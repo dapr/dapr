@@ -1,0 +1,7 @@
+language: go
+go: 1.3
+install:
+  - export PATH=$PATH:$HOME/gopath/bin
+  - go get github.com/stretchr/testify
+scripts:
+  - go test -coverprofile=coverage.out

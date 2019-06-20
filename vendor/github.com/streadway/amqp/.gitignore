@@ -1,0 +1,12 @@
+certs/*
+spec/spec
+examples/simple-consumer/simple-consumer
+examples/simple-producer/simple-producer
+
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+
+.idea/**/contentModel.xml

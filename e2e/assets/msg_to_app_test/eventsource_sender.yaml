@@ -1,0 +1,14 @@
+apiVersion: actions.dev/v1alpha1
+kind: EventSource
+metadata:
+  name: sender
+spec:
+  type: actions.sender.redis
+  connectionInfo:
+    redisHost: "localhost:6379"
+    redisPassword: ""
+  senderOptions:
+    numWorkers: 1
+    queueName: "msg_invoker"
+
+

@@ -1,0 +1,10 @@
+amqp.test
+/fuzz/*/*
+!/fuzz/*/corpus
+/fuzz/*.zip
+*.log
+/cmd
+cover.out
+.envrc
+recordings
+.vscode

@@ -1,0 +1,19 @@
+language: go
+
+go:
+  - 1.10.x
+  - 1.11.x
+  - 1.12.x
+
+services:
+  - rabbitmq
+
+env:
+  - GO111MODULE=on AMQP_URL=amqp://guest:guest@127.0.0.1:5672/
+
+before_install:
+  - go get -v golang.org/x/lint/golint
+
+script:
+  - ./pre-commit
+  - go test -cpu=1,2 -v -tags integration ./...

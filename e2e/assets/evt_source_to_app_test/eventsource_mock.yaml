@@ -1,0 +1,9 @@
+apiVersion: actions.dev/v1alpha1
+kind: EventSource
+metadata:
+  name: httptest
+spec:
+  type: actions.test.mock
+  connectionInfo:
+    messageCount: 1000
+    interval: 1
