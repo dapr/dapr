@@ -12,9 +12,6 @@ steps:
     version: '1.12'
 - task: Go@0
   inputs:
-    command: 'get'
-- task: Go@0
-  inputs:
     command: 'build'
     arguments: '-o $(Build.ArtifactStagingDirectory)/action'
     workingDirectory: 'cmd/action'
