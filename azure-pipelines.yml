@@ -16,5 +16,10 @@ steps:
 - task: Go@0
   inputs:
     command: 'build'
-    arguments: '-o actions'
-    workingDirectory: '$GOPATH/src/github.com/actionscore/actions/cmd/action'
+    arguments: '-o $(Build.ArtifactStagingDirectory)/actions'
+    workingDirectory: 'cmd/action'
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
