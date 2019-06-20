@@ -16,7 +16,7 @@ steps:
 - task: Go@0
   inputs:
     command: 'build'
-    arguments: '-o $(Build.ArtifactStagingDirectory)/actions'
+    arguments: '-o $(Build.ArtifactStagingDirectory)/action'
     workingDirectory: 'cmd/action'
 - task: PublishBuildArtifacts@1
   inputs:
