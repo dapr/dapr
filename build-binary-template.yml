@@ -3,31 +3,35 @@ parameters:
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
   binaryName: ''
 
-steps:
-  - task: GoTool@0
-    inputs:
-      version: '1.12'
-  - script: |
-      mkdir -p '$(GOPATH)/pkg'
-      mkdir -p '$(modulePath)'
-      shopt -s extglob
-      mv !(gopath) '$(modulePath)'
-    displayName: 'Set up the Go workspace'
-  - task: Go@0
-    inputs:
-      command: 'get'
-      arguments: '-v -t -d ./...'
-      workingDirectory: '$(modulePath)/cmd/$(binaryName)'
-      displayName: 'Run go get'
-  - task: Go@0
-    inputs:
-      command: 'build'
-      arguments: '-v -o $(Build.ArtifactStagingDirectory)/$(binaryName)'
-      workingDirectory: '$(modulePath)/cmd/$(binaryName)'
-      displayName: 'Run go build'
-  - task: PublishBuildArtifacts@1
-    inputs:
-      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-      ArtifactName: 'drop'
-      publishLocation: 'Container'
-      displayName: 'Publish build artifacts'
+jobs:
+- job: build_${{ parameters.binaryName }}_${{ parameters.pool }}
+  pool:
+    vmImage: '${{ parameters.pool }}-latest'
+  steps:
+    - task: GoTool@0
+      inputs:
+        version: '1.12'
+    - script: |
+        mkdir -p '$(GOPATH)/pkg'
+        mkdir -p '$(modulePath)'
+        shopt -s extglob
+        mv !(gopath) '$(modulePath)'
+      displayName: 'Set up the Go workspace'
+    - task: Go@0
+      inputs:
+        command: 'get'
+        arguments: '-v -t -d ./...'
+        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
+        displayName: 'Run go get'
+    - task: Go@0
+      inputs:
+        command: 'build'
+        arguments: '-v -o $(Build.ArtifactStagingDirectory)/${{ parameters.binaryName }}'
+        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
+        displayName: 'Run go build'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+        displayName: 'Publish build artifacts'
