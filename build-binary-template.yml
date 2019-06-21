@@ -1,5 +1,7 @@
 parameters:
-  BinaryName: ''
+  GOPATH: ''
+  modulePath: ''
+  binaryName: ''
 
 steps:
   - task: GoTool@0
@@ -15,13 +17,13 @@ steps:
     inputs:
       command: 'get'
       arguments: '-v -t -d ./...'
-      workingDirectory: '$(modulePath)/cmd/$(BinaryName)'
+      workingDirectory: '$(modulePath)/cmd/$(binaryName)'
       displayName: 'Run go get'
   - task: Go@0
     inputs:
       command: 'build'
-      arguments: '-v -o $(Build.ArtifactStagingDirectory)/$(BinaryName)'
-      workingDirectory: '$(modulePath)/cmd/$(BinaryName)'
+      arguments: '-v -o $(Build.ArtifactStagingDirectory)/$(binaryName)'
+      workingDirectory: '$(modulePath)/cmd/$(binaryName)'
       displayName: 'Run go build'
   - task: PublishBuildArtifacts@1
     inputs:
