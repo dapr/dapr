@@ -3,10 +3,6 @@
 trigger:
 - master
 
-variables:
-  GOPATH: '$(system.defaultWorkingDirectory)/gopath' # Go workspace path
-  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)' # Path to the module's code
-
 jobs:
 - job: build_action_macos
   pool:
@@ -14,24 +10,18 @@ jobs:
   steps:
   - template: 'build-binary-template.yml'
     parameters:
-      GOPATH: $(GOPATH)
-      modulePath: $(modulePath)
-      binaryName: 'action'
+      binaryName: action
 - job: build_assigner_macos
   pool:
     vmImage: 'macOS-latest'
   steps:
   - template: 'build-binary-template.yml'
     parameters:
-      GOPATH: $(GOPATH)
-      modulePath: $(modulePath)
-      binaryName: 'assigner'
+      binaryName: assigner
 - job: build_controller_macos
   pool:
     vmImage: 'macOS-latest'
   steps:
   - template: 'build-binary-template.yml'
     parameters:
-      GOPATH: $(GOPATH)
-      modulePath: $(modulePath)
-      binaryName: 'controller'
+      binaryName: controller
