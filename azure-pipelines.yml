@@ -29,5 +29,10 @@ jobs:
   - task: Go@0
     inputs:
       command: 'build'
-      arguments: '-v -o action'
+      arguments: '-v -o $(Build.ArtifactStagingDirectory)/action'
       workingDirectory: '$(modulePath)/cmd/action'
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      ArtifactName: 'drop'
+      publishLocation: 'Container'
