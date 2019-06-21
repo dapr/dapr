@@ -64,7 +64,7 @@ jobs:
   condition: |
     and
     (
-      eq(variables['Build.SourceBranch'], 'refs/heads/master'),
+      # eq(variables['Build.SourceBranch'], 'refs/heads/master'),
       eq(dependencies.build_action_darwin.result, 'Succeeded'),
       eq(dependencies.build_assigner_darwin.result, 'Succeeded'),
       eq(dependencies.build_controller_darwin.result, 'Succeeded'),
