@@ -1,5 +1,5 @@
 parameters:
-  pool: 'macOS'
+  poolImage: 'macOS-latest'
   targetOS: 'darwin'
   binaryName: 'action'
 
@@ -9,7 +9,7 @@ jobs:
     GOOS: ${{ parameters.targetOS }}
     GOARCH: amd64
   pool:
-    vmImage: '${{ parameters.pool }}-latest'
+    vmImage: '${{ parameters.poolImage }}'
   steps:
     - task: GoTool@0
       displayName: 'Install Go'
