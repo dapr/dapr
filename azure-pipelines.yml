@@ -39,3 +39,28 @@ jobs:
     pool: ubuntu
     targetOS: linux
     binaryName: controller
+- job: 'publish_edge_binaries'
+  dependsOn:
+  - build_action_darwin
+  - build_assigner_darwin
+  - build_controller_darwin
+  condition: |
+    and
+    (
+      eq(dependencies.build_action_darwin.result, 'Succeeded'),
+      eq(dependencies.build_assigner_darwin.result, 'Succeeded'),
+      eq(dependencies.build_controller_darwin.result, 'Succeeded')
+    )
+  steps:
+    - task: DownloadPipelineArtifact@2
+      inputs:
+        buildType: 'current'
+        itemPattern: '*.zip'
+        targetPath: '$(Pipeline.Workspace)'
+    - task: AzureFileCopy@3
+      inputs:
+          SourcePath: '$(Pipeline.Workspace)'
+          azureSubscription: 'Actions Releases'
+          Destination: 'AzureBlob'
+          storage: 'actionsreleases'
+          ContainerName: 'bin'

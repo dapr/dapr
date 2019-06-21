@@ -9,6 +9,7 @@ jobs:
     vmImage: '${{ parameters.pool }}-latest'
   steps:
     - task: GoTool@0
+      displayName: 'Install Go'
       inputs:
         version: '1.12'
     - script: |
@@ -19,30 +20,31 @@ jobs:
         echo '##vso[task.prependpath]$(GOBIN)'
       displayName: 'Set up the Go workspace'
     - task: Go@0
+      displayName: 'Run go get documentdb'
       inputs:
         command: 'get'
         arguments: '-u github.com/a8m/documentdb-go'
         workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
-        displayName: 'Run go get documentdb'
     - task: Go@0
+      displayName: 'Run go get'
       inputs:
         command: 'get'
         arguments: '-v -t -d ./...'
         workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
-        displayName: 'Run go get'
     - task: CmdLine@2
+      displayName: 'Run go test'
       inputs:
         script: 'make test'
         workingDirectory: '$(modulePath)'
         failOnStderr: true
-        displayName: 'Run go test'
     - task: Go@0
+      displayName: 'Run go build'
       inputs:
         command: 'build'
         arguments: '-v -o $(Build.BinariesDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}'
         workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
-        displayName: 'Run go build'
     - task: ArchiveFiles@2
+      displayName: 'Build ${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
       inputs:
         rootFolderOrFile: '$(Build.BinariesDirectory)/${{ parameters.targetOS }}'
         includeRootFolder: false
@@ -50,8 +52,8 @@ jobs:
         archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
         replaceExistingArchive: true
     - task: PublishBuildArtifacts@1
+      displayName: 'Publish build artifacts'
       inputs:
         PathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}'
         ArtifactName: 'drop'
         publishLocation: 'Container'
-        displayName: 'Publish build artifacts'
