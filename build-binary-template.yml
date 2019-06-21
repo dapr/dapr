@@ -3,7 +3,7 @@ parameters:
   targetOS: 'darwin'
   binaryName: 'action'
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
-  modulePath: '${{ parameters.GOPATH }}/src/github.com/$(build.repository.name)'
+  modulePath: '$(system.defaultWorkingDirectory)/gopath/src/github.com/$(build.repository.name)'
 
 jobs:
 - job: build_${{ parameters.binaryName }}_${{ parameters.targetOS }}
