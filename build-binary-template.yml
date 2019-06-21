@@ -1,8 +1,10 @@
 parameters:
-  GOPATH: '$(system.defaultWorkingDirectory)/gopath'
-  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
   pool: 'macOS'
   binaryName: ''
+  
+variables:
+  GOPATH: '$(system.defaultWorkingDirectory)/gopath'
+  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
 
 jobs:
 - job: build_${{ parameters.binaryName }}_${{ parameters.pool }}
