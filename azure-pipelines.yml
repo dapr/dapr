@@ -4,24 +4,15 @@ trigger:
 - master
 
 jobs:
-- job: build_action_macos
-  pool:
-    vmImage: 'macOS-latest'
-  steps:
-  - template: 'build-binary-template.yml'
-    parameters:
-      binaryName: action
-- job: build_assigner_macos
-  pool:
-    vmImage: 'macOS-latest'
-  steps:
-  - template: 'build-binary-template.yml'
-    parameters:
-      binaryName: assigner
-- job: build_controller_macos
-  pool:
-    vmImage: 'macOS-latest'
-  steps:
-  - template: 'build-binary-template.yml'
-    parameters:
-      binaryName: controller
+- template: 'build-binary-template.yml'
+  parameters:
+    pool: macOS
+    binaryName: action
+- template: 'build-binary-template.yml'
+  parameters:
+    pool: macOS
+    binaryName: assigner
+- template: 'build-binary-template.yml'
+  parameters:
+    pool: macOS
+    binaryName: controller
