@@ -55,7 +55,7 @@ jobs:
     targetOS: windows
     binaryName: controller
 - job: 'publish_edge_binaries'
-  poolImage:
+  pool:
     vmImage: 'windows-2019'
   dependsOn:
   - build_action_darwin
