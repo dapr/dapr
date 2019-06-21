@@ -26,8 +26,8 @@ jobs:
         displayName: 'Run go get'
     - task: CmdLine@2
       inputs:
-        script: 'make'
-        workingDirectory: '$(modulePath) test'
+        script: 'make test'
+        workingDirectory: '$(modulePath)'
         failOnStderr: true
         displayName: 'Run go test'
     - task: Go@0
