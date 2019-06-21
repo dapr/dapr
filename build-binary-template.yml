@@ -16,13 +16,16 @@ steps:
       command: 'get'
       arguments: '-v -t -d ./...'
       workingDirectory: '$(modulePath)/cmd/$(BinaryName)'
+      displayName: 'Run go get'
   - task: Go@0
     inputs:
       command: 'build'
       arguments: '-v -o $(Build.ArtifactStagingDirectory)/$(BinaryName)'
       workingDirectory: '$(modulePath)/cmd/$(BinaryName)'
+      displayName: 'Run go build'
   - task: PublishBuildArtifacts@1
     inputs:
       PathtoPublish: '$(Build.ArtifactStagingDirectory)'
       ArtifactName: 'drop'
       publishLocation: 'Container'
+      displayName: 'Publish build artifacts'
