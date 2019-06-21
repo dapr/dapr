@@ -6,10 +6,14 @@ import (
 	"os/signal"
 	"strconv"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/actionscore/actions/pkg/action"
+	"github.com/actionscore/actions/pkg/version"
 )
 
 func main() {
+	log.Infof("Starting Actions Runtime -- version %s -- commit %s", version.Version(), version.Commit())
+
 	mode := flag.String("mode", "standalone", "")
 	actionHTTPPort := flag.String("action-http-port", "3500", "")
 	actionGRPCPort := flag.String("action-grpc-port", "50001", "")

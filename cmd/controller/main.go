@@ -4,14 +4,14 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/golang/glog"
 	"github.com/actionscore/actions/pkg/controller"
 	k8s "github.com/actionscore/actions/pkg/kubernetes"
 	"github.com/actionscore/actions/pkg/signals"
+	"github.com/actionscore/actions/pkg/version"
 )
 
 func main() {
-	log.Info("Starting Actions Controller")
+	log.Infof("Starting Actions Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
 	kubeClient, actionsClient, err := k8s.Clients()
@@ -22,6 +22,6 @@ func main() {
 	controller.NewController(kubeClient, actionsClient).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
-	glog.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
+	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
 	<-time.After(shutdownDuration)
 }
