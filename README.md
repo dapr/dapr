@@ -1,5 +1,7 @@
 # Actions - A highly performant, lightweight serverless runtime for cloud and edge
 
+[![Build Status](https://dev.azure.com/azure-octo/Actions/_apis/build/status/builds/actions%20build?branchName=master)](https://dev.azure.com/azure-octo/Actions/_build/latest?definitionId=5&branchName=master)
+
 __Note: This repo is currently under heavy development.
 As long as this note is here, consider docs not up-to-date at all times. Edge builds with potential bugs and/or breaking changes will be pushed daily.__
 
