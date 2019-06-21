@@ -5,6 +5,9 @@ parameters:
 
 jobs:
 - job: build_${{ parameters.binaryName }}_${{ parameters.targetOS }}
+  variables:
+    GOOS: ${{ parameters.targetOS }}
+    GOARCH: amd64
   pool:
     vmImage: '${{ parameters.pool }}-latest'
   steps:
