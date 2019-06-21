@@ -23,6 +23,11 @@ jobs:
     displayName: 'Set up the Go workspace'
   - task: Go@0
     inputs:
+      command: 'get'
+      arguments: '-v -t -d ./...'
+      workingDirectory: '$(modulePath)/cmd/action'
+  - task: Go@0
+    inputs:
       command: 'build'
       arguments: '-v -o action'
       workingDirectory: '$(modulePath)/cmd/action'
