@@ -61,6 +61,12 @@ jobs:
   - build_action_darwin
   - build_assigner_darwin
   - build_controller_darwin
+  - build_action_linux
+  - build_assigner_linux
+  - build_controller_linux
+  - build_action_windows
+  - build_assigner_windows
+  - build_controller_windows
   condition: |
     and
     (
