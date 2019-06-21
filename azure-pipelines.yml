@@ -41,17 +41,17 @@ jobs:
     binaryName: controller
 - template: 'build-binary-template.yml'
   parameters:
-    pool: macOS
+    pool: windows-2019
     targetOS: windows
     binaryName: action
 - template: 'build-binary-template.yml'
   parameters:
-    pool: macOS
+    pool: windows-2019
     targetOS: windows
     binaryName: assigner
 - template: 'build-binary-template.yml'
   parameters:
-    pool: macOS
+    pool: windows-2019
     targetOS: windows
     binaryName: controller
 - job: 'publish_edge_binaries'
