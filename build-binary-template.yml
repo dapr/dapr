@@ -1,3 +1,6 @@
+parameters:
+  BinaryName: ''
+
 steps:
   - task: GoTool@0
     inputs:
