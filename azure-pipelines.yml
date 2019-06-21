@@ -3,6 +3,11 @@
 trigger:
 - master
 
+variables:
+  GOPATH: '$(system.defaultWorkingDirectory)/gopath'
+  GOBIN:  '$(GOPATH)/bin'
+  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
+
 jobs:
 - template: 'build-binary-template.yml'
   parameters:

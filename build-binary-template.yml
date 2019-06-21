@@ -2,8 +2,6 @@ parameters:
   pool: 'macOS'
   targetOS: 'darwin'
   binaryName: 'action'
-  GOPATH: '$(system.defaultWorkingDirectory)/gopath'
-  modulePath: '$(system.defaultWorkingDirectory)/gopath/src/github.com/$(build.repository.name)'
 
 jobs:
 - job: build_${{ parameters.binaryName }}_${{ parameters.targetOS }}
@@ -14,22 +12,29 @@ jobs:
       inputs:
         version: '1.12'
     - script: |
-        mkdir -p '${{ parameters.GOPATH }}/pkg'
-        mkdir -p '${{ parameters.modulePath }}'
+        mkdir -p '$(GOPATH)/pkg'
+        mkdir -p '$(modulePath)'
         shopt -s extglob
-        mv !(gopath) '${{ parameters.modulePath }}'
+        mv !(gopath) '$(modulePath)'
+        echo '##vso[task.prependpath]$(GOBIN)'
       displayName: 'Set up the Go workspace'
     - task: Go@0
       inputs:
         command: 'get'
         arguments: '-v -t -d ./...'
-        workingDirectory: '${{ parameters.modulePath }}/cmd/${{ parameters.binaryName }}'
+        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
         displayName: 'Run go get'
+    - task: CmdLine@2
+      inputs:
+        script: 'make'
+        workingDirectory: '$(modulePath)'
+        failOnStderr: true
+        displayName: 'Run go test'
     - task: Go@0
       inputs:
         command: 'build'
         arguments: '-v -o $(Build.BinariesDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}'
-        workingDirectory: '${{ parameters.modulePath }}/cmd/${{ parameters.binaryName }}'
+        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
         displayName: 'Run go build'
     - task: ArchiveFiles@2
       inputs:
