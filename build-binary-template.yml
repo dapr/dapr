@@ -1,11 +1,12 @@
 parameters:
   pool: 'macOS'
+  targetOS: ''
   binaryName: ''
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
 
 jobs:
-- job: build_${{ parameters.binaryName }}_${{ parameters.pool }}
+- job: build_${{ parameters.binaryName }}_${{ parameters.targetOS }}
   pool:
     vmImage: '${{ parameters.pool }}-latest'
   steps:
@@ -16,7 +17,7 @@ jobs:
         mkdir -p '${{ parameters.GOPATH }}/pkg'
         mkdir -p '${{ parameters.modulePath }}'
         shopt -s extglob
-        mv !(gopath) '${{ parameters.modulePath }}'
+        mv '${{ parameters.GOPATH }}' '${{ parameters.modulePath }}'
       displayName: 'Set up the Go workspace'
     - task: Go@0
       inputs:
@@ -27,12 +28,19 @@ jobs:
     - task: Go@0
       inputs:
         command: 'build'
-        arguments: '-v -o $(Build.ArtifactStagingDirectory)/${{ parameters.binaryName }}'
+        arguments: '-v -o $(Build.BinariesDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}'
         workingDirectory: '${{ parameters.modulePath }}/cmd/${{ parameters.binaryName }}'
         displayName: 'Run go build'
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: '$(Build.BinariesDirectory)/${{ parameters.targetOS }}'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
+        replaceExistingArchive: true
     - task: PublishBuildArtifacts@1
       inputs:
-        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}'
         ArtifactName: 'drop'
         publishLocation: 'Container'
         displayName: 'Publish build artifacts'
