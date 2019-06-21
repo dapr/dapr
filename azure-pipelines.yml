@@ -3,20 +3,16 @@
 trigger:
 - master
 
-pool:
-  vmImage: 'ubuntu-latest'
-
-steps:
-- task: GoTool@0
-  inputs:
-    version: '1.12'
-- task: Go@0
-  inputs:
-    command: 'build'
-    arguments: '-o $(Build.ArtifactStagingDirectory)/action'
-    workingDirectory: 'cmd/action'
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'drop'
-    publishLocation: 'Container'
+jobs:
+- job: build_macos
+  pool:
+    vmImage: 'macOS-latest'
+  steps:
+  - task: GoTool@0
+    inputs:
+      version: '1.10'
+  - task: Go@0
+    inputs:
+      command: 'build'
+      arguments: '-o action'
+      workingDirectory: '$GOPATH/src/github.com/actionscore/actions/cmd/action'
