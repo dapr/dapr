@@ -1,0 +1,25 @@
+steps:
+  - task: GoTool@0
+    inputs:
+      version: '1.12'
+  - script: |
+      mkdir -p '$(GOPATH)/pkg'
+      mkdir -p '$(modulePath)'
+      shopt -s extglob
+      mv !(gopath) '$(modulePath)'
+    displayName: 'Set up the Go workspace'
+  - task: Go@0
+    inputs:
+      command: 'get'
+      arguments: '-v -t -d ./...'
+      workingDirectory: '$(modulePath)/cmd/$(BinaryName)'
+  - task: Go@0
+    inputs:
+      command: 'build'
+      arguments: '-v -o $(Build.ArtifactStagingDirectory)/$(BinaryName)'
+      workingDirectory: '$(modulePath)/cmd/$(BinaryName)'
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      ArtifactName: 'drop'
+      publishLocation: 'Container'
