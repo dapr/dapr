@@ -1,5 +1,8 @@
 # Actions - A highly performant, lightweight serverless runtime for cloud and edge
 
+__Note: This repo is currently under heavy development.
+As long as this note is here, consider docs not up-to-date at all times. Edge builds with potential bugs and/or breaking changes will be pushed daily.__
+
 Actions is a programming model for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Actions offers an eventing system on which compute units communicate with each other by exchanging messages.
 <br>
 <br>
@@ -13,8 +16,6 @@ Actions uses pluggable state stores and message buses such as Redis as well as g
 
 The Actions runtime is designed for hyper-scale performance in the cloud and on the edge.
 <br>
-
-__Note: Actions is currently under heavy development for the [v0.1-alpha.1 milestone](https://github.com/actionscore/actions/milestone/1). Until the milestone is reached, consider docs not up-to-date at all times. Edge builds with potential bugs will be pushed daily.__
 
 ![Actions Logical Design](/docs/imgs/actions_logical_design.png)
 
