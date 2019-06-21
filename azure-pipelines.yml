@@ -8,31 +8,20 @@ variables:
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)' # Path to the module's code
 
 jobs:
-- job: build_macos
+- job: build_action_macos
   pool:
     vmImage: 'macOS-latest'
   steps:
-  - task: GoTool@0
-    inputs:
-      version: '1.12'
-  - script: |
-      mkdir -p '$(GOPATH)/pkg'
-      mkdir -p '$(modulePath)'
-      shopt -s extglob
-      mv !(gopath) '$(modulePath)'
-    displayName: 'Set up the Go workspace'
-  - task: Go@0
-    inputs:
-      command: 'get'
-      arguments: '-v -t -d ./...'
-      workingDirectory: '$(modulePath)/cmd/action'
-  - task: Go@0
-    inputs:
-      command: 'build'
-      arguments: '-v -o $(Build.ArtifactStagingDirectory)/action'
-      workingDirectory: '$(modulePath)/cmd/action'
-  - task: PublishBuildArtifacts@1
-    inputs:
-      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-      ArtifactName: 'drop'
-      publishLocation: 'Container'
+  - template: 'build-binary-template.yml'
+    parameters:
+      BinaryName: 'action'
+- job: build_assigner_macos
+  pool:
+    vmImage: 'macOS-latest'
+  steps:
+  - template: 'build-binary-template.yml'
+    parameters:
+      BinaryName: 'assigner'
+  - template: 'build-binary-template.yml'
+    parameters:
+      BinaryName: 'controller'
