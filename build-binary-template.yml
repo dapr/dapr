@@ -17,7 +17,7 @@ jobs:
         mkdir -p '${{ parameters.GOPATH }}/pkg'
         mkdir -p '${{ parameters.modulePath }}'
         shopt -s extglob
-        mv '${{ parameters.GOPATH }}' '${{ parameters.modulePath }}'
+        mv !(gopath) '${{ parameters.modulePath }}'
       displayName: 'Set up the Go workspace'
     - task: Go@0
       inputs:
