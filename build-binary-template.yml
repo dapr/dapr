@@ -1,6 +1,6 @@
 parameters:
-  GOPATH: ''
-  modulePath: ''
+  GOPATH: '$(system.defaultWorkingDirectory)/gopath'
+  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
   binaryName: ''
 
 steps:
