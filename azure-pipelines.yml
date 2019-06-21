@@ -7,12 +7,15 @@ jobs:
 - template: 'build-binary-template.yml'
   parameters:
     pool: macOS
+    targetOS: darwin
     binaryName: action
 - template: 'build-binary-template.yml'
   parameters:
     pool: macOS
+    targetOS: darwin
     binaryName: assigner
 - template: 'build-binary-template.yml'
   parameters:
     pool: macOS
+    targetOS: darwin
     binaryName: controller
