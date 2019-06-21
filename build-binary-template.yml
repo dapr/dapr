@@ -1,7 +1,3 @@
-variables:
-  GOPATH: '$(system.defaultWorkingDirectory)/gopath' # Go workspace path
-  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)' # Path to the module's code
-
 steps:
   - task: GoTool@0
     inputs:
