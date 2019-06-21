@@ -22,6 +22,10 @@ jobs:
   - template: 'build-binary-template.yml'
     parameters:
       BinaryName: 'assigner'
+- job: build_controller_macos
+  pool:
+    vmImage: 'macOS-latest'
+  steps:
   - template: 'build-binary-template.yml'
     parameters:
       BinaryName: 'controller'
