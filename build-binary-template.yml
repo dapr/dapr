@@ -1,9 +1,9 @@
 parameters:
   pool: 'macOS'
-  targetOS: ''
-  binaryName: ''
+  targetOS: 'darwin'
+  binaryName: 'action'
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
-  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
+  modulePath: '${{ parameters.GOPATH }}/src/github.com/$(build.repository.name)'
 
 jobs:
 - job: build_${{ parameters.binaryName }}_${{ parameters.targetOS }}
