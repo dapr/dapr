@@ -7,9 +7,12 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/actionscore/actions/pkg/assigner"
+	"github.com/actionscore/actions/pkg/version"
 )
 
 func main() {
+	log.Infof("Starting Actions Assigner -- version %s -- commit %s", version.Version(), version.Commit())
+
 	port := flag.String("port", "50005", "")
 	flag.Parse()
 
