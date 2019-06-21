@@ -1,8 +1,6 @@
 parameters:
   pool: 'macOS'
   binaryName: ''
-  
-variables:
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
 
@@ -15,22 +13,22 @@ jobs:
       inputs:
         version: '1.12'
     - script: |
-        mkdir -p '$(GOPATH)/pkg'
-        mkdir -p '$(modulePath)'
+        mkdir -p '${{ parameters.GOPATH }}/pkg'
+        mkdir -p '${{ parameters.modulePath }}'
         shopt -s extglob
-        mv !(gopath) '$(modulePath)'
+        mv !(gopath) '${{ parameters.modulePath }}'
       displayName: 'Set up the Go workspace'
     - task: Go@0
       inputs:
         command: 'get'
         arguments: '-v -t -d ./...'
-        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
+        workingDirectory: '${{ parameters.modulePath }}/cmd/${{ parameters.binaryName }}'
         displayName: 'Run go get'
     - task: Go@0
       inputs:
         command: 'build'
         arguments: '-v -o $(Build.ArtifactStagingDirectory)/${{ parameters.binaryName }}'
-        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
+        workingDirectory: '${{ parameters.modulePath }}/cmd/${{ parameters.binaryName }}'
         displayName: 'Run go build'
     - task: PublishBuildArtifacts@1
       inputs:
