@@ -728,7 +728,6 @@ func (i *Action) OnLocalBatchActivation(c *routing.Context) {
 }
 
 func (i *Action) OnInvokeAction(c *routing.Context) {
-
 	_, span, spanCtx := i.TraceSpanFromRoutingContext(c, nil, "OnInvokeAction")
 	if span != nil {
 		defer span.End()
@@ -741,9 +740,9 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 	targetAddress := string(c.Request.Header.Peek(addressHeader))
 	httpMethod := string(c.Method())
 
-	corId := ""
+	corID := ""
 	if span != nil {
-		corId = diag.SerializeSpanContext(*spanCtx)
+		corID = diag.SerializeSpanContext(*spanCtx)
 	}
 
 	headers := map[string]string{
@@ -751,7 +750,7 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 		invokedHTTPVerbHeader: httpMethod,
 		invokedMethodHeader:   actionMethod,
 		actionTargetIDHeader:  actionID,
-		diag.CorrelationID:    corId,
+		diag.CorrelationID:    corID,
 	}
 
 	if contextID != "" {
@@ -782,12 +781,9 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 
 			if address == "" {
 				if !responseDelivered {
-
 					diag.SetSpanStatus(span, trace.StatusCodeUnavailable, fmt.Sprintf("could not locate host for: %s/%s", actionID, contextID))
-
 					RespondWithError(c.RequestCtx, 500, fmt.Sprintf("could not locate host for: %s/%s", actionID, contextID))
 				}
-
 				return
 			}
 		} else {
@@ -798,16 +794,14 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 	var resp []byte
 	var err error
 
-	if address == fmt.Sprintf("%s:%v", i.IPAddress, gRPCPort) {
+	if i.isTargetLocal(targetAddress) {
 		resp, err = i.invoke(actionMethod, actionID, contextID, "", httpMethod, string(c.URI().QueryString()), payload, spanCtx)
 	} else {
 		conn, err := i.GetGRPCConnection(address)
 		if err != nil {
 			log.Fatalf("gRPC connection failure: %s", err)
 			if !responseDelivered {
-
 				diag.SetSpanStatus(span, trace.StatusCodeInternal, fmt.Sprintf("Delivery to action id %s failed - %s", actionID, err.Error()))
-
 				RespondWithError(c.RequestCtx, 500, fmt.Sprintf("delivery to action id %s failed", actionID))
 			}
 			return
@@ -828,21 +822,17 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 
 	if err != nil {
 		log.Error(err)
-
 		diag.SetSpanStatus(span, trace.StatusCodeInternal, fmt.Sprintf("Delivery to action id %s failed - %s", actionID, err.Error()))
-
 		RespondWithError(c.RequestCtx, 500, fmt.Sprintf("delivery to action id %s failed", actionID))
+		return
+	}
+
+	if resp != nil && len(resp) > 0 {
+		diag.SetSpanStatus(span, trace.StatusCodeOK, fmt.Sprintf("action was called and returned %s", string(resp)))
+		RespondWithJSON(c.RequestCtx, 200, resp)
 	} else {
-		if resp != nil && len(resp) > 0 {
-
-			diag.SetSpanStatus(span, trace.StatusCodeOK, fmt.Sprintf("action was called and returned %s", string(resp)))
-
-			RespondWithJSON(c.RequestCtx, 200, resp)
-		} else {
-			diag.SetSpanStatus(span, trace.StatusCodeOK, fmt.Sprintf("action was called but returned no value"))
-
-			RespondEmpty(c.RequestCtx, 200)
-		}
+		diag.SetSpanStatus(span, trace.StatusCodeOK, fmt.Sprintf("action was called but returned no value"))
+		RespondEmpty(c.RequestCtx, 200)
 	}
 }
 
@@ -1549,6 +1539,11 @@ func (i *Action) SetIPAddress() {
 	} else if i.Mode == string(KubernetesMode) {
 		i.IPAddress = os.Getenv("HOST_IP")
 	}
+}
+
+func (i *Action) isTargetLocal(address string) bool {
+	return strings.Contains(address, "localhost") || strings.Contains(address, "127.0.0.1") ||
+		address == fmt.Sprintf("%s:%v", i.IPAddress, gRPCPort)
 }
 
 func (i *Action) GetApplicationConfig() {

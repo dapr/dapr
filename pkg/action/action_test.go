@@ -16,7 +16,7 @@ func TestInvokeActionGETWithOneParameter(t *testing.T) {
 	is := assert.New(t)
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI("http://localhost:3505/action/test-action/echo?param=1")
-	req.Header.Set("actions.action-address", "10.0.75.1:60006")
+	req.Header.Set("actions.action-address", "localhost:60006")
 	req.Header.SetMethod("GET")
 	resp := fasthttp.AcquireResponse()
 	client := &fasthttp.Client{}
@@ -28,7 +28,7 @@ func TestInvokeActionGETWithTwoParameters(t *testing.T) {
 	is := assert.New(t)
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI("http://localhost:3505/action/test-action/echo?param1=1&param2=2")
-	req.Header.Set("actions.action-address", "10.0.75.1:60006")
+	req.Header.Set("actions.action-address", "localhost:60006")
 	req.Header.SetMethod("GET")
 	resp := fasthttp.AcquireResponse()
 	client := &fasthttp.Client{}
@@ -55,7 +55,7 @@ func TestInvokeActionGETWithNoParameters(t *testing.T) {
 	is := assert.New(t)
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI("http://localhost:3505/action/test-action/echo")
-	req.Header.Set("actions.action-address", "10.0.75.1:60006")
+	req.Header.Set("actions.action-address", "localhost:60006")
 	req.Header.SetMethod("GET")
 	resp := fasthttp.AcquireResponse()
 	client := &fasthttp.Client{}
