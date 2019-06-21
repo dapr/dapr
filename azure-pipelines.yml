@@ -19,3 +19,18 @@ jobs:
     pool: macOS
     targetOS: darwin
     binaryName: controller
+- template: 'build-binary-template.yml'
+  parameters:
+    pool: ubuntu
+    targetOS: linux
+    binaryName: action
+- template: 'build-binary-template.yml'
+  parameters:
+    pool: ubuntu
+    targetOS: linux
+    binaryName: assigner
+- template: 'build-binary-template.yml'
+  parameters:
+    pool: ubuntu
+    targetOS: linux
+    binaryName: controller
