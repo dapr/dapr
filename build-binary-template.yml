@@ -1,6 +1,7 @@
 parameters:
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
+  pool: 'macOS'
   binaryName: ''
 
 jobs:
