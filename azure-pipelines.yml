@@ -14,18 +14,24 @@ jobs:
   steps:
   - template: 'build-binary-template.yml'
     parameters:
-      BinaryName: 'action'
+      GOPATH: $(GOPATH)
+      modulePath: $(modulePath)
+      binaryName: 'action'
 - job: build_assigner_macos
   pool:
     vmImage: 'macOS-latest'
   steps:
   - template: 'build-binary-template.yml'
     parameters:
-      BinaryName: 'assigner'
+      GOPATH: $(GOPATH)
+      modulePath: $(modulePath)
+      binaryName: 'assigner'
 - job: build_controller_macos
   pool:
     vmImage: 'macOS-latest'
   steps:
   - template: 'build-binary-template.yml'
     parameters:
-      BinaryName: 'controller'
+      GOPATH: $(GOPATH)
+      modulePath: $(modulePath)
+      binaryName: 'controller'
