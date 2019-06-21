@@ -15,13 +15,16 @@ jobs:
       displayName: 'Install Go'
       inputs:
         version: '1.12'
-    - script: |
-        mkdir -p '$(GOPATH)/pkg'
-        mkdir -p '$(modulePath)'
-        shopt -s extglob
-        mv !(gopath) '$(modulePath)'
-        echo '##vso[task.prependpath]$(GOBIN)'
+    - task: Bash@3
       displayName: 'Set up the Go workspace'
+      inputs:
+        targetType: 'inline'
+        script: |
+          mkdir -p '$(GOPATH)/pkg'
+          mkdir -p '$(modulePath)'
+          shopt -s extglob
+          mv !(gopath) '$(modulePath)'
+          echo '##vso[task.prependpath]$(GOBIN)'
     - task: Go@0
       displayName: 'Run go get documentdb'
       inputs:
