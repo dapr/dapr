@@ -19,7 +19,9 @@ Actions uses pluggable state stores and message buses such as Redis as well as g
 The Actions runtime is designed for hyper-scale performance in the cloud and on the edge.
 <br>
 
-![Actions Logical Design](/docs/imgs/actions_logical_design.png)
+![Actions Standalone](/docs/imgs/actions_standalone.png)
+
+![Actions on Kubernetes](/docs/imgs/actions_k8s.png)
 
 ## Why Actions
 
