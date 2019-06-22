@@ -1,5 +1,7 @@
 # Actions - A highly performant, lightweight serverless runtime for cloud and edge
 
+[![Build Status](https://dev.azure.com/azure-octo/Actions/_apis/build/status/builds/actions%20build?branchName=master)](https://dev.azure.com/azure-octo/Actions/_build/latest?definitionId=5&branchName=master)
+
 __Note: This repo is currently under heavy development.
 As long as this note is here, consider docs not up-to-date at all times. Edge builds with potential bugs and/or breaking changes will be pushed daily.__
 
@@ -16,8 +18,12 @@ Actions uses pluggable state stores and message buses such as Redis as well as g
 
 The Actions runtime is designed for hyper-scale performance in the cloud and on the edge.
 <br>
-
-![Actions Logical Design](/docs/imgs/actions_logical_design.png)
+###### Actions Standalone Deployment
+![Actions Standalone](/docs/imgs/actions_standalone.png)
+<br>
+<br>
+###### Actions Kubernetes Deployment
+![Actions on Kubernetes](/docs/imgs/actions_k8s.png)
 
 ## Why Actions
 

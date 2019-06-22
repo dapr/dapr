@@ -1,0 +1,65 @@
+parameters:
+  poolImage: 'macOS-latest'
+  targetOS: 'darwin'
+  binaryName: 'action'
+
+jobs:
+- job: build_${{ parameters.binaryName }}_${{ parameters.targetOS }}
+  variables:
+    GOOS: ${{ parameters.targetOS }}
+    GOARCH: amd64
+  pool:
+    vmImage: '${{ parameters.poolImage }}'
+  steps:
+    - task: GoTool@0
+      displayName: 'Install Go'
+      inputs:
+        version: '1.12'
+    - task: Bash@3
+      displayName: 'Set up the Go workspace'
+      inputs:
+        targetType: 'inline'
+        script: |
+          mkdir -p '$(GOPATH)/pkg'
+          mkdir -p '$(modulePath)'
+          shopt -s extglob
+          mv !(gopath) '$(modulePath)'
+          echo '##vso[task.prependpath]$(GOBIN)'
+    - task: Go@0
+      displayName: 'Run go get documentdb'
+      inputs:
+        command: 'get'
+        arguments: '-u github.com/a8m/documentdb-go'
+        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
+    - task: Go@0
+      displayName: 'Run go get'
+      inputs:
+        command: 'get'
+        arguments: '-v -t -d ./...'
+        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
+    - task: CmdLine@2
+      displayName: 'Run go test'
+      inputs:
+        script: 'make test'
+        workingDirectory: '$(modulePath)'
+        failOnStderr: true
+    - task: Go@0
+      displayName: 'Run go build'
+      inputs:
+        command: 'build'
+        arguments: '-v -o $(Build.BinariesDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}'
+        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
+    - task: ArchiveFiles@2
+      displayName: 'Build ${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
+      inputs:
+        rootFolderOrFile: '$(Build.BinariesDirectory)/${{ parameters.targetOS }}'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
+        replaceExistingArchive: true
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish build artifacts'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
