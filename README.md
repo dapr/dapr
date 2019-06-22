@@ -20,7 +20,8 @@ The Actions runtime is designed for hyper-scale performance in the cloud and on 
 <br>
 
 ![Actions Standalone](/docs/imgs/actions_standalone.png)
-
+<br>
+<br>
 ![Actions on Kubernetes](/docs/imgs/actions_k8s.png)
 
 ## Why Actions
