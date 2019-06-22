@@ -7,7 +7,7 @@ var (
 )
 
 // Version returns the Actions version. This is either a semantic version
-// number or else, in the case of unreleased code, the string "devel".
+// number or else, in the case of unreleased code, the string "edge".
 func Version() string {
 	return version
 }
