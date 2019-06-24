@@ -55,7 +55,7 @@ jobs:
     - task: CmdLine@2
       displayName: 'Run make build'
       inputs:
-        script: 'make build TARGETS=${{ parameters.targetOS }} ARCH=$(GOARCH)'
+        script: 'make build BINARIES=${{ parameters.binaryName }} TARGETS=${{ parameters.targetOS }} ARCH=$(GOARCH)'
         workingDirectory: '$(modulePath)'
         failOnStderr: true
     - task: ArchiveFiles@2
