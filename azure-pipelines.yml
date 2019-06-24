@@ -143,11 +143,11 @@ jobs:
         destinationFolder: '$(Pipeline.Workspace)/dist'
         cleanDestinationFolder: true
     - task: Docker@2
+      enabled: false
       displayName: 'Build and push Docker image'
       inputs:
-        containerRegistry: 'ACR Actions Core'
         repository: 'actions'
-        command: 'buildAndPush'
+        command: 'build'
         Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
         tags: 'edge
           latest
