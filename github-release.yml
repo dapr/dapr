@@ -5,6 +5,9 @@ variables:
   ReleaseVersion: ''
   ReleaseTitle: 'Actions Runtime $(ReleaseVersion) Release'
 
+pool:
+  vmImage: 'macOS-latest'
+
 steps:
 - task: DownloadPipelineArtifact@2
   inputs:
