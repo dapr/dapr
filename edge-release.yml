@@ -1,0 +1,41 @@
+# actionscore/actions edge release pipeline
+
+steps:
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download pipeline artifacts to workspace'
+    inputs:
+      buildType: 'current'
+      itemPattern: '**/*.zip'
+      targetPath: '$(Pipeline.Workspace)'
+  - task: AzureFileCopy@3
+    displayName: 'Publish archives to blob storage'
+    inputs:
+        SourcePath: '$(Pipeline.Workspace)/drop'
+        azureSubscription: 'Actions Releases'
+        Destination: 'AzureBlob'
+        storage: 'actionsreleases'
+        ContainerName: 'bin'
+  - task: CopyFiles@2
+    displayName: 'Copy Dockerfile to workspace'
+    inputs:
+      SourceFolder: '$(Build.SourcesDirectory)'
+      Contents: 'Dockerfile'
+      TargetFolder: '$(Pipeline.Workspace)'
+      OverWrite: true
+      flattenFolders: true
+  - task: ExtractFiles@1
+    inputs:
+      archiveFilePatterns: '$(Pipeline.Workspace)/drop/*.zip'
+      destinationFolder: '$(Pipeline.Workspace)/dist'
+      cleanDestinationFolder: true
+  - task: Docker@2
+    displayName: 'Build and push Docker image'
+    inputs:
+      containerRegistry: 'ACR Actions Core'
+      repository: 'actions'
+      command: 'buildAndPush'
+      Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
+      tags: 'edge
+        latest
+        $(Build.BuildId)
+        $(ReleaseVersion)'
