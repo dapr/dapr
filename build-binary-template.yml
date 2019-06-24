@@ -47,7 +47,7 @@ jobs:
         failOnStderr: true
     - task: CmdLine@2
       displayName: 'Run make test'
-      condition: ne(parameters['targetArch'], 'arm')
+      condition: ne('${{ parameters.targetOS }}', 'arm')
       inputs:
         script: 'make test'
         workingDirectory: '$(modulePath)'
