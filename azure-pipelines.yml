@@ -100,7 +100,6 @@ jobs:
   condition: |
     and
     (
-      eq(variables['Build.SourceBranch'], 'refs/heads/master'),
       eq(dependencies.build_darwin_amd64_action.result, 'Succeeded'),
       eq(dependencies.build_darwin_amd64_assigner.result, 'Succeeded'),
       eq(dependencies.build_darwin_amd64_controller.result, 'Succeeded'),
