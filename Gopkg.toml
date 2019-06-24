@@ -51,10 +51,6 @@ ignored = ["github.com/a8m/documentdb-go"]
   version = "6.15.1"
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/golang/glog"
-
-[[constraint]]
   name = "github.com/gorilla/mux"
   version = "1.7.0"
 
