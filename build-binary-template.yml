@@ -22,6 +22,7 @@ jobs:
         targetType: 'inline'
         script: |
           mkdir -p '$(GOPATH)/pkg'
+          mkdir -p '$(GOPATH)/bin'
           mkdir -p '$(modulePath)'
           shopt -s extglob
           mv !(gopath) '$(modulePath)'
