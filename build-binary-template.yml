@@ -33,7 +33,6 @@ jobs:
         targetType: 'inline'
         script: |
           curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-          sudo mv $(GOPATH)/bin/dep /usr/local/bin/
     - task: Go@0
       displayName: 'Run go get documentdb'
       inputs:
