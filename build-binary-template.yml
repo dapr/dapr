@@ -21,7 +21,6 @@ jobs:
       inputs:
         targetType: 'inline'
         script: |
-          make --version
           mkdir -p '$(GOPATH)/pkg'
           mkdir -p '$(modulePath)'
           shopt -s extglob
@@ -36,7 +35,7 @@ jobs:
     - task: CmdLine@2
       displayName: 'Run make deps'
       inputs:
-        script: 'make deps'
+        script: 'export GOARCH=amd64;make deps'
         workingDirectory: '$(modulePath)'
         failOnStderr: true
     - task: CmdLine@2
