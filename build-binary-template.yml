@@ -34,8 +34,6 @@ jobs:
         workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
     - task: CmdLine@2
       displayName: 'Run make deps'
-      variables:
-        GOARCH=amd64
       inputs:
         script: 'make deps'
         workingDirectory: '$(modulePath)'
