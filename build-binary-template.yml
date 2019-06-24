@@ -34,8 +34,10 @@ jobs:
         workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
     - task: CmdLine@2
       displayName: 'Run make deps'
+      variables:
+        GOARCH=amd64
       inputs:
-        script: 'export GOARCH=amd64;make deps'
+        script: 'make deps'
         workingDirectory: '$(modulePath)'
         failOnStderr: true
     - task: CmdLine@2
