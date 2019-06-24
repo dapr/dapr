@@ -13,73 +13,106 @@ jobs:
   parameters:
     poolImage: macOS-latest
     targetOS: darwin
+    targetArch: amd64
     binaryName: action
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: macOS-latest
     targetOS: darwin
+    targetArch: amd64
     binaryName: assigner
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: macOS-latest
     targetOS: darwin
+    targetArch: amd64
+    binaryName: controller
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: macOS-latest
+    targetOS: linux
+    targetArch: arm
+    binaryName: action
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: macOS-latest
+    targetOS: linux
+    targetArch: arm
+    binaryName: assigner
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: macOS-latest
+    targetOS: linux
+    targetArch: arm
     binaryName: controller
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: ubuntu-latest
     targetOS: linux
+    targetArch: amd64
     binaryName: action
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: ubuntu-latest
     targetOS: linux
+    targetArch: amd64
     binaryName: assigner
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: ubuntu-latest
     targetOS: linux
+    targetArch: amd64
     binaryName: controller
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: windows-2019
     targetOS: windows
+    targetArch: amd64
     binaryName: action
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: windows-2019
     targetOS: windows
+    targetArch: amd64
     binaryName: assigner
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: windows-2019
     targetOS: windows
+    targetArch: amd64
     binaryName: controller
 - job: 'publish_edge_binaries'
   pool:
     vmImage: 'windows-2019'
   dependsOn:
-  - build_action_darwin
-  - build_assigner_darwin
-  - build_controller_darwin
-  - build_action_linux
-  - build_assigner_linux
-  - build_controller_linux
-  - build_action_windows
-  - build_assigner_windows
-  - build_controller_windows
+  - build_darwin_amd64_action
+  - build_darwin_amd64_assigner
+  - build_darwin_amd64_controller
+  - build_linux_amd64_action
+  - build_linux_amd64_assigner
+  - build_linux_amd64_controller
+  - build_linux_arm_action
+  - build_linux_arm_assigner
+  - build_linux_arm_controller
+  - build_windows_amd64_action
+  - build_windows_amd64_assigner
+  - build_windows_amd64_controller
   condition: |
     and
     (
       eq(variables['Build.SourceBranch'], 'refs/heads/master'),
-      eq(dependencies.build_action_darwin.result, 'Succeeded'),
-      eq(dependencies.build_assigner_darwin.result, 'Succeeded'),
-      eq(dependencies.build_controller_darwin.result, 'Succeeded'),
-      eq(dependencies.build_action_linux.result, 'Succeeded'),
-      eq(dependencies.build_assigner_linux.result, 'Succeeded'),
-      eq(dependencies.build_controller_linux.result, 'Succeeded'),
-      eq(dependencies.build_action_windows.result, 'Succeeded'),
-      eq(dependencies.build_assigner_windows.result, 'Succeeded'),
-      eq(dependencies.build_controller_windows.result, 'Succeeded')
+      eq(dependencies.build_darwin_amd64_action.result, 'Succeeded'),
+      eq(dependencies.build_darwin_amd64_assigner.result, 'Succeeded'),
+      eq(dependencies.build_darwin_amd64_controller.result, 'Succeeded'),
+      eq(dependencies.build_linux_amd64_action.result, 'Succeeded'),
+      eq(dependencies.build_linux_amd64_assigner.result, 'Succeeded'),
+      eq(dependencies.build_linux_amd64_controller.result, 'Succeeded'),
+      eq(dependencies.build_linux_arm_action.result, 'Succeeded'),
+      eq(dependencies.build_linux_arm_assigner.result, 'Succeeded'),
+      eq(dependencies.build_linux_arm_controller.result, 'Succeeded'),
+      eq(dependencies.build_windows_amd64_action.result, 'Succeeded'),
+      eq(dependencies.build_windows_amd64_assigner.result, 'Succeeded'),
+      eq(dependencies.build_windows_amd64_controller.result, 'Succeeded')
     )
   steps:
     - task: DownloadPipelineArtifact@2

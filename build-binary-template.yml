@@ -1,13 +1,14 @@
 parameters:
   poolImage: 'macOS-latest'
   targetOS: 'darwin'
+  targetArch: 'amd64'
   binaryName: 'action'
 
 jobs:
-- job: build_${{ parameters.binaryName }}_${{ parameters.targetOS }}
+- job: build_${{ parameters.targetOS }}_${{ parameters.targetArch }}_${{ parameters.binaryName }}
   variables:
     GOOS: ${{ parameters.targetOS }}
-    GOARCH: amd64
+    GOARCH: ${{ parameters.targetArch }}
   pool:
     vmImage: '${{ parameters.poolImage }}'
   steps:
@@ -21,45 +22,53 @@ jobs:
         targetType: 'inline'
         script: |
           mkdir -p '$(GOPATH)/pkg'
+          mkdir -p '$(GOPATH)/bin'
           mkdir -p '$(modulePath)'
           shopt -s extglob
           mv !(gopath) '$(modulePath)'
           echo '##vso[task.prependpath]$(GOBIN)'
+    - task: Bash@3
+      displayName: 'Install dep'
+      inputs:
+        targetType: 'inline'
+        script: |
+          curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
     - task: Go@0
       displayName: 'Run go get documentdb'
       inputs:
         command: 'get'
         arguments: '-u github.com/a8m/documentdb-go'
         workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
-    - task: Go@0
-      displayName: 'Run go get'
-      inputs:
-        command: 'get'
-        arguments: '-v -t -d ./...'
-        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
     - task: CmdLine@2
-      displayName: 'Run go test'
+      displayName: 'Run make deps'
+      inputs:
+        script: 'make deps'
+        workingDirectory: '$(modulePath)'
+        failOnStderr: true
+    - task: CmdLine@2
+      displayName: 'Run make test'
+      condition: ne('${{ parameters.targetArch }}', 'arm')
       inputs:
         script: 'make test'
         workingDirectory: '$(modulePath)'
         failOnStderr: true
-    - task: Go@0
-      displayName: 'Run go build'
+    - task: CmdLine@2
+      displayName: 'Run make build'
       inputs:
-        command: 'build'
-        arguments: '-v -o $(Build.BinariesDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}'
-        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
+        script: 'make build TARGETS=${{ parameters.targetOS }} ARCH=$(GOARCH)'
+        workingDirectory: '$(modulePath)'
+        failOnStderr: true
     - task: ArchiveFiles@2
-      displayName: 'Build ${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
+      displayName: 'Build $(GOARCH)/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
       inputs:
-        rootFolderOrFile: '$(Build.BinariesDirectory)/${{ parameters.targetOS }}'
+        rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)'
         includeRootFolder: false
         archiveType: 'zip'
-        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)/${{ parameters.binaryName }}_${{ parameters.targetOS }}_$(GOARCH).zip'
         replaceExistingArchive: true
     - task: PublishBuildArtifacts@1
       displayName: 'Publish build artifacts'
       inputs:
-        PathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}'
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)'
         ArtifactName: 'drop'
         publishLocation: 'Container'

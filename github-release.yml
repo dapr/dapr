@@ -1,0 +1,33 @@
+# actionscore/actions github release pipeline
+
+variables:
+  ReleaseIteration: ''
+  ReleaseVersion: ''
+  ReleaseTitle: 'Actions Runtime $(ReleaseVersion) Release'
+
+pool:
+  vmImage: 'macOS-latest'
+
+steps:
+- task: DownloadPipelineArtifact@2
+  inputs:
+    buildType: 'specific'
+    project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
+    definition: '5'
+    specificBuildWithTriggering: true
+    buildVersionToDownload: 'latest'
+    artifactName: 'drop'
+    itemPattern: '**/.zip'
+    targetPath: '$(Pipeline.Workspace)'
+- task: GitHubRelease@0
+  inputs:
+    gitHubConnection: 'GitHub'
+    repositoryName: '$(Build.Repository.Name)'
+    action: 'create'
+    target: '$(ReleaseVersion)'
+    tagSource: 'manual'
+    tag: '$(ReleaseIteration)'
+    title: '$(ReleaseTitle)'
+    assets: $(Pipeline.Workspace)
+    releaseNotesFile: '$(ReleaseNotesFilePath)'
+    isPreRelease: true
