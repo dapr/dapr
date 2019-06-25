@@ -27,7 +27,7 @@ type controller struct {
 	EventSourcesHandler  handlers.Handler
 }
 
-func NewController(kubeClient kubernetes.Interface, actionsClient scheme.Interface) *controller {
+func NewController(kubeClient kubernetes.Interface, actionsClient scheme.Interface, config Config) *controller {
 	c := &controller{
 		KubeClient:    kubeClient,
 		ActionsClient: actionsClient,
@@ -43,7 +43,7 @@ func NewController(kubeClient kubernetes.Interface, actionsClient scheme.Interfa
 			nil,
 			nil,
 		),
-		ActionsHandler:      handlers.NewActionsHandler(actionsClient),
+		ActionsHandler:      handlers.NewActionsHandler(actionsClient, handlers.ActionsHandlerConfig{RuntimeImage: config.ActionsRuntimeImage}),
 		EventSourcesHandler: handlers.NewEventSourcesHandler(kubeClient),
 	}
 
