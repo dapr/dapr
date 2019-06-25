@@ -22,12 +22,6 @@ Follow the steps [here](../../../README.md#Install-on-Kubernetes) to have Action
 As we'll be deploying stateful apps, you'll also need to set up a state store.
 You can find the instructions [here](../../state/redis.md).
 
-## Step 2 - Clone the repo
-
-```
-git clone https://github.com/actionscore/actions.git
-```
-
 ## Step 2 - Deploy the node.js code with the Actions sidecar
 
 Take a look at the node app at ```/docs/getting_started/zero_to_hero/node.js/app.js```.
