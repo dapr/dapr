@@ -26,7 +26,7 @@ You can find the instructions [here](../../state/redis.md).
 
 Take a look at the node app at ```/docs/getting_started/zero_to_hero/node.js/app.js```.
 
-There are a few things of interest here: first, there are no libraries or SDKs! our code is the simplest possible node web-server.
+There are a few things of interest here: first, this is a very simple express application, which exposes a few routes and handlers.
 
 Take a look at the ```neworder``` handler:
 
