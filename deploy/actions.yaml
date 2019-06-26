@@ -66,6 +66,9 @@ spec:
       containers:
       - name: actions
         image: yaron2/actionsedge:v2
+        env:
+        - name: RUNTIME_IMAGE
+          value: yaron2/actionsedge:v2
         imagePullPolicy: Always
         ports:
         - containerPort: 6500

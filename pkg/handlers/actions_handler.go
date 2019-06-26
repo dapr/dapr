@@ -25,7 +25,6 @@ const (
 	actionSidecarContainerName             = "action"
 	actionSidecarHTTPPortName              = "actions-http"
 	actionSidecarGRPCPortName              = "actions-grpc"
-	actionSidecarImage                     = "yaron2/actionsedge:v2"
 	actionSidecarHTTPPort                  = 3500
 	actionSidecarGRPCPort                  = 50001
 	apiAddress                             = "http://actions-api.default.svc.cluster.local"
@@ -37,10 +36,16 @@ const (
 type ActionsHandler struct {
 	Client          scheme.Interface
 	DeploymentsLock *sync.Mutex
+	Config          ActionsHandlerConfig
 }
 
-func NewActionsHandler(client scheme.Interface) *ActionsHandler {
+type ActionsHandlerConfig struct {
+	RuntimeImage string
+}
+
+func NewActionsHandler(client scheme.Interface, config ActionsHandlerConfig) *ActionsHandler {
 	return &ActionsHandler{
+		Config:          config,
 		Client:          client,
 		DeploymentsLock: &sync.Mutex{},
 	}
@@ -51,7 +56,7 @@ func (r *ActionsHandler) Init() error {
 	return nil
 }
 
-func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol, actionName string) v1.Container {
+func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol, actionName, actionSidecarImage string) v1.Container {
 	return v1.Container{
 		Name:            actionSidecarContainerName,
 		Image:           actionSidecarImage,
@@ -149,7 +154,7 @@ func (r *ActionsHandler) EnableAction(deployment *appsv1.Deployment) error {
 	appPort := r.GetApplicationPort(deployment.Spec.Template.Spec.Containers)
 	appProtocol := r.GetAppProtocol(deployment)
 	actionName := r.GetActionName(deployment)
-	sidecar := r.GetEventingSidecar(appPort, appProtocol, actionName)
+	sidecar := r.GetEventingSidecar(appPort, appProtocol, actionName, r.Config.RuntimeImage)
 	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
 
 	err := r.CreateEventingService(actionName, deployment)

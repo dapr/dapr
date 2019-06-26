@@ -19,7 +19,11 @@ func main() {
 		log.Fatalf("Error building Kubernetes clients: %s", err)
 	}
 
-	controller.NewController(kubeClient, actionsClient).Run(ctx)
+	cfg, err := controller.GetConfigFromEnvironment()
+	if err != nil {
+		log.Fatalf("Error getting config: %s", err)
+	}
+	controller.NewController(kubeClient, actionsClient, cfg).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
