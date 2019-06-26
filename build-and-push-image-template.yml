@@ -8,7 +8,7 @@ steps:
     displayName: 'Download pipeline artifacts to workspace'
     inputs:
       buildType: 'current'
-      itemPattern: '**/linux_${{ parameters.targetArch }}_*.zip'
+      itemPattern: '**/*_linux_${{ parameters.targetArch }}.zip'
       targetPath: '$(Pipeline.Workspace)'
   - task: CopyFiles@2
     displayName: 'Copy Dockerfile to workspace'
