@@ -182,7 +182,4 @@ jobs:
         repository: 'actions'
         command: 'buildAndPush'
         Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
-        tags: 'edge
-          latest
-          $(Build.BuildId)
-          $(REL_VERSION)'
+        tags: 'latest'
