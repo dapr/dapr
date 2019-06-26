@@ -1,4 +1,4 @@
-# From Zero to Hero
+# From Zero to Hero with Kubernetes
 
 This tutorial will get you up and running with Actions in no time.
 By the end of this tutorial, you will know how to:
