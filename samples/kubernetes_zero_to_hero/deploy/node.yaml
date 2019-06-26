@@ -1,0 +1,41 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: nodeapp
+  labels:
+    app: node
+spec:
+  selector:
+    app: node
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodeapp
+  labels:
+    app: node
+  annotations:
+    actions.io/enabled: "true"
+    actions.io/id: "nodeapp"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node
+  template:
+    metadata:
+      labels:
+        app: node
+    spec:
+      containers:
+      - name: node
+        image: yaron2/nodeapp
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always
