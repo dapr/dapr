@@ -185,4 +185,4 @@ jobs:
         tags: 'edge
           latest
           $(Build.BuildId)
-          $(ReleaseVersion)'
+          $(REL_VERSION)'

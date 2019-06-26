@@ -1,9 +1,7 @@
 # actionscore/actions github release pipeline
 
 variables:
-  ReleaseIteration: ''
-  ReleaseVersion: ''
-  ReleaseTitle: 'Actions Runtime $(ReleaseVersion) Release'
+  ReleaseTitle: 'Actions Runtime $(REL_VERSION) Release'
 
 pool:
   vmImage: 'macOS-latest'
@@ -24,9 +22,9 @@ steps:
     gitHubConnection: 'GitHub'
     repositoryName: '$(Build.Repository.Name)'
     action: 'create'
-    target: '$(ReleaseVersion)'
+    target: '$(REL_VERSION)'
     tagSource: 'manual'
-    tag: '$(ReleaseIteration)'
+    tag: '$(REL_ITERATION)'
     title: '$(ReleaseTitle)'
     assets: $(Pipeline.Workspace)
     releaseNotesFile: '$(ReleaseNotesFilePath)'
