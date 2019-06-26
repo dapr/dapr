@@ -3,9 +3,9 @@
 This tutorial will get you up and running with Actions in no time.
 By the end of this tutorial, you will know how to:
 
-1. Set up Actions on your Kubernetes cluster
-2. Deploy an Actions enabled Kubernetes Pod
-3. Publish and receive messages from Node.js and Python
+1. Set up Actions Locally
+2. Run actions using the cli
+3. Publish and receive messages from Node.js
 4. Save and restore Action state
 5. Bonus - get your code triggered by external Event Sources
 
@@ -17,7 +17,7 @@ Let's get going!
 ## Step 1 - Setup
 
 First thing you need is an RBAC enabled Kubernetes cluster.
-Follow the steps [here](../../../README.md#Install-on-Kubernetes) to have Actions deployed to your Kubernetes cluster.<br>
+Follow the steps [here](../../../README.md#install-as-standalone) to have install Actions as a standalone.<br>
 
 As we'll be deploying stateful apps, you'll also need to set up a state store.
 You can find the instructions [here](../../state/redis.md).
