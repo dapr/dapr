@@ -134,7 +134,7 @@ jobs:
   dependsOn:
     - publish_edge_binaries
   condition: |
-    eq(dependencies.publish_edge_binaries.result, 'Succeeded'),
+    eq(dependencies.publish_edge_binaries.result, 'Succeeded')
   steps:
     - task: DownloadPipelineArtifact@2
       displayName: 'Download pipeline artifacts to workspace'
