@@ -151,10 +151,11 @@ jobs:
         OverWrite: true
         flattenFolders: true
     - task: ExtractFiles@1
+      displayName: 'Extract darwin amd64 binaries'
       inputs:
-        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*.zip'
-        destinationFolder: '$(Pipeline.Workspace)/dist'
-        cleanDestinationFolder: true
+        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_darwin_amd64.zip'
+        destinationFolder: '$(Pipeline.Workspace)/dist/darwin_amd64'
+        cleanDestinationFolder: false
     - task: Docker@2
       enabled: false
       displayName: 'Build and push Docker image'
