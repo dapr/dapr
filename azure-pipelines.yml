@@ -177,8 +177,9 @@ jobs:
     - task: Docker@2
       displayName: 'Build and push Docker image'
       inputs:
+        containerRegistry: 'ACR Actions Core'
         repository: 'actions'
-        command: 'build'
+        command: 'buildAndPush'
         Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
         tags: 'edge
           latest
