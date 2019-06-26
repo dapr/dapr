@@ -26,7 +26,7 @@ steps:
       cleanDestinationFolder: false
   - task: Docker@2
     displayName: 'Build and push ${{ parameters.targetArch }} Docker image'
-    condition: eq(${{ parameters.targetArch }}, 'amd64')
+    condition: eq('${{ parameters.targetArch }}', 'amd64')
     inputs:
       containerRegistry: 'ACR Actions Core'
       repository: 'actions'
@@ -35,7 +35,7 @@ steps:
       tags: 'latest latest-${{ parameters.targetArch }}'
   - task: Docker@2
     displayName: 'Build and push ${{ parameters.targetArch }} Docker image'
-    condition: ne(${{ parameters.targetArch }}, 'amd64')
+    condition: ne('${{ parameters.targetArch }}', 'amd64')
     inputs:
       containerRegistry: 'ACR Actions Core'
       repository: 'actions'
