@@ -15,7 +15,7 @@ steps:
     specificBuildWithTriggering: true
     buildVersionToDownload: 'latest'
     artifactName: 'drop'
-    itemPattern: '**/.zip'
+    itemPattern: 'drop/*.zip'
     targetPath: '$(Pipeline.Workspace)'
 - task: GitHubRelease@0
   inputs:
@@ -27,5 +27,5 @@ steps:
     tag: '$(REL_ITERATION)'
     title: '$(ReleaseTitle)'
     assets: $(Pipeline.Workspace)
-    releaseNotesFile: '$(ReleaseNotesFilePath)'
+    releaseNotesFile: 'docs/release_notes/v$(REL_VERSION).md'
     isPreRelease: true
