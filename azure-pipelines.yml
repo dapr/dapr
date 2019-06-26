@@ -2,6 +2,7 @@
 
 trigger:
 - master
+- release-*
 
 variables:
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
