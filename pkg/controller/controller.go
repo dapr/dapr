@@ -43,7 +43,7 @@ func NewController(kubeClient kubernetes.Interface, actionsClient scheme.Interfa
 			nil,
 			nil,
 		),
-		ActionsHandler:      handlers.NewActionsHandler(actionsClient, handlers.ActionsHandlerConfig{RuntimeImage: config.ActionsRuntimeImage}),
+		ActionsHandler:      handlers.NewActionsHandler(actionsClient, handlers.ActionsHandlerConfig{RuntimeImage: config.ActionsRuntimeImage, ImagePullSecretName: config.ImagePullSecretName}),
 		EventSourcesHandler: handlers.NewEventSourcesHandler(kubeClient),
 	}
 
