@@ -129,7 +129,7 @@ jobs:
           Destination: 'AzureBlob'
           storage: 'actionsreleases'
           ContainerName: 'bin'
-- job: 'build_and_push_docker_image'
+- job: 'build_and_push_amd64_docker_image'
   pool: 
     vmImage: 'ubuntu-latest'
   dependsOn:
@@ -137,49 +137,17 @@ jobs:
   condition: |
     eq(dependencies.publish_edge_binaries.result, 'Succeeded')
   steps:
-    - task: DownloadPipelineArtifact@2
-      displayName: 'Download pipeline artifacts to workspace'
-      inputs:
-        buildType: 'current'
-        itemPattern: '**/*.zip'
-        targetPath: '$(Pipeline.Workspace)'
-    - task: CopyFiles@2
-      displayName: 'Copy Dockerfile to workspace'
-      inputs:
-        SourceFolder: '$(Build.SourcesDirectory)'
-        Contents: 'Dockerfile'
-        TargetFolder: '$(Pipeline.Workspace)'
-        OverWrite: true
-        flattenFolders: true
-    - task: ExtractFiles@1
-      displayName: 'Extract darwin amd64 binaries'
-      inputs:
-        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_darwin_amd64.zip'
-        destinationFolder: '$(Pipeline.Workspace)/dist/darwin_amd64'
-        cleanDestinationFolder: false
-    - task: ExtractFiles@1
-      displayName: 'Extract linux amd64 binaries'
-      inputs:
-        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_linux_amd64.zip'
-        destinationFolder: '$(Pipeline.Workspace)/dist/linux_amd64'
-        cleanDestinationFolder: false
-    - task: ExtractFiles@1
-      displayName: 'Extract windows amd64 binaries'
-      inputs:
-        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_windows_amd64.zip'
-        destinationFolder: '$(Pipeline.Workspace)/dist/windows_amd64'
-        cleanDestinationFolder: false
-    - task: ExtractFiles@1
-      displayName: 'Extract linux arm binaries'
-      inputs:
-        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_linux_arm.zip'
-        destinationFolder: '$(Pipeline.Workspace)/dist/linux_arm'
-        cleanDestinationFolder: false
-    - task: Docker@2
-      displayName: 'Build and push Docker image'
-      inputs:
-        containerRegistry: 'ACR Actions Core'
-        repository: 'actions'
-        command: 'buildAndPush'
-        Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
-        tags: 'latest'
+    - template: 'build-and-push-image-template.yml'
+      parameters:
+        targetArch: amd64
+- job: 'build_and_push_arm_docker_image'
+  pool: 
+    vmImage: 'ubuntu-latest'
+  dependsOn:
+    - publish_edge_binaries
+  condition: |
+    eq(dependencies.publish_edge_binaries.result, 'Succeeded')
+  steps:
+    - template: 'build-and-push-image-template.yml'
+      parameters:
+        targetArch: arm
