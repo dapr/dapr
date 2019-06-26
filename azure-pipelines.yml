@@ -156,8 +156,25 @@ jobs:
         archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_darwin_amd64.zip'
         destinationFolder: '$(Pipeline.Workspace)/dist/darwin_amd64'
         cleanDestinationFolder: false
+    - task: ExtractFiles@1
+      displayName: 'Extract linux amd64 binaries'
+      inputs:
+        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_linux_amd64.zip'
+        destinationFolder: '$(Pipeline.Workspace)/dist/linux_amd64'
+        cleanDestinationFolder: false
+    - task: ExtractFiles@1
+      displayName: 'Extract windows amd64 binaries'
+      inputs:
+        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_windows_amd64.zip'
+        destinationFolder: '$(Pipeline.Workspace)/dist/windows_amd64'
+        cleanDestinationFolder: false
+    - task: ExtractFiles@1
+      displayName: 'Extract linux arm binaries'
+      inputs:
+        archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_linux_arm.zip'
+        destinationFolder: '$(Pipeline.Workspace)/dist/linux_arm'
+        cleanDestinationFolder: false
     - task: Docker@2
-      enabled: false
       displayName: 'Build and push Docker image'
       inputs:
         repository: 'actions'
