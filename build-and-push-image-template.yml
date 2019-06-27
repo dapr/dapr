@@ -45,4 +45,4 @@ steps:
       repository: 'actions'
       command: 'buildAndPush'
       Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
-      tags: 'latest'
+      tags: '$(DockerTags)'
