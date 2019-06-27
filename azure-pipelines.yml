@@ -117,7 +117,7 @@ jobs:
   steps:
     - script: |
       echo '##vso[task.setvariable variable=BlobPrefix]$(Build.SourceBranchName)/$(REL_VERSION)'
-    condition: not(startsWith('variables['Build.SourceBranch']', 'refs/heads/release-'))
+      condition: not(startsWith('variables['Build.SourceBranch']', 'refs/heads/release-'))
     - task: DownloadPipelineArtifact@2
       displayName: 'Download pipeline artifacts to workspace'
       inputs:
