@@ -1,6 +1,7 @@
 # From Zero to Hero Locally
 
-This tutorial will get you up and running with Actions in no time.
+This tutorial will demonstrate how to get Actions running locally on your machine. We'll be deploying a Node.js app that subscribes to order messages persists them.
+
 By the end of the end, you will know how to:
 
 1. Set up Actions Locally
@@ -8,8 +9,6 @@ By the end of the end, you will know how to:
 3. Run the Node.js app with Actions
 4. Post Messages to your Service
 5. Confirm Successful Persistence
-
-In this tutorial, we'll be deploying a Node.js app that subscribes to order messages persists them.
 
 ## Prerequisites
 This sample depends requires you to have the following installed on your machine:
