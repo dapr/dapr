@@ -1,32 +1,42 @@
 # From Zero to Hero Locally
 
 This tutorial will get you up and running with Actions in no time.
-By the end of this tutorial, you will know how to:
+By the end of the end, you will know how to:
 
 1. Set up Actions Locally
-2. Run actions using the cli
-3. Publish and receive messages from Node.js
-4. Save and restore Action state
-5. Bonus - get your code triggered by external Event Sources
+2. Understand the Code
+3. Run the Node.js app with Actions
+4. Post Messages to your Service
+5. Confirm Successful Persistence
 
 In this tutorial, we'll be deploying a node.js app that subscribes to messages arriving on ```neworder``` and saving it's state.
-We'll also be deploying a Python app that publishes a new message.
 
-Let's get going!
+## Prerequisites
+This sample depends requires you to have the following installed on your machine:
+- [Docker](https://docs.docker.com/)
+- [Node](https://nodejs.org/en/)
+- [Postman](https://www.getpostman.com/)
 
-## Step 1 - Setup
+## Step 1 - Setup Actions 
 
-First thing you need is an RBAC enabled Kubernetes cluster.
-Follow the steps [here](../../../README.md#install-as-standalone) to have install Actions as a standalone.<br>
+1. Download the [release](https://github.com/actionscore/cli/releases) for your OS
 
-As we'll be deploying stateful apps, you'll also need to set up a state store.
-You can find the instructions [here](../../state/redis.md).
+    **Note for Windows Users**: Due to a known bug, you must rename 'action' to 'actions.exe'
 
-## Step 2 - Deploy the node.js code with the Actions sidecar
+2. Add the path to `actions.exe` to your PATH
+3. Run `actions init`, which will set up create two containers: the actions runtime and a redis state store. To validate that these two containers were successfully created, run `docker ps` and observe output: 
+```
+CONTAINER ID        IMAGE                   COMMAND                  CREATED             STATUS              PORTS                     NAMES
+84b19574f5e5        yaron2/actionsedge:v2   "./assigner"             About an hour ago   Up About an hour    0.0.0.0:6050->50005/tcp   xenodochial_chatterjee
+78d39ae67a95        redis                   "docker-entrypoint.s…"   About an hour ago   Up About an hour    0.0.0.0:6379->6379/tcp    hungry_dubinsky
+```
+4. Download actions repo: Clone repo: `git clone https://github.com/actionscore/actions.git`
 
-Take a look at the node app at ```/docs/getting_started/zero_to_hero/node.js/app.js```.
+## Step 2 - Understand the Code
 
-There are a few things of interest here: first, this is a very simple express application, which exposes a few routes and handlers.
+Now that we've locally set up actions and cloned the repo, let's take a look at our local zero-to-hero sample. Navigate to the local_zero_to_hero sample: `cd samples/local_zero_to_hero/app.js`.
+
+In the `app.js` you'll find a very simple `express` application, which exposes a few routes and handlers.
 
 Take a look at the ```neworder``` handler:
 
@@ -50,8 +60,7 @@ app.post('/neworder', (req, res) => {
 })
 ```
 
-As you can see, in order to register for an event, you only need to listen on some event name.
-That event name can be used by other Actions to send messages to, or it can be the name of an Event Source you defined, for example [Azure Event Hubs](../../azure_eventhubs.md).<br><br>
+As you can see, in order to register for an event, you only need to listen on some event name. External event sources (e.g. [Azure Event Hubs](../azure_eventhubs.md)) or other actions can _publish_ events by that name and your service _subscribes_ to them.
 
 But the Action doesn't stop there!
 We are returning a JSON response to Actions saying we want to save a state in a key-value format:
@@ -68,120 +77,48 @@ res.json({
 All the heavy lifting, retries, concurrency handling etc. is handled by our invisible friend, Action.
 
 Now that we save our state, we want to get it as soon as our process launches, so we can either reject the state and start clean or accept it.
-To do that, simply listen on a POST ```/state``` endpoint:
+To accomplish this, we simply expose a POST endpoint: `/state` 
 
 ```
 app.post('/state', (req, res) => {
     e = req.body
 
     if (e.length > 0) {
-        order = e[0].value
+        order = e[e.length - 1].value
     }
 
     res.status(200).send()
 })
 ```
 
-Here, we are simply assigning the first item of the state array back to our order value.
+Here, we are simply assigning the last item of the state array back to our order value.
 
-This is enough, lets deploy our app:
+## Step 3 - Run the Node.js App with Actions
+ 
+1. Navigate to the zero to hero nod sample project: `cd samples/local_zero_to_hero/app.js`
 
-```
-kubectl apply -f ./deploy/node.yaml
-```
+2. Install dependencies: `npm install`. This will install `express` and `body-parser`
 
-This will deploy our web app to Kubernetes.
-The Actions control plane will automatically inject the Actions sidecar to our Pod.
-
-If you take a look at the ```node.yaml``` file, you will see how Actions is enabled for that deployment:
-
-```actions.io/enabled: true``` - this tells the Action control plane to inject a sidecar to this deployment.
-```actions.io/id: nodeapp``` - this assigns a unique id or name to the Action, so it can be sent messages to and communicated with by other Actions.
-
-
-This deployment provisions an External IP.
-Wait until the IP is visible: (may take a few minutes)
+3. Run node application with actions: `actions run --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
 
 ```
-kubectl get svc nodeapp
+Starting Actions with id mynode on port 50283
+You're up and running! Both Actions and your app logs will appear here. 
+...
 ```
 
-Once you have an external IP, save it.
-You can also export it to a variable:
+4. Copy the Actions port for the next step
 
-```
-export NODE_APP=$(kubectl get svc nodeapp --output 'jsonpath={.status.loadBalancer.ingress[0].ip}')
-```
+## Step 4 - Post Messages to your Service
 
-## Step 3 - Deploy the Python app with the Actions sidecar
+Now that our actions and node app are running, let's post messages against it. 
 
-```
-kubectl apply -f ./deploy/python.yaml
-```
+ Open Postman and create a POST request against `http://localhost:<YOUR_PORT>/invoke/neworder`
+![Postman Screenshot](./img/postman1.jpg)
+In your terminal window, you should see logs indicating that the message was received and state was updated.
 
-Our Python app will be used to publish a message every second.
+## Step 5 - Confirm Successful Persistence
 
-If you look at /python/app.py, you will notice it sends a JSON message to the actions url at ```localhost:3500```, the default listening endpoint for Actions.
-
-```
-while True:
-  message = "{\"data\":{\"orderID\":\"777\"}", "\"eventName\": \"neworder\"}"
-
-  try:
-    response = requests.post(actions_url, data=message)
-  except Exception:
-      pass
-```
-
-Wait for the pod to be in ```Running``` state:
-
-```
-kubectl get pods --selector=app=python -w
-```
-
-## Step 4 - Observe messages coming through and rejoice
-
-Great, we now have both our apps deployed along with the Actions sidecars.<br>
-Get the logs of our node app:
-
-```
-kubectl logs --selector=app=node -c node
-```
-
-If everything went right, you should be seeing something like this in the logs:
-
-```
-Got a new order! Order ID: 777
-```
-
-## Step 5 - Confirm our immortality (aka State)
-
-Hit the node app's order endpoint to get the latest order.
-Remember that IP from before? put it in your browser, or curl it:
-
-```
-curl $NODE_APP/order
-{"orderID":"777"}
-```
-
-You should be getting the order JSON as a response.
-Now, we'll scale the Python app to zero so it stops sending messages:
-
-```
-kubectl scale deploy pythonapp --replicas 0
-```
-
-Wait until all the pods have terminated:
-
-```
-kubectl get pods --selector=app=python
-```
-
-Delete the node app pod, and wait for it to come back up:
-
-```
-kubectl delete pod --selector=app=node
-kubectl get pod --selector=app=node -w
-```
-
-Hit the order endpoint again, and voila! our state has been restored.
+Now, let's just make sure that we our order was successfully persisted to our state store. Create a GET request against: `http://localhost:state/order`
+![Postman Screenshot 2](./img/postman2.jpg)
+Observe the expected result!
