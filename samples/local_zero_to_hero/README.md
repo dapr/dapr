@@ -118,6 +118,6 @@ In your terminal window, you should see logs indicating that the message was rec
 
 ## Step 5 - Confirm Successful Persistence
 
-Now, let's just make sure that we our order was successfully persisted to our state store. Create a GET request against: `http://localhost:state/order`
+Now, let's just make sure that we our order was successfully persisted to our state store. Create a GET request against: `http://localhost:<YOUR_PORT>/state/order`
 ![Postman Screenshot 2](./img/postman2.jpg)
 Observe the expected result!
