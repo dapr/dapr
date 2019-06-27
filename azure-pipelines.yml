@@ -115,6 +115,9 @@ jobs:
       eq(dependencies.build_windows_amd64_controller.result, 'Succeeded')
     )
   steps:
+    - script: |
+      echo '##vso[task.setvariable variable=BlobPrefix]$(Build.SourceBranchName)/$(REL_VERSION)'
+    condition: not(startsWith('variables['Build.SourceBranch']', 'refs/heads/release-'))
     - task: DownloadPipelineArtifact@2
       displayName: 'Download pipeline artifacts to workspace'
       inputs:
@@ -124,11 +127,12 @@ jobs:
     - task: AzureFileCopy@3
       displayName: 'Publish archives to blob storage'
       inputs:
-          SourcePath: '$(Pipeline.Workspace)/drop'
-          azureSubscription: 'Actions Releases'
-          Destination: 'AzureBlob'
-          storage: 'actionsreleases'
-          ContainerName: 'bin'
+        SourcePath: '$(Pipeline.Workspace)/drop'
+        azureSubscription: 'Actions Releases'
+        Destination: 'AzureBlob'
+        storage: 'actionsreleases'
+        ContainerName: 'bin'
+        blobPrefix: '$(BlobPrefix)'
 - job: 'build_and_push_amd64_docker_image'
   pool: 
     vmImage: 'ubuntu-latest'
