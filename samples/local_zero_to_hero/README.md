@@ -1,6 +1,6 @@
 # From Zero to Hero Locally
 
-This tutorial will demonstrate how to get Actions running locally on your machine. We'll be deploying a Node.js app that subscribes to order messages persists them.
+This tutorial will demonstrate how to get Actions running locally on your machine. We'll be deploying a Node.js app that subscribes to order messages and persists them.
 
 By the end of the end, you will know how to:
 
