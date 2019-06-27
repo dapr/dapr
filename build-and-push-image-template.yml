@@ -7,11 +7,11 @@ steps:
   - script: |
       echo '##vso[task.setvariable variable=DeployEnvironment]dev'
       echo '##vso[task.setvariable variable=DockerTags]$(Build.SourceBranchName)'
-    condition: not(startsWith('variables['Build.SourceBranch']', 'refs/heads/release-'))
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
   - script: |
       echo '##vso[task.setvariable variable=DeployEnvironment]prod'
       echo '##vso[task.setvariable variable=DockerTags]v$(REL_VERSION'
-    condition: startsWith('variables['Build.SourceBranch']', 'refs/heads/release-')
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
   - script: |
       echo '##vso[task.setvariable variable=DockerTags]$(DockerTags)\nlatest'
     condition: eq('${{ parameters.targetArch }}', 'amd64')
