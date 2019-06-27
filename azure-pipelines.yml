@@ -2,6 +2,7 @@
 
 trigger:
 - master
+- release-*
 
 variables:
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
@@ -100,7 +101,6 @@ jobs:
   condition: |
     and
     (
-      eq(variables['Build.SourceBranch'], 'refs/heads/master'),
       eq(dependencies.build_darwin_amd64_action.result, 'Succeeded'),
       eq(dependencies.build_darwin_amd64_assigner.result, 'Succeeded'),
       eq(dependencies.build_darwin_amd64_controller.result, 'Succeeded'),
@@ -116,14 +116,38 @@ jobs:
     )
   steps:
     - task: DownloadPipelineArtifact@2
+      displayName: 'Download pipeline artifacts to workspace'
       inputs:
         buildType: 'current'
         itemPattern: '**/*.zip'
         targetPath: '$(Pipeline.Workspace)'
     - task: AzureFileCopy@3
+      displayName: 'Publish archives to blob storage'
       inputs:
           SourcePath: '$(Pipeline.Workspace)/drop'
           azureSubscription: 'Actions Releases'
           Destination: 'AzureBlob'
           storage: 'actionsreleases'
           ContainerName: 'bin'
+- job: 'build_and_push_amd64_docker_image'
+  pool: 
+    vmImage: 'ubuntu-latest'
+  dependsOn:
+    - publish_edge_binaries
+  condition: |
+    eq(dependencies.publish_edge_binaries.result, 'Succeeded')
+  steps:
+    - template: 'build-and-push-image-template.yml'
+      parameters:
+        targetArch: amd64
+- job: 'build_and_push_arm_docker_image'
+  pool: 
+    vmImage: 'ubuntu-latest'
+  dependsOn:
+    - publish_edge_binaries
+  condition: |
+    eq(dependencies.publish_edge_binaries.result, 'Succeeded')
+  steps:
+    - template: 'build-and-push-image-template.yml'
+      parameters:
+        targetArch: arm

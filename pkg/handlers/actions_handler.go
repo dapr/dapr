@@ -40,7 +40,8 @@ type ActionsHandler struct {
 }
 
 type ActionsHandlerConfig struct {
-	RuntimeImage string
+	RuntimeImage        string
+	ImagePullSecretName string
 }
 
 func NewActionsHandler(client scheme.Interface, config ActionsHandlerConfig) *ActionsHandler {
@@ -150,26 +151,6 @@ func (r *ActionsHandler) GetAppProtocol(deployment *appsv1.Deployment) string {
 	return string(HTTPProtocol)
 }
 
-func (r *ActionsHandler) EnableAction(deployment *appsv1.Deployment) error {
-	appPort := r.GetApplicationPort(deployment.Spec.Template.Spec.Containers)
-	appProtocol := r.GetAppProtocol(deployment)
-	actionName := r.GetActionName(deployment)
-	sidecar := r.GetEventingSidecar(appPort, appProtocol, actionName, r.Config.RuntimeImage)
-	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
-
-	err := r.CreateEventingService(actionName, deployment)
-	if err != nil {
-		return err
-	}
-
-	err = kubernetes.UpdateDeployment(deployment)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (r *ActionsHandler) IsAnnotatedForActions(deployment *appsv1.Deployment) bool {
 	annotations := deployment.ObjectMeta.Annotations
 	if annotations != nil {
@@ -189,6 +170,32 @@ func (r *ActionsHandler) ActionEnabled(deployment *appsv1.Deployment) bool {
 	}
 
 	return false
+}
+
+func (r *ActionsHandler) EnableAction(deployment *appsv1.Deployment) error {
+	appPort := r.GetApplicationPort(deployment.Spec.Template.Spec.Containers)
+	appProtocol := r.GetAppProtocol(deployment)
+	actionName := r.GetActionName(deployment)
+	sidecar := r.GetEventingSidecar(appPort, appProtocol, actionName, r.Config.RuntimeImage)
+	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
+
+	if r.Config.ImagePullSecretName != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(deployment.Spec.Template.Spec.ImagePullSecrets, corev1.LocalObjectReference{
+			Name: r.Config.ImagePullSecretName,
+		})
+	}
+
+	err := r.CreateEventingService(actionName, deployment)
+	if err != nil {
+		return err
+	}
+
+	err = kubernetes.UpdateDeployment(deployment)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *ActionsHandler) RemoveActionFromDeployment(deployment *appsv1.Deployment) error {
