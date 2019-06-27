@@ -51,5 +51,5 @@ steps:
       command: 'buildAndPush'
       Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
       tags: |
-        '$(DockerVersionTag)'
-        '$(DockerReleaseTag)'
+        $(DockerVersionTag)
+        $(DockerReleaseTag)
