@@ -9,7 +9,7 @@ By the end of the end, you will know how to:
 4. Post Messages to your Service
 5. Confirm Successful Persistence
 
-In this tutorial, we'll be deploying a node.js app that subscribes to messages arriving on ```neworder``` and saving it's state.
+In this tutorial, we'll be deploying a Node.js app that subscribes to order messages persists them.
 
 ## Prerequisites
 This sample depends requires you to have the following installed on your machine:
@@ -19,7 +19,7 @@ This sample depends requires you to have the following installed on your machine
 
 ## Step 1 - Setup Actions 
 
-1. Download the [release](https://github.com/actionscore/cli/releases) for your OS
+1. Download the [Actions CLI release](https://github.com/actionscore/cli/releases) for your OS
 
     **Note for Windows Users**: Due to a known bug, you must rename 'action' to 'actions.exe'
 
