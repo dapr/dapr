@@ -1,0 +1,55 @@
+# actionscore/actions build and push image template
+
+parameters:
+  targetArch: 'amd64'
+
+steps:
+  - script: |
+      echo '##vso[task.setvariable variable=DockerVersionTag]$(Build.SourceBranchName)'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
+  - script: |
+      echo '##vso[task.setvariable variable=DockerReleaseTag]latest'
+      echo '##vso[task.setvariable variable=DockerVersionTag]v$(REL_VERSION)'
+    condition: |
+      and(
+        eq('${{ parameters.targetArch }}', 'amd64'),
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
+      )
+  - script: |
+      echo '##vso[task.setvariable variable=DockerReleaseTag]latest-${{ parameters.targetArch }}'
+      echo '##vso[task.setvariable variable=DockerVersionTag]v$(REL_VERSION)-${{ parameters.targetArch }}'
+    condition: |
+      and(
+        ne('${{ parameters.targetArch }}', 'amd64'),
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
+      )
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download pipeline artifacts to workspace'
+    inputs:
+      buildType: 'current'
+      itemPattern: '**/*_linux_${{ parameters.targetArch }}.zip'
+      targetPath: '$(Pipeline.Workspace)'
+  - task: CopyFiles@2
+    displayName: 'Copy Dockerfile to workspace'
+    inputs:
+      SourceFolder: '$(Build.SourcesDirectory)'
+      Contents: 'Dockerfile'
+      TargetFolder: '$(Pipeline.Workspace)'
+      OverWrite: true
+      flattenFolders: true
+  - task: ExtractFiles@1
+    displayName: 'Extract linux ${{ parameters.targetArch }} binaries'
+    inputs:
+      archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_linux_${{ parameters.targetArch }}.zip'
+      destinationFolder: '$(Pipeline.Workspace)/dist'
+      cleanDestinationFolder: false
+  - task: Docker@2
+    displayName: 'Build and push ${{ parameters.targetArch }} Docker image'
+    inputs:
+      containerRegistry: 'ACR Actions Core'
+      repository: 'actions'
+      command: 'buildAndPush'
+      Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
+      tags: |
+        $(DockerVersionTag)
+        $(DockerReleaseTag)
