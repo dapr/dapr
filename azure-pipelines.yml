@@ -133,6 +133,9 @@ jobs:
         ContainerName: 'bin'
         blobPrefix: '$(BlobPrefix)'
 - job: 'build_and_push_amd64_docker_image'
+  variables:
+    DockerVersionTag: ''
+    DockerReleaseTag: ''
   pool: 
     vmImage: 'ubuntu-latest'
   dependsOn:
@@ -144,6 +147,9 @@ jobs:
       parameters:
         targetArch: amd64
 - job: 'build_and_push_arm_docker_image'
+  variables:
+    DockerVersionTag: ''
+    DockerReleaseTag: ''
   pool: 
     vmImage: 'ubuntu-latest'
   dependsOn:
