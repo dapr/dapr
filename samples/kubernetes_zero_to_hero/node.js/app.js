@@ -1,24 +1,20 @@
 const express = require('express');
-var bodyParser = require('body-parser');
+const bodyParser = require('body-parser');
+require('isomorphic-fetch');
+
 const app = express();
 app.use(bodyParser.json());
 
+const actionsUrl = `http://localhost:3500`;
 const port = 3000;
 
-app.post('/state', (req, res) => {
-    e = req.body;
-
-    if (e.length > 0) {
-        order = e[e.length - 1].value;
-    }
-
-    res.status(200).send();
-});
-
-let order;
-
 app.get('/order', (_req, res) => {
-    res.json(order);
+    fetch(`${actionsUrl}/state/order`)
+        .then((response) => {
+            return response.json();
+        }).then((orders) => {
+            res.send(orders);
+        });
 });
 
 app.post('/neworder', (req, res) => {
@@ -26,14 +22,22 @@ app.post('/neworder', (req, res) => {
     const orderId = data.orderId;
     console.log("Got a new order! Order ID: " + orderId);
 
-    order = data;
+    const state = [{
+        key: "order",
+        value: data
+    }];
 
-    res.json({
-        state: [{
-            key: "order",
-            value: order
-        }]
+    fetch(`${actionsUrl}/state`, {
+        method: "POST",
+        body: JSON.stringify(state),
+        headers: {
+            "Content-Type": "application/json"
+        }
+    }).then((response) => {
+        console.log((response.ok) ? "Successfully persisted state" : "Failed to persist state");
     });
+
+    res.status(200).send();
 });
 
 app.listen(port, () => console.log(`Node App listening on port ${port}!`));
