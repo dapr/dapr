@@ -35,34 +35,40 @@ CONTAINER ID        IMAGE                   COMMAND                  CREATED    
 
 Now that we've locally set up actions and cloned the repo, let's take a look at our local zero-to-hero sample. Navigate to the local_zero_to_hero sample: `cd samples/local_zero_to_hero/app.js`.
 
-In the `app.js` you'll find a very simple `express` application, which exposes a few routes and handlers.
+In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers.
 
-Take a look at the ```neworder``` handler:
+Take a look at the ```neworder``` handler, which handles order messages, logs them and then persists them:
 
 ```
 app.post('/neworder', (req, res) => {
-    data = req.body.data
-    orderID = data.orderID
+    const data = req.body.data;
+    const orderId = data.orderId;
+    console.log("Got a new order! Order ID: " + orderId);
 
-    console.log("Got a new order! Order ID: " + orderID)
+    const state = [{
+        key: "order",
+        value: data
+    }];
 
-    order = data
-    
-    res.json({
-        state: [
-            {
-                key: "order",
-                value: order
-            }
-        ]
+    fetch("http://localhost:3500/state", {
+        method: "POST",
+        body: JSON.stringify(state),
+        headers: {
+            "Content-Type": "application/json"
+        }
+    }).then((response) => {
+        console.log((response.ok) ? "Successfully persisted state" : "Failed to persist state");
     })
-})
+
+    res.status(200).send();
+});
 ```
 
-As you can see, in order to register for an event, you only need to listen on some event name. External event sources (e.g. [Azure Event Hubs](../azure_eventhubs.md)) or other actions can _publish_ events by that name and your service _subscribes_ to them.
+Here we're simply subscribing for `neworder` events by implementing a `/neworder` route and handler. When a message with `eventName` of "neworder" comes through, this handler will handle it. External event sources (e.g. [Azure Event Hubs](../azure_eventhubs.md)) or other actions can _publish_ events by that name and your service _subscribes_ to them.
 
-But the Action doesn't stop there!
-We are returning a JSON response to Actions saying we want to save a state in a key-value format:
+Taking a look at the code, you can see that we log the  `orderId   ` of the message that comes through, and then persist it against our state store (Redis) by posting to the `/state` endpoint. 
+
+Alternatively, we could have persisted our state by simply returning it with our response object:
 
 ```
 res.json({
@@ -72,6 +78,8 @@ res.json({
         }
     })
 ```
+
+We chose to avoid this approach, as it doesn't allow us to verify if our message successfully persisted.
 
 All the heavy lifting, retries, concurrency handling etc. is handled by our invisible friend, Action.
 
