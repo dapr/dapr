@@ -7,16 +7,6 @@ app.use(bodyParser.json());
 
 const port = 3000;
 
-app.post('/state', (req, res) => {
-    e = req.body;
-
-    if (e.length > 0) {
-        order = e[0].value;
-    }
-
-    res.status(200).send();
-});
-
 app.get('/order', (_req, res) => {
     fetch("http://localhost:3500/state/order")
         .then((response) => {

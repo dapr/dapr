@@ -66,7 +66,7 @@ app.post('/neworder', (req, res) => {
 
 Here we're simply subscribing for `neworder` events by implementing a `/neworder` route and handler. When a message with `eventName` of "neworder" comes through, this handler will handle it. External event sources (e.g. [Azure Event Hubs](../azure_eventhubs.md)) or other actions can _publish_ events by that name and your service _subscribes_ to them.
 
-Taking a look at the code, you can see that we log the  `orderId   ` of the message that comes through, and then persist it against our state store (Redis) by posting to the `/state` endpoint. 
+Taking a look at the code, you can see that we log the  `orderId` of the message that comes through, and then persist it against our state store (Redis) by posting to the `/state` endpoint. 
 
 Alternatively, we could have persisted our state by simply returning it with our response object:
 
@@ -81,35 +81,16 @@ res.json({
 
 We chose to avoid this approach, as it doesn't allow us to verify if our message successfully persisted.
 
-All the heavy lifting, retries, concurrency handling etc. is handled by our invisible friend, Action.
-
-Now that we save our state, we want to get it as soon as our process launches, so we can either reject the state and start clean or accept it.
-To accomplish this, we simply expose a POST endpoint: `/state` 
-
-```
-app.post('/state', (req, res) => {
-    e = req.body
-
-    if (e.length > 0) {
-        order = e[e.length - 1].value
-    }
-
-    res.status(200).send()
-})
-```
-
-Here, we are simply assigning the last item of the state array back to our order value.
-
 ## Step 3 - Run the Node.js App with Actions
  
 1. Navigate to the zero to hero nod sample project: `cd samples/local_zero_to_hero/app.js`
 
 2. Install dependencies: `npm install`. This will install `express` and `body-parser`
 
-3. Run node application with actions: `actions run --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
+3. Run node application with actions: `actions run --port 3500 --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
 
 ```
-Starting Actions with id mynode on port 50283
+Starting Actions with id mynode on port 3500
 You're up and running! Both Actions and your app logs will appear here. 
 ...
 ```
