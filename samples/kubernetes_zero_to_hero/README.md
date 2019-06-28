@@ -1,96 +1,99 @@
 # From Zero to Hero with Kubernetes
 
-This tutorial will get you up and running with Actions in no time.
+This tutorial will get you up and running with Actions in a Kubernetes cluster. We'll be deploying a python app that generates messages and a Node app that consumes and persists them. 
+
 By the end of this tutorial, you will know how to:
 
-1. Set up Actions on your Kubernetes cluster
-2. Deploy an Actions enabled Kubernetes Pod
-3. Publish and receive messages from Node.js and Python
-4. Save and restore Action state
-5. Bonus - get your code triggered by external Event Sources
+1. Set up Actions on your Kubernetes Cluster
+2. Understand the Code
+3. Deploy the Node App with the Actions Sidecar
+4. Deploy the Python App with the Actions Sidecar
+5. Observe Messages
+6. Confirm Successful Persistence
 
-In this tutorial, we'll be deploying a node.js app that subscribes to messages arriving on ```neworder``` and saving it's state.
-We'll also be deploying a Python app that publishes a new message.
+## Step 1 - Setup Actions on your Kubernetes Cluster
 
-Let's get going!
+The first thing you need is an RBAC enabled Kubernetes cluster. This could be running on your machine using Minikube, or it could be a fully-fledged cluser in Azure using [AKS](https://azure.microsoft.com/en-us/services/kubernetes-service/).
 
-## Step 1 - Setup
+Next, follow [these steps](/../README.md#Install-on-Kubernetes) to have Actions deployed to your Kubernetes cluster.<br>
 
-First thing you need is an RBAC enabled Kubernetes cluster.
-Follow the steps [here](../../../README.md#Install-on-Kubernetes) to have Actions deployed to your Kubernetes cluster.<br>
+Finally, we'll also want to go set up a state store on our cluster. Follow [these instructions](../concepts/state/redis.md) to set up a Redis store.
 
-As we'll be deploying stateful apps, you'll also need to set up a state store.
-You can find the instructions [here](../../state/redis.md).
+## Step 2 - Understand the Code
 
-## Step 2 - Deploy the node.js code with the Actions sidecar
+Now that we have everything we need, let's take a look at our services. First, let's look at the node app. Navigate to the Node app in the Kubernetes sample: `cd samples/kubernetes_zero_to_hero/node.js/app.js`.
 
-Take a look at the node app at ```/docs/getting_started/zero_to_hero/node.js/app.js```.
+In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers.
 
-There are a few things of interest here: first, this is a very simple express application, which exposes a few routes and handlers.
+Let's take a look at the ```neworder``` handler:
 
-Take a look at the ```neworder``` handler:
-
-```
+```js
 app.post('/neworder', (req, res) => {
-    data = req.body.data
-    orderID = data.orderID
+    const data = req.body.data;
+    const orderId = data.orderId;
+    console.log("Got a new order! Order ID: " + orderId);
 
-    console.log("Got a new order! Order ID: " + orderID)
+    const state = [{
+        key: "order",
+        value: data
+    }];
 
-    order = data
-    
-    res.json({
-        state: [
-            {
-                key: "order",
-                value: order
-            }
-        ]
-    })
-})
+    fetch(`${actionsUrl}/state`, {
+        method: "POST",
+        body: JSON.stringify(state),
+        headers: {
+            "Content-Type": "application/json"
+        }
+    }).then((response) => {
+        console.log((response.ok) ? "Successfully persisted state" : "Failed to persist state");
+    });
+
+    res.status(200).send();
+});
 ```
 
-As you can see, in order to register for an event, you only need to listen on some event name.
-That event name can be used by other Actions to send messages to, or it can be the name of an Event Source you defined, for example [Azure Event Hubs](../../azure_eventhubs.md).<br><br>
+Here we're exposing an endpoint that will receive and handle `neworder` messages. We first log the incoming message, and then persist the order ID to our Redis store by posting a state array to the `/state` endpoint.
 
-But the Action doesn't stop there!
-We are returning a JSON response to Actions saying we want to save a state in a key-value format:
+Alternatively, we could have persisted our state by simply returning it with our response object:
 
-```
+```js
 res.json({
-        state: {
+        state: [{
             key: "order",
             value: order
-        }
+        }]
     })
 ```
 
-All the heavy lifting, retries, concurrency handling etc. is handled by our invisible friend, Action.
+We chose to avoid this approach, as it doesn't allow us to verify if our message successfully persisted.
 
-Now that we save our state, we want to get it as soon as our process launches, so we can either reject the state and start clean or accept it.
-To do that, simply listen on a POST ```/state``` endpoint:
+We also expose a GET endpoint, `/order`:
 
-```
-app.post('/state', (req, res) => {
-    e = req.body
-
-    if (e.length > 0) {
-        order = e[0].value
-    }
-
-    res.status(200).send()
-})
+```js
+app.get('/order', (_req, res) => {
+    fetch(`${actionsUrl}/state/order`)
+        .then((response) => {
+            return response.json();
+        }).then((orders) => {
+            res.send(orders);
+        });
+});
 ```
 
-Here, we are simply assigning the first item of the state array back to our order value.
+This calls out to our Redis cache to grab the latest value of the "order" key, which effectively allows our node app to be _stateless_. 
 
-This is enough, lets deploy our app:
+## Step 3 - Deploy the Node App with the Actions Sidecar
 
 ```
 kubectl apply -f ./deploy/node.yaml
 ```
 
-This will deploy our web app to Kubernetes.
+This will deploy our web app to Kubernetes. **NOTE**: While the dockerhub repository is private, you will only be able to deploy images by creating a secret. You can do this by executing: 
+
+```bash
+kubectl create secret docker-registry actions-core-auth --docker-server https://index.docker.io/v1/ --docker-username <YOUR_USERNAME> --docker-password <YOUR_PASSWORD> --docker-email <YOUR_EMAIL>
+```
+
 The Actions control plane will automatically inject the Actions sidecar to our Pod.
 
 If you take a look at the ```node.yaml``` file, you will see how Actions is enabled for that deployment:
@@ -113,75 +116,64 @@ You can also export it to a variable:
 export NODE_APP=$(kubectl get svc nodeapp --output 'jsonpath={.status.loadBalancer.ingress[0].ip}')
 ```
 
-## Step 3 - Deploy the Python app with the Actions sidecar
+## Step 4 - Deploy the Python App with the Actions Sidecar
+Next, let's take a quick look at our python app. Navigate to the python app in the kubernetes sample: `cd samples/kubernetes_zero_to_hero/python/app.py`.
 
+At a quick glance, this is a basic python app that posts JSON message to ```localhost:3500```, which is the default listening port for Actions. We invoke our node application's `neworder` endpoint by posting to `/action/nodeapp/neworder`. Our message contains some `data` with an orderId that increments once per second. 
+
+```python
+actions_url = "http://localhost:3500/action/nodeapp/neworder"
+n = 0
+while True:
+    n += 1
+    message = {"data": {"orderId": n}}
+
+    try:
+        response = requests.post(actions_url, json=message)
+    except Exception as e:
+        print(e)
+
+    time.sleep(1)
+```
+
+Let's deploy the python app to your Kubernetes cluster:
 ```
 kubectl apply -f ./deploy/python.yaml
 ```
 
-Our Python app will be used to publish a message every second.
-
-If you look at /python/app.py, you will notice it sends a JSON message to the actions url at ```localhost:3500```, the default listening endpoint for Actions.
-
-```
-while True:
-  message = "{\"data\":{\"orderID\":\"777\"}", "\"eventName\": \"neworder\"}"
-
-  try:
-    response = requests.post(actions_url, data=message)
-  except Exception:
-      pass
-```
-
-Wait for the pod to be in ```Running``` state:
+Now, let's just wait for the pod to be in ```Running``` state:
 
 ```
 kubectl get pods --selector=app=python -w
 ```
 
-## Step 4 - Observe messages coming through and rejoice
+## Step 5 - Observe Messages
 
-Great, we now have both our apps deployed along with the Actions sidecars.<br>
+Now that we have our node and python applications deployed, let's watch messages come through.<br>
 Get the logs of our node app:
 
 ```
 kubectl logs --selector=app=node -c node
 ```
 
-If everything went right, you should be seeing something like this in the logs:
+If all went well, you should see logs like this:
 
 ```
-Got a new order! Order ID: 777
+Got a new order! Order ID: 1
+Successfully persisted state
+Got a new order! Order ID: 2
+Successfully persisted state
+Got a new order! Order ID: 3
+Successfully persisted state
 ```
 
-## Step 5 - Confirm our immortality (aka State)
+## Step 6 - Confirm Successful Persistence
 
-Hit the node app's order endpoint to get the latest order.
-Remember that IP from before? put it in your browser, or curl it:
+Hit the node app's order endpoint to get the latest order. Grab the external IP address that we saved before and, append "/order" and perform a GET request against it (enter it into your browser, use Postman, or curl it!):
 
 ```
 curl $NODE_APP/order
-{"orderID":"777"}
+{"orderID":"42"}
 ```
 
-You should be getting the order JSON as a response.
-Now, we'll scale the Python app to zero so it stops sending messages:
-
-```
-kubectl scale deploy pythonapp --replicas 0
-```
-
-Wait until all the pods have terminated:
-
-```
-kubectl get pods --selector=app=python
-```
-
-Delete the node app pod, and wait for it to come back up:
-
-```
-kubectl delete pod --selector=app=node
-kubectl get pod --selector=app=node -w
-```
-
-Hit the order endpoint again, and voila! our state has been restored.
+You should see the latest JSON in response!
