@@ -18,18 +18,19 @@ This sample depends requires you to have the following installed on your machine
 
 ## Step 1 - Setup Actions 
 
-1. Download the [Actions CLI release](https://github.com/actionscore/cli/releases) for your OS
+1. Install actions as standalone, following [these instructions](https://github.com/actionscore/actions#install-as-standalone)
+2. Download the [Actions CLI release](https://github.com/actionscore/cli/releases) for your OS
 
     **Note for Windows Users**: Due to a known bug, you must rename 'action' to 'actions.exe'
 
-2. Add the path to `actions.exe` to your PATH
-3. Run `actions init`, which will set up create two containers: the actions runtime and a redis state store. To validate that these two containers were successfully created, run `docker ps` and observe output: 
+3. Add the path to `actions.exe` to your PATH
+4. Run `actions init`, which will set up create two containers: the actions runtime and a redis state store. To validate that these two containers were successfully created, run `docker ps` and observe output: 
 ```
 CONTAINER ID        IMAGE                   COMMAND                  CREATED             STATUS              PORTS                     NAMES
 84b19574f5e5        actionscore.azurecr.io/actions:latest   "./assigner"             About an hour ago   Up About an hour    0.0.0.0:6050->50005/tcp   xenodochial_chatterjee
 78d39ae67a95        redis                   "docker-entrypoint.s…"   About an hour ago   Up About an hour    0.0.0.0:6379->6379/tcp    hungry_dubinsky
 ```
-4. Download actions repo: Clone repo: `git clone https://github.com/actionscore/actions.git`
+5. Download actions repo: Clone repo: `git clone https://github.com/actionscore/actions.git`
 
 ## Step 2 - Understand the Code
 
