@@ -794,7 +794,7 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 	var resp []byte
 	var err error
 
-	if i.isTargetLocal(targetAddress) {
+	if i.ActionID == actionID || i.isTargetLocal(targetAddress) {
 		resp, err = i.invoke(actionMethod, actionID, contextID, "", httpMethod, string(c.URI().QueryString()), payload, spanCtx)
 	} else {
 		conn, err := i.GetGRPCConnection(address)
@@ -814,9 +814,16 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 		ctxMetadata := metadata.NewOutgoingContext(ctx, md)
 		client := pb.NewActionClient(conn)
 		r, err := client.Invoke(ctxMetadata, &pb.InvokeEnvelope{Data: &any.Any{Value: payload}})
+		if err != nil {
+			if !responseDelivered {
+				diag.SetSpanStatus(span, trace.StatusCodeInternal, fmt.Sprintf("Delivery to action id %s failed - %s", actionID, err.Error()))
+				RespondWithError(c.RequestCtx, 500, fmt.Sprintf("delivery to action id %s failed", actionID))
+			}
+			return
+		}
+
 		if r != nil && r.Data != nil {
 			resp = r.GetData().GetValue()
-			responseDelivered = true
 		}
 	}
 
