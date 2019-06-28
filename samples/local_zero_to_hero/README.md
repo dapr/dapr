@@ -35,11 +35,17 @@ CONTAINER ID        IMAGE                   COMMAND                  CREATED    
 
 Now that we've locally set up actions and cloned the repo, let's take a look at our local zero-to-hero sample. Navigate to the local_zero_to_hero sample: `cd samples/local_zero_to_hero/app.js`.
 
-In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers.
+In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers. First, let's take a look at the `actionsUrl` at the top of the file: 
 
-Take a look at the ```neworder``` handler, which handles order messages, logs them and then persists them:
-
+```js
+const actionsUrl = `http://localhost:${process.env.ACTIONS_PORT}`;
 ```
+
+When we use the Actions CLI, it creates an environment variable for the Actions port, which defaults to 3500. We'll be using this in step 3 when we POST messages to to our system.
+
+Next, let's take a look at the ```neworder``` handler, which handles order messages, logs them and then persists them:
+
+```js
 app.post('/neworder', (req, res) => {
     const data = req.body.data;
     const orderId = data.orderId;
@@ -50,7 +56,7 @@ app.post('/neworder', (req, res) => {
         value: data
     }];
 
-    fetch("http://localhost:3500/state", {
+    fetch(`${actionsUrl}/state`, {
         method: "POST",
         body: JSON.stringify(state),
         headers: {
@@ -58,7 +64,7 @@ app.post('/neworder', (req, res) => {
         }
     }).then((response) => {
         console.log((response.ok) ? "Successfully persisted state" : "Failed to persist state");
-    })
+    });
 
     res.status(200).send();
 });
@@ -66,11 +72,11 @@ app.post('/neworder', (req, res) => {
 
 Here we're simply subscribing for `neworder` events by implementing a `/neworder` route and handler. When a message with `eventName` of "neworder" comes through, this handler will handle it. External event sources (e.g. [Azure Event Hubs](../azure_eventhubs.md)) or other actions can _publish_ events by that name and your service _subscribes_ to them.
 
-Taking a look at the code, you can see that we log the  `orderId` of the message that comes through, and then persist it against our state store (Redis) by posting to the `/state` endpoint. 
+Taking a look at the code, you can see that we log the  `orderId` of the message that comes through, and then persist it against our state store (Redis) by posting to the `/state` endpoint.
 
 Alternatively, we could have persisted our state by simply returning it with our response object:
 
-```
+```js
 res.json({
         state: {
             key: "order",
@@ -80,6 +86,23 @@ res.json({
 ```
 
 We chose to avoid this approach, as it doesn't allow us to verify if our message successfully persisted.
+
+The other endpoint we expose `/order`:
+
+```js
+app.get('/order', (_req, res) => {
+    fetch(`${actionsUrl}/state/order`)
+        .then((response) => {
+            return response.json();
+        }).then((orders) => {
+            res.send(orders);
+        });
+});
+```
+
+This calls out to our Redis cache to grab the latest value of the "order" key, which effectively allows our node app to be _stateless_. 
+
+**Note**: If we only expected to have a single instance of the Node app, and didn't expect anything else to update "order", we could have instead kept a local version of our order state and returned that (reducing a call to our Redis store). We would then create a `/state` POST endpoint, which would allow actions to initialize our app's state when it starts up. 
 
 ## Step 3 - Run the Node.js App with Actions
  
@@ -101,12 +124,17 @@ You're up and running! Both Actions and your app logs will appear here.
 
 Now that our actions and node app are running, let's post messages against it. 
 
- Open Postman and create a POST request against `http://localhost:<YOUR_PORT>/invoke/neworder`
+ Open Postman and create a POST request against `http://localhost:<YOUR_PORT>/<YOUR_APP_NAME>/neworder`
 ![Postman Screenshot](./img/postman1.jpg)
-In your terminal window, you should see logs indicating that the message was received and state was updated.
+In your terminal window, you should see logs indicating that the message was received and state was updated:
+```bash
+[0m[94;1m== APP == Got a new order! Order ID: 42
+[0m[94;1m== APP == Successfully persisted state
+```
 
 ## Step 5 - Confirm Successful Persistence
 
-Now, let's just make sure that we our order was successfully persisted to our state store. Create a GET request against: `http://localhost:<YOUR_PORT>/state/order`
+Now, let's just make sure that we our order was successfully persisted to our state store. Create a GET request against: `http://localhost:<YOUR_PORT>/<YOUR_APP_NAME>/order`
 ![Postman Screenshot 2](./img/postman2.jpg)
-Observe the expected result!
+
+This invokes the `/order` route, which calls out to our Redis store for the latest data. Observe the expected result!
