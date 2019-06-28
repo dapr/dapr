@@ -8,6 +8,7 @@ variables:
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
   GOBIN:  '$(GOPATH)/bin'
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
+  BlobPrefix: ''
 
 jobs:
 - template: 'build-binary-template.yml'
