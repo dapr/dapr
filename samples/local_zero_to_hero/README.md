@@ -83,7 +83,7 @@ We chose to avoid this approach, as it doesn't allow us to verify if our message
 
 ## Step 3 - Run the Node.js App with Actions
  
-1. Navigate to the zero to hero nod sample project: `cd samples/local_zero_to_hero/app.js`
+1. Navigate to the zero to hero node sample project: `cd samples/local_zero_to_hero/app.js`
 
 2. Install dependencies: `npm install`. This will install `express` and `body-parser`
 
