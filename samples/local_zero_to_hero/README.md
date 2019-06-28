@@ -26,7 +26,7 @@ This sample depends requires you to have the following installed on your machine
 3. Run `actions init`, which will set up create two containers: the actions runtime and a redis state store. To validate that these two containers were successfully created, run `docker ps` and observe output: 
 ```
 CONTAINER ID        IMAGE                   COMMAND                  CREATED             STATUS              PORTS                     NAMES
-84b19574f5e5        yaron2/actionsedge:v2   "./assigner"             About an hour ago   Up About an hour    0.0.0.0:6050->50005/tcp   xenodochial_chatterjee
+84b19574f5e5        actionscore.azurecr.io/actions:latest   "./assigner"             About an hour ago   Up About an hour    0.0.0.0:6050->50005/tcp   xenodochial_chatterjee
 78d39ae67a95        redis                   "docker-entrypoint.s…"   About an hour ago   Up About an hour    0.0.0.0:6379->6379/tcp    hungry_dubinsky
 ```
 4. Download actions repo: Clone repo: `git clone https://github.com/actionscore/actions.git`
