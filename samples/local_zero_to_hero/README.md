@@ -44,7 +44,7 @@ const actionsUrl = `http://localhost:${process.env.ACTIONS_PORT}`;
 
 When we use the Actions CLI, it creates an environment variable for the Actions port, which defaults to 3500. We'll be using this in step 3 when we POST messages to to our system.
 
-Next, let's take a look at the ```neworder``` handler, which handles order messages, logs them and then persists them:
+Next, let's take a look at the ```neworder``` handler:
 
 ```js
 app.post('/neworder', (req, res) => {
@@ -71,18 +71,16 @@ app.post('/neworder', (req, res) => {
 });
 ```
 
-Here we're simply subscribing for `neworder` events by implementing a `/neworder` route and handler. When a message with `eventName` of "neworder" comes through, this handler will handle it. External event sources (e.g. [Azure Event Hubs](../azure_eventhubs.md)) or other actions can _publish_ events by that name and your service _subscribes_ to them.
-
-Taking a look at the code, you can see that we log the  `orderId` of the message that comes through, and then persist it against our state store (Redis) by posting to the `/state` endpoint.
+Here we're exposing an endpoint that will receive and handle `neworder` messages. We first log the incoming message, and then persist the order ID to our Redis store by posting a state array to the `/state` endpoint.
 
 Alternatively, we could have persisted our state by simply returning it with our response object:
 
 ```js
 res.json({
-        state: {
+        state: [{
             key: "order",
             value: order
-        }
+        }]
     })
 ```
 
@@ -103,10 +101,10 @@ app.get('/order', (_req, res) => {
 
 This calls out to our Redis cache to grab the latest value of the "order" key, which effectively allows our node app to be _stateless_. 
 
-**Note**: If we only expected to have a single instance of the Node app, and didn't expect anything else to update "order", we could have instead kept a local version of our order state and returned that (reducing a call to our Redis store). We would then create a `/state` POST endpoint, which would allow actions to initialize our app's state when it starts up. 
+**Note**: If we only expected to have a single instance of the Node app, and didn't expect anything else to update "order", we instead could have kept a local version of our order state and returned that (reducing a call to our Redis store). We would then create a `/state` POST endpoint, which would allow actions to initialize our app's state when it starts up. In that case, our Node app would be `stateful`.
 
 ## Step 3 - Run the Node.js App with Actions
- 
+
 1. Navigate to the zero to hero node sample project: `cd samples/local_zero_to_hero/app.js`
 
 2. Install dependencies: `npm install`. This will install `express` and `body-parser`
