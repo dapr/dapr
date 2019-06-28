@@ -35,7 +35,9 @@ spec:
     spec:
       containers:
       - name: node
-        image: yaron2/nodeapp
+        image: actionscore/node-app
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
+      imagePullSecrets:
+      - name: actions-core-auth
