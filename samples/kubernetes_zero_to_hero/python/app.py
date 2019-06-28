@@ -2,15 +2,15 @@ import time
 import requests
 import os
 
-actions_url = "http://localhost:3500/publish"
-
+actions_url = "http://localhost:3500/action/nodeapp/neworder"
+n = 0
 while True:
-  message = { "eventName": "neworder", "data": { "orderID": "777" }, "to": ["nodeapp"] }
+    n += 1
+    message = {"data": {"orderId": n}}
 
-  try:
-    response = requests.post(actions_url, json=message)
-  except Exception as e:
-      print(e)
+    try:
+        response = requests.post(actions_url, json=message)
+    except Exception as e:
+        print(e)
 
-  time.sleep(1)
-  
+    time.sleep(1)
