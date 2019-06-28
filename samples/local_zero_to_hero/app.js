@@ -5,10 +5,11 @@ require('isomorphic-fetch');
 const app = express();
 app.use(bodyParser.json());
 
+const actionsUrl = `http://localhost:${process.env.ACTIONS_PORT}`;
 const port = 3000;
 
 app.get('/order', (_req, res) => {
-    fetch("http://localhost:3500/state/order")
+    fetch(`${actionsUrl}/state/order`)
         .then((response) => {
             return response.json();
         }).then((orders) => {
@@ -26,7 +27,7 @@ app.post('/neworder', (req, res) => {
         value: data
     }];
 
-    fetch("http://localhost:3500/state", {
+    fetch(`${actionsUrl}/state`, {
         method: "POST",
         body: JSON.stringify(state),
         headers: {
