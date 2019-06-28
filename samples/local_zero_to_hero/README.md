@@ -11,7 +11,7 @@ By the end of the end, you will know how to:
 5. Confirm Successful Persistence
 
 ## Prerequisites
-This sample depends requires you to have the following installed on your machine:
+This sample requires you to have the following installed on your machine:
 - [Docker](https://docs.docker.com/)
 - [Node](https://nodejs.org/en/)
 - [Postman](https://www.getpostman.com/)
@@ -30,7 +30,7 @@ CONTAINER ID        IMAGE                   COMMAND                  CREATED    
 84b19574f5e5        actionscore.azurecr.io/actions:latest   "./assigner"             About an hour ago   Up About an hour    0.0.0.0:6050->50005/tcp   xenodochial_chatterjee
 78d39ae67a95        redis                   "docker-entrypoint.s…"   About an hour ago   Up About an hour    0.0.0.0:6379->6379/tcp    hungry_dubinsky
 ```
-5. Download actions repo: Clone repo: `git clone https://github.com/actionscore/actions.git`
+5. Clone actions repo: `git clone https://github.com/actionscore/actions.git`
 
 ## Step 2 - Understand the Code
 
@@ -86,7 +86,7 @@ res.json({
 
 We chose to avoid this approach, as it doesn't allow us to verify if our message successfully persisted.
 
-The other endpoint we expose `/order`:
+We also expose a GET endpoint, `/order`:
 
 ```js
 app.get('/order', (_req, res) => {
