@@ -19,4 +19,6 @@ spec:
     spec:
       containers:
       - name: python
-        image: yaron2/pythonapp
+        image: actionscore/python-app
+      imagePullSecrets:
+      - name: actions-core-auth
