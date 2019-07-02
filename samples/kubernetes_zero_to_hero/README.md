@@ -15,9 +15,9 @@ By the end of this tutorial, you will know how to:
 
 The first thing you need is an RBAC enabled Kubernetes cluster. This could be running on your machine using Minikube, or it could be a fully-fledged cluser in Azure using [AKS](https://azure.microsoft.com/en-us/services/kubernetes-service/).
 
-Next, follow [these steps](/../README.md#Install-on-Kubernetes) to have Actions deployed to your Kubernetes cluster.<br>
+Next, follow [these steps](/../../#install-on-kubernetes) to have Actions deployed to your Kubernetes cluster.<br>
 
-Finally, we'll also want to go set up a state store on our cluster. Follow [these instructions](../concepts/state/redis.md) to set up a Redis store.
+Finally, we'll also want to go set up a state store on our cluster. Follow [these instructions](/../../blob/master/docs/concepts/state/redis.md) to set up a Redis store.
 
 ## Step 2 - Understand the Code
 
