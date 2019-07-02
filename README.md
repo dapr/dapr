@@ -39,7 +39,7 @@ Actions is flexible in threading model and state consistency model. Developers c
 * Built-in Eventing system
 * Built-in service discovery
 * Asynchronous Pub-Sub with guaranteed delivery and at-least-once semantics
-* Action to Action request response using gRCP
+* Action to Action request response using gRPC
 * State management - persist and restore
 * Choice of concurrency model: Single-Threaded or Multiple
 * Triggers (Azure, AWS, GCP, etc.)
@@ -118,7 +118,8 @@ go build -o action
 
 Check out the following tutorials:
 
-* [From Zero to Hero with Kubernetes](docs/getting_started/zero_to_hero/README.md)
+* [From Zero to Hero with Kubernetes](samples/kubernetes_zero_to_hero)
+* [From Zero to Hero Locally](samples/local_zero_to_hero)
 * [Enable state management with Redis](docs/concepts/state/redis.md)
 * [Enable state management with CosmosDB](docs/concepts/state/cosmosdb.md)<br><br>
 * [Setup an AWS SQS Event Source](docs/aws_sqs.md)
