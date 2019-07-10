@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/actions-org/actions/pkg/consistenthash"
 	pb "github.com/actionscore/actions/pkg/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -16,7 +15,7 @@ import (
 type PlacementService struct {
 	generation        int
 	entriesLock       *sync.RWMutex
-	entries           map[string]*consistenthash.Consistent
+	entries           map[string]*Consistent
 	hosts             []pb.PlacementService_ReportActionStatusServer
 	hostsEntitiesLock *sync.RWMutex
 	hostsEntities     map[string][]string
@@ -27,7 +26,7 @@ type PlacementService struct {
 func NewPlacementService() *PlacementService {
 	return &PlacementService{
 		entriesLock:       &sync.RWMutex{},
-		entries:           make(map[string]*consistenthash.Consistent),
+		entries:           make(map[string]*Consistent),
 		hostsEntitiesLock: &sync.RWMutex{},
 		hostsEntities:     make(map[string][]string),
 		hostsLock:         &sync.Mutex{},
@@ -173,7 +172,7 @@ func (p *PlacementService) ProcessHost(host *pb.Host) {
 	for _, e := range host.Entities {
 		p.entriesLock.Lock()
 		if _, ok := p.entries[e]; !ok {
-			p.entries[e] = consistenthash.New()
+			p.entries[e] = NewConsistentHash()
 		}
 
 		exists := p.entries[e].Add(host.Name, host.Port)

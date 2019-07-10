@@ -57,7 +57,7 @@ func NewHost(name string, load int64, port int64) *Host {
 	}
 }
 
-func New() *Consistent {
+func NewConsistentHash() *Consistent {
 	return &Consistent{
 		hosts:     map[uint64]string{},
 		sortedSet: []uint64{},
