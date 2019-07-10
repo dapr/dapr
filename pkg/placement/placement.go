@@ -1,30 +1,31 @@
-package assigner
+package placement
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/actionscore/actions/pkg/consistenthash"
+	"github.com/actions-org/actions/pkg/consistenthash"
 	pb "github.com/actionscore/actions/pkg/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
-type Assigner struct {
+type PlacementService struct {
 	generation        int
 	entriesLock       *sync.RWMutex
 	entries           map[string]*consistenthash.Consistent
-	hosts             []pb.Assigner_ReportActionStatusServer
+	hosts             []pb.PlacementService_ReportActionStatusServer
 	hostsEntitiesLock *sync.RWMutex
 	hostsEntities     map[string][]string
 	hostsLock         *sync.Mutex
 	updateLock        *sync.Mutex
 }
 
-func NewAssigner() *Assigner {
-	return &Assigner{
+func NewPlacementService() *PlacementService {
+	return &PlacementService{
 		entriesLock:       &sync.RWMutex{},
 		entries:           make(map[string]*consistenthash.Consistent),
 		hostsEntitiesLock: &sync.RWMutex{},
@@ -34,14 +35,19 @@ func NewAssigner() *Assigner {
 	}
 }
 
-func (a *Assigner) ReportActionStatus(srv pb.Assigner_ReportActionStatusServer) error {
+func (p *PlacementService) ReportActionStatus(srv pb.PlacementService_ReportActionStatusServer) error {
 	ctx := srv.Context()
-	a.hostsLock.Lock()
+	p.hostsLock.Lock()
 	md, _ := metadata.FromIncomingContext(srv.Context())
-	id := md["id"][0]
-	a.hosts = append(a.hosts, srv)
+	v := md.Get("id")
+	if len(v) == 0 {
+		return errors.New("id header not found in metadata")
+	}
+
+	id := v[0]
+	p.hosts = append(p.hosts, srv)
 	log.Infof("host added: %s", id)
-	a.hostsLock.Unlock()
+	p.hostsLock.Unlock()
 
 	for {
 		select {
@@ -52,36 +58,36 @@ func (a *Assigner) ReportActionStatus(srv pb.Assigner_ReportActionStatusServer) 
 
 		req, err := srv.Recv()
 		if err != nil {
-			a.hostsLock.Lock()
-			a.RemoveHost(srv)
-			a.ProcessRemovedHost(id)
+			p.hostsLock.Lock()
+			p.RemoveHost(srv)
+			p.ProcessRemovedHost(id)
 			log.Infof("host removed: %s", id)
-			a.hostsLock.Unlock()
+			p.hostsLock.Unlock()
 			continue
 		}
 
-		a.ProcessHost(req)
+		p.ProcessHost(req)
 	}
 }
 
-func (a *Assigner) RemoveHost(srv pb.Assigner_ReportActionStatusServer) {
-	for i := len(a.hosts) - 1; i >= 0; i-- {
-		if a.hosts[i] == srv {
-			a.hosts = append(a.hosts[:i], a.hosts[i+1:]...)
+func (p *PlacementService) RemoveHost(srv pb.PlacementService_ReportActionStatusServer) {
+	for i := len(p.hosts) - 1; i >= 0; i-- {
+		if p.hosts[i] == srv {
+			p.hosts = append(p.hosts[:i], p.hosts[i+1:]...)
 		}
 	}
 }
 
-func (a *Assigner) PerformTablesUpdate() {
-	a.updateLock.Lock()
-	defer a.updateLock.Unlock()
+func (p *PlacementService) PerformTablesUpdate() {
+	p.updateLock.Lock()
+	defer p.updateLock.Unlock()
 
-	a.generation++
-	o := pb.AssignerOrder{
+	p.generation++
+	o := pb.PlacementOrder{
 		Operation: "lock",
 	}
 
-	for _, host := range a.hosts {
+	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
 			log.Errorf("Error updating host on lock operation: %s", err)
@@ -89,17 +95,17 @@ func (a *Assigner) PerformTablesUpdate() {
 		}
 	}
 
-	v := fmt.Sprintf("%v", a.generation)
+	v := fmt.Sprintf("%v", p.generation)
 
 	o.Operation = "update"
-	o.Tables = &pb.AssignmentTables{
+	o.Tables = &pb.PlacementTables{
 		Version: v,
-		Entries: map[string]*pb.AssignmentTable{},
+		Entries: map[string]*pb.PlacementTable{},
 	}
 
-	for k, v := range a.entries {
+	for k, v := range p.entries {
 		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
-		table := pb.AssignmentTable{
+		table := pb.PlacementTable{
 			Hosts:     hosts,
 			SortedSet: sortedSet,
 			TotalLoad: totalLoad,
@@ -119,7 +125,7 @@ func (a *Assigner) PerformTablesUpdate() {
 		o.Tables.Entries[k] = &table
 	}
 
-	for _, host := range a.hosts {
+	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
 			log.Errorf("Error updating host on update operation: %s", err)
@@ -130,7 +136,7 @@ func (a *Assigner) PerformTablesUpdate() {
 	o.Tables = nil
 	o.Operation = "unlock"
 
-	for _, host := range a.hosts {
+	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
 			log.Errorf("Error updating host on unlock operation: %s", err)
@@ -139,61 +145,61 @@ func (a *Assigner) PerformTablesUpdate() {
 	}
 }
 
-func (a *Assigner) ProcessRemovedHost(id string) {
+func (p *PlacementService) ProcessRemovedHost(id string) {
 	updateRequired := false
 
-	a.hostsEntitiesLock.RLock()
-	entities := a.hostsEntities[id]
-	delete(a.hostsEntities, id)
-	a.hostsEntitiesLock.RUnlock()
+	p.hostsEntitiesLock.RLock()
+	entities := p.hostsEntities[id]
+	delete(p.hostsEntities, id)
+	p.hostsEntitiesLock.RUnlock()
 
-	a.entriesLock.Lock()
+	p.entriesLock.Lock()
 	for _, e := range entities {
-		if _, ok := a.entries[e]; ok {
-			a.entries[e].Remove(id)
+		if _, ok := p.entries[e]; ok {
+			p.entries[e].Remove(id)
 			updateRequired = true
 		}
 	}
-	a.entriesLock.Unlock()
+	p.entriesLock.Unlock()
 
 	if updateRequired {
-		a.PerformTablesUpdate()
+		p.PerformTablesUpdate()
 	}
 }
 
-func (a *Assigner) ProcessHost(host *pb.Host) {
+func (p *PlacementService) ProcessHost(host *pb.Host) {
 	updateRequired := false
 
 	for _, e := range host.Entities {
-		a.entriesLock.Lock()
-		if _, ok := a.entries[e]; !ok {
-			a.entries[e] = consistenthash.New()
+		p.entriesLock.Lock()
+		if _, ok := p.entries[e]; !ok {
+			p.entries[e] = consistenthash.New()
 		}
 
-		exists := a.entries[e].Add(host.Name, host.Port)
+		exists := p.entries[e].Add(host.Name, host.Port)
 		if !exists {
 			updateRequired = true
 		}
-		a.entriesLock.Unlock()
+		p.entriesLock.Unlock()
 	}
 
 	if updateRequired {
-		a.PerformTablesUpdate()
+		p.PerformTablesUpdate()
 	}
 
-	a.hostsEntitiesLock.Lock()
-	a.hostsEntities[host.Name] = host.Entities
-	a.hostsEntitiesLock.Unlock()
+	p.hostsEntitiesLock.Lock()
+	p.hostsEntities[host.Name] = host.Entities
+	p.hostsEntitiesLock.Unlock()
 }
 
-func (a *Assigner) Run(port string) {
+func (p *PlacementService) Run(port string) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
 	s := grpc.NewServer()
-	pb.RegisterAssignerServer(s, a)
+	pb.RegisterPlacementServiceServer(s, p)
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

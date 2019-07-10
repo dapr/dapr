@@ -24,9 +24,9 @@ import (
 	log "github.com/Sirupsen/logrus"
 	configuration_v1alpha1 "github.com/actionscore/actions/pkg/apis/configuration/v1alpha1"
 	eventing_v1alpha1 "github.com/actionscore/actions/pkg/apis/eventing/v1alpha1"
-	"github.com/actionscore/actions/pkg/consistenthash"
 	diag "github.com/actionscore/actions/pkg/diagnostics"
 	exporters "github.com/actionscore/actions/pkg/exporters"
+	"github.com/actionscore/actions/pkg/placement"
 	pb "github.com/actionscore/actions/pkg/proto"
 	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
@@ -69,60 +69,60 @@ var (
 )
 
 type Action struct {
-	Router              *mux.Router
-	ActionID            string
-	ApplicationPort     string
-	Mode                string
-	Protocol            Protocol
-	EventSources        []EventSource
-	ActionSources       map[string]ActionSource
-	StateStore          ActionSource
-	EventSourcesPath    string
-	ConfigurationName   string
-	APIAddress          string
-	AssignerAddress     string
-	AppConfig           ApplicationConfig
-	Sender              Sender
-	StateWriteLock      *sync.Mutex
-	HTTPClient          *fasthttp.Client
-	GRPCClient          *grpc.ClientConn
-	GRPCLock            *sync.Mutex
-	GRPCConnectionPool  map[string]*grpc.ClientConn
-	IPAddress           string
-	AssignmentTableLock *sync.RWMutex
-	AssignmentTables    *consistenthash.AssignmentTables
-	AssignmentSignal    chan struct{}
-	AssignmentBlock     bool
-	ActiveContextsLock  *sync.RWMutex
-	ActiveContexts      map[string]string
-	json                jsoniter.API
-	Configuration       Configuration
-	AllowedOrigins      []string
+	Router             *mux.Router
+	ActionID           string
+	ApplicationPort    string
+	Mode               string
+	Protocol           Protocol
+	EventSources       []EventSource
+	ActionSources      map[string]ActionSource
+	StateStore         ActionSource
+	EventSourcesPath   string
+	ConfigurationName  string
+	APIAddress         string
+	PlacementAddress   string
+	AppConfig          ApplicationConfig
+	Sender             Sender
+	StateWriteLock     *sync.Mutex
+	HTTPClient         *fasthttp.Client
+	GRPCClient         *grpc.ClientConn
+	GRPCLock           *sync.Mutex
+	GRPCConnectionPool map[string]*grpc.ClientConn
+	IPAddress          string
+	PlacementTableLock *sync.RWMutex
+	PlacementTables    *placement.PlacementTables
+	PlacementSignal    chan struct{}
+	PlacementBlock     bool
+	ActiveContextsLock *sync.RWMutex
+	ActiveContexts     map[string]string
+	json               jsoniter.API
+	Configuration      Configuration
+	AllowedOrigins     []string
 }
 
-func NewAction(actionID string, applicationPort string, mode string, protocol string, eventSourcesPath string, configurationName string, apiAddress string, assignerAddress string, allowedOrigins string) *Action {
+func NewAction(actionID string, applicationPort string, mode string, protocol string, eventSourcesPath string, configurationName string, apiAddress string, placementAddress string, allowedOrigins string) *Action {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	return &Action{
-		ActionID:            actionID,
-		ApplicationPort:     applicationPort,
-		Protocol:            Protocol(protocol),
-		Router:              mux.NewRouter(),
-		Mode:                mode,
-		EventSourcesPath:    eventSourcesPath,
-		ConfigurationName:   configurationName,
-		APIAddress:          apiAddress,
-		AssignerAddress:     assignerAddress,
-		StateWriteLock:      &sync.Mutex{},
-		HTTPClient:          &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}},
-		GRPCLock:            &sync.Mutex{},
-		GRPCConnectionPool:  map[string]*grpc.ClientConn{},
-		AssignmentTableLock: &sync.RWMutex{},
-		AssignmentTables:    &consistenthash.AssignmentTables{Entries: make(map[string]*consistenthash.Consistent)},
-		ActiveContextsLock:  &sync.RWMutex{},
-		ActiveContexts:      map[string]string{},
-		json:                jsoniter.ConfigFastest,
-		AllowedOrigins:      strings.Split(allowedOrigins, ","),
+		ActionID:           actionID,
+		ApplicationPort:    applicationPort,
+		Protocol:           Protocol(protocol),
+		Router:             mux.NewRouter(),
+		Mode:               mode,
+		EventSourcesPath:   eventSourcesPath,
+		ConfigurationName:  configurationName,
+		APIAddress:         apiAddress,
+		PlacementAddress:   placementAddress,
+		StateWriteLock:     &sync.Mutex{},
+		HTTPClient:         &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}},
+		GRPCLock:           &sync.Mutex{},
+		GRPCConnectionPool: map[string]*grpc.ClientConn{},
+		PlacementTableLock: &sync.RWMutex{},
+		PlacementTables:    &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
+		ActiveContextsLock: &sync.RWMutex{},
+		ActiveContexts:     map[string]string{},
+		json:               jsoniter.ConfigFastest,
+		AllowedOrigins:     strings.Split(allowedOrigins, ","),
 	}
 }
 
@@ -287,7 +287,7 @@ func (i *Action) StartGRPCServer(grpcPort int) {
 			log.Fatalf("gRPC error: %s", err)
 		}
 		s := grpc.NewServer()
-		pb.RegisterActionServer(s, i)
+		pb.RegisterActionsServer(s, i)
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("gRPC error: %v", err)
 		}
@@ -755,9 +755,9 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 
 	if contextID != "" {
 		headers[contextIDHeader] = contextID
-		// Only block if request is targeting a context and an assignment table update is ongoing
-		if i.AssignmentBlock {
-			<-i.AssignmentSignal
+		// Only block if request is targeting a context and an placement table update is ongoing
+		if i.PlacementBlock {
+			<-i.PlacementSignal
 		}
 	}
 
@@ -812,7 +812,7 @@ func (i *Action) OnInvokeAction(c *routing.Context) {
 		defer cancel()
 
 		ctxMetadata := metadata.NewOutgoingContext(ctx, md)
-		client := pb.NewActionClient(conn)
+		client := pb.NewActionsClient(conn)
 		r, err := client.Invoke(ctxMetadata, &pb.InvokeEnvelope{Data: &any.Any{Value: payload}})
 		if err != nil {
 			if !responseDelivered {
@@ -1463,7 +1463,7 @@ func (i *Action) Run(httpPort int, grpcPort int) {
 	d := time.Since(start).Seconds() * 1000
 	log.Infof("Action initialized. Status: Running. Init Elapsed %vms", d)
 
-	go i.ConnectToAssignerService()
+	go i.ConnectToPlacementService()
 }
 
 func (i *Action) SetupSender() {
@@ -1615,16 +1615,16 @@ func (i *Action) ActivateContext(targetID, contextID string) error {
 	return nil
 }
 
-func (i *Action) GetAssignerClientPersistently() pb.Assigner_ReportActionStatusClient {
+func (i *Action) GetPlacementClientPersistently() pb.PlacementService_ReportActionStatusClient {
 	for {
-		conn, err := grpc.Dial(i.AssignerAddress, grpc.WithInsecure())
+		conn, err := grpc.Dial(i.PlacementAddress, grpc.WithInsecure())
 		if err != nil {
 			time.Sleep(time.Second * 1)
 			continue
 		}
 		header := metadata.New(map[string]string{"id": i.IPAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
-		client := pb.NewAssignerClient(conn)
+		client := pb.NewPlacementServiceClient(conn)
 		stream, err := client.ReportActionStatus(ctx)
 		if err != nil {
 			time.Sleep(time.Second * 1)
@@ -1635,16 +1635,16 @@ func (i *Action) GetAssignerClientPersistently() pb.Assigner_ReportActionStatusC
 	}
 }
 
-func (i *Action) ConnectToAssignerService() {
-	if i.AssignerAddress == "" {
-		log.Info("No assignment service discovered")
+func (i *Action) ConnectToPlacementService() {
+	if i.PlacementAddress == "" {
+		log.Info("No placement service discovered")
 		return
 	}
 
-	log.Infof("Starting connection attempt to assigner service at %s", i.AssignerAddress)
-	stream := i.GetAssignerClientPersistently()
+	log.Infof("Starting connection attempt to placement service at %s", i.PlacementAddress)
+	stream := i.GetPlacementClientPersistently()
 
-	log.Infof("Established connection to assigner service at %s", i.AssignerAddress)
+	log.Infof("Established connection to placement service at %s", i.PlacementAddress)
 
 	go func() {
 		for {
@@ -1657,8 +1657,8 @@ func (i *Action) ConnectToAssignerService() {
 
 			if stream != nil {
 				if err := stream.Send(&host); err != nil {
-					log.Error("Connection failure to assigner: retrying")
-					stream = i.GetAssignerClientPersistently()
+					log.Error("Connection failure to placement service: retrying")
+					stream = i.GetPlacementClientPersistently()
 				}
 			}
 			time.Sleep(time.Second * 1)
@@ -1669,21 +1669,21 @@ func (i *Action) ConnectToAssignerService() {
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
-				log.Error("Connection failure to assigner: retrying")
-				stream = i.GetAssignerClientPersistently()
+				log.Error("Connection failure to placement service: retrying")
+				stream = i.GetPlacementClientPersistently()
 			}
 			if resp != nil {
-				i.OnAssignmentOrder(resp)
+				i.OnPlacementOrder(resp)
 			}
 		}
 	}()
 }
 
 func (i *Action) LookupContextAddress(actionID, contextID string) string {
-	i.AssignmentTableLock.RLock()
-	defer i.AssignmentTableLock.RUnlock()
+	i.PlacementTableLock.RLock()
+	defer i.PlacementTableLock.RUnlock()
 
-	t := i.AssignmentTables.Entries[actionID]
+	t := i.PlacementTables.Entries[actionID]
 	if t == nil {
 		return ""
 	}
@@ -1691,58 +1691,58 @@ func (i *Action) LookupContextAddress(actionID, contextID string) string {
 	return fmt.Sprintf("%s:%v", a.Name, a.Port)
 }
 
-func (i *Action) BlockAssignments() {
-	i.AssignmentSignal = make(chan struct{})
-	i.AssignmentBlock = true
+func (i *Action) BlockPlacements() {
+	i.PlacementSignal = make(chan struct{})
+	i.PlacementBlock = true
 }
 
-func (i *Action) UnblockAssignments() {
-	if i.AssignmentBlock {
-		i.AssignmentBlock = false
-		close(i.AssignmentSignal)
+func (i *Action) UnblockPlacements() {
+	if i.PlacementBlock {
+		i.PlacementBlock = false
+		close(i.PlacementSignal)
 	}
 }
 
-func (i *Action) OnAssignmentOrder(in *pb.AssignerOrder) {
-	log.Infof("Assignment order received: %s", in.Operation)
+func (i *Action) OnPlacementOrder(in *pb.PlacementOrder) {
+	log.Infof("Placement order received: %s", in.Operation)
 
 	switch in.Operation {
 	case "lock":
 		{
-			i.BlockAssignments()
+			i.BlockPlacements()
 
 			go func() {
 				time.Sleep(time.Second * 5)
-				i.UnblockAssignments()
+				i.UnblockPlacements()
 			}()
 		}
 	case "unlock":
 		{
-			i.UnblockAssignments()
+			i.UnblockPlacements()
 		}
 	case "update":
 		{
-			i.UpdateAssignments(in.Tables)
+			i.UpdatePlacements(in.Tables)
 		}
 	}
 }
 
-func (i *Action) UpdateAssignments(in *pb.AssignmentTables) {
-	if in.Version != i.AssignmentTables.Version {
-		i.AssignmentTableLock.Lock()
-		defer i.AssignmentTableLock.Unlock()
+func (i *Action) UpdatePlacements(in *pb.PlacementTables) {
+	if in.Version != i.PlacementTables.Version {
+		i.PlacementTableLock.Lock()
+		defer i.PlacementTableLock.Unlock()
 
 		for k, v := range in.Entries {
-			loadMap := map[string]*consistenthash.Host{}
+			loadMap := map[string]*placement.Host{}
 			for lk, lv := range v.LoadMap {
-				loadMap[lk] = consistenthash.NewHost(lv.Name, lv.Load, lv.Port)
+				loadMap[lk] = placement.NewHost(lv.Name, lv.Load, lv.Port)
 			}
-			c := consistenthash.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
-			i.AssignmentTables.Entries[k] = c
+			c := placement.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
+			i.PlacementTables.Entries[k] = c
 		}
 
-		i.AssignmentTables.Version = in.Version
+		i.PlacementTables.Version = in.Version
 
-		log.Info("Assignment tables updated")
+		log.Info("Placement tables updated")
 	}
 }

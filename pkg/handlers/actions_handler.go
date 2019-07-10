@@ -28,7 +28,7 @@ const (
 	actionSidecarHTTPPort                  = 3500
 	actionSidecarGRPCPort                  = 50001
 	apiAddress                             = "http://actions-api.default.svc.cluster.local"
-	assignerAddress                        = "actions-assigner.default.svc.cluster.local:80"
+	placementAddress                       = "actions-placement.default.svc.cluster.local:80"
 	HTTPProtocol                  Protocol = "http"
 	GRPCProtocol                  Protocol = "grpc"
 )
@@ -74,7 +74,7 @@ func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol
 		},
 		Command: []string{"/action"},
 		Env:     []v1.EnvVar{v1.EnvVar{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}},
-		Args:    []string{"--mode", "kubernetes", "--action-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--action-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--action-id", actionName, "--api-address", apiAddress, "--protocol", applicationProtocol, "--assigner-address", assignerAddress},
+		Args:    []string{"--mode", "kubernetes", "--action-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--action-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--action-id", actionName, "--api-address", apiAddress, "--protocol", applicationProtocol, "--placement-address", placementAddress},
 	}
 }
 

@@ -7,7 +7,7 @@ GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
 TARGETS		?= darwin linux windows
 ARCH		?= amd64
 CGO			?= 0
-BINARIES    ?= action assigner controller
+BINARIES    ?= action placement controller
 
 ifdef REL_VERSION
 	ACTIONS_VERSION := $(REL_VERSION)

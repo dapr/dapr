@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package action;
+package actions;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 
-// Action Runtime definitions
-service Action {
+// Actions Runtime definitions
+service Actions {
   rpc Invoke (InvokeEnvelope) returns (InvokeEnvelope) {}
   rpc SaveState (SaveStateEnvelope) returns (google.protobuf.Empty) {}
   rpc GetState (GetStateEnvelope) returns (google.protobuf.Any) {}
@@ -61,22 +61,22 @@ message ApplicationConfig {
   repeated string entities = 1;
 }
 
-// Assigner service
-service Assigner {
-    rpc ReportActionStatus(stream Host) returns (stream AssignerOrder) {}
+// Placement service
+service PlacementService {
+    rpc ReportActionStatus(stream Host) returns (stream PlacementOrder) {}
 }
 
-message AssignerOrder {
-  AssignmentTables tables = 1;
+message PlacementOrder {
+  PlacementTables tables = 1;
   string operation = 2;
 }
 
-message AssignmentTables {
-  map<string, AssignmentTable> entries = 1;
+message PlacementTables {
+  map<string, PlacementTable> entries = 1;
   string version = 2;
 }
 
-message AssignmentTable {
+message PlacementTable {
   map<uint64, string> hosts = 1;
   repeated uint64 sortedSet = 2;
   map<string, Host> loadMap = 3;
