@@ -117,6 +117,6 @@ func (r *EventSourcesHandler) sendEventSourceToPod(eventSource pb.EventSource, a
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	c := pb.NewActionClient(conn)
+	c := pb.NewActionsClient(conn)
 	c.UpdateEventSource(ctx, &eventSource)
 }

@@ -23,7 +23,7 @@ func main() {
 	configurationName := flag.String("configuration-name", "", "")
 	actionID := flag.String("action-id", "", "")
 	apiAddress := flag.String("api-address", "", "")
-	assignerAddress := flag.String("assigner-address", "", "")
+	placementServiceAddresss := flag.String("placement-address", "", "")
 	allowedOrigins := flag.String("allowed-origins", "*", "")
 
 	flag.Parse()
@@ -34,7 +34,7 @@ func main() {
 	actionHTTP, _ := strconv.Atoi(*actionHTTPPort)
 	actionGRPC, _ := strconv.Atoi(*actionGRPCPort)
 
-	i := action.NewAction(*actionID, *appPort, *mode, *appProtocol, *eventSourcesPath, *configurationName, *apiAddress, *assignerAddress, *allowedOrigins)
+	i := action.NewAction(*actionID, *appPort, *mode, *appProtocol, *eventSourcesPath, *configurationName, *apiAddress, *placementServiceAddresss, *allowedOrigins)
 	i.Run(actionHTTP, actionGRPC)
 
 	<-stop

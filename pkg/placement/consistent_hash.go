@@ -4,7 +4,7 @@
 // https://en.wikipedia.org/wiki/Consistent_hashing
 //
 // https://research.googleblog.com/2017/04/consistent-hashing-with-bounded-loads.html
-package consistenthash
+package placement
 
 import (
 	"encoding/binary"
@@ -22,7 +22,7 @@ const replicationFactor = 10
 
 var ErrNoHosts = errors.New("no hosts added")
 
-type AssignmentTables struct {
+type PlacementTables struct {
 	Version string
 	Entries map[string]*Consistent
 }
@@ -42,8 +42,8 @@ type Consistent struct {
 	sync.RWMutex
 }
 
-func NewAssignmentTables(version string, entries map[string]*Consistent) *AssignmentTables {
-	return &AssignmentTables{
+func NewPlacementTables(version string, entries map[string]*Consistent) *PlacementTables {
+	return &PlacementTables{
 		Version: version,
 		Entries: entries,
 	}
@@ -57,7 +57,7 @@ func NewHost(name string, load int64, port int64) *Host {
 	}
 }
 
-func New() *Consistent {
+func NewConsistentHash() *Consistent {
 	return &Consistent{
 		hosts:     map[uint64]string{},
 		sortedSet: []uint64{},
