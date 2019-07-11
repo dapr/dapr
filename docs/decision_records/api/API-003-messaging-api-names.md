@@ -1,4 +1,4 @@
-#API-003: Messaging API names
+# API-003: Messaging API names
 
 ## Status
 Accepted

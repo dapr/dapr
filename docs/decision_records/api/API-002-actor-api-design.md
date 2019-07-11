@@ -1,4 +1,4 @@
-#API-002: Actor API design
+# API-002: Actor API design
 
 ## Status
 Accepted
