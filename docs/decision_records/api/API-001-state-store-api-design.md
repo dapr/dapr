@@ -1,4 +1,4 @@
-#API-001: State store API design
+# API-001: State store API design
 
 ## Status
 Accepted

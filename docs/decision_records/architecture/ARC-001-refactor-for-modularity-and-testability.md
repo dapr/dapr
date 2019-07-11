@@ -1,4 +1,4 @@
-#ARC-001: Refactor for modularity and testability
+# ARC-001: Refactor for modularity and testability
 
 ## Status
 Accepted
