@@ -13,7 +13,7 @@ As we keep building up Actions features, it becomes apparent that we need to ref
 * Ensure consistency between gRPC and HTTP interface.
 * Separate binding implementations to a separate repository. 
 * Use smart defaults for configurable parameters.
-* Rename Actions runtime binary from **action** to **actiond**.
+* Rename Actions runtime binary from **action** to **actionsrt**.
 
 ### Non-Actions
 * We may consider allowing Actions to dynamically load bindings during runtime. However, we are not going to implement this unless it's justified by customer asks.
