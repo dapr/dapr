@@ -18,7 +18,7 @@ Our existing messaging interface names lack of clarity. This review was to make 
       One-to-many messaging: a sender sending message to a list of recipients. 
     - **pub-sub**
       Messaging through pub-sub: a publisher publishing to a topic, to which subscribers subscribe.
-
+* We distinguish message and direct invocation. For messaging, we guarantee at-least-once delivery. For direct invocation, we provide best-attempt delivery.
 ## Consequences
 
 We should achieve better clarity on messaging behaviors.

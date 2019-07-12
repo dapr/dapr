@@ -9,12 +9,14 @@ All decisions are categorized in the following folders:
 * **Architecture** - Decisions on general architecture, code structure, coding conventions and common practices.
   
   - [ARC-001: Refactor for modularity and testability](./architecture/ARC-001-refactor-for-modularity-and-testability.md)
+  - [ARC-002: Multitenancy](./architecture/ARC-002-multitenancy.md)
   
 * **API** - Decisions on Actions runtime API designs.
 
   - [API-001: State store API design](./api/API-001-state-store-api-design.md)
   - [API-002: Actor API design](./api/API-002-actor-api-design.md)
   - [API-003: Messaging API names](./api/API-003-messaging-api-names.md)
+  - [API-004: Binding Manifests](./api/API-004-binding-manifests.md)
 * **CLI** - Decisions on Actions CLI architecture and behaviors.
 * **SDKs** - Decisions on Actions SDKs.
 * **Engineering** - Decisions on Engineering practices, including CI/CD, testings and releases.
