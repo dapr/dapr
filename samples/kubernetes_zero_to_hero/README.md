@@ -20,7 +20,7 @@ Next, follow [these steps](/../../#install-on-kubernetes) to have Actions deploy
 
 ## Step 2 - Set up a State Store
 
-In this sample, a Node app will be persisting messages created by a Python app. Correspondingly, we'll need to create and configure a state store. For this demo we'll use Redis as our store. 
+In this sample, a Node app will be persisting messages created by a Python app. Correspondingly, we'll need to create and configure a state store. We'll be using Redis, though we could use CosmosDB, DynamoDB or Cassandra. 
 
 ### 1. Create a Redis Store
 
