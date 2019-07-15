@@ -18,12 +18,17 @@ This sample requires you to have the following installed on your machine:
 
 ## Step 1 - Setup Actions 
 
-1. Install actions as standalone, following [these instructions](https://github.com/actionscore/actions#install-as-standalone).
+1. Download and unzip the Actions release for your OS:
+    **Windows**: https://actionsreleases.blob.core.windows.net/bin/actions_windows_amd64.zip
+    **Linux ARM**: https://actionsreleases.blob.core.windows.net/bin/actions_linux_arm.zip
+    **Linux AMD64**: https://actionsreleases.blob.core.windows.net/bin/actions_linux_amd64.zip
+    **Darwin AMD64**: https://actionsreleases.blob.core.windows.net/bin/actions_darwin_amd64.zip
+
 2. Download the [Actions CLI release](https://github.com/actionscore/cli/releases) for your OS
 
     **Note for Windows Users**: Due to a known bug, you must rename 'action' to 'actions.exe'
 
-3. Add the paths to Actions and the Actions CLI to your PATH
+3. Add the filepaths to Actions and the Actions CLI to your PATH
 4. Run `actions init`, which will set up create two containers: the actions runtime and a redis state store. To validate that these two containers were successfully created, run `docker ps` and observe output: 
 ```
 CONTAINER ID        IMAGE                   COMMAND                  CREATED             STATUS              PORTS                     NAMES
