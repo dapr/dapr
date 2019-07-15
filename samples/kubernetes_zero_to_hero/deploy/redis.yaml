@@ -1,0 +1,9 @@
+apiVersion: actions.io/v1alpha1
+kind: EventSource
+metadata:
+  name: statestore
+spec:
+  type: actions.state.redis
+  connectionInfo:
+    redisHost: ""
+    redisPassword: ""
