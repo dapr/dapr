@@ -5,5 +5,5 @@ metadata:
 spec:
   type: actions.state.redis
   connectionInfo:
-    redisHost: ""
-    redisPassword: ""
+    redisHost: "actions-redis.redis.cache.windows.net:6379"
+    redisPassword: "YOUR_REDIS_KEY_HERE"
