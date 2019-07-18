@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	log.Infof("Starting Actions Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Actions Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 
 	port := flag.String("port", "50005", "")
 	flag.Parse()
@@ -22,6 +22,6 @@ func main() {
 	p := placement.NewPlacementService()
 	go p.Run(*port)
 
-	log.Infof("Placement Service started on port %s", *port)
+	log.Infof("placement Service started on port %s", *port)
 	<-stop
 }

@@ -19,8 +19,8 @@ limitations under the License.
 package scheme
 
 import (
+	componentsv1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
 	configurationv1alpha1 "github.com/actionscore/actions/pkg/apis/configuration/v1alpha1"
-	eventingv1alpha1 "github.com/actionscore/actions/pkg/apis/eventing/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,8 +32,8 @@ var Scheme = runtime.NewScheme()
 var Codecs = serializer.NewCodecFactory(Scheme)
 var ParameterCodec = runtime.NewParameterCodec(Scheme)
 var localSchemeBuilder = runtime.SchemeBuilder{
+	componentsv1alpha1.AddToScheme,
 	configurationv1alpha1.AddToScheme,
-	eventingv1alpha1.AddToScheme,
 }
 
 // AddToScheme adds all types of this clientset into the given scheme. This allows composition
