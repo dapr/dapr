@@ -79,10 +79,10 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: actions-placement
+  name: actions-assigner
 spec:
   selector:
-    app: actions-placement
+    app: actions-assigner
   ports:
   - protocol: TCP
     port: 80
@@ -91,24 +91,24 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: actions-placement
+  name: actions-assigner
   labels:
-    app: actions-placement
+    app: actions-assigner
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: actions-placement
+      app: actions-assigner
   template:
     metadata:
       labels:
-        app: actions-placement
+        app: actions-assigner
     spec:
       containers:
-      - name: actions-placement
+      - name: actions-assigner
         image: yaron2/actionsedge:v2
         imagePullPolicy: Always
         ports:
         - containerPort: 50005
-        command: ["./placement"]
+        command: ["./assigner"]
       serviceAccountName: actions-controller
