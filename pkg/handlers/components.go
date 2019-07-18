@@ -103,6 +103,6 @@ func (c *ComponentsHandler) updateActionsRuntime(component pb.Component, address
 	client := pb.NewActionsClient(conn)
 	_, err = client.UpdateComponent(ctx, &component)
 	if err != nil {
-		log.Warn("Error updating Actions Runtime with component: %s", err)
+		log.Warnf("Error updating Actions Runtime with component: %s", err)
 	}
 }

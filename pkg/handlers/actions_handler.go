@@ -73,7 +73,7 @@ func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol
 				Name:          actionSidecarGRPCPortName,
 			},
 		},
-		Command: []string{"/action"},
+		Command: []string{"/actionsrt"},
 		Env:     []v1.EnvVar{v1.EnvVar{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}},
 		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--actions-id", actionName, "--control-plane-address", apiAddress, "--protocol", applicationProtocol, "--placement-address", placementAddress, "--config", config},
 	}
