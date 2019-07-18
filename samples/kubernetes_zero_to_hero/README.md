@@ -26,13 +26,13 @@ In this sample, a Node app will be persisting messages created by a Python app. 
 
 You can create your Redis store wherever you see fit: Azure, AWS, GCP or on a container. 
 
-To create a managed instance in Azure, follow [this create flow](https://ms.portal.azure.com/#create/Microsoft.Cache). Be sure to **check the "Unblock port 6379" box**, which will allow us to persist state without SSL.
+For this demo, we'll create a managed instance in Azure by following [this create flow](https://ms.portal.azure.com/#create/Microsoft.Cache). Be sure to **check the "Unblock port 6379" box**, which will allow us to persist state without SSL.
 
 ### 2. Configure your store
 
-Once your Redis store is created, you can use your connection string and password to connect your actions cluster to it. You can see your connection information in the "Access keys" tab under "Settings". Set the `redisPassword` property in the `./deploy/redis.yaml` file to your primary or secondary key. 
+Once your Redis store is created, you can use your connection string and password to connect your actions cluster to it. You can see your connection information in the "Access keys" tab under "Settings". Set the `redisPassword` property in the `./deploy/redis.yaml` file to your primary or secondary key.
 
-Note that the `redisHost` property has already been set to the Azure Redis host. If you're using a different provider, be sure to set your host accordingly.
+Note that the `redisHost` property has already been set to the Azure Redis host and that it uses port 6379. If you're using a different provider, be sure to set your host accordingly.
 
 To connect your cluster to your Redis store simply apply the deployment file:
 
@@ -47,7 +47,7 @@ eventsource.actions.io "statestore" configured
 
 ## Step 3 - Understand the Code
 
-Now that we have everything we need, let's take a look at our services. Navigate to the Node app in the Kubernetes sample: `cd samples/kubernetes_zero_to_hero/node.js/app.js`.
+Now that we've setup actions and state, let's take a look at our services. Navigate to the Node app in the Kubernetes sample: `cd samples/kubernetes_zero_to_hero/node.js/app.js`.
 
 In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers.
 
