@@ -210,7 +210,7 @@ func (a *actors) connectToPlacementService(placementAddress, hostAddress string,
 	log.Infof("actors: starting connection attempt to placement service at %s", placementAddress)
 	stream := a.getPlacementClientPersistently(placementAddress, hostAddress)
 
-	log.Infof("actors: stablished connection to placement service at %s", placementAddress)
+	log.Infof("actors: established connection to placement service at %s", placementAddress)
 
 	go func() {
 		for {

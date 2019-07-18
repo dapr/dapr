@@ -26,8 +26,12 @@ type apiServer struct {
 }
 
 type Component struct {
-	Name string                            `json:"name"`
-	Spec components_v1alpha1.ComponentSpec `json:"spec"`
+	Metadata ComponentMetadata                 `json:"metadata"`
+	Spec     components_v1alpha1.ComponentSpec `json:"spec"`
+}
+
+type ComponentMetadata struct {
+	Name string `json:"name"`
 }
 
 type Configuration struct {
@@ -124,7 +128,9 @@ func (a *apiServer) GetComponents(w http.ResponseWriter, r *http.Request) {
 
 	for _, c := range components.Items {
 		list = append(list, Component{
-			Name: c.ObjectMeta.Name,
+			Metadata: ComponentMetadata{
+				Name: c.ObjectMeta.Name,
+			},
 			Spec: c.Spec,
 		})
 	}

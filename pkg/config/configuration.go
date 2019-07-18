@@ -40,7 +40,7 @@ func LoadDefaultConfiguration() *Configuration {
 func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 	_, err := os.Stat(config)
 	if err != nil {
-		return LoadDefaultConfiguration(), nil
+		return nil, err
 	}
 
 	b, err := ioutil.ReadFile(config)
@@ -69,7 +69,7 @@ func LoadKubernetesConfiguration(config, controlPlaneAddress string) (*Configura
 	}
 	err := client.Do(req, resp)
 	if err != nil {
-		return LoadDefaultConfiguration(), err
+		return nil, err
 	}
 
 	body := resp.Body()
@@ -77,7 +77,7 @@ func LoadKubernetesConfiguration(config, controlPlaneAddress string) (*Configura
 	var conf Configuration
 	err = json.Unmarshal(body, &conf)
 	if err != nil {
-		return LoadDefaultConfiguration(), err
+		return nil, err
 	}
 
 	return &conf, nil

@@ -35,12 +35,12 @@ func main() {
 
 	actionHTTP, err := strconv.Atoi(*actionHTTPPort)
 	if err != nil {
-		log.Fatalf("error parsing action-http-port flag: %s", err)
+		log.Fatalf("error parsing actions-http-port flag: %s", err)
 	}
 
 	actionGRPC, err := strconv.Atoi(*actionGRPCPort)
 	if err != nil {
-		log.Fatalf("error parsing action-grpc-port flag: %s", err)
+		log.Fatalf("error parsing actions-grpc-port flag: %s", err)
 	}
 
 	applicationPort := 0
@@ -56,17 +56,19 @@ func main() {
 
 	var globalConfig *global_config.Configuration
 
-	switch modes.ActionsMode(*mode) {
-	case modes.KubernetesMode:
-		globalConfig, err = global_config.LoadKubernetesConfiguration(*config, *controlPlaneAddress)
-	case modes.StandaloneMode:
-		globalConfig, err = global_config.LoadStandaloneConfiguration(*config)
-	default:
+	if *config != "" {
+		switch modes.ActionsMode(*mode) {
+		case modes.KubernetesMode:
+			globalConfig, err = global_config.LoadKubernetesConfiguration(*config, *controlPlaneAddress)
+		case modes.StandaloneMode:
+			globalConfig, err = global_config.LoadStandaloneConfiguration(*config)
+		}
+	} else {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
 	if err != nil {
-		log.Fatalf("error loading config: %s", err)
+		log.Warnf("error loading config: %s. loading default config", err)
 	}
 
 	stop := make(chan os.Signal, 1)
