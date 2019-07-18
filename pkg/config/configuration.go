@@ -69,7 +69,7 @@ func LoadKubernetesConfiguration(config, controlPlaneAddress string) (*Configura
 	}
 	err := client.Do(req, resp)
 	if err != nil {
-		return nil, err
+		return LoadDefaultConfiguration(), err
 	}
 
 	body := resp.Body()
@@ -77,7 +77,7 @@ func LoadKubernetesConfiguration(config, controlPlaneAddress string) (*Configura
 	var conf Configuration
 	err = json.Unmarshal(body, &conf)
 	if err != nil {
-		return nil, err
+		return LoadDefaultConfiguration(), err
 	}
 
 	return &conf, nil
