@@ -127,6 +127,7 @@ If you take a look at the ```node.yaml``` file, you will see how Actions is enab
 ```actions.io/enabled: true``` - this tells the Action control plane to inject a sidecar to this deployment.
 ```actions.io/id: nodeapp``` - this assigns a unique id or name to the Action, so it can be sent messages to and communicated with by other Actions.
 
+You'll also see the docker image that we're deploying. If you want to update the code and deploy a new image, see **Next Steps** section. 
 
 This deployment provisions an External IP.
 Wait until the IP is visible: (may take a few minutes)
@@ -203,3 +204,16 @@ curl $NODE_APP/order
 ```
 
 You should see the latest JSON in response!
+
+## Next Steps
+
+Now that you're successfully working with actions, you probably want to update the sample code to fit your scenario. The Node and Python apps that make up this sample are deployed from [dockerhub](https://hub.docker.com/) images. To create new images with updated code, you'll first need to install docker on your machine and create a dockerhub account. Next, follow these steps:
+
+1. Update Node or Python code as you see fit!
+2. Run `docker login` and complete the interactive login flow.
+3. Navigate to the directory of the app you want to build a new image for.
+4. Run `docker build -t <YOUR_IMAGE_NAME> . `. You can name your image whatever you like, but it should start with `<YOUR_DOCKERHUB_USERNAME>/`.
+5. Once your image has built you can see it on your machines by running `docker images`.
+6. Publish your docker image to docker hub by running `docker publish <YOUR IMAGE NAME>`.
+7. Update your .yaml file to reflect the new image name.
+8. Deploy your actions enabled app: `kubectl apply -f <YOUR APP NAME>.yaml`.
