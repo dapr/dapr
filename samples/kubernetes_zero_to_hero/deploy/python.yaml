@@ -19,6 +19,4 @@ spec:
     spec:
       containers:
       - name: python
-        image: actionscore/python-app
-      imagePullSecrets:
-      - name: actions-core-auth
+        image: actionsdemoes/pythonapp
