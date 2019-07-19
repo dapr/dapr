@@ -74,6 +74,12 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onPostState,
 		},
+		Endpoint{
+			Methods: []string{http.Delete},
+			Route:   "state/<key>",
+			Version: apiVersionV1,
+			Handler: a.onDeleteState,
+		},
 	}
 }
 
@@ -150,6 +156,26 @@ func (a *api) onGetState(c *routing.Context) error {
 	}
 
 	respondWithJSON(c.RequestCtx, 200, resp.Data)
+	return nil
+}
+
+func (a *api) onDeleteState(c *routing.Context) error {
+	if a.stateStore == nil {
+		respondWithError(c.RequestCtx, 400, "error: state store not found")
+		return nil
+	}
+
+	key := c.Param(stateKeyParam)
+	req := state.DeleteRequest{
+		Key: key,
+	}
+
+	err := a.stateStore.Delete(&req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, fmt.Sprintf("error deleting state with key %s: %s", key, err))
+		return nil
+	}
+
 	return nil
 }
 
