@@ -30,9 +30,7 @@ For this demo, we'll create a managed instance in Azure by following [this creat
 
 ### 2. Configure your store
 
-Once your Redis store is created, you can use your connection string and password to connect your actions cluster to it. You can see your connection information in the "Access keys" tab under "Settings". Set the `redisPassword` property in the `./deploy/redis.yaml` file to your primary or secondary key.
-
-Note that the `redisHost` property has already been set to the Azure Redis host and that it uses port 6379. If you're using a different provider, be sure to set your host accordingly.
+Once your Redis store is created, you can use your connection string and password to connect your actions cluster to it. You can see your connection information in the "Access keys" tab under "Settings". Set the `redisHost` and `redisPassword` properties in the `./deploy/redis.yaml` file to your host and your key. If you're using an Azure managed Redis instance, your host will be `actions-redis.redis.cache.windows.net:6379` and your key will be available in Settings -> Access Keys.
 
 To connect your cluster to your Redis store simply apply the deployment file:
 
