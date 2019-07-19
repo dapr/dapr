@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: divideapp
+  labels:
+    app: divide
+  annotations:
+    actions.io/enabled: "true"
+    actions.io/id: "divideapp"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: divide
+  template:
+    metadata:
+      labels:
+        app: divide
+    spec:
+      containers:
+      - name: divide
+        image: ryanvolum/node-calculator
+        ports:
+        - containerPort: 4000
+        imagePullPolicy: Always

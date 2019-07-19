@@ -1,0 +1,41 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: calculator-front-end
+  labels:
+    app: calculator-front-end
+spec:
+  selector:
+    app: calculator-front-end
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calculator-front-end
+  labels:
+    app: calculator-front-end
+  annotations:
+    actions.io/enabled: "true"
+    actions.io/id: "calculator-front-end"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: calculator-front-end
+  template:
+    metadata:
+      labels:
+        app: calculator-front-end
+    spec:
+      containers:
+      - name: calculator-front-end
+        image: ryanvolum/calculator-front-end
+        ports:
+        - containerPort: 8080
+        imagePullPolicy: Always
