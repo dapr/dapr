@@ -144,11 +144,13 @@ func (a *actors) callRemoteActor(targetAddress, actorType, actorID, actorMethod 
 }
 
 func (a *actors) tryActivateActor(actorType, actorID string) error {
+	// read lock actor for read confirmation
 	a.actorLock.RLock()
 	_, exists := a.activeActors[actorID]
 	a.actorLock.RUnlock()
 
 	if !exists {
+		// lock for actor activation
 		a.actorLock.Lock()
 		defer a.actorLock.Unlock()
 
@@ -270,6 +272,7 @@ func (a *actors) getPlacementClientPersistently(placementAddress, hostAddress st
 func (a *actors) onPlacementOrder(in *pb.PlacementOrder) {
 	log.Infof("actors: placement order received: %s", in.Operation)
 
+	// lock all incoming calls when an updated table arrives
 	a.operationUpdateLock.Lock()
 	defer a.operationUpdateLock.Unlock()
 
@@ -308,9 +311,6 @@ func (a *actors) unblockPlacements() {
 
 func (a *actors) updatePlacements(in *pb.PlacementTables) {
 	if in.Version != a.placementTables.Version {
-		a.placementTableLock.Lock()
-		defer a.placementTableLock.Unlock()
-
 		for k, v := range in.Entries {
 			loadMap := map[string]*placement.Host{}
 			for lk, lv := range v.LoadMap {
@@ -326,6 +326,7 @@ func (a *actors) updatePlacements(in *pb.PlacementTables) {
 }
 
 func (a *actors) lookupActorAddress(actorType, actorID string) string {
+	// read lock for table map
 	a.placementTableLock.RLock()
 	defer a.placementTableLock.RUnlock()
 
