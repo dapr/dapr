@@ -33,7 +33,7 @@ This sample requires you to have the following installed on your machine:
     **Note for Windows Users**: Due to a known bug, you must rename 'action' to 'actions.exe'
 
 3. Add the filepaths to Actions and the Actions CLI to your PATH
-4. Run `actions init`, which will set up create two containers: the actions runtime and a redis state store. To validate that these two containers were successfully created, run `docker ps` and observe output: 
+4. Run `actions init`, which will set up create two containers: the actions placement service and a redis state store. To validate that these two containers were successfully created, run `docker ps` and observe output: 
 ```
 CONTAINER ID        IMAGE                   COMMAND                  CREATED             STATUS              PORTS                     NAMES
 84b19574f5e5        actionscore.azurecr.io/actions:latest   "./placement"             About an hour ago   Up About an hour    0.0.0.0:6050->50005/tcp   xenodochial_chatterjee
