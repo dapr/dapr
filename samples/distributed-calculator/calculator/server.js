@@ -12,21 +12,14 @@ app.use(bodyParser.urlencoded({
 const port = 8080;
 const actionsUrl = `http://localhost:3500/action`;
 
-app.post('/calculate/add', (req, res) => {
-  let args = req.body;
-
-  const [operandOne, operandTwo] = [Number(args['operandOne']), Number(args['operandTwo'])];
-  console.log(`Adding ${operandOne} by ${operandTwo}`);
-
-  let sum = operandOne + operandTwo;
-  res.send(sum.toString());
+app.post('/calculate/add', async (req, res) => {
+  const addUrl = `${actionsUrl}/addapp/add`;
+  await callAPI(addUrl, req.body, res);
 });
 
-app.post('/calculate/subtract', (req, res) => {
-  let args = req.body;
-  const [operandOne, operandTwo] = [Number(args['operandOne']), Number(args['operandTwo'])];
-  let sum = operandOne - operandTwo;
-  res.send(sum.toString());
+app.post('/calculate/subtract', async (req, res) => {
+  const subtractUrl = `${actionsUrl}/subtractapp/subtract`;
+  await callAPI(subtractUrl, req.body, res);
 });
 
 app.post('/calculate/multiply', async (req, res) => {
