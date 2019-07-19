@@ -10,8 +10,12 @@ import (
 	"github.com/actionscore/actions/pkg/version"
 )
 
+var (
+	logLevel = flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
+)
+
 func main() {
-	log.Infof("Starting Actions Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Actions Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 
 	port := flag.String("port", "50005", "")
 	flag.Parse()
@@ -22,6 +26,18 @@ func main() {
 	p := placement.NewPlacementService()
 	go p.Run(*port)
 
-	log.Infof("Placement Service started on port %s", *port)
+	log.Infof("placement Service started on port %s", *port)
 	<-stop
+}
+
+func init() {
+	flag.Parse()
+
+	parsedLogLevel, err := log.ParseLevel(*logLevel)
+	if err == nil {
+		log.SetLevel(parsedLogLevel)
+		log.Infof("Log level set to: %s", parsedLogLevel)
+	} else {
+		log.Fatalf("Invalid value for --log-level: %s", *logLevel)
+	}
 }
