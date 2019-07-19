@@ -16,13 +16,12 @@ import (
 	"github.com/actionscore/actions/pkg/version"
 )
 
-var (
-	logLevel = flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
-)
+var ()
 
 func main() {
 	log.Infof("starting Actions Runtime -- version %s -- commit %s", version.Version(), version.Commit())
 
+	logLevel := flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Actions")
 	actionHTTPPort := flag.String("actions-http-port", fmt.Sprintf("%v", actionsrt.DefaultActionsHTTPPort), "HTTP port for Actions to listen on")
 	actionGRPCPort := flag.String("actions-grpc-port", fmt.Sprintf("%v", actionsrt.DefaultActionsGRPCPort), "gRPC port for Actions to listen on")
@@ -36,6 +35,14 @@ func main() {
 	allowedOrigins := flag.String("allowed-origins", actionsrt.DefaultAllowedOrigins, "Allowed HTTP origins")
 
 	flag.Parse()
+
+	parsedLogLevel, err := log.ParseLevel(*logLevel)
+	if err == nil {
+		log.SetLevel(parsedLogLevel)
+		log.Infof("log level set to: %s", parsedLogLevel)
+	} else {
+		log.Fatalf("invalid value for --log-level: %s", *logLevel)
+	}
 
 	actionHTTP, err := strconv.Atoi(*actionHTTPPort)
 	if err != nil {
@@ -89,16 +96,4 @@ func main() {
 	log.Info("actions shutting down. Waiting 5 seconds to finish outstanding operations")
 	rt.Stop()
 	<-time.After(gracefulShutdownDuration)
-}
-
-func init() {
-	flag.Parse()
-
-	parsedLogLevel, err := log.ParseLevel(*logLevel)
-	if err == nil {
-		log.SetLevel(parsedLogLevel)
-		log.Infof("Log level set to: %s", parsedLogLevel)
-	} else {
-		log.Fatalf("Invalid value for --log-level: %s", *logLevel)
-	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,8 @@ type actors struct {
 	operationUpdateLock *sync.Mutex
 	grpcConnectionFn    func(address string) (*grpc.ClientConn, error)
 	config              Config
+	actorLastUsedLock   *sync.RWMutex
+	actorLastUsed       map[string]time.Time
 }
 
 const (
@@ -60,6 +63,8 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		placementTables:     &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
 		operationUpdateLock: &sync.Mutex{},
 		grpcConnectionFn:    grpcConnectionFn,
+		actorLastUsedLock:   &sync.RWMutex{},
+		actorLastUsed:       map[string]time.Time{},
 	}
 }
 
@@ -69,10 +74,89 @@ func (a *actors) Init() error {
 	}
 
 	go a.connectToPlacementService(a.config.PlacementServiceAddress, a.config.HostAddress, a.config.HeartbeatInterval)
+	a.startDeactivationTicker(a.config.ActorDeactivationScanInterval)
+
+	log.Infof("actor runtime started. actor idle timeout: %s. actor scan interval: %s",
+		a.config.ActorIdleTimeout.String(), a.config.ActorDeactivationScanInterval.String())
+
 	return nil
 }
 
+func (a *actors) updateActorUsage(actorType, actorID string) {
+	key := fmt.Sprintf("%s-%s", actorType, actorID)
+	a.actorLastUsedLock.Lock()
+	defer a.actorLastUsedLock.Unlock()
+	a.actorLastUsed[key] = time.Now()
+}
+
+func (a *actors) deactivateActor(actorType, actorID string) error {
+	req := channel.InvokeRequest{
+		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
+		Metadata: map[string]string{http.HTTPVerb: http.Delete},
+	}
+
+	resp, err := a.appChannel.InvokeMethod(&req)
+	if err != nil {
+		return err
+	}
+
+	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+		return errors.New("error from actor sdk")
+	}
+
+	return nil
+}
+
+func (a *actors) getStatusCodeFromMetadata(metadata map[string]string) int {
+	code := metadata[http.HTTPStatusCode]
+	if code != "" {
+		statusCode, err := strconv.Atoi(code)
+		if err == nil {
+			return statusCode
+		}
+	}
+
+	return 200
+}
+
+func (a *actors) getActorTypeAndIDFromKey(key string) (string, string) {
+	arr := strings.Split(key, "-")
+	return arr[0], arr[1]
+}
+
+func (a *actors) startDeactivationTicker(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		for t := range ticker.C {
+			a.actorLastUsedLock.RLock()
+
+			for actorKey, lastUsed := range a.actorLastUsed {
+				durationPassed := t.Sub(lastUsed)
+				if durationPassed >= a.config.ActorIdleTimeout {
+					go func(actorKey string) {
+						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
+						err := a.deactivateActor(actorType, actorID)
+						if err != nil {
+							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
+						} else {
+							a.actorLock.Lock()
+							delete(a.activeActors, actorID)
+							a.actorLock.Unlock()
+
+							a.actorLastUsedLock.Lock()
+							delete(a.actorLastUsed, actorKey)
+							a.actorLastUsedLock.Unlock()
+						}
+					}(actorKey)
+				}
+			}
+			a.actorLastUsedLock.RUnlock()
+		}
+	}()
+}
+
 func (a *actors) Call(req *CallRequest) (*CallResponse, error) {
+	go a.updateActorUsage(req.ActorType, req.ActorID)
 	if a.placementBlock {
 		<-a.placementSignal
 	}
@@ -155,17 +239,24 @@ func (a *actors) tryActivateActor(actorType, actorID string) error {
 		defer a.actorLock.Unlock()
 
 		key := a.constructActorStateKey(actorType, actorID)
-		resp, err := a.store.Get(&state.GetRequest{
-			Key: key,
-		})
+		var data []byte
+
+		if a.store != nil {
+			resp, err := a.store.Get(&state.GetRequest{
+				Key: key,
+			})
+			if err == nil {
+				data = resp.Data
+			}
+		}
 
 		req := channel.InvokeRequest{
 			Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
 			Metadata: map[string]string{http.HTTPVerb: http.Post},
-			Payload:  resp.Data,
+			Payload:  data,
 		}
 
-		_, err = a.appChannel.InvokeMethod(&req)
+		_, err := a.appChannel.InvokeMethod(&req)
 		if err != nil {
 			return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
 		}
