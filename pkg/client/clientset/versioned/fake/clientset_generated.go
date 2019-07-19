@@ -20,10 +20,10 @@ package fake
 
 import (
 	clientset "github.com/actionscore/actions/pkg/client/clientset/versioned"
+	componentsv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/components/v1alpha1"
+	fakecomponentsv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/components/v1alpha1/fake"
 	configurationv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/configuration/v1alpha1"
 	fakeconfigurationv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/configuration/v1alpha1/fake"
-	eventingv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/eventing/v1alpha1"
-	fakeeventingv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/eventing/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -78,12 +78,12 @@ func (c *Clientset) Tracker() testing.ObjectTracker {
 
 var _ clientset.Interface = &Clientset{}
 
+// ComponentsV1alpha1 retrieves the ComponentsV1alpha1Client
+func (c *Clientset) ComponentsV1alpha1() componentsv1alpha1.ComponentsV1alpha1Interface {
+	return &fakecomponentsv1alpha1.FakeComponentsV1alpha1{Fake: &c.Fake}
+}
+
 // ConfigurationV1alpha1 retrieves the ConfigurationV1alpha1Client
 func (c *Clientset) ConfigurationV1alpha1() configurationv1alpha1.ConfigurationV1alpha1Interface {
 	return &fakeconfigurationv1alpha1.FakeConfigurationV1alpha1{Fake: &c.Fake}
-}
-
-// EventingV1alpha1 retrieves the EventingV1alpha1Client
-func (c *Clientset) EventingV1alpha1() eventingv1alpha1.EventingV1alpha1Interface {
-	return &fakeeventingv1alpha1.FakeEventingV1alpha1{Fake: &c.Fake}
 }

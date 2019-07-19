@@ -89,7 +89,7 @@ func (p *PlacementService) PerformTablesUpdate() {
 	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
-			log.Errorf("Error updating host on lock operation: %s", err)
+			log.Errorf("error updating host on lock operation: %s", err)
 			continue
 		}
 	}
@@ -127,7 +127,7 @@ func (p *PlacementService) PerformTablesUpdate() {
 	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
-			log.Errorf("Error updating host on update operation: %s", err)
+			log.Errorf("error updating host on update operation: %s", err)
 			continue
 		}
 	}
@@ -138,7 +138,7 @@ func (p *PlacementService) PerformTablesUpdate() {
 	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
-			log.Errorf("Error updating host on unlock operation: %s", err)
+			log.Errorf("error updating host on unlock operation: %s", err)
 			continue
 		}
 	}

@@ -4,8 +4,8 @@ import (
 	"context"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/actionscore/actions/pkg/api"
 	scheme "github.com/actionscore/actions/pkg/client/clientset/versioned"
+	"github.com/actionscore/actions/pkg/controller/api"
 	"github.com/actionscore/actions/pkg/handlers"
 	k8s "github.com/actionscore/actions/pkg/kubernetes"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,13 +18,13 @@ type Controller interface {
 }
 
 type controller struct {
-	KubeClient           kubernetes.Interface
-	ActionsClient        scheme.Interface
-	DeploymentsInformer  cache.SharedInformer
-	EventSourcesInformer cache.SharedInformer
-	Ctx                  context.Context
-	ActionsHandler       handlers.Handler
-	EventSourcesHandler  handlers.Handler
+	KubeClient          kubernetes.Interface
+	ActionsClient       scheme.Interface
+	DeploymentsInformer cache.SharedInformer
+	ComponentsInformer  cache.SharedInformer
+	Ctx                 context.Context
+	ActionsHandler      handlers.Handler
+	ComponentsHandler   handlers.Handler
 }
 
 func NewController(kubeClient kubernetes.Interface, actionsClient scheme.Interface, config Config) *controller {
@@ -37,14 +37,14 @@ func NewController(kubeClient kubernetes.Interface, actionsClient scheme.Interfa
 			nil,
 			nil,
 		),
-		EventSourcesInformer: k8s.EventSourcesIndexInformer(
+		ComponentsInformer: k8s.ComponentsIndexInformer(
 			actionsClient,
 			meta_v1.NamespaceAll,
 			nil,
 			nil,
 		),
-		ActionsHandler:      handlers.NewActionsHandler(actionsClient, handlers.ActionsHandlerConfig{RuntimeImage: config.ActionsRuntimeImage, ImagePullSecretName: config.ImagePullSecretName}),
-		EventSourcesHandler: handlers.NewEventSourcesHandler(kubeClient),
+		ActionsHandler:    handlers.NewActionsHandler(actionsClient, handlers.ActionsHandlerConfig{RuntimeImage: config.ActionsRuntimeImage, ImagePullSecretName: config.ImagePullSecretName}),
+		ComponentsHandler: handlers.NewComponentsHandler(kubeClient),
 	}
 
 	c.DeploymentsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -55,18 +55,18 @@ func NewController(kubeClient kubernetes.Interface, actionsClient scheme.Interfa
 		DeleteFunc: c.syncDeletedDeployment,
 	})
 
-	c.EventSourcesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: c.syncEventSource,
+	c.ComponentsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: c.syncComponent,
 		UpdateFunc: func(_, newObj interface{}) {
-			c.syncEventSource(newObj)
+			c.syncComponent(newObj)
 		},
 	})
 
 	return c
 }
 
-func (c *controller) syncEventSource(obj interface{}) {
-	c.EventSourcesHandler.ObjectCreated(obj)
+func (c *controller) syncComponent(obj interface{}) {
+	c.ComponentsHandler.ObjectCreated(obj)
 }
 
 func (c *controller) syncDeployment(obj interface{}) {
@@ -91,7 +91,7 @@ func (c *controller) Run(ctx context.Context) {
 		cancel()
 	}()
 	go func() {
-		c.EventSourcesInformer.Run(ctx.Done())
+		c.ComponentsInformer.Run(ctx.Done())
 		cancel()
 	}()
 	apiSrv := api.NewAPIServer(c.ActionsClient)

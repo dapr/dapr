@@ -24,88 +24,332 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
-type InvokeEnvelope struct {
-	Data                 *any.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+type LocalCallEnvelope struct {
+	Data                 *any.Any          `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Method               string            `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	Metadata             map[string]string `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
-func (m *InvokeEnvelope) Reset()         { *m = InvokeEnvelope{} }
-func (m *InvokeEnvelope) String() string { return proto.CompactTextString(m) }
-func (*InvokeEnvelope) ProtoMessage()    {}
-func (*InvokeEnvelope) Descriptor() ([]byte, []int) {
+func (m *LocalCallEnvelope) Reset()         { *m = LocalCallEnvelope{} }
+func (m *LocalCallEnvelope) String() string { return proto.CompactTextString(m) }
+func (*LocalCallEnvelope) ProtoMessage()    {}
+func (*LocalCallEnvelope) Descriptor() ([]byte, []int) {
 	return fileDescriptor_eeb49063df94c2b8, []int{0}
 }
 
-func (m *InvokeEnvelope) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_InvokeEnvelope.Unmarshal(m, b)
+func (m *LocalCallEnvelope) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_LocalCallEnvelope.Unmarshal(m, b)
 }
-func (m *InvokeEnvelope) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_InvokeEnvelope.Marshal(b, m, deterministic)
+func (m *LocalCallEnvelope) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_LocalCallEnvelope.Marshal(b, m, deterministic)
 }
-func (m *InvokeEnvelope) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_InvokeEnvelope.Merge(m, src)
+func (m *LocalCallEnvelope) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LocalCallEnvelope.Merge(m, src)
 }
-func (m *InvokeEnvelope) XXX_Size() int {
-	return xxx_messageInfo_InvokeEnvelope.Size(m)
+func (m *LocalCallEnvelope) XXX_Size() int {
+	return xxx_messageInfo_LocalCallEnvelope.Size(m)
 }
-func (m *InvokeEnvelope) XXX_DiscardUnknown() {
-	xxx_messageInfo_InvokeEnvelope.DiscardUnknown(m)
+func (m *LocalCallEnvelope) XXX_DiscardUnknown() {
+	xxx_messageInfo_LocalCallEnvelope.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_InvokeEnvelope proto.InternalMessageInfo
+var xxx_messageInfo_LocalCallEnvelope proto.InternalMessageInfo
 
-func (m *InvokeEnvelope) GetData() *any.Any {
+func (m *LocalCallEnvelope) GetData() *any.Any {
 	if m != nil {
 		return m.Data
 	}
 	return nil
 }
 
-type EventSource struct {
-	Name                 string           `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Spec                 *EventSourceSpec `protobuf:"bytes,2,opt,name=spec,proto3" json:"spec,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
-	XXX_unrecognized     []byte           `json:"-"`
-	XXX_sizecache        int32            `json:"-"`
+func (m *LocalCallEnvelope) GetMethod() string {
+	if m != nil {
+		return m.Method
+	}
+	return ""
 }
 
-func (m *EventSource) Reset()         { *m = EventSource{} }
-func (m *EventSource) String() string { return proto.CompactTextString(m) }
-func (*EventSource) ProtoMessage()    {}
-func (*EventSource) Descriptor() ([]byte, []int) {
+func (m *LocalCallEnvelope) GetMetadata() map[string]string {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
+type CallRemoteAppEnvelope struct {
+	Target               string            `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Data                 *any.Any          `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Method               string            `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"`
+	Metadata             map[string]string `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *CallRemoteAppEnvelope) Reset()         { *m = CallRemoteAppEnvelope{} }
+func (m *CallRemoteAppEnvelope) String() string { return proto.CompactTextString(m) }
+func (*CallRemoteAppEnvelope) ProtoMessage()    {}
+func (*CallRemoteAppEnvelope) Descriptor() ([]byte, []int) {
 	return fileDescriptor_eeb49063df94c2b8, []int{1}
 }
 
-func (m *EventSource) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_EventSource.Unmarshal(m, b)
+func (m *CallRemoteAppEnvelope) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CallRemoteAppEnvelope.Unmarshal(m, b)
 }
-func (m *EventSource) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_EventSource.Marshal(b, m, deterministic)
+func (m *CallRemoteAppEnvelope) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CallRemoteAppEnvelope.Marshal(b, m, deterministic)
 }
-func (m *EventSource) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_EventSource.Merge(m, src)
+func (m *CallRemoteAppEnvelope) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CallRemoteAppEnvelope.Merge(m, src)
 }
-func (m *EventSource) XXX_Size() int {
-	return xxx_messageInfo_EventSource.Size(m)
+func (m *CallRemoteAppEnvelope) XXX_Size() int {
+	return xxx_messageInfo_CallRemoteAppEnvelope.Size(m)
 }
-func (m *EventSource) XXX_DiscardUnknown() {
-	xxx_messageInfo_EventSource.DiscardUnknown(m)
+func (m *CallRemoteAppEnvelope) XXX_DiscardUnknown() {
+	xxx_messageInfo_CallRemoteAppEnvelope.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_EventSource proto.InternalMessageInfo
+var xxx_messageInfo_CallRemoteAppEnvelope proto.InternalMessageInfo
 
-func (m *EventSource) GetName() string {
+func (m *CallRemoteAppEnvelope) GetTarget() string {
+	if m != nil {
+		return m.Target
+	}
+	return ""
+}
+
+func (m *CallRemoteAppEnvelope) GetData() *any.Any {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+func (m *CallRemoteAppEnvelope) GetMethod() string {
+	if m != nil {
+		return m.Method
+	}
+	return ""
+}
+
+func (m *CallRemoteAppEnvelope) GetMetadata() map[string]string {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
+type CallActorEnvelope struct {
+	ActorID              string   `protobuf:"bytes,1,opt,name=actorID,proto3" json:"actorID,omitempty"`
+	ActorType            string   `protobuf:"bytes,2,opt,name=actorType,proto3" json:"actorType,omitempty"`
+	Method               string   `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"`
+	Data                 *any.Any `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *CallActorEnvelope) Reset()         { *m = CallActorEnvelope{} }
+func (m *CallActorEnvelope) String() string { return proto.CompactTextString(m) }
+func (*CallActorEnvelope) ProtoMessage()    {}
+func (*CallActorEnvelope) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eeb49063df94c2b8, []int{2}
+}
+
+func (m *CallActorEnvelope) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_CallActorEnvelope.Unmarshal(m, b)
+}
+func (m *CallActorEnvelope) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_CallActorEnvelope.Marshal(b, m, deterministic)
+}
+func (m *CallActorEnvelope) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CallActorEnvelope.Merge(m, src)
+}
+func (m *CallActorEnvelope) XXX_Size() int {
+	return xxx_messageInfo_CallActorEnvelope.Size(m)
+}
+func (m *CallActorEnvelope) XXX_DiscardUnknown() {
+	xxx_messageInfo_CallActorEnvelope.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_CallActorEnvelope proto.InternalMessageInfo
+
+func (m *CallActorEnvelope) GetActorID() string {
+	if m != nil {
+		return m.ActorID
+	}
+	return ""
+}
+
+func (m *CallActorEnvelope) GetActorType() string {
+	if m != nil {
+		return m.ActorType
+	}
+	return ""
+}
+
+func (m *CallActorEnvelope) GetMethod() string {
+	if m != nil {
+		return m.Method
+	}
+	return ""
+}
+
+func (m *CallActorEnvelope) GetData() *any.Any {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+type InvokeResponse struct {
+	Data                 *any.Any          `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Metadata             map[string]string `protobuf:"bytes,2,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *InvokeResponse) Reset()         { *m = InvokeResponse{} }
+func (m *InvokeResponse) String() string { return proto.CompactTextString(m) }
+func (*InvokeResponse) ProtoMessage()    {}
+func (*InvokeResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eeb49063df94c2b8, []int{3}
+}
+
+func (m *InvokeResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_InvokeResponse.Unmarshal(m, b)
+}
+func (m *InvokeResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_InvokeResponse.Marshal(b, m, deterministic)
+}
+func (m *InvokeResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InvokeResponse.Merge(m, src)
+}
+func (m *InvokeResponse) XXX_Size() int {
+	return xxx_messageInfo_InvokeResponse.Size(m)
+}
+func (m *InvokeResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_InvokeResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InvokeResponse proto.InternalMessageInfo
+
+func (m *InvokeResponse) GetData() *any.Any {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+func (m *InvokeResponse) GetMetadata() map[string]string {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
+type Component struct {
+	Name                 string         `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Spec                 *ComponentSpec `protobuf:"bytes,2,opt,name=spec,proto3" json:"spec,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
+}
+
+func (m *Component) Reset()         { *m = Component{} }
+func (m *Component) String() string { return proto.CompactTextString(m) }
+func (*Component) ProtoMessage()    {}
+func (*Component) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eeb49063df94c2b8, []int{4}
+}
+
+func (m *Component) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_Component.Unmarshal(m, b)
+}
+func (m *Component) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_Component.Marshal(b, m, deterministic)
+}
+func (m *Component) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Component.Merge(m, src)
+}
+func (m *Component) XXX_Size() int {
+	return xxx_messageInfo_Component.Size(m)
+}
+func (m *Component) XXX_DiscardUnknown() {
+	xxx_messageInfo_Component.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Component proto.InternalMessageInfo
+
+func (m *Component) GetName() string {
 	if m != nil {
 		return m.Name
 	}
 	return ""
 }
 
-func (m *EventSource) GetSpec() *EventSourceSpec {
+func (m *Component) GetSpec() *ComponentSpec {
 	if m != nil {
 		return m.Spec
+	}
+	return nil
+}
+
+type ComponentSpec struct {
+	Type                 string            `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	ConnectionInfo       map[string]string `protobuf:"bytes,2,rep,name=connection_info,json=connectionInfo,proto3" json:"connection_info,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Properties           map[string]string `protobuf:"bytes,3,rep,name=properties,proto3" json:"properties,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *ComponentSpec) Reset()         { *m = ComponentSpec{} }
+func (m *ComponentSpec) String() string { return proto.CompactTextString(m) }
+func (*ComponentSpec) ProtoMessage()    {}
+func (*ComponentSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eeb49063df94c2b8, []int{5}
+}
+
+func (m *ComponentSpec) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ComponentSpec.Unmarshal(m, b)
+}
+func (m *ComponentSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ComponentSpec.Marshal(b, m, deterministic)
+}
+func (m *ComponentSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ComponentSpec.Merge(m, src)
+}
+func (m *ComponentSpec) XXX_Size() int {
+	return xxx_messageInfo_ComponentSpec.Size(m)
+}
+func (m *ComponentSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ComponentSpec.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ComponentSpec proto.InternalMessageInfo
+
+func (m *ComponentSpec) GetType() string {
+	if m != nil {
+		return m.Type
+	}
+	return ""
+}
+
+func (m *ComponentSpec) GetConnectionInfo() map[string]string {
+	if m != nil {
+		return m.ConnectionInfo
+	}
+	return nil
+}
+
+func (m *ComponentSpec) GetProperties() map[string]string {
+	if m != nil {
+		return m.Properties
 	}
 	return nil
 }
@@ -121,7 +365,7 @@ func (m *SaveStateEnvelope) Reset()         { *m = SaveStateEnvelope{} }
 func (m *SaveStateEnvelope) String() string { return proto.CompactTextString(m) }
 func (*SaveStateEnvelope) ProtoMessage()    {}
 func (*SaveStateEnvelope) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{2}
+	return fileDescriptor_eeb49063df94c2b8, []int{6}
 }
 
 func (m *SaveStateEnvelope) XXX_Unmarshal(b []byte) error {
@@ -160,7 +404,7 @@ func (m *GetStateEnvelope) Reset()         { *m = GetStateEnvelope{} }
 func (m *GetStateEnvelope) String() string { return proto.CompactTextString(m) }
 func (*GetStateEnvelope) ProtoMessage()    {}
 func (*GetStateEnvelope) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{3}
+	return fileDescriptor_eeb49063df94c2b8, []int{7}
 }
 
 func (m *GetStateEnvelope) XXX_Unmarshal(b []byte) error {
@@ -188,102 +432,47 @@ func (m *GetStateEnvelope) GetKey() string {
 	return ""
 }
 
-type EventSourceSpec struct {
-	Type                 string   `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	ConnectionInfo       *any.Any `protobuf:"bytes,2,opt,name=connection_info,json=connectionInfo,proto3" json:"connection_info,omitempty"`
+type AppMethodCallEnvelope struct {
+	Method               string   `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	Data                 *any.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *EventSourceSpec) Reset()         { *m = EventSourceSpec{} }
-func (m *EventSourceSpec) String() string { return proto.CompactTextString(m) }
-func (*EventSourceSpec) ProtoMessage()    {}
-func (*EventSourceSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{4}
+func (m *AppMethodCallEnvelope) Reset()         { *m = AppMethodCallEnvelope{} }
+func (m *AppMethodCallEnvelope) String() string { return proto.CompactTextString(m) }
+func (*AppMethodCallEnvelope) ProtoMessage()    {}
+func (*AppMethodCallEnvelope) Descriptor() ([]byte, []int) {
+	return fileDescriptor_eeb49063df94c2b8, []int{8}
 }
 
-func (m *EventSourceSpec) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_EventSourceSpec.Unmarshal(m, b)
+func (m *AppMethodCallEnvelope) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_AppMethodCallEnvelope.Unmarshal(m, b)
 }
-func (m *EventSourceSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_EventSourceSpec.Marshal(b, m, deterministic)
+func (m *AppMethodCallEnvelope) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_AppMethodCallEnvelope.Marshal(b, m, deterministic)
 }
-func (m *EventSourceSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_EventSourceSpec.Merge(m, src)
+func (m *AppMethodCallEnvelope) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AppMethodCallEnvelope.Merge(m, src)
 }
-func (m *EventSourceSpec) XXX_Size() int {
-	return xxx_messageInfo_EventSourceSpec.Size(m)
+func (m *AppMethodCallEnvelope) XXX_Size() int {
+	return xxx_messageInfo_AppMethodCallEnvelope.Size(m)
 }
-func (m *EventSourceSpec) XXX_DiscardUnknown() {
-	xxx_messageInfo_EventSourceSpec.DiscardUnknown(m)
+func (m *AppMethodCallEnvelope) XXX_DiscardUnknown() {
+	xxx_messageInfo_AppMethodCallEnvelope.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_EventSourceSpec proto.InternalMessageInfo
+var xxx_messageInfo_AppMethodCallEnvelope proto.InternalMessageInfo
 
-func (m *EventSourceSpec) GetType() string {
+func (m *AppMethodCallEnvelope) GetMethod() string {
 	if m != nil {
-		return m.Type
+		return m.Method
 	}
 	return ""
 }
 
-func (m *EventSourceSpec) GetConnectionInfo() *any.Any {
-	if m != nil {
-		return m.ConnectionInfo
-	}
-	return nil
-}
-
-type InvokeMethod struct {
-	MethodName           string   `protobuf:"bytes,1,opt,name=method_name,json=methodName,proto3" json:"method_name,omitempty"`
-	ContextId            string   `protobuf:"bytes,2,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"`
-	Data                 *any.Any `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *InvokeMethod) Reset()         { *m = InvokeMethod{} }
-func (m *InvokeMethod) String() string { return proto.CompactTextString(m) }
-func (*InvokeMethod) ProtoMessage()    {}
-func (*InvokeMethod) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{5}
-}
-
-func (m *InvokeMethod) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_InvokeMethod.Unmarshal(m, b)
-}
-func (m *InvokeMethod) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_InvokeMethod.Marshal(b, m, deterministic)
-}
-func (m *InvokeMethod) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_InvokeMethod.Merge(m, src)
-}
-func (m *InvokeMethod) XXX_Size() int {
-	return xxx_messageInfo_InvokeMethod.Size(m)
-}
-func (m *InvokeMethod) XXX_DiscardUnknown() {
-	xxx_messageInfo_InvokeMethod.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_InvokeMethod proto.InternalMessageInfo
-
-func (m *InvokeMethod) GetMethodName() string {
-	if m != nil {
-		return m.MethodName
-	}
-	return ""
-}
-
-func (m *InvokeMethod) GetContextId() string {
-	if m != nil {
-		return m.ContextId
-	}
-	return ""
-}
-
-func (m *InvokeMethod) GetData() *any.Any {
+func (m *AppMethodCallEnvelope) GetData() *any.Any {
 	if m != nil {
 		return m.Data
 	}
@@ -301,7 +490,7 @@ func (m *State) Reset()         { *m = State{} }
 func (m *State) String() string { return proto.CompactTextString(m) }
 func (*State) ProtoMessage()    {}
 func (*State) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{6}
+	return fileDescriptor_eeb49063df94c2b8, []int{9}
 }
 
 func (m *State) XXX_Unmarshal(b []byte) error {
@@ -341,7 +530,7 @@ func (m *KeyVal) Reset()         { *m = KeyVal{} }
 func (m *KeyVal) String() string { return proto.CompactTextString(m) }
 func (*KeyVal) ProtoMessage()    {}
 func (*KeyVal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{7}
+	return fileDescriptor_eeb49063df94c2b8, []int{10}
 }
 
 func (m *KeyVal) XXX_Unmarshal(b []byte) error {
@@ -387,7 +576,7 @@ func (m *ApplicationConfig) Reset()         { *m = ApplicationConfig{} }
 func (m *ApplicationConfig) String() string { return proto.CompactTextString(m) }
 func (*ApplicationConfig) ProtoMessage()    {}
 func (*ApplicationConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{8}
+	return fileDescriptor_eeb49063df94c2b8, []int{11}
 }
 
 func (m *ApplicationConfig) XXX_Unmarshal(b []byte) error {
@@ -427,7 +616,7 @@ func (m *PlacementOrder) Reset()         { *m = PlacementOrder{} }
 func (m *PlacementOrder) String() string { return proto.CompactTextString(m) }
 func (*PlacementOrder) ProtoMessage()    {}
 func (*PlacementOrder) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{9}
+	return fileDescriptor_eeb49063df94c2b8, []int{12}
 }
 
 func (m *PlacementOrder) XXX_Unmarshal(b []byte) error {
@@ -474,7 +663,7 @@ func (m *PlacementTables) Reset()         { *m = PlacementTables{} }
 func (m *PlacementTables) String() string { return proto.CompactTextString(m) }
 func (*PlacementTables) ProtoMessage()    {}
 func (*PlacementTables) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{10}
+	return fileDescriptor_eeb49063df94c2b8, []int{13}
 }
 
 func (m *PlacementTables) XXX_Unmarshal(b []byte) error {
@@ -523,7 +712,7 @@ func (m *PlacementTable) Reset()         { *m = PlacementTable{} }
 func (m *PlacementTable) String() string { return proto.CompactTextString(m) }
 func (*PlacementTable) ProtoMessage()    {}
 func (*PlacementTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{11}
+	return fileDescriptor_eeb49063df94c2b8, []int{14}
 }
 
 func (m *PlacementTable) XXX_Unmarshal(b []byte) error {
@@ -586,7 +775,7 @@ func (m *Host) Reset()         { *m = Host{} }
 func (m *Host) String() string { return proto.CompactTextString(m) }
 func (*Host) ProtoMessage()    {}
 func (*Host) Descriptor() ([]byte, []int) {
-	return fileDescriptor_eeb49063df94c2b8, []int{12}
+	return fileDescriptor_eeb49063df94c2b8, []int{15}
 }
 
 func (m *Host) XXX_Unmarshal(b []byte) error {
@@ -636,12 +825,20 @@ func (m *Host) GetEntities() []string {
 }
 
 func init() {
-	proto.RegisterType((*InvokeEnvelope)(nil), "actions.InvokeEnvelope")
-	proto.RegisterType((*EventSource)(nil), "actions.EventSource")
+	proto.RegisterType((*LocalCallEnvelope)(nil), "actions.LocalCallEnvelope")
+	proto.RegisterMapType((map[string]string)(nil), "actions.LocalCallEnvelope.MetadataEntry")
+	proto.RegisterType((*CallRemoteAppEnvelope)(nil), "actions.CallRemoteAppEnvelope")
+	proto.RegisterMapType((map[string]string)(nil), "actions.CallRemoteAppEnvelope.MetadataEntry")
+	proto.RegisterType((*CallActorEnvelope)(nil), "actions.CallActorEnvelope")
+	proto.RegisterType((*InvokeResponse)(nil), "actions.InvokeResponse")
+	proto.RegisterMapType((map[string]string)(nil), "actions.InvokeResponse.MetadataEntry")
+	proto.RegisterType((*Component)(nil), "actions.Component")
+	proto.RegisterType((*ComponentSpec)(nil), "actions.ComponentSpec")
+	proto.RegisterMapType((map[string]string)(nil), "actions.ComponentSpec.ConnectionInfoEntry")
+	proto.RegisterMapType((map[string]string)(nil), "actions.ComponentSpec.PropertiesEntry")
 	proto.RegisterType((*SaveStateEnvelope)(nil), "actions.SaveStateEnvelope")
 	proto.RegisterType((*GetStateEnvelope)(nil), "actions.GetStateEnvelope")
-	proto.RegisterType((*EventSourceSpec)(nil), "actions.EventSourceSpec")
-	proto.RegisterType((*InvokeMethod)(nil), "actions.InvokeMethod")
+	proto.RegisterType((*AppMethodCallEnvelope)(nil), "actions.AppMethodCallEnvelope")
 	proto.RegisterType((*State)(nil), "actions.State")
 	proto.RegisterType((*KeyVal)(nil), "actions.KeyVal")
 	proto.RegisterType((*ApplicationConfig)(nil), "actions.ApplicationConfig")
@@ -657,57 +854,69 @@ func init() {
 func init() { proto.RegisterFile("actions.proto", fileDescriptor_eeb49063df94c2b8) }
 
 var fileDescriptor_eeb49063df94c2b8 = []byte{
-	// 797 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x54, 0x5d, 0x8f, 0xdb, 0x44,
-	0x14, 0x8d, 0x63, 0xef, 0xa6, 0xbe, 0xd9, 0xee, 0xc7, 0x68, 0x01, 0xd7, 0x80, 0x58, 0x0d, 0xad,
-	0x14, 0x21, 0xf0, 0x56, 0xe1, 0x81, 0xd5, 0x8a, 0x82, 0x42, 0x15, 0x4a, 0x04, 0xa5, 0xc8, 0x81,
-	0x3e, 0xb2, 0x78, 0xed, 0x9b, 0xad, 0x55, 0x67, 0xc6, 0xb2, 0x27, 0x51, 0xf3, 0x27, 0xf8, 0x43,
-	0x3c, 0xf1, 0xcc, 0x9f, 0x42, 0x33, 0xe3, 0xcf, 0x24, 0x5e, 0x78, 0xf2, 0xf8, 0xde, 0x73, 0xef,
-	0x3d, 0x73, 0x66, 0xe6, 0xc0, 0xc3, 0x20, 0x14, 0x31, 0x67, 0xb9, 0x97, 0x66, 0x5c, 0x70, 0x32,
-	0x28, 0x7e, 0xdd, 0x47, 0x77, 0x9c, 0xdf, 0x25, 0x78, 0xa9, 0xc2, 0xb7, 0xab, 0xc5, 0x65, 0xc0,
-	0x36, 0x1a, 0xe3, 0x7e, 0xb8, 0x9d, 0xc2, 0x65, 0x2a, 0x8a, 0x24, 0xbd, 0x86, 0xe3, 0x19, 0x5b,
-	0xf3, 0xb7, 0x38, 0x65, 0x6b, 0x4c, 0x78, 0x8a, 0x64, 0x04, 0x56, 0x14, 0x88, 0xc0, 0x31, 0x2e,
-	0x8c, 0xd1, 0x70, 0x7c, 0xee, 0xe9, 0x6a, 0xaf, 0xac, 0xf6, 0x26, 0x6c, 0xe3, 0x2b, 0x04, 0x7d,
-	0x05, 0xc3, 0xe9, 0x1a, 0x99, 0x98, 0xf3, 0x55, 0x16, 0x22, 0x21, 0x60, 0xb1, 0x60, 0x89, 0xaa,
-	0xd0, 0xf6, 0xd5, 0x9a, 0x7c, 0x0e, 0x56, 0x9e, 0x62, 0xe8, 0xf4, 0x55, 0x33, 0xc7, 0x2b, 0xd9,
-	0x37, 0xea, 0xe6, 0x29, 0x86, 0xbe, 0x42, 0xd1, 0x6b, 0x38, 0x9b, 0x07, 0x6b, 0x9c, 0x8b, 0x40,
-	0xd4, 0x7c, 0x9e, 0xc0, 0x41, 0x2e, 0x03, 0x8e, 0x71, 0x61, 0x8e, 0x86, 0xe3, 0x93, 0xaa, 0xc7,
-	0x8f, 0xb8, 0x79, 0x1d, 0x24, 0xbe, 0xce, 0xd2, 0xc7, 0x70, 0xfa, 0x02, 0x45, 0xbb, 0xf4, 0x14,
-	0xcc, 0xb7, 0xb8, 0x29, 0x08, 0xc9, 0x25, 0x8d, 0xe0, 0x64, 0x6b, 0xb4, 0xa4, 0x2d, 0x36, 0x69,
-	0x45, 0x5b, 0xae, 0xc9, 0x33, 0x38, 0x09, 0x39, 0x63, 0xa8, 0x26, 0xdd, 0xc4, 0x6c, 0xc1, 0x8b,
-	0x1d, 0xec, 0x97, 0xe3, 0xb8, 0x06, 0xcf, 0xd8, 0x82, 0xd3, 0x77, 0x70, 0xa4, 0x45, 0x7d, 0x89,
-	0xe2, 0x0d, 0x8f, 0xc8, 0x27, 0x30, 0x5c, 0xaa, 0xd5, 0x4d, 0x43, 0x20, 0xd0, 0xa1, 0x9f, 0xa5,
-	0x4c, 0x1f, 0x03, 0x84, 0x9c, 0x09, 0x7c, 0x27, 0x6e, 0xe2, 0x48, 0x8d, 0xb2, 0x7d, 0xbb, 0x88,
-	0xcc, 0xa2, 0xea, 0x48, 0xcc, 0xff, 0x3c, 0x12, 0x0f, 0x0e, 0x94, 0x04, 0xff, 0x57, 0xb5, 0xef,
-	0xe1, 0x50, 0x07, 0x76, 0xb5, 0x22, 0x9f, 0xc1, 0xc1, 0x3a, 0x48, 0x56, 0x78, 0xef, 0xd6, 0x35,
-	0x84, 0x5e, 0xc2, 0xd9, 0x24, 0x4d, 0x93, 0x38, 0x0c, 0xe4, 0x94, 0xe7, 0x9c, 0x2d, 0xe2, 0x3b,
-	0xe2, 0xc2, 0x03, 0x64, 0x22, 0x16, 0x31, 0xe6, 0x8a, 0x86, 0xed, 0x57, 0xff, 0xf4, 0x0f, 0x38,
-	0xfe, 0x25, 0x09, 0x42, 0x5c, 0x22, 0x13, 0xaf, 0xb2, 0x08, 0x33, 0xf2, 0x14, 0x0e, 0x45, 0x70,
-	0x9b, 0x28, 0x6c, 0xfb, 0xb2, 0x54, 0xc0, 0x5f, 0x55, 0xde, 0x2f, 0x70, 0xe4, 0x23, 0xb0, 0x79,
-	0x8a, 0x99, 0x1a, 0x59, 0x8a, 0x56, 0x05, 0xe8, 0xdf, 0x06, 0x9c, 0x6c, 0x55, 0x92, 0x6f, 0x61,
-	0x80, 0x4c, 0x64, 0x25, 0xa1, 0xe1, 0xf8, 0x49, 0xd7, 0x10, 0x6f, 0xaa, 0x71, 0xf2, 0xb3, 0xf1,
-	0xcb, 0x2a, 0xe2, 0xc0, 0x60, 0x8d, 0x59, 0x5e, 0x0f, 0x2c, 0x7f, 0xdd, 0x39, 0x1c, 0x35, 0x4b,
-	0xf6, 0xe8, 0xf9, 0x45, 0x5b, 0xcf, 0x0f, 0x3a, 0x46, 0x17, 0x92, 0x5e, 0xf7, 0xaf, 0x0c, 0xfa,
-	0x4f, 0xbf, 0x21, 0x93, 0xca, 0x92, 0x2b, 0x38, 0x78, 0xc3, 0x73, 0x51, 0x6e, 0x80, 0x76, 0x74,
-	0xf1, 0x7e, 0x90, 0x20, 0xcd, 0x5e, 0x17, 0x48, 0xb9, 0x72, 0x9e, 0x09, 0x8c, 0xe6, 0x28, 0x9c,
-	0xfe, 0x85, 0x39, 0xb2, 0xfc, 0x3a, 0x40, 0xbe, 0x81, 0x41, 0xc2, 0x83, 0xe8, 0x65, 0x90, 0x3a,
-	0xa6, 0xea, 0xfc, 0xb8, 0xab, 0xf3, 0x4f, 0x1a, 0x56, 0x28, 0x53, 0x14, 0xc9, 0xee, 0x82, 0x8b,
-	0x20, 0x91, 0x59, 0xc7, 0xba, 0x30, 0x46, 0xa6, 0x5f, 0x07, 0xdc, 0x2b, 0x80, 0x9a, 0x50, 0x53,
-	0x1b, 0x4b, 0x6b, 0x73, 0xde, 0xd4, 0xc6, 0x6e, 0x48, 0xe0, 0xce, 0xe0, 0xa8, 0x39, 0x70, 0x8f,
-	0xae, 0x9f, 0xb6, 0x75, 0x7d, 0x58, 0xf1, 0x96, 0x13, 0x9b, 0x6a, 0xfe, 0x0e, 0x96, 0x0c, 0xed,
-	0x35, 0x2a, 0x02, 0x56, 0xca, 0x33, 0xa1, 0x7a, 0x98, 0xbe, 0x5a, 0xcb, 0x98, 0xdc, 0x9d, 0x7a,
-	0x76, 0xa6, 0xaf, 0xd6, 0xad, 0x3b, 0x6d, 0xb5, 0xef, 0xf4, 0xf8, 0xcf, 0x3e, 0x0c, 0x26, 0x7a,
-	0x36, 0xf9, 0x1a, 0x0e, 0xb5, 0x05, 0x90, 0xfa, 0x9c, 0xdb, 0x46, 0xeb, 0x76, 0x25, 0x68, 0x8f,
-	0x4c, 0xc0, 0xae, 0x8c, 0x90, 0xb8, 0x15, 0x6e, 0xc7, 0x1c, 0xdd, 0xf7, 0x77, 0x1e, 0xe5, 0x54,
-	0x9a, 0x3b, 0xed, 0x91, 0x67, 0xf0, 0xa0, 0xf4, 0x43, 0xf2, 0xa8, 0xea, 0xb0, 0x6d, 0x91, 0xee,
-	0xde, 0x57, 0x4d, 0x7b, 0xe4, 0x39, 0x9c, 0xfd, 0x96, 0x46, 0x12, 0xd9, 0x70, 0xf8, 0xf3, 0x7d,
-	0xfe, 0xdd, 0xcd, 0x61, 0xfc, 0x97, 0x01, 0xe6, 0x24, 0x4d, 0xc9, 0x57, 0x95, 0x18, 0xef, 0x6d,
-	0xed, 0x59, 0x1b, 0x64, 0x27, 0x8b, 0x2b, 0x38, 0xf2, 0x31, 0x17, 0x3c, 0x2b, 0xa4, 0x38, 0xae,
-	0xa5, 0x90, 0xff, 0xf7, 0x6c, 0x7f, 0x02, 0xf6, 0x0b, 0x14, 0x85, 0x11, 0x75, 0xc0, 0xdc, 0x5a,
-	0xd9, 0x1d, 0xf3, 0xa2, 0xbd, 0xf1, 0x6b, 0x38, 0xad, 0x6e, 0xfe, 0x1c, 0xb3, 0x75, 0x1c, 0x22,
-	0xf9, 0x0e, 0x88, 0x8f, 0xf2, 0x72, 0xe8, 0x73, 0x96, 0x2c, 0x56, 0x39, 0x69, 0x5f, 0x39, 0x77,
-	0xcf, 0xcb, 0x56, 0x16, 0x47, 0x7b, 0x23, 0xe3, 0xa9, 0x71, 0x7b, 0xa8, 0x58, 0x7c, 0xf9, 0x6f,
-	0x00, 0x00, 0x00, 0xff, 0xff, 0x2d, 0x82, 0xe9, 0xe9, 0xcb, 0x07, 0x00, 0x00,
+	// 987 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x56, 0x51, 0x6f, 0xdb, 0x36,
+	0x10, 0xb6, 0x6c, 0x25, 0xa9, 0xaf, 0x71, 0x9c, 0x70, 0x6d, 0xea, 0x69, 0xc3, 0x10, 0x68, 0xed,
+	0x60, 0x04, 0x9b, 0x52, 0x78, 0x2f, 0x41, 0x87, 0xad, 0x70, 0xd3, 0xa4, 0xcd, 0xda, 0xa0, 0x85,
+	0xdc, 0x15, 0xd8, 0xcb, 0x36, 0x46, 0xbe, 0xa4, 0x46, 0x65, 0x92, 0x90, 0x18, 0x03, 0xfe, 0x11,
+	0xfb, 0x0b, 0xfb, 0x21, 0x7b, 0xdb, 0x1e, 0xb7, 0x3f, 0xb0, 0x9f, 0xb2, 0xc7, 0x82, 0x14, 0x45,
+	0x4b, 0xb1, 0xd4, 0x34, 0x0f, 0x7d, 0x23, 0x8f, 0x77, 0xdf, 0xdd, 0x7d, 0x3a, 0x7e, 0x14, 0x74,
+	0x68, 0x24, 0x27, 0x9c, 0xa5, 0x81, 0x48, 0xb8, 0xe4, 0x64, 0xcd, 0x6c, 0xbd, 0x4f, 0xcf, 0x39,
+	0x3f, 0x8f, 0x71, 0x4f, 0x9b, 0x4f, 0x2f, 0xce, 0xf6, 0x28, 0x9b, 0x67, 0x3e, 0xde, 0x67, 0x97,
+	0x8f, 0x70, 0x2a, 0xa4, 0x39, 0xf4, 0xff, 0x73, 0x60, 0xeb, 0x39, 0x8f, 0x68, 0x7c, 0x40, 0xe3,
+	0xf8, 0x90, 0xcd, 0x30, 0xe6, 0x02, 0x49, 0x1f, 0xdc, 0x31, 0x95, 0xb4, 0xe7, 0xec, 0x38, 0xfd,
+	0x9b, 0x83, 0x5b, 0x41, 0x86, 0x10, 0xe4, 0x08, 0xc1, 0x90, 0xcd, 0x43, 0xed, 0x41, 0xb6, 0x61,
+	0x75, 0x8a, 0xf2, 0x0d, 0x1f, 0xf7, 0x9a, 0x3b, 0x4e, 0xbf, 0x1d, 0x9a, 0x1d, 0x79, 0x0c, 0x37,
+	0xa6, 0x28, 0xa9, 0x46, 0x69, 0xed, 0xb4, 0xfa, 0x37, 0x07, 0xfd, 0x20, 0x2f, 0x7d, 0x29, 0x5f,
+	0x70, 0x62, 0x5c, 0x0f, 0x99, 0x4c, 0xe6, 0xa1, 0x8d, 0xf4, 0xbe, 0x83, 0x4e, 0xe9, 0x88, 0x6c,
+	0x42, 0xeb, 0x2d, 0xce, 0x75, 0x5d, 0xed, 0x50, 0x2d, 0xc9, 0x2d, 0x58, 0x99, 0xd1, 0xf8, 0x02,
+	0x4d, 0xfe, 0x6c, 0xf3, 0xa0, 0xb9, 0xef, 0xf8, 0xff, 0x3b, 0x70, 0x5b, 0x65, 0x09, 0x71, 0xca,
+	0x25, 0x0e, 0x85, 0xb0, 0xed, 0x6d, 0xc3, 0xaa, 0xa4, 0xc9, 0x39, 0x4a, 0x03, 0x64, 0x76, 0xb6,
+	0xed, 0xe6, 0x35, 0xda, 0x6e, 0x95, 0xda, 0x7e, 0x5a, 0x68, 0xdb, 0xd5, 0x6d, 0x7f, 0x6d, 0xdb,
+	0xae, 0xac, 0xe5, 0xe3, 0xb4, 0xfe, 0xbb, 0x03, 0x5b, 0x2a, 0xdd, 0x30, 0x92, 0x3c, 0xb1, 0x6d,
+	0xf7, 0x40, 0x8d, 0x0b, 0x4f, 0x8e, 0x1f, 0x1b, 0x94, 0x7c, 0x4b, 0x3e, 0x87, 0xb6, 0x5e, 0xbe,
+	0x9a, 0x8b, 0x1c, 0x6d, 0x61, 0xa8, 0x6d, 0x36, 0xa7, 0xcb, 0xbd, 0x8a, 0x2e, 0xff, 0x4f, 0x07,
+	0x36, 0x8e, 0xd9, 0x8c, 0xbf, 0xc5, 0x10, 0x53, 0xc1, 0x59, 0x7a, 0x9d, 0x11, 0x1b, 0x16, 0x38,
+	0x6d, 0x6a, 0x4e, 0xef, 0x59, 0x4e, 0xcb, 0xa0, 0x1f, 0x87, 0xcc, 0x67, 0xd0, 0x3e, 0xe0, 0x53,
+	0xc1, 0x19, 0x32, 0x49, 0x08, 0xb8, 0x8c, 0x4e, 0xd1, 0x44, 0xea, 0x35, 0xd9, 0x05, 0x37, 0x15,
+	0x18, 0x99, 0xb1, 0xd9, 0x5e, 0x7c, 0xf0, 0x3c, 0x6a, 0x24, 0x30, 0x0a, 0xb5, 0x8f, 0xff, 0x77,
+	0x13, 0x3a, 0x25, 0xbb, 0x42, 0x94, 0x8a, 0x76, 0x83, 0xa8, 0xd6, 0x64, 0x04, 0xdd, 0x88, 0x33,
+	0x86, 0x1a, 0xe8, 0xd7, 0x09, 0x3b, 0xe3, 0xa6, 0xf3, 0xdd, 0x6a, 0xf0, 0xe0, 0xc0, 0x7a, 0x1f,
+	0xb3, 0x33, 0x9e, 0xb5, 0xbf, 0x11, 0x95, 0x8c, 0xe4, 0x08, 0x40, 0x24, 0x5c, 0x60, 0x22, 0x27,
+	0x98, 0x9a, 0x4b, 0xf9, 0x55, 0x0d, 0xde, 0x4b, 0xeb, 0x98, 0x61, 0x15, 0x22, 0xbd, 0x21, 0x7c,
+	0x52, 0x91, 0xee, 0x3a, 0x94, 0x7a, 0xdf, 0x43, 0xf7, 0x52, 0x86, 0x6b, 0x7d, 0x91, 0x07, 0xb0,
+	0x35, 0xa2, 0x33, 0x1c, 0x49, 0x2a, 0xd1, 0x4e, 0xf7, 0x3d, 0x58, 0x49, 0x95, 0xa1, 0xe7, 0xe8,
+	0xce, 0xba, 0xb6, 0xb3, 0x67, 0x38, 0x7f, 0x4d, 0xe3, 0x30, 0x3b, 0xf5, 0xef, 0xc2, 0xe6, 0x13,
+	0x94, 0xe5, 0xd0, 0xa5, 0xdc, 0xfe, 0xcf, 0x70, 0x7b, 0x28, 0xc4, 0x89, 0x9e, 0xf3, 0x92, 0x32,
+	0x2e, 0xee, 0x82, 0x53, 0x79, 0x17, 0xae, 0x94, 0x0e, 0x3f, 0x80, 0x15, 0x9d, 0xfd, 0x43, 0x0b,
+	0x3e, 0x82, 0xd5, 0xcc, 0x50, 0x41, 0xd1, 0x6e, 0x91, 0xa2, 0xba, 0xb4, 0x99, 0x8b, 0xbf, 0x07,
+	0x5b, 0x43, 0x21, 0xe2, 0x49, 0x44, 0x55, 0x96, 0x03, 0xce, 0xce, 0x26, 0xe7, 0xc4, 0x83, 0x1b,
+	0xc8, 0xe4, 0x44, 0x4f, 0x84, 0x2a, 0xa3, 0x1d, 0xda, 0xbd, 0xff, 0x1b, 0x6c, 0xbc, 0x8c, 0x69,
+	0x84, 0x53, 0x64, 0xf2, 0x45, 0x32, 0xc6, 0x84, 0xdc, 0x57, 0xba, 0x79, 0x1a, 0x6b, 0x5f, 0x95,
+	0xaf, 0x67, 0x4b, 0xb6, 0x8e, 0xaf, 0xf4, 0x79, 0x68, 0xfc, 0x94, 0xb0, 0xa8, 0xcf, 0xac, 0x53,
+	0xe6, 0xc2, 0x62, 0x0d, 0xfe, 0x5f, 0x0e, 0x74, 0x2f, 0x45, 0x92, 0x87, 0xb0, 0x86, 0x4c, 0x26,
+	0x79, 0x41, 0xc5, 0xcb, 0x7e, 0xc9, 0x35, 0x38, 0xcc, 0xfc, 0xb2, 0x09, 0xcd, 0xa3, 0x94, 0xca,
+	0xcd, 0x30, 0x49, 0x17, 0x09, 0xf3, 0xad, 0x37, 0x82, 0xf5, 0x62, 0x48, 0x05, 0x9f, 0xdf, 0x94,
+	0xf9, 0xbc, 0x53, 0x93, 0xba, 0x38, 0x8b, 0xff, 0x36, 0x0b, 0x34, 0xe9, 0x53, 0xb2, 0x0f, 0x2b,
+	0x6f, 0x78, 0x2a, 0xf3, 0x06, 0xfc, 0x1a, 0x94, 0xe0, 0xa9, 0x72, 0xca, 0xaa, 0xcf, 0x02, 0x14,
+	0x5d, 0x29, 0x4f, 0x24, 0x8e, 0x47, 0x28, 0xf5, 0x8d, 0x77, 0xc3, 0x85, 0x81, 0xfc, 0x00, 0x6b,
+	0x31, 0xa7, 0xe3, 0x13, 0x2a, 0xcc, 0xed, 0xbd, 0x5b, 0x87, 0xfc, 0x3c, 0x73, 0x33, 0xcc, 0x98,
+	0x20, 0x85, 0x2e, 0xb9, 0xa4, 0xb1, 0x3a, 0xd5, 0xa2, 0xdd, 0x0a, 0x17, 0x06, 0x6f, 0x1f, 0x60,
+	0x51, 0x50, 0x91, 0x1b, 0xf7, 0xaa, 0xdb, 0x7c, 0x0c, 0xeb, 0xc5, 0x84, 0x15, 0xbc, 0x7e, 0x59,
+	0xe6, 0xb5, 0x63, 0xeb, 0x56, 0x19, 0x8b, 0x6c, 0xfe, 0x02, 0xae, 0x32, 0x55, 0xca, 0x2c, 0x01,
+	0x57, 0xf0, 0x44, 0x6a, 0x8c, 0x56, 0xa8, 0xd7, 0xca, 0xa6, 0xba, 0xd3, 0x0f, 0x53, 0x2b, 0xd4,
+	0xeb, 0xd2, 0x4c, 0xbb, 0xe5, 0x99, 0x1e, 0xfc, 0xd1, 0x84, 0xb5, 0x61, 0x96, 0x9b, 0xfc, 0x08,
+	0x9d, 0xd2, 0x93, 0x4c, 0xbe, 0x78, 0xff, 0x53, 0xed, 0xdd, 0xa9, 0x79, 0x76, 0xfc, 0x06, 0x79,
+	0x04, 0x6d, 0xfb, 0xde, 0x12, 0xaf, 0x84, 0x53, 0x7a, 0x83, 0x3f, 0x00, 0x43, 0xff, 0x1d, 0x15,
+	0x30, 0x96, 0xfe, 0x96, 0xde, 0x87, 0xf1, 0x10, 0xba, 0x3f, 0x89, 0x31, 0x95, 0x58, 0x78, 0xb1,
+	0x96, 0x25, 0xde, 0xdb, 0x5e, 0x12, 0x8a, 0x43, 0xf5, 0x4f, 0xe8, 0x37, 0x06, 0xff, 0x38, 0xd0,
+	0x52, 0x5c, 0x1c, 0xc1, 0xfa, 0x0b, 0xb6, 0xd0, 0xbf, 0x02, 0x37, 0x95, 0xba, 0xe8, 0x55, 0x4a,
+	0x8f, 0xdf, 0x20, 0xfb, 0xb0, 0x1e, 0x62, 0x2a, 0x79, 0x92, 0xa9, 0x35, 0xd9, 0xb0, 0x38, 0x7a,
+	0x5f, 0x5f, 0x09, 0x19, 0x42, 0xfb, 0x09, 0x4a, 0xa3, 0x53, 0x35, 0x6e, 0x9e, 0x57, 0x2c, 0xab,
+	0xac, 0x6d, 0x7e, 0x63, 0xf0, 0x1a, 0x36, 0xed, 0xc5, 0x18, 0x61, 0x32, 0x9b, 0x44, 0x48, 0x1e,
+	0x01, 0x09, 0x51, 0xcd, 0x4e, 0x36, 0x06, 0xaa, 0x8a, 0x8b, 0x94, 0x94, 0x27, 0xd2, 0xab, 0xb8,
+	0xf8, 0x5a, 0x01, 0xfd, 0x46, 0xdf, 0xb9, 0xef, 0x9c, 0xae, 0xea, 0x2a, 0xbe, 0x7d, 0x17, 0x00,
+	0x00, 0xff, 0xff, 0x50, 0x8f, 0xcf, 0x18, 0x8d, 0x0b, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -722,10 +931,10 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ActionsClient interface {
-	Invoke(ctx context.Context, in *InvokeEnvelope, opts ...grpc.CallOption) (*InvokeEnvelope, error)
-	SaveState(ctx context.Context, in *SaveStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
-	GetState(ctx context.Context, in *GetStateEnvelope, opts ...grpc.CallOption) (*any.Any, error)
-	UpdateEventSource(ctx context.Context, in *EventSource, opts ...grpc.CallOption) (*empty.Empty, error)
+	CallRemoteApp(ctx context.Context, in *CallRemoteAppEnvelope, opts ...grpc.CallOption) (*InvokeResponse, error)
+	CallActor(ctx context.Context, in *CallActorEnvelope, opts ...grpc.CallOption) (*InvokeResponse, error)
+	CallLocal(ctx context.Context, in *LocalCallEnvelope, opts ...grpc.CallOption) (*InvokeResponse, error)
+	UpdateComponent(ctx context.Context, in *Component, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type actionsClient struct {
@@ -736,36 +945,36 @@ func NewActionsClient(cc *grpc.ClientConn) ActionsClient {
 	return &actionsClient{cc}
 }
 
-func (c *actionsClient) Invoke(ctx context.Context, in *InvokeEnvelope, opts ...grpc.CallOption) (*InvokeEnvelope, error) {
-	out := new(InvokeEnvelope)
-	err := c.cc.Invoke(ctx, "/actions.Actions/Invoke", in, out, opts...)
+func (c *actionsClient) CallRemoteApp(ctx context.Context, in *CallRemoteAppEnvelope, opts ...grpc.CallOption) (*InvokeResponse, error) {
+	out := new(InvokeResponse)
+	err := c.cc.Invoke(ctx, "/actions.Actions/CallRemoteApp", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *actionsClient) SaveState(ctx context.Context, in *SaveStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (c *actionsClient) CallActor(ctx context.Context, in *CallActorEnvelope, opts ...grpc.CallOption) (*InvokeResponse, error) {
+	out := new(InvokeResponse)
+	err := c.cc.Invoke(ctx, "/actions.Actions/CallActor", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *actionsClient) CallLocal(ctx context.Context, in *LocalCallEnvelope, opts ...grpc.CallOption) (*InvokeResponse, error) {
+	out := new(InvokeResponse)
+	err := c.cc.Invoke(ctx, "/actions.Actions/CallLocal", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *actionsClient) UpdateComponent(ctx context.Context, in *Component, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/actions.Actions/SaveState", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *actionsClient) GetState(ctx context.Context, in *GetStateEnvelope, opts ...grpc.CallOption) (*any.Any, error) {
-	out := new(any.Any)
-	err := c.cc.Invoke(ctx, "/actions.Actions/GetState", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *actionsClient) UpdateEventSource(ctx context.Context, in *EventSource, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/actions.Actions/UpdateEventSource", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/actions.Actions/UpdateComponent", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -774,84 +983,84 @@ func (c *actionsClient) UpdateEventSource(ctx context.Context, in *EventSource, 
 
 // ActionsServer is the server API for Actions service.
 type ActionsServer interface {
-	Invoke(context.Context, *InvokeEnvelope) (*InvokeEnvelope, error)
-	SaveState(context.Context, *SaveStateEnvelope) (*empty.Empty, error)
-	GetState(context.Context, *GetStateEnvelope) (*any.Any, error)
-	UpdateEventSource(context.Context, *EventSource) (*empty.Empty, error)
+	CallRemoteApp(context.Context, *CallRemoteAppEnvelope) (*InvokeResponse, error)
+	CallActor(context.Context, *CallActorEnvelope) (*InvokeResponse, error)
+	CallLocal(context.Context, *LocalCallEnvelope) (*InvokeResponse, error)
+	UpdateComponent(context.Context, *Component) (*empty.Empty, error)
 }
 
 func RegisterActionsServer(s *grpc.Server, srv ActionsServer) {
 	s.RegisterService(&_Actions_serviceDesc, srv)
 }
 
-func _Actions_Invoke_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(InvokeEnvelope)
+func _Actions_CallRemoteApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CallRemoteAppEnvelope)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ActionsServer).Invoke(ctx, in)
+		return srv.(ActionsServer).CallRemoteApp(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/actions.Actions/Invoke",
+		FullMethod: "/actions.Actions/CallRemoteApp",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ActionsServer).Invoke(ctx, req.(*InvokeEnvelope))
+		return srv.(ActionsServer).CallRemoteApp(ctx, req.(*CallRemoteAppEnvelope))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Actions_SaveState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SaveStateEnvelope)
+func _Actions_CallActor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CallActorEnvelope)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ActionsServer).SaveState(ctx, in)
+		return srv.(ActionsServer).CallActor(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/actions.Actions/SaveState",
+		FullMethod: "/actions.Actions/CallActor",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ActionsServer).SaveState(ctx, req.(*SaveStateEnvelope))
+		return srv.(ActionsServer).CallActor(ctx, req.(*CallActorEnvelope))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Actions_GetState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetStateEnvelope)
+func _Actions_CallLocal_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LocalCallEnvelope)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ActionsServer).GetState(ctx, in)
+		return srv.(ActionsServer).CallLocal(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/actions.Actions/GetState",
+		FullMethod: "/actions.Actions/CallLocal",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ActionsServer).GetState(ctx, req.(*GetStateEnvelope))
+		return srv.(ActionsServer).CallLocal(ctx, req.(*LocalCallEnvelope))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Actions_UpdateEventSource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(EventSource)
+func _Actions_UpdateComponent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Component)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ActionsServer).UpdateEventSource(ctx, in)
+		return srv.(ActionsServer).UpdateComponent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/actions.Actions/UpdateEventSource",
+		FullMethod: "/actions.Actions/UpdateComponent",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ActionsServer).UpdateEventSource(ctx, req.(*EventSource))
+		return srv.(ActionsServer).UpdateComponent(ctx, req.(*Component))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -861,20 +1070,20 @@ var _Actions_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*ActionsServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Invoke",
-			Handler:    _Actions_Invoke_Handler,
+			MethodName: "CallRemoteApp",
+			Handler:    _Actions_CallRemoteApp_Handler,
 		},
 		{
-			MethodName: "SaveState",
-			Handler:    _Actions_SaveState_Handler,
+			MethodName: "CallActor",
+			Handler:    _Actions_CallActor_Handler,
 		},
 		{
-			MethodName: "GetState",
-			Handler:    _Actions_GetState_Handler,
+			MethodName: "CallLocal",
+			Handler:    _Actions_CallLocal_Handler,
 		},
 		{
-			MethodName: "UpdateEventSource",
-			Handler:    _Actions_UpdateEventSource_Handler,
+			MethodName: "UpdateComponent",
+			Handler:    _Actions_UpdateComponent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -885,7 +1094,7 @@ var _Actions_serviceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type AppClient interface {
-	Invoke(ctx context.Context, in *InvokeMethod, opts ...grpc.CallOption) (*any.Any, error)
+	OnMethodCall(ctx context.Context, in *AppMethodCallEnvelope, opts ...grpc.CallOption) (*any.Any, error)
 	RestoreState(ctx context.Context, in *State, opts ...grpc.CallOption) (*empty.Empty, error)
 	GetConfig(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ApplicationConfig, error)
 }
@@ -898,9 +1107,9 @@ func NewAppClient(cc *grpc.ClientConn) AppClient {
 	return &appClient{cc}
 }
 
-func (c *appClient) Invoke(ctx context.Context, in *InvokeMethod, opts ...grpc.CallOption) (*any.Any, error) {
+func (c *appClient) OnMethodCall(ctx context.Context, in *AppMethodCallEnvelope, opts ...grpc.CallOption) (*any.Any, error) {
 	out := new(any.Any)
-	err := c.cc.Invoke(ctx, "/actions.App/Invoke", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/actions.App/OnMethodCall", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -927,7 +1136,7 @@ func (c *appClient) GetConfig(ctx context.Context, in *empty.Empty, opts ...grpc
 
 // AppServer is the server API for App service.
 type AppServer interface {
-	Invoke(context.Context, *InvokeMethod) (*any.Any, error)
+	OnMethodCall(context.Context, *AppMethodCallEnvelope) (*any.Any, error)
 	RestoreState(context.Context, *State) (*empty.Empty, error)
 	GetConfig(context.Context, *empty.Empty) (*ApplicationConfig, error)
 }
@@ -936,20 +1145,20 @@ func RegisterAppServer(s *grpc.Server, srv AppServer) {
 	s.RegisterService(&_App_serviceDesc, srv)
 }
 
-func _App_Invoke_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(InvokeMethod)
+func _App_OnMethodCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppMethodCallEnvelope)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AppServer).Invoke(ctx, in)
+		return srv.(AppServer).OnMethodCall(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/actions.App/Invoke",
+		FullMethod: "/actions.App/OnMethodCall",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppServer).Invoke(ctx, req.(*InvokeMethod))
+		return srv.(AppServer).OnMethodCall(ctx, req.(*AppMethodCallEnvelope))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -995,8 +1204,8 @@ var _App_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*AppServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Invoke",
-			Handler:    _App_Invoke_Handler,
+			MethodName: "OnMethodCall",
+			Handler:    _App_OnMethodCall_Handler,
 		},
 		{
 			MethodName: "RestoreState",
