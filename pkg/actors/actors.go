@@ -32,9 +32,7 @@ type Actors interface {
 type actors struct {
 	appChannel          channel.AppChannel
 	store               state.StateStore
-	activationCheckLock *sync.RWMutex
 	activeActorsLocks   *sync.Map
-	actorLock           *sync.RWMutex
 	placementTableLock  *sync.RWMutex
 	placementTables     *placement.PlacementTables
 	placementSignal     chan struct{}
@@ -58,8 +56,6 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		appChannel:          appChannel,
 		config:              config,
 		store:               stateStore,
-		activationCheckLock: &sync.RWMutex{},
-		actorLock:           &sync.RWMutex{},
 		activeActorsLocks:   &sync.Map{},
 		placementTableLock:  &sync.RWMutex{},
 		placementTables:     &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
