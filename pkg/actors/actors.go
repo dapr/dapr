@@ -245,6 +245,12 @@ func (a *actors) tryActivateActor(actorType, actorID string) error {
 		lock.Lock()
 		defer lock.Unlock()
 
+		// check-lock-check pattern
+		_, exists = a.activeActorsLocks.Load(key)
+		if exists {
+			return nil
+		}
+
 		stateKey := a.constructActorStateKey(actorType, actorID)
 		var data []byte
 
