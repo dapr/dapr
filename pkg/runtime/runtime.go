@@ -349,7 +349,8 @@ func (a *ActionsRuntime) startGRPCServer(port int) error {
 }
 
 func (a *ActionsRuntime) setHostAddress() error {
-	if a.runtimeConfig.Mode == modes.StandaloneMode {
+	a.hostAddress = os.Getenv(hostIPEnvVar)
+	if a.hostAddress == "" {
 		addrs, err := net.InterfaceAddrs()
 		if err != nil {
 			return err
@@ -363,8 +364,6 @@ func (a *ActionsRuntime) setHostAddress() error {
 				}
 			}
 		}
-	} else if a.runtimeConfig.Mode == modes.KubernetesMode {
-		a.hostAddress = os.Getenv(hostIPEnvVar)
 	}
 
 	return nil
