@@ -245,12 +245,6 @@ func (a *actors) tryActivateActor(actorType, actorID string) error {
 		lock.Lock()
 		defer lock.Unlock()
 
-		// check-lock-check pattern
-		_, exists = a.activeActorsLocks.Load(key)
-		if exists {
-			return nil
-		}
-
 		stateKey := a.constructActorStateKey(actorType, actorID)
 		var data []byte
 
@@ -274,6 +268,8 @@ func (a *actors) tryActivateActor(actorType, actorID string) error {
 			a.activeActorsLocks.Delete(key)
 			return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
 		}
+
+		fmt.Println("activated")
 	}
 
 	return nil
