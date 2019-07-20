@@ -106,7 +106,7 @@ git clone https://github.com/actionscore/actions.git github.com/actionscore/acti
 #### Build the action binary
 
 ```
-cd $GOPATH/src/github.com/actionscore/actions/cmd/action
+cd $GOPATH/src/github.com/actionscore/actions/cmd/actionsrt
 go build -o action
 ```
 

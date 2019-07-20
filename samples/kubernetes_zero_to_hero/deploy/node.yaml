@@ -35,9 +35,7 @@ spec:
     spec:
       containers:
       - name: node
-        image: actionscore/node-app
+        image: actionsdemoes/nodeapp
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
-      imagePullSecrets:
-      - name: actions-core-auth
