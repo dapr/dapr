@@ -30,18 +30,20 @@ type Actors interface {
 }
 
 type actors struct {
-	appChannel          channel.AppChannel
-	store               state.StateStore
-	activeActorsLocks   *sync.Map
-	placementTableLock  *sync.RWMutex
-	placementTables     *placement.PlacementTables
-	placementSignal     chan struct{}
-	placementBlock      bool
-	operationUpdateLock *sync.Mutex
-	grpcConnectionFn    func(address string) (*grpc.ClientConn, error)
-	config              Config
-	actorLastUsedLock   *sync.RWMutex
-	actorLastUsed       map[string]time.Time
+	appChannel            channel.AppChannel
+	store                 state.StateStore
+	activeActorsLocks     *sync.Map
+	placementTableLock    *sync.RWMutex
+	placementTables       *placement.PlacementTables
+	placementSignal       chan struct{}
+	placementBlock        bool
+	operationUpdateLock   *sync.Mutex
+	grpcConnectionFn      func(address string) (*grpc.ClientConn, error)
+	config                Config
+	actorLastUsedLock     *sync.RWMutex
+	actorLastUsed         map[string]time.Time
+	actorCallTrackingLock *sync.RWMutex
+	actorCallTracking     map[string]bool
 }
 
 const (
@@ -53,16 +55,18 @@ const (
 
 func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
 	return &actors{
-		appChannel:          appChannel,
-		config:              config,
-		store:               stateStore,
-		activeActorsLocks:   &sync.Map{},
-		placementTableLock:  &sync.RWMutex{},
-		placementTables:     &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
-		operationUpdateLock: &sync.Mutex{},
-		grpcConnectionFn:    grpcConnectionFn,
-		actorLastUsedLock:   &sync.RWMutex{},
-		actorLastUsed:       map[string]time.Time{},
+		appChannel:            appChannel,
+		config:                config,
+		store:                 stateStore,
+		activeActorsLocks:     &sync.Map{},
+		placementTableLock:    &sync.RWMutex{},
+		placementTables:       &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
+		operationUpdateLock:   &sync.Mutex{},
+		grpcConnectionFn:      grpcConnectionFn,
+		actorLastUsedLock:     &sync.RWMutex{},
+		actorLastUsed:         map[string]time.Time{},
+		actorCallTrackingLock: &sync.RWMutex{},
+		actorCallTracking:     map[string]bool{},
 	}
 }
 
@@ -133,6 +137,13 @@ func (a *actors) startDeactivationTicker(interval time.Duration) {
 			a.actorLastUsedLock.RLock()
 
 			for actorKey, lastUsed := range a.actorLastUsed {
+				a.actorCallTrackingLock.RLock()
+				busy := a.actorCallTracking[actorKey]
+				a.actorCallTrackingLock.RUnlock()
+				if busy {
+					continue
+				}
+
 				durationPassed := t.Sub(lastUsed)
 				if durationPassed >= a.config.ActorIdleTimeout {
 					go func(actorKey string) {
@@ -192,6 +203,10 @@ func (a *actors) Call(req *CallRequest) (*CallResponse, error) {
 
 func (a *actors) callLocalActor(actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
 	key := a.constructActorStateKey(actorType, actorID)
+	a.actorCallTrackingLock.Lock()
+	a.actorCallTracking[key] = true
+	a.actorCallTrackingLock.Unlock()
+
 	l, _ := a.activeActorsLocks.LoadOrStore(key, &sync.RWMutex{})
 	lock := l.(*sync.RWMutex)
 	lock.Lock()
@@ -205,6 +220,11 @@ func (a *actors) callLocalActor(actorType, actorID, actorMethod string, data []b
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
+
+	a.actorCallTrackingLock.Lock()
+	a.actorCallTracking[key] = false
+	a.actorCallTrackingLock.Unlock()
+
 	if err != nil {
 		return nil, err
 	}
@@ -268,8 +288,6 @@ func (a *actors) tryActivateActor(actorType, actorID string) error {
 			a.activeActorsLocks.Delete(key)
 			return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
 		}
-
-		fmt.Println("activated")
 	}
 
 	return nil
