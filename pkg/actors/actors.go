@@ -32,7 +32,8 @@ type Actors interface {
 type actors struct {
 	appChannel          channel.AppChannel
 	store               state.StateStore
-	activeActors        map[string]string
+	activationCheckLock *sync.RWMutex
+	activeActorsLocks   *sync.Map
 	actorLock           *sync.RWMutex
 	placementTableLock  *sync.RWMutex
 	placementTables     *placement.PlacementTables
@@ -57,8 +58,9 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		appChannel:          appChannel,
 		config:              config,
 		store:               stateStore,
+		activationCheckLock: &sync.RWMutex{},
 		actorLock:           &sync.RWMutex{},
-		activeActors:        map[string]string{},
+		activeActorsLocks:   &sync.Map{},
 		placementTableLock:  &sync.RWMutex{},
 		placementTables:     &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
 		operationUpdateLock: &sync.Mutex{},
@@ -82,8 +84,12 @@ func (a *actors) Init() error {
 	return nil
 }
 
+func (a *actors) constructCombinedActorKey(actorType, actorID string) string {
+	return fmt.Sprintf("%s-%s", actorType, actorID)
+}
+
 func (a *actors) updateActorUsage(actorType, actorID string) {
-	key := fmt.Sprintf("%s-%s", actorType, actorID)
+	key := a.constructCombinedActorKey(actorType, actorID)
 	a.actorLastUsedLock.Lock()
 	defer a.actorLastUsedLock.Unlock()
 	a.actorLastUsed[key] = time.Now()
@@ -139,9 +145,7 @@ func (a *actors) startDeactivationTicker(interval time.Duration) {
 						if err != nil {
 							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
 						} else {
-							a.actorLock.Lock()
-							delete(a.activeActors, actorID)
-							a.actorLock.Unlock()
+							a.activeActorsLocks.Delete(actorKey)
 
 							a.actorLastUsedLock.Lock()
 							delete(a.actorLastUsed, actorKey)
@@ -156,15 +160,16 @@ func (a *actors) startDeactivationTicker(interval time.Duration) {
 }
 
 func (a *actors) Call(req *CallRequest) (*CallResponse, error) {
-	go a.updateActorUsage(req.ActorType, req.ActorID)
-	if a.placementBlock {
-		<-a.placementSignal
-	}
-
 	targetActorAddress := a.lookupActorAddress(req.ActorType, req.ActorID)
 	if targetActorAddress == "" {
 		return nil, fmt.Errorf("error finding address for actor type %s with id %s", req.ActorType, req.ActorID)
 	}
+
+	if a.placementBlock {
+		<-a.placementSignal
+	}
+
+	go a.updateActorUsage(req.ActorType, req.ActorID)
 
 	var resp []byte
 	var err error
@@ -190,6 +195,12 @@ func (a *actors) Call(req *CallRequest) (*CallResponse, error) {
 }
 
 func (a *actors) callLocalActor(actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
+	key := a.constructActorStateKey(actorType, actorID)
+	l, _ := a.activeActorsLocks.LoadOrStore(key, &sync.RWMutex{})
+	lock := l.(*sync.RWMutex)
+	lock.Lock()
+	defer lock.Unlock()
+
 	method := fmt.Sprintf("actors/%s/%s/%s", actorType, actorID, actorMethod)
 	req := channel.InvokeRequest{
 		Method:   method,
@@ -228,22 +239,22 @@ func (a *actors) callRemoteActor(targetAddress, actorType, actorID, actorMethod 
 }
 
 func (a *actors) tryActivateActor(actorType, actorID string) error {
-	// read lock actor for read confirmation
-	a.actorLock.RLock()
-	_, exists := a.activeActors[actorID]
-	a.actorLock.RUnlock()
+	// create or get a per actor lock
+	key := a.constructCombinedActorKey(actorType, actorID)
+	l, exists := a.activeActorsLocks.LoadOrStore(key, &sync.RWMutex{})
 
 	if !exists {
-		// lock for actor activation
-		a.actorLock.Lock()
-		defer a.actorLock.Unlock()
+		// perform actual activation with per actor lock
+		lock := l.(*sync.RWMutex)
+		lock.Lock()
+		defer lock.Unlock()
 
-		key := a.constructActorStateKey(actorType, actorID)
+		stateKey := a.constructActorStateKey(actorType, actorID)
 		var data []byte
 
 		if a.store != nil {
 			resp, err := a.store.Get(&state.GetRequest{
-				Key: key,
+				Key: stateKey,
 			})
 			if err == nil {
 				data = resp.Data
@@ -258,10 +269,9 @@ func (a *actors) tryActivateActor(actorType, actorID string) error {
 
 		_, err := a.appChannel.InvokeMethod(&req)
 		if err != nil {
+			a.activeActorsLocks.Delete(key)
 			return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
 		}
-
-		a.activeActors[actorID] = actorType
 	}
 
 	return nil
