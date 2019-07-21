@@ -75,7 +75,7 @@ cd actions
 #### Deploy Actions
 
 ```
-kubectl apply -f ./deploy
+kubectl apply -f ./deploy/actions.yaml
 ```
 
 Watch for the Actions control plane pod to be in ```Running``` state:
