@@ -29,7 +29,7 @@ type Actors interface {
 	SaveState(req *SaveStateRequest) error
 }
 
-type actors struct {
+type actorsRuntime struct {
 	appChannel            channel.AppChannel
 	store                 state.StateStore
 	activeActorsLocks     *sync.Map
@@ -54,7 +54,7 @@ const (
 )
 
 func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
-	return &actors{
+	return &actorsRuntime{
 		appChannel:            appChannel,
 		config:                config,
 		store:                 stateStore,
@@ -70,7 +70,7 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 	}
 }
 
-func (a *actors) Init() error {
+func (a *actorsRuntime) Init() error {
 	if a.config.PlacementServiceAddress == "" {
 		return errors.New("couldn't connect to placement service: address is empty")
 	}
@@ -84,18 +84,18 @@ func (a *actors) Init() error {
 	return nil
 }
 
-func (a *actors) constructCombinedActorKey(actorType, actorID string) string {
+func (a *actorsRuntime) constructCombinedActorKey(actorType, actorID string) string {
 	return fmt.Sprintf("%s-%s", actorType, actorID)
 }
 
-func (a *actors) updateActorUsage(actorType, actorID string) {
+func (a *actorsRuntime) updateActorUsage(actorType, actorID string) {
 	key := a.constructCombinedActorKey(actorType, actorID)
 	a.actorLastUsedLock.Lock()
 	defer a.actorLastUsedLock.Unlock()
 	a.actorLastUsed[key] = time.Now()
 }
 
-func (a *actors) deactivateActor(actorType, actorID string) error {
+func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	req := channel.InvokeRequest{
 		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
 		Metadata: map[string]string{http.HTTPVerb: http.Delete},
@@ -113,7 +113,7 @@ func (a *actors) deactivateActor(actorType, actorID string) error {
 	return nil
 }
 
-func (a *actors) getStatusCodeFromMetadata(metadata map[string]string) int {
+func (a *actorsRuntime) getStatusCodeFromMetadata(metadata map[string]string) int {
 	code := metadata[http.HTTPStatusCode]
 	if code != "" {
 		statusCode, err := strconv.Atoi(code)
@@ -125,12 +125,12 @@ func (a *actors) getStatusCodeFromMetadata(metadata map[string]string) int {
 	return 200
 }
 
-func (a *actors) getActorTypeAndIDFromKey(key string) (string, string) {
+func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
 	arr := strings.Split(key, "-")
 	return arr[0], arr[1]
 }
 
-func (a *actors) startDeactivationTicker(interval, actorIdleTimeout time.Duration) {
+func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		for t := range ticker.C {
@@ -166,7 +166,7 @@ func (a *actors) startDeactivationTicker(interval, actorIdleTimeout time.Duratio
 	}()
 }
 
-func (a *actors) Call(req *CallRequest) (*CallResponse, error) {
+func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	targetActorAddress := a.lookupActorAddress(req.ActorType, req.ActorID)
 	if targetActorAddress == "" {
 		return nil, fmt.Errorf("error finding address for actor type %s with id %s", req.ActorType, req.ActorID)
@@ -201,7 +201,7 @@ func (a *actors) Call(req *CallRequest) (*CallResponse, error) {
 	}, nil
 }
 
-func (a *actors) callLocalActor(actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
+func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
 	key := a.constructActorStateKey(actorType, actorID)
 	a.actorCallTrackingLock.Lock()
 	a.actorCallTracking[key] = true
@@ -232,7 +232,7 @@ func (a *actors) callLocalActor(actorType, actorID, actorMethod string, data []b
 	return resp.Data, nil
 }
 
-func (a *actors) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
+func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
 	req := pb.CallActorEnvelope{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -254,7 +254,7 @@ func (a *actors) callRemoteActor(targetAddress, actorType, actorID, actorMethod 
 	return resp.Data.Value, nil
 }
 
-func (a *actors) tryActivateActor(actorType, actorID string) error {
+func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
 	// create or get a per actor lock
 	key := a.constructCombinedActorKey(actorType, actorID)
 	l, exists := a.activeActorsLocks.LoadOrStore(key, &sync.RWMutex{})
@@ -293,12 +293,12 @@ func (a *actors) tryActivateActor(actorType, actorID string) error {
 	return nil
 }
 
-func (a *actors) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
+func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
 	return strings.Contains(targetActorAddress, "localhost") || strings.Contains(targetActorAddress, "127.0.0.1") ||
 		targetActorAddress == fmt.Sprintf("%s:%v", hostAddress, grpcPort)
 }
 
-func (a *actors) GetState(req *GetStateRequest) (*StateResponse, error) {
+func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 	key := a.constructActorStateKey(req.ActorType, req.ActorID)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
@@ -312,7 +312,7 @@ func (a *actors) GetState(req *GetStateRequest) (*StateResponse, error) {
 	}, nil
 }
 
-func (a *actors) SaveState(req *SaveStateRequest) error {
+func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	key := a.constructActorStateKey(req.ActorType, req.ActorID)
 	err := a.store.Set(&state.SetRequest{
 		Value: req.Data,
@@ -321,11 +321,11 @@ func (a *actors) SaveState(req *SaveStateRequest) error {
 	return err
 }
 
-func (a *actors) constructActorStateKey(actorType, actorID string) string {
+func (a *actorsRuntime) constructActorStateKey(actorType, actorID string) string {
 	return fmt.Sprintf("%s-%s-%s", a.config.ActionsID, actorType, actorID)
 }
 
-func (a *actors) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
+func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
 	log.Infof("actors: starting connection attempt to placement service at %s", placementAddress)
 	stream := a.getPlacementClientPersistently(placementAddress, hostAddress)
 
@@ -364,7 +364,7 @@ func (a *actors) connectToPlacementService(placementAddress, hostAddress string,
 	}()
 }
 
-func (a *actors) getPlacementClientPersistently(placementAddress, hostAddress string) pb.PlacementService_ReportActionStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) pb.PlacementService_ReportActionStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
@@ -386,7 +386,7 @@ func (a *actors) getPlacementClientPersistently(placementAddress, hostAddress st
 	}
 }
 
-func (a *actors) onPlacementOrder(in *pb.PlacementOrder) {
+func (a *actorsRuntime) onPlacementOrder(in *pb.PlacementOrder) {
 	log.Infof("actors: placement order received: %s", in.Operation)
 
 	// lock all incoming calls when an updated table arrives
@@ -414,19 +414,19 @@ func (a *actors) onPlacementOrder(in *pb.PlacementOrder) {
 	}
 }
 
-func (a *actors) blockPlacements() {
+func (a *actorsRuntime) blockPlacements() {
 	a.placementSignal = make(chan struct{})
 	a.placementBlock = true
 }
 
-func (a *actors) unblockPlacements() {
+func (a *actorsRuntime) unblockPlacements() {
 	if a.placementBlock {
 		a.placementBlock = false
 		close(a.placementSignal)
 	}
 }
 
-func (a *actors) updatePlacements(in *pb.PlacementTables) {
+func (a *actorsRuntime) updatePlacements(in *pb.PlacementTables) {
 	if in.Version != a.placementTables.Version {
 		for k, v := range in.Entries {
 			loadMap := map[string]*placement.Host{}
@@ -442,7 +442,7 @@ func (a *actors) updatePlacements(in *pb.PlacementTables) {
 	}
 }
 
-func (a *actors) lookupActorAddress(actorType, actorID string) string {
+func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) string {
 	// read lock for table map
 	a.placementTableLock.RLock()
 	defer a.placementTableLock.RUnlock()
