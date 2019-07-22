@@ -4,7 +4,7 @@
 Accepted
 
 ## Context
-Given Actions is going out with a (C#) Actor framework, we formally introduced an Actor API into Actions to make Actors are first-class citizen in Actions. The goal of this review was to ensure Actions can provide strong support of Service Fabric stateful actors programming model so that we can offer a migration path to the majority of existing actor users.
+Given Actions is going out with language specific Actor SDKs, we formally introduced an Actor API into Actions to make Actors are first-class citizen in Actions. The goal of this review was to ensure Actions can provide strong support of Service Fabric stateful actors programming model so that we can offer a migration path to the majority of existing actor users.
 
 ## Decisions
 
