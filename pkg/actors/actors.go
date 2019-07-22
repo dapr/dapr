@@ -76,7 +76,7 @@ func (a *actors) Init() error {
 	}
 
 	go a.connectToPlacementService(a.config.PlacementServiceAddress, a.config.HostAddress, a.config.HeartbeatInterval)
-	a.startDeactivationTicker(a.config.ActorDeactivationScanInterval)
+	a.startDeactivationTicker(a.config.ActorDeactivationScanInterval, a.config.ActorIdleTimeout)
 
 	log.Infof("actor runtime started. actor idle timeout: %s. actor scan interval: %s",
 		a.config.ActorIdleTimeout.String(), a.config.ActorDeactivationScanInterval.String())
@@ -130,7 +130,7 @@ func (a *actors) getActorTypeAndIDFromKey(key string) (string, string) {
 	return arr[0], arr[1]
 }
 
-func (a *actors) startDeactivationTicker(interval time.Duration) {
+func (a *actors) startDeactivationTicker(interval, actorIdleTimeout time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		for t := range ticker.C {
@@ -145,7 +145,7 @@ func (a *actors) startDeactivationTicker(interval time.Duration) {
 				}
 
 				durationPassed := t.Sub(lastUsed)
-				if durationPassed >= a.config.ActorIdleTimeout {
+				if durationPassed >= actorIdleTimeout {
 					go func(actorKey string) {
 						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
 						err := a.deactivateActor(actorType, actorID)
