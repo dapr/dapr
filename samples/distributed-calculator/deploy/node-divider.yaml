@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: addapp
+  name: divideapp
   labels:
-    app: add
+    app: divide
   annotations:
     actions.io/enabled: "true"
-    actions.io/id: "addapp"
+    actions.io/id: "divideapp"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: add
+      app: divide
   template:
     metadata:
       labels:
-        app: add
+        app: divide
     spec:
       containers:
-      - name: add
-        image: ryanvolum/go-calculator
+      - name: divide
+        image: actionsdemoes/node-divider
         ports:
-        - containerPort: 6000
+        - containerPort: 4000
         imagePullPolicy: Always

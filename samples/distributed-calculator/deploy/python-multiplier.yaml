@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: divideapp
+  name: multiplyapp
   labels:
-    app: divide
+    app: multiply
   annotations:
     actions.io/enabled: "true"
-    actions.io/id: "divideapp"
+    actions.io/id: "multiplyapp"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: divide
+      app: multiply
   template:
     metadata:
       labels:
-        app: divide
+        app: multiply
     spec:
       containers:
-      - name: divide
-        image: ryanvolum/node-calculator
+      - name: multiply
+        image: actionsdemoes/python-multiplier
         ports:
-        - containerPort: 4000
+        - containerPort: 5000
         imagePullPolicy: Always

@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: multiplyapp
+  name: addapp
   labels:
-    app: multiply
+    app: add
   annotations:
     actions.io/enabled: "true"
-    actions.io/id: "multiplyapp"
+    actions.io/id: "addapp"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: multiply
+      app: add
   template:
     metadata:
       labels:
-        app: multiply
+        app: add
     spec:
       containers:
-      - name: multiply
-        image: ryanvolum/python-calculator
+      - name: add
+        image: ryanvolum/go-adder
         ports:
-        - containerPort: 5000
+        - containerPort: 6000
         imagePullPolicy: Always
