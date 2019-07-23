@@ -35,8 +35,11 @@ func fakeChannel() channel.AppChannel {
 }
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorKey string) {
-	actors.activeActorsLocks.LoadOrStore(actorKey, &sync.RWMutex{})
-	actors.actorLastUsed[actorKey] = time.Now()
+	actors.actorsTable.LoadOrStore(actorKey, &actor{
+		lastUsedTime: time.Now(),
+		lock:         &sync.RWMutex{},
+		active:       false,
+	})
 }
 
 func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorKey string, actorIdleTimeout time.Duration) {
@@ -54,7 +57,7 @@ func TestActorIsDeactivated(t *testing.T) {
 	deactivateActorWithDuration(testActorsRuntime, actorKey, idleTimeout)
 	time.Sleep(time.Second * 3)
 
-	_, exists := testActorsRuntime.actorLastUsed[actorKey]
+	_, exists := testActorsRuntime.actorsTable.Load(actorKey)
 
 	if exists {
 		t.Fail()
@@ -70,7 +73,7 @@ func TestActorIsNotDeactivated(t *testing.T) {
 	deactivateActorWithDuration(testActorsRuntime, actorKey, idleTimeout)
 	time.Sleep(time.Second * 3)
 
-	_, exists := testActorsRuntime.actorLastUsed[actorKey]
+	_, exists := testActorsRuntime.actorsTable.Load(actorKey)
 
 	if !exists {
 		t.Fail()

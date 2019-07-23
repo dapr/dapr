@@ -30,20 +30,16 @@ type Actors interface {
 }
 
 type actorsRuntime struct {
-	appChannel            channel.AppChannel
-	store                 state.StateStore
-	activeActorsLocks     *sync.Map
-	placementTableLock    *sync.RWMutex
-	placementTables       *placement.PlacementTables
-	placementSignal       chan struct{}
-	placementBlock        bool
-	operationUpdateLock   *sync.Mutex
-	grpcConnectionFn      func(address string) (*grpc.ClientConn, error)
-	config                Config
-	actorLastUsedLock     *sync.RWMutex
-	actorLastUsed         map[string]time.Time
-	actorCallTrackingLock *sync.RWMutex
-	actorCallTracking     map[string]bool
+	appChannel          channel.AppChannel
+	store               state.StateStore
+	placementTableLock  *sync.RWMutex
+	placementTables     *placement.PlacementTables
+	placementSignal     chan struct{}
+	placementBlock      bool
+	operationUpdateLock *sync.Mutex
+	grpcConnectionFn    func(address string) (*grpc.ClientConn, error)
+	config              Config
+	actorsTable         *sync.Map
 }
 
 const (
@@ -55,18 +51,14 @@ const (
 
 func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
 	return &actorsRuntime{
-		appChannel:            appChannel,
-		config:                config,
-		store:                 stateStore,
-		activeActorsLocks:     &sync.Map{},
-		placementTableLock:    &sync.RWMutex{},
-		placementTables:       &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
-		operationUpdateLock:   &sync.Mutex{},
-		grpcConnectionFn:      grpcConnectionFn,
-		actorLastUsedLock:     &sync.RWMutex{},
-		actorLastUsed:         map[string]time.Time{},
-		actorCallTrackingLock: &sync.RWMutex{},
-		actorCallTracking:     map[string]bool{},
+		appChannel:          appChannel,
+		config:              config,
+		store:               stateStore,
+		placementTableLock:  &sync.RWMutex{},
+		placementTables:     &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
+		operationUpdateLock: &sync.Mutex{},
+		grpcConnectionFn:    grpcConnectionFn,
+		actorsTable:         &sync.Map{},
 	}
 }
 
@@ -86,13 +78,6 @@ func (a *actorsRuntime) Init() error {
 
 func (a *actorsRuntime) constructCombinedActorKey(actorType, actorID string) string {
 	return fmt.Sprintf("%s-%s", actorType, actorID)
-}
-
-func (a *actorsRuntime) updateActorUsage(actorType, actorID string) {
-	key := a.constructCombinedActorKey(actorType, actorID)
-	a.actorLastUsedLock.Lock()
-	defer a.actorLastUsedLock.Unlock()
-	a.actorLastUsed[key] = time.Now()
 }
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
@@ -134,17 +119,14 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 	ticker := time.NewTicker(interval)
 	go func() {
 		for t := range ticker.C {
-			a.actorLastUsedLock.RLock()
+			a.actorsTable.Range(func(key, value interface{}) bool {
+				actorInstance := value.(*actor)
 
-			for actorKey, lastUsed := range a.actorLastUsed {
-				a.actorCallTrackingLock.RLock()
-				busy := a.actorCallTracking[actorKey]
-				a.actorCallTrackingLock.RUnlock()
-				if busy {
-					continue
+				if actorInstance.active {
+					return true
 				}
 
-				durationPassed := t.Sub(lastUsed)
+				durationPassed := t.Sub(actorInstance.lastUsedTime)
 				if durationPassed >= actorIdleTimeout {
 					go func(actorKey string) {
 						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
@@ -152,16 +134,13 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 						if err != nil {
 							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
 						} else {
-							a.activeActorsLocks.Delete(actorKey)
-
-							a.actorLastUsedLock.Lock()
-							delete(a.actorLastUsed, actorKey)
-							a.actorLastUsedLock.Unlock()
+							a.actorsTable.Delete(actorKey)
 						}
-					}(actorKey)
+					}(key.(string))
 				}
-			}
-			a.actorLastUsedLock.RUnlock()
+
+				return true
+			})
 		}
 	}()
 }
@@ -176,17 +155,10 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 		<-a.placementSignal
 	}
 
-	go a.updateActorUsage(req.ActorType, req.ActorID)
-
 	var resp []byte
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-		err := a.tryActivateActor(req.ActorType, req.ActorID)
-		if err != nil {
-			return nil, err
-		}
-
 		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data)
 	} else {
 		resp, err = a.callRemoteActor(targetActorAddress, req.ActorType, req.ActorID, req.Method, req.Data)
@@ -202,15 +174,28 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 }
 
 func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
-	key := a.constructActorStateKey(actorType, actorID)
-	a.actorCallTrackingLock.Lock()
-	a.actorCallTracking[key] = true
-	a.actorCallTrackingLock.Unlock()
+	key := a.constructCombinedActorKey(actorType, actorID)
 
-	l, _ := a.activeActorsLocks.LoadOrStore(key, &sync.RWMutex{})
-	lock := l.(*sync.RWMutex)
+	val, exists := a.actorsTable.LoadOrStore(key, &actor{
+		lock:         &sync.RWMutex{},
+		active:       true,
+		lastUsedTime: time.Now(),
+	})
+
+	act := val.(*actor)
+	lock := act.lock
 	lock.Lock()
 	defer lock.Unlock()
+
+	if !exists {
+		err := a.tryActivateActor(actorType, actorID)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		act.active = true
+		act.lastUsedTime = time.Now()
+	}
 
 	method := fmt.Sprintf("actors/%s/%s/%s", actorType, actorID, actorMethod)
 	req := channel.InvokeRequest{
@@ -220,10 +205,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-
-	a.actorCallTrackingLock.Lock()
-	a.actorCallTracking[key] = false
-	a.actorCallTrackingLock.Unlock()
+	act.active = false
 
 	if err != nil {
 		return nil, err
@@ -255,39 +237,29 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 }
 
 func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
-	// create or get a per actor lock
-	key := a.constructCombinedActorKey(actorType, actorID)
-	l, exists := a.activeActorsLocks.LoadOrStore(key, &sync.RWMutex{})
+	stateKey := a.constructActorStateKey(actorType, actorID)
+	var data []byte
 
-	if !exists {
-		// perform actual activation with per actor lock
-		lock := l.(*sync.RWMutex)
-		lock.Lock()
-		defer lock.Unlock()
-
-		stateKey := a.constructActorStateKey(actorType, actorID)
-		var data []byte
-
-		if a.store != nil {
-			resp, err := a.store.Get(&state.GetRequest{
-				Key: stateKey,
-			})
-			if err == nil {
-				data = resp.Data
-			}
+	if a.store != nil {
+		resp, err := a.store.Get(&state.GetRequest{
+			Key: stateKey,
+		})
+		if err == nil {
+			data = resp.Data
 		}
+	}
 
-		req := channel.InvokeRequest{
-			Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
-			Metadata: map[string]string{http.HTTPVerb: http.Post},
-			Payload:  data,
-		}
+	req := channel.InvokeRequest{
+		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
+		Metadata: map[string]string{http.HTTPVerb: http.Post},
+		Payload:  data,
+	}
 
-		_, err := a.appChannel.InvokeMethod(&req)
-		if err != nil {
-			a.activeActorsLocks.Delete(key)
-			return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
-		}
+	resp, err := a.appChannel.InvokeMethod(&req)
+	if err != nil || a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+		key := a.constructCombinedActorKey(actorType, actorID)
+		a.actorsTable.Delete(key)
+		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
 	}
 
 	return nil
