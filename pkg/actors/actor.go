@@ -8,5 +8,5 @@ import (
 type actor struct {
 	lock         *sync.RWMutex
 	lastUsedTime time.Time
-	active       bool
+	busy         bool
 }

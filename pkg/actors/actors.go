@@ -122,7 +122,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 			a.actorsTable.Range(func(key, value interface{}) bool {
 				actorInstance := value.(*actor)
 
-				if actorInstance.active {
+				if actorInstance.busy {
 					return true
 				}
 
@@ -178,7 +178,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
 		lock:         &sync.RWMutex{},
-		active:       true,
+		busy:         true,
 		lastUsedTime: time.Now(),
 	})
 
@@ -193,7 +193,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 			return nil, err
 		}
 	} else {
-		act.active = true
+		act.busy = true
 		act.lastUsedTime = time.Now()
 	}
 
@@ -205,7 +205,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-	act.active = false
+	act.busy = false
 
 	if err != nil {
 		return nil, err
