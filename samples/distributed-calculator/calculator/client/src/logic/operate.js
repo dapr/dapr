@@ -1,14 +1,19 @@
-export default async function operate(operandOne, operandTwo, operation) {
-  const operationMap = {
+const operationMap = {
   "+": "add",
   "-": "subtract",
   "x": "multiply",
   "÷": "divide"
 };
-  operandOne = operandOne || "0";
-  operandTwo = operandTwo || (operation === "÷" || operation === 'x' ? "1" : "0"); //If dividing or multiplying, then 1 maintains current value in cases of null
 
-  const rawResponse = await fetch(`/calculate/${operationMap[operation]}`, {
+export default async function operate(operandOne, operandTwo, operationSymbol) {
+
+  operandOne = operandOne || "0";
+  operandTwo = operandTwo || (operationSymbol === "÷" || operationSymbol === 'x' ? "1" : "0"); //If dividing or multiplying, then 1 maintains current value in cases of null
+
+  const operation = operationMap[operationSymbol];
+  console.log(`Calling ${operation} service`);
+  
+  const rawResponse = await fetch(`/calculate/${operation}`, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',

@@ -53,7 +53,6 @@ export default async function calculate(obj, buttonName) {
   if (buttonName === "%") {
     if (obj.operation && obj.next) {
       let result = await operate(obj.total, obj.next, obj.operation);
-      console.log(result);
       return {
         total: Big(result)
           .div(Big("100"))
@@ -90,7 +89,6 @@ export default async function calculate(obj, buttonName) {
   if (buttonName === "=") {
     if (obj.next && obj.operation) {
       const total = await operate(obj.total, obj.next, obj.operation);
-      console.log(total);
       return {
         total,
         next: null,
