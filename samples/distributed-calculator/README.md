@@ -27,9 +27,10 @@ kubectl apply -f actionsdemoes/dotnet-subtractor.yaml
 kubectl apply -f actionsdemoes/python-multiplier.yaml
 kubectl apply -f actionsdemoes/node-divider.yaml
 ```
-Each of these deployments will spin up a pod with two containers: one for your service and the other for the actions sidecar. It will also configure
-a service for each sidecar, along with an external IP for our front-end. For more details on how these resources are spun up, look at each individual 
-app's README.
+
+    Each of these deployments will spin up a pod with two containers: one for your service and the other for the actions sidecar. It will also configure
+    a service for each sidecar, along with an external IP for our front-end. For more details on how these resources are spun up, look at each individual 
+    app's README.
 
 4. Wait until your pods are in a running state: `kubectl get pods -w`
 
@@ -64,6 +65,8 @@ Each service ending in "-action" represents your service's respective sidecars, 
 load balancer for the React calculator front-end.
 
 6. Take the external IP address for `calculator-front-end` and drop it in your browser and voilà! You have a working distributed calculator!
+
+![Calculator Screenshot](./img/calculator-screenshot.jpg)
 
 ## The Role of Actions
 
