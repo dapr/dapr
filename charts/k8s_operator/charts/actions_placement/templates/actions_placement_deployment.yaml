@@ -1,0 +1,29 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: actions-placement
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: actions-placement
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: actions-placement
+  template:
+    metadata:
+      labels:
+        app: actions-placement
+    spec:
+      containers:
+      - name: actions-placement
+        repository: {{ .Values.repository }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+          - containerPort: 50005
+        command: ["./placement"]
+      imagePullSecrets:
+      - name: {{ .Values.image.pullSecret }}
+      serviceAccountName: actions-controller
