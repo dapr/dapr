@@ -16,8 +16,6 @@ import (
 	"github.com/actionscore/actions/pkg/version"
 )
 
-var ()
-
 func main() {
 	log.Infof("starting Actions Runtime -- version %s -- commit %s", version.Version(), version.Commit())
 
