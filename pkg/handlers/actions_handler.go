@@ -21,15 +21,15 @@ const (
 	actionsEnabledAnnotationKey            = "actions.io/enabled"
 	actionsIDAnnotationKey                 = "actions.io/id"
 	actionsProtocolAnnotationKey           = "actions.io/protocol"
+	actionsConfigAnnotationKey             = "actions.io/config"
 	actionsEnabledAnnotationValue          = "true"
 	actionSidecarContainerName             = "action"
 	actionSidecarHTTPPortName              = "actions-http"
 	actionSidecarGRPCPortName              = "actions-grpc"
-	actionSidecarImage                     = "yaron2/actionsedge:v2"
 	actionSidecarHTTPPort                  = 3500
 	actionSidecarGRPCPort                  = 50001
 	apiAddress                             = "http://actions-api.default.svc.cluster.local"
-	assignerAddress                        = "actions-assigner.default.svc.cluster.local:80"
+	placementAddress                       = "actions-placement.default.svc.cluster.local:80"
 	HTTPProtocol                  Protocol = "http"
 	GRPCProtocol                  Protocol = "grpc"
 )
@@ -37,10 +37,17 @@ const (
 type ActionsHandler struct {
 	Client          scheme.Interface
 	DeploymentsLock *sync.Mutex
+	Config          ActionsHandlerConfig
 }
 
-func NewActionsHandler(client scheme.Interface) *ActionsHandler {
+type ActionsHandlerConfig struct {
+	RuntimeImage        string
+	ImagePullSecretName string
+}
+
+func NewActionsHandler(client scheme.Interface, config ActionsHandlerConfig) *ActionsHandler {
 	return &ActionsHandler{
+		Config:          config,
 		Client:          client,
 		DeploymentsLock: &sync.Mutex{},
 	}
@@ -51,7 +58,7 @@ func (r *ActionsHandler) Init() error {
 	return nil
 }
 
-func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol, actionName string) v1.Container {
+func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol, actionName, config, actionSidecarImage string) v1.Container {
 	return v1.Container{
 		Name:            actionSidecarContainerName,
 		Image:           actionSidecarImage,
@@ -66,9 +73,9 @@ func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol
 				Name:          actionSidecarGRPCPortName,
 			},
 		},
-		Command: []string{"/action"},
+		Command: []string{"/actionsrt"},
 		Env:     []v1.EnvVar{v1.EnvVar{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}},
-		Args:    []string{"--mode", "kubernetes", "--action-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--action-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--action-id", actionName, "--api-address", apiAddress, "--protocol", applicationProtocol, "--assigner-address", assignerAddress},
+		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--actions-id", actionName, "--control-plane-address", apiAddress, "--protocol", applicationProtocol, "--placement-address", placementAddress, "--config", config},
 	}
 }
 
@@ -145,24 +152,12 @@ func (r *ActionsHandler) GetAppProtocol(deployment *appsv1.Deployment) string {
 	return string(HTTPProtocol)
 }
 
-func (r *ActionsHandler) EnableAction(deployment *appsv1.Deployment) error {
-	appPort := r.GetApplicationPort(deployment.Spec.Template.Spec.Containers)
-	appProtocol := r.GetAppProtocol(deployment)
-	actionName := r.GetActionName(deployment)
-	sidecar := r.GetEventingSidecar(appPort, appProtocol, actionName)
-	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
-
-	err := r.CreateEventingService(actionName, deployment)
-	if err != nil {
-		return err
+func (r *ActionsHandler) GetAppConfig(deployment *appsv1.Deployment) string {
+	if val, ok := deployment.ObjectMeta.Annotations[actionsConfigAnnotationKey]; ok && val != "" {
+		return val
 	}
 
-	err = kubernetes.UpdateDeployment(deployment)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return ""
 }
 
 func (r *ActionsHandler) IsAnnotatedForActions(deployment *appsv1.Deployment) bool {
@@ -184,6 +179,33 @@ func (r *ActionsHandler) ActionEnabled(deployment *appsv1.Deployment) bool {
 	}
 
 	return false
+}
+
+func (r *ActionsHandler) EnableAction(deployment *appsv1.Deployment) error {
+	appPort := r.GetApplicationPort(deployment.Spec.Template.Spec.Containers)
+	appProtocol := r.GetAppProtocol(deployment)
+	config := r.GetAppConfig(deployment)
+	actionName := r.GetActionName(deployment)
+	sidecar := r.GetEventingSidecar(appPort, appProtocol, actionName, config, r.Config.RuntimeImage)
+	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
+
+	if r.Config.ImagePullSecretName != "" {
+		deployment.Spec.Template.Spec.ImagePullSecrets = append(deployment.Spec.Template.Spec.ImagePullSecrets, corev1.LocalObjectReference{
+			Name: r.Config.ImagePullSecretName,
+		})
+	}
+
+	err := r.CreateEventingService(actionName, deployment)
+	if err != nil {
+		return err
+	}
+
+	err = kubernetes.UpdateDeployment(deployment)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *ActionsHandler) RemoveActionFromDeployment(deployment *appsv1.Deployment) error {

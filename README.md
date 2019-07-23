@@ -39,7 +39,7 @@ Actions is flexible in threading model and state consistency model. Developers c
 * Built-in Eventing system
 * Built-in service discovery
 * Asynchronous Pub-Sub with guaranteed delivery and at-least-once semantics
-* Action to Action request response using gRCP
+* Action to Action request response using gRPC
 * State management - persist and restore
 * Choice of concurrency model: Single-Threaded or Multiple
 * Triggers (Azure, AWS, GCP, etc.)
@@ -75,7 +75,7 @@ cd actions
 #### Deploy Actions
 
 ```
-kubectl apply -f ./deploy
+kubectl apply -f ./deploy/actions.yaml
 ```
 
 Watch for the Actions control plane pod to be in ```Running``` state:
@@ -106,15 +106,20 @@ git clone https://github.com/actionscore/actions.git github.com/actionscore/acti
 #### Build the action binary
 
 ```
-cd $GOPATH/src/github.com/actionscore/actions/cmd/action
+cd $GOPATH/src/github.com/actionscore/actions/cmd/actionsrt
 go build -o action
 ```
+
+**Note**: There is a known issue with a Document DB package that may cause build issues. If building throws an error containing `Cannot find package "github.com/a8m/documentdb-go"`, you'll need to get that package by running `go get -u github.com/a8m/documentdb-go`.
+
+**Windows Users**: Actions currently takes a dependency on gcc. If building throws an error containing: `"gcc": executable file not found in %PATH%`, you'll need to install gcc through the [Cygwin Project](https://sourceware.org/cygwin/) or the [MinGW Project](http://mingw-w64.org/doku.php).
 
 ## Usage
 
 Check out the following tutorials:
 
-* [From Zero to Hero with Kubernetes](docs/getting_started/zero_to_hero/README.md)
+* [From Zero to Hero with Kubernetes](samples/kubernetes_zero_to_hero)
+* [From Zero to Hero Locally](samples/local_zero_to_hero)
 * [Enable state management with Redis](docs/concepts/state/redis.md)
 * [Enable state management with CosmosDB](docs/concepts/state/cosmosdb.md)<br><br>
 * [Setup an AWS SQS Event Source](docs/aws_sqs.md)

@@ -2,95 +2,162 @@
 
 trigger:
 - master
+- release-*
 
 variables:
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
   GOBIN:  '$(GOPATH)/bin'
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
+  BlobPrefix: ''
 
 jobs:
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: macOS-latest
     targetOS: darwin
-    binaryName: action
+    targetArch: amd64
+    binaryName: actionsrt
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: macOS-latest
     targetOS: darwin
-    binaryName: assigner
+    targetArch: amd64
+    binaryName: placement
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: macOS-latest
     targetOS: darwin
+    targetArch: amd64
+    binaryName: controller
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: macOS-latest
+    targetOS: linux
+    targetArch: arm
+    binaryName: actionsrt
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: macOS-latest
+    targetOS: linux
+    targetArch: arm
+    binaryName: placement
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: macOS-latest
+    targetOS: linux
+    targetArch: arm
     binaryName: controller
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: ubuntu-latest
     targetOS: linux
-    binaryName: action
+    targetArch: amd64
+    binaryName: actionsrt
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: ubuntu-latest
     targetOS: linux
-    binaryName: assigner
+    targetArch: amd64
+    binaryName: placement
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: ubuntu-latest
     targetOS: linux
+    targetArch: amd64
     binaryName: controller
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: windows-2019
     targetOS: windows
-    binaryName: action
+    targetArch: amd64
+    binaryName: actionsrt
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: windows-2019
     targetOS: windows
-    binaryName: assigner
+    targetArch: amd64
+    binaryName: placement
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: windows-2019
     targetOS: windows
+    targetArch: amd64
     binaryName: controller
 - job: 'publish_edge_binaries'
   pool:
     vmImage: 'windows-2019'
   dependsOn:
-  - build_action_darwin
-  - build_assigner_darwin
-  - build_controller_darwin
-  - build_action_linux
-  - build_assigner_linux
-  - build_controller_linux
-  - build_action_windows
-  - build_assigner_windows
-  - build_controller_windows
+  - build_darwin_amd64_actionsrt
+  - build_darwin_amd64_placement
+  - build_darwin_amd64_controller
+  - build_linux_amd64_actionsrt
+  - build_linux_amd64_placement
+  - build_linux_amd64_controller
+  - build_linux_arm_actionsrt
+  - build_linux_arm_placement
+  - build_linux_arm_controller
+  - build_windows_amd64_actionsrt
+  - build_windows_amd64_placement
+  - build_windows_amd64_controller
   condition: |
     and
     (
-      eq(variables['Build.SourceBranch'], 'refs/heads/master'),
-      eq(dependencies.build_action_darwin.result, 'Succeeded'),
-      eq(dependencies.build_assigner_darwin.result, 'Succeeded'),
-      eq(dependencies.build_controller_darwin.result, 'Succeeded'),
-      eq(dependencies.build_action_linux.result, 'Succeeded'),
-      eq(dependencies.build_assigner_linux.result, 'Succeeded'),
-      eq(dependencies.build_controller_linux.result, 'Succeeded'),
-      eq(dependencies.build_action_windows.result, 'Succeeded'),
-      eq(dependencies.build_assigner_windows.result, 'Succeeded'),
-      eq(dependencies.build_controller_windows.result, 'Succeeded')
+      eq(dependencies.build_darwin_amd64_actionsrt.result, 'Succeeded'),
+      eq(dependencies.build_darwin_amd64_placement.result, 'Succeeded'),
+      eq(dependencies.build_darwin_amd64_controller.result, 'Succeeded'),
+      eq(dependencies.build_linux_amd64_actionsrt.result, 'Succeeded'),
+      eq(dependencies.build_linux_amd64_placement.result, 'Succeeded'),
+      eq(dependencies.build_linux_amd64_controller.result, 'Succeeded'),
+      eq(dependencies.build_linux_arm_actionsrt.result, 'Succeeded'),
+      eq(dependencies.build_linux_arm_placement.result, 'Succeeded'),
+      eq(dependencies.build_linux_arm_controller.result, 'Succeeded'),
+      eq(dependencies.build_windows_amd64_actionsrt.result, 'Succeeded'),
+      eq(dependencies.build_windows_amd64_placement.result, 'Succeeded'),
+      eq(dependencies.build_windows_amd64_controller.result, 'Succeeded')
     )
   steps:
+    - script: echo '##vso[task.setvariable variable=BlobPrefix]$(Build.SourceBranchName)/$(REL_VERSION)
+      condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
     - task: DownloadPipelineArtifact@2
+      displayName: 'Download pipeline artifacts to workspace'
       inputs:
         buildType: 'current'
         itemPattern: '**/*.zip'
         targetPath: '$(Pipeline.Workspace)'
     - task: AzureFileCopy@3
+      displayName: 'Publish archives to blob storage'
       inputs:
-          SourcePath: '$(Pipeline.Workspace)/drop'
-          azureSubscription: 'Actions Releases'
-          Destination: 'AzureBlob'
-          storage: 'actionsreleases'
-          ContainerName: 'bin'
+        SourcePath: '$(Pipeline.Workspace)/drop'
+        azureSubscription: 'Actions Releases'
+        Destination: 'AzureBlob'
+        storage: 'actionsreleases'
+        ContainerName: 'bin'
+        blobPrefix: '$(BlobPrefix)'
+- job: 'build_and_push_amd64_docker_image'
+  variables:
+    DockerVersionTag: ''
+    DockerReleaseTag: ''
+  pool: 
+    vmImage: 'ubuntu-latest'
+  dependsOn:
+    - publish_edge_binaries
+  condition: |
+    eq(dependencies.publish_edge_binaries.result, 'Succeeded')
+  steps:
+    - template: 'build-and-push-image-template.yml'
+      parameters:
+        targetArch: amd64
+- job: 'build_and_push_arm_docker_image'
+  variables:
+    DockerVersionTag: ''
+    DockerReleaseTag: ''
+  pool: 
+    vmImage: 'ubuntu-latest'
+  dependsOn:
+    - publish_edge_binaries
+  condition: |
+    eq(dependencies.publish_edge_binaries.result, 'Succeeded')
+  steps:
+    - template: 'build-and-push-image-template.yml'
+      parameters:
+        targetArch: arm

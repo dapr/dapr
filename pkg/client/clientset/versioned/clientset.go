@@ -19,8 +19,10 @@ limitations under the License.
 package versioned
 
 import (
+	"fmt"
+
+	componentsv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/components/v1alpha1"
 	configurationv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/configuration/v1alpha1"
-	eventingv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/eventing/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
@@ -28,26 +30,26 @@ import (
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
+	ComponentsV1alpha1() componentsv1alpha1.ComponentsV1alpha1Interface
 	ConfigurationV1alpha1() configurationv1alpha1.ConfigurationV1alpha1Interface
-	EventingV1alpha1() eventingv1alpha1.EventingV1alpha1Interface
 }
 
 // Clientset contains the clients for groups. Each group has exactly one
 // version included in a Clientset.
 type Clientset struct {
 	*discovery.DiscoveryClient
+	componentsV1alpha1    *componentsv1alpha1.ComponentsV1alpha1Client
 	configurationV1alpha1 *configurationv1alpha1.ConfigurationV1alpha1Client
-	eventingV1alpha1      *eventingv1alpha1.EventingV1alpha1Client
+}
+
+// ComponentsV1alpha1 retrieves the ComponentsV1alpha1Client
+func (c *Clientset) ComponentsV1alpha1() componentsv1alpha1.ComponentsV1alpha1Interface {
+	return c.componentsV1alpha1
 }
 
 // ConfigurationV1alpha1 retrieves the ConfigurationV1alpha1Client
 func (c *Clientset) ConfigurationV1alpha1() configurationv1alpha1.ConfigurationV1alpha1Interface {
 	return c.configurationV1alpha1
-}
-
-// EventingV1alpha1 retrieves the EventingV1alpha1Client
-func (c *Clientset) EventingV1alpha1() eventingv1alpha1.EventingV1alpha1Interface {
-	return c.eventingV1alpha1
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -59,18 +61,23 @@ func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 }
 
 // NewForConfig creates a new Clientset for the given config.
+// If config's RateLimiter is not set and QPS and Burst are acceptable,
+// NewForConfig will generate a rate-limiter in configShallowCopy.
 func NewForConfig(c *rest.Config) (*Clientset, error) {
 	configShallowCopy := *c
 	if configShallowCopy.RateLimiter == nil && configShallowCopy.QPS > 0 {
+		if configShallowCopy.Burst <= 0 {
+			return nil, fmt.Errorf("Burst is required to be greater than 0 when RateLimiter is not set and QPS is set to greater than 0")
+		}
 		configShallowCopy.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(configShallowCopy.QPS, configShallowCopy.Burst)
 	}
 	var cs Clientset
 	var err error
-	cs.configurationV1alpha1, err = configurationv1alpha1.NewForConfig(&configShallowCopy)
+	cs.componentsV1alpha1, err = componentsv1alpha1.NewForConfig(&configShallowCopy)
 	if err != nil {
 		return nil, err
 	}
-	cs.eventingV1alpha1, err = eventingv1alpha1.NewForConfig(&configShallowCopy)
+	cs.configurationV1alpha1, err = configurationv1alpha1.NewForConfig(&configShallowCopy)
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +93,8 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 // panics if there is an error in the config.
 func NewForConfigOrDie(c *rest.Config) *Clientset {
 	var cs Clientset
+	cs.componentsV1alpha1 = componentsv1alpha1.NewForConfigOrDie(c)
 	cs.configurationV1alpha1 = configurationv1alpha1.NewForConfigOrDie(c)
-	cs.eventingV1alpha1 = eventingv1alpha1.NewForConfigOrDie(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClientForConfigOrDie(c)
 	return &cs
@@ -96,8 +103,8 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 // New creates a new Clientset for the given RESTClient.
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
+	cs.componentsV1alpha1 = componentsv1alpha1.New(c)
 	cs.configurationV1alpha1 = configurationv1alpha1.New(c)
-	cs.eventingV1alpha1 = eventingv1alpha1.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs
