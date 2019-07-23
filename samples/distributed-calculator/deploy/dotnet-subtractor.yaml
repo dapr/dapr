@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: subtract
-        image: ryanvolum/dotnet-subtractor
+        image: actionsdemoes/dotnet-subtractor
         ports:
         - containerPort: 80
         imagePullPolicy: Always
