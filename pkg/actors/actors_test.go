@@ -38,7 +38,7 @@ func fakeCallAndActivateActor(actors *actorsRuntime, actorKey string) {
 	actors.actorsTable.LoadOrStore(actorKey, &actor{
 		lastUsedTime: time.Now(),
 		lock:         &sync.RWMutex{},
-		active:       false,
+		busy:         false,
 	})
 }
 
