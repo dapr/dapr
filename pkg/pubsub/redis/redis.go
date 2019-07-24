@@ -3,11 +3,18 @@ package redis
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 
 	"github.com/actionscore/actions/pkg/components/pubsub"
 	"github.com/go-redis/redis"
+)
+
+const (
+	host       = "redisHost"
+	password   = "password"
+	consumerID = "consumerID"
 )
 
 type redisStreams struct {
@@ -22,17 +29,17 @@ func NewRedisStreams() pubsub.PubSub {
 
 func parseRedisMetadata(meta pubsub.Metadata) (metadata, error) {
 	m := metadata{}
-	if val, ok := meta.ConnectionInfo["redisHost"]; ok && val != "" {
+	if val, ok := meta.ConnectionInfo[host]; ok && val != "" {
 		m.host = val
 	} else {
 		return m, errors.New("redis streams error: missing host address")
 	}
 
-	if val, ok := meta.ConnectionInfo["password"]; ok && val != "" {
+	if val, ok := meta.ConnectionInfo[password]; ok && val != "" {
 		m.password = val
 	}
 
-	if val, ok := meta.Properties["consumerID"]; ok && val != "" {
+	if val, ok := meta.Properties[consumerID]; ok && val != "" {
 		m.consumerID = val
 	} else {
 		return m, errors.New("redis streams error: missing consumerID")
@@ -50,9 +57,11 @@ func (r *redisStreams) Init(metadata pubsub.Metadata) error {
 	r.metadata = m
 
 	client := redis.NewClient(&redis.Options{
-		Addr:     m.host,
-		Password: m.password,
-		DB:       0,
+		Addr:            m.host,
+		Password:        m.password,
+		DB:              0,
+		MaxRetries:      3,
+		MaxRetryBackoff: time.Second * 2,
 	})
 
 	_, err = client.Ping().Result()
