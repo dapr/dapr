@@ -6,7 +6,7 @@ metadata:
   labels:
     app: actions-controller
 spec:
-  replicas: {{ .Values.replicas }}
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: actions-controller
