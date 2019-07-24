@@ -10,7 +10,8 @@ app.use(bodyParser.urlencoded({
 }));
 
 const port = 8080;
-const actionsUrl = `http://localhost:3500/action`;
+const actionsUrl = "http://localhost:3500/action";
+const stateUrl = "http://localhost:3500/state";
 
 app.post('/calculate/add', async (req, res) => {
   const addUrl = `${actionsUrl}/addapp/add`;
@@ -32,6 +33,28 @@ app.post('/calculate/divide', async (req, res) => {
   await callAPI(divideUrl, req.body, res);
 });
 
+app.get('/state', async (_req, res) => {
+  try {
+    const rawResponse = await fetch(`${stateUrl}/calculatorState`);
+    const calculatorState = await rawResponse.json();
+    res.send(calculatorState);
+  } catch (err) {
+    console.log(err);
+    res.status(500).send(err);
+  }
+});
+
+app.post('/persist', async (req, res) => {
+  fetch(stateUrl, {
+    method: "POST",
+    body: JSON.stringify(req.body),
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+  res.send(200);
+});
+
 const callAPI = async (url, body, res) => {
   const rawResponse = await fetch(url, {
     method: 'POST',
@@ -49,7 +72,7 @@ const callAPI = async (url, body, res) => {
 app.use(express.static(path.join(__dirname, 'client/build')));
 
 // Handle React routing, return all requests to React app
-app.get('*', function (_, res) {
+app.get('*', function (_req, res) {
   res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 

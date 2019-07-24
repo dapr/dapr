@@ -11,10 +11,44 @@ export default class App extends React.Component {
     operation: null,
   };
 
-  handleClick = async buttonName => {
+  async componentDidMount() {
+    const savedState = await this.getState();
+    if (savedState) {
+      console.log("Rehydrating State:");
+      console.log(savedState);
+      this.setState(savedState);
+    }
+  }
+
+  handleClick = async (buttonName) => {
     let value = await calculate(this.state, buttonName);
     this.setState(value);
+    this.persistState(this.state);
   };
+
+  persistState = (value) => {
+    console.log(`Persisting State:`);
+    console.log(value);
+
+    const state = [{ 
+      key: "calculatorState", 
+      value 
+    }];
+    
+    fetch("/persist", {
+      method: "POST",
+      body: JSON.stringify(state),
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+  }
+  
+  getState = async () => {
+    const rawResponse = await fetch("/state");
+    const calculatorState = await rawResponse.json();
+    return calculatorState;
+  }
 
   render() {
     return (
