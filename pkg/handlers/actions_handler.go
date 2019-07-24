@@ -23,7 +23,7 @@ const (
 	actionsProtocolAnnotationKey           = "actions.io/protocol"
 	actionsConfigAnnotationKey             = "actions.io/config"
 	actionsEnabledAnnotationValue          = "true"
-	actionSidecarContainerName             = "action"
+	actionSidecarContainerName             = "actionsrt"
 	actionSidecarHTTPPortName              = "actions-http"
 	actionSidecarGRPCPortName              = "actions-grpc"
 	actionSidecarHTTPPort                  = 3500
