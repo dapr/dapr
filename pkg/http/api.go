@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/actionscore/actions/pkg/components/pubsub"
+
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/actionscore/actions/pkg/actors"
@@ -26,6 +28,7 @@ type api struct {
 	stateStore      state.StateStore
 	json            jsoniter.API
 	actor           actors.Actors
+	pubSub          pubsub.PubSub
 	id              string
 }
 
@@ -36,15 +39,17 @@ const (
 	actorTypeParam = "actorType"
 	actorIDParam   = "actorId"
 	stateKeyParam  = "key"
+	topicParam     = "topic"
 )
 
-func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, actor actors.Actors) API {
+func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors) API {
 	api := &api{
 		appChannel:      appChannel,
 		directMessaging: directMessaging,
 		stateStore:      stateStore,
 		json:            jsoniter.ConfigFastest,
 		actor:           actor,
+		pubSub:          pubSub,
 		id:              actionID,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
@@ -84,7 +89,14 @@ func (a *api) constructStateEndpoints() []Endpoint {
 }
 
 func (a *api) constructPubSubEndpoints() []Endpoint {
-	return []Endpoint{}
+	return []Endpoint{
+		Endpoint{
+			Methods: []string{http.Post, http.Put},
+			Route:   "publish/<topic>",
+			Version: apiVersionV1,
+			Handler: a.onPublish,
+		},
+	}
 }
 
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
@@ -348,6 +360,30 @@ func (a *api) onGetActorState(c *routing.Context) error {
 
 func (a *api) onGetMetadata(c *routing.Context) error {
 	//TODO: implement
+	return nil
+}
+
+func (a *api) onPublish(c *routing.Context) error {
+	if a.pubSub == nil {
+		respondWithError(c.RequestCtx, 400, "pubsub not initialized")
+		return nil
+	}
+
+	topic := c.Param(topicParam)
+	body := c.PostBody()
+
+	req := pubsub.PublishRequest{
+		Topic: topic,
+		Data:  body,
+	}
+
+	err := a.pubSub.Publish(&req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, err.Error())
+	} else {
+		respondEmpty(c.RequestCtx, 200)
+	}
+
 	return nil
 }
 

@@ -261,6 +261,22 @@
   version = "v1.0.0"
 
 [[projects]]
+  digest = "1:c950e574951c7199fb3d990d0e7a61996f40f8e646ba7cf8a557878d4c737f53"
+  name = "github.com/go-redis/redis"
+  packages = [
+    ".",
+    "internal",
+    "internal/consistenthash",
+    "internal/hashtag",
+    "internal/pool",
+    "internal/proto",
+    "internal/util",
+  ]
+  pruneopts = "UT"
+  revision = "75795aa4236dc7341eefac3bbe945e68c99ef9df"
+  version = "v6.15.3"
+
+[[projects]]
   digest = "1:4d02824a56d268f74a6b6fdd944b20b58a77c3d70e81008b3ee0c4f1a6777340"
   name = "github.com/gogo/protobuf"
   packages = [
@@ -1052,6 +1068,7 @@
     "github.com/aws/aws-sdk-go/service/sqs",
     "github.com/eclipse/paho.mqtt.golang",
     "github.com/ghodss/yaml",
+    "github.com/go-redis/redis",
     "github.com/golang/protobuf/proto",
     "github.com/golang/protobuf/ptypes/any",
     "github.com/golang/protobuf/ptypes/empty",
