@@ -37,7 +37,7 @@ func createFullName(name string) string {
 }
 
 func (p *pubSubRegistry) CreatePubSub(name string) (PubSub, error) {
-	if val, ok := p.messageBuses[createFullName(name)]; ok {
+	if val, ok := p.messageBuses[name]; ok {
 		return val, nil
 	}
 
