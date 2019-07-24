@@ -1,4 +1,7 @@
 dependencies:
+- name:   actions_image_pull_secret
+  version: "0.1.0"
+  repository: "file://actions_image_pull_secret"
 - name: actions_crd
   version: "0.1.0"
   repository: "file://actions_crd"
