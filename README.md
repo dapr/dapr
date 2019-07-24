@@ -1,4 +1,4 @@
-# Actions - A highly performant, lightweight serverless runtime for cloud and edge
+# Actions - A high performance, lightweight serverless runtime for cloud and edge
 
 [![Build Status](https://dev.azure.com/azure-octo/Actions/_apis/build/status/builds/actions%20build?branchName=master)](https://dev.azure.com/azure-octo/Actions/_build/latest?definitionId=5&branchName=master)
 
