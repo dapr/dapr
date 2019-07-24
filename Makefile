@@ -44,10 +44,11 @@ build:
 	  set -e; \
 	  for b in $(BINARIES); do \
 	  		for t in $(TARGETS); do \
+			  	if test "windows" = $$t; then EXT=".exe"; else EXT=""; fi; \
 				CGO_ENABLED=$(CGO) GOOS=$$t GOARCH=$(ARCH) go build \
-						-ldflags "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(ACTIONS_VERSION)" \
-						-o dist/"$$t"_$(ARCH)/$$b \
-						cmd/$$b/main.go; \
+				-ldflags "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(ACTIONS_VERSION)" \
+				-o dist/"$$t"_$(ARCH)/$$b$$EXT \
+				cmd/$$b/main.go; \
 			done; \
 	  done;
 

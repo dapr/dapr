@@ -552,14 +552,9 @@ func (a *ActionsRuntime) onNewPublishedMessage(msg *pubsub.NewMessage) error {
 }
 
 func (a *ActionsRuntime) initActors() error {
-	act := actors.NewActors(a.stateStore, a.appChannel, a.grpc.GetGRPCConnection, actors.Config{
-		ActionsID:               a.runtimeConfig.ID,
-		PlacementServiceAddress: a.runtimeConfig.PlacementServiceAddress,
-		HostedActorTypes:        a.appConfig.Entities,
-		HostAddress:             a.hostAddress,
-		Port:                    a.runtimeConfig.GRPCPort,
-		HeartbeatInterval:       time.Second * 1,
-	})
+	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
+		a.runtimeConfig.GRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout)
+	act := actors.NewActors(a.stateStore, a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
 	err := act.Init()
 	a.actor = act
 	return err
