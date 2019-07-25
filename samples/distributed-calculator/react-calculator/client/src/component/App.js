@@ -47,7 +47,7 @@ export default class App extends React.Component {
   getState = async () => {
     const rawResponse = await fetch("/state");
     const calculatorState = await rawResponse.json();
-    return calculatorState;
+    return JSON.parse(calculatorState);
   }
 
   render() {
