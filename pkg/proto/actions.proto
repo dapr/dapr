@@ -67,6 +67,7 @@ service App {
 message AppMethodCallEnvelope {
     string method = 1;
     google.protobuf.Any data = 2;
+    map<string,string> metadata = 3;
 }
 
 message State {

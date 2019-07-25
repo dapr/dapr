@@ -235,11 +235,12 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	method := c.Param(methodParam)
 	body := c.PostBody()
 	verb := string(c.Method())
+	queryString := string(c.QueryArgs().QueryString())
 
 	req := messaging.DirectMessageRequest{
 		Data:     body,
 		Method:   method,
-		Metadata: map[string]string{http.HTTPVerb: verb},
+		Metadata: map[string]string{http.HTTPVerb: verb, http.QueryString: queryString},
 		Target:   targetID,
 	}
 
