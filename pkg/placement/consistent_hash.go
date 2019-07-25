@@ -231,7 +231,7 @@ func (c *Consistent) Remove(host string) bool {
 func (c *Consistent) Hosts() (hosts []string) {
 	c.RLock()
 	defer c.RUnlock()
-	for k, _ := range c.loadMap {
+	for k := range c.loadMap {
 		hosts = append(hosts, k)
 	}
 	return hosts

@@ -64,17 +64,17 @@ func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol
 		Image:           actionSidecarImage,
 		ImagePullPolicy: corev1.PullAlways,
 		Ports: []v1.ContainerPort{
-			v1.ContainerPort{
+			{
 				ContainerPort: int32(actionSidecarHTTPPort),
 				Name:          actionSidecarHTTPPortName,
 			},
-			v1.ContainerPort{
+			{
 				ContainerPort: int32(actionSidecarGRPCPort),
 				Name:          actionSidecarGRPCPortName,
 			},
 		},
 		Command: []string{"/actionsrt"},
-		Env:     []v1.EnvVar{v1.EnvVar{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}},
+		Env:     []v1.EnvVar{{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}},
 		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--actions-id", actionName, "--control-plane-address", apiAddress, "--protocol", applicationProtocol, "--placement-address", placementAddress, "--config", config},
 	}
 }
@@ -105,13 +105,13 @@ func (r *ActionsHandler) CreateEventingService(name string, deployment *appsv1.D
 		Spec: corev1.ServiceSpec{
 			Selector: deployment.Spec.Selector.MatchLabels,
 			Ports: []corev1.ServicePort{
-				corev1.ServicePort{
+				{
 					Protocol:   corev1.ProtocolTCP,
 					Port:       80,
 					TargetPort: intstr.FromInt(actionSidecarHTTPPort),
 					Name:       actionSidecarHTTPPortName,
 				},
-				corev1.ServicePort{
+				{
 					Protocol:   corev1.ProtocolTCP,
 					Port:       int32(actionSidecarGRPCPort),
 					TargetPort: intstr.FromInt(actionSidecarGRPCPort),
