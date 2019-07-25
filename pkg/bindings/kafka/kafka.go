@@ -11,6 +11,7 @@ import (
 	"github.com/actionscore/actions/pkg/components/bindings"
 )
 
+// Kafka allows reading/writing to a Kafka consumer group
 type Kafka struct {
 	producer      sarama.SyncProducer
 	topics        []string
@@ -19,7 +20,8 @@ type Kafka struct {
 	publishTopic  string
 }
 
-type KafkaMetadata struct {
+// Metadata is the config object for Kafka
+type Metadata struct {
 	Brokers       []string `json:"brokers"`
 	Topics        []string `json:"topics"`
 	PublishTopic  string   `json:"publishTopic"`
@@ -51,10 +53,12 @@ func (consumer *consumer) Setup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
+// NewKafka returns a new kafka instance
 func NewKafka() *Kafka {
 	return &Kafka{}
 }
 
+// Init does metadata parsing and connection establishment
 func (k *Kafka) Init(metadata bindings.Metadata) error {
 	meta, err := k.GetKafkaMetadata(metadata)
 	if err != nil {
@@ -86,13 +90,14 @@ func (k *Kafka) Write(req *bindings.WriteRequest) error {
 	return nil
 }
 
-func (k *Kafka) GetKafkaMetadata(metadata bindings.Metadata) (*KafkaMetadata, error) {
+// GetKafkaMetadata returns new Kafka metadata
+func (k *Kafka) GetKafkaMetadata(metadata bindings.Metadata) (*Metadata, error) {
 	b, err := json.Marshal(metadata.ConnectionInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	var meta KafkaMetadata
+	var meta Metadata
 	err = json.Unmarshal(b, &meta)
 	if err != nil {
 		return nil, err
@@ -101,7 +106,7 @@ func (k *Kafka) GetKafkaMetadata(metadata bindings.Metadata) (*KafkaMetadata, er
 	return &meta, nil
 }
 
-func (k *Kafka) getSyncProducer(meta *KafkaMetadata) (sarama.SyncProducer, error) {
+func (k *Kafka) getSyncProducer(meta *Metadata) (sarama.SyncProducer, error) {
 	config := sarama.NewConfig()
 	config.Producer.RequiredAcks = sarama.WaitForLocal
 	config.Producer.Retry.Max = 10

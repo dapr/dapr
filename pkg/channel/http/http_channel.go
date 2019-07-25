@@ -10,21 +10,30 @@ import (
 )
 
 const (
-	HTTPVerb       = "http.verb"
+	// HTTPVerb is an actions http channel verb
+	HTTPVerb = "http.verb"
+	// HTTPStatusCode is an actions http channel status code
 	HTTPStatusCode = "http.status_code"
-	Get            = "GET"
-	Post           = "POST"
-	Delete         = "DELETE"
-	Put            = "PUT"
-	Options        = "OPTIONS"
+	// Get is an HTTP Get method
+	Get = "GET"
+	// Post is an Post Get method
+	Post = "POST"
+	// Delete is an HTTP Delete method
+	Delete = "DELETE"
+	// Put is an HTTP Put method
+	Put = "PUT"
+	// OPTIONS is an HTTP OPTIONS method
+	Options = "OPTIONS"
 )
 
-type HTTPChannel struct {
+// Channel is an HTTP implementation of an AppChannel
+type Channel struct {
 	client      *fasthttp.Client
 	baseAddress string
 }
 
-func (h *HTTPChannel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.InvokeResponse, error) {
+// InvokeMethod invokes user code via HTTP
+func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.InvokeResponse, error) {
 	req := fasthttp.AcquireRequest()
 	uri := fmt.Sprintf("%s/%s", h.baseAddress, invokeRequest.Method)
 	req.SetRequestURI(uri)
@@ -57,8 +66,9 @@ func (h *HTTPChannel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*chann
 	}, nil
 }
 
+// CreateLocalChannel creates an HTTP AppChannel
 func CreateLocalChannel(port int) (channel.AppChannel, error) {
-	return &HTTPChannel{
+	return &Channel{
 		client:      &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}, ReadTimeout: time.Second * 60},
 		baseAddress: fmt.Sprintf("http://127.0.0.1:%v", port),
 	}, nil

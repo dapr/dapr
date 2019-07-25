@@ -10,26 +10,30 @@ import (
 	"github.com/actionscore/actions/pkg/components/bindings"
 )
 
-type HttpSource struct {
-	Spec HttpMetadata
+// HTTPSource allows sending data to an HTTP URL
+type HTTPSource struct {
+	Spec Metadata
 }
 
-type HttpMetadata struct {
+// Metadata is the config object for HTTPSource
+type Metadata struct {
 	URL    string `json:"url"`
 	Method string `json:"method"`
 }
 
-func NewHTTP() *HttpSource {
-	return &HttpSource{}
+// NewHTTP returns a new HTTPSource
+func NewHTTP() *HTTPSource {
+	return &HTTPSource{}
 }
 
-func (h *HttpSource) Init(metadata bindings.Metadata) error {
+// Init performs metadata parsing
+func (h *HTTPSource) Init(metadata bindings.Metadata) error {
 	b, err := json.Marshal(metadata.ConnectionInfo)
 	if err != nil {
 		return err
 	}
 
-	var httpMetadata HttpMetadata
+	var httpMetadata Metadata
 	err = json.Unmarshal(b, &httpMetadata)
 	if err != nil {
 		return err
@@ -40,7 +44,8 @@ func (h *HttpSource) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (h *HttpSource) HttpGet(url string) ([]byte, error) {
+// HttpGet performs an HTTP get request
+func (h *HTTPSource) HttpGet(url string) ([]byte, error) {
 	client := http.Client{Timeout: time.Second * 5}
 	resp, err := client.Get(h.Spec.URL)
 	if err != nil {
@@ -59,7 +64,7 @@ func (h *HttpSource) HttpGet(url string) ([]byte, error) {
 	return b, nil
 }
 
-func (h *HttpSource) Read(handler func(*bindings.ReadResponse) error) error {
+func (h *HTTPSource) Read(handler func(*bindings.ReadResponse) error) error {
 	b, err := h.HttpGet(h.Spec.URL)
 	if err != nil {
 		return err
@@ -72,7 +77,7 @@ func (h *HttpSource) Read(handler func(*bindings.ReadResponse) error) error {
 	return nil
 }
 
-func (h *HttpSource) Write(req *bindings.WriteRequest) error {
+func (h *HTTPSource) Write(req *bindings.WriteRequest) error {
 	client := http.Client{Timeout: time.Second * 5}
 	resp, err := client.Post(h.Spec.URL, "application/json; charset=utf-8", bytes.NewBuffer(req.Data))
 	if err != nil {
