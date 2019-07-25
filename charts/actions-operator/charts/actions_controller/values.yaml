@@ -1,10 +1,10 @@
-replicas: 1
+replicaCount: 1
 
 image:
   repository: actionscore.azurecr.io/actions
   tag: merge
   imagePullPolicy: Always
-  pullSecret: actions-auth
+  pullSecret: actions-auth-pull
 
 nameOverride: ""
 fullnameOverride: ""

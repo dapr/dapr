@@ -7,7 +7,7 @@ metadata:
   labels:
     app: actions-placement
 spec:
-  replicas: {{ .Values.replicas }}
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: actions-placement
