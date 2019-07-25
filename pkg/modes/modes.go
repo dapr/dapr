@@ -2,7 +2,7 @@ package modes
 
 type ActionsMode string
 
-var (
+const (
 	KubernetesMode ActionsMode = "kubernetes"
 	StandaloneMode ActionsMode = "standalone"
 )

@@ -127,6 +127,7 @@ func (a *ActionsRuntime) initRuntime() error {
 		log.Warnf("failed to init state: %s", err)
 	}
 
+	pubsub_loader.Load()
 	err = a.initPubSub()
 	if err != nil {
 		log.Warnf("failed to init pubsub: %s", err)
@@ -491,8 +492,6 @@ func (a *ActionsRuntime) getSubscribedTopicsFromApp() []string {
 }
 
 func (a *ActionsRuntime) initPubSub() error {
-	pubsub_loader.Load()
-
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
 			pubSub, err := a.pubSubRegistry.CreatePubSub(c.Spec.Type)
