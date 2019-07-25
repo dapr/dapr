@@ -10,6 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// Clients returns a new Kubernetes and Actions clients
 func Clients() (kubernetes.Interface, scheme.Interface, error) {
 	client := utils.GetKubeClient()
 	config := utils.GetConfig()
@@ -22,6 +23,7 @@ func Clients() (kubernetes.Interface, scheme.Interface, error) {
 	return client, eventingClient, nil
 }
 
+// GetDeployment gets a deployment
 func GetDeployment(name, namespace string) (*appsv1.Deployment, error) {
 	client := utils.GetKubeClient()
 
@@ -33,6 +35,7 @@ func GetDeployment(name, namespace string) (*appsv1.Deployment, error) {
 	return dep, nil
 }
 
+// UpdateDeployment updates an existing deployment
 func UpdateDeployment(deployment *appsv1.Deployment) error {
 	client := utils.GetKubeClient()
 	_, err := client.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Update(deployment)
@@ -43,6 +46,7 @@ func UpdateDeployment(deployment *appsv1.Deployment) error {
 	return nil
 }
 
+// CreateService creates a new service
 func CreateService(service *corev1.Service, namespace string) error {
 	client := utils.GetKubeClient()
 
@@ -54,6 +58,7 @@ func CreateService(service *corev1.Service, namespace string) error {
 	return nil
 }
 
+// ServiceExists checks if a service already exists
 func ServiceExists(name, namespace string) bool {
 	client := utils.GetKubeClient()
 
@@ -61,6 +66,7 @@ func ServiceExists(name, namespace string) bool {
 	return err == nil
 }
 
+// GetEndpoints retuns a list of service endpoints
 func GetEndpoints(name, namespace string) (*corev1.Endpoints, error) {
 	client := utils.GetKubeClient()
 
@@ -72,6 +78,7 @@ func GetEndpoints(name, namespace string) (*corev1.Endpoints, error) {
 	return endpoints, nil
 }
 
+// GetDeploymentsBySelector returns a deployment by a selector
 func GetDeploymentsBySelector(selector meta_v1.LabelSelector) ([]appsv1.Deployment, error) {
 	client := utils.GetKubeClient()
 

@@ -14,6 +14,7 @@ import (
 	pb "github.com/actionscore/actions/pkg/proto"
 )
 
+// API is the gRPC interface for the Actions runtime
 type API interface {
 	CallActor(ctx context.Context, in *pb.CallActorEnvelope) (*pb.InvokeResponse, error)
 	CallRemoteApp(ctx context.Context, in *pb.CallRemoteAppEnvelope) (*pb.InvokeResponse, error)
@@ -29,6 +30,7 @@ type api struct {
 	id                string
 }
 
+// NewAPI returns a new gRPC API
 func NewAPI(actionsID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, actor actors.Actors, componentHandler components.ComponentHandler) API {
 	return &api{
 		appChannel:        appChannel,
@@ -39,6 +41,7 @@ func NewAPI(actionsID string, appChannel channel.AppChannel, directMessaging mes
 	}
 }
 
+// CallRemoteApp invokes a remote app
 func (a *api) CallRemoteApp(ctx context.Context, in *pb.CallRemoteAppEnvelope) (*pb.InvokeResponse, error) {
 	req := messaging.DirectMessageRequest{
 		Data:     in.Data.Value,
@@ -58,6 +61,7 @@ func (a *api) CallRemoteApp(ctx context.Context, in *pb.CallRemoteAppEnvelope) (
 	}, nil
 }
 
+// CallLocal is used for internal Actions-Actions calls
 func (a *api) CallLocal(ctx context.Context, in *pb.LocalCallEnvelope) (*pb.InvokeResponse, error) {
 	req := channel.InvokeRequest{
 		Payload:  in.Data.Value,
@@ -76,6 +80,7 @@ func (a *api) CallLocal(ctx context.Context, in *pb.LocalCallEnvelope) (*pb.Invo
 	}, nil
 }
 
+// CallActor invokes a virtual actor
 func (a *api) CallActor(ctx context.Context, in *pb.CallActorEnvelope) (*pb.InvokeResponse, error) {
 	req := actors.CallRequest{
 		ActorType: in.ActorType,
@@ -95,6 +100,7 @@ func (a *api) CallActor(ctx context.Context, in *pb.CallActorEnvelope) (*pb.Invo
 	}, nil
 }
 
+// UpdateComponent is fired by the Actions control plane when a component state changes
 func (a *api) UpdateComponent(ctx context.Context, in *pb.Component) (*empty.Empty, error) {
 	c := components.Component{
 		Metadata: components.ComponentMetadata{

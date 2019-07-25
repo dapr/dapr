@@ -9,16 +9,19 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// KubernetesComponents loads components in a kubernetes environment
 type KubernetesComponents struct {
 	config config.KubernetesConfig
 }
 
+// NewKubernetesComponents returns a new kubernetes loader
 func NewKubernetesComponents(configuration config.KubernetesConfig) *KubernetesComponents {
 	return &KubernetesComponents{
 		config: configuration,
 	}
 }
 
+// LoadComponents returns components from a given control plane address
 func (k *KubernetesComponents) LoadComponents() ([]Component, error) {
 	url := fmt.Sprintf("%s/components", k.config.ControlPlaneAddress)
 	req := fasthttp.AcquireRequest()
