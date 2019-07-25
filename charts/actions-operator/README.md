@@ -59,7 +59,7 @@ Once the chart installation is done, verify Actions operator pods are running in
 kubectl get pods --namespace actions-system
 ```
  
-![actions_helm_success](/actions-operator/img/actions_helm_success.png)
+![actions_helm_success](/charts/actions-operator/img/actions_helm_success.png)
 
 ## Uninstalling the Chart
 
