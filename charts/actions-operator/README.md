@@ -47,14 +47,14 @@ For more details on initializing helm, Go [here](https://docs.helm.sh/helm/#helm
     --password 485b3522-59bb-4152-8938-ca8b90108af6
     ```
 
-2. Install Actions chart on your cluster using the actions-system namespace:
+2. Install the Actions chart on your cluster in the actions-system namespace:
     ```
     helm install actionscore/actions-operator --name actions --namespace actions-system
     ``` 
 
 ## Verify installation
 
-Once the chart installation is done, verify Actions operator pods are running in the `actions-system` namespace:
+Once the chart installation is done, verify the Actions operator pods are running in the `actions-system` namespace:
 ```
 kubectl get pods --namespace actions-system
 ```
