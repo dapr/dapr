@@ -5,24 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
-
-type MockPubSub struct {
-	mock.Mock
-}
-
-func (m *MockPubSub) Init(metadata Metadata) error {
-	return nil
-}
-
-func (m *MockPubSub) Publish(req *PublishRequest) error {
-	return nil
-}
-
-func (m *MockPubSub) Subscribe(req SubscribeRequest, handler func(msg *NewMessage) error) error {
-	return nil
-}
 
 func TestCreateFullName(t *testing.T) {
 	t.Run("create redis pubsub key name", func(t *testing.T) {
