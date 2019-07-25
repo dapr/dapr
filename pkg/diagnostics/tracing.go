@@ -13,9 +13,11 @@ import (
 )
 
 const (
+	// CorrelationID is an opencensus corellation id
 	CorrelationID = "correlation-id"
 )
 
+// Event is an Actions event
 type Event struct {
 	EventName   string        `json:"eventName,omitempty"`
 	To          []string      `json:"to,omitempty"`
@@ -25,6 +27,7 @@ type Event struct {
 	Data        interface{}   `json:"data,omitempty"`
 }
 
+// KeyValState is a state key value state
 type KeyValState struct {
 	Key   string      `json:"key"`
 	Value interface{} `json:"value"`
@@ -35,7 +38,7 @@ func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
 
-//DeserializeSpanContext deseralize a span cotnext from a string
+//DeserializeSpanContext deseralizes a span cotnext from a string
 func DeserializeSpanContext(ctx string) trace.SpanContext {
 	parts := strings.Split(ctx, ";")
 	spanID, _ := hex.DecodeString(parts[0])
@@ -48,6 +51,7 @@ func DeserializeSpanContext(ctx string) trace.SpanContext {
 	return ret
 }
 
+// DeserializeSpanContextPointer deseralizes a span context from a trace pointer
 func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 	if ctx == "" {
 		return nil
@@ -57,11 +61,12 @@ func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 	return context
 }
 
-func TraceSpanFromCorrelationId(corId string, operation string, actionMethod string, targetID string, from string, verbMethod string) (context.Context, *trace.Span) {
+// TraceSpanFromCorrelationId traces a span from a given correlation id
+func TraceSpanFromCorrelationId(corID string, operation string, actionMethod string, targetID string, from string, verbMethod string) (context.Context, *trace.Span) {
 	var ctx context.Context
 	var span *trace.Span
-	if corId != "" {
-		spanContext := DeserializeSpanContext(corId)
+	if corID != "" {
+		spanContext := DeserializeSpanContext(corID)
 		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), operation, spanContext)
 	} else {
 		ctx, span = trace.StartSpan(context.Background(), operation)
@@ -77,6 +82,7 @@ func TraceSpanFromCorrelationId(corId string, operation string, actionMethod str
 	return ctx, span
 }
 
+// TraceSpanFromContext starts a span and traces a context with the given params
 func TraceSpanFromContext(c context.Context, events *[]Event, operation string, includeEvent bool, includeEventBody bool) (context.Context, *trace.Span, *trace.SpanContext) {
 	ctx, span := trace.StartSpan(c, operation)
 	if includeEvent {
@@ -86,15 +92,17 @@ func TraceSpanFromContext(c context.Context, events *[]Event, operation string, 
 	*context = span.SpanContext()
 	return ctx, span, context
 }
+
+// TraceSpanFromRoutingContext starts a span and traces a context from a given http route context
 func TraceSpanFromRoutingContext(c *routing.Context, events *[]Event, operation string, includeEvent bool, includeEventBody bool) (context.Context, *trace.Span, *trace.SpanContext) {
 	var ctx context.Context
 	var span *trace.Span
 	if c == nil {
 		ctx, span = trace.StartSpan(context.Background(), operation)
 	} else {
-		corId := string(c.Request.Header.Peek(CorrelationID))
-		if corId != "" {
-			spanContext := DeserializeSpanContext(corId)
+		corID := string(c.Request.Header.Peek(CorrelationID))
+		if corID != "" {
+			spanContext := DeserializeSpanContext(corID)
 			ctx, span = trace.StartSpanWithRemoteParent(context.Background(), operation, spanContext)
 		} else {
 			ctx, span = trace.StartSpan(context.Background(), operation)
@@ -112,6 +120,8 @@ func TraceSpanFromRoutingContext(c *routing.Context, events *[]Event, operation 
 		return ctx, span, nil
 	}
 }
+
+// AddEventAnnotations adds an Actions events annotation
 func AddEventAnnotations(events *[]Event, span *trace.Span, includeEventBody bool) {
 	for _, e := range *events {
 		attrs := []trace.Attribute{
@@ -127,6 +137,8 @@ func AddEventAnnotations(events *[]Event, span *trace.Span, includeEventBody boo
 		span.AddAttributes(attrs...)
 	}
 }
+
+// SetSpanStatus sets the status for a given span
 func SetSpanStatus(span *trace.Span, code int32, message string) {
 	if span != nil {
 		span.SetStatus(trace.Status{

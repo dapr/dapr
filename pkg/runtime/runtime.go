@@ -46,7 +46,7 @@ type ActionsRuntime struct {
 	runtimeConfig      *Config
 	globalConfig       *config.Configuration
 	components         []components.Component
-	grpc               *grpc.GRPCManager
+	grpc               *grpc.Manager
 	appChannel         channel.AppChannel
 	appConfig          config.ApplicationConfig
 	directMessaging    messaging.DirectMessaging
