@@ -9,16 +9,19 @@ import (
 	"github.com/ghodss/yaml"
 )
 
+// StandaloneComponents loads components in a standalone mode environment
 type StandaloneComponents struct {
 	config config.StandaloneConfig
 }
 
+// NewStandaloneComponents returns a new standalone loader
 func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneComponents {
 	return &StandaloneComponents{
 		config: configuration,
 	}
 }
 
+// LoadComponents loads actions components from a given directory
 func (s *StandaloneComponents) LoadComponents() ([]Component, error) {
 	dir := s.config.ComponentsPath
 	files, err := ioutil.ReadDir(dir)

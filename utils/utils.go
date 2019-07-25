@@ -3,7 +3,6 @@ package utils
 import (
 	"flag"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 
 	"k8s.io/client-go/rest"
@@ -26,6 +25,7 @@ func initKubeConfig() {
 	clientSet = clientset
 }
 
+// GetConfig gets a kubernetes rest config
 func GetConfig() *rest.Config {
 	if kubeConfig == nil {
 		var kubeconfig *string
@@ -51,19 +51,11 @@ func GetConfig() *rest.Config {
 	return kubeConfig
 }
 
+// GetKubeClient gets a kubernetes client
 func GetKubeClient() *kubernetes.Clientset {
 	if clientSet == nil {
 		initKubeConfig()
 	}
 
 	return clientSet
-}
-
-func Int32Ptr(i int32) *int32 { return &i }
-
-func RunCMD(cmd string, args []string) {
-	err := exec.Command(cmd, args...).Run()
-	if err != nil {
-		fmt.Println(err.Error())
-	}
 }

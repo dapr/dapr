@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewRuntime(t *testing.T) {
-	r := NewActionsRuntime(&RuntimeConfig{}, &config.Configuration{})
+	r := NewActionsRuntime(&Config{}, &config.Configuration{})
 	if r == nil {
 		t.Error(
 			"Expected success but got nil",

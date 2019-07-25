@@ -15,6 +15,7 @@ import (
 	routing "github.com/qiangxue/fasthttp-routing"
 )
 
+// API returns a list of HTTP endpoints for Actions
 type API interface {
 	APIEndpoints() []Endpoint
 }
@@ -38,6 +39,7 @@ const (
 	stateKeyParam  = "key"
 )
 
+// NewAPI returns a new API
 func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, actor actors.Actors) API {
 	api := &api{
 		appChannel:      appChannel,
@@ -56,6 +58,7 @@ func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging mess
 	return api
 }
 
+// APIEndpoints returns the list of registered endpoints
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
 }

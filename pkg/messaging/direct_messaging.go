@@ -16,6 +16,7 @@ import (
 	pb "github.com/actionscore/actions/pkg/proto"
 )
 
+// DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
 	Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error)
 }
@@ -28,6 +29,7 @@ type directMessaging struct {
 	grpcPort            int
 }
 
+// NewDirectMessaging returns a new direct messaging api
 func NewDirectMessaging(actionsID string, port int, mode modes.ActionsMode, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error)) DirectMessaging {
 	return &directMessaging{
 		appChannel:          appChannel,
@@ -38,6 +40,7 @@ func NewDirectMessaging(actionsID string, port int, mode modes.ActionsMode, appC
 	}
 }
 
+// Invoke takes a message requests and invokes an app, either local or remote
 func (d *directMessaging) Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error) {
 	var invokeFn func(*DirectMessageRequest) (*DirectMessageResponse, error)
 

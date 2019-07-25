@@ -50,12 +50,14 @@ type TracingSpec struct {
 	IncludeEventBody bool   `json:"includeEventBody"`
 }
 
+// NewAPIServer returns a new API server
 func NewAPIServer(client scheme.Interface) APIServer {
 	return &apiServer{
 		Client: client,
 	}
 }
 
+// Run starts a new HTTP control
 func (a *apiServer) Run(ctx context.Context) {
 	r := mux.NewRouter()
 	r.HandleFunc("/components", a.GetComponents).Methods("GET")
@@ -94,6 +96,7 @@ func (a *apiServer) Run(ctx context.Context) {
 	close(doneCh)
 }
 
+// GetConfiguration returns an Actions configuration
 func (a *apiServer) GetConfiguration(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["name"]
@@ -116,6 +119,8 @@ func (a *apiServer) GetConfiguration(w http.ResponseWriter, r *http.Request) {
 	}
 	RespondWithJSON(w, 200, ret)
 }
+
+// GetComponents returns a list of Actions components
 func (a *apiServer) GetComponents(w http.ResponseWriter, r *http.Request) {
 	list := []Component{}
 
@@ -138,10 +143,12 @@ func (a *apiServer) GetComponents(w http.ResponseWriter, r *http.Request) {
 	RespondWithJSON(w, 200, list)
 }
 
+// RespondWithError is a helper method for returning an error http message
 func RespondWithError(w http.ResponseWriter, code int, message string) {
 	RespondWithJSON(w, code, map[string]string{"error": message})
 }
 
+// RespondWithJSON is a helper method for returning an HTTP message with a JSON paylad
 func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	buffer := &bytes.Buffer{}
 	encoder := json.NewEncoder(buffer)

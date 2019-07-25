@@ -1,4 +1,4 @@
-// An implementation of Consistent Hashing and
+// Package placement is an implementation of Consistent Hashing and
 // Consistent Hashing With Bounded Loads.
 //
 // https://en.wikipedia.org/wiki/Consistent_hashing
@@ -20,19 +20,23 @@ import (
 
 const replicationFactor = 10
 
+// ErrNoHosts is an error for no hosts
 var ErrNoHosts = errors.New("no hosts added")
 
+// PlacementTables is a table holding a map of consistent hashes with a given version
 type PlacementTables struct {
 	Version string
 	Entries map[string]*Consistent
 }
 
+// Host represents a host of stateful entities with a given name, port and load
 type Host struct {
 	Name string
 	Port int64
 	Load int64
 }
 
+// Consistent represents a data structure for consistent hashing
 type Consistent struct {
 	hosts     map[uint64]string
 	sortedSet []uint64
@@ -42,6 +46,7 @@ type Consistent struct {
 	sync.RWMutex
 }
 
+// NewPlacementTables returns new stateful placement tables with a given version
 func NewPlacementTables(version string, entries map[string]*Consistent) *PlacementTables {
 	return &PlacementTables{
 		Version: version,
@@ -49,6 +54,7 @@ func NewPlacementTables(version string, entries map[string]*Consistent) *Placeme
 	}
 }
 
+// NewHost returns a new host
 func NewHost(name string, load int64, port int64) *Host {
 	return &Host{
 		Name: name,
@@ -57,6 +63,7 @@ func NewHost(name string, load int64, port int64) *Host {
 	}
 }
 
+// NewConsistentHash returns a new consistent hash
 func NewConsistentHash() *Consistent {
 	return &Consistent{
 		hosts:     map[uint64]string{},
@@ -65,6 +72,7 @@ func NewConsistentHash() *Consistent {
 	}
 }
 
+// NewFromExisting creates a new consistent hash from existing values
 func NewFromExisting(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*Host) *Consistent {
 	return &Consistent{
 		hosts:     hosts,
@@ -73,6 +81,7 @@ func NewFromExisting(hosts map[uint64]string, sortedSet []uint64, loadMap map[st
 	}
 }
 
+// GetInternals returns the internal data structure of the consistent hash
 func (c *Consistent) GetInternals() (map[uint64]string, []uint64, map[string]*Host, int64) {
 	c.RLock()
 	defer c.RUnlock()
@@ -80,6 +89,7 @@ func (c *Consistent) GetInternals() (map[uint64]string, []uint64, map[string]*Ho
 	return c.hosts, c.sortedSet, c.loadMap, c.totalLoad
 }
 
+// Add adds a host with port to the table
 func (c *Consistent) Add(host string, port int64) bool {
 	c.Lock()
 	defer c.Unlock()
@@ -105,7 +115,7 @@ func (c *Consistent) Add(host string, port int64) bool {
 	return false
 }
 
-// Returns the host that owns `key`.
+// Get returns the host that owns `key`.
 //
 // As described in https://en.wikipedia.org/wiki/Consistent_hashing
 //
@@ -123,6 +133,7 @@ func (c *Consistent) Get(key string) (string, error) {
 	return c.hosts[c.sortedSet[idx]], nil
 }
 
+// GetHost gets a host
 func (c *Consistent) GetHost(key string) (*Host, error) {
 	h, err := c.Get(key)
 	if err != nil {
@@ -132,7 +143,7 @@ func (c *Consistent) GetHost(key string) (*Host, error) {
 	return c.loadMap[h], nil
 }
 
-// It uses Consistent Hashing With Bounded loads
+// GetLeast uses Consistent Hashing With Bounded loads
 //
 // https://research.googleblog.com/2017/04/consistent-hashing-with-bounded-loads.html
 //
@@ -175,7 +186,7 @@ func (c *Consistent) search(key uint64) int {
 	return idx
 }
 
-// Sets the load of `host` to the given `load`
+// UpdateLoad sets the load of `host` to the given `load`
 func (c *Consistent) UpdateLoad(host string, load int64) {
 	c.Lock()
 	defer c.Unlock()
@@ -188,7 +199,7 @@ func (c *Consistent) UpdateLoad(host string, load int64) {
 	c.totalLoad += load
 }
 
-// Increments the load of host by 1
+// Inc increments the load of host by 1
 //
 // should only be used with if you obtained a host with GetLeast
 func (c *Consistent) Inc(host string) {
@@ -199,7 +210,7 @@ func (c *Consistent) Inc(host string) {
 	atomic.AddInt64(&c.totalLoad, 1)
 }
 
-// Decrements the load of host by 1
+// Done decrements the load of host by 1
 //
 // should only be used with if you obtained a host with GetLeast
 func (c *Consistent) Done(host string) {
@@ -213,7 +224,7 @@ func (c *Consistent) Done(host string) {
 	atomic.AddInt64(&c.totalLoad, -1)
 }
 
-// Deletes host from the ring
+// Remove deletes host from the ring
 func (c *Consistent) Remove(host string) bool {
 	c.Lock()
 	defer c.Unlock()
@@ -227,7 +238,7 @@ func (c *Consistent) Remove(host string) bool {
 	return true
 }
 
-// Return the list of hosts in the ring
+// Hosts return the list of hosts in the ring
 func (c *Consistent) Hosts() (hosts []string) {
 	c.RLock()
 	defer c.RUnlock()
@@ -237,7 +248,7 @@ func (c *Consistent) Hosts() (hosts []string) {
 	return hosts
 }
 
-// Returns the loads of all the hosts
+// GetLoads returns the loads of all the hosts
 func (c *Consistent) GetLoads() map[string]int64 {
 	loads := map[string]int64{}
 
@@ -247,7 +258,7 @@ func (c *Consistent) GetLoads() map[string]int64 {
 	return loads
 }
 
-// Returns the maximum load of the single host
+// MaxLoad returns the maximum load of the single host
 // which is:
 // (total_load/number_of_hosts)*1.25
 // total_load = is the total number of active requests served by hosts
