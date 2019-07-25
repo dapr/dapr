@@ -1,5 +1,6 @@
 package actors
 
+// CallRequest is the request object to call an actor
 type CallRequest struct {
 	ActorType string            `json:"actorType"`
 	ActorID   string            `json:"actorId"`

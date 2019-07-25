@@ -2,6 +2,7 @@ package actors
 
 import "time"
 
+// Config is the actor runtime configuration
 type Config struct {
 	HostAddress                   string
 	ActionsID                     string

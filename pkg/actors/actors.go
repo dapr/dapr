@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// Actors allow calling into virtual actors as well as actor state mangements
 type Actors interface {
 	Call(req *CallRequest) (*CallResponse, error)
 	Init() error
@@ -49,6 +50,7 @@ const (
 	updateOperation = "update"
 )
 
+// NewActors create a new actors runtime with given config
 func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
