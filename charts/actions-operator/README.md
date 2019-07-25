@@ -64,11 +64,11 @@ kubectl get pods --namespace actions-system
 ## Uninstalling the Chart
 
 To uninstall/delete the `actions` release but continue to track the release:
-    ```
-    $ helm delete actions
-    ```
+```
+helm delete actions
+```
 
 To uninstall/delete the `actions` release completely and make its name free for later use:
-    ```
-    $ helm delete --purge actions
-    ```
+```
+helm delete --purge actions
+```
