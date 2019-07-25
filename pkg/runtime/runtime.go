@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -11,8 +12,10 @@ import (
 	"time"
 
 	"github.com/actionscore/actions/pkg/actors"
+	"github.com/actionscore/actions/pkg/components/pubsub"
 	"github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/messaging"
+	pubsub_loader "github.com/actionscore/actions/pkg/pubsub"
 	state_loader "github.com/actionscore/actions/pkg/state"
 
 	bindings_loader "github.com/actionscore/actions/pkg/bindings"
@@ -56,6 +59,8 @@ type ActionsRuntime struct {
 	bindingsRegistry   bindings.BindingsRegistry
 	inputBindings      map[string]bindings.InputBinding
 	outputBindings     map[string]bindings.OutputBinding
+	pubSubRegistry     pubsub.PubSubRegistry
+	pubSub             pubsub.PubSub
 	json               jsoniter.API
 	hostAddress        string
 }
@@ -71,6 +76,7 @@ func NewActionsRuntime(runtimeConfig *Config, globalConfig *config.Configuration
 		outputBindings:     map[string]bindings.OutputBinding{},
 		stateStoreRegistry: state.NewStateStoreRegistry(),
 		bindingsRegistry:   bindings.NewBindingsRegistry(),
+		pubSubRegistry:     pubsub.NewPubSubRegsitry(),
 	}
 }
 
@@ -121,6 +127,7 @@ func (a *ActionsRuntime) initRuntime() error {
 		log.Warnf("failed to init state: %s", err)
 	}
 
+	pubsub_loader.Load()
 	err = a.initPubSub()
 	if err != nil {
 		log.Warnf("failed to init pubsub: %s", err)
@@ -333,7 +340,7 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 }
 
 func (a *ActionsRuntime) startHTTPServer(port int, allowedOrigins string) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.actor)
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor)
 	serverConf := http.NewServerConfig(port, allowedOrigins)
 	server := http.NewServer(api, serverConf)
 	server.StartNonBlocking()
@@ -439,7 +446,7 @@ func (a *ActionsRuntime) initState(registry state.StateStoreRegistry) error {
 		if strings.Index(s.Spec.Type, "state") == 0 {
 			store, err := registry.CreateStateStore(s.Spec.Type)
 			if err != nil {
-				log.Warn(err)
+				log.Warnf("error creating state store %s: %s", s.Spec.Type, err)
 				continue
 			}
 
@@ -449,7 +456,7 @@ func (a *ActionsRuntime) initState(registry state.StateStoreRegistry) error {
 					Properties:     s.Spec.Properties,
 				})
 				if err != nil {
-					return err
+					log.Warnf("error initializing state store %s: %s", s.Spec.Type, err)
 				}
 
 				a.stateStore = store
@@ -461,7 +468,85 @@ func (a *ActionsRuntime) initState(registry state.StateStoreRegistry) error {
 	return nil
 }
 
+func (a *ActionsRuntime) getSubscribedTopicsFromApp() []string {
+	topics := []string{}
+
+	if a.appChannel == nil {
+		return topics
+	}
+
+	req := &channel.InvokeRequest{
+		Method:   "actions/subscribe",
+		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
+	}
+
+	resp, err := a.appChannel.InvokeMethod(req)
+	if err == nil && http.GetStatusCodeFromMetadata(resp.Metadata) == 200 {
+		err := json.Unmarshal(resp.Data, &topics)
+		if err != nil {
+			log.Errorf("error getting topics from app: %s", err)
+		}
+	}
+
+	return topics
+}
+
 func (a *ActionsRuntime) initPubSub() error {
+	for _, c := range a.components {
+		if strings.Index(c.Spec.Type, "pubsub") == 0 {
+			pubSub, err := a.pubSubRegistry.CreatePubSub(c.Spec.Type)
+			if err != nil {
+				log.Warnf("error creating pub sub %s: %s", c.Spec.Type, err)
+				continue
+			}
+
+			properties := c.Spec.Properties
+			if properties == nil {
+				properties = make(map[string]string, 1)
+			}
+			properties["consumerID"] = a.runtimeConfig.ID
+
+			err = pubSub.Init(pubsub.Metadata{
+				ConnectionInfo: c.Spec.ConnectionInfo,
+				Properties:     properties,
+			})
+			if err != nil {
+				log.Warnf("error initializing pub sub %s: %s", c.Spec.Type, err)
+				continue
+			}
+
+			a.pubSub = pubSub
+			break
+		}
+	}
+
+	if a.pubSub != nil && a.appChannel != nil {
+		topics := a.getSubscribedTopicsFromApp()
+		for _, t := range topics {
+			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
+				Topic: t,
+			}, a.onNewPublishedMessage)
+			if err != nil {
+				log.Warnf("failed to subscribe to topic %s: %s", t, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *ActionsRuntime) onNewPublishedMessage(msg *pubsub.NewMessage) error {
+	req := channel.InvokeRequest{
+		Method:   msg.Topic,
+		Payload:  msg.Data,
+		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post},
+	}
+
+	resp, err := a.appChannel.InvokeMethod(&req)
+	if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
+		return fmt.Errorf("error from app: %s", err)
+	}
+
 	return nil
 }
 
