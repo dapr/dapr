@@ -44,12 +44,25 @@ func (d mockDirectMessaging) Invoke(req *messaging.DirectMessageRequest) (*messa
 }
 
 func TestOnDirectMessage(t *testing.T) {
-	testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}}
-	c := &routing.Context{}
-	request := fasthttp.Request{}
-	request.URI().Parse(nil, []byte("http://www.microsoft.com/dummy?param1=val1&param2=val2"))
-	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
-	err := testAPI.onDirectMessage(c)
-	assert.NoError(t, err)
-	assert.Equal(t, "param1=val1&param2=val2", string(c.Response.Body()))
+	t.Run("with parameters", func(t *testing.T) {
+		testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}}
+		c := &routing.Context{}
+		request := fasthttp.Request{}
+		request.URI().Parse(nil, []byte("http://www.microsoft.com/dummy?param1=val1&param2=val2"))
+		c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+		err := testAPI.onDirectMessage(c)
+		assert.NoError(t, err)
+		assert.Equal(t, "param1=val1&param2=val2", string(c.Response.Body()))
+	})
+
+	t.Run("without parameters", func(t *testing.T) {
+		testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}}
+		c := &routing.Context{}
+		request := fasthttp.Request{}
+		request.URI().Parse(nil, []byte("http://www.microsoft.com/dummy"))
+		c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+		err := testAPI.onDirectMessage(c)
+		assert.NoError(t, err)
+		assert.Equal(t, "", string(c.Response.Body()))
+	})
 }

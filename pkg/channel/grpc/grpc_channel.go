@@ -40,20 +40,9 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 
 	c := pb.NewAppClient(g.client)
 
-	var metadata map[string]string
-	if val, ok := req.Metadata[QueryString]; ok {
-		metadata = make(map[string]string)
-		params, err := url.ParseQuery(val)
-		if err != nil {
-			return nil, err
-		}
-		for k, v := range params {
-			if len(v) != 1 {
-				metadata[k] = strings.Join(v, ",")
-			} else {
-				metadata[k] = v[0]
-			}
-		}
+	metadata, err := putQueryStringinMetadata(req)
+	if err != nil {
+		return nil, err
 	}
 	msg := pb.AppMethodCallEnvelope{
 		Data:     &any.Any{Value: req.Payload},
@@ -70,4 +59,23 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 		Data:     resp.Value,
 		Metadata: map[string]string{},
 	}, nil
+}
+
+func putQueryStringinMetadata(req *channel.InvokeRequest) (map[string]string, error) {
+	var metadata map[string]string
+	if val, ok := req.Metadata[QueryString]; ok {
+		metadata = make(map[string]string)
+		params, err := url.ParseQuery(val)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range params {
+			if len(v) != 1 {
+				metadata[k] = strings.Join(v, ",")
+			} else {
+				metadata[k] = v[0]
+			}
+		}
+	}
+	return metadata, nil
 }

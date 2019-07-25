@@ -54,5 +54,6 @@ func TestInvokeMethod(t *testing.T) {
 	grpcServer.Stop()
 
 	assert.NoError(t, err)
-	assert.Equal(t, "param1=val1&param2=val2&", string(response.Data))
+	assert.True(t, "param1=val1&param2=val2&" == string(response.Data) ||
+		"param2=val2&param1=val1&" == string(response.Data))
 }
