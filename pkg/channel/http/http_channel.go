@@ -22,8 +22,10 @@ const (
 	Delete = "DELETE"
 	// Put is an HTTP Put method
 	Put = "PUT"
-	// OPTIONS is an HTTP OPTIONS method
+	// Options is an HTTP OPTIONS method
 	Options = "OPTIONS"
+	// QueryString is the query string passed by the request
+	QueryString = "http.query_string"
 )
 
 // Channel is an HTTP implementation of an AppChannel
@@ -38,6 +40,9 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	uri := fmt.Sprintf("%s/%s", h.baseAddress, invokeRequest.Method)
 	req.SetRequestURI(uri)
 	req.SetBody(invokeRequest.Payload)
+	if val, ok := invokeRequest.Metadata[QueryString]; ok {
+		req.URI().SetQueryString(val)
+	}
 	req.Header.SetContentType("application/json")
 
 	method := invokeRequest.Metadata[HTTPVerb]

@@ -3,6 +3,8 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/any"
@@ -26,15 +28,37 @@ func CreateLocalChannel(port int, conn *grpc.ClientConn) *Channel {
 	}
 }
 
+const (
+	// QueryString is the query string passed by the request
+	QueryString = "http.query_string"
+)
+
 // InvokeMethod invokes user code via gRPC
 func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
 	defer cancel()
 
 	c := pb.NewAppClient(g.client)
+
+	var metadata map[string]string
+	if val, ok := req.Metadata[QueryString]; ok {
+		metadata = make(map[string]string)
+		params, err := url.ParseQuery(val)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range params {
+			if len(v) != 1 {
+				metadata[k] = strings.Join(v, ",")
+			} else {
+				metadata[k] = v[0]
+			}
+		}
+	}
 	msg := pb.AppMethodCallEnvelope{
-		Data:   &any.Any{Value: req.Payload},
-		Method: req.Method,
+		Data:     &any.Any{Value: req.Payload},
+		Method:   req.Method,
+		Metadata: metadata,
 	}
 
 	resp, err := c.OnMethodCall(ctx, &msg)
