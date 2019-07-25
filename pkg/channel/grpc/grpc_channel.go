@@ -40,7 +40,7 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 
 	c := pb.NewAppClient(g.client)
 
-	metadata, err := putQueryStringinMetadata(req)
+	metadata, err := getQueryStringFromMetadata(req)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 	}, nil
 }
 
-func putQueryStringinMetadata(req *channel.InvokeRequest) (map[string]string, error) {
+func getQueryStringFromMetadata(req *channel.InvokeRequest) (map[string]string, error) {
 	var metadata map[string]string
 	if val, ok := req.Metadata[QueryString]; ok {
 		metadata = make(map[string]string)
