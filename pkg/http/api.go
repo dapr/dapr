@@ -44,7 +44,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, actor actors.Actors) API {
+func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors) API {
 	api := &api{
 		appChannel:      appChannel,
 		directMessaging: directMessaging,
