@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// Mock PubSub
 type MockPubSub struct {
 	mock.Mock
 }
