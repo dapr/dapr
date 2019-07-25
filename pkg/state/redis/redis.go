@@ -15,23 +15,26 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
-type RedisStateStore struct {
+// StateStore is a Redis state store
+type StateStore struct {
 	client *redis.SyncCtx
 	json   jsoniter.API
 }
 
-type RedisCredentials struct {
+type credenials struct {
 	Host     string `json:"redisHost"`
 	Password string `json:"redisPassword"`
 }
 
-func NewRedisStateStore() *RedisStateStore {
-	return &RedisStateStore{
+// NewRedisStateStore returns a new redis state store
+func NewRedisStateStore() *StateStore {
+	return &StateStore{
 		json: jsoniter.ConfigFastest,
 	}
 }
 
-func (r *RedisStateStore) Init(metadata state.Metadata) error {
+// Init does metadata and connection parsing
+func (r *StateStore) Init(metadata state.Metadata) error {
 	rand.Seed(time.Now().Unix())
 
 	connInfo := metadata.ConnectionInfo
@@ -40,7 +43,7 @@ func (r *RedisStateStore) Init(metadata state.Metadata) error {
 		return err
 	}
 
-	var redisCreds RedisCredentials
+	var redisCreds credenials
 	err = json.Unmarshal(b, &redisCreds)
 	if err != nil {
 		return err
@@ -63,7 +66,8 @@ func (r *RedisStateStore) Init(metadata state.Metadata) error {
 	return nil
 }
 
-func (r *RedisStateStore) Delete(req *state.DeleteRequest) error {
+// Delete performs a delete operation
+func (r *StateStore) Delete(req *state.DeleteRequest) error {
 	res := r.client.Do(context.Background(), "DEL", req.Key)
 	if err := redis.AsError(res); err != nil {
 		return err
@@ -72,7 +76,8 @@ func (r *RedisStateStore) Delete(req *state.DeleteRequest) error {
 	return nil
 }
 
-func (r *RedisStateStore) BulkDelete(req []state.DeleteRequest) error {
+// BulkDelete performs a bulk delete operation
+func (r *StateStore) BulkDelete(req []state.DeleteRequest) error {
 	keys := make([]interface{}, len(req))
 	for i, r := range req {
 		keys[i] = r
@@ -86,7 +91,8 @@ func (r *RedisStateStore) BulkDelete(req []state.DeleteRequest) error {
 	return nil
 }
 
-func (r *RedisStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+// Get retrieves state from redis with a key
+func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	res := r.client.Do(context.Background(), "GET", req.Key)
 	if err := redis.AsError(res); err != nil {
 		return nil, err
@@ -102,7 +108,8 @@ func (r *RedisStateStore) Get(req *state.GetRequest) (*state.GetResponse, error)
 	}, nil
 }
 
-func (r *RedisStateStore) Set(req *state.SetRequest) error {
+// Set saves state into redis
+func (r *StateStore) Set(req *state.SetRequest) error {
 	b, _ := r.json.Marshal(req.Value)
 	res := r.client.Do(context.Background(), "SET", req.Key, b)
 	if err := redis.AsError(res); err != nil {
@@ -112,7 +119,8 @@ func (r *RedisStateStore) Set(req *state.SetRequest) error {
 	return nil
 }
 
-func (r *RedisStateStore) BulkSet(req []state.SetRequest) error {
+// BulkSet performs a bulks save operation
+func (r *StateStore) BulkSet(req []state.SetRequest) error {
 	for _, s := range req {
 		err := r.Set(&s)
 		if err != nil {

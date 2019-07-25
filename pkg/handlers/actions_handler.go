@@ -15,36 +15,42 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Protocol is a communication protocol type
 type Protocol string
 
 const (
-	actionsEnabledAnnotationKey            = "actions.io/enabled"
-	actionsIDAnnotationKey                 = "actions.io/id"
-	actionsProtocolAnnotationKey           = "actions.io/protocol"
-	actionsConfigAnnotationKey             = "actions.io/config"
-	actionsEnabledAnnotationValue          = "true"
-	actionSidecarContainerName             = "actionsrt"
-	actionSidecarHTTPPortName              = "actions-http"
-	actionSidecarGRPCPortName              = "actions-grpc"
-	actionSidecarHTTPPort                  = 3500
-	actionSidecarGRPCPort                  = 50001
-	apiAddress                             = "http://actions-api.default.svc.cluster.local"
-	placementAddress                       = "actions-placement.default.svc.cluster.local:80"
-	HTTPProtocol                  Protocol = "http"
-	GRPCProtocol                  Protocol = "grpc"
+	actionsEnabledAnnotationKey   = "actions.io/enabled"
+	actionsIDAnnotationKey        = "actions.io/id"
+	actionsProtocolAnnotationKey  = "actions.io/protocol"
+	actionsConfigAnnotationKey    = "actions.io/config"
+	actionsEnabledAnnotationValue = "true"
+	actionSidecarContainerName    = "actionsrt"
+	actionSidecarHTTPPortName     = "actions-http"
+	actionSidecarGRPCPortName     = "actions-grpc"
+	actionSidecarHTTPPort         = 3500
+	actionSidecarGRPCPort         = 50001
+	apiAddress                    = "http://actions-api.default.svc.cluster.local"
+	placementAddress              = "actions-placement.default.svc.cluster.local:80"
+	// HTTPProtocol represents an http protocol
+	HTTPProtocol Protocol = "http"
+	// GRPCProtocol represents a grpc protocol
+	GRPCProtocol Protocol = "grpc"
 )
 
+// ActionsHandler handles the lifetime for Actions CRDs
 type ActionsHandler struct {
 	Client          scheme.Interface
 	DeploymentsLock *sync.Mutex
 	Config          ActionsHandlerConfig
 }
 
+// Config object for the handler
 type ActionsHandlerConfig struct {
 	RuntimeImage        string
 	ImagePullSecretName string
 }
 
+// NewActionsHandler returns a new Actions handler
 func NewActionsHandler(client scheme.Interface, config ActionsHandlerConfig) *ActionsHandler {
 	return &ActionsHandler{
 		Config:          config,
@@ -53,32 +59,35 @@ func NewActionsHandler(client scheme.Interface, config ActionsHandlerConfig) *Ac
 	}
 }
 
+// Init allows for various startup tasks
 func (r *ActionsHandler) Init() error {
 	log.Info("ActionsHandler.Init")
 	return nil
 }
 
+// GetEventingSidecar creates a container for the Actions runtime
 func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol, actionName, config, actionSidecarImage string) v1.Container {
 	return v1.Container{
 		Name:            actionSidecarContainerName,
 		Image:           actionSidecarImage,
 		ImagePullPolicy: corev1.PullAlways,
 		Ports: []v1.ContainerPort{
-			v1.ContainerPort{
+			{
 				ContainerPort: int32(actionSidecarHTTPPort),
 				Name:          actionSidecarHTTPPortName,
 			},
-			v1.ContainerPort{
+			{
 				ContainerPort: int32(actionSidecarGRPCPort),
 				Name:          actionSidecarGRPCPortName,
 			},
 		},
 		Command: []string{"/actionsrt"},
-		Env:     []v1.EnvVar{v1.EnvVar{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}},
+		Env:     []v1.EnvVar{{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}},
 		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--actions-id", actionName, "--control-plane-address", apiAddress, "--protocol", applicationProtocol, "--placement-address", placementAddress, "--config", config},
 	}
 }
 
+// GetApplicationPort returns the port used by the app
 func (r *ActionsHandler) GetApplicationPort(containers []v1.Container) string {
 	for _, c := range containers {
 		if (c.Name != actionSidecarHTTPPortName && c.Name != actionSidecarGRPCPortName) && len(c.Ports) > 0 {
@@ -89,6 +98,7 @@ func (r *ActionsHandler) GetApplicationPort(containers []v1.Container) string {
 	return ""
 }
 
+// CreateEventingService creates a new kubernetes service that points to the Actions runtime container
 func (r *ActionsHandler) CreateEventingService(name string, deployment *appsv1.Deployment) error {
 	serviceName := fmt.Sprintf("%s-%s", name, "action")
 	exists := kubernetes.ServiceExists(serviceName, deployment.ObjectMeta.Namespace)
@@ -105,13 +115,13 @@ func (r *ActionsHandler) CreateEventingService(name string, deployment *appsv1.D
 		Spec: corev1.ServiceSpec{
 			Selector: deployment.Spec.Selector.MatchLabels,
 			Ports: []corev1.ServicePort{
-				corev1.ServicePort{
+				{
 					Protocol:   corev1.ProtocolTCP,
 					Port:       80,
 					TargetPort: intstr.FromInt(actionSidecarHTTPPort),
 					Name:       actionSidecarHTTPPortName,
 				},
-				corev1.ServicePort{
+				{
 					Protocol:   corev1.ProtocolTCP,
 					Port:       int32(actionSidecarGRPCPort),
 					TargetPort: intstr.FromInt(actionSidecarGRPCPort),
@@ -131,6 +141,7 @@ func (r *ActionsHandler) CreateEventingService(name string, deployment *appsv1.D
 	return nil
 }
 
+// GetActionName gets the unique Actions ID from deployment annotations
 func (r *ActionsHandler) GetActionName(deployment *appsv1.Deployment) string {
 	annotations := deployment.ObjectMeta.GetAnnotations()
 	if val, ok := annotations[actionsIDAnnotationKey]; ok && val != "" {
@@ -140,6 +151,7 @@ func (r *ActionsHandler) GetActionName(deployment *appsv1.Deployment) string {
 	return deployment.GetName()
 }
 
+// GetAppProtocol returns a new protocol. either http or grpc
 func (r *ActionsHandler) GetAppProtocol(deployment *appsv1.Deployment) string {
 	if val, ok := deployment.ObjectMeta.Annotations[actionsProtocolAnnotationKey]; ok && val != "" {
 		if Protocol(val) != HTTPProtocol && Protocol(val) != GRPCProtocol {
@@ -152,6 +164,7 @@ func (r *ActionsHandler) GetAppProtocol(deployment *appsv1.Deployment) string {
 	return string(HTTPProtocol)
 }
 
+// GetAppConfig returns an actions config annotation value
 func (r *ActionsHandler) GetAppConfig(deployment *appsv1.Deployment) string {
 	if val, ok := deployment.ObjectMeta.Annotations[actionsConfigAnnotationKey]; ok && val != "" {
 		return val
@@ -160,6 +173,7 @@ func (r *ActionsHandler) GetAppConfig(deployment *appsv1.Deployment) string {
 	return ""
 }
 
+// IsAnnotatedForActions checks whether a deployment has Actions annotation
 func (r *ActionsHandler) IsAnnotatedForActions(deployment *appsv1.Deployment) bool {
 	annotations := deployment.ObjectMeta.Annotations
 	if annotations != nil {
@@ -171,6 +185,7 @@ func (r *ActionsHandler) IsAnnotatedForActions(deployment *appsv1.Deployment) bo
 	return false
 }
 
+// ActionEnabled checks whether the Actions sidecar is running inside a pod
 func (r *ActionsHandler) ActionEnabled(deployment *appsv1.Deployment) bool {
 	for _, c := range deployment.Spec.Template.Spec.Containers {
 		if c.Name == actionSidecarContainerName {
@@ -181,6 +196,7 @@ func (r *ActionsHandler) ActionEnabled(deployment *appsv1.Deployment) bool {
 	return false
 }
 
+// EnableAction creates an Actions sidecar and updates a deployment
 func (r *ActionsHandler) EnableAction(deployment *appsv1.Deployment) error {
 	appPort := r.GetApplicationPort(deployment.Spec.Template.Spec.Containers)
 	appProtocol := r.GetAppProtocol(deployment)
@@ -208,6 +224,7 @@ func (r *ActionsHandler) EnableAction(deployment *appsv1.Deployment) error {
 	return nil
 }
 
+// RemoveActionFromDeployment removes the Actions container from a deployment
 func (r *ActionsHandler) RemoveActionFromDeployment(deployment *appsv1.Deployment) error {
 	for i := len(deployment.Spec.Template.Spec.Containers) - 1; i >= 0; i-- {
 		if deployment.Spec.Template.Spec.Containers[i].Name == actionSidecarContainerName {
@@ -223,6 +240,7 @@ func (r *ActionsHandler) RemoveActionFromDeployment(deployment *appsv1.Deploymen
 	return nil
 }
 
+// ObjectCreated handles Actions crds creation
 func (r *ActionsHandler) ObjectCreated(obj interface{}) {
 	r.DeploymentsLock.Lock()
 
@@ -252,8 +270,10 @@ func (r *ActionsHandler) ObjectCreated(obj interface{}) {
 	r.DeploymentsLock.Unlock()
 }
 
+// ObjectDeleted handles Actions crd updates
 func (r *ActionsHandler) ObjectUpdated(old interface{}, new interface{}) {
 }
 
+// ObjectDeleted handles Actions crd deletion
 func (r *ActionsHandler) ObjectDeleted(obj interface{}) {
 }

@@ -10,6 +10,7 @@ import (
 	pb "github.com/actionscore/actions/pkg/proto"
 )
 
+// Server is an interface for the actions gRPC server
 type Server interface {
 	StartNonBlocking() error
 }
@@ -19,6 +20,7 @@ type server struct {
 	config ServerConfig
 }
 
+// NewServer returns a new gRPC server
 func NewServer(api API, config ServerConfig) Server {
 	return &server{
 		api:    api,
@@ -26,6 +28,7 @@ func NewServer(api API, config ServerConfig) Server {
 	}
 }
 
+// StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", s.config.Port))
 	if err != nil {

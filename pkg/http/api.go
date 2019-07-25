@@ -17,6 +17,7 @@ import (
 	routing "github.com/qiangxue/fasthttp-routing"
 )
 
+// API returns a list of HTTP endpoints for Actions
 type API interface {
 	APIEndpoints() []Endpoint
 }
@@ -42,6 +43,7 @@ const (
 	topicParam     = "topic"
 )
 
+// NewAPI returns a new API
 func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors) API {
 	api := &api{
 		appChannel:      appChannel,
@@ -61,25 +63,26 @@ func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging mess
 	return api
 }
 
+// APIEndpoints returns the list of registered endpoints
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
 	return []Endpoint{
-		Endpoint{
+		{
 			Methods: []string{http.Get},
 			Route:   "state/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetState,
 		},
-		Endpoint{
+		{
 			Methods: []string{http.Post},
 			Route:   "state",
 			Version: apiVersionV1,
 			Handler: a.onPostState,
 		},
-		Endpoint{
+		{
 			Methods: []string{http.Delete},
 			Route:   "state/<key>",
 			Version: apiVersionV1,
@@ -101,13 +104,13 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
-		Endpoint{
+		{
 			Methods: []string{http.Get, http.Post, http.Delete, http.Put},
 			Route:   "actions/<id>/<method>",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
 		},
-		Endpoint{
+		{
 			Methods: []string{http.Post},
 			Route:   "invoke/*",
 			Version: apiVersionV1,
@@ -118,19 +121,19 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 
 func (a *api) constructActorEndpoints() []Endpoint {
 	return []Endpoint{
-		Endpoint{
+		{
 			Methods: []string{http.Get, http.Post, http.Delete, http.Put},
 			Route:   "actors/<actorType>/<actorId>/<method>",
 			Version: apiVersionV1,
 			Handler: a.onDirectActorMessage,
 		},
-		Endpoint{
+		{
 			Methods: []string{http.Post, http.Put},
 			Route:   "actors/<actorType>/<actorId>/state",
 			Version: apiVersionV1,
 			Handler: a.OnSaveActorState,
 		},
-		Endpoint{
+		{
 			Methods: []string{http.Get},
 			Route:   "actors/<actorType>/<actorId>/state",
 			Version: apiVersionV1,
@@ -141,7 +144,7 @@ func (a *api) constructActorEndpoints() []Endpoint {
 
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
-		Endpoint{
+		{
 			Methods: []string{http.Get},
 			Route:   "metadata",
 			Version: apiVersionV1,

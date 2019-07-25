@@ -14,28 +14,27 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
+// AWSSQS allows receiving and sending data to/from AWS SQS
 type AWSSQS struct {
 	Spec     bindings.Metadata
 	Client   *sqs.SQS
 	QueueURL *string
 }
 
-type AWSSQSMetadata struct {
+// Metadata is the config for AWS SQS
+type Metadata struct {
 	QueueName string `json:"queueName"`
 	Region    string `json:"region"`
 	AccessKey string `json:"accessKey"`
 	SecretKey string `json:"secretKey"`
 }
 
-type SQSDataPayload struct {
-	Message interface{} `json:"message"`
-	Subject interface{} `json:"subject"`
-}
-
+// NewAWSSQS returns a new AWS SQS instance
 func NewAWSSQS() *AWSSQS {
 	return &AWSSQS{}
 }
 
+// Init does metadata parsing and connection creation
 func (a *AWSSQS) Init(metadata bindings.Metadata) error {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	a.Spec = metadata
@@ -117,13 +116,14 @@ func (a *AWSSQS) Read(handler func(*bindings.ReadResponse) error) error {
 	}
 }
 
-func (a *AWSSQS) GetAWSMetadata() (*AWSSQSMetadata, error) {
+// GetAWSMetadata gets AWS metadata
+func (a *AWSSQS) GetAWSMetadata() (*Metadata, error) {
 	b, err := json.Marshal(a.Spec.ConnectionInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	var awsMeta AWSSQSMetadata
+	var awsMeta Metadata
 	err = json.Unmarshal(b, &awsMeta)
 	if err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func (a *AWSSQS) GetAWSMetadata() (*AWSSQSMetadata, error) {
 	return &awsMeta, nil
 }
 
-func (a *AWSSQS) getClient(awsMeta *AWSSQSMetadata) (*sqs.SQS, error) {
+func (a *AWSSQS) getClient(awsMeta *Metadata) (*sqs.SQS, error) {
 	os.Setenv("AWS_ACCESS_KEY_ID", awsMeta.AccessKey)
 	os.Setenv("AWS_SECRET_ACCESS_KEY", awsMeta.SecretKey)
 	os.Setenv("AWS_REGION", awsMeta.Region)

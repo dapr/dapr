@@ -12,19 +12,23 @@ import (
 	"github.com/joomcode/redispipe/redisconn"
 )
 
+// Redis is a redis output binding
 type Redis struct {
 	client *redis.SyncCtx
 }
 
-type RedisCredentials struct {
+// Credentials is the connection config object for redis
+type Credentials struct {
 	Host     string `json:"redisHost"`
 	Password string `json:"redisPassword"`
 }
 
+// NewRedis returns a new redis instance
 func NewRedis() *Redis {
 	return &Redis{}
 }
 
+// Init performs metadata parsing and connection creation
 func (r *Redis) Init(metadata bindings.Metadata) error {
 	connInfo := metadata.ConnectionInfo
 	b, err := json.Marshal(connInfo)
@@ -32,7 +36,7 @@ func (r *Redis) Init(metadata bindings.Metadata) error {
 		return err
 	}
 
-	var redisCreds RedisCredentials
+	var redisCreds Credentials
 	err = json.Unmarshal(b, &redisCreds)
 	if err != nil {
 		return err

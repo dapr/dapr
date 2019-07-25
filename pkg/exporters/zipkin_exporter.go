@@ -7,15 +7,17 @@ import (
 	"go.opencensus.io/trace"
 )
 
+// ZipkinExporter is an OpenCensus zipkin exporter
 type ZipkinExporter struct {
 }
 
-func (z ZipkinExporter) Init(action_id string, action_address string, exporter_address string) error {
-	localEndpoint, err := openzipkin.NewEndpoint(action_id, action_address)
+// Init creates a new zipkin endpoint and reporter
+func (z ZipkinExporter) Init(actionsID string, actionsAddress string, exporterAddress string) error {
+	localEndpoint, err := openzipkin.NewEndpoint(actionsID, actionsAddress)
 	if err != nil {
 		return err
 	}
-	reporter := zipkinHTTP.NewReporter(exporter_address)
+	reporter := zipkinHTTP.NewReporter(exporterAddress)
 	ze := zipkin.NewExporter(reporter, localEndpoint)
 	trace.RegisterExporter(ze)
 	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})

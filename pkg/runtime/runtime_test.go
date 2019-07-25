@@ -24,7 +24,7 @@ const (
 
 func TestNewRuntime(t *testing.T) {
 	// act
-	r := NewActionsRuntime(&RuntimeConfig{}, &config.Configuration{})
+	r := NewActionsRuntime(&Config{}, &config.Configuration{})
 
 	// assert
 	assert.NotNil(t, r, "runtime must be initiated")

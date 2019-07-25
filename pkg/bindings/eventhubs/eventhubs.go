@@ -15,23 +15,28 @@ import (
 	"github.com/actionscore/actions/pkg/components/bindings"
 )
 
+// AzureEventHubs allows sending/receiving Azure Event Hubs events
 type AzureEventHubs struct {
 	Spec bindings.Metadata
 }
 
+// AzureEventHubsMetadata is Azure Event Hubs connection metadata
 type AzureEventHubsMetadata struct {
 	ConnectionString string `json:"connectionString"`
 }
 
+// NewAzureEventHubs returns a new Azure Event hubs instance
 func NewAzureEventHubs() *AzureEventHubs {
 	return &AzureEventHubs{}
 }
 
+// Init performs metadata init
 func (a *AzureEventHubs) Init(metadata bindings.Metadata) error {
 	a.Spec = metadata
 	return nil
 }
 
+// GetBytes turns an interface{} to a byte array representation
 func GetBytes(key interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -42,6 +47,7 @@ func GetBytes(key interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Write posts an event hubs message
 func (a *AzureEventHubs) Write(req *bindings.WriteRequest) error {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
@@ -74,6 +80,7 @@ func (a *AzureEventHubs) Write(req *bindings.WriteRequest) error {
 	return nil
 }
 
+// Read reads from eventhubs in a non-blocking fashion
 func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 

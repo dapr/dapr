@@ -17,20 +17,24 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
+// MQTT allows sending and receving data to/from an MQTT broker
 type MQTT struct {
-	Metadata *MQTTMetadata
+	Metadata *Metadata
 	Client   mqtt.Client
 }
 
-type MQTTMetadata struct {
+// Metadata is the MQTT config
+type Metadata struct {
 	URL   string `json:"url"`
 	Topic string `json:"topic"`
 }
 
+// NewMQTT returns a new MQTT instance
 func NewMQTT() *MQTT {
 	return &MQTT{}
 }
 
+// Init does MQTT connection parsing
 func (m *MQTT) Init(metadata bindings.Metadata) error {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
@@ -52,13 +56,14 @@ func (m *MQTT) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (m *MQTT) GetMQTTMetadata(metadata bindings.Metadata) (*MQTTMetadata, error) {
+// GetMQTTMetadata returns new MQTT metadata
+func (m *MQTT) GetMQTTMetadata(metadata bindings.Metadata) (*Metadata, error) {
 	b, err := json.Marshal(metadata.ConnectionInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	var mqttMetadata MQTTMetadata
+	var mqttMetadata Metadata
 	err = json.Unmarshal(b, &mqttMetadata)
 	if err != nil {
 		return nil, err

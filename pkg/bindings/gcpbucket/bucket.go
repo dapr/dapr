@@ -13,10 +13,12 @@ import (
 	"google.golang.org/api/option"
 )
 
+// GCPStorage allows saving data to GCP bucket storage
 type GCPStorage struct {
 	Spec bindings.Metadata
 }
 
+// GCPMetadata represents a GCP bucket config
 type GCPMetadata struct {
 	Bucket              string `json:"bucket"`
 	Type                string `json:"type"`
@@ -31,10 +33,12 @@ type GCPMetadata struct {
 	ClientCertURL       string `json:"client_x509_cert_url"`
 }
 
+// NewGCPStorage returns a new GCP storage instance
 func NewGCPStorage() *GCPStorage {
 	return &GCPStorage{}
 }
 
+// Init performs connction parsing
 func (g *GCPStorage) Init(metadata bindings.Metadata) error {
 	g.Spec = metadata
 	return nil

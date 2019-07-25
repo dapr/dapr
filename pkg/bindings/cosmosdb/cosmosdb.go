@@ -10,12 +10,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// CosmosDB allows performing state operations on collections
 type CosmosDB struct {
 	client     *documentdb.DocumentDB
 	collection *documentdb.Collection
 	db         *documentdb.Database
 }
 
+// CosmosDBCredentials is the credentials config for the CosmosDB client
 type CosmosDBCredentials struct {
 	URL        string `json:"url"`
 	MasterKey  string `json:"masterKey"`
@@ -23,16 +25,19 @@ type CosmosDBCredentials struct {
 	Collection string `json:"collection"`
 }
 
+// CosmosItem is a wrapper item around a CosmosDB document
 type CosmosItem struct {
 	documentdb.Document
 	ID    string      `json:"id"`
 	Value interface{} `json:"value"`
 }
 
+// NewCosmosDB returns a new CosmosDB instance
 func NewCosmosDB() *CosmosDB {
 	return &CosmosDB{}
 }
 
+// Init performs CosmosDB connection parsing and connecting
 func (c *CosmosDB) Init(metadata bindings.Metadata) error {
 	connInfo := metadata.ConnectionInfo
 	b, err := json.Marshal(connInfo)

@@ -46,10 +46,10 @@ const (
 
 // ActionsRuntime holds all the core components of the runtime
 type ActionsRuntime struct {
-	runtimeConfig      *RuntimeConfig
+	runtimeConfig      *Config
 	globalConfig       *config.Configuration
 	components         []components.Component
-	grpc               *grpc.GRPCManager
+	grpc               *grpc.Manager
 	appChannel         channel.AppChannel
 	appConfig          config.ApplicationConfig
 	directMessaging    messaging.DirectMessaging
@@ -66,7 +66,7 @@ type ActionsRuntime struct {
 }
 
 // NewActionsRuntime returns a new runtime with the given runtime config and global config
-func NewActionsRuntime(runtimeConfig *RuntimeConfig, globalConfig *config.Configuration) *ActionsRuntime {
+func NewActionsRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *ActionsRuntime {
 	return &ActionsRuntime{
 		runtimeConfig:      runtimeConfig,
 		globalConfig:       globalConfig,

@@ -7,23 +7,27 @@ import (
 	"github.com/streadway/amqp"
 )
 
+// RabbitMQ allows sending/receving data to/from RabbitMQ
 type RabbitMQ struct {
 	connection *amqp.Connection
 	channel    *amqp.Channel
-	metadata   *RabbitMQMetadata
+	metadata   *Metadata
 }
 
-type RabbitMQMetadata struct {
+// Metadata is the rabbitmq config
+type Metadata struct {
 	QueueName        string `json:"queueName"`
 	Host             string `json:"host"`
 	Durable          bool   `json:"durable"`
 	DeleteWhenUnused bool   `json:"deleteWhenUnused"`
 }
 
+// NewRabbitMQ returns a new rabbitmq instance
 func NewRabbitMQ() *RabbitMQ {
 	return &RabbitMQ{}
 }
 
+// Init does metadata parsing and connection creation
 func (r *RabbitMQ) Init(metadata bindings.Metadata) error {
 	meta, err := r.GetRabbitMQMetadata(metadata)
 	if err != nil {
@@ -65,13 +69,14 @@ func (r *RabbitMQ) Write(req *bindings.WriteRequest) error {
 	return nil
 }
 
-func (r *RabbitMQ) GetRabbitMQMetadata(metadata bindings.Metadata) (*RabbitMQMetadata, error) {
+// GetRabbitMQMetadata gets rabbitmq metadata
+func (r *RabbitMQ) GetRabbitMQMetadata(metadata bindings.Metadata) (*Metadata, error) {
 	b, err := json.Marshal(metadata.ConnectionInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	var rabbitMQMeta RabbitMQMetadata
+	var rabbitMQMeta Metadata
 	err = json.Unmarshal(b, &rabbitMQMeta)
 	if err != nil {
 		return nil, err
