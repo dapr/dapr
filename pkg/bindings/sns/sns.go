@@ -10,10 +10,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/sns"
 )
 
+// AWSSns is an AWS SNS binding
 type AWSSns struct {
 	Spec bindings.Metadata
 }
 
+// AWSSnsMetadata is the config object for AWSSns
 type AWSSnsMetadata struct {
 	TopicArn  string `json:"topicArn"`
 	Region    string `json:"region"`
@@ -21,15 +23,18 @@ type AWSSnsMetadata struct {
 	SecretKey string `json:"secretKey"`
 }
 
-type SNSDataPayload struct {
+// DataPayload is a wrapper object around SNS payloads
+type DataPayload struct {
 	Message interface{} `json:"message"`
 	Subject interface{} `json:"subject"`
 }
 
+// NewAWSSns creates a new SNS
 func NewAWSSns() *AWSSns {
 	return &AWSSns{}
 }
 
+// Init does metadata parsing
 func (a *AWSSns) Init(metadata bindings.Metadata) error {
 	a.Spec = metadata
 	return nil
@@ -54,7 +59,7 @@ func (a *AWSSns) Write(req *bindings.WriteRequest) error {
 	s := session.Must(session.NewSession())
 	c := sns.New(s)
 
-	var payload SNSDataPayload
+	var payload DataPayload
 	err = json.Unmarshal(req.Data, &payload)
 	if err != nil {
 		return err

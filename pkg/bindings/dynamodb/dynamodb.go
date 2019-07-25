@@ -12,27 +12,32 @@ import (
 	"github.com/google/uuid"
 )
 
+//DynamoDB allows performing stateful operations on AWS DynamoDB
 type DynamoDB struct {
 	client *dynamodb.DynamoDB
 	table  string
 }
 
-type DynamoDBMetadata struct {
+// Metadata is the metadata for DynamoDB
+type Metadata struct {
 	Region    string `json:"region"`
 	AccessKey string `json:"accessKey"`
 	SecretKey string `json:"secretKey"`
 	Table     string `json:"table"`
 }
 
+// DynamoItem is a wrapper around a DynamoDB value
 type DynamoItem struct {
 	ID    string      `json:"id"`
 	Value interface{} `json:"value"`
 }
 
+// NewDynamoDB returns a new DynamoDB instance
 func NewDynamoDB() *DynamoDB {
 	return &DynamoDB{}
 }
 
+// Init performs connection parsing for DynamoDB
 func (d *DynamoDB) Init(metadata bindings.Metadata) error {
 	meta, err := d.GetDynamoDBMetadata(metadata)
 	if err != nil {
@@ -80,13 +85,14 @@ func (d *DynamoDB) Write(req *bindings.WriteRequest) error {
 	return nil
 }
 
-func (d *DynamoDB) GetDynamoDBMetadata(spec bindings.Metadata) (*DynamoDBMetadata, error) {
+// GetDynamoDBMetadata parses DynamoDB metadata
+func (d *DynamoDB) GetDynamoDBMetadata(spec bindings.Metadata) (*Metadata, error) {
 	b, err := json.Marshal(spec.ConnectionInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	var meta DynamoDBMetadata
+	var meta Metadata
 	err = json.Unmarshal(b, &meta)
 	if err != nil {
 		return nil, err
@@ -95,7 +101,7 @@ func (d *DynamoDB) GetDynamoDBMetadata(spec bindings.Metadata) (*DynamoDBMetadat
 	return &meta, nil
 }
 
-func (d *DynamoDB) getClient(awsMeta *DynamoDBMetadata) (*dynamodb.DynamoDB, error) {
+func (d *DynamoDB) getClient(awsMeta *Metadata) (*dynamodb.DynamoDB, error) {
 	os.Setenv("AWS_ACCESS_KEY_ID", awsMeta.AccessKey)
 	os.Setenv("AWS_SECRET_ACCESS_KEY", awsMeta.SecretKey)
 	os.Setenv("AWS_REGION", awsMeta.Region)
