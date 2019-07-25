@@ -10,6 +10,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// Server is an interface for the Actions HTTP server
 type Server interface {
 	StartNonBlocking()
 }
@@ -19,6 +20,7 @@ type server struct {
 	api    API
 }
 
+// NewServer returns a new HTTP server
 func NewServer(api API, config ServerConfig) Server {
 	return &server{
 		api:    api,
@@ -26,6 +28,7 @@ func NewServer(api API, config ServerConfig) Server {
 	}
 }
 
+// StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)

@@ -27,7 +27,7 @@ type (
 	NOOPLogger struct{}
 )
 
-func (NOOPLogger) Println(v ...interface{}) {}
+func (NOOPLogger) Println(v ...interface{})               {}
 func (NOOPLogger) Printf(format string, v ...interface{}) {}
 
 // Internal levels of library output that are initialised to not print

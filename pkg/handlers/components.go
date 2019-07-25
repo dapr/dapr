@@ -18,27 +18,33 @@ import (
 	pb "github.com/actionscore/actions/pkg/proto"
 )
 
+// ComponentsHandler handles the lifetime management of Component CRDs
 type ComponentsHandler struct {
 	kubeClient kubernetes.Interface
 }
 
+// NewComponentsHandler returns a new component handler
 func NewComponentsHandler(client kubernetes.Interface) *ComponentsHandler {
 	return &ComponentsHandler{
 		kubeClient: client,
 	}
 }
 
+// Init performs any startup tasks needed
 func (c *ComponentsHandler) Init() error {
 	log.Info("ComponentsHandler.Init")
 	return nil
 }
 
+// ObjectUpdated handles upated crd operations
 func (c *ComponentsHandler) ObjectUpdated(old interface{}, new interface{}) {
 }
 
+// ObjectDeleted handles deleted crd operations
 func (c *ComponentsHandler) ObjectDeleted(obj interface{}) {
 }
 
+// ObjectCreated handles created crd operations
 func (c *ComponentsHandler) ObjectCreated(obj interface{}) {
 	log.Info("Notified about a component update")
 

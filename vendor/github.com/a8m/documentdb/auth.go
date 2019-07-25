@@ -4,7 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-        "errors"
+	"errors"
 )
 
 func authorize(str, key string) (string, error) {
@@ -14,7 +14,7 @@ func authorize(str, key string) (string, error) {
 
 	if err != nil {
 		if _, ok := err.(base64.CorruptInputError); ok {
-                        err = errors.New("base64 input is corrupt, check CosmosDB key.")
+			err = errors.New("base64 input is corrupt, check CosmosDB key.")
 			return ret, err
 		}
 		return ret, err

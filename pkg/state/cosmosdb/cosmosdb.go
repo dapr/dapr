@@ -11,37 +11,41 @@ import (
 	documentdb "github.com/a8m/documentdb-go"
 )
 
-type CosmosDBStateStore struct {
+// StateStore is a CosmosDB state store
+type StateStore struct {
 	client     *documentdb.DocumentDB
 	collection *documentdb.Collection
 	db         *documentdb.Database
 }
 
-type CosmosDBCredentials struct {
+type credentials struct {
 	URL        string `json:"url"`
 	MasterKey  string `json:"masterKey"`
 	Database   string `json:"database"`
 	Collection string `json:"collection"`
 }
 
+// CosmosItem is a wrapper around a CosmosDB document
 type CosmosItem struct {
 	documentdb.Document
 	ID    string      `json:"id"`
 	Value interface{} `json:"value"`
 }
 
-func NewCosmosDBStateStore() *CosmosDBStateStore {
-	return &CosmosDBStateStore{}
+// NewCosmosDBStateStore returns a new CosmosDB state store
+func NewCosmosDBStateStore() *StateStore {
+	return &StateStore{}
 }
 
-func (c *CosmosDBStateStore) Init(metadata state.Metadata) error {
+// Init does metadata and connection parsing
+func (c *StateStore) Init(metadata state.Metadata) error {
 	connInfo := metadata.ConnectionInfo
 	b, err := json.Marshal(connInfo)
 	if err != nil {
 		return err
 	}
 
-	var creds CosmosDBCredentials
+	var creds credentials
 	err = json.Unmarshal(b, &creds)
 	if err != nil {
 		return err
@@ -78,7 +82,8 @@ func (c *CosmosDBStateStore) Init(metadata state.Metadata) error {
 	return nil
 }
 
-func (c *CosmosDBStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+// Get retreives a CosmosDB item
+func (c *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	key := req.Key
 
 	items := []CosmosItem{}
@@ -104,7 +109,8 @@ func (c *CosmosDBStateStore) Get(req *state.GetRequest) (*state.GetResponse, err
 	}, nil
 }
 
-func (c *CosmosDBStateStore) Set(req *state.SetRequest) error {
+// Set saves a CosmosDB item
+func (c *StateStore) Set(req *state.SetRequest) error {
 	items := []CosmosItem{}
 	_, err := c.client.QueryDocuments(
 		c.collection.Self,
@@ -137,7 +143,8 @@ func (c *CosmosDBStateStore) Set(req *state.SetRequest) error {
 	return nil
 }
 
-func (c *CosmosDBStateStore) BulkSet(req []state.SetRequest) error {
+// BulkSet performs a bulk set operation
+func (c *StateStore) BulkSet(req []state.SetRequest) error {
 	for _, s := range req {
 		err := c.Set(&s)
 		if err != nil {
@@ -148,13 +155,15 @@ func (c *CosmosDBStateStore) BulkSet(req []state.SetRequest) error {
 	return nil
 }
 
-func (c *CosmosDBStateStore) Delete(req *state.DeleteRequest) error {
+// Delete performs a delete operation
+func (c *StateStore) Delete(req *state.DeleteRequest) error {
 	selfLink := fmt.Sprintf("dbs/%s/colls/%s/documents/%s", c.db.Id, c.collection.Id, req.Key)
 	_, err := c.client.DeleteDocument(selfLink)
 	return err
 }
 
-func (c *CosmosDBStateStore) BulkDelete(req []state.DeleteRequest) error {
+// BulkDelete performs a bulk delete operation
+func (c *StateStore) BulkDelete(req []state.DeleteRequest) error {
 	for _, r := range req {
 		err := c.Delete(&r)
 		if err != nil {

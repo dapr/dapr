@@ -44,8 +44,8 @@ func (h *HTTPSource) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-// HttpGet performs an HTTP get request
-func (h *HTTPSource) HttpGet(url string) ([]byte, error) {
+// HTTPGet performs an HTTP get request
+func (h *HTTPSource) HTTPGet(url string) ([]byte, error) {
 	client := http.Client{Timeout: time.Second * 5}
 	resp, err := client.Get(h.Spec.URL)
 	if err != nil {
@@ -65,7 +65,7 @@ func (h *HTTPSource) HttpGet(url string) ([]byte, error) {
 }
 
 func (h *HTTPSource) Read(handler func(*bindings.ReadResponse) error) error {
-	b, err := h.HttpGet(h.Spec.URL)
+	b, err := h.HTTPGet(h.Spec.URL)
 	if err != nil {
 		return err
 	}

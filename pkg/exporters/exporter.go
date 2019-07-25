@@ -1,5 +1,6 @@
 package exporters
 
+// Exporter is an interface for an Actions metrics exporter
 type Exporter interface {
-	Init(action_id string, action_address string, exporter_address string) error
+	Init(actionsID string, actionsAddress string, exporterAddress string) error
 }
