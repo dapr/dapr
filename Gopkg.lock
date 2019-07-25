@@ -585,9 +585,20 @@
   revision = "75d898a42a940fbc854dfd1a4199eabdc00cf024"
 
 [[projects]]
-  digest = "1:972c2427413d41a1e06ca4897e8528e5a1622894050e2f527b38ddf0f343f759"
+  digest = "1:ac83cf90d08b63ad5f7e020ef480d319ae890c208f8524622a2f3136e2686b02"
+  name = "github.com/stretchr/objx"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "477a77ecc69700c7cdeb1fa9e129548e1c1c393c"
+  version = "v0.1.1"
+
+[[projects]]
+  digest = "1:0bcc464dabcfad5393daf87c3f8142911d0f6c52569b837e91a1c15e890265f3"
   name = "github.com/stretchr/testify"
-  packages = ["assert"]
+  packages = [
+    "assert",
+    "mock",
+  ]
   pruneopts = "UT"
   revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
   version = "v1.3.0"
@@ -1101,6 +1112,7 @@
     "github.com/satori/go.uuid",
     "github.com/streadway/amqp",
     "github.com/stretchr/testify/assert",
+    "github.com/stretchr/testify/mock",
     "github.com/valyala/fasthttp",
     "go.opencensus.io/trace",
     "google.golang.org/api/option",
