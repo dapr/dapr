@@ -18,8 +18,9 @@ Each application has been dockerized and pushed into [dockerhub](https://hub.doc
 In order to run this sample, we need to deploy all of its resources. 
 
 1. Navigate to the deploy directory in this sample directory: `cd deploy`
-2. Deploy the React front-end: `kubectl apply -f react-calculator`
-3. Deploy each of the supporting applications:
+2. Follow [these instructions](https://github.com/actionscore/actions/tree/master/samples/kubernetes_zero_to_hero#step-2---set-up-a-state-store) to create and configure a Redis store
+3. Deploy the React front-end: `kubectl apply -f react-calculator`
+4. Deploy each of the supporting applications:
 
 ```bash
 kubectl apply -f actionsdemoes/go-adder.yaml
@@ -28,11 +29,9 @@ kubectl apply -f actionsdemoes/python-multiplier.yaml
 kubectl apply -f actionsdemoes/node-divider.yaml
 ```
 
-Each of these deployments will spin up a pod with two containers: one for your service and the other for the actions sidecar. It will also configure
-a service for each sidecar, along with an external IP for our front-end. For more details on how these resources are spun up, look at each individual 
-app's README.
+Each of these deployments will spin up a pod with two containers: one for your service and the other for the actions sidecar. It will also configure a service for each sidecar and an external IP for our front-end, which allows us to connect to it externally.
 
-4. Wait until your pods are in a running state: `kubectl get pods -w`
+5. Wait until your pods are in a running state: `kubectl get pods -w`
 
 ```bash
 
@@ -46,7 +45,7 @@ multiplyapp-746588586f-kxpx4            2/2       Running   0          1m
 subtractapp-7bbdfd5649-r4pxk            2/2       Running   0          2m
 ```
 
-5. Next, let's take a look at our services and wait until we have an external IP configured for our front-end: `kubectl get svc -w`
+6. Next, let's take a look at our services and wait until we have an external IP configured for our front-end: `kubectl get svc -w`
 
     ```bash
     NAME                          TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)            AGE
@@ -61,41 +60,66 @@ subtractapp-7bbdfd5649-r4pxk            2/2       Running   0          2m
     subtractapp-action            ClusterIP      10.0.146.253   <none>          80/TCP,50001/TCP   2m
     ```
 
-    Each service ending in "-action" represents your service's respective sidecars, while the "calculator-front-end" service represents the external 
-    load balancer for the React calculator front-end.
+    Each service ending in "-action" represents your service's respective sidecars, while the "calculator-front-end" service represents the external load balancer for the React calculator front-end.
 
-6. Take the external IP address for `calculator-front-end` and drop it in your browser and voilà! You have a working distributed calculator!
+7. Take the external IP address for `calculator-front-end` and drop it in your browser and voilà! You have a working distributed calculator!
 
 ![Calculator Screenshot](./img/calculator-screenshot.jpg)
 
 ## The Role of Actions
 
-This sample demonstrates how we use actions as a programming model for simplifying the development of distributed systems. In this sample, actions is
-enabling polyglot programming, service discovery and simplified state management.
+This sample demonstrates how we use actions as a programming model for simplifying the development of distributed systems. In this sample, actions is enabling polyglot programming, service discovery and simplified state management.
 
 ### Polyglot Programming
 
-Each service in this sample is written in a different programming language, but they're used together in the same larger application. Actions itself is
-langauge agnostic - none of our services have to include any dependency in order to work with actions. This empowers developers to build each service 
-however they want, using the best language for the job or for a particular dev team.
+Each service in this sample is written in a different programming language, but they're used together in the same larger application. Actions itself is langauge agnostic - none of our services have to include any dependency in order to work with actions. This empowers developers to build each service however they want, using the best language for the job or for a particular dev team.
 
 ### Service Discovery
 
-When our front-end server calls the respective operation services (see `server.js` code below), it doesn't need to know what IP address they live at or how they were built. Instead it invokes their action sidecar by name, which adds a useful layer of inderection. 
+When our front-end server calls the respective operation services (see `server.js` code below), it doesn't need to know what IP address they live at or how they were built. Instead it invokes their action sidecar by name, which adds a useful layer of indirection. 
 
 ```js
 const actionsUrl = `http://localhost:3500/action`;
 
 app.post('/calculate/add', async (req, res) => {
   const addUrl = `${actionsUrl}/addapp/add`;
-  await callAPI(addUrl, req.body, res);
+  req.pipe(request(addUrl)).pipe(res);
 });
 
 app.post('/calculate/subtract', async (req, res) => {
   const subtractUrl = `${actionsUrl}/subtractapp/subtract`;
-  await callAPI(subtractUrl, req.body, res);
+  req.pipe(request(subtractUrl)).pipe(res);
 });
 ...
 ```
 
-Moderns services are dynamic. Between autoscaling, updates and failures, service instances and their network locations are constantly changing. Actions sidecars abstract away networking overhead, allowing developers to focus on _what_ their services do instead of _where_ they're hosted or _how_ they communicate.
+Moderns services are dynamic. Between autoscaling, updates and failures, service instances and their network locations are constantly changing. By enabling service discovery, Actions allows developers to focus on _what_ their services do instead of _where_ they're hosted or _how_ they communicate.
+
+### Simplified State Management
+
+Actions sidecars also help facilitate state management. In this sample, we persist our calculator's state each time we click a new button. This means we can refresh the page, close the page or even take down our `calculator-front-end` pod, and still retain the same state when we next open it. Actions adds a layer of indirection so that our app doesn't need to know where it's persisting state. It doesn't have to keep track of keys, handle retry logic or worry about state provider specific configuration. All it has to do is GET or POST against its actions sidecar's state endpoint: `http://localhost:3500/state`.
+
+Take a look at `server.js` in the `react-calculator` directory. Note that it exposes two state endpoints for our React client to get and set state: the GET `/state` endpoint and the POST `/persist` endpoint. Both forward client calls to the Actions state endpoint: 
+
+```js
+const stateUrl = "http://localhost:3500/state";
+```
+
+Our client persists state by simply POSTing JSON key-value pairs (see `react-calculator/client/src/component/App.js`): 
+
+```js
+    const state = [{ 
+      key: "calculatorState", 
+      value 
+    }];
+    
+    fetch("/persist", {
+      method: "POST",
+      body: JSON.stringify(state),
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+```
+
+By abstracting away state management, neither our client nor our server need to have any state configuration, know what state store they're using, or worry about retry logic (which actions will take care of).
