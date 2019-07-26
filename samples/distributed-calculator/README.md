@@ -2,8 +2,8 @@
 
 This sample demonstrates a distributed calculator: each operation is powered by a different service written in a different language/framework:
 
-- **Addition**: Go [mux](https://github.com/gorilla/mux) app
-- **Subtraction**: Python [flask](https://flask.palletsprojects.com/en/1.0.x/) app
+- **Addition**: Go [mux](https://github.com/gorilla/mux) application
+- **Subtraction**: Python [flask](https://flask.palletsprojects.com/en/1.0.x/) application
 - **Division**: Node [Express](https://expressjs.com/) application
 - **Multiplication**: [.NET Core](https://docs.microsoft.com/en-us/dotnet/core/) application
 
@@ -13,9 +13,11 @@ sample was used for the client.
 
 Each application has been dockerized and pushed into [dockerhub](https://hub.docker.com/u/actionsdemoes), where we will pull them from.
 
-## Running the Sample
+## Prerequisites
 
-In order to run this sample, we need to deploy all of its resources. 
+In order to run this sample, you'll need to have an actions-enabled Kubernetes cluster. Follow [these instructions](https://github.com/actionscore/actions/#install-on-kubernetes) to set this up.
+
+## Running the Sample
 
 1. Navigate to the deploy directory in this sample directory: `cd deploy`
 2. Follow [these instructions](https://github.com/actionscore/actions/tree/master/samples/kubernetes_zero_to_hero#step-2---set-up-a-state-store) to create and configure a Redis store
@@ -29,7 +31,7 @@ kubectl apply -f actionsdemoes/python-multiplier.yaml
 kubectl apply -f actionsdemoes/node-divider.yaml
 ```
 
-Each of these deployments will spin up a pod with two containers: one for your service and the other for the actions sidecar. It will also configure a service for each sidecar and an external IP for our front-end, which allows us to connect to it externally.
+Each of these deployments will spin up a pod with two containers: one for your service and one for the actions sidecar. It will also configure a service for each sidecar and an external IP for our front-end, which allows us to connect to it externally.
 
 5. Wait until your pods are in a running state: `kubectl get pods -w`
 
@@ -60,7 +62,7 @@ subtractapp-7bbdfd5649-r4pxk            2/2       Running   0          2m
     subtractapp-action            ClusterIP      10.0.146.253   <none>          80/TCP,50001/TCP   2m
     ```
 
-    Each service ending in "-action" represents your service's respective sidecars, while the "calculator-front-end" service represents the external load balancer for the React calculator front-end.
+    Each service ending in "-action" represents your services respective sidecars, while the `calculator-front-end` service represents the external load balancer for the React calculator front-end.
 
 7. Take the external IP address for `calculator-front-end` and drop it in your browser and voilà! You have a working distributed calculator!
 
@@ -143,5 +145,3 @@ Our client persists state by simply POSTing JSON key-value pairs (see `react-cal
       }
     });
 ```
-
-By abstracting away state management, neither our client nor our server need to have any state configuration, know what state store they're using, or worry about retry logic (which actions will take care of).
