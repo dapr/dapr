@@ -25,10 +25,10 @@ In order to run this sample, you'll need to have an Actions-enabled Kubernetes c
 4. Deploy each of the supporting applications:
 
 ```bash
-kubectl apply -f actionsdemoes/go-adder.yaml
-kubectl apply -f actionsdemoes/dotnet-subtractor.yaml
-kubectl apply -f actionsdemoes/python-multiplier.yaml
-kubectl apply -f actionsdemoes/node-divider.yaml
+kubectl apply -f go-adder.yaml
+kubectl apply -f dotnet-subtractor.yaml
+kubectl apply -f python-multiplier.yaml
+kubectl apply -f node-divider.yaml
 ```
 
 Each of these deployments will spin up a pod with two containers: one for your service and one for the actions sidecar. It will also configure a service for each sidecar and an external IP for our front-end, which allows us to connect to it externally.
