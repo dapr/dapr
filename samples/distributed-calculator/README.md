@@ -1,6 +1,6 @@
 # Kubernetes Distributed Calculator
 
-This sample demonstrates a distributed calculator: each operation is powered by a different service written in a different language/framework:
+This sample shows method invocation and state persistent capabilities of Actions through a distributed calculator where each operation is powered by a different service written in a different language/framework:
 
 - **Addition**: Go [mux](https://github.com/gorilla/mux) application
 - **Subtraction**: Python [flask](https://flask.palletsprojects.com/en/1.0.x/) application
@@ -15,7 +15,7 @@ Each application has been dockerized and pushed into [dockerhub](https://hub.doc
 
 ## Prerequisites
 
-In order to run this sample, you'll need to have an actions-enabled Kubernetes cluster. Follow [these instructions](https://github.com/actionscore/actions/#install-on-kubernetes) to set this up.
+In order to run this sample, you'll need to have an Actions-enabled Kubernetes cluster. Follow [these instructions](https://github.com/actionscore/actions/#install-on-kubernetes) to set this up.
 
 ## Running the Sample
 
@@ -68,7 +68,7 @@ subtractapp-7bbdfd5649-r4pxk            2/2       Running   0          2m
 
 ![Calculator Screenshot](./img/calculator-screenshot.jpg)
 
-8. Open your browser's console window to see the logs produced as we use the calculator. Note that each time we click a button, we see logs that indicate state persistence: 
+8. Open your browser's console window (using F12 key) to see the logs produced as we use the calculator. Note that each time we click a button, we see logs that indicate state persistence: 
 
 ```js
 Persisting State:
@@ -88,20 +88,21 @@ Also note that each time we enter a full equation (e.g. "126 ÷ 3 =") our logs i
 Calling divide service
 ```
 
-Our client code calls to an express server, which routes our calls through actions to our back-end services. In this case we're calling the divide endpoint on our node application.
+Our client code calls to an Express server, which routes our calls through Actions to our back-end services. In this case we're calling the divide endpoint on our nodejs application.
 
 ## The Role of Actions
 
-This sample demonstrates how we use actions as a programming model for simplifying the development of distributed systems. In this sample, actions is enabling polyglot programming, service discovery and simplified state management.
+This sample demonstrates how we use Actions as a programming model for simplifying the development of distributed systems. In this sample, Actions is enabling polyglot programming, service discovery and simplified state management.
 
 ### Polyglot Programming
 
-Each service in this sample is written in a different programming language, but they're used together in the same larger application. Actions itself is langauge agnostic - none of our services have to include any dependency in order to work with actions. This empowers developers to build each service however they want, using the best language for the job or for a particular dev team.
+Each service in this sample is written in a different programming language, but they're used together in the same larger application. Actions itself is langauge agnostic - none of our services have to include any dependency in order to work with Actions. This empowers developers to build each service however they want, using the best language for the job or for a particular dev team.
 
-### Service Discovery
+### Service Invocation
 
-When our front-end server calls the respective operation services (see `server.js` code below), it doesn't need to know what IP address they live at or how they were built. Instead it invokes their action sidecar by name, which adds a useful layer of indirection. 
+When our front-end server calls the respective operation services (see `server.js` code below), it doesn't need to know what IP address they live at or how they were built. Instead it calls their local action side-car by name, which knows how to invoke the method on the service, taking advantage of the platform’s service discovery mechanism, in this case Kubernetes DNS resolution.
 
+The code below shows calls to the “add” and “subtract” services via the Actions URLs:
 ```js
 const actionsUrl = `http://localhost:3500/action`;
 
@@ -117,11 +118,11 @@ app.post('/calculate/subtract', async (req, res) => {
 ...
 ```
 
-Moderns services are dynamic. Between autoscaling, updates and failures, service instances and their network locations are constantly changing. By enabling service discovery, Actions allows developers to focus on _what_ their services do instead of _where_ they're hosted or _how_ they communicate.
+Microservice applications are dynamic with scaling, updates and failures causing services to change their network endpoints. Actions enables you to call service endpoints with a consistent URL syntax, utilizing the hosting platform’s service discovery capabilities to resolve the endpoint location.
 
 ### Simplified State Management
 
-Actions sidecars also help facilitate state management. In this sample, we persist our calculator's state each time we click a new button. This means we can refresh the page, close the page or even take down our `calculator-front-end` pod, and still retain the same state when we next open it. Actions adds a layer of indirection so that our app doesn't need to know where it's persisting state. It doesn't have to keep track of keys, handle retry logic or worry about state provider specific configuration. All it has to do is GET or POST against its actions sidecar's state endpoint: `http://localhost:3500/state`.
+Actions side-cars provide state management. In this sample, we persist our calculator's state each time we click a new button. This means we can refresh the page, close the page or even take down our `calculator-front-end` pod, and still retain the same state when we next open it. Actions adds a layer of indirection so that our app doesn't need to know where it's persisting state. It doesn't have to keep track of keys, handle retry logic or worry about state provider specific configuration. All it has to do is GET or POST against its Actions sidecar's state endpoint: `http://localhost:3500/state`.
 
 Take a look at `server.js` in the `react-calculator` directory. Note that it exposes two state endpoints for our React client to get and set state: the GET `/state` endpoint and the POST `/persist` endpoint. Both forward client calls to the Actions state endpoint: 
 
