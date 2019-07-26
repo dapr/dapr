@@ -66,14 +66,14 @@ subtractapp-7bbdfd5649-r4pxk            2/2       Running   0          2m
 
 ![Calculator Screenshot](./img/calculator-screenshot.jpg)
 
-8. Open your browser's console window to see the logs produced as we use the calculator. Note that each time we click any button, we see logs indicated state persistence: 
+8. Open your browser's console window to see the logs produced as we use the calculator. Note that each time we click a button, we see logs that indicate state persistence: 
 
 ```js
 Persisting State:
 {total: "21", next: "2", operation: "x"}
 ```
 
-`total`, `next`, and `operation` reflect the three pieces of state a calculator needs to operate. By persisting these, we can refresh the page or take down the front-end pod and still jump right back where we were. Let's try it! Enter something into the calculator and refresh the page. The calculator should have retained the state, and your console should read: 
+`total`, `next`, and `operation` reflect the three pieces of state a calculator needs to operate. Our app persists these to a Redis store (see "Simplified State Management" section below). By persisting these, we can refresh the page or take down the front-end pod and still jump right back where we were. Let's try it! Enter something into the calculator and refresh the page. The calculator should have retained the state, and your console should read: 
 
 ```js
 Rehydrating State:
