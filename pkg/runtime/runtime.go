@@ -185,7 +185,7 @@ func (a *ActionsRuntime) beginReadInputBindings() error {
 }
 
 func (a *ActionsRuntime) initDirectMessaging() {
-	a.directMessaging = messaging.NewDirectMessaging(a.runtimeConfig.ID, a.runtimeConfig.GRPCPort, a.runtimeConfig.Mode, a.appChannel, a.grpc.GetGRPCConnection)
+	a.directMessaging = messaging.NewDirectMessaging(a.runtimeConfig.ID, os.Getenv("NAMESPACE") a.runtimeConfig.GRPCPort, a.runtimeConfig.Mode, a.appChannel, a.grpc.GetGRPCConnection)
 }
 
 // OnComponentUpdated updates the Actions runtime with new or changed components

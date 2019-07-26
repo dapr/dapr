@@ -31,6 +31,7 @@ type api struct {
 	actor           actors.Actors
 	pubSub          pubsub.PubSub
 	id              string
+	namespace       string
 }
 
 const (
@@ -41,10 +42,11 @@ const (
 	actorIDParam   = "actorId"
 	stateKeyParam  = "key"
 	topicParam     = "topic"
+	namespace      = "namespace"
 )
 
 // NewAPI returns a new API
-func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors) API {
+func NewAPI(actionID, namespace string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors) API {
 	api := &api{
 		appChannel:      appChannel,
 		directMessaging: directMessaging,
@@ -53,6 +55,7 @@ func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging mess
 		actor:           actor,
 		pubSub:          pubSub,
 		id:              actionID,
+		namespace:       namespace,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
@@ -239,7 +242,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	req := messaging.DirectMessageRequest{
 		Data:     body,
 		Method:   method,
-		Metadata: map[string]string{http.HTTPVerb: verb},
+		Metadata: map[string]string{http.HTTPVerb: verb, namespace: a.namespace},
 		Target:   targetID,
 	}
 
