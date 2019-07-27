@@ -1,0 +1,9 @@
+Thank you for installing Actions: High-performance, lightweight serverless runtime for cloud and edge
+
+Your release is named {{ .Release.Name }}.
+
+To get started with Actions, we recommend using our samples page:
+https://github.com/actionscore/actions/tree/master/samples/kubernetes_zero_to_hero
+
+For more information on running Actions, visit:
+https://github.com/actionscore

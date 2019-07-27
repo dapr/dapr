@@ -1,4 +1,4 @@
-# Actions - A highly performant, lightweight serverless runtime for cloud and edge
+# Actions - A high performance, lightweight serverless runtime for cloud and edge
 
 [![Build Status](https://dev.azure.com/azure-octo/Actions/_apis/build/status/builds/actions%20build?branchName=master)](https://dev.azure.com/azure-octo/Actions/_build/latest?definitionId=5&branchName=master)
 
@@ -75,7 +75,7 @@ cd actions
 #### Deploy Actions
 
 ```
-kubectl apply -f ./deploy
+kubectl apply -f ./deploy/actions.yaml
 ```
 
 Watch for the Actions control plane pod to be in ```Running``` state:
@@ -106,7 +106,7 @@ git clone https://github.com/actionscore/actions.git github.com/actionscore/acti
 #### Build the action binary
 
 ```
-cd $GOPATH/src/github.com/actionscore/actions/cmd/action
+cd $GOPATH/src/github.com/actionscore/actions/cmd/actionsrt
 go build -o action
 ```
 

@@ -12,9 +12,9 @@ app.get('/order', (_req, res) => {
     fetch(`${actionsUrl}/state/order`)
         .then((response) => {
             return response.json();
-        }).then((orders) => {
-            res.send(orders);
-        });
+        }).then((order) => {
+            res.send(order);
+    });
 });
 
 app.post('/neworder', (req, res) => {

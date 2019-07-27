@@ -1,0 +1,16 @@
+dependencies:
+- name:   actions_image_pull_secret
+  version: "0.1.0"
+  repository: "file://actions_image_pull_secret"
+- name: actions_crd
+  version: "0.1.0"
+  repository: "file://actions_crd"
+- name: actions_rbac
+  version: "0.1.0"
+  repository: "file://actions_rbac"
+- name: actions_controller
+  version: "0.1.0"
+  repository: "file://actions_controller"
+- name: actions_placement
+  version: "0.1.0"
+  repository: "file://actions_placement"      

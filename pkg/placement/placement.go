@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// PlacementService updates the Actions runtimes with distributed hash tables for stateful entities.
 type PlacementService struct {
 	generation        int
 	entriesLock       *sync.RWMutex
@@ -23,6 +24,7 @@ type PlacementService struct {
 	updateLock        *sync.Mutex
 }
 
+// NewPlacementService returns a new placement service
 func NewPlacementService() *PlacementService {
 	return &PlacementService{
 		entriesLock:       &sync.RWMutex{},
@@ -34,6 +36,7 @@ func NewPlacementService() *PlacementService {
 	}
 }
 
+// ReportActionStatus gets a heartbeat report from different Actions hosts
 func (p *PlacementService) ReportActionStatus(srv pb.PlacementService_ReportActionStatusServer) error {
 	ctx := srv.Context()
 	p.hostsLock.Lock()
@@ -69,6 +72,7 @@ func (p *PlacementService) ReportActionStatus(srv pb.PlacementService_ReportActi
 	}
 }
 
+// RemoveHost removes the host from the hosts list
 func (p *PlacementService) RemoveHost(srv pb.PlacementService_ReportActionStatusServer) {
 	for i := len(p.hosts) - 1; i >= 0; i-- {
 		if p.hosts[i] == srv {
@@ -77,6 +81,8 @@ func (p *PlacementService) RemoveHost(srv pb.PlacementService_ReportActionStatus
 	}
 }
 
+// PerformTablesUpdate updates the connected actions runtimes using a 3 stage commit. first it locks so no further action can be taken
+// it then proceeds to update and then unlock once all runtimes have been updated
 func (p *PlacementService) PerformTablesUpdate() {
 	p.updateLock.Lock()
 	defer p.updateLock.Unlock()
@@ -89,7 +95,7 @@ func (p *PlacementService) PerformTablesUpdate() {
 	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
-			log.Errorf("Error updating host on lock operation: %s", err)
+			log.Errorf("error updating host on lock operation: %s", err)
 			continue
 		}
 	}
@@ -127,7 +133,7 @@ func (p *PlacementService) PerformTablesUpdate() {
 	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
-			log.Errorf("Error updating host on update operation: %s", err)
+			log.Errorf("error updating host on update operation: %s", err)
 			continue
 		}
 	}
@@ -138,12 +144,13 @@ func (p *PlacementService) PerformTablesUpdate() {
 	for _, host := range p.hosts {
 		err := host.Send(&o)
 		if err != nil {
-			log.Errorf("Error updating host on unlock operation: %s", err)
+			log.Errorf("error updating host on unlock operation: %s", err)
 			continue
 		}
 	}
 }
 
+// ProcessRemovedHost removes a host from the hash table
 func (p *PlacementService) ProcessRemovedHost(id string) {
 	updateRequired := false
 
@@ -166,6 +173,7 @@ func (p *PlacementService) ProcessRemovedHost(id string) {
 	}
 }
 
+// ProcessHost updates the distributed has list based on a new host and its entities
 func (p *PlacementService) ProcessHost(host *pb.Host) {
 	updateRequired := false
 
@@ -191,6 +199,7 @@ func (p *PlacementService) ProcessHost(host *pb.Host) {
 	p.hostsEntitiesLock.Unlock()
 }
 
+// Run starts the placement service gRPC server
 func (p *PlacementService) Run(port string) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {

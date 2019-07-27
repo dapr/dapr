@@ -1,0 +1,15 @@
+replicaCount: 1
+
+image:
+  repository: actionscore.azurecr.io/actions
+  tag: merge
+  imagePullPolicy: Always
+  pullSecret: actions-auth-pull
+
+nameOverride: ""
+fullnameOverride: ""
+
+ports:
+  protocol: TCP
+  port: 80
+  targetPort: 6500

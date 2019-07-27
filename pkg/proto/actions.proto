@@ -7,19 +7,46 @@ import "google/protobuf/empty.proto";
 
 // Actions Runtime definitions
 service Actions {
-  rpc Invoke (InvokeEnvelope) returns (InvokeEnvelope) {}
-  rpc SaveState (SaveStateEnvelope) returns (google.protobuf.Empty) {}
-  rpc GetState (GetStateEnvelope) returns (google.protobuf.Any) {}
-  rpc UpdateEventSource (EventSource) returns (google.protobuf.Empty) {}
+  rpc CallRemoteApp (CallRemoteAppEnvelope) returns (InvokeResponse) {}
+  rpc CallActor (CallActorEnvelope) returns (InvokeResponse) {}
+  rpc CallLocal (LocalCallEnvelope) returns (InvokeResponse) {}
+  rpc UpdateComponent (Component) returns (google.protobuf.Empty) {}
 }
 
-message InvokeEnvelope {
+message LocalCallEnvelope {
     google.protobuf.Any data = 1;
+    string method = 2;
+    map<string,string> metadata = 3;
 }
 
-message EventSource {
+message CallRemoteAppEnvelope {
+  string target = 1;
+  google.protobuf.Any data = 2;
+  string method = 3;
+  map<string,string> metadata = 4;
+}
+
+message CallActorEnvelope {
+  string actorID = 1;
+  string actorType = 2;
+  string method = 3;
+  google.protobuf.Any data = 4;
+}
+
+message InvokeResponse {
+  google.protobuf.Any data = 1;
+  map<string,string> metadata = 2;
+}
+
+message Component {
   string name = 1;
-  EventSourceSpec spec = 2;
+  ComponentSpec spec = 2;
+}
+
+message ComponentSpec {
+  string type = 1;
+  map<string,string> connection_info = 2;
+  map<string,string> properties = 3;
 }
 
 message SaveStateEnvelope {
@@ -30,22 +57,17 @@ message GetStateEnvelope {
   string key = 1;
 }
 
-message EventSourceSpec {
-  string type = 1;
-  google.protobuf.Any connection_info = 2;
-}
-
 // User Code definitions
 service App {
-  rpc Invoke (InvokeMethod) returns (google.protobuf.Any) {}
+  rpc OnMethodCall (AppMethodCallEnvelope) returns (google.protobuf.Any) {}
   rpc RestoreState (State) returns (google.protobuf.Empty) {}
   rpc GetConfig(google.protobuf.Empty) returns (ApplicationConfig) {}
 }
 
-message InvokeMethod {
-    string method_name = 1;
-    string context_id = 2;
-    google.protobuf.Any data = 3;
+message AppMethodCallEnvelope {
+    string method = 1;
+    google.protobuf.Any data = 2;
+    map<string,string> metadata = 3;
 }
 
 message State {

@@ -1,7 +1,7 @@
 package kubernetes
 
 import (
-	actions_v1alpha1 "github.com/actionscore/actions/pkg/apis/eventing/v1alpha1"
+	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
 	scheme "github.com/actionscore/actions/pkg/client/clientset/versioned"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,13 +47,13 @@ func DeploymentsIndexInformer(
 	)
 }
 
-func EventSourcesIndexInformer(
+func ComponentsIndexInformer(
 	client scheme.Interface,
 	namespace string,
 	fieldSelector fields.Selector,
 	labelSelector labels.Selector,
 ) cache.SharedIndexInformer {
-	actionsClient := client.EventingV1alpha1().EventSources(namespace)
+	actionsClient := client.ComponentsV1alpha1().Components(namespace)
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
@@ -75,7 +75,7 @@ func EventSourcesIndexInformer(
 				return actionsClient.Watch(options)
 			},
 		},
-		&actions_v1alpha1.EventSource{},
+		&components_v1alpha1.Component{},
 		0,
 		cache.Indexers{},
 	)

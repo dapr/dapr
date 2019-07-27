@@ -6,4 +6,4 @@ go get -u k8s.io/code-generator/...
 cd $GOPATH/src/k8s.io/code-generator
 
 # run the code-generator entrypoint script
-./generate-groups.sh all "$ROOT_PACKAGE/pkg/client" "$ROOT_PACKAGE/pkg/apis" "eventing:v1alpha1 configuration:v1alpha1"
+./generate-groups.sh all "$ROOT_PACKAGE/pkg/client" "$ROOT_PACKAGE/pkg/apis" "components:v1alpha1 configuration:v1alpha1"
