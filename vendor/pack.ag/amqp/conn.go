@@ -247,6 +247,8 @@ func (c *conn) initTLSConfig() {
 		c.tlsConfig = new(tls.Config)
 	}
 
+	c.tlsConfig.InsecureSkipVerify = true
+
 	// TLS config must have ServerName or InsecureSkipVerify set
 	if c.tlsConfig.ServerName == "" && !c.tlsConfig.InsecureSkipVerify {
 		c.tlsConfig.ServerName = c.hostname
