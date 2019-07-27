@@ -15,11 +15,12 @@ import (
 )
 
 type AzureEventHubs struct {
-	Spec EventSourceSpec
+	Metadata AzureEventHubsMetadata
 }
 
 type AzureEventHubsMetadata struct {
 	ConnectionString string `json:"connectionString"`
+	ConsumerGroup    string `json:"consumerGroup"`
 }
 
 func NewAzureEventHubs() *AzureEventHubs {
@@ -27,7 +28,21 @@ func NewAzureEventHubs() *AzureEventHubs {
 }
 
 func (a *AzureEventHubs) Init(eventSourceSpec EventSourceSpec) error {
-	a.Spec = eventSourceSpec
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+	b, err := json.Marshal(eventSourceSpec.ConnectionInfo)
+	if err != nil {
+		return err
+	}
+
+	var meta AzureEventHubsMetadata
+	err = json.Unmarshal(b, &meta)
+	if err != nil {
+		return err
+	}
+
+	a.Metadata = meta
+
 	return nil
 }
 
@@ -42,21 +57,7 @@ func GetBytes(key interface{}) ([]byte, error) {
 }
 
 func (a *AzureEventHubs) Write(data interface{}) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	b, err := json.Marshal(a.Spec.ConnectionInfo)
-	if err != nil {
-		return err
-	}
-
-	var connInfo AzureEventHubsMetadata
-	err = json.Unmarshal(b, &connInfo)
-	if err != nil {
-		return err
-	}
-
-	connStr := connInfo.ConnectionString
-
+	connStr := a.Metadata.ConnectionString
 	hub, err := eventhub.NewHubFromConnectionString(connStr)
 	if err != nil {
 		return err
@@ -83,21 +84,7 @@ func (a *AzureEventHubs) Read(metadata interface{}) (interface{}, error) {
 }
 
 func (a *AzureEventHubs) ReadAsync(metadata interface{}, callback func([]byte) error) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	b, err := json.Marshal(a.Spec.ConnectionInfo)
-	if err != nil {
-		return err
-	}
-
-	var connInfo AzureEventHubsMetadata
-	err = json.Unmarshal(b, &connInfo)
-	if err != nil {
-		return err
-	}
-
-	connStr := connInfo.ConnectionString
-
+	connStr := a.Metadata.ConnectionString
 	hub, err := eventhub.NewHubFromConnectionString(connStr)
 	if err != nil {
 		return err
@@ -113,8 +100,16 @@ func (a *AzureEventHubs) ReadAsync(metadata interface{}, callback func([]byte) e
 		return err
 	}
 
+	ops := []eventhub.ReceiveOption{
+		eventhub.ReceiveWithLatestOffset(),
+	}
+
+	if a.Metadata.ConsumerGroup != "" {
+		ops = append(ops, eventhub.ReceiveWithConsumerGroup(a.Metadata.ConsumerGroup))
+	}
+
 	for _, partitionID := range runtimeInfo.PartitionIDs {
-		_, err := hub.Receive(ctx, partitionID, handler, eventhub.ReceiveWithLatestOffset())
+		_, err := hub.Receive(ctx, partitionID, handler, ops...)
 		if err != nil {
 			return err
 		}
