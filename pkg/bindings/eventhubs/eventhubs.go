@@ -90,7 +90,7 @@ func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error 
 			if err != nil {
 				log.Errorf("error parsing duration: %s", err)
 				return nil
-			} else if time.Since(enqTime) > d {
+			} else if time.Now().UTC().Sub(enqTime) > d {
 				return nil
 			}
 		}
