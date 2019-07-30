@@ -81,7 +81,7 @@ func (a *AzureEventHubs) Write(req *bindings.WriteRequest) error {
 	return nil
 }
 
-// Read reads from eventhubs in a non-blocking fashion
+// Read gets messages from eventhubs in a non-blocking fashion
 func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error {
 	callback := func(c context.Context, event *eventhub.Event) error {
 		if a.meta.MessageAge != "" && event.SystemProperties != nil && event.SystemProperties.EnqueuedTime != nil {
