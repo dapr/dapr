@@ -5,8 +5,8 @@ const request = require('request');
 const app = express();
 
 const port = 8080;
-const actionsUrl = "http://localhost:3500/action";
-const stateUrl = "http://localhost:3500/state";
+const actionsUrl = "http://localhost:3500/v1.0/actions";
+const stateUrl = "http://localhost:3500/v1.0/state";
 
 /**
 The following routes forward requests (using pipe) from our React client to our actions-enabled services. Our actions sidecar lives on localhost:3500. We invoke other actions enabled services by calling /action/<ACTION_ID>/<SERVICE'S_ROUTE>.
