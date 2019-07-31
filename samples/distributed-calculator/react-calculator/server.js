@@ -9,7 +9,7 @@ const actionsUrl = "http://localhost:3500/v1.0/actions";
 const stateUrl = "http://localhost:3500/v1.0/state";
 
 /**
-The following routes forward requests (using pipe) from our React client to our actions-enabled services. Our actions sidecar lives on localhost:3500. We invoke other actions enabled services by calling /action/<ACTION_ID>/<SERVICE'S_ROUTE>.
+The following routes forward requests (using pipe) from our React client to our actions-enabled services. Our actions sidecar lives on localhost:3500. We invoke other actions enabled services by calling /v1.0/actions/<ACTION_ID>/<SERVICE'S_ROUTE>.
 */
 
 app.post('/calculate/add', async (req, res) => {
