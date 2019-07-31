@@ -5,7 +5,7 @@ require('isomorphic-fetch');
 const app = express();
 app.use(bodyParser.json());
 
-const actionsUrl = `http://localhost:3500`;
+const actionsUrl = `http://localhost:3500/v1.0`;
 const port = 3000;
 
 app.get('/order', (_req, res) => {
