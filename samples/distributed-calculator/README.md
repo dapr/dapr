@@ -104,7 +104,7 @@ When our front-end server calls the respective operation services (see `server.j
 
 The code below shows calls to the “add” and “subtract” services via the Actions URLs:
 ```js
-const actionsUrl = `http://localhost:3500/action`;
+const actionsUrl = `http://localhost:3500/v1.0/actions`;
 
 app.post('/calculate/add', async (req, res) => {
   const addUrl = `${actionsUrl}/addapp/add`;
