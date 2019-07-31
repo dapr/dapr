@@ -27,16 +27,18 @@ type directMessaging struct {
 	actionsID           string
 	mode                modes.ActionsMode
 	grpcPort            int
+	namespace           string
 }
 
 // NewDirectMessaging returns a new direct messaging api
-func NewDirectMessaging(actionsID string, port int, mode modes.ActionsMode, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error)) DirectMessaging {
+func NewDirectMessaging(actionsID, namespace string, port int, mode modes.ActionsMode, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error)) DirectMessaging {
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: grpcConnectionFn,
 		actionsID:           actionsID,
 		mode:                mode,
 		grpcPort:            port,
+		namespace:           namespace,
 	}
 }
 
@@ -110,7 +112,7 @@ func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessag
 func (d *directMessaging) getAddress(target string) (string, error) {
 	switch d.mode {
 	case modes.KubernetesMode:
-		return fmt.Sprintf("%s-action.default.svc.cluster.local:%v", target, d.grpcPort), nil
+		return fmt.Sprintf("%s-action.%s.svc.cluster.local:%v", target, d.namespace, d.grpcPort), nil
 	default:
 		return "", fmt.Errorf("remote calls not supported for %s mode", string(d.mode))
 	}
