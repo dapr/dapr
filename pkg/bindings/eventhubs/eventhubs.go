@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	eventhub "github.com/Azure/azure-event-hubs-go"
 	log "github.com/Sirupsen/logrus"
@@ -17,12 +18,15 @@ import (
 
 // AzureEventHubs allows sending/receiving Azure Event Hubs events
 type AzureEventHubs struct {
-	Spec bindings.Metadata
+	hub  *eventhub.Hub
+	meta AzureEventHubsMetadata
 }
 
 // AzureEventHubsMetadata is Azure Event Hubs connection metadata
 type AzureEventHubsMetadata struct {
 	ConnectionString string `json:"connectionString"`
+	ConsumerGroup    string `json:"consumerGroup"`
+	MessageAge       string `json:"messageAge"`
 }
 
 // NewAzureEventHubs returns a new Azure Event hubs instance
@@ -32,7 +36,25 @@ func NewAzureEventHubs() *AzureEventHubs {
 
 // Init performs metadata init
 func (a *AzureEventHubs) Init(metadata bindings.Metadata) error {
-	a.Spec = metadata
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	b, err := json.Marshal(metadata.ConnectionInfo)
+	if err != nil {
+		return err
+	}
+
+	var ehMetadata AzureEventHubsMetadata
+	err = json.Unmarshal(b, &ehMetadata)
+	if err != nil {
+		return err
+	}
+
+	a.meta = ehMetadata
+	hub, err := eventhub.NewHubFromConnectionString(a.meta.ConnectionString)
+	if err != nil {
+		return err
+	}
+
+	a.hub = hub
 	return nil
 }
 
@@ -49,60 +71,29 @@ func GetBytes(key interface{}) ([]byte, error) {
 
 // Write posts an event hubs message
 func (a *AzureEventHubs) Write(req *bindings.WriteRequest) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	b, err := json.Marshal(a.Spec.ConnectionInfo)
-	if err != nil {
-		return err
-	}
-
-	var connInfo AzureEventHubsMetadata
-	err = json.Unmarshal(b, &connInfo)
-	if err != nil {
-		return err
-	}
-
-	connStr := connInfo.ConnectionString
-
-	hub, err := eventhub.NewHubFromConnectionString(connStr)
-	if err != nil {
-		return err
-	}
-
-	err = hub.Send(context.Background(), &eventhub.Event{
+	err := a.hub.Send(context.Background(), &eventhub.Event{
 		Data: req.Data,
 	})
 	if err != nil {
 		return err
 	}
 
-	log.Info("EventHubs event sent successfully")
 	return nil
 }
 
-// Read reads from eventhubs in a non-blocking fashion
+// Read gets messages from eventhubs in a non-blocking fashion
 func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	b, err := json.Marshal(a.Spec.ConnectionInfo)
-	if err != nil {
-		return err
-	}
-
-	var connInfo AzureEventHubsMetadata
-	err = json.Unmarshal(b, &connInfo)
-	if err != nil {
-		return err
-	}
-
-	connStr := connInfo.ConnectionString
-
-	hub, err := eventhub.NewHubFromConnectionString(connStr)
-	if err != nil {
-		return err
-	}
-
 	callback := func(c context.Context, event *eventhub.Event) error {
+		if a.meta.MessageAge != "" && event.SystemProperties != nil && event.SystemProperties.EnqueuedTime != nil {
+			enqTime := *event.SystemProperties.EnqueuedTime
+			d, err := time.ParseDuration(a.meta.MessageAge)
+			if err != nil {
+				log.Errorf("error parsing duration: %s", err)
+				return nil
+			} else if time.Now().UTC().Sub(enqTime) > d {
+				return nil
+			}
+		}
 		if event != nil {
 			handler(&bindings.ReadResponse{
 				Data: event.Data,
@@ -113,13 +104,23 @@ func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error 
 	}
 
 	ctx := context.Background()
-	runtimeInfo, err := hub.GetRuntimeInformation(ctx)
+	runtimeInfo, err := a.hub.GetRuntimeInformation(ctx)
 	if err != nil {
 		return err
 	}
 
+	ops := []eventhub.ReceiveOption{
+		eventhub.ReceiveWithLatestOffset(),
+	}
+
+	if a.meta.ConsumerGroup != "" {
+		log.Infof("eventhubs: using consumer group %s", a.meta.ConsumerGroup)
+		ops = append(ops, eventhub.ReceiveWithConsumerGroup(a.meta.ConsumerGroup))
+
+	}
+
 	for _, partitionID := range runtimeInfo.PartitionIDs {
-		_, err := hub.Receive(ctx, partitionID, callback, eventhub.ReceiveWithLatestOffset())
+		_, err := a.hub.Receive(ctx, partitionID, callback, ops...)
 		if err != nil {
 			return err
 		}
@@ -129,7 +130,7 @@ func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error 
 	signal.Notify(signalChan, os.Interrupt, os.Kill)
 	<-signalChan
 
-	hub.Close(context.Background())
+	a.hub.Close(context.Background())
 
 	return nil
 }

@@ -65,14 +65,18 @@ spec:
     spec:
       containers:
       - name: actions
-        image: yaron2/actionsedge:v2
+        image: actionscore.azurecr.io/actions:latest
         env:
         - name: RUNTIME_IMAGE
-          value: yaron2/actionsedge:v2
+          value: actionscore.azurecr.io/actions:latest
+        - name: IMAGE_PULL_SECRET_NAME
+          value: actions-auth
         imagePullPolicy: Always
         ports:
         - containerPort: 6500
         command: ["./controller"]
+      imagePullSecrets:
+      - name: actions-auth
       serviceAccountName: actions-controller
 
 ---
@@ -106,9 +110,11 @@ spec:
     spec:
       containers:
       - name: actions-assigner
-        image: yaron2/actionsedge:v2
+        image: actionscore.azurecr.io/actions:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 50005
         command: ["./assigner"]
+      imagePullSecrets:
+      - name: actions-auth
       serviceAccountName: actions-controller
