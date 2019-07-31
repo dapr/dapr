@@ -18,6 +18,8 @@ All decisions are categorized in the following folders:
   - [API-003: Messaging API names](./api/API-003-messaging-api-names.md)
   - [API-004: Binding Manifests](./api/API-004-binding-manifests.md)
 * **CLI** - Decisions on Actions CLI architecture and behaviors.
+
+  - [CLI-001: CLI and runtim versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
 * **SDKs** - Decisions on Actions SDKs.
 * **Engineering** - Decisions on Engineering practices, including CI/CD, testings and releases.
 

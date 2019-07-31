@@ -66,7 +66,7 @@ func (r *ActionsHandler) Init() error {
 }
 
 // GetEventingSidecar creates a container for the Actions runtime
-func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol, actionName, config, actionSidecarImage string) v1.Container {
+func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol, actionName, config, actionSidecarImage, namespace string) v1.Container {
 	return v1.Container{
 		Name:            actionSidecarContainerName,
 		Image:           actionSidecarImage,
@@ -82,7 +82,7 @@ func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol
 			},
 		},
 		Command: []string{"/actionsrt"},
-		Env:     []v1.EnvVar{{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}},
+		Env:     []v1.EnvVar{{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
 		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--actions-id", actionName, "--control-plane-address", apiAddress, "--protocol", applicationProtocol, "--placement-address", placementAddress, "--config", config},
 	}
 }
@@ -202,7 +202,7 @@ func (r *ActionsHandler) EnableAction(deployment *appsv1.Deployment) error {
 	appProtocol := r.GetAppProtocol(deployment)
 	config := r.GetAppConfig(deployment)
 	actionName := r.GetActionName(deployment)
-	sidecar := r.GetEventingSidecar(appPort, appProtocol, actionName, config, r.Config.RuntimeImage)
+	sidecar := r.GetEventingSidecar(appPort, appProtocol, actionName, config, r.Config.RuntimeImage, deployment.ObjectMeta.Namespace)
 	deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, sidecar)
 
 	if r.Config.ImagePullSecretName != "" {
