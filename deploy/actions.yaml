@@ -71,6 +71,10 @@ spec:
           value: actionscore.azurecr.io/actions:latest
         - name: IMAGE_PULL_SECRET_NAME
           value: actions-auth
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         imagePullPolicy: Always
         ports:
         - containerPort: 6500
