@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/actionscore/actions/pkg/channel"
@@ -41,6 +42,33 @@ func (d mockDirectMessaging) Invoke(req *messaging.DirectMessageRequest) (*messa
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
 	}, nil
+}
+
+func TestOutputBinding(t *testing.T) {
+	t.Run("with correct input params", func(t *testing.T) {
+		testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}, sendToOutputBindingFn: func(name string, data []byte) error {
+			return nil
+		}}
+		c := &routing.Context{}
+		request := fasthttp.Request{}
+		request.URI().Parse(nil, []byte("http://actionscore.dev/bindings/test"))
+		c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+		err := testAPI.onOutputBindingMessage(c)
+		assert.NoError(t, err)
+		assert.Equal(t, 200, c.Response.StatusCode())
+	})
+
+	t.Run("with missing binding name", func(t *testing.T) {
+		testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}, sendToOutputBindingFn: func(name string, data []byte) error {
+			return errors.New("missing binding name")
+		}}
+		c := &routing.Context{}
+		request := fasthttp.Request{}
+		request.URI().Parse(nil, []byte("http://actionscore.dev/bindings/test"))
+		c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+		testAPI.onOutputBindingMessage(c)
+		assert.NotEqual(t, 200, c.Response.StatusCode())
+	})
 }
 
 func TestOnDirectMessage(t *testing.T) {

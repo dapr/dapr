@@ -23,14 +23,15 @@ type API interface {
 }
 
 type api struct {
-	endpoints       []Endpoint
-	directMessaging messaging.DirectMessaging
-	appChannel      channel.AppChannel
-	stateStore      state.StateStore
-	json            jsoniter.API
-	actor           actors.Actors
-	pubSub          pubsub.PubSub
-	id              string
+	endpoints             []Endpoint
+	directMessaging       messaging.DirectMessaging
+	appChannel            channel.AppChannel
+	stateStore            state.StateStore
+	json                  jsoniter.API
+	actor                 actors.Actors
+	pubSub                pubsub.PubSub
+	sendToOutputBindingFn func(name string, data []byte) error
+	id                    string
 }
 
 const (
@@ -41,24 +42,27 @@ const (
 	actorIDParam   = "actorId"
 	stateKeyParam  = "key"
 	topicParam     = "topic"
+	nameParam      = "name"
 )
 
 // NewAPI returns a new API
-func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors) API {
+func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, data []byte) error) API {
 	api := &api{
-		appChannel:      appChannel,
-		directMessaging: directMessaging,
-		stateStore:      stateStore,
-		json:            jsoniter.ConfigFastest,
-		actor:           actor,
-		pubSub:          pubSub,
-		id:              actionID,
+		appChannel:            appChannel,
+		directMessaging:       directMessaging,
+		stateStore:            stateStore,
+		json:                  jsoniter.ConfigFastest,
+		actor:                 actor,
+		pubSub:                pubSub,
+		sendToOutputBindingFn: sendToOutputBindingFn,
+		id:                    actionID,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructActorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 
 	return api
 }
@@ -98,6 +102,17 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 			Route:   "publish/<topic>",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
+		},
+	}
+}
+
+func (a *api) constructBindingsEndpoints() []Endpoint {
+	return []Endpoint{
+		Endpoint{
+			Methods: []string{http.Post, http.Put},
+			Route:   "bindings/<name>",
+			Version: apiVersionV1,
+			Handler: a.onOutputBindingMessage,
 		},
 	}
 }
@@ -151,6 +166,20 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Handler: a.onGetMetadata,
 		},
 	}
+}
+
+func (a *api) onOutputBindingMessage(c *routing.Context) error {
+	name := c.Param(nameParam)
+	body := c.PostBody()
+
+	err := a.sendToOutputBindingFn(name, body)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, fmt.Sprintf("error invoking output binding %s: %s", name, err))
+		return nil
+	}
+
+	respondEmpty(c.RequestCtx, 200)
+	return nil
 }
 
 func (a *api) onGetState(c *routing.Context) error {
