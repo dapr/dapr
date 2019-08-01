@@ -5,7 +5,7 @@ metadate:
 
 image:
   repository: actionscore.azurecr.io/actions
-  tag: merge
+  tag: latest
   imagePullPolicy: Always
   pullSecret: actions-auth-pull
 
