@@ -22,9 +22,10 @@ spec:
         env:
         - name: RUNTIME_IMAGE
           value: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        env:
         - name: IMAGE_PULL_SECRET_NAME
           value: "{{ .Values.image.pullSecret }}"
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
           - containerPort: 6500
