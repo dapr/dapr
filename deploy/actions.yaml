@@ -1,14 +1,23 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: actions-auth
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJhY3Rpb25zY29yZS5henVyZWNyLmlvIjp7InVzZXJuYW1lIjoiMzkwNDAxYTctZDdhNi00NmRhLWIxMGYtM2NlZmY3YTFjZGQ1IiwicGFzc3dvcmQiOiI0ODViMzUyMi01OWJiLTQxNTItODkzOC1jYThiOTAxMDhhZjYiLCJlbWFpbCI6Imxpa2FtcmF0QG1pY3Jvc29mdC5jb20iLCJhdXRoIjoiTXprd05EQXhZVGN0WkRkaE5pMDBObVJoTFdJeE1HWXRNMk5sWm1ZM1lURmpaR1ExT2pRNE5XSXpOVEl5TFRVNVltSXROREUxTWkwNE9UTTRMV05oT0dJNU1ERXdPR0ZtTmc9PSJ9fX0=
+
+---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: eventsources.actions.io
+  name: components.actions.io
 spec:
   group: actions.io
   version: v1alpha1
   names:
-    kind: EventSource
-    plural: eventsources
-    singular: eventsource
+    kind: Component
+    plural: components
+    singular: components
     categories:
     - all
     - actions
@@ -41,7 +50,7 @@ metadata:
   name: actions-api
 spec:
   selector:
-    app: actions
+    app: actions-controller
   ports:
   - protocol: TCP
     port: 80
@@ -52,19 +61,19 @@ kind: Deployment
 metadata:
   name: actions-controller
   labels:
-    app: actions
+    app: actions-controller
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: actions
+      app: actions-controller
   template:
     metadata:
       labels:
-        app: actions
+        app: actions-controller
     spec:
       containers:
-      - name: actions
+      - name: actions-controller
         image: actionscore.azurecr.io/actions:latest
         env:
         - name: RUNTIME_IMAGE
@@ -87,10 +96,10 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
-  name: actions-assigner
+  name: actions-placement
 spec:
   selector:
-    app: actions-assigner
+    app: actions-placement
   ports:
   - protocol: TCP
     port: 80
@@ -99,26 +108,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: actions-assigner
+  name: actions-placement
   labels:
-    app: actions-assigner
+    app: actions-placement
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: actions-assigner
+      app: actions-placement
   template:
     metadata:
       labels:
-        app: actions-assigner
+        app: actions-placement
     spec:
       containers:
-      - name: actions-assigner
+      - name: actions-placement
         image: actionscore.azurecr.io/actions:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 50005
-        command: ["./assigner"]
+        command: ["./placement"]
       imagePullSecrets:
       - name: actions-auth
       serviceAccountName: actions-controller
