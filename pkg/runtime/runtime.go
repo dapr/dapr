@@ -154,11 +154,6 @@ func (a *ActionsRuntime) initRuntime() error {
 }
 
 func (a *ActionsRuntime) initBindings() {
-	if a.appChannel == nil {
-		log.Warnf("skipping binding initialization: app channel not initialized")
-		return
-	}
-
 	bindings_loader.Load()
 	err := a.initOutputBindings(a.bindingsRegistry)
 	if err != nil {
@@ -340,7 +335,7 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 }
 
 func (a *ActionsRuntime) startHTTPServer(port int, allowedOrigins string) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor)
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(port, allowedOrigins)
 	server := http.NewServer(api, serverConf)
 	server.StartNonBlocking()
@@ -377,6 +372,10 @@ func (a *ActionsRuntime) setHostAddress() error {
 }
 
 func (a *ActionsRuntime) initInputBindings(registry bindings.BindingsRegistry) error {
+	if a.appChannel == nil {
+		return fmt.Errorf("app channel not initialized")
+	}
+
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			req := channel.InvokeRequest{
