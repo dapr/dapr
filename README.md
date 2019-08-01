@@ -53,9 +53,15 @@ Actions is flexible in threading model and state consistency model. Developers c
 
 #### Prerequisites
 
-Download the Actions CLI [release](https://github.com/actionscore/cli/releases) for your OS, unpack it and move it to your desired location (for Mac/Linux - ```mv actions /usr/local/bin```. For Windows, add the executable to your System PATH.)
+Download the Actions CLI [release](https://github.com/actionscore/cli/releases) for your OS, unpack it and move it to your desired location (for Mac/Linux - ```mv actions /usr/local/bin```. For Windows, add the executable to your System PATH. e.g. create c:\actions)
+
+Next login to Docker with the following read-only credentials
+
+Docker login actionscore.azurecr.io --username actionscore --password bA8UCES/zeuIvFFyjad1XVTDsX8hEeaQ
 
 __*Note: For Windows users, run the cmd terminal in administrator mode*__
+
+__*Note: For Linux users, if you run docker cmds with sudo, yuu need to do "sudo actions init" *__
 
 #### Install
 
