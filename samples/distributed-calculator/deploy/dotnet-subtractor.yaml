@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subtractapp
+  labels:
+    app: subtract
+  annotations:
+    actions.io/enabled: "true"
+    actions.io/id: "subtractapp"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: subtract
+  template:
+    metadata:
+      labels:
+        app: subtract
+    spec:
+      containers:
+      - name: subtract
+        image: actionsdemoes/dotnet-subtractor
+        ports:
+        - containerPort: 80
+        imagePullPolicy: Always

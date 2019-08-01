@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addapp
+  labels:
+    app: add
+  annotations:
+    actions.io/enabled: "true"
+    actions.io/id: "addapp"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: add
+  template:
+    metadata:
+      labels:
+        app: add
+    spec:
+      containers:
+      - name: add
+        image: actionsdemoes/go-adder
+        ports:
+        - containerPort: 6000
+        imagePullPolicy: Always
