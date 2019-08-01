@@ -29,8 +29,8 @@ const (
 	actionSidecarGRPCPortName     = "actions-grpc"
 	actionSidecarHTTPPort         = 3500
 	actionSidecarGRPCPort         = 50001
-	apiAddress                    = "http://actions-api.default.svc.cluster.local"
-	placementAddress              = "actions-placement.default.svc.cluster.local:80"
+	apiAddress                    = "http://actions-api"
+	placementAddress              = "actions-placement"
 	// HTTPProtocol represents an http protocol
 	HTTPProtocol Protocol = "http"
 	// GRPCProtocol represents a grpc protocol
@@ -48,6 +48,7 @@ type ActionsHandler struct {
 type ActionsHandlerConfig struct {
 	RuntimeImage        string
 	ImagePullSecretName string
+	Namespace           string
 }
 
 // NewActionsHandler returns a new Actions handler
@@ -83,7 +84,7 @@ func (r *ActionsHandler) GetEventingSidecar(applicationPort, applicationProtocol
 		},
 		Command: []string{"/actionsrt"},
 		Env:     []v1.EnvVar{{Name: "HOST_IP", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
-		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--actions-id", actionName, "--control-plane-address", apiAddress, "--protocol", applicationProtocol, "--placement-address", placementAddress, "--config", config},
+		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", actionSidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", actionSidecarGRPCPort), "--app-port", applicationPort, "--actions-id", actionName, "--control-plane-address", fmt.Sprintf("%s.%s.svc.cluster.local", apiAddress, r.Config.Namespace), "--protocol", applicationProtocol, "--placement-address", fmt.Sprintf("%s.%s.svc.cluster.local", placementAddress, r.Config.Namespace), "--config", config},
 	}
 }
 
