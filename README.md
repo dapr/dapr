@@ -53,7 +53,7 @@ Actions is flexible in threading model and state consistency model. Developers c
 
 #### Prerequisites
 
-Download the [release](https://github.com/actionscore/cli/releases) for your OS, unpack it and move it to your desired location (for Mac/Linux - ```mv actions /usr/local/bin```. For Windows, add the executable to your System PATH.)
+Download the Actions CLI [release](https://github.com/actionscore/cli/releases) for your OS, unpack it and move it to your desired location (for Mac/Linux - ```mv actions /usr/local/bin```. For Windows, add the executable to your System PATH.)
 
 __*Note: For Windows users, run the cmd terminal in administrator mode*__
 
@@ -64,6 +64,8 @@ $ actions init
 ⌛  Making the jump to hyperspace...
 ✅  Success! Get ready to rumble
 ```
+
+For getting started with the Actions CLI, go [here](https://github.com/actionscore/cli).
 
 ### Install on Kubernetes
 
