@@ -28,7 +28,7 @@ spec:
           value: {{ .Release.Namespace }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
-          - containerPort: 6500
+        - containerPort: 6500
         command: ["./controller"]
       imagePullSecrets:
       - name: {{ .Values.image.pullSecret }}
