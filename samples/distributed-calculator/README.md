@@ -21,7 +21,7 @@ In order to run this sample, you'll need to have an Actions-enabled Kubernetes c
 
 1. Navigate to the deploy directory in this sample directory: `cd deploy`
 2. Follow [these instructions](https://github.com/actionscore/actions/tree/master/samples/kubernetes_zero_to_hero#step-2---set-up-a-state-store) to create and configure a Redis store
-3. Deploy the React front-end: `kubectl apply -f react-calculator`
+3. Deploy the React front-end: `kubectl apply -f react-calculator.yaml`
 4. Deploy each of the supporting applications:
 
 ```bash
@@ -66,7 +66,7 @@ subtractapp-7bbdfd5649-r4pxk            2/2       Running   0          2m
 
 7. Take the external IP address for `calculator-front-end` and drop it in your browser and voilà! You have a working distributed calculator!
 
-![Calculator Screenshot](./img/calculator-screenshot.jpg)
+![Calculator Screenshot](./img/calculator-screenshot.JPG)
 
 8. Open your browser's console window (using F12 key) to see the logs produced as we use the calculator. Note that each time we click a button, we see logs that indicate state persistence: 
 
@@ -75,7 +75,7 @@ Persisting State:
 {total: "21", next: "2", operation: "x"}
 ```
 
-`total`, `next`, and `operation` reflect the three pieces of state a calculator needs to operate. Our app persists these to a Redis store (see "Simplified State Management" section below). By persisting these, we can refresh the page or take down the front-end pod and still jump right back where we were. Let's try it! Enter something into the calculator and refresh the page. The calculator should have retained the state, and your console should read: 
+`total`, `next`, and `operation` reflect the three pieces of state a calculator needs to operate. Our app persists these to a Redis store (see [Simplified State Management](https://github.com/actionscore/actions/blob/calculator-fixes/samples/distributed-calculator/README.md#simplified-state-management) section below). By persisting these, we can refresh the page or take down the front-end pod and still jump right back where we were. Let's try it! Enter something into the calculator and refresh the page. The calculator should have retained the state, and your console should read: 
 
 ```js
 Rehydrating State:
