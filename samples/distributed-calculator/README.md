@@ -66,7 +66,7 @@ subtractapp-7bbdfd5649-r4pxk            2/2       Running   0          2m
 
 7. Take the external IP address for `calculator-front-end` and drop it in your browser and voilà! You have a working distributed calculator!
 
-![Calculator Screenshot](./img/calculator-screenshot.jpg)
+![Calculator Screenshot](./img/calculator-screenshot.JPG)
 
 8. Open your browser's console window (using F12 key) to see the logs produced as we use the calculator. Note that each time we click a button, we see logs that indicate state persistence: 
 
