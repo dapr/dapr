@@ -75,7 +75,7 @@ Persisting State:
 {total: "21", next: "2", operation: "x"}
 ```
 
-`total`, `next`, and `operation` reflect the three pieces of state a calculator needs to operate. Our app persists these to a Redis store (see "Simplified State Management" section below). By persisting these, we can refresh the page or take down the front-end pod and still jump right back where we were. Let's try it! Enter something into the calculator and refresh the page. The calculator should have retained the state, and your console should read: 
+`total`, `next`, and `operation` reflect the three pieces of state a calculator needs to operate. Our app persists these to a Redis store (see [Simplified State Management](https://github.com/actionscore/actions/blob/calculator-fixes/samples/distributed-calculator/README.md#simplified-state-management) section below). By persisting these, we can refresh the page or take down the front-end pod and still jump right back where we were. Let's try it! Enter something into the calculator and refresh the page. The calculator should have retained the state, and your console should read: 
 
 ```js
 Rehydrating State:
