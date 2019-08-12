@@ -58,7 +58,7 @@ Download the Actions CLI [release](https://github.com/actionscore/cli/releases) 
 Next login to Docker with the following read-only credentials
 
 ```
-Docker login actionscore.azurecr.io --username 390401a7-d7a6-46da-b10f-3ceff7a1cdd5 --password 485b3522-59bb-4152-8938-ca8b90108af6
+docker login actionscore.azurecr.io --username 390401a7-d7a6-46da-b10f-3ceff7a1cdd5 --password 485b3522-59bb-4152-8938-ca8b90108af6
 ```
 
 __*Note: For Windows users, run the cmd terminal in administrator mode*__

@@ -18,39 +18,17 @@ This sample requires you to have the following installed on your machine:
 
 ## Step 1 - Setup Actions 
 
-1. Download and unzip the Actions release for your OS:
-
-    **Windows**: https://actionsreleases.blob.core.windows.net/bin/actions_windows_amd64.zip
-
-    **Linux ARM**: https://actionsreleases.blob.core.windows.net/bin/actions_linux_arm.zip
-
-    **Linux AMD64**: https://actionsreleases.blob.core.windows.net/bin/actions_linux_amd64.zip
-
-    **Darwin AMD64**: https://actionsreleases.blob.core.windows.net/bin/actions_darwin_amd64.zip
-
-2. Download the [Actions CLI release](https://github.com/actionscore/cli/releases) for your OS
-
-    **Note for Windows Users**: Due to a known bug, you must rename 'action' to 'actions.exe'
-
-3. Add the filepaths to Actions and the Actions CLI to your PATH
-4. Run `actions init`, which will set up create two containers: the actions placement service and a redis state store. To validate that these two containers were successfully created, run `docker ps` and observe output: 
-```
-CONTAINER ID        IMAGE                   COMMAND                  CREATED             STATUS              PORTS                     NAMES
-84b19574f5e5        actionscore.azurecr.io/actions:latest   "./placement"             About an hour ago   Up About an hour    0.0.0.0:6050->50005/tcp   xenodochial_chatterjee
-78d39ae67a95        redis                   "docker-entrypoint.s…"   About an hour ago   Up About an hour    0.0.0.0:6379->6379/tcp    hungry_dubinsky
-```
-5. Clone actions repo: `git clone https://github.com/actionscore/actions.git`
+Follow [instructions](https://github.com/actionscore/actions#install-as-standalone) to download the Actions CLI and initialize Actions.
 
 ## Step 2 - Understand the Code
 
 Now that we've locally set up actions and cloned the repo, let's take a look at our local zero-to-hero sample. Navigate to the local_zero_to_hero sample: `cd samples/local_zero_to_hero/app.js`.
 
-In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers. First, let's take a look at the `actionsUrl` at the top of the file: 
+In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers. First, let's take a look at the `stateUrl` at the top of the file: 
 
 ```js
-const actionsUrl = `http://localhost:${process.env.ACTIONS_PORT}`;
+const stateUrl = `http://localhost:${process.env.ACTIONS_PORT}/v1.0/state`;
 ```
-
 When we use the Actions CLI, it creates an environment variable for the Actions port, which defaults to 3500. We'll be using this in step 3 when we POST messages to to our system.
 
 Next, let's take a look at the ```neworder``` handler:
@@ -66,7 +44,7 @@ app.post('/neworder', (req, res) => {
         value: data
     }];
 
-    fetch(`${actionsUrl}/state`, {
+    fetch(stateUrl, {
         method: "POST",
         body: JSON.stringify(state),
         headers: {
@@ -114,25 +92,22 @@ This calls out to our Redis cache to grab the latest value of the "order" key, w
 
 ## Step 3 - Run the Node.js App with Actions
 
-1. Navigate to the zero to hero node sample project: `cd samples/local_zero_to_hero/app.js`
+1. Navigate to the zero to hero node sample project: `cd samples/local_zero_to_hero/app.js`.
 
-2. Install dependencies: `npm install`. This will install `express` and `body-parser`
+2. Install dependencies: `npm install`. This will install `express` and `body-parser`, dependencies that are shown in our `package.json`.
 
 3. Run node application with actions: `actions run --port 3500 --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
 
 ```
 Starting Actions with id mynode on port 3500
-You're up and running! Both Actions and your app logs will appear here. 
 ...
 ```
 
-4. Copy the Actions port for the next step
-
 ## Step 4 - Post Messages to your Service
 
-Now that our actions and node app are running, let's post messages against it. 
+Now that Actions and our Node app are running, let's POST messages against it.
 
- Open Postman and create a POST request against `http://localhost:<YOUR_PORT>/<YOUR_APP_NAME>/neworder`
+ Open Postman and create a POST request against `http://localhost:3500/<YOUR_APP_NAME>/neworder`
 ![Postman Screenshot](./img/postman1.jpg)
 In your terminal window, you should see logs indicating that the message was received and state was updated:
 ```bash
@@ -142,7 +117,7 @@ In your terminal window, you should see logs indicating that the message was rec
 
 ## Step 5 - Confirm Successful Persistence
 
-Now, let's just make sure that we our order was successfully persisted to our state store. Create a GET request against: `http://localhost:<YOUR_PORT>/<YOUR_APP_NAME>/order`
+Now, let's just make sure that our order was successfully persisted to our state store. Create a GET request against: `http://localhost:3500/<YOUR_APP_NAME>/order`
 ![Postman Screenshot 2](./img/postman2.jpg)
 
 This invokes the `/order` route, which calls out to our Redis store for the latest data. Observe the expected result!
