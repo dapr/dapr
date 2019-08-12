@@ -4,7 +4,6 @@ image:
   repository: actionscore.azurecr.io/actions
   tag: latest
   imagePullPolicy: Always
-  pullSecret: actions-auth-pull
 
 nameOverride: ""
 fullnameOverride: ""
