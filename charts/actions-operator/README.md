@@ -2,7 +2,7 @@
 This chart bootstraps all of Actions Operator components on a Kubernetes cluster using the Helm package manager.
 
 ## Chart Details
-This chart installs multiple Actions components as via "child-charts":
+This chart installs multiple Actions components via "child-charts":
 
 * Actions Components Kubernetes CRD
 * Actions RBAC components
