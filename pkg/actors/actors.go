@@ -50,6 +50,7 @@ type actorsRuntime struct {
 	activeReminders     *sync.Map
 	remindersLock       *sync.RWMutex
 	reminders           map[string][]Reminder
+	evaluationLock      *sync.RWMutex
 }
 
 const (
@@ -74,6 +75,7 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		activeReminders:     &sync.Map{},
 		remindersLock:       &sync.RWMutex{},
 		reminders:           map[string][]Reminder{},
+		evaluationLock:      &sync.RWMutex{},
 	}
 }
 
@@ -433,6 +435,10 @@ func (a *actorsRuntime) updatePlacements(in *pb.PlacementTables) {
 }
 
 func (a *actorsRuntime) evaluateReminders() {
+	a.evaluationLock.Lock()
+	defer a.evaluationLock.Unlock()
+
+	var wg sync.WaitGroup
 	for _, t := range a.config.HostedActorTypes {
 		vals, err := a.getRemindersForActorType(t)
 		if err != nil {
@@ -442,7 +448,10 @@ func (a *actorsRuntime) evaluateReminders() {
 			a.reminders[t] = vals
 			a.remindersLock.Unlock()
 
-			go func(reminders []Reminder) {
+			go func(wg *sync.WaitGroup, reminders []Reminder) {
+				wg.Add(1)
+				defer wg.Done()
+
 				for _, r := range reminders {
 					targetActorAddress := a.lookupActorAddress(r.ActorType, r.ActorID)
 					if targetActorAddress == "" {
@@ -462,9 +471,10 @@ func (a *actorsRuntime) evaluateReminders() {
 						}
 					}
 				}
-			}(vals)
+			}(&wg, vals)
 		}
 	}
+	wg.Wait()
 }
 
 func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) string {
@@ -658,6 +668,9 @@ func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
 		}
 	}
 
+	a.evaluationLock.RLock()
+	defer a.evaluationLock.RUnlock()
+
 	reminder := Reminder{
 		ActorID:        req.ActorID,
 		ActorType:      req.ActorType,
@@ -781,6 +794,9 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 }
 
 func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
+	a.evaluationLock.RLock()
+	defer a.evaluationLock.RUnlock()
+
 	key := fmt.Sprintf("actors-%s", req.ActorType)
 	reminders, err := a.getRemindersForActorType(req.ActorType)
 	if err != nil {
