@@ -91,9 +91,11 @@ $ actions init --kubernetes
 Once the chart installation is done, verify the Actions operator pods are running in the `actions-system` namespace:
 ```
 kubectl get pods --namespace actions-system
+
+NAME                                  READY   STATUS    RESTARTS   AGE
+actions-controller-5fdc5c8d8d-dqs2f   1/1     Running   0          2d2h
+actions-placement-8df4f746b-2sbs8     1/1     Running   0          2d2h
 ```
- 
-![actions_k8s_success](/img/actions_k8s_success.png)
 
 ### (Optional) Installing Redis as Actions state store on Kubernetes using Helm
 
