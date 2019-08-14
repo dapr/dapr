@@ -114,6 +114,8 @@ steps:
     target: '$(RELEASE_COMMIT)'
     tagSource: 'manual'
     tag: '$(RELEASE_VERSION)'
+    isPreRelease: true
+    addChangeLog: false
     releaseNotesFile: './docs/sdk/release_notes/$(RELEASE_VERSION).md'
     title: 'Actions Pre-release SDK $(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/cli_drop/drop/*.zip'
