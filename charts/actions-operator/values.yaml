@@ -1,0 +1,6 @@
+replicaCount: 1
+
+image:
+  repository: actionscore.azurecr.io/actions
+  tag: latest
+  

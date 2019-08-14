@@ -144,9 +144,9 @@ kubectl get pods --namespace actions-system
 
 By itself, Actions installation does not include a state store. 
 For getting a state store up and running on your Kubernetes cluster in a swift manner, we recommend installing Redis with Helm using the following command:
-    ```
-    helm install stable/redis --set rbac.create=true
-    ```   
+```
+helm install stable/redis --rbac.create=true
+```   
 
 ### Clone the repo
 
