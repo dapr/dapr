@@ -24,6 +24,4 @@ spec:
         ports:
           - containerPort: 50005
         command: ["./placement"]
-      imagePullSecrets:
-      - name: {{ .Values.image.pullSecret }}
       serviceAccountName: actions-controller
