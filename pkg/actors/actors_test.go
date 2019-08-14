@@ -353,7 +353,7 @@ func TestReminderFiresOnceWitnEmptyPeriod(t *testing.T) {
 	err := testActorsRuntime.CreateReminder(&reminder)
 	assert.Nil(t, err)
 
-	time.Sleep(time.Millisecond * 100)
+	time.Sleep(time.Millisecond * 150)
 
 	track, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Empty(t, track.LastFiredTime)
