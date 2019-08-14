@@ -1,0 +1,119 @@
+# actionscore/actions pre-release-sdk
+
+trigger: none
+
+pr : none
+
+schedules:
+- cron: "00 06 * * Tue-Sat"
+  displayName: M-F 11:00PM PST daily build
+  branches:
+    include:
+    - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- task: DownloadBuildArtifacts@0
+  inputs:
+    buildType: 'specific'
+    project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
+    pipeline: '6'
+    buildVersionToDownload: 'latestFromBranch'
+    branchName: 'refs/heads/master'
+    downloadType: 'single'
+    artifactName: 'drop'
+    downloadPath: '$(System.ArtifactsDirectory)/cli_drop'
+- task: Bash@3
+  displayName: 'Git clone pre-release repo'
+  inputs:
+    targetType: 'inline'
+    script: |
+      cd ..
+      git config --global user.email "actionsvt@service.microsoft.com"
+      git config --global user.name "Actions"
+
+      git clone https://$(PREREL_GITHUB_USERNAME):$(PREREL_GITHUB_SECRET)@github.com/actionscore/actionsprerel.git
+    workingDirectory: '$(Build.SourcesDirectory)'
+- task: Bash@3
+  displayName: 'Git clone actions/cli repo'
+  inputs:
+    targetType: 'inline'
+    script: |
+      cd ..
+      git clone https://$(PREREL_GITHUB_USERNAME):$(PREREL_GITHUB_SECRET)@github.com/actionscore/cli.git
+    workingDirectory: '$(Build.SourcesDirectory)'
+- task: Bash@3
+  displayName: 'Copy SDK files from actions to pre-release repo'
+  inputs:
+    targetType: 'inline'
+    script: |
+      pushd ../actionsprerel
+      rm -rf samples docs release_notes
+      rm -f LICENSE README.md
+      popd
+      
+      cp LICENSE ../actionsprerel/
+      cp -R samples ../actionsprerel/
+      cp -R docs ../actionsprerel/
+      mv ../actionsprerel/docs/sdk/README.md ../actionsprerel/
+      mkdir ../actionsprerel/docs/cli
+      mv ../cli/docs/sdk/README.md ../actionsprerel/docs/cli/
+      
+      # Remove unnecessary files
+      rm -rf ../actionsprerel/docs/decision_records
+      rm -rf ../actionsprerel/docs/assets
+    workingDirectory: '$(Build.SourcesDirectory)'
+- task: Bash@3
+  displayName: 'Fix url in markdown documents to Pre-release repo url'
+  inputs:
+    targetType: 'inline'
+    script: |
+      pushd ../actionsprerel
+      
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/actions/github.com\/actionscore\/actionsprerel/gI' {} \;
+
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/actionsprerel\/releases/gI' {} \;
+
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/blob\/master\/README.md/github.com\/actionscore\/actionsprerel\/blob\/master\/docs\/cli\/README.md/gI' {} \;
+      
+      popd
+    workingDirectory: '$(Build.SourcesDirectory)'
+- task: Bash@3
+  displayName: 'Git Push the changes to Pre-release Repo'
+  inputs:
+    targetType: 'inline'
+    script: |
+      pushd ../actionsprerel
+      
+      cd docs/sdk/release_notes/
+      export LAST_RELEASE_NOTE_FILE=`ls | sort -V | tail -1`
+      export LAST_VERSION=`basename $LAST_RELEASE_NOTE_FILE .md`
+      echo "##vso[task.setvariable variable=RELEASE_VERSION]$LAST_VERSION"
+      echo * Latest release version : $LAST_VERSION
+      cd ../../../
+  
+      git add -A
+      git commit -am "Actions Pre-release SDK $LAST_VERSION"
+      git status
+
+      git push origin master
+
+      export LAST_COMMIT=`git rev-parse HEAD`
+      echo "##vso[task.setvariable variable=RELEASE_COMMIT]$LAST_COMMIT"
+
+      popd
+    workingDirectory: '$(Build.SourcesDirectory)'
+- task: GitHubRelease@0
+  displayName: 'Upload Actions CLI to GitHub Release'  
+  inputs:
+    gitHubConnection: 'GitHub'
+    repositoryName: 'actionscore/actionsprerel'
+    action: 'create'
+    target: '$(RELEASE_COMMIT)'
+    tagSource: 'manual'
+    tag: '$(RELEASE_VERSION)'
+    releaseNotesFile: './docs/sdk/release_notes/$(RELEASE_VERSION).md'
+    title: 'Actions Pre-release SDK $(RELEASE_VERSION)'
+    assets: '$(System.ArtifactsDirectory)/cli_drop/drop/*.zip'
