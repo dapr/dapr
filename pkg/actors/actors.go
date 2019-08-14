@@ -209,6 +209,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	if !exists {
 		err := a.tryActivateActor(actorType, actorID)
 		if err != nil {
+			a.actorsTable.Delete(key)
 			return nil, err
 		}
 	} else {
@@ -685,6 +686,10 @@ func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
 		return err
 	}
 
+	a.remindersLock.Lock()
+	a.reminders[req.ActorType] = reminders
+	a.remindersLock.Unlock()
+
 	err = a.startReminder(&reminder)
 	if err != nil {
 		return err
@@ -803,6 +808,10 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	if err != nil {
 		return err
 	}
+
+	a.remindersLock.Lock()
+	a.reminders[req.ActorType] = reminders
+	a.remindersLock.Unlock()
 
 	err = a.store.Delete(&state.DeleteRequest{
 		Key: reminderKey,
