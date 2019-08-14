@@ -82,7 +82,7 @@ steps:
       cd ../../../
   
       git add -A
-      git commit -am "Actions Pre-release SDK v$LAST_VERSION"
+      git commit -am "Actions Pre-release SDK $LAST_VERSION"
       git status
 
       git push origin master
@@ -100,7 +100,7 @@ steps:
     action: 'create'
     target: '$(RELEASE_COMMIT)'
     tagSource: 'manual'
-    tag: 'v$(RELEASE_VERSION)'
+    tag: '$(RELEASE_VERSION)'
     releaseNotesFile: './docs/sdk/release_notes/$(RELEASE_VERSION).md'
-    title: 'Actions Pre-release SDK v$(RELEASE_VERSION)'
+    title: 'Actions Pre-release SDK $(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/cli_drop/drop/*.zip'
