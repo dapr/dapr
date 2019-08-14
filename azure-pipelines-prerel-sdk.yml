@@ -63,7 +63,7 @@ steps:
     script: |
       pushd ../actionsprerel
       
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli/github.com\/actionscore\/actionsprerel/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/actions/github.com\/actionscore\/actionsprerel/gI' {} \;
 
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/actionsprerel\/releases/gI' {} \;
 
