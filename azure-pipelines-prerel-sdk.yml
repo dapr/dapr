@@ -2,6 +2,8 @@
 
 trigger: none
 
+pr : none
+
 schedules:
 - cron: "00 06 * * Tue-Sat"
   displayName: M-F 11:00PM PST daily build
