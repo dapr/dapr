@@ -46,10 +46,8 @@ type actorsRuntime struct {
 	grpcConnectionFn    func(address string) (*grpc.ClientConn, error)
 	config              Config
 	actorsTable         *sync.Map
-	activeTimersLock    *sync.RWMutex
-	activeTimers        map[string]chan (bool)
-	activeRemindersLock *sync.RWMutex
-	activeReminders     map[string]chan (bool)
+	activeTimers        *sync.Map
+	activeReminders     *sync.Map
 	remindersLock       *sync.RWMutex
 	reminders           map[string][]Reminder
 }
@@ -72,10 +70,8 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		operationUpdateLock: &sync.Mutex{},
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
-		activeTimersLock:    &sync.RWMutex{},
-		activeTimers:        map[string]chan (bool){},
-		activeRemindersLock: &sync.RWMutex{},
-		activeReminders:     map[string]chan (bool){},
+		activeTimers:        &sync.Map{},
+		activeReminders:     &sync.Map{},
 		remindersLock:       &sync.RWMutex{},
 		reminders:           map[string][]Reminder{},
 	}
@@ -456,9 +452,7 @@ func (a *actorsRuntime) evaluateReminders() {
 					if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 						actorKey := a.constructCombinedActorKey(r.ActorType, r.ActorID)
 						reminderKey := fmt.Sprintf("%s-%s", actorKey, r.Name)
-						a.activeRemindersLock.RLock()
-						_, exists := a.activeReminders[reminderKey]
-						a.activeRemindersLock.RUnlock()
+						_, exists := a.activeReminders.Load(reminderKey)
 
 						if !exists {
 							err := a.startReminder(&r)
@@ -586,10 +580,8 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 				log.Errorf("error parsing reminder period: %s", err)
 			}
 
-			a.activeRemindersLock.Lock()
 			stop := make(chan bool, 1)
-			a.activeReminders[reminderKey] = stop
-			a.activeRemindersLock.Unlock()
+			a.activeReminders.Store(reminderKey, stop)
 
 			t := time.NewTicker(period)
 			go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, reminder, dueTime, period string, data interface{}) {
@@ -711,11 +703,9 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 		return fmt.Errorf("can't create timer for actor %s: actor not activated", actorKey)
 	}
 
-	a.activeTimersLock.Lock()
-	defer a.activeTimersLock.Unlock()
-
-	if val, ok := a.activeTimers[timerKey]; ok {
-		close(val)
+	stopChan, exists := a.activeTimers.Load(timerKey)
+	if exists {
+		close(stopChan.(chan bool))
 	}
 
 	d, err := time.ParseDuration(req.Period)
@@ -725,7 +715,7 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 
 	t := time.NewTicker(d)
 	stop := make(chan bool, 1)
-	a.activeTimers[timerKey] = stop
+	a.activeTimers.Store(timerKey, stop)
 
 	go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, name, dueTime, period, callback string, data interface{}) {
 		if dueTime != "" {
@@ -791,9 +781,6 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 }
 
 func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
-	a.activeRemindersLock.Lock()
-	defer a.activeRemindersLock.Unlock()
-
 	key := fmt.Sprintf("actors-%s", req.ActorType)
 	reminders, err := a.getRemindersForActorType(req.ActorType)
 	if err != nil {
@@ -809,10 +796,12 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
 	reminderKey := fmt.Sprintf("%s-%s", actorKey, req.Name)
 
-	if val, ok := a.activeReminders[reminderKey]; ok {
-		close(val)
-		delete(a.activeReminders, reminderKey)
+	stopChan, exists := a.activeReminders.Load(reminderKey)
+	if exists {
+		close(stopChan.(chan bool))
+		a.activeReminders.Delete(reminderKey)
 	}
+
 	err = a.store.Set(&state.SetRequest{
 		Key:   key,
 		Value: reminders,
@@ -838,12 +827,11 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
 	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
 	timerKey := fmt.Sprintf("%s-%s", actorKey, req.Name)
-	a.activeTimersLock.Lock()
-	defer a.activeTimersLock.Unlock()
 
-	if val, ok := a.activeTimers[timerKey]; ok {
-		close(val)
-		delete(a.activeTimers, timerKey)
+	stopChan, exists := a.activeTimers.Load(timerKey)
+	if exists {
+		close(stopChan.(chan bool))
+		a.activeTimers.Delete(timerKey)
 	}
 
 	return nil

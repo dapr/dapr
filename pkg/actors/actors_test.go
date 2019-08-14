@@ -275,14 +275,18 @@ func TestDeleteTimer(t *testing.T) {
 
 	timerKey := fmt.Sprintf("%s-%s", actorKey, timer.Name)
 
-	assert.NotNil(t, testActorsRuntime.activeTimers[timerKey])
+	_, ok := testActorsRuntime.activeTimers.Load(timerKey)
+	assert.True(t, ok)
+
 	err = testActorsRuntime.DeleteTimer(&DeleteTimerRequest{
 		Name:      timer.Name,
 		ActorID:   actorID,
 		ActorType: actorType,
 	})
 	assert.Nil(t, err)
-	assert.Nil(t, testActorsRuntime.activeTimers[timerKey])
+
+	_, ok = testActorsRuntime.activeTimers.Load(timerKey)
+	assert.False(t, ok)
 }
 
 func TestReminderFires(t *testing.T) {
@@ -292,7 +296,7 @@ func TestReminderFires(t *testing.T) {
 	err := testActorsRuntime.CreateReminder(&reminder)
 	assert.Nil(t, err)
 
-	time.Sleep(time.Millisecond * 400)
+	time.Sleep(time.Millisecond * 250)
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
 	track, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Nil(t, err)
