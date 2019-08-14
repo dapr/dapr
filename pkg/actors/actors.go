@@ -565,8 +565,6 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 	actorKey := a.constructCombinedActorKey(reminder.ActorType, reminder.ActorID)
 	reminderKey := fmt.Sprintf("%s-%s", actorKey, reminder.Name)
-	a.activeRemindersLock.Lock()
-	defer a.activeRemindersLock.Unlock()
 	nextInvokeTime, err := a.getUpcomingReminderInvokeTime(reminder)
 	if err != nil {
 		return err
@@ -587,7 +585,9 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 				log.Errorf("error parsing reminder period: %s", err)
 			}
 
+			a.activeRemindersLock.Lock()
 			a.activeReminders[reminderKey] = time.NewTicker(period)
+			a.activeRemindersLock.Unlock()
 			go func(actorType, actorID, reminder, dueTime, period string, data interface{}) {
 				actorKey := a.constructCombinedActorKey(actorType, actorID)
 				reminderKey := fmt.Sprintf("%s-%s", actorKey, reminder)
