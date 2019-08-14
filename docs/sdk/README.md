@@ -13,17 +13,17 @@ In this SDK repository, included are the following:
 2.	README file with instruction on how to setup Actions
 3.	Actions CLI binaries
 4.	Samples to help you get started with Actions
-5.	Documentations
+5.	Documentation
 
 
-## What's new (version 0.3.0-alpha)
+## Release notes
 
-This release of Actions SDK is the very first project's partners SDK. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kuberntes mode as well as samples.   
+This release of Actions SDK is the very first project's partners SDK. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.   
 
-* Actions CLI 0.3.0-alpha [(release notes)](https://github.com/actionscore/actions/docs/release_notes/v0.3.0-alpha.md)
+* Actions runtime 0.2.0-alpha [(release notes)](https://github.com/actionscore/actions/docs/release_notes/v0.2.0-alpha.md)
 * C# SDK
 
-For the full release notes, go [here](https://github.com/actionscore/actions/docs/sdk/release_notes/v0.3.0-alpha.md). 
+For the full release notes, go [here](https://github.com/actionscore/actions/docs/sdk/release_notes/v1.0.md). 
 
 ## Setup
 
