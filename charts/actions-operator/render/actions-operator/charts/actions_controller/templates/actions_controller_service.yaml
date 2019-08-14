@@ -1,0 +1,14 @@
+---
+# Source: actions-operator/charts/actions_controller/templates/actions_controller_service.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: actions-api
+  namespace: default
+spec:
+  selector:
+    app: actions-controller
+  ports:
+  - protocol: TCP
+    port: 80 
+    targetPort: 6500  

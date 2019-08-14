@@ -1,0 +1,29 @@
+---
+# Source: actions-operator/charts/actions_placement/templates/actions_placement_deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: actions-placement
+  namespace: default
+  labels:
+    app: actions-placement
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: actions-placement
+  template:
+    metadata:
+      labels:
+        app: actions-placement
+    spec:
+      containers:
+      - name: actions-placement
+        repository: 
+        image: "actionscore.azurecr.io/actions:latest"
+        imagePullPolicy: 
+        ports:
+          - containerPort: 50005
+        command: ["./placement"]
+      serviceAccountName: actions-controller
