@@ -1,7 +1,13 @@
 # actionscore/actions pre-release-sdk
 
-variables:
-  ReleaseTitle: 'Actions Pre-release SDK'
+trigger: none
+
+schedules:
+- cron: "00 06 * * Tue-Sat"
+  displayName: M-F 11:00PM PST daily build
+  branches:
+    include:
+    - master
 
 pool:
   vmImage: 'ubuntu-latest'
