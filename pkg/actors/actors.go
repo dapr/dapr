@@ -47,9 +47,9 @@ type actorsRuntime struct {
 	config              Config
 	actorsTable         *sync.Map
 	activeTimersLock    *sync.RWMutex
-	activeTimers        map[string]*time.Ticker
+	activeTimers        map[string]chan (bool)
 	activeRemindersLock *sync.RWMutex
-	activeReminders     map[string]*time.Ticker
+	activeReminders     map[string]chan (bool)
 	remindersLock       *sync.RWMutex
 	reminders           map[string][]Reminder
 }
@@ -73,9 +73,9 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
 		activeTimersLock:    &sync.RWMutex{},
-		activeTimers:        map[string]*time.Ticker{},
+		activeTimers:        map[string]chan (bool){},
 		activeRemindersLock: &sync.RWMutex{},
-		activeReminders:     map[string]*time.Ticker{},
+		activeReminders:     map[string]chan (bool){},
 		remindersLock:       &sync.RWMutex{},
 		reminders:           map[string][]Reminder{},
 	}
@@ -587,19 +587,24 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 			}
 
 			a.activeRemindersLock.Lock()
-			a.activeReminders[reminderKey] = time.NewTicker(period)
+			stop := make(chan bool, 1)
+			a.activeReminders[reminderKey] = stop
 			a.activeRemindersLock.Unlock()
-			go func(actorType, actorID, reminder, dueTime, period string, data interface{}) {
-				actorKey := a.constructCombinedActorKey(actorType, actorID)
-				reminderKey := fmt.Sprintf("%s-%s", actorKey, reminder)
 
-				for _ = range a.activeReminders[reminderKey].C {
-					err := a.executeReminder(actorType, actorID, dueTime, period, reminder, data)
-					if err != nil {
-						log.Debugf("error invoking reminder on actor %s: %s", actorKey, err)
+			t := time.NewTicker(period)
+			go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, reminder, dueTime, period string, data interface{}) {
+				for {
+					select {
+					case <-ticker.C:
+						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, data)
+						if err != nil {
+							log.Debugf("error invoking reminder on actor %s: %s", a.constructCombinedActorKey(actorType, actorID), err)
+						}
+					case <-stop:
+						return
 					}
 				}
-			}(reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
+			}(t, stop, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
 		} else {
 			err := a.DeleteReminder(&DeleteReminderRequest{
 				Name:      reminder.Name,
@@ -710,7 +715,7 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 	defer a.activeTimersLock.Unlock()
 
 	if val, ok := a.activeTimers[timerKey]; ok {
-		val.Stop()
+		close(val)
 	}
 
 	d, err := time.ParseDuration(req.Period)
@@ -718,8 +723,11 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 		return err
 	}
 
-	a.activeTimers[timerKey] = time.NewTicker(d)
-	go func(actorType, actorID, name, dueTime, period, callback string, data interface{}) {
+	t := time.NewTicker(d)
+	stop := make(chan bool, 1)
+	a.activeTimers[timerKey] = stop
+
+	go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, name, dueTime, period, callback string, data interface{}) {
 		if dueTime != "" {
 			d, err := time.ParseDuration(dueTime)
 			if err == nil {
@@ -728,24 +736,28 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 		}
 
 		actorKey := a.constructCombinedActorKey(actorType, actorID)
-		timerKey := fmt.Sprintf("%s-%s", actorKey, name)
 
-		for _ = range a.activeTimers[timerKey].C {
-			_, exists := a.actorsTable.Load(actorKey)
-			if exists {
-				err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
-				if err != nil {
-					log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+		for {
+			select {
+			case <-ticker.C:
+				_, exists := a.actorsTable.Load(actorKey)
+				if exists {
+					err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
+					if err != nil {
+						log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+					}
+				} else {
+					a.DeleteTimer(&DeleteTimerRequest{
+						Name:      name,
+						ActorID:   actorID,
+						ActorType: actorType,
+					})
 				}
-			} else {
-				a.DeleteTimer(&DeleteTimerRequest{
-					Name:      name,
-					ActorID:   actorID,
-					ActorType: actorType,
-				})
+			case <-stop:
+				return
 			}
 		}
-	}(req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
+	}(t, stop, req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
 	return nil
 }
 
@@ -797,8 +809,8 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
 	reminderKey := fmt.Sprintf("%s-%s", actorKey, req.Name)
 
-	if _, ok := a.activeReminders[reminderKey]; ok {
-		a.activeReminders[reminderKey].Stop()
+	if val, ok := a.activeReminders[reminderKey]; ok {
+		close(val)
 		delete(a.activeReminders, reminderKey)
 	}
 	err = a.store.Set(&state.SetRequest{
@@ -830,7 +842,7 @@ func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
 	defer a.activeTimersLock.Unlock()
 
 	if val, ok := a.activeTimers[timerKey]; ok {
-		val.Stop()
+		close(val)
 		delete(a.activeTimers, timerKey)
 	}
 

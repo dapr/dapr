@@ -269,7 +269,7 @@ func TestDeleteTimer(t *testing.T) {
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorKey)
 
-	timer := createTimer(actorID, actorType, "timer1", "1s", "1s", "callback", "")
+	timer := createTimer(actorID, actorType, "timer1", "100ms", "100ms", "callback", "")
 	err := testActorsRuntime.CreateTimer(&timer)
 	assert.Nil(t, err)
 
