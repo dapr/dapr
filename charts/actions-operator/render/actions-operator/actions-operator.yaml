@@ -98,7 +98,7 @@ spec:
         - name: RUNTIME_IMAGE
           value: "actionscore.azurecr.io/actions:latest"
         - name: NAMESPACE
-          value: default
+          value: actions-system
         imagePullPolicy: 
         ports:
         - containerPort: 6500
