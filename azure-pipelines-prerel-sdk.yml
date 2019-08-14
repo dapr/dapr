@@ -23,7 +23,6 @@ steps:
     targetType: 'inline'
     script: |
       cd ..
-
       git config --global user.email "actionsvt@service.microsoft.com"
       git config --global user.name "Actions"
 
@@ -35,7 +34,6 @@ steps:
     targetType: 'inline'
     script: |
       cd ..
-
       git clone https://$(PREREL_GITHUB_USERNAME):$(PREREL_GITHUB_SECRET)@github.com/actionscore/cli.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
@@ -104,5 +102,5 @@ steps:
     tagSource: 'manual'
     tag: 'v$(RELEASE_VERSION)'
     releaseNotesFile: './docs/sdk/release_notes/$(RELEASE_VERSION).md'
-    title: 'Actions SDK Pre-release v$(RELEASE_VERSION)'
+    title: 'Actions Pre-release SDK v$(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/cli_drop/drop/*.zip'
