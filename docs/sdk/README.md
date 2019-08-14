@@ -4,26 +4,25 @@
 
 Actions is a programming model for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Actions offers an eventing system on which compute units communicate with each other by exchanging messages.
 
-
-## Included in this SDK 
+## Included in this SDK
 
 In this SDK repository, included are the following:
 
-1.	Microsoft “Actions” Private Preview license
-2.	README file with instruction on how to setup Actions
-3.	Actions CLI binaries
-4.	Samples to help you get started with Actions
-5.	Documentation
+1. Microsoft “Actions” Private Preview license
+2. README file with instruction on how to setup Actions
+3. Actions CLI binaries
+4. Samples to help you get started with Actions
+5. Documentation
 
 
 ## Release notes
 
-This release of Actions SDK is the very first project's partners SDK. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.   
+This release of Actions SDK is the very first project's partners SDK. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.
 
-* Actions runtime 0.2.0-alpha [(release notes)](https://github.com/actionscore/actions/docs/release_notes/v0.2.0-alpha.md)
+* Actions runtime 0.2.0-alpha [(release notes)](https://github.com/actionscore/actions/blob/master/docs/release_notes/v0.2.0-alpha.md)
 * C# SDK
 
-For the full release notes, go [here](https://github.com/actionscore/actions/docs/sdk/release_notes/v1.0.md). 
+For the full release notes, go [here](https://github.com/actionscore/actions/blob/master/docs/sdk/release_notes/v1.0.0.md).
 
 ## Setup
 
@@ -54,7 +53,7 @@ $ actions init
 ✅  Success! Get ready to rumble
 ```
 
-For getting started with the Actions CLI, go [here](https://github.com/actionscore/cli).
+For getting started with the Actions CLI, go [here](https://github.com/actionscore/cli/blob/master/README.md).
 
 
 ### Install on Kubernetes
