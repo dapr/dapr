@@ -11,7 +11,7 @@ The front-end application consists of a server and a client written in [React](h
 Kudos to [ahfarmer](https://github.com/ahfarmer) whose [React calculator](https://github.com/ahfarmer/calculator) 
 sample was used for the client.
 
-Each application has been dockerized and pushed into [dockerhub](https://hub.docker.com/u/actionsdemoes), where we will pull them from.
+Each application has been dockerized and pushed into an [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/), where we will pull them from.
 
 ## Prerequisites
 
