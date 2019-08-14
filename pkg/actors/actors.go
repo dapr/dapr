@@ -694,7 +694,7 @@ func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
 		for {
 			select {
 			case <-time.After(time.Second * 5):
-				break
+				return errors.New("error creating reminder: timed out after 5s")
 			case <-a.evaluationChan:
 				break
 			}
@@ -828,7 +828,7 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 		for {
 			select {
 			case <-time.After(time.Second * 5):
-				break
+				return errors.New("error creating reminder: timed out after 5s")
 			case <-a.evaluationChan:
 				break
 			}
