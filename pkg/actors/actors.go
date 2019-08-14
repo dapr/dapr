@@ -51,6 +51,8 @@ type actorsRuntime struct {
 	remindersLock       *sync.RWMutex
 	reminders           map[string][]Reminder
 	evaluationLock      *sync.RWMutex
+	evaluationBusy      bool
+	evaluationChan      chan bool
 }
 
 const (
@@ -76,6 +78,8 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		remindersLock:       &sync.RWMutex{},
 		reminders:           map[string][]Reminder{},
 		evaluationLock:      &sync.RWMutex{},
+		evaluationBusy:      false,
+		evaluationChan:      make(chan bool),
 	}
 }
 
@@ -438,6 +442,9 @@ func (a *actorsRuntime) evaluateReminders() {
 	a.evaluationLock.Lock()
 	defer a.evaluationLock.Unlock()
 
+	a.evaluationBusy = true
+	a.evaluationChan = make(chan bool)
+
 	var wg sync.WaitGroup
 	for _, t := range a.config.HostedActorTypes {
 		vals, err := a.getRemindersForActorType(t)
@@ -475,6 +482,8 @@ func (a *actorsRuntime) evaluateReminders() {
 		}
 	}
 	wg.Wait()
+	close(a.evaluationChan)
+	a.evaluationBusy = false
 }
 
 func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) string {
@@ -641,35 +650,56 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	return err
 }
 
-func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest) bool {
-	a.remindersLock.RLock()
-	reminders := a.reminders[req.ActorType]
-	a.remindersLock.RUnlock()
-
-	for _, r := range reminders {
-		if r.ActorID == req.ActorID && r.ActorType == req.ActorType &&
-			(r.Data != req.Data || r.DueTime != req.DueTime || r.Period != req.Period) {
-			return true
-		}
+func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest, reminder *Reminder) bool {
+	if reminder.ActorID == req.ActorID && reminder.ActorType == req.ActorType && reminder.Name == req.Name &&
+		(reminder.Data != req.Data || reminder.DueTime != req.DueTime || reminder.Period != req.Period) {
+		return true
 	}
 
 	return false
 }
 
-func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
-	if a.reminderRequiresUpdate(req) {
-		err := a.DeleteReminder(&DeleteReminderRequest{
-			ActorID:   req.ActorID,
-			ActorType: req.ActorType,
-			Name:      req.Name,
-		})
-		if err != nil {
-			return err
+func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool) {
+	a.remindersLock.RLock()
+	reminders := a.reminders[req.ActorType]
+	a.remindersLock.RUnlock()
+
+	for _, r := range reminders {
+		if r.ActorID == req.ActorID && r.ActorType == req.ActorType && r.Name == req.Name {
+			return &r, true
 		}
 	}
 
-	a.evaluationLock.RLock()
-	defer a.evaluationLock.RUnlock()
+	return nil, false
+}
+
+func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
+	r, exists := a.getReminder(req)
+	if exists {
+		if a.reminderRequiresUpdate(req, r) {
+			err := a.DeleteReminder(&DeleteReminderRequest{
+				ActorID:   req.ActorID,
+				ActorType: req.ActorType,
+				Name:      req.Name,
+			})
+			if err != nil {
+				return err
+			}
+		} else {
+			return nil
+		}
+	}
+
+	if a.evaluationBusy {
+		for {
+			select {
+			case <-time.After(time.Second * 5):
+				break
+			case <-a.evaluationChan:
+				break
+			}
+		}
+	}
 
 	reminder := Reminder{
 		ActorID:        req.ActorID,
@@ -794,8 +824,16 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 }
 
 func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
-	a.evaluationLock.RLock()
-	defer a.evaluationLock.RUnlock()
+	if a.evaluationBusy {
+		for {
+			select {
+			case <-time.After(time.Second * 5):
+				break
+			case <-a.evaluationChan:
+				break
+			}
+		}
+	}
 
 	key := fmt.Sprintf("actors-%s", req.ActorType)
 	reminders, err := a.getRemindersForActorType(req.ActorType)
