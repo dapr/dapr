@@ -2,6 +2,7 @@ package actors
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -28,6 +29,10 @@ type Actors interface {
 	Init() error
 	GetState(req *GetStateRequest) (*StateResponse, error)
 	SaveState(req *SaveStateRequest) error
+	CreateReminder(req *CreateReminderRequest) error
+	DeleteReminder(req *DeleteReminderRequest) error
+	CreateTimer(req *CreateTimerRequest) error
+	DeleteTimer(req *DeleteTimerRequest) error
 }
 
 type actorsRuntime struct {
@@ -41,6 +46,12 @@ type actorsRuntime struct {
 	grpcConnectionFn    func(address string) (*grpc.ClientConn, error)
 	config              Config
 	actorsTable         *sync.Map
+	activeTimersLock    *sync.RWMutex
+	activeTimers        map[string]*time.Ticker
+	activeRemindersLock *sync.RWMutex
+	activeReminders     map[string]*time.Ticker
+	remindersLock       *sync.RWMutex
+	reminders           map[string][]Reminder
 }
 
 const (
@@ -61,6 +72,12 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		operationUpdateLock: &sync.Mutex{},
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
+		activeTimersLock:    &sync.RWMutex{},
+		activeTimers:        map[string]*time.Ticker{},
+		activeRemindersLock: &sync.RWMutex{},
+		activeReminders:     map[string]*time.Ticker{},
+		remindersLock:       &sync.RWMutex{},
+		reminders:           map[string][]Reminder{},
 	}
 }
 
@@ -413,6 +430,45 @@ func (a *actorsRuntime) updatePlacements(in *pb.PlacementTables) {
 
 		a.placementTables.Version = in.Version
 		log.Info("actors: placement tables updated")
+
+		go a.evaluateReminders()
+	}
+}
+
+func (a *actorsRuntime) evaluateReminders() {
+	for _, t := range a.config.HostedActorTypes {
+		vals, err := a.getRemindersForActorType(t)
+		if err != nil {
+			log.Debugf("error getting reminders for actor type %s: %s", t, err)
+		} else {
+			a.remindersLock.Lock()
+			a.reminders[t] = vals
+			a.remindersLock.Unlock()
+
+			go func(reminders []Reminder) {
+				for _, r := range reminders {
+					targetActorAddress := a.lookupActorAddress(r.ActorType, r.ActorID)
+					if targetActorAddress == "" {
+						continue
+					}
+
+					if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
+						actorKey := a.constructCombinedActorKey(r.ActorType, r.ActorID)
+						reminderKey := fmt.Sprintf("%s-%s", actorKey, r.Name)
+						a.activeRemindersLock.RLock()
+						_, exists := a.activeReminders[reminderKey]
+						a.activeRemindersLock.RUnlock()
+
+						if !exists {
+							err := a.startReminder(&r)
+							if err != nil {
+								log.Debugf("error starting reminder: %s", err)
+							}
+						}
+					}
+				}
+			}(vals)
+		}
 	}
 }
 
@@ -425,6 +481,349 @@ func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) string {
 	if t == nil {
 		return ""
 	}
-	host, _ := t.GetHost(actorID)
+	host, err := t.GetHost(actorID)
+	if err != nil || host == nil {
+		return ""
+	}
 	return fmt.Sprintf("%s:%v", host.Name, host.Port)
+}
+
+func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack, error) {
+	resp, err := a.store.Get(&state.GetRequest{
+		Key: fmt.Sprintf("%s-%s", actorKey, name),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var track ReminderTrack
+	json.Unmarshal(resp.Data, &track)
+	return &track, nil
+}
+
+func (a *actorsRuntime) updateReminderTrack(actorKey, name string) error {
+	track := ReminderTrack{
+		LastFiredTime: time.Now().UTC().Format(time.RFC3339),
+	}
+
+	err := a.store.Set(&state.SetRequest{
+		Key:   fmt.Sprintf("%s-%s", actorKey, name),
+		Value: track,
+	})
+	return err
+}
+
+func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.Time, error) {
+	var nextInvokeTime time.Time
+
+	registeredTime, err := time.Parse(time.RFC3339, reminder.RegisteredTime)
+	if err != nil {
+		return nextInvokeTime, fmt.Errorf("error parsing reminder registered time: %s", err)
+	}
+
+	dueTime, err := time.ParseDuration(reminder.DueTime)
+	if err != nil {
+		return nextInvokeTime, fmt.Errorf("error parsing reminder due time: %s", err)
+	}
+
+	key := a.constructCombinedActorKey(reminder.ActorType, reminder.ActorID)
+	track, err := a.getReminderTrack(key, reminder.Name)
+	if err != nil {
+		return nextInvokeTime, fmt.Errorf("error getting reminder track: %s", err)
+	}
+
+	var lastFiredTime time.Time
+	if track != nil && track.LastFiredTime != "" {
+		lastFiredTime, err = time.Parse(time.RFC3339, track.LastFiredTime)
+		if err != nil {
+			return nextInvokeTime, fmt.Errorf("error parsing reminder last fired time: %s", err)
+		}
+	}
+
+	if reminder.Period != "" {
+		period, err := time.ParseDuration(reminder.Period)
+		if err != nil {
+			return nextInvokeTime, fmt.Errorf("error parsing reminder period: %s", err)
+		}
+
+		if !lastFiredTime.IsZero() {
+			nextInvokeTime = lastFiredTime.Add(period)
+		} else {
+			nextInvokeTime = registeredTime.Add(dueTime)
+		}
+	} else {
+		if !lastFiredTime.IsZero() {
+			nextInvokeTime = lastFiredTime.Add(dueTime)
+		} else {
+			nextInvokeTime = registeredTime.Add(dueTime)
+		}
+	}
+
+	return nextInvokeTime, nil
+}
+
+func (a *actorsRuntime) startReminder(reminder *Reminder) error {
+	actorKey := a.constructCombinedActorKey(reminder.ActorType, reminder.ActorID)
+	reminderKey := fmt.Sprintf("%s-%s", actorKey, reminder.Name)
+	a.activeRemindersLock.Lock()
+	defer a.activeRemindersLock.Unlock()
+	nextInvokeTime, err := a.getUpcomingReminderInvokeTime(reminder)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		now := time.Now().UTC()
+		initialDuration := nextInvokeTime.Sub(now)
+		time.Sleep(initialDuration)
+		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, reminder.Data)
+		if err != nil {
+			log.Errorf("error executing reminder: %s", err)
+		}
+
+		if reminder.Period != "" {
+			period, err := time.ParseDuration(reminder.Period)
+			if err != nil {
+				log.Errorf("error parsing reminder period: %s", err)
+			}
+
+			a.activeReminders[reminderKey] = time.NewTicker(period)
+			go func(actorType, actorID, reminder, dueTime, period string, data interface{}) {
+				actorKey := a.constructCombinedActorKey(actorType, actorID)
+				reminderKey := fmt.Sprintf("%s-%s", actorKey, reminder)
+
+				for _ = range a.activeReminders[reminderKey].C {
+					err := a.executeReminder(actorType, actorID, dueTime, period, reminder, data)
+					if err != nil {
+						log.Debugf("error invoking reminder on actor %s: %s", actorKey, err)
+					}
+				}
+			}(reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
+		} else {
+			err := a.DeleteReminder(&DeleteReminderRequest{
+				Name:      reminder.Name,
+				ActorID:   reminder.ActorID,
+				ActorType: reminder.ActorType,
+			})
+			if err != nil {
+				log.Errorf("error deleting reminder: %s", err)
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, data interface{}) error {
+	r := ReminderResponse{
+		DueTime: dueTime,
+		Period:  period,
+		Data:    data,
+	}
+	b, err := json.Marshal(&r)
+	if err != nil {
+		return err
+	}
+
+	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b)
+	if err == nil {
+		key := a.constructCombinedActorKey(actorType, actorID)
+		a.updateReminderTrack(key, reminder)
+	}
+	return err
+}
+
+func (a *actorsRuntime) reminderRequiresUpdate(req *CreateReminderRequest) bool {
+	a.remindersLock.RLock()
+	reminders := a.reminders[req.ActorType]
+	a.remindersLock.RUnlock()
+
+	for _, r := range reminders {
+		if r.ActorID == req.ActorID && r.ActorType == req.ActorType &&
+			(r.Data != req.Data || r.DueTime != req.DueTime || r.Period != req.Period) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
+	if a.reminderRequiresUpdate(req) {
+		err := a.DeleteReminder(&DeleteReminderRequest{
+			ActorID:   req.ActorID,
+			ActorType: req.ActorType,
+			Name:      req.Name,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	reminder := Reminder{
+		ActorID:        req.ActorID,
+		ActorType:      req.ActorType,
+		Name:           req.Name,
+		Data:           req.Data,
+		Period:         req.Period,
+		DueTime:        req.DueTime,
+		RegisteredTime: time.Now().UTC().Format(time.RFC3339),
+	}
+
+	reminders, err := a.getRemindersForActorType(req.ActorType)
+	if err != nil {
+		return err
+	}
+
+	reminders = append(reminders, reminder)
+
+	err = a.store.Set(&state.SetRequest{
+		Key:   fmt.Sprintf("actors-%s", req.ActorType),
+		Value: reminders,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = a.startReminder(&reminder)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
+	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
+	timerKey := fmt.Sprintf("%s-%s", actorKey, req.Name)
+
+	_, exists := a.actorsTable.Load(actorKey)
+	if !exists {
+		return fmt.Errorf("can't create timer for actor %s: actor not activated", actorKey)
+	}
+
+	a.activeTimersLock.Lock()
+	defer a.activeTimersLock.Unlock()
+
+	if val, ok := a.activeTimers[timerKey]; ok {
+		val.Stop()
+	}
+
+	d, err := time.ParseDuration(req.Period)
+	if err != nil {
+		return err
+	}
+
+	a.activeTimers[timerKey] = time.NewTicker(d)
+	go func(actorType, actorID, name, dueTime, period, callback string, data interface{}) {
+		if dueTime != "" {
+			d, err := time.ParseDuration(dueTime)
+			if err == nil {
+				time.Sleep(d)
+			}
+		}
+
+		actorKey := a.constructCombinedActorKey(actorType, actorID)
+		timerKey := fmt.Sprintf("%s-%s", actorKey, name)
+
+		for _ = range a.activeTimers[timerKey].C {
+			_, exists := a.actorsTable.Load(actorKey)
+			if exists {
+				err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
+				if err != nil {
+					log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+				}
+			} else {
+				a.DeleteTimer(&DeleteTimerRequest{
+					Name:      name,
+					ActorID:   actorID,
+					ActorType: actorType,
+				})
+			}
+		}
+	}(req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
+	return nil
+}
+
+func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, callback string, data interface{}) error {
+	t := TimerResponse{
+		Callback: callback,
+		Data:     data,
+		DueTime:  dueTime,
+		Period:   period,
+	}
+	b, err := json.Marshal(&t)
+	if err != nil {
+		return err
+	}
+	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b)
+	return err
+}
+
+func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, error) {
+	key := fmt.Sprintf("actors-%s", actorType)
+	resp, err := a.store.Get(&state.GetRequest{
+		Key: key,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var reminders []Reminder
+	json.Unmarshal(resp.Data, &reminders)
+	return reminders, nil
+}
+
+func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
+	a.activeRemindersLock.Lock()
+	defer a.activeRemindersLock.Unlock()
+
+	key := fmt.Sprintf("actors-%s", req.ActorType)
+	reminders, err := a.getRemindersForActorType(req.ActorType)
+	if err != nil {
+		return err
+	}
+
+	for i := len(reminders) - 1; i >= 0; i-- {
+		if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
+			reminders = append(reminders[:i], reminders[i+1:]...)
+		}
+	}
+
+	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
+	reminderKey := fmt.Sprintf("%s-%s", actorKey, req.Name)
+
+	if _, ok := a.activeReminders[reminderKey]; ok {
+		a.activeReminders[reminderKey].Stop()
+		delete(a.activeReminders, reminderKey)
+	}
+	err = a.store.Set(&state.SetRequest{
+		Key:   key,
+		Value: reminders,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = a.store.Delete(&state.DeleteRequest{
+		Key: reminderKey,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
+	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
+	timerKey := fmt.Sprintf("%s-%s", actorKey, req.Name)
+	a.activeTimersLock.Lock()
+	defer a.activeTimersLock.Unlock()
+
+	if val, ok := a.activeTimers[timerKey]; ok {
+		val.Stop()
+		delete(a.activeTimers, timerKey)
+	}
+
+	return nil
 }
