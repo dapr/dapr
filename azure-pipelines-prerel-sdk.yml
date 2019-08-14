@@ -61,6 +61,7 @@ steps:
       
       # Remove unnecessary files
       rm -rf ../actionsprerel/docs/decision_records
+      rm -rf ../actionsprerel/docs/assets
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Fix url in markdown documents to Pre-release repo url'

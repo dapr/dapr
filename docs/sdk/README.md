@@ -26,6 +26,8 @@ For the full release notes, go [here](https://github.com/actionscore/actions/blo
 
 ## Setup
 
+The Actions CLI allows you to setup Actions on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Actions instances.
+
 ### Install as standalone
 
 #### Prerequisites
@@ -71,8 +73,6 @@ For getting started with the Actions CLI, go [here](https://github.com/actionsco
 
 2. *Kubectl* has been installed and configured to work with your cluster [(instructions)](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
 
-The Actions CLI allows you to setup Actions on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Actions instances.
-
 3. Download the [release](https://github.com/actionscore/cli/releases) for your OS, unpack it and move it to your desired location (for Mac/Linux - ```mv actions /usr/local/bin```. For Windows, add the executable to your System PATH.)
 
 __*Note: For Windows users, run the cmd terminal in administrator mode*__
@@ -90,7 +90,7 @@ $ actions init --kubernetes
 
 Once the chart installation is done, verify the Actions operator pods are running in the `actions-system` namespace:
 ```
-kubectl get pods --namespace actions-system
+$ kubectl get pods --namespace actions-system
 
 NAME                                  READY   STATUS    RESTARTS   AGE
 actions-controller-5fdc5c8d8d-dqs2f   1/1     Running   0          2d2h
