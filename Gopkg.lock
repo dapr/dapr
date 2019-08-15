@@ -1114,6 +1114,7 @@
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/mock",
     "github.com/valyala/fasthttp",
+    "github.com/valyala/fasthttp/fasthttputil",
     "go.opencensus.io/trace",
     "google.golang.org/api/option",
     "google.golang.org/grpc",
