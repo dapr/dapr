@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
       - name: calculator-front-end
-        image: actionsdemoes/react-calculator
+        image: actionscore.azurecr.io/samples/react-calculator
         ports:
         - containerPort: 8080
         imagePullPolicy: Always

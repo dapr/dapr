@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: subtract
-        image: actionsdemoes/dotnet-subtractor
+        image: actionscore.azurecr.io/samples/dotnet-subtractor
         ports:
         - containerPort: 80
         imagePullPolicy: Always
