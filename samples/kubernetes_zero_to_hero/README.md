@@ -112,11 +112,10 @@ This calls out to our Redis cache to grab the latest value of the "order" key, w
 kubectl apply -f ./deploy/node.yaml
 ```
 
-This will deploy our Node app to Kubernetes. The Actions control plane will automatically inject the Actions sidecar to our Pod.
-
-If you take a look at the ```node.yaml``` file, you will see how Actions is enabled for that deployment:
+This will deploy our Node app to Kubernetes. The Actions control plane will automatically inject the Actions sidecar to our Pod. If you take a look at the ```node.yaml``` file, you will see how Actions is enabled for that deployment:
 
 ```actions.io/enabled: true``` - this tells the Action control plane to inject a sidecar to this deployment.
+
 ```actions.io/id: nodeapp``` - this assigns a unique id or name to the Action, so it can be sent messages to and communicated with by other Actions.
 
 You'll also see the container image that we're deploying. If you want to update the code and deploy a new image, see **Next Steps** section. 
