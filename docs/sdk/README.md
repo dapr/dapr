@@ -1,8 +1,6 @@
 # Actions SDK
 
 ## Overview
-__Note: This repo is currently under heavy development.
-As long as this note is here, consider docs not up-to-date at all times.__
 
 Actions is a programming model for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Actions offers an eventing system on which compute units communicate with each other by exchanging messages.
 
@@ -108,7 +106,7 @@ helm install stable/redis --rbac.create=true
 
 ## Contributing & Support
 
-We We actively reviewing contributions into this repository via [pull request](https://help.github.com/articles/using-pull-requests/). 
+We We actively reviewing contributions into this repository via [issues](https://help.github.com/en/articles/creating-an-issue). 
 
 For any other topic or escalation, please send an email to ???
 
