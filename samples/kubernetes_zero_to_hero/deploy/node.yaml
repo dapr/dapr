@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
       - name: node
-        image: actionsdemoes/nodeapp
+        image: actionscore.azurecr.io/samples/nodeapp
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
