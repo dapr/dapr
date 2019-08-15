@@ -250,7 +250,6 @@ func (f *fakeHTTPServer) Shutdown() {
 }
 
 func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) (int, []byte) {
-
 	r, _ := gohttp.NewRequest(method, fmt.Sprintf("http://localhost/%s", path), bytes.NewBuffer(body))
 	res, err := f.client.Do(r)
 	if err != nil {
