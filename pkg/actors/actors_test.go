@@ -22,6 +22,7 @@ const (
 
 type fakeStateStore struct {
 	items map[string][]byte
+	lock  *sync.RWMutex
 }
 
 func (f *fakeStateStore) Init(metadata state.Metadata) error {
@@ -29,6 +30,8 @@ func (f *fakeStateStore) Init(metadata state.Metadata) error {
 }
 
 func (f *fakeStateStore) Delete(req *state.DeleteRequest) error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
 	delete(f.items, req.Key)
 	return nil
 }
@@ -38,11 +41,16 @@ func (f *fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
 }
 
 func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
-	return &state.GetResponse{Data: f.items[req.Key]}, nil
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+	item := f.items[req.Key]
+	return &state.GetResponse{Data: item}, nil
 }
 
 func (f *fakeStateStore) Set(req *state.SetRequest) error {
 	b, _ := json.Marshal(&req.Value)
+	f.lock.Lock()
+	defer f.lock.Unlock()
 	f.items[req.Key] = b
 	return nil
 }
@@ -74,6 +82,7 @@ func getTestActorTypeAndID() (string, string) {
 func fakeStore() state.StateStore {
 	return &fakeStateStore{
 		items: map[string][]byte{},
+		lock: &sync.RWMutex{},
 	}
 }
 
@@ -312,7 +321,7 @@ func TestReminderDueDate(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, track.LastFiredTime)
 
-	time.Sleep(time.Millisecond * 105)
+	time.Sleep(time.Millisecond * 250)
 
 	track, err = testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Nil(t, err)
@@ -332,7 +341,7 @@ func TestReminderPeriod(t *testing.T) {
 	track, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.NotEmpty(t, track.LastFiredTime)
 
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 3)
 
 	track2, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Nil(t, err)
