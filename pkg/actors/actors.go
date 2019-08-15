@@ -180,7 +180,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data)
+		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	} else {
 		resp, err = a.callRemoteActor(targetActorAddress, req.ActorType, req.ActorID, req.Method, req.Data)
 	}
@@ -194,7 +194,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	}, nil
 }
 
-func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
+func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) ([]byte, error) {
 	key := a.constructCombinedActorKey(actorType, actorID)
 
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
@@ -224,6 +224,11 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		Method:   method,
 		Payload:  data,
 		Metadata: map[string]string{http.HTTPVerb: http.Put},
+	}
+	if metadata != nil {
+		for k, v := range metadata {
+			req.Metadata[k] = v
+		}
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
@@ -642,7 +647,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 		return err
 	}
 
-	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b)
+	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b, nil)
 	if err == nil {
 		key := a.constructCombinedActorKey(actorType, actorID)
 		a.updateReminderTrack(key, reminder)
@@ -805,7 +810,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	if err != nil {
 		return err
 	}
-	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b)
+	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b, nil)
 	return err
 }
 
