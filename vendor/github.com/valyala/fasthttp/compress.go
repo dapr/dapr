@@ -152,7 +152,6 @@ func WriteGzipLevel(w io.Writer, p []byte, level int) (int, error) {
 	switch w.(type) {
 	case *byteSliceWriter,
 		*bytes.Buffer,
-		*ByteBuffer,
 		*bytebufferpool.ByteBuffer:
 		// These writers don't block, so we can just use stacklessWriteGzip
 		ctx := &compressCtx{
@@ -249,7 +248,6 @@ func WriteDeflateLevel(w io.Writer, p []byte, level int) (int, error) {
 	switch w.(type) {
 	case *byteSliceWriter,
 		*bytes.Buffer,
-		*ByteBuffer,
 		*bytebufferpool.ByteBuffer:
 		// These writers don't block, so we can just use stacklessWriteDeflate
 		ctx := &compressCtx{
@@ -409,7 +407,7 @@ func isFileCompressible(f *os.File, minCompressRatio float64) bool {
 	// Try compressing the first 4kb of of the file
 	// and see if it can be compressed by more than
 	// the given minCompressRatio.
-	b := AcquireByteBuffer()
+	b := bytebufferpool.Get()
 	zw := acquireStacklessGzipWriter(b, CompressDefaultCompression)
 	lr := &io.LimitedReader{
 		R: f,
@@ -424,7 +422,7 @@ func isFileCompressible(f *os.File, minCompressRatio float64) bool {
 
 	n := 4096 - lr.N
 	zn := len(b.B)
-	ReleaseByteBuffer(b)
+	bytebufferpool.Put(b)
 	return float64(zn) < float64(n)*minCompressRatio
 }
 

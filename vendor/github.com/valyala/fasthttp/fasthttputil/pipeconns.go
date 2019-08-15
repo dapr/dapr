@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// NewPipeConns returns new bi-directonal connection pipe.
+// NewPipeConns returns new bi-directional connection pipe.
 func NewPipeConns() *PipeConns {
 	ch1 := make(chan *byteBuffer, 4)
 	ch2 := make(chan *byteBuffer, 4)

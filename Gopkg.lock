@@ -612,7 +612,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:15ad8a80098fcc7a194b9db6b26d74072a852e4faa957848c8118193d3c69230"
+  digest = "1:7d7cc6dc6fc6495f107eb80586838880bbf2c7732306598d922206219bbfcf5f"
   name = "github.com/valyala/fasthttp"
   packages = [
     ".",
@@ -620,8 +620,8 @@
     "stackless",
   ]
   pruneopts = "UT"
-  revision = "e5f51c11919d4f66400334047b897ef0a94c6f3c"
-  version = "v20180529"
+  revision = "1bd0404cedf0148dca83663870e12cf8b156c7f7"
+  version = "v1.4.0"
 
 [[projects]]
   digest = "1:4c93890bbbb5016505e856cb06b5c5a2ff5b7217584d33f2a9071ebef4b5d473"
