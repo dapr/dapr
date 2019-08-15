@@ -104,7 +104,7 @@ func TestOnDirectMessage(t *testing.T) {
 }
 
 func TestSaveActorState(t *testing.T) {
-	testPath := "v1.0/actors/fakeActorType/fakeActorID/states/key1"
+	testPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 	fakeData := []byte("fakeData")
 
 	fakeServer := &fakeHTTPServer{Port: DefaultFakeServerPort}
@@ -148,7 +148,7 @@ func TestSaveActorState(t *testing.T) {
 }
 
 func TestGetActorState(t *testing.T) {
-	testPath := "v1.0/actors/fakeActorType/fakeActorID/states/key1"
+	testPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 	fakeServer := &fakeHTTPServer{Port: DefaultFakeServerPort}
 	testAPI := &api{actor: nil}
 
