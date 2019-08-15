@@ -4,7 +4,6 @@
 
 Actions is a programming model for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Actions offers an eventing system on which compute units communicate with each other by exchanging messages.
 
-<<<<<<< HEAD:docs/preview/README.md
 The Actions runtime is designed for hyper-scale performance in the cloud and on the edge.
 <br>
 ###### Actions Standalone Deployment
@@ -14,9 +13,6 @@ The Actions runtime is designed for hyper-scale performance in the cloud and on 
 ###### Actions Kubernetes Deployment
 ![Actions on Kubernetes](/docs/imgs/actions_k8s.png)
 
-=======
-## Included in this SDK
->>>>>>> a627c0d6cf22bc2539f769c76e3d9baf73c089f3:docs/sdk/README.md
 
 ## Included in this Preview Kit 
 
@@ -31,20 +27,13 @@ In this Preview Kit repository, included are the following:
 
 ## Release notes
 
-<<<<<<< HEAD:docs/preview/README.md
 This release of Actions preview kit is the very first kit version. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.   
-=======
-This release of Actions SDK is the very first project's partners SDK. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.
->>>>>>> a627c0d6cf22bc2539f769c76e3d9baf73c089f3:docs/sdk/README.md
 
 * Actions runtime 0.2.0-alpha [(release notes)](https://github.com/actionscore/actions/blob/master/docs/release_notes/v0.2.0-alpha.md)
 * C# SDK
 
-<<<<<<< HEAD:docs/preview/README.md
 For the full release notes, go [here](https://github.com/actionscore/actions/docs/preview/release_notes/v1.0.0-alpha.md). 
-=======
-For the full release notes, go [here](https://github.com/actionscore/actions/blob/master/docs/sdk/release_notes/v1.0.0.md).
->>>>>>> a627c0d6cf22bc2539f769c76e3d9baf73c089f3:docs/sdk/README.md
+
 
 ## Setup
 
