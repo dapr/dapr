@@ -11,8 +11,6 @@ The front-end application consists of a server and a client written in [React](h
 Kudos to [ahfarmer](https://github.com/ahfarmer) whose [React calculator](https://github.com/ahfarmer/calculator) 
 sample was used for the client.
 
-Each application has been dockerized and pushed into an [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/), where we will pull them from.
-
 ## Prerequisites
 
 In order to run this sample, you'll need to have an Actions-enabled Kubernetes cluster. Follow [these instructions](https://github.com/actionscore/actions/#install-on-kubernetes) to set this up.
