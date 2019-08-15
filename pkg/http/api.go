@@ -475,7 +475,7 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 
 func (a *api) OnSaveActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor is not initialized")
 		return nil
 	}
 
@@ -484,13 +484,6 @@ func (a *api) OnSaveActorState(c *routing.Context) error {
 	key := c.Param(stateKeyParam)
 	body := c.PostBody()
 
-	var state actors.SaveStateRequest
-	err := a.json.Unmarshal(body, &state)
-	if err != nil {
-		respondWithError(c.RequestCtx, 400, "error: malformed json request")
-		return nil
-	}
-
 	req := actors.SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -498,7 +491,7 @@ func (a *api) OnSaveActorState(c *routing.Context) error {
 		Data:      body,
 	}
 
-	err = a.actor.SaveState(&req)
+	err := a.actor.SaveState(&req)
 	if err != nil {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
@@ -510,7 +503,7 @@ func (a *api) OnSaveActorState(c *routing.Context) error {
 
 func (a *api) onGetActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor is not initialized")
 		return nil
 	}
 
