@@ -144,13 +144,13 @@ func (a *api) constructActorEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{http.Post, http.Put},
-			Route:   "actors/<actorType>/<actorId>/states/<key>",
+			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
 			Handler: a.OnSaveActorState,
 		},
 		{
 			Methods: []string{http.Get},
-			Route:   "actors/<actorType>/<actorId>/states/<key>",
+			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetActorState,
 		},
