@@ -208,13 +208,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	lock.Lock()
 	defer lock.Unlock()
 
-	if !exists {
-		err := a.tryActivateActor(actorType, actorID)
-		if err != nil {
-			a.actorsTable.Delete(key)
-			return nil, err
-		}
-	} else {
+	if exists {
 		act.busy = true
 		act.lastUsedTime = time.Now()
 	}
@@ -256,35 +250,6 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 	}
 
 	return resp.Data.Value, nil
-}
-
-func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
-	stateKey := a.constructActorStateKey(actorType, actorID)
-	var data []byte
-
-	if a.store != nil {
-		resp, err := a.store.Get(&state.GetRequest{
-			Key: stateKey,
-		})
-		if err == nil {
-			data = resp.Data
-		}
-	}
-
-	req := channel.InvokeRequest{
-		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
-		Metadata: map[string]string{http.HTTPVerb: http.Post},
-		Payload:  data,
-	}
-
-	resp, err := a.appChannel.InvokeMethod(&req)
-	if err != nil || a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
-		key := a.constructCombinedActorKey(actorType, actorID)
-		a.actorsTable.Delete(key)
-		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
-	}
-
-	return nil
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
