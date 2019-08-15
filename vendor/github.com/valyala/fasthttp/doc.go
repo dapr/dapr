@@ -7,9 +7,6 @@ Fasthttp provides the following features:
       concurrent keep-alive connections on modern hardware.
     * Optimized for low memory usage.
     * Easy 'Connection: Upgrade' support via RequestCtx.Hijack.
-    * Server supports requests' pipelining. Multiple requests may be read from
-      a single network packet and multiple responses may be sent in a single
-      network packet. This may be useful for highly loaded REST services.
     * Server provides the following anti-DoS limits:
 
         * The number of concurrent connections.

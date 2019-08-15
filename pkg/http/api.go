@@ -144,13 +144,13 @@ func (a *api) constructActorEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{http.Post, http.Put},
-			Route:   "actors/<actorType>/<actorId>/state",
+			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
 			Handler: a.OnSaveActorState,
 		},
 		{
 			Methods: []string{http.Get},
-			Route:   "actors/<actorType>/<actorId>/state",
+			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetActorState,
 		},
@@ -346,7 +346,7 @@ func (a *api) onInvokeLocal(c *routing.Context) error {
 
 func (a *api) onCreateActorReminder(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -377,7 +377,7 @@ func (a *api) onCreateActorReminder(c *routing.Context) error {
 
 func (a *api) onCreateActorTimer(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -409,7 +409,7 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 
 func (a *api) onDeleteActorReminder(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -435,7 +435,7 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 
 func (a *api) onDeleteActorTimer(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -461,7 +461,7 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 
 func (a *api) onDirectActorMessage(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -506,28 +506,23 @@ func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context
 
 func (a *api) OnSaveActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
 	actorType := c.Param(actorTypeParam)
 	actorID := c.Param(actorIDParam)
+	key := c.Param(stateKeyParam)
 	body := c.PostBody()
-
-	var state actors.SaveStateRequest
-	err := a.json.Unmarshal(body, &state)
-	if err != nil {
-		respondWithError(c.RequestCtx, 400, "error: malformed json request")
-		return nil
-	}
 
 	req := actors.SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
+		Key:       key,
 		Data:      body,
 	}
 
-	err = a.actor.SaveState(&req)
+	err := a.actor.SaveState(&req)
 	if err != nil {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
@@ -539,16 +534,18 @@ func (a *api) OnSaveActorState(c *routing.Context) error {
 
 func (a *api) onGetActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
 	actorType := c.Param(actorTypeParam)
 	actorID := c.Param(actorIDParam)
+	key := c.Param(stateKeyParam)
 
 	req := actors.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
+		Key:       key,
 	}
 
 	resp, err := a.actor.GetState(&req)

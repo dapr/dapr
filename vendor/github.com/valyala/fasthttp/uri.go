@@ -180,7 +180,7 @@ func (u *URI) Reset() {
 	u.parsedQueryArgs = false
 
 	// There is no need in u.fullURI = u.fullURI[:0], since full uri
-	// is calucalted on each call to FullURI().
+	// is calculated on each call to FullURI().
 
 	// There is no need in u.requestURI = u.requestURI[:0], since requestURI
 	// is calculated on each call to RequestURI().

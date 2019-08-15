@@ -264,22 +264,11 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 }
 
 func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
-	stateKey := a.constructActorStateKey(actorType, actorID)
-	var data []byte
-
-	if a.store != nil {
-		resp, err := a.store.Get(&state.GetRequest{
-			Key: stateKey,
-		})
-		if err == nil {
-			data = resp.Data
-		}
-	}
-
+	// Send the activation signal to the app
 	req := channel.InvokeRequest{
 		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
 		Metadata: map[string]string{http.HTTPVerb: http.Post},
-		Payload:  data,
+		Payload:  nil,
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
@@ -298,7 +287,7 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 }
 
 func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
-	key := a.constructActorStateKey(req.ActorType, req.ActorID)
+	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
 	})
@@ -312,7 +301,7 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 }
 
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
-	key := a.constructActorStateKey(req.ActorType, req.ActorID)
+	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Set(&state.SetRequest{
 		Value: req.Data,
 		Key:   key,
@@ -320,8 +309,8 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	return err
 }
 
-func (a *actorsRuntime) constructActorStateKey(actorType, actorID string) string {
-	return fmt.Sprintf("%s-%s-%s", a.config.ActionsID, actorType, actorID)
+func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) string {
+	return fmt.Sprintf("%s-%s-%s-%s", a.config.ActionsID, actorType, actorID, key)
 }
 
 func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/gzip"
+	"github.com/valyala/bytebufferpool"
 )
 
 // ServeFileBytesUncompressed returns HTTP response containing file contents
@@ -139,12 +140,12 @@ func NewVHostPathRewriter(slashesCount int) PathRewriteFunc {
 		if len(host) == 0 {
 			host = strInvalidHost
 		}
-		b := AcquireByteBuffer()
+		b := bytebufferpool.Get()
 		b.B = append(b.B, '/')
 		b.B = append(b.B, host...)
 		b.B = append(b.B, path...)
 		ctx.URI().SetPathBytes(b.B)
-		ReleaseByteBuffer(b)
+		bytebufferpool.Put(b)
 
 		return ctx.Path()
 	}
@@ -225,7 +226,7 @@ type FS struct {
 	// It adds CompressedFileSuffix suffix to the original file name and
 	// tries saving the resulting compressed file under the new file name.
 	// So it is advisable to give the server write access to Root
-	// and to all inner folders in order to minimze CPU usage when serving
+	// and to all inner folders in order to minimize CPU usage when serving
 	// compressed responses.
 	//
 	// Transparent compression is disabled by default.
@@ -240,6 +241,14 @@ type FS struct {
 	//
 	// By default request path is not modified.
 	PathRewrite PathRewriteFunc
+
+	// PathNotFound fires when file is not found in filesystem
+	// this functions tries to replace "Cannot open requested path"
+	// server response giving to the programmer the control of server flow.
+	//
+	// By default PathNotFound returns
+	// "Cannot open requested path"
+	PathNotFound RequestHandler
 
 	// Expiration duration for inactive file handlers.
 	//
@@ -343,6 +352,7 @@ func (fs *FS) initRequestHandler() {
 		pathRewrite:          fs.PathRewrite,
 		generateIndexPages:   fs.GenerateIndexPages,
 		compress:             fs.Compress,
+		pathNotFound:         fs.PathNotFound,
 		acceptByteRange:      fs.AcceptByteRange,
 		cacheDuration:        cacheDuration,
 		compressedFileSuffix: compressedFileSuffix,
@@ -365,6 +375,7 @@ type fsHandler struct {
 	root                 string
 	indexNames           []string
 	pathRewrite          PathRewriteFunc
+	pathNotFound         RequestHandler
 	generateIndexPages   bool
 	compress             bool
 	acceptByteRange      bool
@@ -726,7 +737,12 @@ func (h *fsHandler) handleRequest(ctx *RequestCtx) {
 			}
 		} else if err != nil {
 			ctx.Logger().Printf("cannot open file %q: %s", filePath, err)
-			ctx.Error("Cannot open requested path", StatusNotFound)
+			if h.pathNotFound == nil {
+				ctx.Error("Cannot open requested path", StatusNotFound)
+			} else {
+				ctx.SetStatusCode(StatusNotFound)
+				h.pathNotFound(ctx)
+			}
 			return
 		}
 
@@ -808,7 +824,10 @@ func (h *fsHandler) handleRequest(ctx *RequestCtx) {
 			}
 		}
 	}
-	ctx.SetContentType(ff.contentType)
+	hdr.noDefaultContentType = true
+	if len(hdr.ContentType()) == 0 {
+		ctx.SetContentType(ff.contentType)
+	}
 	ctx.SetStatusCode(statusCode)
 }
 
@@ -897,7 +916,7 @@ var (
 )
 
 func (h *fsHandler) createDirIndex(base *URI, dirPath string, mustCompress bool) (*fsFile, error) {
-	w := &ByteBuffer{}
+	w := &bytebufferpool.ByteBuffer{}
 
 	basePathEscaped := html.EscapeString(string(base.Path()))
 	fmt.Fprintf(w, "<html><head><title>%s</title><style>.dir { font-weight: bold }</style></head><body>", basePathEscaped)
@@ -924,7 +943,7 @@ func (h *fsHandler) createDirIndex(base *URI, dirPath string, mustCompress bool)
 	}
 
 	fm := make(map[string]os.FileInfo, len(fileinfos))
-	var filenames []string
+	filenames := make([]string, 0, len(fileinfos))
 	for _, fi := range fileinfos {
 		name := fi.Name()
 		if strings.HasSuffix(name, h.compressedFileSuffix) {
@@ -939,7 +958,7 @@ func (h *fsHandler) createDirIndex(base *URI, dirPath string, mustCompress bool)
 	base.CopyTo(&u)
 	u.Update(string(u.Path()) + "/")
 
-	sort.Sort(sort.StringSlice(filenames))
+	sort.Strings(filenames)
 	for _, name := range filenames {
 		u.Update(name)
 		pathEscaped := html.EscapeString(string(u.Path()))
@@ -957,7 +976,7 @@ func (h *fsHandler) createDirIndex(base *URI, dirPath string, mustCompress bool)
 	fmt.Fprintf(w, "</ul></body></html>")
 
 	if mustCompress {
-		var zbuf ByteBuffer
+		var zbuf bytebufferpool.ByteBuffer
 		zbuf.B = AppendGzipBytesLevel(zbuf.B, w.B, CompressDefaultCompression)
 		w = &zbuf
 	}

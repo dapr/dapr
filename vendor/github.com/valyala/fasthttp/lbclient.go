@@ -59,7 +59,7 @@ type LBClient struct {
 // DefaultLBClientTimeout is the default request timeout used by LBClient
 // when calling LBClient.Do.
 //
-// The timeout may be overriden via LBClient.Timeout.
+// The timeout may be overridden via LBClient.Timeout.
 const DefaultLBClientTimeout = time.Second
 
 // DoDeadline calls DoDeadline on the least loaded client

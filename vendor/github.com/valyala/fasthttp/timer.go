@@ -26,7 +26,12 @@ func stopTimer(t *time.Timer) {
 	}
 }
 
-func acquireTimer(timeout time.Duration) *time.Timer {
+// AcquireTimer returns a time.Timer from the pool and updates it to
+// send the current time on its channel after at least timeout.
+//
+// The returned Timer may be returned to the pool with ReleaseTimer
+// when no longer needed. This allows reducing GC load.
+func AcquireTimer(timeout time.Duration) *time.Timer {
 	v := timerPool.Get()
 	if v == nil {
 		return time.NewTimer(timeout)
@@ -36,7 +41,12 @@ func acquireTimer(timeout time.Duration) *time.Timer {
 	return t
 }
 
-func releaseTimer(t *time.Timer) {
+// ReleaseTimer returns the time.Timer acquired via AcquireTimer to the pool
+// and prevents the Timer from firing.
+//
+// Do not access the released time.Timer or read from it's channel otherwise
+// data races may occur.
+func ReleaseTimer(t *time.Timer) {
 	stopTimer(t)
 	timerPool.Put(t)
 }
