@@ -27,9 +27,9 @@ type testHandlerHeaders struct {
 func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	headers := []string{}
 	for k, v := range r.Header {
-		headers = append(headers, fmt.Sprintf("%s=%s", k, v[0]))
+		headers = append(headers, fmt.Sprintf("%s&__header_equals__&%s", k, v[0]))
 	}
-	io.WriteString(w, strings.Join(headers, ","))
+	io.WriteString(w, strings.Join(headers, "&__header_delim__&"))
 }
 
 func TestInvokeMethod(t *testing.T) {
@@ -49,12 +49,12 @@ func TestInvokeWithHeaders(t *testing.T) {
 	c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
 	request := &channel.InvokeRequest{
 		Metadata: map[string]string{
-			"headers": "h1=v1,h2=v2",
+			"headers": "h1&__header_equals__&v1&__header_delim__&h2&__header_equals__&v2",
 		},
 	}
 	response, err := c.InvokeMethod(request)
 	assert.NoError(t, err)
-	assert.Contains(t, string(response.Data), "H1=v1")
-	assert.Contains(t, string(response.Data), "H2=v2")
+	assert.Contains(t, string(response.Data), "H1&__header_equals__&v1")
+	assert.Contains(t, string(response.Data), "H2&__header_equals__&v2")
 	server.Close()
 }

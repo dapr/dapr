@@ -104,5 +104,5 @@ func TestSetHeaders(t *testing.T) {
 	c.Request.Header.Set("H2", "v2")
 	m := map[string]string{}
 	testAPI.setHeaders(c, m)
-	assert.Equal(t, "H1=v1,H2=v2", m["headers"])
+	assert.Equal(t, "H1&__header_equals__&v1&__header_delim__&H2&__header_equals__&v2", m["headers"])
 }

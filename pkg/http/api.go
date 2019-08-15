@@ -289,10 +289,10 @@ func (a *api) setHeaders(c *routing.Context, metadata map[string]string) {
 		k := string(key)
 		v := string(value)
 
-		headers = append(headers, fmt.Sprintf("%s=%s", k, v))
+		headers = append(headers, fmt.Sprintf("%s&__header_equals__&%s", k, v))
 	})
 	if len(headers) > 0 {
-		metadata["headers"] = strings.Join(headers, ",")
+		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
 	}
 }
 
@@ -496,9 +496,9 @@ func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context
 	}
 
 	if val, ok := metadata["headers"]; ok {
-		headers := strings.Split(val, ",")
+		headers := strings.Split(val, "&__header_delim__&")
 		for _, h := range headers {
-			kv := strings.Split(h, "=")
+			kv := strings.Split(h, "&__header_equals__&")
 			c.RequestCtx.Response.Header.Set(kv[0], kv[1])
 		}
 	}
