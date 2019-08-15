@@ -317,7 +317,7 @@ func TestReminderDueDate(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime(t)
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
-	reminder := createReminder(actorID, actorType, "reminder1", "100ms", "100ms", "a")
+	reminder := createReminder(actorID, actorType, "reminder1", "100ms", "500ms", "a")
 	err := testActorsRuntime.CreateReminder(&reminder)
 	assert.Nil(t, err)
 
@@ -325,7 +325,7 @@ func TestReminderDueDate(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Empty(t, track.LastFiredTime)
 
-	time.Sleep(time.Millisecond * 250)
+	time.Sleep(time.Second * 1)
 
 	track, err = testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Nil(t, err)
