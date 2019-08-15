@@ -35,15 +35,14 @@ type api struct {
 }
 
 const (
-	apiVersionV1       = "v1.0"
-	idParam            = "id"
-	methodParam        = "method"
-	actorTypeParam     = "actorType"
-	actorIDParam       = "actorId"
-	actorStateKeyParam = "key"
-	stateKeyParam      = "key"
-	topicParam         = "topic"
-	nameParam          = "name"
+	apiVersionV1   = "v1.0"
+	idParam        = "id"
+	methodParam    = "method"
+	actorTypeParam = "actorType"
+	actorIDParam   = "actorId"
+	stateKeyParam  = "key"
+	topicParam     = "topic"
+	nameParam      = "name"
 )
 
 // NewAPI returns a new API
@@ -482,7 +481,7 @@ func (a *api) OnSaveActorState(c *routing.Context) error {
 
 	actorType := c.Param(actorTypeParam)
 	actorID := c.Param(actorIDParam)
-	key := c.Param(actorStateKeyParam)
+	key := c.Param(stateKeyParam)
 	body := c.PostBody()
 
 	var state actors.SaveStateRequest
@@ -517,7 +516,7 @@ func (a *api) onGetActorState(c *routing.Context) error {
 
 	actorType := c.Param(actorTypeParam)
 	actorID := c.Param(actorIDParam)
-	key := c.Param(actorStateKeyParam)
+	key := c.Param(stateKeyParam)
 
 	req := actors.GetStateRequest{
 		ActorType: actorType,
