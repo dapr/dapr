@@ -72,11 +72,20 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	copy(arr, body)
 
 	statusCode := resp.StatusCode()
+	headers := []string{}
+	resp.Header.VisitAll(func(key []byte, value []byte) {
+		headers = append(headers, fmt.Sprintf("%s=%s", string(key), string(value)))
+	})
+
+	metadata := map[string]string{HTTPStatusCode: fmt.Sprintf("%v", statusCode)}
+	if len(headers) > 0 {
+		metadata["headers"] = strings.Join(headers, ",")
+	}
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
 
 	return &channel.InvokeResponse{
-		Metadata: map[string]string{HTTPStatusCode: fmt.Sprintf("%v", statusCode)},
+		Metadata: metadata,
 		Data:     arr,
 	}, nil
 }

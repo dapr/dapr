@@ -316,6 +316,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
+		a.setHeadersOnRequest(resp.Metadata, c)
 		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
 	}
 
@@ -482,10 +483,25 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 	if err != nil {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
+		a.setHeadersOnRequest(resp.Metadata, c)
 		respondWithJSON(c.RequestCtx, 200, resp.Data)
 	}
 
 	return nil
+}
+
+func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context) {
+	if metadata == nil {
+		return
+	}
+
+	if val, ok := metadata["headers"]; ok {
+		headers := strings.Split(val, ",")
+		for _, h := range headers {
+			kv := strings.Split(h, "=")
+			c.RequestCtx.Response.Header.Set(kv[0], kv[1])
+		}
+	}
 }
 
 func (a *api) OnSaveActorState(c *routing.Context) error {
