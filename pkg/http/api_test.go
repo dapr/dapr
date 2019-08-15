@@ -1,12 +1,17 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net"
+	gohttp "net/http"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/valyala/fasthttp/fasthttputil"
 
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/channel"
@@ -17,8 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )
-
-const DefaultFakeServerPort = 30000
 
 type mockChannel struct {
 }
@@ -107,7 +110,7 @@ func TestSaveActorState(t *testing.T) {
 	testPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 	fakeData := []byte("fakeData")
 
-	fakeServer := &fakeHTTPServer{Port: DefaultFakeServerPort}
+	fakeServer := newFakeHTTPServer()
 	testAPI := &api{actor: nil}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
@@ -149,7 +152,7 @@ func TestSaveActorState(t *testing.T) {
 
 func TestGetActorState(t *testing.T) {
 	testPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-	fakeServer := &fakeHTTPServer{Port: DefaultFakeServerPort}
+	fakeServer := newFakeHTTPServer()
 	testAPI := &api{actor: nil}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
@@ -189,25 +192,31 @@ func TestGetActorState(t *testing.T) {
 }
 
 // Fake http server and client helpers to simplify endpoints test
+func newFakeHTTPServer() *fakeHTTPServer {
+	return &fakeHTTPServer{}
+}
+
 type fakeHTTPServer struct {
-	Port   int
-	router *routing.Router
-	server fasthttp.Server
+	ln     *fasthttputil.InmemoryListener
+	client gohttp.Client
 }
 
 func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
-	f.router = f.getRouter(endpoints)
-	f.server = fasthttp.Server{
-		Handler:     f.router.HandleRequest,
-		ReadTimeout: 1 * time.Second,
-	}
-
+	router := f.getRouter(endpoints)
+	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		f.server.ListenAndServe(fmt.Sprintf(":%d", f.Port))
+		if err := fasthttp.Serve(f.ln, router.HandleRequest); err != nil {
+			panic(fmt.Errorf("failed to serve: %v", err))
+		}
 	}()
 
-	// Sleep until fake server is fully initialized
-	time.Sleep(1 * time.Second)
+	f.client = gohttp.Client{
+		Transport: &gohttp.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return f.ln.Dial()
+			},
+		},
+	}
 }
 
 func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
@@ -224,18 +233,16 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 }
 
 func (f *fakeHTTPServer) Shutdown() {
-	f.server.Shutdown()
+	f.ln.Close()
 }
 
 func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) (int, []byte) {
-	req := fasthttp.AcquireRequest()
-	req.SetRequestURI(fmt.Sprintf("http://localhost:%d/%s", f.Port, path))
-	req.SetBody(body)
-	req.Header.SetMethod(method)
+	r, _ := gohttp.NewRequest(method, fmt.Sprintf("http://localhost/%s", path), nil)
+	res, err := f.client.Do(r)
+	if err != nil {
+		panic(fmt.Errorf("failed to request: %v", err))
+	}
 
-	resp := fasthttp.AcquireResponse()
-	client := &fasthttp.Client{}
-	client.Do(req, resp)
-
-	return resp.StatusCode(), resp.Body()
+	bodyBytes, _ := ioutil.ReadAll(res.Body)
+	return res.StatusCode, bodyBytes
 }
