@@ -94,3 +94,15 @@ func TestOnDirectMessage(t *testing.T) {
 		assert.Equal(t, "", string(c.Response.Body()))
 	})
 }
+
+func TestSetHeaders(t *testing.T) {
+	testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}}
+	c := &routing.Context{}
+	request := fasthttp.Request{}
+	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+	c.Request.Header.Set("H1", "v1")
+	c.Request.Header.Set("H2", "v2")
+	m := map[string]string{}
+	testAPI.setHeaders(c, m)
+	assert.Equal(t, "H1=v1,H2=v2", m["headers"])
+}

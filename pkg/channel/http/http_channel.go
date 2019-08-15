@@ -3,6 +3,7 @@ package http
 import (
 	"crypto/tls"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/actionscore/actions/pkg/channel"
@@ -42,6 +43,15 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	req.SetBody(invokeRequest.Payload)
 	if val, ok := invokeRequest.Metadata[QueryString]; ok {
 		req.URI().SetQueryString(val)
+	}
+	if invokeRequest.Metadata != nil {
+		if val, ok := invokeRequest.Metadata["headers"]; ok {
+			headers := strings.Split(val, ",")
+			for _, h := range headers {
+				kv := strings.Split(h, "=")
+				req.Header.Set(kv[0], kv[1])
+			}
+		}
 	}
 	req.Header.SetContentType("application/json")
 
