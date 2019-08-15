@@ -138,7 +138,7 @@ func (a *api) constructActorEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{http.Get, http.Post, http.Delete, http.Put},
-			Route:   "actors/<actorType>/<actorId>/<method>",
+			Route:   "actors/<actorType>/<actorId>/method/<method>",
 			Version: apiVersionV1,
 			Handler: a.onDirectActorMessage,
 		},
@@ -153,6 +153,30 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Route:   "actors/<actorType>/<actorId>/state",
 			Version: apiVersionV1,
 			Handler: a.onGetActorState,
+		},
+		{
+			Methods: []string{http.Post, http.Put},
+			Route:   "actors/<actorType>/<actorId>/reminders/<name>",
+			Version: apiVersionV1,
+			Handler: a.onCreateActorReminder,
+		},
+		{
+			Methods: []string{http.Post, http.Put},
+			Route:   "actors/<actorType>/<actorId>/timers/<name>",
+			Version: apiVersionV1,
+			Handler: a.onCreateActorTimer,
+		},
+		{
+			Methods: []string{http.Delete},
+			Route:   "actors/<actorType>/<actorId>/reminders/<name>",
+			Version: apiVersionV1,
+			Handler: a.onDeleteActorReminder,
+		},
+		{
+			Methods: []string{http.Delete},
+			Route:   "actors/<actorType>/<actorId>/timers/<name>",
+			Version: apiVersionV1,
+			Handler: a.onDeleteActorTimer,
 		},
 	}
 }
@@ -300,6 +324,121 @@ func (a *api) onInvokeLocal(c *routing.Context) error {
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
+	}
+
+	return nil
+}
+
+func (a *api) onCreateActorReminder(c *routing.Context) error {
+	if a.actor == nil {
+		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		return nil
+	}
+
+	actorType := c.Param(actorTypeParam)
+	actorID := c.Param(actorIDParam)
+	name := c.Param(nameParam)
+
+	var req actors.CreateReminderRequest
+	err := a.json.Unmarshal(c.PostBody(), &req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 400, "error: malformed json request")
+		return nil
+	}
+
+	req.Name = name
+	req.ActorType = actorType
+	req.ActorID = actorID
+
+	err = a.actor.CreateReminder(&req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, err.Error())
+	} else {
+		respondEmpty(c.RequestCtx, 200)
+	}
+
+	return nil
+}
+
+func (a *api) onCreateActorTimer(c *routing.Context) error {
+	if a.actor == nil {
+		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		return nil
+	}
+
+	actorType := c.Param(actorTypeParam)
+	actorID := c.Param(actorIDParam)
+	name := c.Param(nameParam)
+
+	var req actors.CreateTimerRequest
+	err := a.json.Unmarshal(c.PostBody(), &req)
+	if err != nil {
+		fmt.Println(err)
+		respondWithError(c.RequestCtx, 400, "error: malformed json request")
+		return nil
+	}
+
+	req.Name = name
+	req.ActorType = actorType
+	req.ActorID = actorID
+
+	err = a.actor.CreateTimer(&req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, err.Error())
+	} else {
+		respondEmpty(c.RequestCtx, 200)
+	}
+
+	return nil
+}
+
+func (a *api) onDeleteActorReminder(c *routing.Context) error {
+	if a.actor == nil {
+		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		return nil
+	}
+
+	actorType := c.Param(actorTypeParam)
+	actorID := c.Param(actorIDParam)
+	name := c.Param(nameParam)
+
+	req := actors.DeleteReminderRequest{
+		Name:      name,
+		ActorID:   actorID,
+		ActorType: actorType,
+	}
+
+	err := a.actor.DeleteReminder(&req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, err.Error())
+	} else {
+		respondEmpty(c.RequestCtx, 200)
+	}
+
+	return nil
+}
+
+func (a *api) onDeleteActorTimer(c *routing.Context) error {
+	if a.actor == nil {
+		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		return nil
+	}
+
+	actorType := c.Param(actorTypeParam)
+	actorID := c.Param(actorIDParam)
+	name := c.Param(nameParam)
+
+	req := actors.DeleteTimerRequest{
+		Name:      name,
+		ActorID:   actorID,
+		ActorType: actorType,
+	}
+
+	err := a.actor.DeleteTimer(&req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, err.Error())
+	} else {
+		respondEmpty(c.RequestCtx, 200)
 	}
 
 	return nil
