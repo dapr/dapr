@@ -258,7 +258,7 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 }
 
 func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
-	key := a.constructActorStateKey(req.ActorType, req.ActorID)
+	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
 	})
@@ -272,7 +272,7 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 }
 
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
-	key := a.constructActorStateKey(req.ActorType, req.ActorID)
+	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Set(&state.SetRequest{
 		Value: req.Data,
 		Key:   key,
@@ -280,8 +280,8 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	return err
 }
 
-func (a *actorsRuntime) constructActorStateKey(actorType, actorID string) string {
-	return fmt.Sprintf("%s-%s-%s", a.config.ActionsID, actorType, actorID)
+func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) string {
+	return fmt.Sprintf("%s-%s-%s-%s", a.config.ActionsID, actorType, actorID, key)
 }
 
 func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
