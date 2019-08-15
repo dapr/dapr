@@ -54,6 +54,7 @@ func TestInvokeWithHeaders(t *testing.T) {
 	}
 	response, err := c.InvokeMethod(request)
 	assert.NoError(t, err)
-	assert.Contains(t, string(response.Data), "H1=v1,H2=v2")
+	assert.Contains(t, string(response.Data), "H1=v1")
+	assert.Contains(t, string(response.Data), "H2=v2")
 	server.Close()
 }
