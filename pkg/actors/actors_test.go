@@ -9,13 +9,16 @@ import (
 
 	"github.com/actionscore/actions/pkg/components/state"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/actionscore/actions/pkg/channel"
 	"github.com/actionscore/actions/pkg/channel/http"
+	channelt "github.com/actionscore/actions/pkg/channel/testing"
 )
 
-type fakeAppChannel struct {
-}
+const (
+	TestActionsID = "fakeActionsID"
+)
 
 type fakeStateStore struct {
 	items map[string][]byte
@@ -48,17 +51,18 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeAppChannel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
-	return &channel.InvokeResponse{
+func newTestActorsRuntime() *actorsRuntime {
+	mockAppChannel := new(channelt.MockAppChannel)
+	fakeHttpResponse := &channel.InvokeResponse{
 		Metadata: map[string]string{http.HTTPStatusCode: "200"},
-	}, nil
-}
+	}
+	mockAppChannel.On(
+		"InvokeMethod",
+		mock.AnythingOfType("*channel.InvokeRequest")).Return(fakeHttpResponse, nil)
 
-func newTestActorsRuntime(t *testing.T) *actorsRuntime {
-	ch := fakeChannel()
 	store := fakeStore()
-	config := NewConfig("", "", "", nil, 0, "", "")
-	a := NewActors(store, ch, nil, config)
+	config := NewConfig("", TestActionsID, "", nil, 0, "", "")
+	a := NewActors(store, mockAppChannel, nil, config)
 
 	return a.(*actorsRuntime)
 }
@@ -71,10 +75,6 @@ func fakeStore() state.StateStore {
 	return &fakeStateStore{
 		items: map[string][]byte{},
 	}
-}
-
-func fakeChannel() channel.AppChannel {
-	return &fakeAppChannel{}
 }
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorKey string) {
@@ -115,7 +115,7 @@ func createTimer(actorID, actorType, name, period, dueTime, callback, data strin
 }
 
 func TestActorIsDeactivated(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	idleTimeout := time.Second * 2
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
@@ -125,13 +125,11 @@ func TestActorIsDeactivated(t *testing.T) {
 
 	_, exists := testActorsRuntime.actorsTable.Load(actorKey)
 
-	if exists {
-		t.Fail()
-	}
+	assert.False(t, exists)
 }
 
 func TestActorIsNotDeactivated(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	idleTimeout := time.Second * 5
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
@@ -141,13 +139,11 @@ func TestActorIsNotDeactivated(t *testing.T) {
 
 	_, exists := testActorsRuntime.actorsTable.Load(actorKey)
 
-	if !exists {
-		t.Fail()
-	}
+	assert.True(t, exists)
 }
 
 func TestTimerExecution(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorKey)
@@ -157,7 +153,7 @@ func TestTimerExecution(t *testing.T) {
 }
 
 func TestReminderExecution(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorKey)
@@ -167,7 +163,7 @@ func TestReminderExecution(t *testing.T) {
 }
 
 func TestSetReminderTrack(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	err := testActorsRuntime.updateReminderTrack(actorType, actorID)
 	assert.Nil(t, err)
@@ -175,14 +171,14 @@ func TestSetReminderTrack(t *testing.T) {
 
 func TestGetReminderTrack(t *testing.T) {
 	t.Run("reminder doesn't exist", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime(t)
+		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 		r, _ := testActorsRuntime.getReminderTrack(actorType, actorID)
 		assert.Empty(t, r.LastFiredTime)
 	})
 
 	t.Run("reminder exists", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime(t)
+		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 		testActorsRuntime.updateReminderTrack(actorType, actorID)
 		r, _ := testActorsRuntime.getReminderTrack(actorType, actorID)
@@ -191,7 +187,7 @@ func TestGetReminderTrack(t *testing.T) {
 }
 
 func TestCreateReminder(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	err := testActorsRuntime.CreateReminder(&CreateReminderRequest{
 		ActorID:   actorID,
@@ -206,7 +202,7 @@ func TestCreateReminder(t *testing.T) {
 
 func TestOverrideReminder(t *testing.T) {
 	t.Run("override data", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime(t)
+		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 		reminder := createReminder(actorID, actorType, "reminder1", "1s", "1s", "a")
 		err := testActorsRuntime.CreateReminder(&reminder)
@@ -220,7 +216,7 @@ func TestOverrideReminder(t *testing.T) {
 	})
 
 	t.Run("override dueTime", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime(t)
+		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 		reminder := createReminder(actorID, actorType, "reminder1", "1s", "1s", "")
 		err := testActorsRuntime.CreateReminder(&reminder)
@@ -234,7 +230,7 @@ func TestOverrideReminder(t *testing.T) {
 	})
 
 	t.Run("override period", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime(t)
+		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 		reminder := createReminder(actorID, actorType, "reminder1", "1s", "1s", "")
 		err := testActorsRuntime.CreateReminder(&reminder)
@@ -249,7 +245,7 @@ func TestOverrideReminder(t *testing.T) {
 }
 
 func TestDeleteReminder(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	reminder := createReminder(actorID, actorType, "reminder1", "1s", "1s", "")
 	testActorsRuntime.CreateReminder(&reminder)
@@ -264,7 +260,7 @@ func TestDeleteReminder(t *testing.T) {
 }
 
 func TestDeleteTimer(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorKey)
@@ -290,7 +286,7 @@ func TestDeleteTimer(t *testing.T) {
 }
 
 func TestReminderFires(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	reminder := createReminder(actorID, actorType, "reminder1", "100ms", "100ms", "a")
 	err := testActorsRuntime.CreateReminder(&reminder)
@@ -305,7 +301,7 @@ func TestReminderFires(t *testing.T) {
 }
 
 func TestReminderDueDate(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
 	reminder := createReminder(actorID, actorType, "reminder1", "100ms", "100ms", "a")
@@ -324,7 +320,7 @@ func TestReminderDueDate(t *testing.T) {
 }
 
 func TestReminderPeriod(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
 	reminder := createReminder(actorID, actorType, "reminder1", "100ms", "100ms", "a")
@@ -346,7 +342,7 @@ func TestReminderPeriod(t *testing.T) {
 }
 
 func TestReminderFiresOnceWitnEmptyPeriod(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime(t)
+	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCombinedActorKey(actorType, actorID)
 	reminder := createReminder(actorID, actorType, "reminder1", "", "100ms", "a")
@@ -357,4 +353,66 @@ func TestReminderFiresOnceWitnEmptyPeriod(t *testing.T) {
 
 	track, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Empty(t, track.LastFiredTime)
+}
+
+func TestConstructActorStateKey(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	actorType, actorID := getTestActorTypeAndID()
+	keyName := "key0"
+	expected := fmt.Sprintf("%s-%s-%s-%s", TestActionsID, actorType, actorID, keyName)
+
+	// act
+	stateKey := testActorsRuntime.constructActorStateKey(actorType, actorID, keyName)
+
+	// assert
+	assert.Equal(t, expected, stateKey)
+}
+
+func TestSaveState(t *testing.T) {
+	testActorRuntime := newTestActorsRuntime()
+	actorType, actorID := getTestActorTypeAndID()
+	keyName := "key0"
+	fakeData := []byte("fakeData")
+
+	// act
+	testActorRuntime.SaveState(&SaveStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       keyName,
+		Data:      fakeData,
+	})
+
+	// assert
+	expectedData, _ := json.Marshal(fakeData)
+	response, err := testActorRuntime.store.Get(&state.GetRequest{
+		Key: testActorRuntime.constructActorStateKey(actorType, actorID, keyName),
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, expectedData, response.Data)
+}
+
+func TestGetState(t *testing.T) {
+	testActorRuntime := newTestActorsRuntime()
+	actorType, actorID := getTestActorTypeAndID()
+	keyName := "key0"
+	fakeData := []byte("fakeData")
+
+	testActorRuntime.SaveState(&SaveStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       keyName,
+		Data:      fakeData,
+	})
+
+	// act
+	response, err := testActorRuntime.GetState(&GetStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       keyName,
+	})
+
+	// assert
+	expectedData, _ := json.Marshal(fakeData)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedData, response.Data)
 }
