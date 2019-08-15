@@ -78,6 +78,7 @@ func getTestActorTypeAndID() (string, string) {
 func fakeStore() state.StateStore {
 	return &fakeStateStore{
 		items: map[string][]byte{},
+		lock: &sync.RWMutex{},
 	}
 }
 
