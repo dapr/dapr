@@ -19,4 +19,4 @@ spec:
     spec:
       containers:
       - name: python
-        image: actionsdemoes/pythonapp
+        image: actionscore.azurecr.io/samples/pythonapp
