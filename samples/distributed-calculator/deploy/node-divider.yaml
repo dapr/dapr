@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: divide
-        image: actionsdemoes/node-divider
+        image: actionscore.azurecr.io/samples/node-divider
         ports:
         - containerPort: 4000
         imagePullPolicy: Always

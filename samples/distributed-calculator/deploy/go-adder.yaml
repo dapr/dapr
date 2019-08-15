@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: add
-        image: actionsdemoes/go-adder
+        image: actionscore.azurecr.io/samples/go-adder
         ports:
         - containerPort: 6000
         imagePullPolicy: Always
