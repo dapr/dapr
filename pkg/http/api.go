@@ -283,6 +283,19 @@ func (a *api) getModifiedStateKey(key string) string {
 	return key
 }
 
+func (a *api) setHeaders(c *routing.Context, metadata map[string]string) {
+	headers := []string{}
+	c.RequestCtx.Request.Header.VisitAll(func(key, value []byte) {
+		k := string(key)
+		v := string(value)
+
+		headers = append(headers, fmt.Sprintf("%s&__header_equals__&%s", k, v))
+	})
+	if len(headers) > 0 {
+		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
+	}
+}
+
 func (a *api) onDirectMessage(c *routing.Context) error {
 	targetID := c.Param(idParam)
 	method := c.Param(methodParam)
@@ -296,12 +309,14 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 		Metadata: map[string]string{http.HTTPVerb: verb, http.QueryString: queryString},
 		Target:   targetID,
 	}
+	a.setHeaders(c, req.Metadata)
 
 	resp, err := a.directMessaging.Invoke(&req)
 	if err != nil {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
+		a.setHeadersOnRequest(resp.Metadata, c)
 		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
 	}
 
@@ -462,15 +477,31 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 		Metadata:  map[string]string{},
 		Data:      body,
 	}
+	a.setHeaders(c, req.Metadata)
 
 	resp, err := a.actor.Call(&req)
 	if err != nil {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
+		a.setHeadersOnRequest(resp.Metadata, c)
 		respondWithJSON(c.RequestCtx, 200, resp.Data)
 	}
 
 	return nil
+}
+
+func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context) {
+	if metadata == nil {
+		return
+	}
+
+	if val, ok := metadata["headers"]; ok {
+		headers := strings.Split(val, "&__header_delim__&")
+		for _, h := range headers {
+			kv := strings.Split(h, "&__header_equals__&")
+			c.RequestCtx.Response.Header.Set(kv[0], kv[1])
+		}
+	}
 }
 
 func (a *api) OnSaveActorState(c *routing.Context) error {

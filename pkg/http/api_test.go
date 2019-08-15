@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -104,6 +105,18 @@ func TestOnDirectMessage(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "", string(c.Response.Body()))
 	})
+}
+
+func TestSetHeaders(t *testing.T) {
+	testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}}
+	c := &routing.Context{}
+	request := fasthttp.Request{}
+	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+	c.Request.Header.Set("H1", "v1")
+	c.Request.Header.Set("H2", "v2")
+	m := map[string]string{}
+	testAPI.setHeaders(c, m)
+	assert.Equal(t, "H1&__header_equals__&v1&__header_delim__&H2&__header_equals__&v2", m["headers"])
 }
 
 func TestSaveActorState(t *testing.T) {
@@ -237,7 +250,8 @@ func (f *fakeHTTPServer) Shutdown() {
 }
 
 func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) (int, []byte) {
-	r, _ := gohttp.NewRequest(method, fmt.Sprintf("http://localhost/%s", path), nil)
+
+	r, _ := gohttp.NewRequest(method, fmt.Sprintf("http://localhost/%s", path), bytes.NewBuffer(body))
 	res, err := f.client.Do(r)
 	if err != nil {
 		panic(fmt.Errorf("failed to request: %v", err))
