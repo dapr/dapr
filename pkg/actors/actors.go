@@ -208,7 +208,13 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	lock.Lock()
 	defer lock.Unlock()
 
-	if exists {
+	if !exists {
+		err := a.tryActivateActor(actorType, actorID)
+		if err != nil {
+			a.actorsTable.Delete(key)
+			return nil, err
+		}
+	} else {
 		act.busy = true
 		act.lastUsedTime = time.Now()
 	}
@@ -250,6 +256,24 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 	}
 
 	return resp.Data.Value, nil
+}
+
+func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
+	// Send the activation signal to the app
+	req := channel.InvokeRequest{
+		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
+		Metadata: map[string]string{http.HTTPVerb: http.Post},
+		Payload:  nil,
+	}
+
+	resp, err := a.appChannel.InvokeMethod(&req)
+	if err != nil || a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+		key := a.constructCombinedActorKey(actorType, actorID)
+		a.actorsTable.Delete(key)
+		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
+	}
+
+	return nil
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {

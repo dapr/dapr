@@ -199,7 +199,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
 	f.router = f.getRouter(endpoints)
 	f.server = fasthttp.Server{
 		Handler:     f.router.HandleRequest,
-		ReadTimeout: 30000,
+		ReadTimeout: 1 * time.Second,
 	}
 
 	go func() {
