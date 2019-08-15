@@ -1,12 +1,22 @@
-# Actions SDK
+# Actions Preview Kit
 
 ## Overview
 
 Actions is a programming model for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Actions offers an eventing system on which compute units communicate with each other by exchanging messages.
 
-## Included in this SDK
+The Actions runtime is designed for hyper-scale performance in the cloud and on the edge.
+<br>
+###### Actions Standalone Deployment
+![Actions Standalone](/docs/imgs/actions_standalone.png)
+<br>
+<br>
+###### Actions Kubernetes Deployment
+![Actions on Kubernetes](/docs/imgs/actions_k8s.png)
 
-In this SDK repository, included are the following:
+
+## Included in this Preview Kit 
+
+In this Preview Kit repository, included are the following:
 
 1. Microsoft “Actions” Private Preview license
 2. README file with instruction on how to setup Actions
@@ -17,12 +27,13 @@ In this SDK repository, included are the following:
 
 ## Release notes
 
-This release of Actions SDK is the very first project's partners SDK. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.
+This release of Actions preview kit is the very first kit version. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.   
 
 * Actions runtime 0.2.0-alpha [(release notes)](https://github.com/actionscore/actions/blob/master/docs/release_notes/v0.2.0-alpha.md)
 * C# SDK
 
-For the full release notes, go [here](https://github.com/actionscore/actions/blob/master/docs/sdk/release_notes/v1.0.0.md).
+For the full release notes, go [here](https://github.com/actionscore/actions/docs/preview/release_notes/v1.0.0-alpha.md). 
+
 
 ## Setup
 
@@ -44,7 +55,6 @@ Docker login actionscore.azurecr.io --username 390401a7-d7a6-46da-b10f-3ceff7a1c
 __*Note: For Windows users, run the cmd terminal in administrator mode*__
 
 __*Note: For Linux users, if you run docker cmds with sudo, yuu need to use "sudo actions init*__
-
 
 
 #### Install
@@ -104,3 +114,7 @@ For getting a state store up and running on your Kubernetes cluster in a swift m
 ```
 helm install stable/redis --rbac.create=true
 ```
+
+## Contributing & Support
+
+We We actively reviewing contributions into this repository via [issues](https://help.github.com/en/articles/creating-an-issue). 
