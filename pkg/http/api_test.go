@@ -128,7 +128,7 @@ func TestSaveActorState(t *testing.T) {
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
 
-	t.Run("Actor is not initialized", func(t *testing.T) {
+	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		// act
 		statusCode, body := fakeServer.DoRequest("PUT", testPath, fakeData)
 
@@ -136,7 +136,7 @@ func TestSaveActorState(t *testing.T) {
 		var bodyObj map[string]string
 		json.Unmarshal(body, &bodyObj)
 		assert.Equal(t, 400, statusCode)
-		assert.Equal(t, "actor is not initialized", bodyObj["error"])
+		assert.Equal(t, "actor runtime is not initialized", bodyObj["error"])
 	})
 
 	t.Run("Save granular state key", func(t *testing.T) {
@@ -170,7 +170,7 @@ func TestGetActorState(t *testing.T) {
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
 
-	t.Run("Actor is not initialized", func(t *testing.T) {
+	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		// act
 		statusCode, body := fakeServer.DoRequest("GET", testPath, nil)
 
@@ -178,7 +178,7 @@ func TestGetActorState(t *testing.T) {
 		var bodyObj map[string]string
 		json.Unmarshal(body, &bodyObj)
 		assert.Equal(t, 400, statusCode)
-		assert.Equal(t, "actor is not initialized", bodyObj["error"])
+		assert.Equal(t, "actor runtime is not initialized", bodyObj["error"])
 	})
 
 	t.Run("Get Actor State successfully", func(t *testing.T) {

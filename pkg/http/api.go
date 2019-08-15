@@ -346,7 +346,7 @@ func (a *api) onInvokeLocal(c *routing.Context) error {
 
 func (a *api) onCreateActorReminder(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -377,7 +377,7 @@ func (a *api) onCreateActorReminder(c *routing.Context) error {
 
 func (a *api) onCreateActorTimer(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -409,7 +409,7 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 
 func (a *api) onDeleteActorReminder(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -435,7 +435,7 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 
 func (a *api) onDeleteActorTimer(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -461,7 +461,7 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 
 func (a *api) onDirectActorMessage(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actors not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -506,7 +506,7 @@ func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context
 
 func (a *api) OnSaveActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor is not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
@@ -534,7 +534,7 @@ func (a *api) OnSaveActorState(c *routing.Context) error {
 
 func (a *api) onGetActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor is not initialized")
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
 	}
 
