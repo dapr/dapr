@@ -23,7 +23,7 @@ spec:
   names:
     kind: Component
     plural: components
-    singular: components
+    singular: component
     categories:
     - all
     - actions
