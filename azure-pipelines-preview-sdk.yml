@@ -79,8 +79,8 @@ steps:
 
       echo "copying specs..."
       mkdir ../preview/docs/spec
-      unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-specifications-md.zip -d ../preview/docs/spec/
-      cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-specifications-pdf.zip $(System.ArtifactsDirectory)/release/drop/
+      unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../preview/docs/spec/
+      cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
 
       echo "moving arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
