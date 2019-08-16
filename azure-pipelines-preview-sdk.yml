@@ -25,7 +25,7 @@ steps:
     branchName: 'refs/heads/master'
     downloadType: 'single'
     artifactName: 'drop'
-    downloadPath: '$(System.ArtifactsDirectory)/cli_drop'
+    downloadPath: '$(System.ArtifactsDirectory)/release'
 - task: DownloadBuildArtifacts@0
   displayName: 'Download Specs'
   inputs:
@@ -76,6 +76,13 @@ steps:
       # Remove unnecessary files
       rm -rf ../preview/docs/decision_records
       rm -rf ../preview/docs/assets
+
+      echo "copying specs..."
+      mkdir ../preview/docs/spec
+      unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions_specifications_md.zip -d ../preview/docs/spec/
+      cp $(System.ArtifactsDirectory)/spec_drop/actions_specifications_pdf.zip $(System.ArtifactsDirectory)/release/drop/actions_specifications_pdf.zip
+
+      rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Fix url in markdown documents to preview repo url'
@@ -101,8 +108,9 @@ steps:
       export LAST_RELEASE_NOTE_FILE=`ls | sort -V | tail -1`
       export LAST_VERSION=`basename $LAST_RELEASE_NOTE_FILE .md`
       echo "##vso[task.setvariable variable=RELEASE_VERSION]$LAST_VERSION"
-      echo * Latest release version : $LAST_VERSION
       cd ../../../
+
+      echo * Latest release version : $LAST_VERSION
   
       git add -A
       git commit -am "Actions preview SDK $LAST_VERSION"
@@ -128,4 +136,4 @@ steps:
     addChangeLog: false
     releaseNotesFile: './docs/sdk/release_notes/$(RELEASE_VERSION).md'
     title: 'Actions preview SDK $(RELEASE_VERSION)'
-    assets: '$(System.ArtifactsDirectory)/cli_drop/drop/*.zip'
+    assets: '$(System.ArtifactsDirectory)/release/drop/*.zip'
