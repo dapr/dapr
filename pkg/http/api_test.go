@@ -42,7 +42,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
 
-	t.Run("/v1.0/bindings/<name> - 200 OK", func(t *testing.T) {
+	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
 		fakeData := []byte("fake output")
 
@@ -56,7 +56,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("/v1.0/bindings/<name> - 500 InternalError", func(t *testing.T) {
+	t.Run("Invoke output bindings - 500 InternalError", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/notfound", apiVersionV1)
 		fakeData := []byte("fake output")
 
@@ -79,14 +79,15 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 }
 
 func TestV1DirectMessagingEndpoints(t *testing.T) {
-	testHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
+	fakeHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
 	fakeDirectMessageResponse := &messaging.DirectMessageResponse{
 		Data: []byte("fakeDirectMessageResponse"),
 		Metadata: map[string]string{
 			"http.status_code": "200",
-			"headers":          testHeader,
+			"headers":          fakeHeader,
 		},
 	}
+
 	mockDirectMessaging := new(actionst.MockDirectMessaging)
 
 	fakeServer := newFakeHTTPServer()
@@ -95,7 +96,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
-	t.Run("v1.0/actions/<id>/<method> - return 200 OK", func(t *testing.T) {
+	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actions/fakeActionsID/fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -106,7 +107,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				Data:   fakeData,
 				Method: "fakeMethod",
 				Metadata: map[string]string{
-					"headers":        testHeader,
+					"headers":        fakeHeader,
 					http.HTTPVerb:    "POST",
 					http.QueryString: "", // without query string
 				},
@@ -121,7 +122,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
-	t.Run("v1.0/actions/<id>/<method>?param1=val1&param2=val2 - return 200 OK", func(t *testing.T) {
+	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actions/fakeActionsID/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
@@ -132,7 +133,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				Data:   fakeData,
 				Method: "fakeMethod",
 				Metadata: map[string]string{
-					"headers":        testHeader,
+					"headers":        fakeHeader,
 					http.HTTPVerb:    "POST",
 					http.QueryString: "param1=val1&param2=val2",
 				},
@@ -156,7 +157,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
 
-	testPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+	apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 	fakeData := []byte("fakeData")
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
@@ -166,7 +167,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, testPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -188,7 +189,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, testPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -208,7 +209,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("GET", testPath, nil)
+		resp := fakeServer.DoRequest("GET", apiPath, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
