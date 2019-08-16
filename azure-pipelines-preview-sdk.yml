@@ -22,7 +22,7 @@ steps:
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
     pipeline: '6'
     buildVersionToDownload: 'latestFromBranch'
-    branchName: 'release'
+    branchName: 'refs/heads/master'
     downloadType: 'single'
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/cli_drop'
