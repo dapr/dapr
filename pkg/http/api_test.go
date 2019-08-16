@@ -23,6 +23,18 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+func TestSetHeaders(t *testing.T) {
+	testAPI := &api{}
+	c := &routing.Context{}
+	request := fasthttp.Request{}
+	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+	c.Request.Header.Set("H1", "v1")
+	c.Request.Header.Set("H2", "v2")
+	m := map[string]string{}
+	testAPI.setHeaders(c, m)
+	assert.Equal(t, "H1&__header_equals__&v1&__header_delim__&H2&__header_equals__&v2", m["headers"])
+}
+
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
@@ -96,13 +108,15 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				Metadata: map[string]string{
 					"headers":        testHeader,
 					http.HTTPVerb:    "POST",
-					http.QueryString: "",
+					http.QueryString: "", // without query string
 				},
 				Target: "fakeActionsID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+
+		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
 	})
@@ -202,18 +216,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	fakeServer.Shutdown()
-}
-
-func TestSetHeaders(t *testing.T) {
-	testAPI := &api{}
-	c := &routing.Context{}
-	request := fasthttp.Request{}
-	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
-	c.Request.Header.Set("H1", "v1")
-	c.Request.Header.Set("H2", "v2")
-	m := map[string]string{}
-	testAPI.setHeaders(c, m)
-	assert.Equal(t, "H1&__header_equals__&v1&__header_delim__&H2&__header_equals__&v2", m["headers"])
 }
 
 // Fake http server and client helpers to simplify endpoints test
