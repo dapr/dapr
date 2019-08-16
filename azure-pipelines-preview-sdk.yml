@@ -37,6 +37,17 @@ steps:
     downloadType: 'single'
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/spec_drop'
+- task: DownloadBuildArtifacts@0
+  displayName: 'Download Specs'
+  inputs:
+    buildType: 'specific'
+    project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
+    pipeline: '16'
+    buildVersionToDownload: 'latestFromBranch'
+    branchName: 'refs/heads/master'
+    downloadType: 'single'
+    artifactName: 'Build.buildprojects.release'
+    downloadPath: '$(System.ArtifactsDirectory)/cs-sdk'
 - task: Bash@3
   displayName: 'Git clone preview repo'
   inputs:
@@ -81,6 +92,7 @@ steps:
       mkdir ../preview/docs/spec
       unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../preview/docs/spec/
       cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
+      cp $(System.ArtifactsDirectory)/cs-sdk/Build.buildprojects.release/*.nuget $(System.ArtifactsDirectory)/release/drop/
 
       echo "moving arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
