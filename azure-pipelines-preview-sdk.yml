@@ -21,10 +21,20 @@ steps:
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
     pipeline: '6'
     buildVersionToDownload: 'latestFromBranch'
-    branchName: 'refs/heads/master'
+    branchName: 'refs/heads/release-*'
     downloadType: 'single'
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/cli_drop'
+- task: DownloadBuildArtifacts@0
+  inputs:
+    buildType: 'specific'
+    project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
+    pipeline: '15'
+    buildVersionToDownload: 'latestFromBranch'
+    branchName: 'refs/heads/master'
+    downloadType: 'single'
+    artifactName: 'drop'
+    downloadPath: '$(System.ArtifactsDirectory)/spec_drop'
 - task: Bash@3
   displayName: 'Git clone preview repo'
   inputs:
