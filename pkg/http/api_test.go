@@ -15,7 +15,6 @@ import (
 	"github.com/valyala/fasthttp/fasthttputil"
 
 	"github.com/actionscore/actions/pkg/actors"
-	"github.com/actionscore/actions/pkg/channel"
 	"github.com/actionscore/actions/pkg/channel/http"
 	"github.com/actionscore/actions/pkg/messaging"
 	actionst "github.com/actionscore/actions/pkg/testing"
@@ -24,122 +23,144 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-type mockChannel struct {
-}
-
-func (c mockChannel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
-	if val, ok := req.Metadata[http.QueryString]; ok {
-		return &channel.InvokeResponse{Data: []byte(val)}, nil
+func TestV1OutputBindingsEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		sendToOutputBindingFn: func(name string, data []byte) error { return nil },
 	}
-	return nil, nil
-}
+	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
 
-type mockDirectMessaging struct {
-	appChannel channel.AppChannel
-}
+	t.Run("/v1.0/bindings/<name> - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
+		fakeData := []byte("fake output")
 
-func (d mockDirectMessaging) Invoke(req *messaging.DirectMessageRequest) (*messaging.DirectMessageResponse, error) {
-	localInvokeReq := channel.InvokeRequest{
-		Metadata: req.Metadata,
-		Method:   req.Method,
-		Payload:  req.Data,
-	}
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, fakeData)
 
-	resp, err := d.appChannel.InvokeMethod(&localInvokeReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &messaging.DirectMessageResponse{
-		Data:     resp.Data,
-		Metadata: resp.Metadata,
-	}, nil
-}
-
-func TestOutputBinding(t *testing.T) {
-	t.Run("with correct input params", func(t *testing.T) {
-		testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}, sendToOutputBindingFn: func(name string, data []byte) error {
-			return nil
-		}}
-		c := &routing.Context{}
-		request := fasthttp.Request{}
-		request.URI().Parse(nil, []byte("http://actionscore.dev/bindings/test"))
-		c.RequestCtx = &fasthttp.RequestCtx{Request: request}
-		err := testAPI.onOutputBindingMessage(c)
-		assert.NoError(t, err)
-		assert.Equal(t, 200, c.Response.StatusCode())
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
+		}
 	})
 
-	t.Run("with missing binding name", func(t *testing.T) {
-		testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}, sendToOutputBindingFn: func(name string, data []byte) error {
+	t.Run("/v1.0/bindings/<name> - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/bindings/notfound", apiVersionV1)
+		fakeData := []byte("fake output")
+
+		testAPI.sendToOutputBindingFn = func(name string, data []byte) error {
 			return errors.New("missing binding name")
-		}}
-		c := &routing.Context{}
-		request := fasthttp.Request{}
-		request.URI().Parse(nil, []byte("http://actionscore.dev/bindings/test"))
-		c.RequestCtx = &fasthttp.RequestCtx{Request: request}
-		testAPI.onOutputBindingMessage(c)
-		assert.NotEqual(t, 200, c.Response.StatusCode())
-	})
-}
+		}
 
-func TestOnDirectMessage(t *testing.T) {
-	t.Run("with parameters", func(t *testing.T) {
-		testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}}
-		c := &routing.Context{}
-		request := fasthttp.Request{}
-		request.URI().Parse(nil, []byte("http://www.microsoft.com/dummy?param1=val1&param2=val2"))
-		c.RequestCtx = &fasthttp.RequestCtx{Request: request}
-		err := testAPI.onDirectMessage(c)
-		assert.NoError(t, err)
-		assert.Equal(t, "param1=val1&param2=val2", string(c.Response.Body()))
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+
+			// assert
+			assert.Equal(t, 500, resp.StatusCode)
+			assert.Equal(t, "error invoking output binding notfound: missing binding name", fakeServer.UnmarshalBody(resp.Body)["error"])
+		}
 	})
 
-	t.Run("without parameters", func(t *testing.T) {
-		testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}}
-		c := &routing.Context{}
-		request := fasthttp.Request{}
-		request.URI().Parse(nil, []byte("http://www.microsoft.com/dummy"))
-		c.RequestCtx = &fasthttp.RequestCtx{Request: request}
-		err := testAPI.onDirectMessage(c)
-		assert.NoError(t, err)
-		assert.Equal(t, "", string(c.Response.Body()))
+	fakeServer.Shutdown()
+}
+
+func TestV1DirectMessagingEndpoints(t *testing.T) {
+	testHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
+	fakeDirectMessageResponse := &messaging.DirectMessageResponse{
+		Data: []byte("fakeDirectMessageResponse"),
+		Metadata: map[string]string{
+			"http.status_code": "200",
+			"headers":          testHeader,
+		},
+	}
+	mockDirectMessaging := new(actionst.MockDirectMessaging)
+
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		directMessaging: mockDirectMessaging,
+	}
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
+
+	t.Run("v1.0/actions/<id>/<method> - return 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actions/fakeActionsID/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging.On(
+			"Invoke",
+			&messaging.DirectMessageRequest{
+				Data:   fakeData,
+				Method: "fakeMethod",
+				Metadata: map[string]string{
+					"headers":        testHeader,
+					http.HTTPVerb:    "POST",
+					http.QueryString: "",
+				},
+				Target: "fakeActionsID",
+			}).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
 	})
+
+	t.Run("v1.0/actions/<id>/<method>?param1=val1&param2=val2 - return 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actions/fakeActionsID/fakeMethod?param1=val1&param2=val2"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging.On(
+			"Invoke",
+			&messaging.DirectMessageRequest{
+				Data:   fakeData,
+				Method: "fakeMethod",
+				Metadata: map[string]string{
+					"headers":        testHeader,
+					http.HTTPVerb:    "POST",
+					http.QueryString: "param1=val1&param2=val2",
+				},
+				Target: "fakeActionsID",
+			}).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	fakeServer.Shutdown()
 }
 
-func TestSetHeaders(t *testing.T) {
-	testAPI := &api{directMessaging: mockDirectMessaging{appChannel: mockChannel{}}}
-	c := &routing.Context{}
-	request := fasthttp.Request{}
-	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
-	c.Request.Header.Set("H1", "v1")
-	c.Request.Header.Set("H2", "v2")
-	m := map[string]string{}
-	testAPI.setHeaders(c, m)
-	assert.Equal(t, "H1&__header_equals__&v1&__header_delim__&H2&__header_equals__&v2", m["headers"])
-}
-
-func TestSaveActorState(t *testing.T) {
-	testPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-	fakeData := []byte("fakeData")
-
+func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{actor: nil}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
 
-	t.Run("Actor runtime is not initialized", func(t *testing.T) {
-		// act
-		statusCode, body := fakeServer.DoRequest("PUT", testPath, fakeData)
+	testPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+	fakeData := []byte("fakeData")
 
-		// assert
-		var bodyObj map[string]string
-		json.Unmarshal(body, &bodyObj)
-		assert.Equal(t, 400, statusCode)
-		assert.Equal(t, "actor runtime is not initialized", bodyObj["error"])
+	t.Run("Actor runtime is not initialized", func(t *testing.T) {
+		testAPI.actor = nil
+
+		testMethods := []string{"POST", "PUT", "GET"}
+
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, testPath, fakeData)
+
+			// assert
+			assert.Equal(t, 400, resp.StatusCode)
+			assert.Equal(t, "actor runtime is not initialized", fakeServer.UnmarshalBody(resp.Body)["error"])
+		}
 	})
 
-	t.Run("Save granular state key", func(t *testing.T) {
+	t.Run("Save actor state - 200 OK", func(t *testing.T) {
 		mockActors := new(actionst.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
@@ -153,35 +174,14 @@ func TestSaveActorState(t *testing.T) {
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
-			statusCode, _ := fakeServer.DoRequest(method, testPath, fakeData)
+			resp := fakeServer.DoRequest(method, testPath, fakeData)
 
 			// assert
-			assert.Equal(t, 201, statusCode, "failed to save state key with %s", method)
+			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
 		}
 	})
 
-	fakeServer.Shutdown()
-}
-
-func TestGetActorState(t *testing.T) {
-	testPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-	fakeServer := newFakeHTTPServer()
-	testAPI := &api{actor: nil}
-
-	fakeServer.StartServer(testAPI.constructActorEndpoints())
-
-	t.Run("Actor runtime is not initialized", func(t *testing.T) {
-		// act
-		statusCode, body := fakeServer.DoRequest("GET", testPath, nil)
-
-		// assert
-		var bodyObj map[string]string
-		json.Unmarshal(body, &bodyObj)
-		assert.Equal(t, 400, statusCode)
-		assert.Equal(t, "actor runtime is not initialized", bodyObj["error"])
-	})
-
-	t.Run("Get Actor State successfully", func(t *testing.T) {
+	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		mockActors := new(actionst.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
@@ -194,14 +194,26 @@ func TestGetActorState(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		statusCode, body := fakeServer.DoRequest("GET", testPath, nil)
+		resp := fakeServer.DoRequest("GET", testPath, nil)
 
 		// assert
-		assert.Equal(t, 200, statusCode)
-		assert.Equal(t, []byte("fakeData"), body)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeData"), resp.Body)
 	})
 
 	fakeServer.Shutdown()
+}
+
+func TestSetHeaders(t *testing.T) {
+	testAPI := &api{}
+	c := &routing.Context{}
+	request := fasthttp.Request{}
+	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+	c.Request.Header.Set("H1", "v1")
+	c.Request.Header.Set("H2", "v2")
+	m := map[string]string{}
+	testAPI.setHeaders(c, m)
+	assert.Equal(t, "H1&__header_equals__&v1&__header_delim__&H2&__header_equals__&v2", m["headers"])
 }
 
 // Fake http server and client helpers to simplify endpoints test
@@ -212,6 +224,12 @@ func newFakeHTTPServer() *fakeHTTPServer {
 type fakeHTTPServer struct {
 	ln     *fasthttputil.InmemoryListener
 	client gohttp.Client
+}
+
+type fakeHTTPResponse struct {
+	StatusCode int
+	Header     gohttp.Header
+	Body       []byte
 }
 
 func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
@@ -249,7 +267,7 @@ func (f *fakeHTTPServer) Shutdown() {
 	f.ln.Close()
 }
 
-func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) (int, []byte) {
+func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) fakeHTTPResponse {
 	r, _ := gohttp.NewRequest(method, fmt.Sprintf("http://localhost/%s", path), bytes.NewBuffer(body))
 	res, err := f.client.Do(r)
 	if err != nil {
@@ -257,5 +275,16 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) (int, []byt
 	}
 
 	bodyBytes, _ := ioutil.ReadAll(res.Body)
-	return res.StatusCode, bodyBytes
+
+	return fakeHTTPResponse{
+		StatusCode: res.StatusCode,
+		Header:     res.Header,
+		Body:       bodyBytes,
+	}
+}
+
+func (f *fakeHTTPServer) UnmarshalBody(respBody []byte) map[string]string {
+	var bodyObj map[string]string
+	json.Unmarshal(respBody, &bodyObj)
+	return bodyObj
 }
