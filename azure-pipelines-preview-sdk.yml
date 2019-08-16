@@ -1,4 +1,4 @@
-# actionscore/actions preview-sdk
+# actionscore/actions preview-kit
 
 trigger: none
 
@@ -57,7 +57,7 @@ steps:
       git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/cli.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
-  displayName: 'Copy SDK files from actions to preview repo'
+  displayName: 'Copy Preview Kit contents to preview repo'
   inputs:
     targetType: 'inline'
     script: |
@@ -69,9 +69,9 @@ steps:
       cp LICENSE ../preview/
       cp -R samples ../preview/
       cp -R docs ../preview/
-      mv ../preview/docs/sdk/README.md ../preview/
+      mv ../preview/docs/preview/README.md ../preview/
       mkdir ../preview/docs/cli
-      mv ../cli/docs/sdk/README.md ../preview/docs/cli/
+      mv ../cli/docs/preview/README.md ../preview/docs/cli/
       
       # Remove unnecessary files
       rm -rf ../preview/docs/decision_records
@@ -104,7 +104,7 @@ steps:
     script: |
       pushd ../preview
       
-      cd docs/sdk/release_notes/
+      cd docs/preview/release_notes/
       export LAST_RELEASE_NOTE_FILE=`ls | sort -V | tail -1`
       export LAST_VERSION=`basename $LAST_RELEASE_NOTE_FILE .md`
       echo "##vso[task.setvariable variable=RELEASE_VERSION]$LAST_VERSION"
@@ -113,7 +113,7 @@ steps:
       echo * Latest release version : $LAST_VERSION
   
       git add -A
-      git commit -am "Actions preview SDK $LAST_VERSION"
+      git commit -am "Actions Preview Kit $LAST_VERSION"
       git status
 
       git push origin master
@@ -134,6 +134,6 @@ steps:
     tag: '$(RELEASE_VERSION)'
     isPreRelease: true
     addChangeLog: false
-    releaseNotesFile: './docs/sdk/release_notes/$(RELEASE_VERSION).md'
-    title: 'Actions preview SDK $(RELEASE_VERSION)'
+    releaseNotesFile: './docs/preview/release_notes/$(RELEASE_VERSION).md'
+    title: 'Actions Preview Kit $(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/release/drop/*.zip'
