@@ -149,4 +149,5 @@ steps:
     addChangeLog: false
     releaseNotesFile: './docs/preview/release_notes/$(RELEASE_VERSION).md'
     title: 'Actions Preview Kit $(RELEASE_VERSION)'
-    assets: '$(System.ArtifactsDirectory)/release/drop/*.zip'
+    assets: '$(System.ArtifactsDirectory)/release/drop/*.zip;$(System.ArtifactsDirectory)/release/drop/*.nupkg'
+
