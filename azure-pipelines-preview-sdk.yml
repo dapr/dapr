@@ -16,16 +16,18 @@ pool:
 
 steps:
 - task: DownloadBuildArtifacts@0
+  displayName: 'Download Actions CLI Binaries'
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
     pipeline: '6'
     buildVersionToDownload: 'latestFromBranch'
-    branchName: 'refs/heads/release-*'
+    branchName: 'release'
     downloadType: 'single'
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/cli_drop'
 - task: DownloadBuildArtifacts@0
+  displayName: 'Download Specs'
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
