@@ -21,8 +21,8 @@ steps:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
     pipeline: '6'
-    buildVersionToDownload: 'latestFromBranch'
-    branchName: 'refs/heads/master'
+    buildVersionToDownload: 'latest'
+    tags: 'release'
     downloadType: 'single'
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/release'
@@ -37,6 +37,7 @@ steps:
     downloadType: 'single'
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/spec_drop'
+
 - task: DownloadBuildArtifacts@0
   displayName: 'Download cs-sdk'
   inputs:
@@ -152,4 +153,3 @@ steps:
     releaseNotesFile: './docs/preview/release_notes/$(RELEASE_VERSION).md'
     title: 'Actions Preview Kit $(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/release/drop/**'
-
