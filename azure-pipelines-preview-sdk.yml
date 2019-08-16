@@ -1,4 +1,4 @@
-# actionscore/actions preview-sdk
+# actionscore/actions preview-kit
 
 trigger: none
 
@@ -16,15 +16,39 @@ pool:
 
 steps:
 - task: DownloadBuildArtifacts@0
+  displayName: 'Download Actions CLI Binaries'
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
     pipeline: '6'
+    buildVersionToDownload: 'latest'
+    tags: 'release'
+    downloadType: 'single'
+    artifactName: 'drop'
+    downloadPath: '$(System.ArtifactsDirectory)/release'
+- task: DownloadBuildArtifacts@0
+  displayName: 'Download Specs'
+  inputs:
+    buildType: 'specific'
+    project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
+    pipeline: '15'
     buildVersionToDownload: 'latestFromBranch'
     branchName: 'refs/heads/master'
     downloadType: 'single'
     artifactName: 'drop'
-    downloadPath: '$(System.ArtifactsDirectory)/cli_drop'
+    downloadPath: '$(System.ArtifactsDirectory)/spec_drop'
+
+- task: DownloadBuildArtifacts@0
+  displayName: 'Download cs-sdk'
+  inputs:
+    buildType: 'specific'
+    project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
+    pipeline: '16'
+    buildVersionToDownload: 'latestFromBranch'
+    branchName: 'refs/heads/master'
+    downloadType: 'single'
+    artifactName: 'release_drop'
+    downloadPath: '$(System.ArtifactsDirectory)/cs-sdk'
 - task: Bash@3
   displayName: 'Git clone preview repo'
   inputs:
@@ -45,7 +69,7 @@ steps:
       git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/cli.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
-  displayName: 'Copy SDK files from actions to preview repo'
+  displayName: 'Copy Preview Kit contents to preview repo'
   inputs:
     targetType: 'inline'
     script: |
@@ -57,13 +81,24 @@ steps:
       cp LICENSE ../preview/
       cp -R samples ../preview/
       cp -R docs ../preview/
-      mv ../preview/docs/sdk/README.md ../preview/
+      mv ../preview/docs/preview/README.md ../preview/
       mkdir ../preview/docs/cli
-      mv ../cli/docs/sdk/README.md ../preview/docs/cli/
+      mv ../cli/docs/preview/README.md ../preview/docs/cli/
       
       # Remove unnecessary files
       rm -rf ../preview/docs/decision_records
       rm -rf ../preview/docs/assets
+
+      echo "copying specs..."
+      mkdir ../preview/docs/spec
+      unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../preview/docs/spec/
+      cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
+      
+      echo "copying nuget pkgs..."
+      cp $(System.ArtifactsDirectory)/cs-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
+
+      echo "removing arm binary..."
+      rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Fix url in markdown documents to preview repo url'
@@ -85,15 +120,16 @@ steps:
     script: |
       pushd ../preview
       
-      cd docs/sdk/release_notes/
+      cd docs/preview/release_notes/
       export LAST_RELEASE_NOTE_FILE=`ls | sort -V | tail -1`
       export LAST_VERSION=`basename $LAST_RELEASE_NOTE_FILE .md`
       echo "##vso[task.setvariable variable=RELEASE_VERSION]$LAST_VERSION"
-      echo * Latest release version : $LAST_VERSION
       cd ../../../
+
+      echo * Latest release version : $LAST_VERSION
   
       git add -A
-      git commit -am "Actions preview SDK $LAST_VERSION"
+      git commit -am "Actions Preview Kit $LAST_VERSION"
       git status
 
       git push origin master
@@ -114,6 +150,6 @@ steps:
     tag: '$(RELEASE_VERSION)'
     isPreRelease: true
     addChangeLog: false
-    releaseNotesFile: './docs/sdk/release_notes/$(RELEASE_VERSION).md'
-    title: 'Actions preview SDK $(RELEASE_VERSION)'
-    assets: '$(System.ArtifactsDirectory)/cli_drop/drop/*.zip'
+    releaseNotesFile: './docs/preview/release_notes/$(RELEASE_VERSION).md'
+    title: 'Actions Preview Kit $(RELEASE_VERSION)'
+    assets: '$(System.ArtifactsDirectory)/release/drop/**'
