@@ -38,13 +38,13 @@ steps:
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/spec_drop'
 - task: DownloadBuildArtifacts@0
-  displayName: 'Download Specs'
+  displayName: 'Download cs-sdk'
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
     pipeline: '16'
     buildVersionToDownload: 'latestFromBranch'
-    branchName: 'refs/heads/master'
+    branchName: 'master'
     downloadType: 'single'
     artifactName: 'Build.buildprojects.release'
     downloadPath: '$(System.ArtifactsDirectory)/cs-sdk'
