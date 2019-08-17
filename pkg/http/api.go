@@ -521,14 +521,20 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	key := c.Param(stateKeyParam)
 	body := c.PostBody()
 
+	var val interface{}
+	err := jsoniter.ConfigFastest.Unmarshal(body, &val)
+	if err != nil {
+		respondWithError(c.RequestCtx, 400, fmt.Sprintf("error deserializing body: %s", err))
+	}
+
 	req := actors.SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       key,
-		Data:      body,
+		Data:      val,
 	}
 
-	err := a.actor.SaveState(&req)
+	err = a.actor.SaveState(&req)
 	if err != nil {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {

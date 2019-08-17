@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp/fasthttputil"
 
 	"github.com/actionscore/actions/pkg/actors"
@@ -177,11 +178,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Save actor state - 200 OK", func(t *testing.T) {
 		mockActors := new(actionst.MockActors)
+		var val interface{}
+		jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      fakeData,
+			Data:      val,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
