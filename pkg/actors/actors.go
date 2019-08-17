@@ -29,6 +29,7 @@ type Actors interface {
 	Init() error
 	GetState(req *GetStateRequest) (*StateResponse, error)
 	SaveState(req *SaveStateRequest) error
+	DeleteState(req *DeleteStateRequest) error
 	CreateReminder(req *CreateReminderRequest) error
 	DeleteReminder(req *DeleteReminderRequest) error
 	CreateTimer(req *CreateTimerRequest) error
@@ -305,6 +306,14 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	err := a.store.Set(&state.SetRequest{
 		Value: req.Data,
 		Key:   key,
+	})
+	return err
+}
+
+func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
+	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
+	err := a.store.Delete(&state.DeleteRequest{
+		Key: key,
 	})
 	return err
 }

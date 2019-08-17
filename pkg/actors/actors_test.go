@@ -82,7 +82,7 @@ func getTestActorTypeAndID() (string, string) {
 func fakeStore() state.StateStore {
 	return &fakeStateStore{
 		items: map[string][]byte{},
-		lock: &sync.RWMutex{},
+		lock:  &sync.RWMutex{},
 	}
 }
 
@@ -424,4 +424,48 @@ func TestGetState(t *testing.T) {
 	expectedData, _ := json.Marshal(fakeData)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedData, response.Data)
+}
+
+func TestDeleteState(t *testing.T) {
+	testActorRuntime := newTestActorsRuntime()
+	actorType, actorID := getTestActorTypeAndID()
+	keyName := "key0"
+	fakeData := []byte("fakeData")
+
+	// save test state
+	testActorRuntime.SaveState(&SaveStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       keyName,
+		Data:      fakeData,
+	})
+
+	// make sure that state is stored.
+	response, err := testActorRuntime.GetState(&GetStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       keyName,
+	})
+
+	expectedData, _ := json.Marshal(fakeData)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedData, response.Data)
+
+	// act
+	err = testActorRuntime.DeleteState(&DeleteStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       keyName,
+	})
+	assert.NoError(t, err)
+
+	// assert
+	response, err = testActorRuntime.GetState(&GetStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       keyName,
+	})
+
+	assert.NoError(t, err)
+	assert.Nil(t, response.Data)
 }
