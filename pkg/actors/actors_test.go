@@ -3,11 +3,13 @@ package actors
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/actionscore/actions/pkg/components/state"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
@@ -61,12 +63,12 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 
 func newTestActorsRuntime() *actorsRuntime {
 	mockAppChannel := new(channelt.MockAppChannel)
-	fakeHttpResponse := &channel.InvokeResponse{
+	fakeHTTPResponse := &channel.InvokeResponse{
 		Metadata: map[string]string{http.HTTPStatusCode: "200"},
 	}
 	mockAppChannel.On(
 		"InvokeMethod",
-		mock.AnythingOfType("*channel.InvokeRequest")).Return(fakeHttpResponse, nil)
+		mock.AnythingOfType("*channel.InvokeRequest")).Return(fakeHTTPResponse, nil)
 
 	store := fakeStore()
 	config := NewConfig("", TestActionsID, "", nil, 0, "", "")
@@ -381,36 +383,45 @@ func TestSaveState(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	keyName := "key0"
-	fakeData := []byte("fakeData")
+	fakeData := strconv.Quote("fakeData")
+
+	var val interface{}
+	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
 
 	// act
-	testActorRuntime.SaveState(&SaveStateRequest{
+	err := testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       keyName,
-		Data:      fakeData,
-	})
-
-	// assert
-	expectedData, _ := json.Marshal(fakeData)
-	response, err := testActorRuntime.store.Get(&state.GetRequest{
-		Key: testActorRuntime.constructActorStateKey(actorType, actorID, keyName),
+		Data:      val,
 	})
 	assert.NoError(t, err)
-	assert.Equal(t, expectedData, response.Data)
+
+	// assert
+	response, err := testActorRuntime.GetState(&GetStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       keyName,
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, fakeData, string(response.Data))
 }
 
 func TestGetState(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	keyName := "key0"
-	fakeData := []byte("fakeData")
+	fakeData := strconv.Quote("fakeData")
+
+	var val interface{}
+	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
 
 	testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       keyName,
-		Data:      fakeData,
+		Data:      val,
 	})
 
 	// act
@@ -421,23 +432,25 @@ func TestGetState(t *testing.T) {
 	})
 
 	// assert
-	expectedData, _ := json.Marshal(fakeData)
 	assert.NoError(t, err)
-	assert.Equal(t, expectedData, response.Data)
+	assert.Equal(t, fakeData, string(response.Data))
 }
 
 func TestDeleteState(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	keyName := "key0"
-	fakeData := []byte("fakeData")
+	fakeData := strconv.Quote("fakeData")
+
+	var val interface{}
+	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
 
 	// save test state
 	testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       keyName,
-		Data:      fakeData,
+		Data:      val,
 	})
 
 	// make sure that state is stored.
@@ -447,9 +460,8 @@ func TestDeleteState(t *testing.T) {
 		Key:       keyName,
 	})
 
-	expectedData, _ := json.Marshal(fakeData)
 	assert.NoError(t, err)
-	assert.Equal(t, expectedData, response.Data)
+	assert.Equal(t, fakeData, string(response.Data))
 
 	// act
 	err = testActorRuntime.DeleteState(&DeleteStateRequest{
