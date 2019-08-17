@@ -163,7 +163,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		testAPI.actor = nil
 
-		testMethods := []string{"POST", "PUT", "GET"}
+		testMethods := []string{"POST", "PUT", "GET", "DELETE"}
 
 		for _, method := range testMethods {
 			// act
@@ -188,11 +188,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
+			mockActors.Calls = nil
+
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, fakeData)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
+			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
 
@@ -214,6 +217,25 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, []byte("fakeData"), resp.Body)
+		mockActors.AssertNumberOfCalls(t, "GetState", 1)
+	})
+
+	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
+		mockActors := new(actionst.MockActors)
+		mockActors.On("DeleteState", &actors.DeleteStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil)
+
+		// assert
+		assert.Equal(t, 201, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})
 
 	fakeServer.Shutdown()

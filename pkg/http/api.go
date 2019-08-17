@@ -146,13 +146,19 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{http.Post, http.Put},
 			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
-			Handler: a.OnSaveActorState,
+			Handler: a.onSaveActorState,
 		},
 		{
 			Methods: []string{http.Get},
 			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetActorState,
+		},
+		{
+			Methods: []string{http.Delete},
+			Route:   "actors/<actorType>/<actorId>/state/<key>",
+			Version: apiVersionV1,
+			Handler: a.onDeleteActorState,
 		},
 		{
 			Methods: []string{http.Post, http.Put},
@@ -504,7 +510,7 @@ func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context
 	}
 }
 
-func (a *api) OnSaveActorState(c *routing.Context) error {
+func (a *api) onSaveActorState(c *routing.Context) error {
 	if a.actor == nil {
 		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
 		return nil
@@ -553,6 +559,32 @@ func (a *api) onGetActorState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
 		respondWithJSON(c.RequestCtx, 200, resp.Data)
+	}
+
+	return nil
+}
+
+func (a *api) onDeleteActorState(c *routing.Context) error {
+	if a.actor == nil {
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		return nil
+	}
+
+	actorType := c.Param(actorTypeParam)
+	actorID := c.Param(actorIDParam)
+	key := c.Param(stateKeyParam)
+
+	req := actors.DeleteStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Key:       key,
+	}
+
+	err := a.actor.DeleteState(&req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, err.Error())
+	} else {
+		respondEmpty(c.RequestCtx, 201)
 	}
 
 	return nil
