@@ -220,7 +220,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		act.lastUsedTime = time.Now()
 	}
 
-	method := fmt.Sprintf("actors/%s/%s/%s", actorType, actorID, actorMethod)
+	method := fmt.Sprintf("actors/%s/%s/method/%s", actorType, actorID, actorMethod)
 	req := channel.InvokeRequest{
 		Method:   method,
 		Payload:  data,
