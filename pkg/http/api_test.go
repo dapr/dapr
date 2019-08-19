@@ -72,7 +72,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
-			assert.Equal(t, "error invoking output binding notfound: missing binding name", fakeServer.UnmarshalBody(resp.Body)["error"])
+			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
 		}
 	})
 
@@ -172,7 +172,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "actor runtime is not initialized", fakeServer.UnmarshalBody(resp.Body)["error"])
+			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
 		}
 	})
 
