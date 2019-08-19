@@ -550,7 +550,7 @@ func TestTransactionalState(t *testing.T) {
 		assert.NotNil(t, err)
 	})
 
-	t.Run("Unsupported operation tyope - should fail", func(t *testing.T) {
+	t.Run("Unsupported operation type - should fail", func(t *testing.T) {
 		testActorRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 
