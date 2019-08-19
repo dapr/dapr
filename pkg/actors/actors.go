@@ -338,8 +338,11 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 		}
 	}
 
-	//TODO: very the store is transactional
-	err := a.store.(state.TransactionalStateStore).Multi(requests)
+	transactionalStore, ok := a.store.(state.TransactionalStateStore)
+	if !ok {
+		return errors.New("state store does not support transactions")
+	}
+	err := transactionalStore.Multi(requests)
 	return err
 }
 
