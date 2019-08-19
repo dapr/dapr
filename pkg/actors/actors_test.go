@@ -532,4 +532,21 @@ func TestTransactionalState(t *testing.T) {
 		})
 		assert.Nil(t, err)
 	})
+
+	t.Run("Wrong request body - should fail", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		actorType, actorID := getTestActorTypeAndID()
+
+		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Operations: []TransactionalOperation{
+				TransactionalOperation{
+					Operation: Upsert,
+					Request:   "wrongBody",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+	})
 }
