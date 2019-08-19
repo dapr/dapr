@@ -61,6 +61,10 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 	return nil
 }
 
+func (f *fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
+	return nil
+}
+
 func newTestActorsRuntime() *actorsRuntime {
 	mockAppChannel := new(channelt.MockAppChannel)
 	fakeHTTPResponse := &channel.InvokeResponse{
@@ -480,4 +484,87 @@ func TestDeleteState(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Nil(t, response.Data)
+}
+
+func TestTransactionalState(t *testing.T) {
+	t.Run("Single set request succeeds", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		actorType, actorID := getTestActorTypeAndID()
+
+		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Operations: []TransactionalOperation{
+				TransactionalOperation{
+					Operation: Upsert,
+					Request: TransactionalUpsert{
+						Key:  "key1",
+						Data: "fakeData",
+					},
+				},
+			},
+		})
+		assert.Nil(t, err)
+	})
+
+	t.Run("Multiple requests succeeds", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		actorType, actorID := getTestActorTypeAndID()
+
+		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Operations: []TransactionalOperation{
+				TransactionalOperation{
+					Operation: Upsert,
+					Request: TransactionalUpsert{
+						Key:  "key1",
+						Data: "fakeData",
+					},
+				},
+				TransactionalOperation{
+					Operation: Delete,
+					Request: TransactionalDelete{
+						Key: "key1",
+					},
+				},
+			},
+		})
+		assert.Nil(t, err)
+	})
+
+	t.Run("Wrong request body - should fail", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		actorType, actorID := getTestActorTypeAndID()
+
+		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Operations: []TransactionalOperation{
+				TransactionalOperation{
+					Operation: Upsert,
+					Request:   "wrongBody",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+	})
+
+	t.Run("Unsupported operation type - should fail", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		actorType, actorID := getTestActorTypeAndID()
+
+		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Operations: []TransactionalOperation{
+				TransactionalOperation{
+					Operation: "Wrong",
+					Request:   "wrongBody",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, "operation type Wrong not supported", err.Error())
+	})
 }

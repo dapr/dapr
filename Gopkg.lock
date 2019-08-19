@@ -1106,6 +1106,7 @@
     "github.com/json-iterator/go",
     "github.com/kelseyhightower/envconfig",
     "github.com/minio/blake2b-simd",
+    "github.com/mitchellh/mapstructure",
     "github.com/openzipkin/zipkin-go",
     "github.com/openzipkin/zipkin-go/reporter/http",
     "github.com/qiangxue/fasthttp-routing",

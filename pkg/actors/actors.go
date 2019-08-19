@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mitchellh/mapstructure"
+
 	"github.com/actionscore/actions/pkg/channel/http"
 
 	"github.com/golang/protobuf/ptypes/any"
@@ -30,6 +32,7 @@ type Actors interface {
 	GetState(req *GetStateRequest) (*StateResponse, error)
 	SaveState(req *SaveStateRequest) error
 	DeleteState(req *DeleteStateRequest) error
+	TransactionalStateOperation(req *TransactionalRequest) error
 	CreateReminder(req *CreateReminderRequest) error
 	DeleteReminder(req *DeleteReminderRequest) error
 	CreateTimer(req *CreateTimerRequest) error
@@ -299,6 +302,51 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 	return &StateResponse{
 		Data: resp.Data,
 	}, nil
+}
+
+func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) error {
+	requests := []state.TransactionalRequest{}
+	for _, o := range req.Operations {
+		switch o.Operation {
+		case Upsert:
+			var upsert TransactionalUpsert
+			err := mapstructure.Decode(o.Request, &upsert)
+			if err != nil {
+				return err
+			}
+			key := a.constructActorStateKey(req.ActorType, req.ActorID, upsert.Key)
+			requests = append(requests, state.TransactionalRequest{
+				Request: state.SetRequest{
+					Key:   key,
+					Value: upsert.Data,
+				},
+				Operation: state.Upsert,
+			})
+		case Delete:
+			var delete TransactionalDelete
+			err := mapstructure.Decode(o.Request, &delete)
+			if err != nil {
+				return err
+			}
+
+			key := a.constructActorStateKey(req.ActorType, req.ActorID, delete.Key)
+			requests = append(requests, state.TransactionalRequest{
+				Request: state.DeleteRequest{
+					Key: key,
+				},
+				Operation: state.Delete,
+			})
+		default:
+			return fmt.Errorf("operation type %s not supported", o.Operation)
+		}
+	}
+
+	transactionalStore, ok := a.store.(state.TransactionalStateStore)
+	if !ok {
+		return errors.New("state store does not support transactions")
+	}
+	err := transactionalStore.Multi(requests)
+	return err
 }
 
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
