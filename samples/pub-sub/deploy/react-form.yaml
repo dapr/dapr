@@ -1,0 +1,41 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: react-form
+  labels:
+    app: react-form
+spec:
+  selector:
+    app: react-form
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-form
+  labels:
+    app: react-form
+  annotations:
+    actions.io/enabled: "true"
+    actions.io/id: "react-form"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: react-form
+  template:
+    metadata:
+      labels:
+        app: react-form
+    spec:
+      containers:
+      - name: react-form
+        image: actionscore.azurecr.io/samples/react-form
+        ports:
+        - containerPort: 8080
+        imagePullPolicy: Always
