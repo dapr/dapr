@@ -137,6 +137,12 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 func (a *api) constructActorEndpoints() []Endpoint {
 	return []Endpoint{
 		{
+			Methods: []string{http.Post, http.Put},
+			Route:   "actors/<actorType>/<actorId>/state",
+			Version: apiVersionV1,
+			Handler: a.onActorStateTransaction,
+		},
+		{
 			Methods: []string{http.Get, http.Post, http.Delete, http.Put},
 			Route:   "actors/<actorType>/<actorId>/method/<method>",
 			Version: apiVersionV1,
@@ -394,7 +400,6 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 	var req actors.CreateTimerRequest
 	err := a.json.Unmarshal(c.PostBody(), &req)
 	if err != nil {
-		fmt.Println(err)
 		respondWithError(c.RequestCtx, 400, "error: malformed json request")
 		return nil
 	}
@@ -434,6 +439,39 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
 		respondEmpty(c.RequestCtx, 200)
+	}
+
+	return nil
+}
+
+func (a *api) onActorStateTransaction(c *routing.Context) error {
+	if a.actor == nil {
+		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		return nil
+	}
+
+	actorType := c.Param(actorTypeParam)
+	actorID := c.Param(actorIDParam)
+	body := c.PostBody()
+
+	var ops []actors.TransactionalOperation
+	err := a.json.Unmarshal(body, &ops)
+	if err != nil {
+		respondWithError(c.RequestCtx, 400, "error: malformed json request")
+		return nil
+	}
+
+	req := actors.TransactionalRequest{
+		ActorID:    actorID,
+		ActorType:  actorType,
+		Operations: ops,
+	}
+
+	err = a.actor.TransactionalStateOperation(&req)
+	if err != nil {
+		respondWithError(c.RequestCtx, 500, err.Error())
+	} else {
+		respondEmpty(c.RequestCtx, 201)
 	}
 
 	return nil
