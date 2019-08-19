@@ -307,7 +307,8 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) error {
 	requests := []state.TransactionalRequest{}
 	for _, o := range req.Operations {
-		if o.Operation == Upsert {
+		switch o.Operation {
+		case Upsert:
 			var upsert TransactionalUpsert
 			err := mapstructure.Decode(o.Request, &upsert)
 			if err != nil {
@@ -321,7 +322,7 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 				},
 				Operation: state.Upsert,
 			})
-		} else if o.Operation == Delete {
+		case Delete:
 			var delete TransactionalDelete
 			err := mapstructure.Decode(o.Request, &delete)
 			if err != nil {
@@ -335,6 +336,8 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 				},
 				Operation: state.Delete,
 			})
+		default:
+			return fmt.Errorf("operation type %s not supported", o.Operation)
 		}
 	}
 
