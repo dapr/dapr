@@ -60,6 +60,7 @@ jobs:
         failOnStderr: true
     - task: ArchiveFiles@2
       displayName: 'Build $(GOARCH)/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
         rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)'
         includeRootFolder: false
@@ -68,6 +69,7 @@ jobs:
         replaceExistingArchive: true
     - task: PublishBuildArtifacts@1
       displayName: 'Publish build artifacts'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
         PathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)'
         ArtifactName: 'drop'
