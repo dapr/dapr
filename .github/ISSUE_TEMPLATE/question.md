@@ -1,14 +1,5 @@
 ---
 name: Question
-about: Describe this issue template's purpose here.
-title: ''
-labels: ''
-assignees: ''
-
----
-
----
-name: Question
 about: Ask a question about Actions
 title: ''
 labels: kind/question
