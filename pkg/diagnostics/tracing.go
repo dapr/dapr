@@ -8,13 +8,16 @@ import (
 	"strings"
 	"time"
 
-	routing "github.com/qiangxue/fasthttp-routing"
 	"go.opencensus.io/trace"
 )
 
 const (
 	// CorrelationID is an opencensus corellation id
 	CorrelationID = "correlation-id"
+	// StatusCodeInternal indicates a server-side error
+	StatusCodeInternal = 500
+	// StatusCodeOK indicates a successful operation
+	StatusCodeOK = 200
 )
 
 // Event is an Actions event
@@ -82,68 +85,13 @@ func TraceSpanFromCorrelationId(corID string, operation string, actionMethod str
 	return ctx, span
 }
 
-// TraceSpanFromContext starts a span and traces a context with the given params
-func TraceSpanFromContext(c context.Context, events *[]Event, operation string, includeEvent bool, includeEventBody bool) (context.Context, *trace.Span, *trace.SpanContext) {
-	ctx, span := trace.StartSpan(c, operation)
-	if includeEvent {
-		AddEventAnnotations(events, span, includeEventBody)
-	}
-	var context *trace.SpanContext = &trace.SpanContext{}
-	*context = span.SpanContext()
-	return ctx, span, context
-}
-
-// TraceSpanFromRoutingContext starts a span and traces a context from a given http route context
-func TraceSpanFromRoutingContext(c *routing.Context, events *[]Event, operation string, includeEvent bool, includeEventBody bool) (context.Context, *trace.Span, *trace.SpanContext) {
-	var ctx context.Context
-	var span *trace.Span
-	if c == nil {
-		ctx, span = trace.StartSpan(context.Background(), operation)
-	} else {
-		corID := string(c.Request.Header.Peek(CorrelationID))
-		if corID != "" {
-			spanContext := DeserializeSpanContext(corID)
-			ctx, span = trace.StartSpanWithRemoteParent(context.Background(), operation, spanContext)
-		} else {
-			ctx, span = trace.StartSpan(context.Background(), operation)
-		}
-	}
-	if includeEvent {
-		AddEventAnnotations(events, span, includeEventBody)
-	}
-	var context *trace.SpanContext
-	if span != nil {
-		context = &trace.SpanContext{}
-		*context = span.SpanContext()
-		return ctx, span, context
-	} else {
-		return ctx, span, nil
-	}
-}
-
-// AddEventAnnotations adds an Actions events annotation
-func AddEventAnnotations(events *[]Event, span *trace.Span, includeEventBody bool) {
-	for _, e := range *events {
-		attrs := []trace.Attribute{
-			trace.StringAttribute("eventName", e.EventName),
-			trace.StringAttribute("createdAt", e.CreatedAt.String()),
-			trace.StringAttribute("concurrency", e.Concurrency),
-			trace.StringAttribute("to", strings.Join(e.To, ",")),
-		}
-		span.Annotate(attrs, "message")
-		if includeEventBody {
-			attrs = append(attrs, trace.StringAttribute("data", fmt.Sprintf("%v", e.Data)))
-		}
-		span.AddAttributes(attrs...)
-	}
-}
-
-// SetSpanStatus sets the status for a given span
-func SetSpanStatus(span *trace.Span, code int32, message string) {
-	if span != nil {
-		span.SetStatus(trace.Status{
-			Code:    code,
-			Message: message,
-		})
-	}
-}
+//// TraceSpanFromContext starts a span and traces a context with the given params
+//func TraceSpanFromContext(c context.Context, events *[]Event, operation string, includeEvent bool, includeEventBody bool) (context.Context, *trace.Span, *trace.SpanContext) {
+//	ctx, span := trace.StartSpan(c, operation)
+//	if includeEvent {
+//		addEventAnnotations(events, span, includeEventBody)
+//	}
+//	var context *trace.SpanContext = &trace.SpanContext{}
+//	*context = span.SpanContext()
+//	return ctx, span, context
+//}

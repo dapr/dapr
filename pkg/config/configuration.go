@@ -21,17 +21,25 @@ type ConfigurationSpec struct {
 
 type TracingSpec struct {
 	Enabled          bool   `json:"enabled"`
+	TracerType       string `json:"tracerType"`
 	ExporterType     string `json:"exporterType"`
 	ExporterAddress  string `json:"exporterAddress"`
 	IncludeEvent     bool   `json:"includeEvent"`
 	IncludeEventBody bool   `json:"includeEventBody"`
 }
 
+const (
+	NullTracer       = "NullTracer"
+	ConsoleTracer    = "ConsoleTracer"
+	OpenCensusTracer = "OpenCensusTracer"
+)
+
 func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
-				Enabled: false,
+				Enabled:    false,
+				TracerType: NullTracer,
 			},
 		},
 	}

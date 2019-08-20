@@ -13,6 +13,7 @@ import (
 	"github.com/actionscore/actions/pkg/channel"
 	"github.com/actionscore/actions/pkg/channel/http"
 	"github.com/actionscore/actions/pkg/components/state"
+	diag "github.com/actionscore/actions/pkg/diagnostics"
 	"github.com/actionscore/actions/pkg/messaging"
 	routing "github.com/qiangxue/fasthttp-routing"
 )
@@ -32,6 +33,7 @@ type api struct {
 	pubSub                pubsub.PubSub
 	sendToOutputBindingFn func(name string, data []byte) error
 	id                    string
+	tracer                diag.Tracer
 }
 
 const (
@@ -46,7 +48,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, data []byte) error) API {
+func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, data []byte) error, tracer diag.Tracer) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -55,7 +57,8 @@ func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging mess
 		actor:                 actor,
 		pubSub:                pubSub,
 		sendToOutputBindingFn: sendToOutputBindingFn,
-		id:                    actionID,
+		id:     actionID,
+		tracer: tracer,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
@@ -205,15 +208,27 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 }
 
 func (a *api) onOutputBindingMessage(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onOutputBindingMessage")
+	if span != nil {
+		defer span.End()
+	}
+
 	name := c.Param(nameParam)
 	body := c.PostBody()
 
 	err := a.sendToOutputBindingFn(name, body)
 	if err != nil {
-		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("error invoking output binding %s: %s", name, err))
+
+		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
+		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", errMsg)
+
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, errMsg)
+
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
+
+	a.tracer.SetSpanStatus(span, diag.StatusCodeOK, "onOutputBindingMessage succeeded")
 
 	respondEmpty(c.RequestCtx, 200)
 	return nil
