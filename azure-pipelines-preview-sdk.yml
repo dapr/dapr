@@ -44,8 +44,8 @@ steps:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
     pipeline: '16'
-    buildVersionToDownload: 'latestFromBranch'
-    branchName: 'refs/heads/master'
+    buildVersionToDownload: 'latest'
+    tags: 'release'
     downloadType: 'single'
     artifactName: 'release_drop'
     downloadPath: '$(System.ArtifactsDirectory)/cs-sdk'
@@ -93,12 +93,15 @@ steps:
       mkdir ../preview/docs/spec
       unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../preview/docs/spec/
       cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
-      
-      echo "copying nuget pkgs..."
-      cp $(System.ArtifactsDirectory)/cs-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
 
       echo "removing arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
+      
+      if [ -d "$(System.ArtifactsDirectory)/cs-sdk/release_drop" ]
+      then
+        echo "copying nuget pkgs..."
+        cp $(System.ArtifactsDirectory)/cs-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
+      fi
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Fix url in markdown documents to preview repo url'
