@@ -1,26 +1,16 @@
 # From Zero to Hero with Kubernetes
 
-This tutorial will get you up and running with Actions in a Kubernetes cluster. We'll be deploying a python app that generates messages and a Node app that consumes and persists them. 
+This tutorial will get you up and running with Actions in a Kubernetes cluster. We'll be deploying a python app that generates messages and a Node app that consumes and persists them. The following architecture diagram illustrates the components that make up this sample: 
 
-By the end of this tutorial, you will know how to:
-
-1. Set up Actions on your Kubernetes Cluster
-2. Set up a State Store
-3. Understand the Code
-4. Deploy the Node App with the Actions Sidecar
-5. Deploy the Python App with the Actions Sidecar
-6. Observe Messages
-7. Confirm Successful Persistence
+![Architecture Diagram](./img/Architecture_Diagram.jpg)
 
 ## Step 1 - Setup Actions on your Kubernetes Cluster
 
-The first thing you need is an RBAC enabled Kubernetes cluster. This could be running on your machine using Minikube, or it could be a fully-fledged cluser in Azure using [AKS](https://azure.microsoft.com/en-us/services/kubernetes-service/).
-
-Next, follow [these steps](/../../#install-on-kubernetes) to have Actions deployed to your Kubernetes cluster.<br>
+The first thing you need is an RBAC enabled Kubernetes cluster. This could be running on your machine using Minikube, or it could be a fully-fledged cluser in Azure using [AKS](https://azure.microsoft.com/en-us/services/kubernetes-service/). Once you have a cluster, follow [these steps](/../../#install-on-kubernetes) to deploy Actions to it.
 
 ## Step 2 - Set up a State Store
 
-In this sample, a Node app will be persisting messages created by a Python app. Correspondingly, we'll need to create and configure a state store. We'll be using Redis, though we could use CosmosDB, DynamoDB or Cassandra. 
+In this sample, a Node.js app will be persisting messages created by a Python app. Correspondingly, we'll need to create and configure a state store. We'll be using Redis, though we could use CosmosDB, DynamoDB or Cassandra. 
 
 ### 1. Create a Redis Store
 
@@ -45,7 +35,7 @@ eventsource.actions.io "statestore" configured
 
 ## Step 3 - Understand the Code
 
-Now that we've setup actions and state, let's take a look at our services. Navigate to the Node app in the Kubernetes sample: `cd samples/kubernetes_zero_to_hero/node.js/app.js`.
+Now that we've setup actions and state, let's take a look at our services. Navigate to the Node.js app in the Kubernetes sample: `cd samples/kubernetes_zero_to_hero/node.js`.
 
 In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers.
 
@@ -104,15 +94,15 @@ app.get('/order', (_req, res) => {
 });
 ```
 
-This calls out to our Redis cache to grab the latest value of the "order" key, which effectively allows our node app to be _stateless_. 
+This calls out to our Redis cache to grab the latest value of the "order" key, which effectively allows our Node.js app to be _stateless_. 
 
-## Step 4 - Deploy the Node App with the Actions Sidecar
+## Step 4 - Deploy the Node.js App with the Actions Sidecar
 
 ```
 kubectl apply -f ./deploy/node.yaml
 ```
 
-This will deploy our Node app to Kubernetes. The Actions control plane will automatically inject the Actions sidecar to our Pod. If you take a look at the ```node.yaml``` file, you will see how Actions is enabled for that deployment:
+This will deploy our Node.js app to Kubernetes. The Actions control plane will automatically inject the Actions sidecar to our Pod. If you take a look at the ```node.yaml``` file, you will see how Actions is enabled for that deployment:
 
 ```actions.io/enabled: true``` - this tells the Action control plane to inject a sidecar to this deployment.
 
@@ -137,7 +127,7 @@ export NODE_APP=$(kubectl get svc nodeapp --output 'jsonpath={.status.loadBalanc
 ## Step 5 - Deploy the Python App with the Actions Sidecar
 Next, let's take a quick look at our python app. Navigate to the python app in the kubernetes sample: `cd samples/kubernetes_zero_to_hero/python/app.py`.
 
-At a quick glance, this is a basic python app that posts JSON messages to ```localhost:3500```, which is the default listening port for Actions. We invoke our node application's `neworder` endpoint by posting to `v1.0/actions/nodeapp/neworder`. Our message contains some `data` with an orderId that increments once per second:
+At a quick glance, this is a basic python app that posts JSON messages to ```localhost:3500```, which is the default listening port for Actions. We invoke our Node.js application's `neworder` endpoint by posting to `v1.0/actions/nodeapp/neworder`. Our message contains some `data` with an orderId that increments once per second:
 
 ```python
 actions_url = "http://localhost:3500/v1.0/actions/nodeapp/neworder"
@@ -167,8 +157,8 @@ kubectl get pods --selector=app=python -w
 
 ## Step 6 - Observe Messages
 
-Now that we have our node and python applications deployed, let's watch messages come through.<br>
-Get the logs of our node app:
+Now that we have our Node.js and python applications deployed, let's watch messages come through.<br>
+Get the logs of our Node.js app:
 
 ```
 kubectl logs --selector=app=node -c node
@@ -187,7 +177,7 @@ Successfully persisted state
 
 ## Step 7 - Confirm Successful Persistence
 
-Hit the node app's order endpoint to get the latest order. Grab the external IP address that we saved before and, append "/order" and perform a GET request against it (enter it into your browser, use Postman, or curl it!):
+Hit the Node.js app's order endpoint to get the latest order. Grab the external IP address that we saved before and, append "/order" and perform a GET request against it (enter it into your browser, use Postman, or curl it!):
 
 ```
 curl $NODE_APP/order
@@ -198,7 +188,7 @@ You should see the latest JSON in response!
 
 ## Next Steps
 
-Now that you're successfully working with actions, you probably want to update the sample code to fit your scenario. The Node and Python apps that make up this sample are deployed from container images hosted on a private [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/). To create new images with updated code, you'll first need to install docker on your machine. Next, follow these steps:
+Now that you're successfully working with actions, you probably want to update the sample code to fit your scenario. The Node.js and Python apps that make up this sample are deployed from container images hosted on a private [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/). To create new images with updated code, you'll first need to install docker on your machine. Next, follow these steps:
 
 1. Update Node or Python code as you see fit!
 2. Navigate to the directory of the app you want to build a new image for.
