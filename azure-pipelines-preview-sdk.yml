@@ -40,6 +40,7 @@ steps:
 
 - task: DownloadBuildArtifacts@0
   displayName: 'Download cs-sdk'
+  continueOnError: true
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
