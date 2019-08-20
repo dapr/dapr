@@ -118,6 +118,7 @@ steps:
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   displayName: 'Git Push the changes to preview Repo'
   inputs:
     targetType: 'inline'
