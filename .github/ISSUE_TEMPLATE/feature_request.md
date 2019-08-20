@@ -1,12 +1,3 @@
----
-name: Feature request
-about: Suggest an idea for this project
-title: ''
-labels: ''
-assignees: ''
-
----
-
 <!-- If you need to report a security issue with Actions, send an email to actionsct@microsoft.com. -->
 ## In what area(s)?
 
