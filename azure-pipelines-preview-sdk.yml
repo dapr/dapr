@@ -84,7 +84,7 @@ steps:
       cp -R docs ../previewkit/
       mv ../previewkit/docs/preview/README.md ../previewkit/
       mkdir ../previewkit/docs/cli
-      mv ../cli/docs/previewkit/README.md ../previewkit/docs/cli/
+      mv ../cli/docs/preview/README.md ../previewkit/docs/cli/
       
       # Remove unnecessary files
       rm -rf ../previewkit/docs/decision_records
@@ -124,7 +124,7 @@ steps:
     script: |
       pushd ../previewkit
       
-      cd docs/previewkit/release_notes/
+      cd docs/preview/release_notes/
       export LAST_RELEASE_NOTE_FILE=`ls | sort -V | tail -1`
       export LAST_VERSION=`basename $LAST_RELEASE_NOTE_FILE .md`
       echo "##vso[task.setvariable variable=RELEASE_VERSION]$LAST_VERSION"
