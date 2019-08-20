@@ -1,0 +1,41 @@
+---
+name: Bug report
+about: Create a report to help us improve
+title: ''
+labels: ''
+assignees: ''
+
+---
+
+<!-- If you need to report a security issue with Actions, send an email to actionsct@microsoft.com. -->
+## In what area(s)?
+
+<!-- Remove the '> ' to select -->
+
+> /area runtime
+> /area operator
+> /area placement
+> /area docs
+> /area test-and-release
+
+## What version of Actions?
+
+<!-- Delete all but your choice -->
+
+> 0.1.x
+> 0.2.x
+> Output of git describe --dirty
+
+## Expected Behavior
+
+<!-- Briefly describe what you expect to happen -->
+
+
+## Actual Behavior
+
+<!-- Briefly describe what is actually happening -->
+
+
+## Steps to Reproduce the Problem
+
+<!-- How can a maintainer reproduce this issue (be detailed) -->
