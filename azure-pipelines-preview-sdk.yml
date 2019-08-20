@@ -109,7 +109,7 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
-      pushd ../preview
+      pushd ../previewkit
       
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/actions/github.com\/actionscore\/previewkit/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/previewkit\/releases/gI' {} \;
@@ -118,7 +118,6 @@ steps:
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
-  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   displayName: 'Git Push the changes to preview Repo'
   inputs:
     targetType: 'inline'
@@ -145,6 +144,7 @@ steps:
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: GitHubRelease@0
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   displayName: 'Upload Actions CLI to GitHub Release'  
   inputs:
     gitHubConnection: 'GitHub'
