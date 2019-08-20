@@ -1,3 +1,11 @@
+---
+name: Feature Request
+about: Create a Feature Request for Actions
+title: ''
+labels: kind/enhancement
+assignees: ''
+
+---
 <!-- If you need to report a security issue with Actions, send an email to actionsct@microsoft.com. -->
 ## In what area(s)?
 
