@@ -130,3 +130,21 @@ func (r *StateStore) BulkSet(req []state.SetRequest) error {
 
 	return nil
 }
+
+// Multi performs a transactional operation. succeeds only if all operations succeed, and fails if one or more operations fail
+func (r *StateStore) Multi(operations []state.TransactionalRequest) error {
+	redisReqs := []redis.Request{}
+	for _, o := range operations {
+		if o.Operation == state.Upsert {
+			req := o.Request.(state.SetRequest)
+			b, _ := r.json.Marshal(req.Value)
+			redisReqs = append(redisReqs, redis.Req("SET", req.Key, b))
+		} else if o.Operation == state.Delete {
+			req := o.Request.(state.DeleteRequest)
+			redisReqs = append(redisReqs, redis.Req("DEL", req.Key))
+		}
+	}
+
+	_, err := r.client.SendTransaction(context.Background(), redisReqs)
+	return err
+}

@@ -139,3 +139,31 @@ func (_m *MockActors) SaveState(req *actors.SaveStateRequest) error {
 
 	return r0
 }
+
+// DeleteState provides a mock function with given fields: req
+func (_m *MockActors) DeleteState(req *actors.DeleteStateRequest) error {
+	ret := _m.Called(req)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*actors.DeleteStateRequest) error); ok {
+		r0 = rf(req)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// TransactionalStateOperation provides a mock function with given fields: req
+func (_m *MockActors) TransactionalStateOperation(req *actors.TransactionalRequest) error {
+	ret := _m.Called(req)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*actors.TransactionalRequest) error); ok {
+		r0 = rf(req)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}

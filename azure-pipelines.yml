@@ -113,7 +113,8 @@ jobs:
       eq(dependencies.build_linux_arm_controller.result, 'Succeeded'),
       eq(dependencies.build_windows_amd64_actionsrt.result, 'Succeeded'),
       eq(dependencies.build_windows_amd64_placement.result, 'Succeeded'),
-      eq(dependencies.build_windows_amd64_controller.result, 'Succeeded')
+      eq(dependencies.build_windows_amd64_controller.result, 'Succeeded'),
+      ne(variables['Build.Reason'], 'PullRequest')
     )
   steps:
     - script: echo '##vso[task.setvariable variable=BlobPrefix]$(Build.SourceBranchName)/$(REL_VERSION)
