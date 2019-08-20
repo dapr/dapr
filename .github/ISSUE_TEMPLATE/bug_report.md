@@ -1,3 +1,11 @@
+---
+name: Bug report
+about: Report a bug in Actions
+title: ''
+labels: kind/bug
+assignees: ''
+
+---
 <!-- If you need to report a security issue with Actions, send an email to actionsct@microsoft.com. -->
 ## In what area(s)?
 
