@@ -117,4 +117,4 @@ helm install stable/redis --rbac.create=true
 
 ## Contributing & Support
 
-We actively reviewing contributions into this repository via [issues](https://help.github.com/en/articles/creating-an-issue). 
+We are actively reviewing contributions into this repository via [issues](https://help.github.com/en/articles/creating-an-issue). 
