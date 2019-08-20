@@ -155,6 +155,6 @@ steps:
     tag: '$(RELEASE_VERSION)'
     isPreRelease: true
     addChangeLog: false
-    releaseNotesFile: './docs/previewkit/release_notes/$(RELEASE_VERSION).md'
+    releaseNotesFile: './docs/preview/release_notes/$(RELEASE_VERSION).md'
     title: 'Actions Preview Kit $(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/release/drop/**'
