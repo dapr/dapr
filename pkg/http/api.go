@@ -587,10 +587,11 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	body := c.PostBody()
 
 	var val interface{}
-	err := jsoniter.ConfigFastest.Unmarshal(body, &val)
+	err := a.json.Unmarshal(body, &val)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
 		respondWithError(c.RequestCtx, 400, msg)
+		return nil
 	}
 
 	req := actors.SaveStateRequest{
@@ -661,7 +662,7 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 		msg := NewErrorResponse("ERR_ACTOR_DELETE_STATE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
-		respondEmpty(c.RequestCtx, 201)
+		respondEmpty(c.RequestCtx, 200)
 	}
 
 	return nil
