@@ -563,6 +563,7 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	err := jsoniter.ConfigFastest.Unmarshal(body, &val)
 	if err != nil {
 		respondWithError(c.RequestCtx, 400, fmt.Sprintf("error deserializing body: %s", err))
+		return nil
 	}
 
 	req := actors.SaveStateRequest{
@@ -628,7 +629,7 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 	if err != nil {
 		respondWithError(c.RequestCtx, 500, err.Error())
 	} else {
-		respondEmpty(c.RequestCtx, 201)
+		respondEmpty(c.RequestCtx, 200)
 	}
 
 	return nil
