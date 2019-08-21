@@ -40,12 +40,13 @@ steps:
 
 - task: DownloadBuildArtifacts@0
   displayName: 'Download cs-sdk'
+  continueOnError: true
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
     pipeline: '16'
-    buildVersionToDownload: 'latestFromBranch'
-    branchName: 'refs/heads/master'
+    buildVersionToDownload: 'latest'
+    tags: 'release'
     downloadType: 'single'
     artifactName: 'release_drop'
     downloadPath: '$(System.ArtifactsDirectory)/cs-sdk'
@@ -58,7 +59,7 @@ steps:
       git config --global user.email "actionsvt@service.microsoft.com"
       git config --global user.name "Actions Release"
 
-      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/preview.git
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/previewkit.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Git clone actions/cli repo'
@@ -73,43 +74,46 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
-      pushd ../preview
+      pushd ../previewkit
       rm -rf samples docs release_notes
       rm -f LICENSE README.md
       popd
       
-      cp LICENSE ../preview/
-      cp -R samples ../preview/
-      cp -R docs ../preview/
-      mv ../preview/docs/preview/README.md ../preview/
-      mkdir ../preview/docs/cli
-      mv ../cli/docs/preview/README.md ../preview/docs/cli/
+      cp LICENSE ../previewkit/
+      cp -R samples ../previewkit/
+      cp -R docs ../previewkit/
+      mv ../previewkit/docs/preview/README.md ../previewkit/
+      mkdir ../previewkit/docs/cli
+      mv ../cli/docs/preview/README.md ../previewkit/docs/cli/
       
       # Remove unnecessary files
-      rm -rf ../preview/docs/decision_records
-      rm -rf ../preview/docs/assets
+      rm -rf ../previewkit/docs/decision_records
+      rm -rf ../previewkit/docs/assets
 
       echo "copying specs..."
-      mkdir ../preview/docs/spec
-      unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../preview/docs/spec/
+      mkdir ../previewkit/docs/spec
+      unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../previewkit/docs/spec/
       cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
-      
-      echo "copying nuget pkgs..."
-      cp $(System.ArtifactsDirectory)/cs-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
 
       echo "removing arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
+      
+      if [ -d "$(System.ArtifactsDirectory)/cs-sdk/release_drop" ]
+      then
+        echo "copying nuget pkgs..."
+        cp $(System.ArtifactsDirectory)/cs-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
+      fi
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Fix url in markdown documents to preview repo url'
   inputs:
     targetType: 'inline'
     script: |
-      pushd ../preview
+      pushd ../previewkit
       
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/actions/github.com\/actionscore\/preview/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/preview\/releases/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/blob\/master\/README.md/github.com\/actionscore\/preview\/blob\/master\/docs\/cli\/README.md/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/actions/github.com\/actionscore\/previewkit/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/blob\/master\/README.md/github.com\/actionscore\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
       
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
@@ -118,7 +122,7 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
-      pushd ../preview
+      pushd ../previewkit
       
       cd docs/preview/release_notes/
       export LAST_RELEASE_NOTE_FILE=`ls | sort -V | tail -1`
@@ -140,10 +144,11 @@ steps:
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: GitHubRelease@0
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   displayName: 'Upload Actions CLI to GitHub Release'  
   inputs:
     gitHubConnection: 'GitHub'
-    repositoryName: 'actionscore/preview'
+    repositoryName: 'actionscore/previewkit'
     action: 'create'
     target: '$(RELEASE_COMMIT)'
     tagSource: 'manual'

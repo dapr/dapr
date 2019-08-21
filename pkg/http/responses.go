@@ -19,9 +19,9 @@ func respondWithString(ctx *fasthttp.RequestCtx, code int, obj string) {
 	ctx.Response.SetBodyString(obj)
 }
 
-func respondWithError(ctx *fasthttp.RequestCtx, code int, message string) {
-	json, _ := serializeToJSON(map[string]string{"error": message})
-	respondWithJSON(ctx, code, json)
+func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {
+	b, _ := json.Marshal(&resp)
+	respondWithJSON(ctx, code, b)
 }
 
 func respondEmpty(ctx *fasthttp.RequestCtx, code int) {

@@ -210,7 +210,8 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 
 	err := a.sendToOutputBindingFn(name, body)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, fmt.Sprintf("error invoking output binding %s: %s", name, err))
+		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("error invoking output binding %s: %s", name, err))
+		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
 
@@ -220,7 +221,8 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 
 func (a *api) onGetState(c *routing.Context) error {
 	if a.stateStore == nil {
-		respondWithError(c.RequestCtx, 400, "error: state store not found")
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -231,7 +233,8 @@ func (a *api) onGetState(c *routing.Context) error {
 
 	resp, err := a.stateStore.Get(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, fmt.Sprintf("error getting state: %s", err))
+		msg := NewErrorResponse("ERR_GET_STATE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
 
@@ -241,7 +244,8 @@ func (a *api) onGetState(c *routing.Context) error {
 
 func (a *api) onDeleteState(c *routing.Context) error {
 	if a.stateStore == nil {
-		respondWithError(c.RequestCtx, 400, "error: state store not found")
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -252,7 +256,8 @@ func (a *api) onDeleteState(c *routing.Context) error {
 
 	err := a.stateStore.Delete(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, fmt.Sprintf("error deleting state with key %s: %s", key, err))
+		msg := NewErrorResponse("ERR_DELETE_STATE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
+		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
 
@@ -261,14 +266,16 @@ func (a *api) onDeleteState(c *routing.Context) error {
 
 func (a *api) onPostState(c *routing.Context) error {
 	if a.stateStore == nil {
-		respondWithError(c.RequestCtx, 400, "error: state store not found")
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
 	reqs := []state.SetRequest{}
 	err := a.json.Unmarshal(c.PostBody(), &reqs)
 	if err != nil {
-		respondWithError(c.RequestCtx, 400, "error: malformed json request")
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -278,7 +285,8 @@ func (a *api) onPostState(c *routing.Context) error {
 
 	err = a.stateStore.BulkSet(reqs)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, fmt.Sprintf("error saving state: %s", err))
+		msg := NewErrorResponse("ERR_SAVE_REQUEST", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
 
@@ -325,7 +333,8 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 
 	resp, err := a.directMessaging.Invoke(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		a.setHeadersOnRequest(resp.Metadata, c)
@@ -335,6 +344,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	return nil
 }
 
+// DEPRECATED
 func (a *api) onInvokeLocal(c *routing.Context) error {
 	method := string(c.Path())[len(string(c.Path()))-strings.Index(string(c.Path()), "invoke/"):]
 	body := c.PostBody()
@@ -347,7 +357,8 @@ func (a *api) onInvokeLocal(c *routing.Context) error {
 	}
 	resp, err := a.appChannel.InvokeMethod(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_INVOKE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
@@ -358,7 +369,8 @@ func (a *api) onInvokeLocal(c *routing.Context) error {
 
 func (a *api) onCreateActorReminder(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -369,7 +381,8 @@ func (a *api) onCreateActorReminder(c *routing.Context) error {
 	var req actors.CreateReminderRequest
 	err := a.json.Unmarshal(c.PostBody(), &req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 400, "error: malformed json request")
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -379,7 +392,8 @@ func (a *api) onCreateActorReminder(c *routing.Context) error {
 
 	err = a.actor.CreateReminder(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_CREATE_REMINDER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
 	}
@@ -389,7 +403,8 @@ func (a *api) onCreateActorReminder(c *routing.Context) error {
 
 func (a *api) onCreateActorTimer(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -400,7 +415,8 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 	var req actors.CreateTimerRequest
 	err := a.json.Unmarshal(c.PostBody(), &req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 400, "error: malformed json request")
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -410,7 +426,8 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 
 	err = a.actor.CreateTimer(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_CREATE_TIMER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
 	}
@@ -420,7 +437,8 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 
 func (a *api) onDeleteActorReminder(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -436,7 +454,8 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 
 	err := a.actor.DeleteReminder(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_DELETE_REMINDER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
 	}
@@ -446,7 +465,8 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 
 func (a *api) onActorStateTransaction(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -457,7 +477,8 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 	var ops []actors.TransactionalOperation
 	err := a.json.Unmarshal(body, &ops)
 	if err != nil {
-		respondWithError(c.RequestCtx, 400, "error: malformed json request")
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -469,7 +490,8 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 
 	err = a.actor.TransactionalStateOperation(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 201)
 	}
@@ -479,7 +501,8 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 
 func (a *api) onDeleteActorTimer(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -495,7 +518,8 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 
 	err := a.actor.DeleteTimer(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_DELETE_TIMER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
 	}
@@ -505,7 +529,8 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 
 func (a *api) onDirectActorMessage(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -525,7 +550,8 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 
 	resp, err := a.actor.Call(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_INVOKE_ACTOR", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		a.setHeadersOnRequest(resp.Metadata, c)
 		respondWithJSON(c.RequestCtx, 200, resp.Data)
@@ -550,7 +576,8 @@ func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context
 
 func (a *api) onSaveActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -560,9 +587,10 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	body := c.PostBody()
 
 	var val interface{}
-	err := jsoniter.ConfigFastest.Unmarshal(body, &val)
+	err := a.json.Unmarshal(body, &val)
 	if err != nil {
-		respondWithError(c.RequestCtx, 400, fmt.Sprintf("error deserializing body: %s", err))
+		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -575,7 +603,8 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 
 	err = a.actor.SaveState(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_SAVE_STATE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 201)
 	}
@@ -585,7 +614,8 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 
 func (a *api) onGetActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -601,7 +631,8 @@ func (a *api) onGetActorState(c *routing.Context) error {
 
 	resp, err := a.actor.GetState(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_GET_STATE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondWithJSON(c.RequestCtx, 200, resp.Data)
 	}
@@ -611,7 +642,8 @@ func (a *api) onGetActorState(c *routing.Context) error {
 
 func (a *api) onDeleteActorState(c *routing.Context) error {
 	if a.actor == nil {
-		respondWithError(c.RequestCtx, 400, "actor runtime is not initialized")
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -627,7 +659,8 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 
 	err := a.actor.DeleteState(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_DELETE_STATE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
 	}
@@ -642,7 +675,8 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 
 func (a *api) onPublish(c *routing.Context) error {
 	if a.pubSub == nil {
-		respondWithError(c.RequestCtx, 400, "pubsub not initialized")
+		msg := NewErrorResponse("ERR_PUB_SUB_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
@@ -656,7 +690,8 @@ func (a *api) onPublish(c *routing.Context) error {
 
 	err := a.pubSub.Publish(&req)
 	if err != nil {
-		respondWithError(c.RequestCtx, 500, err.Error())
+		msg := NewErrorResponse("ERR_PUBLISH_MESSAGE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
 	}
