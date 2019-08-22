@@ -17,6 +17,8 @@ import (
 
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/channel/http"
+	"github.com/actionscore/actions/pkg/config"
+	diag "github.com/actionscore/actions/pkg/diagnostics"
 	"github.com/actionscore/actions/pkg/messaging"
 	actionst "github.com/actionscore/actions/pkg/testing"
 	routing "github.com/qiangxue/fasthttp-routing"
@@ -73,6 +75,56 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
 			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
+		}
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	buffer := ""
+	tracer := diag.CreateTracer("", "", config.TracingSpec{TracerType: config.OpenCensusTracer, ExporterType: "string"}, &buffer)
+	testAPI := &api{
+		sendToOutputBindingFn: func(name string, data []byte) error { return nil },
+		tracer:                tracer,
+	}
+	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
+
+	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
+		fakeData := []byte("fake output")
+
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			buffer = ""
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
+			assert.Equal(t, "200", buffer, "failed to generate proper traces with %s", method)
+		}
+	})
+
+	t.Run("Invoke output bindings - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/bindings/notfound", apiVersionV1)
+		fakeData := []byte("fake output")
+
+		testAPI.sendToOutputBindingFn = func(name string, data []byte) error {
+			return errors.New("missing binding name")
+		}
+
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			buffer = ""
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+
+			// assert
+			assert.Equal(t, 500, resp.StatusCode)
+			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
+			assert.Equal(t, "500", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -152,6 +204,88 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
+func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
+	fakeHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
+	fakeDirectMessageResponse := &messaging.DirectMessageResponse{
+		Data: []byte("fakeDirectMessageResponse"),
+		Metadata: map[string]string{
+			"http.status_code": "200",
+			"headers":          fakeHeader,
+		},
+	}
+
+	mockDirectMessaging := new(actionst.MockDirectMessaging)
+
+	fakeServer := newFakeHTTPServer()
+
+	buffer := ""
+	tracer := diag.CreateTracer("", "", config.TracingSpec{TracerType: config.OpenCensusTracer, ExporterType: "string"}, &buffer)
+	testAPI := &api{
+		directMessaging: mockDirectMessaging,
+		tracer:          tracer,
+	}
+	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
+
+	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
+
+	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
+		buffer = ""
+		apiPath := "v1.0/actions/fakeActionsID/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging.On(
+			"Invoke",
+			&messaging.DirectMessageRequest{
+				Data:   fakeData,
+				Method: "fakeMethod",
+				Metadata: map[string]string{
+					"headers":        fakeHeader,
+					http.HTTPVerb:    "POST",
+					http.QueryString: "", // without query string
+				},
+				Target: "fakeActionsID",
+			}).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "200", buffer, "failed to generate proper traces with direct messaging without query string")
+
+	})
+
+	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actions/fakeActionsID/fakeMethod?param1=val1&param2=val2"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging.On(
+			"Invoke",
+			&messaging.DirectMessageRequest{
+				Data:   fakeData,
+				Method: "fakeMethod",
+				Metadata: map[string]string{
+					"headers":        fakeHeader,
+					http.HTTPVerb:    "POST",
+					http.QueryString: "param1=val1&param2=val2",
+				},
+				Target: "fakeActionsID",
+			}).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "200", buffer, "failed to generate proper traces with direct messaging with query string")
+	})
+
+	fakeServer.Shutdown()
+}
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{actor: nil}

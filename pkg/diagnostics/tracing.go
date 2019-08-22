@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/actionscore/actions/pkg/config"
 	"go.opencensus.io/trace"
 )
 
@@ -95,3 +96,16 @@ func TraceSpanFromCorrelationId(corID string, operation string, actionMethod str
 //	*context = span.SpanContext()
 //	return ctx, span, context
 //}
+
+// CreateTracer creates a new tracer instance based on the given spec
+func CreateTracer(action_id string, action_address string, spec config.TracingSpec, buffer *string) Tracer {
+	var tracer Tracer
+	switch t := spec.TracerType; t {
+	case config.OpenCensusTracer:
+		tracer = OCTracer{}
+	default:
+		tracer = NullTracer{}
+	}
+	tracer.Init(action_id, action_address, spec, buffer)
+	return tracer
+}

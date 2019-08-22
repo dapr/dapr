@@ -57,8 +57,8 @@ func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging mess
 		actor:                 actor,
 		pubSub:                pubSub,
 		sendToOutputBindingFn: sendToOutputBindingFn,
-		id:     actionID,
-		tracer: tracer,
+		id:                    actionID,
+		tracer:                tracer,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
@@ -332,6 +332,11 @@ func (a *api) setHeaders(c *routing.Context, metadata map[string]string) {
 }
 
 func (a *api) onDirectMessage(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onDirectMessage")
+	if span != nil {
+		defer span.End()
+	}
+
 	targetID := c.Param(idParam)
 	method := c.Param(methodParam)
 	body := c.PostBody()
@@ -349,10 +354,12 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	resp, err := a.directMessaging.Invoke(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, msg.Message)
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		a.setHeadersOnRequest(resp.Metadata, c)
+		a.tracer.SetSpanStatus(span, int32(statusCode), string(resp.Data))
 		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
 	}
 

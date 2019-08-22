@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"github.com/actionscore/actions/pkg/config"
 	routing "github.com/qiangxue/fasthttp-routing"
 )
 
@@ -29,6 +30,6 @@ func (o NullTracer) TraceSpanFromRoutingContext(c *routing.Context, events *[]Ev
 func (o NullTracer) SetSpanStatus(span TracerSpan, code int32, msg string) {
 }
 
-// SetSwitches update tracer verbosity switches
-func (o NullTracer) SetSwitches(switches TracerSwitches) {
+// Init intializes tracer according to the given spec
+func (o NullTracer) Init(action_id string, action_address string, spec config.TracingSpec, buffer *string) {
 }

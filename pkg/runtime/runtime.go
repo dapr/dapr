@@ -32,10 +32,10 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 
 	"github.com/actionscore/actions/pkg/components"
+	diag "github.com/actionscore/actions/pkg/diagnostics"
 	"github.com/actionscore/actions/pkg/modes"
 
 	log "github.com/Sirupsen/logrus"
-	diag "github.com/actionscore/actions/pkg/diagnostics"
 	pb "github.com/actionscore/actions/pkg/proto"
 )
 
@@ -335,31 +335,17 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 	return err
 }
 
-func (a *ActionsRuntime) createTracer() diag.Tracer {
-	var tracer diag.Tracer
-	switch t := a.globalConfig.Spec.TracingSpec.TracerType; t {
-	case config.ConsoleTracer:
-		tracer = diag.ConsoleTracer{}
-	case config.OpenCensusTracer:
-		tracer = diag.OCTracer{}
-	default:
-		tracer = diag.NullTracer{}
-	}
-	tracer.SetSwitches(diag.TracerSwitches{
-		IncludeEvent:     a.globalConfig.Spec.TracingSpec.IncludeEvent,
-		IncludeEventBody: a.globalConfig.Spec.TracingSpec.IncludeEventBody,
-	})
-	return tracer
-}
 func (a *ActionsRuntime) startHTTPServer(port int, allowedOrigins string) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding, a.createTracer())
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding,
+		diag.CreateTracer(a.runtimeConfig.ID, fmt.Sprintf("%s:%d", a.hostAddress, a.runtimeConfig.GRPCPort), a.globalConfig.Spec.TracingSpec))
 	serverConf := http.NewServerConfig(port, allowedOrigins)
 	server := http.NewServer(api, serverConf)
 	server.StartNonBlocking()
 }
 
 func (a *ActionsRuntime) startGRPCServer(port int) error {
-	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.actor, a, a.createTracer())
+	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.actor, a,
+		diag.CreateTracer(a.runtimeConfig.ID, fmt.Sprintf("%s:%d", a.hostAddress, a.runtimeConfig.GRPCPort), a.globalConfig.Spec.TracingSpec))
 	serverConf := grpc.NewServerConfig(port)
 	server := grpc.NewServer(api, serverConf)
 	err := server.StartNonBlocking()

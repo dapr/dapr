@@ -30,7 +30,6 @@ type TracingSpec struct {
 
 const (
 	NullTracer       = "NullTracer"
-	ConsoleTracer    = "ConsoleTracer"
 	OpenCensusTracer = "OpenCensusTracer"
 )
 

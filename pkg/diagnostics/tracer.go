@@ -1,6 +1,7 @@
 package diagnostics
 
 import (
+	"github.com/actionscore/actions/pkg/config"
 	routing "github.com/qiangxue/fasthttp-routing"
 )
 
@@ -10,15 +11,9 @@ type TracerSpan interface {
 	SetStatus(code int32, msg string)
 }
 
-// TracerSwitches controls verbosity of the tracer
-type TracerSwitches struct {
-	IncludeEvent     bool
-	IncludeEventBody bool
-}
-
 // Tracer defines the interface of a distributed tracer
 type Tracer interface {
 	TraceSpanFromRoutingContext(c *routing.Context, events *[]Event, operation string) TracerSpan
 	SetSpanStatus(span TracerSpan, code int32, msg string)
-	SetSwitches(switches TracerSwitches)
+	Init(action_id string, action_address string, spec config.TracingSpec, buffer *string)
 }
