@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-subscriber
+  labels:
+    app: node-subscriber
+  annotations:
+    actions.io/enabled: "true"
+    actions.io/id: "node-subscriber"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-subscriber
+  template:
+    metadata:
+      labels:
+        app: node-subscriber
+    spec:
+      containers:
+      - name: node-subscriber
+        image: actionsdemoes/node-subscriber
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always
