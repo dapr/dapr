@@ -7,9 +7,9 @@
     "client": "cd client && yarn start",
     "server": "nodemon server.js",
     "dev": "concurrently --kill-others-on-fail \"yarn server\" \"yarn client\"",
-    "actionslocal": "npm run buildclient && actions run --app-id nodeserver --app-port 8080 node server.js",
     "start": "node server.js",
-    "buildclient": "cd client && npm install && npm install --only=dev --no-shrinkwrap && npm run build"
+    "buildclient": "cd client && npm install && npm run build",
+    "buildandstart": "npm run buildclient && npm run start"
   },
   "author": "Ryan Volum",
   "license": "ISC",
