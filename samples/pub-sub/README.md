@@ -1,6 +1,6 @@
 # Actions Pub-Sub Sample
 
-In this sample, we'll create publisher microservices and subscriber microservices to demonstrate how Actions enables a publish-subcribe pattern. Publishers will generate messages of a specific topic, while subscribers will listen for messages of specific topics. See [Why Pub-Sub](<INSERTLINK>) to understand when this pattern might be a good choice for your software architecture.
+In this sample, we'll create publisher microservices and subscriber microservices to demonstrate how Actions enables a publish-subcribe pattern. Publishers will generate messages of a specific topic, while subscribers will listen for messages of specific topics. See [Why Pub-Sub](#Why-Pub-Sub?) to understand when this pattern might be a good choice for your software architecture.
 
 This sample includes two publishers:
 
@@ -24,7 +24,6 @@ Actions allows us to deploy the same microservices from our local machines to th
 
 - Actions CLI with Actions initialized: <<INSERT DOCUMENTATION LINK>>
 - Node and/or Python
-- Postman
 
 ### Prerequisites to Run in Kubernetes
 
@@ -44,7 +43,7 @@ In order to run the pub/sub sample locally, we need to run each of our microserv
 #### Run Python Message Subscriber with Actions
 
 1. Open a new CLI window and navigate to Python subscriber directory in your CLI: `cd python_subscriber`
-2. Run Python subscriber app with Actions: `actions run --app-id python-subscriber --app-port 3000 run python app.py`
+2. Run Python subscriber app with Actions: `actions run --app-id python-subscriber --app-port 5000 run python app.py`
     
     We assign `app-id`, which we can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `python app.py`.
 
@@ -52,31 +51,200 @@ In order to run the pub/sub sample locally, we need to run each of our microserv
 
 The Actions CLI provides a mechanism to publish messages for testing purposes. Let's test that our subscribers are listening!
 
-1. Run `actions publish --app-id node-subscriber --topic A --payload '{ "message": "This is a test" }'
+1. Run `actions publish --topic A --payload '{ "message": "This is a test" }'` 
 
-    Note that 
+    Both our Node.js and Python subscribers subscribe to topic A and log when they receive a message. Note that logs are showing up in the console window where we ran each one: 
+    
+    ```bash
+        [0m?[94;1m== APP == Topic A: {'message': 'This is a test'}
+    ```
+
+2. **Optional**: If you're running both the Node and Python apps, try publishing a message of topic B. You'll notice that only the Node app will receive this message.
+
+#### Run the React Front End with Actions
+
+Now let's run our React front end with Actions. Our front end will publish different kinds of messages that our subscribers will pick up.
+
+1. Open a new CLI window and navigate to the react-form directory: `cd react-form`
+2. Run the React front end app with Actions: `actions run --app-id react-form --app-port 8080 npm run buildandstart`. This may take a minute, as it downloads dependencies and creates an optimized production build. You'll know that it's done when you see `== APP == Listening on port 8080!` and several Actions logs.
+3. Open the browser and navigate to "http://localhost:8080/". You should see a form with a dropdown for message type and message text: 
+
+![Form Screenshot](./img/Form_Screenshot.JPG)
+
+4. Pick a topic, enter some text and fire off a message! Observe the logs coming through your respective Actions. Note that the Node.js subscriber receives messages of type "A" and "B", while the Python subscriber receives messages of type "A" and "C.
 
 ## Run in Kubernetes
 
-### Setting up a State Store
+To run the same sample in Kubernetes, we'll need to first set up a Redis store and then deploy our microservices.
+
+### Setting up a Redis Store
+
+Actions' pub-sub model is built on top of Redis streams, a feature in Redis versions > 5. We'll install Redis into our cluster using helm, but keep in mind that you could use whichever Redis host you like, as long as the version is greater than 5.
+
+1. Use helm to create a Redis instance: `helm install stable/redis --name redis`
+
+    **Temporary**: The current Redis version deployed with helm is not up to date. To update your store, run `helm upgrade redis stable/redis --set image.tag=5.0.5-debian-9-r104`
+
+2. Run `kubectl get pods` to see the Redis containers now running in your cluster.
+3. Run `kubectl get svc` and copy the cluster IP of your `redis-master`. Add this IP as the `redisHost` in your redis.yaml file, followed by ":6379". For example:
+    ```yaml
+        redisHost: "10.0.125.130:6379"
+    ```
+4. Next, we'll get our Redis password, which is slightly different depending on the OS we're using:
+    - **Windows**: Run `kubectl get secret --namespace default redis -o jsonpath="{.data.redis-password} > encoded.64"`, which will create a file with your encoded password. Next, run `certutil -decode encoded.b64 password.txt`, which will put your redis password in a text file called `password.txt`. Copy the password and delete the two files.
+
+    - **Linux/MacOS**: Run `kubectl get secret --namespace default redis -o jsonpath="{.data.redis-password}" | base64 --decode` and copy the outputted password.
+
+    Add this password as the `password` value in your redis.yaml file. For example:
+    ```yaml
+        password: "lhDOkwTlp0"
+    ```
+
+### Deploy Assets
+
+Now that we've set up the Redis store, we can deploy our assets.
+
+1. In your CLI window, navigate to the deploy directory
+2. Run `kubectl apply -f .` which will deploy our publisher and two subscriber microservices. It will also apply the redis configuration we set up in the last step.
+3. Run `kubectl get pods` to see each pod being provisioned.
+4. Run `kubectl get svc -w` to get the external IP exposed by our `react-form` microservice. This may take a minute.
+
+### Use the Sample
+
+1. Copy the external IP from the last step into your browser and observe the same React form that we saw locally!
+2. Create and submit messages of different types.
+3. To see the logs generated from your subscribers, first run `kubectl get pods` to get the pod names for each subscriber. Then run `kubectl logs <POD NAME> <CONTAINER NAME>`. For example, I can see the logs for my `node-subscriber` service by running: 
+
+    ```bash
+        kubectl logs node-subscriber-575bcd88f-2scrt node-subscriber
+    ```
+
+4. Note that the Node.js subscriber receives messages of type "A" and "B", while the Python subscriber receives messages of type "A" and "C".
+
 
 ## How it Works
 
-### Node Message Publisher
+Now that you've run the sample locally and/or in Kubernetes, let's unpack how this all works. Our app is broken up into two subscribers and one publisher:
 
 ### Node Message Subscriber
 
+Navigate to the `node-subscriber` directory and open `app.js`, the code for our Node.js subscriber. Here we're exposing three  API endpoints using `express`. The first is a GET endpoint: 
+
+```js
+app.get('/actions/subscribe', (_req, res) => {
+    res.json([
+        'A',
+        'B'
+    ]);
+});
+```
+This tells actions what topics we want to subscribe to. When deployed (locally or in Kubernetes), Actions will call out to my service to determine if it's subscribing to anything - this is how we tell it! The other two endpoints are POST endpoints:
+
+```js
+app.post('/A', (req, res) => {
+    console.log("A: ", req.body);
+    res.sendStatus(200);
+});
+
+app.post('/B', (req, res) => {
+    console.log("B: ", req.body);
+    res.sendStatus(200);
+});
+```
+
+These handle messages of each topic type coming through. Note that we simply log the message. In a more complex application this is where we would include topic-specific logic. 
+
 ### Python Message Subscriber
+
+Navigate to the `python-subscriber` directory and open `app.py`, the code for our Python subscriber. As with our Node.js subscriber, we're exposing three API endpoints, this time using `flask`. The first is a GET endpoint: 
+
+```python
+@app.route('/actions/subscribe', methods=['GET'])
+def subscribe():
+    return jsonify(['A','C'])
+```
+Again, this is how we tell Actions what topics we want to subscribe to. In this case, we're subscribing to topics "A" and "C". We handle  messages of those topics with our other two routes:
+
+```python
+@app.route('/A', methods=['POST'])
+def a_subscriber():
+    content = request.json
+    print(f'Topic A: {content}', file=sys.stderr)
+    return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+
+@app.route('/C', methods=['POST'])
+def b_subscriber():
+    content = request.json
+    print(f'Topic C: {content}', file=sys.stderr)
+    return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+```
 
 ### React Front-End
 
-Our React front-end was bootstrapped with [Create React App](<INSERTLINK>). 
+Our publisher is broken up into a client and a server:
 
 #### Client
 
-MessageForm component 
+Our client is a simple single page React application that was bootstrapped with [Create React App](<INSERTLINK>). The relevant client code sits in `react-form/client/src/MessageForm.js` where we present a form to our users. As our users update the form, we update React state with the latest aggregated JSON data. By default the data is set to:
+
+```js
+{
+    messageType: "A",
+    message: ""
+};
+```
+Upon submission of the form, we send the aggregated JSON data to our server:
+
+```js
+    fetch('/publish', {
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        method:"POST",
+        body: JSON.stringify(this.state),
+    });
+```
 
 #### Server
-Relays messages from the client to the message bus, where subscribers will pick them up.
+
+Our server is a basic express application that exposes a POST endpoint: `/publish`. This takes the requests from our client and publishes them against Actions. We use `body-parser` to parse the JSON out of the incoming requests:
+
+```js
+app.use(bodyParser.json());
+```
+
+This allows us to determine which topic to publish our message with. To publish messages against Actions, our URL needs to look like: `http://localhost:<ACTIONS_URL>/publish/<TOPIC>`, so our `publish` endpoint builds a URL and posts our JSON against it: 
+
+```js
+const publishUrl = `${actionsUrl}/publish/${req.body.messageType}`;
+request( { uri: publishUrl, method: 'POST', json: req.body } );
+```
+
+Note how the `actionsUrl` determines what port Actions live on: 
+
+```js
+const actionsUrl = `http://localhost:${process.env.ACTIONS_PORT || 3500}/v1.0`;
+```
+
+By default, Actions live on 3500, but if we're running Actions locally and set it to a different port (using the `--port` flag in the CLI `run` command), then that port will be injected into our application as an environment variable.
+
+Our server also hosts the React application itself by forwarding all other requests to our built client code:
+
+```js
+app.get('*', function (_req, res) {
+  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+});
+```
 
 ## Why Pub-Sub?
+
+Developers use a pub-sub messaging pattern to achieve high scalability and looser coupling.
+
+### Scalability
+
+Pub-sub is generally used for large applications that need to be highly scalable. Pub-sub applications often scale better than traditional client-server applications.
+
+### Loose Coupling
+
+Pub-sub allows us to completely decouple our components. Our publishers need not be aware of any of their subscribers, nor must our subscribers be aware of publishers. This allows developers to write leaner microservices that don't take an immediate dependency on each other.
