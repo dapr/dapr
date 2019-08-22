@@ -7,13 +7,10 @@ const app = express();
 app.use(bodyParser.json());
 
 const port = 8080;
-const actionsUrl = `http://localhost:${process.env.ACTIONS_PORT}/v1.0`;
-
-/**
-*/
+const actionsUrl = `http://localhost:${process.env.ACTIONS_PORT || 3500}/v1.0`;
 
 app.post('/publish', (req, res) => {
-  console.log("Received: ", req.body);
+  console.log("Publishing: ", req.body);
   const publishUrl = `${actionsUrl}/publish/${req.body.messageType}`;
   request( { uri: publishUrl, method: 'POST', json: req.body } );
   res.sendStatus(200);
