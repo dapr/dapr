@@ -1,10 +1,9 @@
 # Actions Pub-Sub Sample
 
-In this sample, we'll create publisher microservices and subscriber microservices to demonstrate how Actions enables a publish-subcribe pattern. Publishers will generate messages of a specific topic, while subscribers will listen for messages of specific topics. See [Why Pub-Sub](#Why-Pub-Sub?) to understand when this pattern might be a good choice for your software architecture.
+In this sample, we'll create a publisher microservice and two subscriber microservices to demonstrate how Actions enables a publish-subcribe pattern. The publisher will generate messages of a specific topic, while subscribers will listen for messages of specific topics. See [Why Pub-Sub](#Why-Pub-Sub?) to understand when this pattern might be a good choice for your software architecture.
 
-This sample includes two publishers:
+This sample includes one publisher:
 
-- Node.js message generator
 - React front-end message generator
 
 and two subscribers: 
@@ -12,7 +11,7 @@ and two subscribers:
 - Node.js subscriber
 - Python subscriber
 
-Further, Actions uses Redis streams (enabled in Redis versions > 5) as a message bus. The following architecture diagram illustrates how components interconnect:
+Actions uses Redis streams (enabled in Redis versions > 5) as a message bus. The following architecture diagram illustrates how components interconnect:
 
 <<INSERT ARCHITECTURE DIAGRAM>>
 
