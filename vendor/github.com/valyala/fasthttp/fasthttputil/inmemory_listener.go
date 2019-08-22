@@ -8,18 +8,23 @@ import (
 
 // InmemoryListener provides in-memory dialer<->net.Listener implementation.
 //
-// It may be used either for fast in-process client<->server communcations
+// It may be used either for fast in-process client<->server communications
 // without network stack overhead or for client<->server tests.
 type InmemoryListener struct {
 	lock   sync.Mutex
 	closed bool
-	conns  chan net.Conn
+	conns  chan acceptConn
+}
+
+type acceptConn struct {
+	conn     net.Conn
+	accepted chan struct{}
 }
 
 // NewInmemoryListener returns new in-memory dialer<->net.Listener.
 func NewInmemoryListener() *InmemoryListener {
 	return &InmemoryListener{
-		conns: make(chan net.Conn, 1024),
+		conns: make(chan acceptConn, 1024),
 	}
 }
 
@@ -33,7 +38,8 @@ func (ln *InmemoryListener) Accept() (net.Conn, error) {
 	if !ok {
 		return nil, fmt.Errorf("InmemoryListener is already closed: use of closed network connection")
 	}
-	return c, nil
+	close(c.accepted)
+	return c.conn, nil
 }
 
 // Close implements net.Listener's Close.
@@ -59,8 +65,9 @@ func (ln *InmemoryListener) Addr() net.Addr {
 	}
 }
 
-// Dial creates new client<->server connection, enqueues server side
-// of the connection to Accept and returns client side of the connection.
+// Dial creates new client<->server connection.
+// Just like a real Dial it only returns once the server
+// has accepted the connection.
 //
 // It is safe calling Dial from concurrently running goroutines.
 func (ln *InmemoryListener) Dial() (net.Conn, error) {
@@ -68,8 +75,11 @@ func (ln *InmemoryListener) Dial() (net.Conn, error) {
 	cConn := pc.Conn1()
 	sConn := pc.Conn2()
 	ln.lock.Lock()
+	accepted := make(chan struct{})
 	if !ln.closed {
-		ln.conns <- sConn
+		ln.conns <- acceptConn{sConn, accepted}
+		// Wait until the connection has been accepted.
+		<-accepted
 	} else {
 		sConn.Close()
 		cConn.Close()

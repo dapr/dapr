@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mitchellh/mapstructure"
+
 	"github.com/actionscore/actions/pkg/channel/http"
 
 	"github.com/golang/protobuf/ptypes/any"
@@ -29,6 +31,8 @@ type Actors interface {
 	Init() error
 	GetState(req *GetStateRequest) (*StateResponse, error)
 	SaveState(req *SaveStateRequest) error
+	DeleteState(req *DeleteStateRequest) error
+	TransactionalStateOperation(req *TransactionalRequest) error
 	CreateReminder(req *CreateReminderRequest) error
 	DeleteReminder(req *DeleteReminderRequest) error
 	CreateTimer(req *CreateTimerRequest) error
@@ -180,7 +184,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data)
+		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	} else {
 		resp, err = a.callRemoteActor(targetActorAddress, req.ActorType, req.ActorID, req.Method, req.Data)
 	}
@@ -194,7 +198,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	}, nil
 }
 
-func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
+func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) ([]byte, error) {
 	key := a.constructCombinedActorKey(actorType, actorID)
 
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
@@ -219,11 +223,16 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		act.lastUsedTime = time.Now()
 	}
 
-	method := fmt.Sprintf("actors/%s/%s/%s", actorType, actorID, actorMethod)
+	method := fmt.Sprintf("actors/%s/%s/method/%s", actorType, actorID, actorMethod)
 	req := channel.InvokeRequest{
 		Method:   method,
 		Payload:  data,
 		Metadata: map[string]string{http.HTTPVerb: http.Put},
+	}
+	if metadata != nil {
+		for k, v := range metadata {
+			req.Metadata[k] = v
+		}
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
@@ -259,22 +268,11 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 }
 
 func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
-	stateKey := a.constructActorStateKey(actorType, actorID)
-	var data []byte
-
-	if a.store != nil {
-		resp, err := a.store.Get(&state.GetRequest{
-			Key: stateKey,
-		})
-		if err == nil {
-			data = resp.Data
-		}
-	}
-
+	// Send the activation signal to the app
 	req := channel.InvokeRequest{
 		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
 		Metadata: map[string]string{http.HTTPVerb: http.Post},
-		Payload:  data,
+		Payload:  nil,
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
@@ -293,7 +291,7 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 }
 
 func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
-	key := a.constructActorStateKey(req.ActorType, req.ActorID)
+	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
 	})
@@ -306,8 +304,53 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 	}, nil
 }
 
+func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) error {
+	requests := []state.TransactionalRequest{}
+	for _, o := range req.Operations {
+		switch o.Operation {
+		case Upsert:
+			var upsert TransactionalUpsert
+			err := mapstructure.Decode(o.Request, &upsert)
+			if err != nil {
+				return err
+			}
+			key := a.constructActorStateKey(req.ActorType, req.ActorID, upsert.Key)
+			requests = append(requests, state.TransactionalRequest{
+				Request: state.SetRequest{
+					Key:   key,
+					Value: upsert.Data,
+				},
+				Operation: state.Upsert,
+			})
+		case Delete:
+			var delete TransactionalDelete
+			err := mapstructure.Decode(o.Request, &delete)
+			if err != nil {
+				return err
+			}
+
+			key := a.constructActorStateKey(req.ActorType, req.ActorID, delete.Key)
+			requests = append(requests, state.TransactionalRequest{
+				Request: state.DeleteRequest{
+					Key: key,
+				},
+				Operation: state.Delete,
+			})
+		default:
+			return fmt.Errorf("operation type %s not supported", o.Operation)
+		}
+	}
+
+	transactionalStore, ok := a.store.(state.TransactionalStateStore)
+	if !ok {
+		return errors.New("state store does not support transactions")
+	}
+	err := transactionalStore.Multi(requests)
+	return err
+}
+
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
-	key := a.constructActorStateKey(req.ActorType, req.ActorID)
+	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Set(&state.SetRequest{
 		Value: req.Data,
 		Key:   key,
@@ -315,8 +358,16 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	return err
 }
 
-func (a *actorsRuntime) constructActorStateKey(actorType, actorID string) string {
-	return fmt.Sprintf("%s-%s-%s", a.config.ActionsID, actorType, actorID)
+func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
+	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
+	err := a.store.Delete(&state.DeleteRequest{
+		Key: key,
+	})
+	return err
+}
+
+func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) string {
+	return fmt.Sprintf("%s-%s-%s-%s", a.config.ActionsID, actorType, actorID, key)
 }
 
 func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
@@ -642,7 +693,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 		return err
 	}
 
-	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b)
+	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b, nil)
 	if err == nil {
 		key := a.constructCombinedActorKey(actorType, actorID)
 		a.updateReminderTrack(key, reminder)
@@ -805,7 +856,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	if err != nil {
 		return err
 	}
-	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b)
+	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b, nil)
 	return err
 }
 

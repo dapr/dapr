@@ -3,6 +3,7 @@ package http
 import (
 	"crypto/tls"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/actionscore/actions/pkg/channel"
@@ -43,6 +44,15 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	if val, ok := invokeRequest.Metadata[QueryString]; ok {
 		req.URI().SetQueryString(val)
 	}
+	if invokeRequest.Metadata != nil {
+		if val, ok := invokeRequest.Metadata["headers"]; ok {
+			headers := strings.Split(val, "&__header_delim__&")
+			for _, h := range headers {
+				kv := strings.Split(h, "&__header_equals__&")
+				req.Header.Set(kv[0], kv[1])
+			}
+		}
+	}
 	req.Header.SetContentType("application/json")
 
 	method := invokeRequest.Metadata[HTTPVerb]
@@ -62,11 +72,20 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	copy(arr, body)
 
 	statusCode := resp.StatusCode()
+	headers := []string{}
+	resp.Header.VisitAll(func(key []byte, value []byte) {
+		headers = append(headers, fmt.Sprintf("%s&__header_equals__&%s", string(key), string(value)))
+	})
+
+	metadata := map[string]string{HTTPStatusCode: fmt.Sprintf("%v", statusCode)}
+	if len(headers) > 0 {
+		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
+	}
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
 
 	return &channel.InvokeResponse{
-		Metadata: map[string]string{HTTPStatusCode: fmt.Sprintf("%v", statusCode)},
+		Metadata: metadata,
 		Data:     arr,
 	}, nil
 }
