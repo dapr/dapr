@@ -102,7 +102,7 @@ Once the chart installation is done, verify the Actions operator pods are runnin
 $ kubectl get pods --namespace actions-system
 
 NAME                                  READY   STATUS    RESTARTS   AGE
-actions-operator-5fdc5c8d8d-dqs2f     1/1     Running   0          2d2h
+actions-controller-5fdc5c8d8d-dqs2f     1/1     Running   0          2d2h
 actions-placement-8df4f746b-2sbs8     1/1     Running   0          2d2h
 ```
 
