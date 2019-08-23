@@ -586,6 +586,8 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	key := c.Param(stateKeyParam)
 	body := c.PostBody()
 
+	// Deserialize body to validate JSON compatible body
+	// and remove useless characters before saving
 	var val interface{}
 	err := a.json.Unmarshal(body, &val)
 	if err != nil {
