@@ -198,7 +198,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      fakeData,
+			Data:      fakeBodyObject,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -224,7 +224,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "bytearray",
-			Data:      serializedByteArray,
+			Data:      string(base64Encoded),
 		}).Return(nil)
 
 		testAPI.actor = mockActors
