@@ -32,21 +32,21 @@ Actions allows us to deploy the same microservices from our local machines to th
 
 In order to run the pub/sub sample locally, we need to run each of our microservices with Actions. We'll start by running our messages subscribers. **Note**: These instructions deploy a Node subscriber and a Python subscriber, but if you don't have either Node or Python, feel free to run just one.
 
-#### Run Node Message Subscriber with Actions
+### Run Node Message Subscriber with Actions
 
 1. Navigate to Node subscriber directory in your CLI: `cd node-subscriber`
 2. Run Node subscriber app with Actions: `actions run --app-id node-subscriber --app-port 3000 node app.js`
     
     We assign `app-id`, which we can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `node app.js`.
 
-#### Run Python Message Subscriber with Actions
+### Run Python Message Subscriber with Actions
 
 1. Open a new CLI window and navigate to Python subscriber directory in your CLI: `cd python_subscriber`
 2. Run Python subscriber app with Actions: `actions run --app-id python-subscriber --app-port 5000 run python app.py`
     
     We assign `app-id`, which we can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `python app.py`.
 
-#### Use the CLI to Publish Messages to Subscribers
+### Use the CLI to Publish Messages to Subscribers
 
 The Actions CLI provides a mechanism to publish messages for testing purposes. Let's test that our subscribers are listening!
 
@@ -60,7 +60,7 @@ The Actions CLI provides a mechanism to publish messages for testing purposes. L
 
 2. **Optional**: If you're running both the Node and Python apps, try publishing a message of topic B. You'll notice that only the Node app will receive this message. We'll discuss how these microservices are subscribing to specific topics in [How it Works](#How-it-Works).
 
-#### Run the React Front End with Actions
+### Run the React Front End with Actions
 
 Now let's run our React front end with Actions. Our front end will publish different kinds of messages that our subscribers will pick up.
 
