@@ -11,22 +11,22 @@ and two subscribers:
 - Node.js subscriber
 - Python subscriber
 
-Actions uses Redis streams (enabled in Redis versions > 5) as a message bus. The following architecture diagram illustrates how components interconnect:
+Actions uses Redis streams (enabled in Redis versions > 5) as a message bus. The following architecture diagram illustrates how components interconnect locally:
 
-<<INSERT ARCHITECTURE DIAGRAM>>
+![Architecture Diagram](./img/Local_Architecture_Diagram.JPG)
 
-Actions allows us to deploy the same microservices from our local machines to the cloud. Correspondingly, this sample has instructions for deploying this project [locally](<<INSERT LINK>>) or in [Kubernetes](<<INSERT LINK>>). 
+Actions allows us to deploy the same microservices from our local machines to the cloud. Correspondingly, this sample has instructions for deploying this project [locally](#Run-Locally) or in [Kubernetes](#Run-in-Kubernetes). 
 
 ## Prerequisites
 
 ### Prerequisites to Run Locally
 
-- Actions CLI with Actions initialized: <<INSERT DOCUMENTATION LINK>>
-- Node and/or Python
+- [Actions CLI with Actions initialized](/../../#Install-as-standalone)
+- [Node.js](https://nodejs.org/en/) and/or [Python](https://www.python.org/): You can run this sample with one or both microservices
 
 ### Prerequisites to Run in Kubernetes
 
-- Actions enabled Kubernetes cluster: <<INSERT DOCUMENTATION LINK>>
+- [Actions enabled Kubernetes cluster](/../../#Install-on-Kubernetes)
 
 ## Run Locally
 
@@ -58,7 +58,7 @@ The Actions CLI provides a mechanism to publish messages for testing purposes. L
         [0m?[94;1m== APP == Topic A: {'message': 'This is a test'}
     ```
 
-2. **Optional**: If you're running both the Node and Python apps, try publishing a message of topic B. You'll notice that only the Node app will receive this message.
+2. **Optional**: If you're running both the Node and Python apps, try publishing a message of topic B. You'll notice that only the Node app will receive this message. We'll discuss how these microservices are subscribing to specific topics in [How it Works](#How-it-Works).
 
 #### Run the React Front End with Actions
 
@@ -70,11 +70,15 @@ Now let's run our React front end with Actions. Our front end will publish diffe
 
 ![Form Screenshot](./img/Form_Screenshot.JPG)
 
-4. Pick a topic, enter some text and fire off a message! Observe the logs coming through your respective Actions. Note that the Node.js subscriber receives messages of type "A" and "B", while the Python subscriber receives messages of type "A" and "C.
+4. Pick a topic, enter some text and fire off a message! Observe the logs coming through your respective Actions. Note that the Node.js subscriber receives messages of type "A" and "B", while the Python subscriber receives messages of type "A" and "C".
+
+5. If you want to deploy this same application to Kubernetes, move onto the next step. Otherwise, skip ahead to the [How it Works](#How-it-Works) section to understand the code!
 
 ## Run in Kubernetes
 
-To run the same sample in Kubernetes, we'll need to first set up a Redis store and then deploy our microservices.
+To run the same sample in Kubernetes, we'll need to first set up a Redis store and then deploy our microservices. We'll be using the same microservices, but ultimately our architecture is a bit different: 
+
+![Architecture Diagram](./img/K8s_Architecture_Diagram.JPG)
 
 ### Setting up a Redis Store
 
