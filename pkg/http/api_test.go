@@ -84,12 +84,12 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	buffer := ""
-	tracer := diag.CreateTracer("", "", config.TracingSpec{TracerType: config.OpenCensusTracer, ExporterType: "string"}, &buffer)
+	spec := config.TracingSpec{ExporterType: "string"}
+	diag.CreateExporter("", "", spec, &buffer)
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, data []byte) error { return nil },
-		tracer:                tracer,
 	}
-	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
+	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
 
 	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
@@ -219,14 +219,13 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	tracer := diag.CreateTracer("", "", config.TracingSpec{TracerType: config.OpenCensusTracer, ExporterType: "string"}, &buffer)
+	spec := config.TracingSpec{ExporterType: "string"}
+	diag.CreateExporter("", "", spec, &buffer)
+
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		tracer:          tracer,
 	}
-	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
-
-	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
+	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
@@ -252,12 +251,12 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, "200", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "200", buffer, "failed to generate proper traces with direct messaging without query string")
-
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
+		buffer = ""
 		apiPath := "v1.0/actions/fakeActionsID/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
@@ -281,7 +280,8 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "200", buffer, "failed to generate proper traces with direct messaging with query string")
+		assert.Equal(t, "200", buffer, "failed to generate proper traces with invoke")
+
 	})
 
 	fakeServer.Shutdown()
@@ -382,13 +382,14 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	tracer := diag.CreateTracer("", "", config.TracingSpec{TracerType: config.OpenCensusTracer, ExporterType: "string"}, &buffer)
+	spec := config.TracingSpec{ExporterType: "string"}
+	diag.CreateExporter("", "", spec, &buffer)
+
 	testAPI := &api{
-		actor:  nil,
-		tracer: tracer,
+		actor: nil,
 	}
 
-	fakeServer.StartServer(testAPI.constructActorEndpoints())
+	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
 
 	apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 	fakeData := []byte("fakeData")
@@ -425,6 +426,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
+			buffer = ""
 			mockActors.Calls = nil
 
 			// act
@@ -432,11 +434,13 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
+			assert.Equal(t, "201", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
+		buffer = ""
 		mockActors := new(actionst.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
@@ -453,11 +457,13 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "200", buffer, "failed to generate proper traces for get actor state")
 		assert.Equal(t, []byte("fakeData"), resp.Body)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
 	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
+		buffer = ""
 		mockActors := new(actionst.MockActors)
 		mockActors.On("DeleteState", &actors.DeleteStateRequest{
 			ActorID:   "fakeActorID",
@@ -472,6 +478,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 201, resp.StatusCode)
+		assert.Equal(t, "201", buffer, "failed to generate proper traces for delete actor state")
 		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})
 
@@ -499,6 +506,24 @@ func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
 		if err := fasthttp.Serve(f.ln, router.HandleRequest); err != nil {
+			panic(fmt.Errorf("failed to serve: %v", err))
+		}
+	}()
+
+	f.client = gohttp.Client{
+		Transport: &gohttp.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return f.ln.Dial()
+			},
+		},
+	}
+}
+
+func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoints []Endpoint) {
+	router := f.getRouter(endpoints)
+	f.ln = fasthttputil.NewInmemoryListener()
+	go func() {
+		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, router.HandleRequest)); err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
 	}()

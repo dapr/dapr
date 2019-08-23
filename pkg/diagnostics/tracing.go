@@ -6,39 +6,24 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
+
+	"github.com/valyala/fasthttp"
 
 	"github.com/actionscore/actions/pkg/config"
+	"github.com/actionscore/actions/pkg/exporters"
 	"go.opencensus.io/trace"
 )
 
 const (
 	// CorrelationID is an opencensus corellation id
 	CorrelationID = "correlation-id"
-	// StatusCodeInternal indicates a server-side error
-	StatusCodeInternal = 500
-	// StatusCodeOK indicates a successful operation
-	StatusCodeOK = 200
-	// StatusInvalidRequest indicates an invalid request
-	StatusInvalidRequest = 400
-	// StatusCreated indicates an object has been created
-	StatusCreated = 201
 )
 
-// Event is an Actions event
-type Event struct {
-	EventName   string        `json:"eventName,omitempty"`
-	To          []string      `json:"to,omitempty"`
-	Concurrency string        `json:"concurrency,omitempty"`
-	CreatedAt   time.Time     `json:"createdAt,omitempty"`
-	State       []KeyValState `json:"state,omitempty"`
-	Data        interface{}   `json:"data,omitempty"`
-}
-
-// KeyValState is a state key value state
-type KeyValState struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
+// TracerSpan defines a tracing span that a tracer users to keep track of call scopes
+type TracerSpan struct {
+	Context     context.Context
+	Span        *trace.Span
+	SpanContext *trace.SpanContext
 }
 
 //SerializeSpanContext seralizes a span context into a simple string
@@ -64,52 +49,63 @@ func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 	if ctx == "" {
 		return nil
 	}
-	var context *trace.SpanContext = &trace.SpanContext{}
+	context := &trace.SpanContext{}
 	*context = DeserializeSpanContext(ctx)
 	return context
 }
 
-// TraceSpanFromCorrelationId traces a span from a given correlation id
-func TraceSpanFromCorrelationId(corID string, operation string, actionMethod string, targetID string, from string, verbMethod string) (context.Context, *trace.Span) {
+func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) TracerSpan {
 	var ctx context.Context
 	var span *trace.Span
+
+	corID := string(c.Request.Header.Peek(CorrelationID))
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), operation, spanContext)
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(c.Path()), spanContext)
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), operation)
+		ctx, span = trace.StartSpan(context.Background(), string(c.Path()))
 	}
-	attrs := []trace.Attribute{
-		trace.StringAttribute("actionMethod", actionMethod),
-		trace.StringAttribute("targetID", targetID),
-		trace.StringAttribute("from", from),
-		trace.StringAttribute("verbMethod", verbMethod),
-	}
-	span.Annotate(attrs, "actionCall")
-	span.AddAttributes(attrs...)
-	return ctx, span
+
+	addAnnotations(c, span, spec.ExpandParams, spec.IncludeBody)
+
+	var context *trace.SpanContext
+	context = &trace.SpanContext{}
+	*context = span.SpanContext()
+	return TracerSpan{Context: ctx, Span: span, SpanContext: context}
 }
 
-//// TraceSpanFromContext starts a span and traces a context with the given params
-//func TraceSpanFromContext(c context.Context, events *[]Event, operation string, includeEvent bool, includeEventBody bool) (context.Context, *trace.Span, *trace.SpanContext) {
-//	ctx, span := trace.StartSpan(c, operation)
-//	if includeEvent {
-//		addEventAnnotations(events, span, includeEventBody)
-//	}
-//	var context *trace.SpanContext = &trace.SpanContext{}
-//	*context = span.SpanContext()
-//	return ctx, span, context
-//}
-
-// CreateTracer creates a new tracer instance based on the given spec
-func CreateTracer(action_id string, action_address string, spec config.TracingSpec, buffer *string) Tracer {
-	var tracer Tracer
-	switch t := spec.TracerType; t {
-	case config.OpenCensusTracer:
-		tracer = OCTracer{}
-	default:
-		tracer = NullTracer{}
+func addAnnotations(ctx *fasthttp.RequestCtx, span *trace.Span, expandParams bool, includeBody bool) {
+	if expandParams {
+		ctx.VisitUserValues(func(key []byte, value interface{}) {
+			span.AddAttributes(trace.StringAttribute(string(key), value.(string)))
+		})
 	}
-	tracer.Init(action_id, action_address, spec, buffer)
-	return tracer
+	if includeBody {
+		span.AddAttributes(trace.StringAttribute("data", string(ctx.PostBody())))
+	}
+}
+
+// TracingHTTPMiddleware plugs tracer into fasthttp pipeline
+func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		span := TraceSpanFromFastHTTPContext(ctx, spec)
+		defer span.Span.End()
+		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(*span.SpanContext))
+		next(ctx)
+		span.Span.SetStatus(trace.Status{
+			Code:    int32(ctx.Response.StatusCode()),
+			Message: ctx.Response.String(),
+		})
+	}
+}
+
+func CreateExporter(action_id string, host_port string, spec config.TracingSpec, buffer *string) {
+	switch spec.ExporterType {
+	case "zipkin":
+		ex := exporters.ZipkinExporter{}
+		ex.Init(action_id, host_port, spec.ExporterAddress)
+	case "string":
+		es := exporters.StringExporter{Buffer: buffer}
+		es.Init(action_id, host_port, spec.ExporterAddress)
+	}
 }

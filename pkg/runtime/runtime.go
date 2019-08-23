@@ -338,7 +338,7 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 func (a *ActionsRuntime) startHTTPServer(port int, allowedOrigins string) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding,
 		diag.CreateTracer(a.runtimeConfig.ID, fmt.Sprintf("%s:%d", a.hostAddress, a.runtimeConfig.GRPCPort), a.globalConfig.Spec.TracingSpec))
-	serverConf := http.NewServerConfig(port, allowedOrigins)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, port, allowedOrigins)
 	server := http.NewServer(api, serverConf)
 	server.StartNonBlocking()
 }

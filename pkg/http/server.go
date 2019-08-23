@@ -6,6 +6,8 @@ import (
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	log "github.com/Sirupsen/logrus"
+	"github.com/actionscore/actions/pkg/config"
+	diag "github.com/actionscore/actions/pkg/diagnostics"
 	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/valyala/fasthttp"
 )
@@ -16,15 +18,17 @@ type Server interface {
 }
 
 type server struct {
-	config ServerConfig
-	api    API
+	config      ServerConfig
+	tracingSpec config.TracingSpec
+	api         API
 }
 
 // NewServer returns a new HTTP server
-func NewServer(api API, config ServerConfig) Server {
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
 	return &server{
-		api:    api,
-		config: config,
+		api:         api,
+		config:      config,
+		tracingSpec: tracingSpec,
 	}
 }
 
@@ -36,7 +40,13 @@ func (s *server) StartNonBlocking() {
 	corsHandler := s.getCorsHandler(origins)
 
 	go func() {
-		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), corsHandler.CorsMiddleware(router.HandleRequest)))
+		if s.tracingSpec.Enabled {
+			diag.CreateExporter("action_id", string(s.config.Port), s.tracingSpec, nil)
+			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
+				diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(router.HandleRequest))))
+		} else {
+			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), corsHandler.CorsMiddleware(router.HandleRequest)))
+		}
 	}()
 }
 
