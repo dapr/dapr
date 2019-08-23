@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-subscriber
+  labels:
+    app: python-subscriber
+  annotations:
+    actions.io/enabled: "true"
+    actions.io/id: "python-subscriber"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-subscriber
+  template:
+    metadata:
+      labels:
+        app: python-subscriber
+    spec:
+      containers:
+      - name: python-subscriber
+        image: actionscore.azurecr.io/samples/python-subscriber
