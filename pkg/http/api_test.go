@@ -166,15 +166,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
 	fakeData, _ := json.Marshal(fakeBodyObject)
 
-	fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
-
-	serializedByteArray, _ := json.Marshal(fakeBodyArray)
-	encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
-	base64Encoded := make([]byte, encodedLen)
-	base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
-
-	assert.Equal(t, base64Encoded, serializedByteArray[1:len(serializedByteArray)-1], "serialized byte array must be base64-encoded data")
-
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		testAPI.actor = nil
@@ -219,12 +210,65 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Save byte array state value - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
 
+		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
+
+		serializedByteArray, _ := json.Marshal(fakeBodyArray)
+		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
+		base64Encoded := make([]byte, encodedLen)
+		base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
+
+		assert.Equal(t, base64Encoded, serializedByteArray[1:len(serializedByteArray)-1], "serialized byte array must be base64-encoded data")
+
 		mockActors := new(actionst.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "bytearray",
 			Data:      string(base64Encoded),
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			mockActors.Calls = nil
+
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray)
+
+			// assert
+			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
+			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
+		}
+	})
+
+	t.Run("Save object which has byte-array member - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
+
+		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
+
+		fakeBodyObject := map[string]interface{}{
+			"data":  "fakeData",
+			"data2": fakeBodyArray,
+		}
+
+		serializedByteArray, _ := json.Marshal(fakeBodyObject)
+
+		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
+		base64Encoded := make([]byte, encodedLen)
+		base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
+
+		expectedObj := map[string]interface{}{
+			"data":  "fakeData",
+			"data2": string(base64Encoded),
+		}
+
+		mockActors := new(actionst.MockActors)
+		mockActors.On("SaveState", &actors.SaveStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "bytearray",
+			Data:      expectedObj,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
