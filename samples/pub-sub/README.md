@@ -155,7 +155,7 @@ app.post('/B', (req, res) => {
 });
 ```
 
-These handle messages of each topic type coming through. Note that we simply log the message. In a more complex application this is where we would include topic-specific logic. 
+These handle messages of each topic type coming through. Note that we simply log the message. In a more complex application this is where we would include topic-specific handlers. 
 
 ### Python Message Subscriber
 
