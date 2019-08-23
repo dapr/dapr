@@ -19,4 +19,4 @@ spec:
     spec:
       containers:
       - name: python-subscriber
-        image: actionsdemoes/python-subscriber
+        image: actionscore.azurecr.io/samples/python-subscriber

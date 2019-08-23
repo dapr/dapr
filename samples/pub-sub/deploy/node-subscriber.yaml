@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: node-subscriber
-        image: actionsdemoes/node-subscriber
+        image: actionscore.azurecr.io/samples/node-subscriber
         ports:
         - containerPort: 3000
         imagePullPolicy: Always

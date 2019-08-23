@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
       - name: react-form
-        image: actionsdemoes/react-form
+        image: actionscore.azurecr.io/samples/react-form
         ports:
         - containerPort: 8080
         imagePullPolicy: Always
