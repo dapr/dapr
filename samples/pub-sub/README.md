@@ -186,7 +186,7 @@ def b_subscriber():
 
 Our publisher is broken up into a client and a server:
 
-#### Client
+### Client
 
 Our client is a simple single page React application that was bootstrapped with [Create React App](<INSERTLINK>). The relevant client code sits in `react-form/client/src/MessageForm.js` where we present a form to our users. As our users update the form, we update React state with the latest aggregated JSON data. By default the data is set to:
 
@@ -209,7 +209,7 @@ Upon submission of the form, we send the aggregated JSON data to our server:
     });
 ```
 
-#### Server
+### Server
 
 Our server is a basic express application that exposes a POST endpoint: `/publish`. This takes the requests from our client and publishes them against Actions. We use `body-parser` to parse the JSON out of the incoming requests:
 
