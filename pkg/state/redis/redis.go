@@ -110,7 +110,7 @@ func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 // Set saves state into redis
 func (r *StateStore) Set(req *state.SetRequest) error {
-	b, _ := r.json.Marshal(req.Value)
+	b, _ := r.stringify(req.Value)
 	res := r.client.Do(context.Background(), "SET", req.Key, b)
 	if err := redis.AsError(res); err != nil {
 		return err
@@ -147,4 +147,18 @@ func (r *StateStore) Multi(operations []state.TransactionalRequest) error {
 
 	_, err := r.client.SendTransaction(context.Background(), redisReqs)
 	return err
+}
+
+// Stringify interface{} to byte[]
+// https://github.com/a8m/documentdb/blob/f1cda923df27a4b5551f6776cb9f5fd7134713ed/client.go#L165-L176
+func (r *StateStore) stringify(data interface{}) (bt []byte, err error) {
+	switch t := data.(type) {
+	case string:
+		bt = []byte(t)
+	case []byte:
+		bt = t
+	default:
+		bt, err = r.json.Marshal(t)
+	}
+	return
 }
