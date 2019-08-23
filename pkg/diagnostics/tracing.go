@@ -19,6 +19,10 @@ const (
 	StatusCodeInternal = 500
 	// StatusCodeOK indicates a successful operation
 	StatusCodeOK = 200
+	// StatusInvalidRequest indicates an invalid request
+	StatusInvalidRequest = 400
+	// StatusCreated indicates an object has been created
+	StatusCreated = 201
 )
 
 // Event is an Actions event

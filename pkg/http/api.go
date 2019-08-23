@@ -486,8 +486,14 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 }
 
 func (a *api) onActorStateTransaction(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onActorStateTransaction")
+	if span != nil {
+		defer span.End()
+	}
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_ACTOR_RUNTIME_NOT_FOUND")
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -500,6 +506,7 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 	err := a.json.Unmarshal(body, &ops)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_MALFORMED_REQUEST")
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -513,8 +520,10 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 	err = a.actor.TransactionalStateOperation(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, "ERR_ACTOR_STATE_TRANSACTION")
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
+		a.tracer.SetSpanStatus(span, diag.StatusCreated, "Object created")
 		respondEmpty(c.RequestCtx, 201)
 	}
 
@@ -522,8 +531,14 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 }
 
 func (a *api) onDeleteActorTimer(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onActorStateTransaction")
+	if span != nil {
+		defer span.End()
+	}
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_ACTOR_RUNTIME_NOT_FOUND")
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -541,8 +556,10 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 	err := a.actor.DeleteTimer(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DELETE_TIMER", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, "ERR_DELETE_TIMER")
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
+		a.tracer.SetSpanStatus(span, diag.StatusCodeOK, "onDeleteActorTimer succeeded")
 		respondEmpty(c.RequestCtx, 200)
 	}
 
@@ -550,8 +567,14 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 }
 
 func (a *api) onDirectActorMessage(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onDirectActorMessage")
+	if span != nil {
+		defer span.End()
+	}
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_ACTOR_RUNTIME_NOT_FOUND")	
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -573,9 +596,11 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 	resp, err := a.actor.Call(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_INVOKE_ACTOR", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, "ERR_INVOKE_ACTOR")	
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		a.setHeadersOnRequest(resp.Metadata, c)
+		a.tracer.SetSpanStatus(span, diag.StatusCodeOK, "onDirectActorMessage succeeded")	
 		respondWithJSON(c.RequestCtx, 200, resp.Data)
 	}
 
@@ -597,8 +622,14 @@ func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context
 }
 
 func (a *api) onSaveActorState(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onSaveActorState")
+	if span != nil {
+		defer span.End()
+	}
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_ACTOR_RUNTIME_NOT_FOUND")	
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -612,6 +643,7 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	err := jsoniter.ConfigFastest.Unmarshal(body, &val)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_DESERIALIZE_HTTP_BODY")	
 		respondWithError(c.RequestCtx, 400, msg)
 	}
 
@@ -625,8 +657,10 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	err = a.actor.SaveState(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_SAVE_STATE", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, "ERR_ACTOR_SAVE_STATE")	
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
+		a.tracer.SetSpanStatus(span, diag.StatusCreated, "Object created")	
 		respondEmpty(c.RequestCtx, 201)
 	}
 
@@ -634,8 +668,14 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 }
 
 func (a *api) onGetActorState(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onGetActorState")
+	if span != nil {
+		defer span.End()
+	}
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_ACTOR_RUNTIME_NOT_FOUND")			
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -653,8 +693,10 @@ func (a *api) onGetActorState(c *routing.Context) error {
 	resp, err := a.actor.GetState(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_GET_STATE", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, "ERR_ACTOR_GET_STATE")	
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
+		a.tracer.SetSpanStatus(span, diag.StatusCodeOK, "onGetActorState succeeded")		
 		respondWithJSON(c.RequestCtx, 200, resp.Data)
 	}
 
@@ -662,8 +704,14 @@ func (a *api) onGetActorState(c *routing.Context) error {
 }
 
 func (a *api) onDeleteActorState(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onDeleteActorState")
+	if span != nil {
+		defer span.End()
+	}
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_ACTOR_RUNTIME_NOT_FOUND")			
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -681,8 +729,11 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 	err := a.actor.DeleteState(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_DELETE_STATE", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, "ERR_ACTOR_DELETE_STATE")			
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
+		//TODO: delete should not return 201
+		a.tracer.SetSpanStatus(span, diag.StatusCreated, "state deleted")			
 		respondEmpty(c.RequestCtx, 201)
 	}
 
@@ -695,8 +746,14 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 }
 
 func (a *api) onPublish(c *routing.Context) error {
+	span := a.tracer.TraceSpanFromRoutingContext(c, nil, "onPublish")
+	if span != nil {
+		defer span.End()
+	}
+
 	if a.pubSub == nil {
 		msg := NewErrorResponse("ERR_PUB_SUB_NOT_FOUND", "")
+		a.tracer.SetSpanStatus(span, diag.StatusInvalidRequest, "ERR_PUB_SUB_NOT_FOUND")			
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -712,8 +769,10 @@ func (a *api) onPublish(c *routing.Context) error {
 	err := a.pubSub.Publish(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBLISH_MESSAGE", err.Error())
+		a.tracer.SetSpanStatus(span, diag.StatusCodeInternal, "ERR_PUBLISH_MESSAGE")			
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
+		a.tracer.SetSpanStatus(span, diag.StatusCodeOK, "onPublish succeeded")			
 		respondEmpty(c.RequestCtx, 200)
 	}
 

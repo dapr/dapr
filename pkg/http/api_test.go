@@ -378,6 +378,106 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
+func TestV1ActorEndpointsWithTracer(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	buffer := ""
+	tracer := diag.CreateTracer("", "", config.TracingSpec{TracerType: config.OpenCensusTracer, ExporterType: "string"}, &buffer)
+	testAPI := &api{
+		actor:  nil,
+		tracer: tracer,
+	}
+
+	fakeServer.StartServer(testAPI.constructActorEndpoints())
+
+	apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+	fakeData := []byte("fakeData")
+
+	t.Run("Actor runtime is not initialized", func(t *testing.T) {
+		testAPI.actor = nil
+
+		testMethods := []string{"POST", "PUT", "GET", "DELETE"}
+
+		for _, method := range testMethods {
+			buffer = ""
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+
+			// assert
+			assert.Equal(t, 400, resp.StatusCode)
+			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
+			assert.Equal(t, "400", buffer, "failed to generate proper traces with %s", method)
+		}
+	})
+
+	t.Run("Save actor state - 200 OK", func(t *testing.T) {
+		mockActors := new(actionst.MockActors)
+		var val interface{}
+		jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
+		mockActors.On("SaveState", &actors.SaveStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+			Data:      val,
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			mockActors.Calls = nil
+
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+
+			// assert
+			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
+			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
+		}
+	})
+
+	t.Run("Get actor state - 200 OK", func(t *testing.T) {
+		mockActors := new(actionst.MockActors)
+		mockActors.On("GetState", &actors.GetStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(&actors.StateResponse{
+			Data: []byte("fakeData"),
+		}, nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeData"), resp.Body)
+		mockActors.AssertNumberOfCalls(t, "GetState", 1)
+	})
+
+	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
+		mockActors := new(actionst.MockActors)
+		mockActors.On("DeleteState", &actors.DeleteStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil)
+
+		// assert
+		assert.Equal(t, 201, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
+	})
+
+	fakeServer.Shutdown()
+}
+
 // Fake http server and client helpers to simplify endpoints test
 func newFakeHTTPServer() *fakeHTTPServer {
 	return &fakeHTTPServer{}
