@@ -11,7 +11,7 @@ and two subscribers:
 - Node.js subscriber
 - Python subscriber
 
-Actions uses Redis streams (enabled in Redis versions > 5) as a message bus. The following architecture diagram illustrates how components interconnect locally:
+Actions uses pluggable message buses to enable pub-sub, in this case we'll use Redis Streams (enabled in Redis versions => 5). The following architecture diagram illustrates how components interconnect locally:
 
 ![Architecture Diagram](./img/Local_Architecture_Diagram.JPG)
 
@@ -82,12 +82,9 @@ To run the same sample in Kubernetes, we'll need to first set up a Redis store a
 
 ### Setting up a Redis Store
 
-Actions' pub-sub model is built on top of Redis streams, a feature in Redis versions > 5. We'll install Redis into our cluster using helm, but keep in mind that you could use whichever Redis host you like, as long as the version is greater than 5.
+Actions uses pluggable message buses to enable pub-sub, in this case we'll use Redis Streams (enabled in Redis versions => 5). We'll install Redis into our cluster using helm, but keep in mind that you could use whichever Redis host you like, as long as the version is greater than 5.
 
-1. Use helm to create a Redis instance: `helm install stable/redis --name redis`
-
-    **Temporary**: The current Redis version deployed with helm is not up to date. To update your store, run `helm upgrade redis stable/redis --set image.tag=5.0.5-debian-9-r104`
-
+1. Use helm to create a Redis instance: `helm install stable/redis --name redis --set image.tag=5.0.5-debian-9-r104`. We set image tag since the default currently installs a version < 5.
 2. Run `kubectl get pods` to see the Redis containers now running in your cluster.
 3. Run `kubectl get svc` and copy the cluster IP of your `redis-master`. Add this IP as the `redisHost` in your redis.yaml file, followed by ":6379". For example:
     ```yaml
