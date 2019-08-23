@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: actionscore.azurecr.io/actions
   tag: latest
-  imagePullPolicy: Always
+  pullPolicy: Always
 
 nameOverride: ""
 fullnameOverride: ""

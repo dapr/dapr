@@ -112,7 +112,7 @@ func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessag
 func (d *directMessaging) getAddress(target string) (string, error) {
 	switch d.mode {
 	case modes.KubernetesMode:
-		return fmt.Sprintf("%s-action.%s.svc.cluster.local:%v", target, d.namespace, d.grpcPort), nil
+		return fmt.Sprintf("%s-actions.%s.svc.cluster.local:%v", target, d.namespace, d.grpcPort), nil
 	default:
 		return "", fmt.Errorf("remote calls not supported for %s mode", string(d.mode))
 	}

@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   selector:
-    app: actions-controller
+    app: actions-operator
   ports:
   - protocol: TCP
     port: {{ .Values.ports.port }} 

@@ -8,7 +8,7 @@ This chart installs multiple Actions components via "child-charts":
 * Actions RBAC components
     * Cluster Role Binding
     * Service Account
-* Actions Controller
+* Actions Operator
 * Actions Placement
 
 ## Prerequisites
