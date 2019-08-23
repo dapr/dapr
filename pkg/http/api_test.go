@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -165,6 +166,15 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
 	fakeData, _ := json.Marshal(fakeBodyObject)
 
+	fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
+
+	serializedByteArray, _ := json.Marshal(fakeBodyArray)
+	encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
+	base64Encoded := make([]byte, encodedLen)
+	base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
+
+	assert.Equal(t, base64Encoded, serializedByteArray[1:len(serializedByteArray)-1], "serialized byte array must be base64-encoded data")
+
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		testAPI.actor = nil
@@ -188,7 +198,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      fakeBodyObject,
+			Data:      fakeData,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -206,16 +216,42 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("Save byte array state value - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
+
+		mockActors := new(actionst.MockActors)
+		mockActors.On("SaveState", &actors.SaveStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "bytearray",
+			Data:      serializedByteArray,
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			mockActors.Calls = nil
+
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray)
+
+			// assert
+			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
+			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
+		}
+	})
+
 	t.Run("Save actor state - 400 deserialization error", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		nonJSONFakeData := []byte("non-json-serialized")
+		nonJSONFakeData := []byte("{\"key\":}")
 
 		mockActors := new(actionst.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      fakeBodyObject,
+			Data:      nonJSONFakeData,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
