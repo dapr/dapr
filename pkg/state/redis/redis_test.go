@@ -31,10 +31,12 @@ func TestStringify(t *testing.T) {
 			"key1": "value1",
 			"key2": "value2",
 		}
-		actual, err := testRedisStore.stringify(data)
+		result, err := testRedisStore.stringify(data)
 		assert.NoError(t, err)
-		expected, err := jsoniter.ConfigFastest.Marshal(data)
-		assert.NoError(t, err)
-		assert.Equal(t, expected, actual)
+
+		var actual map[string]string
+		jsoniter.Unmarshal(result, &actual)
+
+		assert.EqualValues(t, data, actual)
 	})
 }
