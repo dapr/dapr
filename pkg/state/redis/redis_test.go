@@ -1,9 +1,9 @@
 package redis
 
 import (
-	"encoding/json"
 	"testing"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,7 +33,7 @@ func TestStringify(t *testing.T) {
 		}
 		actual, err := testRedisStore.stringify(data)
 		assert.NoError(t, err)
-		expected, err := json.Marshal(data)
+		expected, err := jsoniter.ConfigFastest.Marshal(data)
 		assert.NoError(t, err)
 		assert.Equal(t, expected, actual)
 	})
