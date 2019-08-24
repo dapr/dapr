@@ -180,7 +180,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 		<-a.placementSignal
 	}
 
-	var resp []byte
+	var resp *CallResponse
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
@@ -193,12 +193,10 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 		return nil, err
 	}
 
-	return &CallResponse{
-		Data: resp,
-	}, nil
+	return resp, nil
 }
 
-func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) ([]byte, error) {
+func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	key := a.constructCombinedActorKey(actorType, actorID)
 
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
@@ -242,10 +240,17 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		return nil, err
 	}
 
-	return resp.Data, nil
+	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+		return nil, errors.New("error from actor sdk")
+	}
+
+	return &CallResponse{
+		Data:     resp.Data,
+		Metadata: resp.Metadata,
+	}, nil
 }
 
-func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
+func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) (*CallResponse, error) {
 	req := pb.CallActorEnvelope{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -264,7 +269,10 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 		return nil, err
 	}
 
-	return resp.Data.Value, nil
+	return &CallResponse{
+		Data:     resp.Data.Value,
+		Metadata: resp.Metadata,
+	}, nil
 }
 
 func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {

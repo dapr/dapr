@@ -553,8 +553,9 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 		msg := NewErrorResponse("ERR_INVOKE_ACTOR", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
+		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		a.setHeadersOnRequest(resp.Metadata, c)
-		respondWithJSON(c.RequestCtx, 200, resp.Data)
+		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
 	}
 
 	return nil
