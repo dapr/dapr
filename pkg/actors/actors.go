@@ -242,6 +242,10 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		return nil, err
 	}
 
+	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+		return nil, errors.New("error from actor sdk")
+	}
+
 	return resp.Data, nil
 }
 
