@@ -393,6 +393,9 @@ func TestSaveState(t *testing.T) {
 	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
 
 	// act
+	actorKey := testActorRuntime.constructCombinedActorKey(actorType, actorID)
+	fakeCallAndActivateActor(testActorRuntime, actorKey)
+
 	err := testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -420,6 +423,9 @@ func TestGetState(t *testing.T) {
 
 	var val interface{}
 	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
+
+	actorKey := testActorRuntime.constructCombinedActorKey(actorType, actorID)
+	fakeCallAndActivateActor(testActorRuntime, actorKey)
 
 	testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
@@ -450,6 +456,9 @@ func TestDeleteState(t *testing.T) {
 	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
 
 	// save test state
+	actorKey := testActorRuntime.constructCombinedActorKey(actorType, actorID)
+	fakeCallAndActivateActor(testActorRuntime, actorKey)
+
 	testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -491,6 +500,9 @@ func TestTransactionalState(t *testing.T) {
 		testActorRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 
+		actorKey := testActorRuntime.constructCombinedActorKey(actorType, actorID)
+		fakeCallAndActivateActor(testActorRuntime, actorKey)
+
 		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
@@ -510,6 +522,9 @@ func TestTransactionalState(t *testing.T) {
 	t.Run("Multiple requests succeeds", func(t *testing.T) {
 		testActorRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
+
+		actorKey := testActorRuntime.constructCombinedActorKey(actorType, actorID)
+		fakeCallAndActivateActor(testActorRuntime, actorKey)
 
 		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
 			ActorType: actorType,
@@ -537,6 +552,9 @@ func TestTransactionalState(t *testing.T) {
 		testActorRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
 
+		actorKey := testActorRuntime.constructCombinedActorKey(actorType, actorID)
+		fakeCallAndActivateActor(testActorRuntime, actorKey)
+
 		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
@@ -553,6 +571,9 @@ func TestTransactionalState(t *testing.T) {
 	t.Run("Unsupported operation type - should fail", func(t *testing.T) {
 		testActorRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
+
+		actorKey := testActorRuntime.constructCombinedActorKey(actorType, actorID)
+		fakeCallAndActivateActor(testActorRuntime, actorKey)
 
 		err := testActorRuntime.TransactionalStateOperation(&TransactionalRequest{
 			ActorType: actorType,
