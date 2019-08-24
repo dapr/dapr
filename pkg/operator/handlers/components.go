@@ -32,7 +32,6 @@ func NewComponentsHandler(client kubernetes.Interface) *ComponentsHandler {
 
 // Init performs any startup tasks needed
 func (c *ComponentsHandler) Init() error {
-	log.Info("ComponentsHandler.Init")
 	return nil
 }
 
@@ -46,12 +45,12 @@ func (c *ComponentsHandler) ObjectDeleted(obj interface{}) {
 
 // ObjectCreated handles created crd operations
 func (c *ComponentsHandler) ObjectCreated(obj interface{}) {
-	log.Info("Notified about a component update")
+	log.Info("notified about a component update")
 
 	component := obj.(*components_v1alpha1.Component)
 	err := c.publishComponentToActionsRuntimes(component)
 	if err != nil {
-		log.Errorf("Error from ObjectCreated: %s", err)
+		log.Errorf("error from ObjectCreated: %s", err)
 	}
 }
 
@@ -66,7 +65,7 @@ func (c *ComponentsHandler) publishComponentToActionsRuntimes(component *compone
 	}
 
 	services, err := c.kubeClient.CoreV1().Services(meta_v1.NamespaceAll).List(meta_v1.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{actionsEnabledAnnotationKey: actionsEnabledAnnotationValue}).String(),
+		LabelSelector: labels.SelectorFromSet(map[string]string{actionsEnabledAnnotationKey: "true"}).String(),
 	})
 	if err != nil {
 		return err
@@ -75,10 +74,10 @@ func (c *ComponentsHandler) publishComponentToActionsRuntimes(component *compone
 	for _, s := range services.Items {
 		svcName := s.GetName()
 
-		log.Infof("Updating actions pod selected by service: %s", svcName)
+		log.Infof("updating actions pod selected by service: %s", svcName)
 		endpoints, err := c.kubeClient.CoreV1().Endpoints(s.GetNamespace()).Get(svcName, meta_v1.GetOptions{})
 		if err != nil {
-			log.Errorf("Error getting endpoints for service %s: %s", svcName, err)
+			log.Errorf("error getting endpoints for service %s: %s", svcName, err)
 			continue
 		}
 		go c.publishComponentToService(payload, endpoints)
@@ -109,6 +108,6 @@ func (c *ComponentsHandler) updateActionsRuntime(component pb.Component, address
 	client := pb.NewActionsClient(conn)
 	_, err = client.UpdateComponent(ctx, &component)
 	if err != nil {
-		log.Warnf("Error updating Actions Runtime with component: %s", err)
+		log.Warnf("error updating Actions Runtime with component: %s", err)
 	}
 }

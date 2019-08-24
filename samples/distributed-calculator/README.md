@@ -39,7 +39,7 @@ Each of these deployments will spin up a pod with two containers: one for your s
 
 NAME                                    READY     STATUS    RESTARTS   AGE
 actions-assigner-5c5bfb956f-ppgqr       1/1       Running   0          5d
-actions-controller-b9fc5578b-htxsm      1/1       Running   0          5d
+actions-operator-b9fc5578b-htxsm        1/1       Running   0          5d
 addapp-db749bff9-kpkn6                  2/2       Running   0          2m
 calculator-front-end-7c549cc84d-m24cb   2/2       Running   0          3m
 divideapp-6d85b88cb4-vh7nz              2/2       Running   0          1m

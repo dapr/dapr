@@ -862,9 +862,10 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:dba68da0a11004655cf005c17797275731b8660e4c5f2f79b83cca9eec57bba6"
+  digest = "1:8174330a6389f8ede58c6b2bd518791861b41ccb35bbae5762319e95153895cc"
   name = "k8s.io/api"
   packages = [
+    "admission/v1beta1",
     "admissionregistration/v1beta1",
     "apps/v1",
     "apps/v1beta1",
@@ -1123,6 +1124,7 @@
     "google.golang.org/grpc/metadata",
     "google.golang.org/grpc/status",
     "gopkg.in/yaml.v2",
+    "k8s.io/api/admission/v1beta1",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/apimachinery/pkg/api/errors",
