@@ -33,6 +33,7 @@ type Actors interface {
 	SaveState(req *SaveStateRequest) error
 	DeleteState(req *DeleteStateRequest) error
 	TransactionalStateOperation(req *TransactionalRequest) error
+	GetReminder(req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(req *CreateReminderRequest) error
 	DeleteReminder(req *DeleteReminderRequest) error
 	CreateTimer(req *CreateTimerRequest) error
@@ -968,6 +969,24 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	}
 
 	return nil
+}
+
+func (a *actorsRuntime) GetReminder(req *GetReminderRequest) (*Reminder, error) {
+	reminders, err := a.getRemindersForActorType(req.ActorType)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, r := range reminders {
+		if r.ActorID == req.ActorID && r.Name == req.Name {
+			return &Reminder{
+				Data:    r.Data,
+				DueTime: r.DueTime,
+				Period:  r.Period,
+			}, nil
+		}
+	}
+	return nil, nil
 }
 
 func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {

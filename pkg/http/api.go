@@ -190,6 +190,12 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorTimer,
 		},
+		{
+			Methods: []string{http.Get},
+			Route:   "actors/<actorType>/<actorId>/reminders/<name>",
+			Version: apiVersionV1,
+			Handler: a.onGetActorReminder,
+		},
 	}
 }
 
@@ -496,6 +502,32 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 		respondEmpty(c.RequestCtx, 201)
 	}
 
+	return nil
+}
+
+func (a *api) onGetActorReminder(c *routing.Context) error {
+	if a.actor == nil {
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
+	actorType := c.Param(actorTypeParam)
+	actorID := c.Param(actorIDParam)
+	name := c.Param(nameParam)
+
+	resp, err := a.actor.GetReminder(&actors.GetReminderRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Name:      name,
+	})
+	b, err := a.json.Marshal(resp)
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_GET_REMINDER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+	} else {
+		respondWithJSON(c.RequestCtx, 200, b)
+	}
 	return nil
 }
 
