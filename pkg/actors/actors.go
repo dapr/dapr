@@ -735,10 +735,13 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 		return err
 	}
 
+	log.Debugf("executing reminder %s for actor type %s with id %s", reminder, actorType, actorID)
 	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b, nil)
 	if err == nil {
 		key := a.constructCombinedActorKey(actorType, actorID)
 		a.updateReminderTrack(key, reminder)
+	} else {
+		log.Debugf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
 	return err
 }
@@ -898,7 +901,12 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	if err != nil {
 		return err
 	}
+
+	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
 	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b, nil)
+	if err != nil {
+		log.Debugf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
+	}
 	return err
 }
 
