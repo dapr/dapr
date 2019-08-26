@@ -6,31 +6,26 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
-	routing "github.com/qiangxue/fasthttp-routing"
+	"github.com/actionscore/actions/pkg/config"
+	"github.com/actionscore/actions/pkg/exporters"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
+	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
+	"google.golang.org/grpc"
+	grpc_go "google.golang.org/grpc"
 )
 
 const (
-	// CorrelationID is an opencensus corellation id
-	CorrelationID = "correlation-id"
+	correlationID = "correlation-id"
 )
 
-// Event is an Actions event
-type Event struct {
-	EventName   string        `json:"eventName,omitempty"`
-	To          []string      `json:"to,omitempty"`
-	Concurrency string        `json:"concurrency,omitempty"`
-	CreatedAt   time.Time     `json:"createdAt,omitempty"`
-	State       []KeyValState `json:"state,omitempty"`
-	Data        interface{}   `json:"data,omitempty"`
-}
-
-// KeyValState is a state key value state
-type KeyValState struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
+// TracerSpan defines a tracing span that a tracer users to keep track of call scopes
+type TracerSpan struct {
+	Context     context.Context
+	Span        *trace.Span
+	SpanContext *trace.SpanContext
 }
 
 //SerializeSpanContext seralizes a span context into a simple string
@@ -56,94 +51,157 @@ func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 	if ctx == "" {
 		return nil
 	}
-	var context *trace.SpanContext = &trace.SpanContext{}
+	context := &trace.SpanContext{}
 	*context = DeserializeSpanContext(ctx)
 	return context
 }
 
-// TraceSpanFromCorrelationId traces a span from a given correlation id
-func TraceSpanFromCorrelationId(corID string, operation string, actionMethod string, targetID string, from string, verbMethod string) (context.Context, *trace.Span) {
+func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) TracerSpan {
 	var ctx context.Context
 	var span *trace.Span
+
+	corID := string(c.Request.Header.Peek(correlationID))
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), operation, spanContext)
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(c.Path()), spanContext)
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), operation)
+		ctx, span = trace.StartSpan(context.Background(), string(c.Path()))
 	}
-	attrs := []trace.Attribute{
-		trace.StringAttribute("actionMethod", actionMethod),
-		trace.StringAttribute("targetID", targetID),
-		trace.StringAttribute("from", from),
-		trace.StringAttribute("verbMethod", verbMethod),
-	}
-	span.Annotate(attrs, "actionCall")
-	span.AddAttributes(attrs...)
-	return ctx, span
+
+	addAnnotations(c, span, spec.ExpandParams, spec.IncludeBody)
+
+	context := span.SpanContext()
+	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}
 }
 
-// TraceSpanFromContext starts a span and traces a context with the given params
-func TraceSpanFromContext(c context.Context, events *[]Event, operation string, includeEvent bool, includeEventBody bool) (context.Context, *trace.Span, *trace.SpanContext) {
-	ctx, span := trace.StartSpan(c, operation)
-	if includeEvent {
-		AddEventAnnotations(events, span, includeEventBody)
+func addAnnotations(ctx *fasthttp.RequestCtx, span *trace.Span, expandParams bool, includeBody bool) {
+	if expandParams {
+		ctx.VisitUserValues(func(key []byte, value interface{}) {
+			span.AddAttributes(trace.StringAttribute(string(key), value.(string)))
+		})
 	}
-	var context *trace.SpanContext = &trace.SpanContext{}
-	*context = span.SpanContext()
-	return ctx, span, context
+	if includeBody {
+		span.AddAttributes(trace.StringAttribute("data", string(ctx.PostBody())))
+	}
 }
 
-// TraceSpanFromRoutingContext starts a span and traces a context from a given http route context
-func TraceSpanFromRoutingContext(c *routing.Context, events *[]Event, operation string, includeEvent bool, includeEventBody bool) (context.Context, *trace.Span, *trace.SpanContext) {
+// TracingHTTPMiddleware plugs tracer into fasthttp pipeline
+func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		span := TraceSpanFromFastHTTPContext(ctx, spec)
+		defer span.Span.End()
+		ctx.Request.Header.Set(correlationID, SerializeSpanContext(*span.SpanContext))
+		next(ctx)
+		span.Span.SetStatus(trace.Status{
+			Code:    projectStatusCode(ctx.Response.StatusCode()),
+			Message: ctx.Response.String(),
+		})
+	}
+}
+
+// CreateExporter creates Opencensus exported as per specified in the tracing spec
+func CreateExporter(actionID string, hostAddress string, spec config.TracingSpec, buffer *string) {
+	switch spec.ExporterType {
+	case "zipkin":
+		ex := exporters.ZipkinExporter{}
+		ex.Init(actionID, hostAddress, spec.ExporterAddress)
+	case "string":
+		es := exporters.StringExporter{Buffer: buffer}
+		es.Init(actionID, hostAddress, spec.ExporterAddress)
+	}
+}
+
+// TracingGRPCMiddleware plugs tracer into gRPC stream
+func TracingGRPCMiddleware(spec config.TracingSpec) grpc_go.StreamServerInterceptor {
+	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		span := TracingSpanFromGRPCContext(stream.Context(), info.FullMethod, spec)
+		wrappedStream := grpc_middleware.WrapServerStream(stream)
+		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationID, SerializeSpanContext(*span.SpanContext))
+		defer span.Span.End()
+		err := handler(srv, wrappedStream)
+		if err != nil {
+			span.Span.SetStatus(trace.Status{
+				Code:    trace.StatusCodeInternal,
+				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
+			})
+		} else {
+			span.Span.SetStatus(trace.Status{
+				Code:    trace.StatusCodeOK,
+				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
+			})
+		}
+		return err
+	}
+}
+
+// TracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
+func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		span := TracingSpanFromGRPCContext(ctx, info.FullMethod, spec)
+		defer span.Span.End()
+		newCtx := context.WithValue(span.Context, correlationID, SerializeSpanContext(*span.SpanContext))
+		resp, err := handler(newCtx, req)
+		if err != nil {
+			span.Span.SetStatus(trace.Status{
+				Code:    trace.StatusCodeInternal,
+				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
+			})
+		} else {
+			span.Span.SetStatus(trace.Status{
+				Code:    trace.StatusCodeOK,
+				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
+			})
+		}
+		return resp, err
+	}
+}
+
+func TracingSpanFromGRPCContext(c context.Context, method string, spec config.TracingSpec) TracerSpan {
 	var ctx context.Context
 	var span *trace.Span
-	if c == nil {
-		ctx, span = trace.StartSpan(context.Background(), operation)
+
+	md := metautils.ExtractIncoming(c)
+	corID := md.Get(correlationID)
+
+	if corID != "" {
+		spanContext := DeserializeSpanContext(corID)
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), method, spanContext)
 	} else {
-		corID := string(c.Request.Header.Peek(CorrelationID))
-		if corID != "" {
-			spanContext := DeserializeSpanContext(corID)
-			ctx, span = trace.StartSpanWithRemoteParent(context.Background(), operation, spanContext)
-		} else {
-			ctx, span = trace.StartSpan(context.Background(), operation)
+		ctx, span = trace.StartSpan(context.Background(), method)
+	}
+
+	addAnnotationsFromMD(md, span, spec.ExpandParams, spec.IncludeBody)
+
+	context := span.SpanContext()
+	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}
+}
+
+func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bool, includeBody bool) {
+	if expandParams {
+		for k, vv := range md {
+			for _, v := range vv {
+				span.AddAttributes(trace.StringAttribute(string(k), v))
+			}
 		}
 	}
-	if includeEvent {
-		AddEventAnnotations(events, span, includeEventBody)
-	}
-	var context *trace.SpanContext
-	if span != nil {
-		context = &trace.SpanContext{}
-		*context = span.SpanContext()
-		return ctx, span, context
-	} else {
-		return ctx, span, nil
+	if includeBody {
+		//TODO: get request body?
 	}
 }
 
-// AddEventAnnotations adds an Actions events annotation
-func AddEventAnnotations(events *[]Event, span *trace.Span, includeEventBody bool) {
-	for _, e := range *events {
-		attrs := []trace.Attribute{
-			trace.StringAttribute("eventName", e.EventName),
-			trace.StringAttribute("createdAt", e.CreatedAt.String()),
-			trace.StringAttribute("concurrency", e.Concurrency),
-			trace.StringAttribute("to", strings.Join(e.To, ",")),
-		}
-		span.Annotate(attrs, "message")
-		if includeEventBody {
-			attrs = append(attrs, trace.StringAttribute("data", fmt.Sprintf("%v", e.Data)))
-		}
-		span.AddAttributes(attrs...)
-	}
-}
-
-// SetSpanStatus sets the status for a given span
-func SetSpanStatus(span *trace.Span, code int32, message string) {
-	if span != nil {
-		span.SetStatus(trace.Status{
-			Code:    code,
-			Message: message,
-		})
+func projectStatusCode(code int) int32 {
+	switch code {
+	case 200:
+		return trace.StatusCodeOK
+	case 400:
+		return trace.StatusCodeInvalidArgument
+	case 500:
+		return trace.StatusCodeInternal
+	case 404:
+		return trace.StatusCodeNotFound
+	case 403:
+		return trace.StatusCodePermissionDenied
+	default:
+		return int32(code)
 	}
 }

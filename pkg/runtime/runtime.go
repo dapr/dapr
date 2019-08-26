@@ -336,15 +336,15 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 
 func (a *ActionsRuntime) startHTTPServer(port int, allowedOrigins string) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
-	serverConf := http.NewServerConfig(port, allowedOrigins)
-	server := http.NewServer(api, serverConf)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, allowedOrigins)
+	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	server.StartNonBlocking()
 }
 
 func (a *ActionsRuntime) startGRPCServer(port int) error {
 	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.actor, a)
-	serverConf := grpc.NewServerConfig(port)
-	server := grpc.NewServer(api, serverConf)
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
+	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	err := server.StartNonBlocking()
 
 	return err

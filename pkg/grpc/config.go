@@ -2,12 +2,16 @@ package grpc
 
 // ServerConfig is the config object for a grpc server
 type ServerConfig struct {
-	Port int
+	ActionID    string
+	HostAddress string
+	Port        int
 }
 
 // NewServerConfig returns a new grpc server config
-func NewServerConfig(port int) ServerConfig {
+func NewServerConfig(actionID string, hostAddress string, port int) ServerConfig {
 	return ServerConfig{
-		Port: port,
+		ActionID:    actionID,
+		HostAddress: hostAddress,
+		Port:        port,
 	}
 }

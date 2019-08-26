@@ -1,0 +1,7 @@
+spec:
+  tracing:
+    enabled: true
+    exporterType: zipkin
+    exporterAddress: "http://localhost:9411/api/v2/spans"
+    expandParams: true
+    includeBody: true

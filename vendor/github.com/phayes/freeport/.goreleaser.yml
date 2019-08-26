@@ -1,0 +1,134 @@
+project_name: freeport
+
+release:
+  github:
+    owner: phayes
+    name: freeport
+
+builds:
+  - binary: freeport
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - "386"
+    goarm:
+      - "6"
+    main: ./cmd/freeport
+    ldflags: -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archive:
+  format: tar.gz
+  name_template: '{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{
+    .Arm }}{{ end }}'
+  files:
+  - licence*
+  - LICENCE*
+  - license*
+  - LICENSE*
+  - readme*
+  - README*
+  - changelog*
+  - CHANGELOG*
+
+snapshot:
+  name_template: SNAPSHOT-{{ .Commit }}
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
+
+# Create RPM and .DEB files
+fpm:
+  vendor: Patrick Hayes
+
+  # Your app's homepage.
+  #homepage: https://example.com/
+
+  # Your app's maintainer
+  maintainer: Patrick Hayes <patrick.d.hayes@gmail.com>
+
+  # Your app's description.
+  description: Get a free open TCP port that is ready to use.
+
+  # Your app's license.
+  # Default is empty.
+  license: BSD
+
+  # Formats to be generated.
+  formats:
+    - deb
+    - rpm
+
+  # Packages your package depends on.
+  #dependencies:
+  #  - git
+  #  - zsh
+
+  # Packages that conflict with your package.
+  #conflicts:
+  #  - svn
+  #  - bash
+
+  # Files or directories to add to your package (beyond the binary).
+  # Keys are source paths to get the files from.
+  # Values are the destination locations of the files in the package.
+  #files:
+  #  "scripts/etc/init.d/": "/etc/init.d"
+
+# Homebrew repos
+brew:
+  # Reporitory to push the tap to.
+  github:
+    owner: phayes
+    name: homebrew-repo
+
+  # Git author used to commit to the repository.
+  # Defaults are shown.
+  commit_author:
+    name: goreleaserbot
+    email: goreleaser@carlosbecker.com
+
+  # Folder inside the repository to put the formula.
+  # Default is the root folder.
+  folder: freeport
+
+  # Caveats for the user of your binary.
+  # Default is empty.
+  # caveats: "How to use this binary"
+
+  # Your app's homepage.
+  # Default is empty.
+  # homepage: "https://example.com/"
+
+  # Your app's description.
+  # Default is empty.
+  description: "Get a free open TCP port that is ready to use."
+
+  # Packages your package depends on.
+  #dependencies:
+  #  - git
+  #  - zsh
+
+  # Packages that conflict with your package.
+  #conflicts:
+  #  - svn
+  #  - bash
+
+  # Specify for packages that run as a service.
+  # Default is empty.
+  #plist: |
+  #  <?xml version="1.0" encoding="UTF-8"?>
+  #  ...
+
+  # So you can `brew test` your formula.
+  # Default is empty.
+  #test: |
+  #  system "#{bin}/program --version"
+  #  ...
+
+  # Custom install script for brew.
+  # Default is 'bin.install "program"'.
+  #install: |
+  #  bin.install "program"
+  #  ...

@@ -216,7 +216,9 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 
 	err := a.sendToOutputBindingFn(name, body)
 	if err != nil {
-		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("error invoking output binding %s: %s", name, err))
+
+		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
+		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", errMsg)
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
@@ -243,7 +245,6 @@ func (a *api) onGetState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
-
 	respondWithJSON(c.RequestCtx, 200, resp.Data)
 	return nil
 }

@@ -12,19 +12,19 @@ import (
 )
 
 type Configuration struct {
-	Spec ConfigurationSpec `json:"spec,omitempty"`
+	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 }
 
 type ConfigurationSpec struct {
-	TracingSpec TracingSpec `json:"tracing,omitempty"`
+	TracingSpec TracingSpec `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 }
 
 type TracingSpec struct {
-	Enabled          bool   `json:"enabled"`
-	ExporterType     string `json:"exporterType"`
-	ExporterAddress  string `json:"exporterAddress"`
-	IncludeEvent     bool   `json:"includeEvent"`
-	IncludeEventBody bool   `json:"includeEventBody"`
+	Enabled         bool   `json:"enabled" yaml:"enabled"`
+	ExporterType    string `json:"exporterType" yaml:"exporterType"`
+	ExporterAddress string `json:"exporterAddress" yaml:"exporterAddress"`
+	ExpandParams    bool   `json:"expandParams" yaml:"expandParams"`
+	IncludeBody     bool   `json:"includeBody" yaml:"includeBody"`
 }
 
 func LoadDefaultConfiguration() *Configuration {
