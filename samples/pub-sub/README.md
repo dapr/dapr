@@ -42,7 +42,7 @@ In order to run the pub/sub sample locally, we need to run each of our microserv
 ### Run Python Message Subscriber with Actions
 
 1. Open a new CLI window and navigate to Python subscriber directory in your CLI: `cd python_subscriber`
-2. Run Python subscriber app with Actions: `actions run --app-id python-subscriber --app-port 5000 run python app.py`
+2. Run Python subscriber app with Actions: `actions run --app-id python-subscriber --app-port 5000 python app.py`
     
     We assign `app-id`, which we can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `python app.py`.
 
