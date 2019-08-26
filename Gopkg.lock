@@ -288,7 +288,8 @@
   version = "v1.2.1"
 
 [[projects]]
-  digest = "1:b8e46955e8385b06d7b0b26165cdb7216dec8bce1cfcc05499cdd9da8af15445"
+  branch = "master"
+  digest = "1:aa4e5c637d8b8fefefdced4d4678b62a5adaf59bd6451fdd3897b7319fbbadd9"
   name = "github.com/golang/protobuf"
   packages = [
     "jsonpb",
@@ -306,8 +307,7 @@
     "ptypes/wrappers",
   ]
   pruneopts = "UT"
-  revision = "b5d812f8a3706043e23a9cd5babf2e5423744d30"
-  version = "v1.3.1"
+  revision = "4c88cc3f1a34ffade77b79abc53335d1e511f25b"
 
 [[projects]]
   digest = "1:e4f5819333ac698d294fe04dbf640f84719658d5c7ce195b10060cc37292ce79"
@@ -527,6 +527,14 @@
   pruneopts = "UT"
   revision = "1b5162aa314e6ccfcf83777bfb5218988c9e8283"
   version = "v0.1.6"
+
+[[projects]]
+  digest = "1:7413525ee648f20b4181be7fe8103d0cb98be9e141926a03ee082dc207061e4e"
+  name = "github.com/phayes/freeport"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "b8543db493a5ed890c5499e935e2cad7504f3a04"
+  version = "1.0.2"
 
 [[projects]]
   digest = "1:259f9b7645983a7a823318d78aa96dec68af8891f706493ac1ec04d819cb977c"
@@ -1123,6 +1131,7 @@
     "github.com/mitchellh/mapstructure",
     "github.com/openzipkin/zipkin-go",
     "github.com/openzipkin/zipkin-go/reporter/http",
+    "github.com/phayes/freeport",
     "github.com/qiangxue/fasthttp-routing",
     "github.com/satori/go.uuid",
     "github.com/streadway/amqp",

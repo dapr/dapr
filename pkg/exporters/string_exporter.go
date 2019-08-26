@@ -11,13 +11,14 @@ type StringExporter struct {
 	Buffer *string
 }
 
+// ExportSpan exports span content to the buffer
 func (se StringExporter) ExportSpan(sd *trace.SpanData) {
 	*se.Buffer = strconv.Itoa(int(sd.Status.Code))
 }
 
 // Init creates a new zipkin endpoint and reporter
-func (z StringExporter) Init(actionsID string, actionsAddress string, exporterAddress string) error {
+func (se StringExporter) Init(actionsID string, actionsAddress string, exporterAddress string) error {
 	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
-	trace.RegisterExporter(z)
+	trace.RegisterExporter(se)
 	return nil
 }

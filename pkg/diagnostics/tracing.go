@@ -18,8 +18,7 @@ import (
 )
 
 const (
-	// CorrelationID is an opencensus corellation id
-	CorrelationID = "correlation-id"
+	correlationID = "correlation-id"
 )
 
 // TracerSpan defines a tracing span that a tracer users to keep track of call scopes
@@ -61,7 +60,7 @@ func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpe
 	var ctx context.Context
 	var span *trace.Span
 
-	corID := string(c.Request.Header.Peek(CorrelationID))
+	corID := string(c.Request.Header.Peek(correlationID))
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
 		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(c.Path()), spanContext)
@@ -71,10 +70,8 @@ func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpe
 
 	addAnnotations(c, span, spec.ExpandParams, spec.IncludeBody)
 
-	var context *trace.SpanContext
-	context = &trace.SpanContext{}
-	*context = span.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: context}
+	context := span.SpanContext()
+	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}
 }
 
 func addAnnotations(ctx *fasthttp.RequestCtx, span *trace.Span, expandParams bool, includeBody bool) {
@@ -93,7 +90,7 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 	return func(ctx *fasthttp.RequestCtx) {
 		span := TraceSpanFromFastHTTPContext(ctx, spec)
 		defer span.Span.End()
-		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(*span.SpanContext))
+		ctx.Request.Header.Set(correlationID, SerializeSpanContext(*span.SpanContext))
 		next(ctx)
 		span.Span.SetStatus(trace.Status{
 			Code:    projectStatusCode(ctx.Response.StatusCode()),
@@ -102,22 +99,24 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 	}
 }
 
-func CreateExporter(action_id string, host_port string, spec config.TracingSpec, buffer *string) {
+// CreateExporter creates Opencensus exported as per specified in the tracing spec
+func CreateExporter(actionID string, hostAddress string, spec config.TracingSpec, buffer *string) {
 	switch spec.ExporterType {
 	case "zipkin":
 		ex := exporters.ZipkinExporter{}
-		ex.Init(action_id, host_port, spec.ExporterAddress)
+		ex.Init(actionID, hostAddress, spec.ExporterAddress)
 	case "string":
 		es := exporters.StringExporter{Buffer: buffer}
-		es.Init(action_id, host_port, spec.ExporterAddress)
+		es.Init(actionID, hostAddress, spec.ExporterAddress)
 	}
 }
 
+// TracingGRPCMiddleware plugs tracer into gRPC stream
 func TracingGRPCMiddleware(spec config.TracingSpec) grpc_go.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		span := TracingSpanFromGRPCContext(stream.Context(), info.FullMethod, spec)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = context.WithValue(span.Context, CorrelationID, SerializeSpanContext(*span.SpanContext))
+		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationID, SerializeSpanContext(*span.SpanContext))
 		defer span.Span.End()
 		err := handler(srv, wrappedStream)
 		if err != nil {
@@ -135,11 +134,12 @@ func TracingGRPCMiddleware(spec config.TracingSpec) grpc_go.StreamServerIntercep
 	}
 }
 
+// TracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
 func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		span := TracingSpanFromGRPCContext(ctx, info.FullMethod, spec)
 		defer span.Span.End()
-		newCtx := context.WithValue(span.Context, CorrelationID, SerializeSpanContext(*span.SpanContext))
+		newCtx := context.WithValue(span.Context, correlationID, SerializeSpanContext(*span.SpanContext))
 		resp, err := handler(newCtx, req)
 		if err != nil {
 			span.Span.SetStatus(trace.Status{
@@ -161,7 +161,7 @@ func TracingSpanFromGRPCContext(c context.Context, method string, spec config.Tr
 	var span *trace.Span
 
 	md := metautils.ExtractIncoming(c)
-	corID := md.Get(CorrelationID)
+	corID := md.Get(correlationID)
 
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
@@ -172,10 +172,8 @@ func TracingSpanFromGRPCContext(c context.Context, method string, spec config.Tr
 
 	addAnnotationsFromMD(md, span, spec.ExpandParams, spec.IncludeBody)
 
-	var context *trace.SpanContext
-	context = &trace.SpanContext{}
-	*context = span.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: context}
+	context := span.SpanContext()
+	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}
 }
 
 func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bool, includeBody bool) {

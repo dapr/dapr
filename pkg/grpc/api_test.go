@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	pb "github.com/actionscore/actions/pkg/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	grpc_go "google.golang.org/grpc"
 )
@@ -33,7 +35,8 @@ func (m *mockGRPCAPI) UpdateComponent(ctx context.Context, in *pb.Component) (*e
 }
 
 func TestCallActorWithTracing(t *testing.T) {
-	lis, err := net.Listen("tcp", ":9998")
+	port, _ := freeport.GetFreePort()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	assert.NoError(t, err)
 
 	buffer := ""
@@ -54,7 +57,7 @@ func TestCallActorWithTracing(t *testing.T) {
 
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
-	conn, err := grpc_go.Dial("localhost:9998", opts...)
+	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
 	defer conn.Close()
 	assert.NoError(t, err)
 
@@ -73,7 +76,8 @@ func TestCallActorWithTracing(t *testing.T) {
 }
 
 func TestCallRemoteAppWithTracing(t *testing.T) {
-	lis, err := net.Listen("tcp", ":9998")
+	port, _ := freeport.GetFreePort()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	assert.NoError(t, err)
 
 	buffer := ""
@@ -94,7 +98,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
-	conn, err := grpc_go.Dial("localhost:9998", opts...)
+	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
 	defer conn.Close()
 	assert.NoError(t, err)
 
