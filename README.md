@@ -194,8 +194,9 @@ Check out the following tutorials:
 * [Getting started with C++](docs/getting_started/c++/tutorial.md)
 * [Getting started with PHP](docs/getting_started/php/tutorial.md)
 * [Getting started with Scala](docs/getting_started/scala/tutorial.md)
-* [Getting started with Kotlin](docs/getting_started/kotlin/tutorial.md)
+* [Getting started with Kotlin](docs/getting_started/kotlin/tutorial.md)<br><br>
 
+* [Setup distributed tracing with Zipkin](docs/distributed_tracing.md)
 ## Concepts
 
 * [Actor Pattern](docs/concepts/actor/actor_pattern.md)
