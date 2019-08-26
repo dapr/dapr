@@ -69,7 +69,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	client.CallActor(context.Background(), request)
 
 	server.Stop()
-	assert.Equal(t, "200", buffer, "failed to generate proper traces with actor call")
+	assert.Equal(t, "0", buffer, "failed to generate proper traces with actor call")
 }
 
 func TestCallRemoteAppWithTracing(t *testing.T) {
@@ -108,5 +108,5 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	client.CallRemoteApp(context.Background(), request)
 
 	server.Stop()
-	assert.Equal(t, "200", buffer, "failed to generate proper traces with actor call")
+	assert.Equal(t, "0", buffer, "failed to generate proper traces with actor call")
 }
