@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/actionscore/actions/pkg/actors"
 
@@ -63,6 +64,10 @@ func (a *api) CallRemoteApp(ctx context.Context, in *pb.CallRemoteAppEnvelope) (
 
 // CallLocal is used for internal Actions-Actions calls
 func (a *api) CallLocal(ctx context.Context, in *pb.LocalCallEnvelope) (*pb.InvokeResponse, error) {
+	if a.appChannel == nil {
+		return nil, errors.New("app channel is not initialized")
+	}
+
 	req := channel.InvokeRequest{
 		Payload:  in.Data.Value,
 		Method:   in.Method,

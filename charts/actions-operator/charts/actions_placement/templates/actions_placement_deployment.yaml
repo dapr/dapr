@@ -24,4 +24,4 @@ spec:
         ports:
           - containerPort: 50005
         command: ["./placement"]
-      serviceAccountName: actions-controller
+      serviceAccountName: actions-operator

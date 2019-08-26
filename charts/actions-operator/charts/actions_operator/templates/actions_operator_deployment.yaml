@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: actions-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: actions-operator
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: actions-operator
+  template:
+    metadata:
+      labels:
+        app: actions-operator
+    spec:
+      containers:
+      - name: actions-operator
+        repository: {{ .Values.repository }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        env:
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 6500
+        command: ["./operator"]
+      serviceAccountName: actions-operator            

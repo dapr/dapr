@@ -33,6 +33,7 @@ type Actors interface {
 	SaveState(req *SaveStateRequest) error
 	DeleteState(req *DeleteStateRequest) error
 	TransactionalStateOperation(req *TransactionalRequest) error
+	GetReminder(req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(req *CreateReminderRequest) error
 	DeleteReminder(req *DeleteReminderRequest) error
 	CreateTimer(req *CreateTimerRequest) error
@@ -180,7 +181,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 		<-a.placementSignal
 	}
 
-	var resp []byte
+	var resp *CallResponse
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
@@ -193,12 +194,10 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 		return nil, err
 	}
 
-	return &CallResponse{
-		Data: resp,
-	}, nil
+	return resp, nil
 }
 
-func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) ([]byte, error) {
+func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	key := a.constructCombinedActorKey(actorType, actorID)
 
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
@@ -242,10 +241,17 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		return nil, err
 	}
 
-	return resp.Data, nil
+	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+		return nil, errors.New("error from actor sdk")
+	}
+
+	return &CallResponse{
+		Data:     resp.Data,
+		Metadata: resp.Metadata,
+	}, nil
 }
 
-func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) ([]byte, error) {
+func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) (*CallResponse, error) {
 	req := pb.CallActorEnvelope{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -264,7 +270,10 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 		return nil, err
 	}
 
-	return resp.Data.Value, nil
+	return &CallResponse{
+		Data:     resp.Data.Value,
+		Metadata: resp.Metadata,
+	}, nil
 }
 
 func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
@@ -305,6 +314,17 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 }
 
 func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) error {
+	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
+	val, exists := a.actorsTable.Load(actorKey)
+	if !exists {
+		return fmt.Errorf("actor id %s is not activated", req.ActorID)
+	}
+
+	act := val.(*actor)
+	lock := act.lock
+	lock.Lock()
+	defer lock.Unlock()
+
 	requests := []state.TransactionalRequest{}
 	for _, o := range req.Operations {
 		switch o.Operation {
@@ -350,6 +370,17 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 }
 
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
+	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
+	val, exists := a.actorsTable.Load(actorKey)
+	if !exists {
+		return fmt.Errorf("actor id %s is not activated", req.ActorID)
+	}
+
+	act := val.(*actor)
+	lock := act.lock
+	lock.Lock()
+	defer lock.Unlock()
+
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Set(&state.SetRequest{
 		Value: req.Data,
@@ -359,6 +390,17 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 }
 
 func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
+	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
+	val, exists := a.actorsTable.Load(actorKey)
+	if !exists {
+		return fmt.Errorf("actor id %s is not activated", req.ActorID)
+	}
+
+	act := val.(*actor)
+	lock := act.lock
+	lock.Lock()
+	defer lock.Unlock()
+
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Delete(&state.DeleteRequest{
 		Key: key,
@@ -693,10 +735,13 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 		return err
 	}
 
+	log.Debugf("executing reminder %s for actor type %s with id %s", reminder, actorType, actorID)
 	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b, nil)
 	if err == nil {
 		key := a.constructCombinedActorKey(actorType, actorID)
 		a.updateReminderTrack(key, reminder)
+	} else {
+		log.Debugf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
 	return err
 }
@@ -856,7 +901,12 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	if err != nil {
 		return err
 	}
+
+	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
 	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b, nil)
+	if err != nil {
+		log.Debugf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
+	}
 	return err
 }
 
@@ -927,6 +977,24 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	}
 
 	return nil
+}
+
+func (a *actorsRuntime) GetReminder(req *GetReminderRequest) (*Reminder, error) {
+	reminders, err := a.getRemindersForActorType(req.ActorType)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, r := range reminders {
+		if r.ActorID == req.ActorID && r.Name == req.Name {
+			return &Reminder{
+				Data:    r.Data,
+				DueTime: r.DueTime,
+				Period:  r.Period,
+			}, nil
+		}
+	}
+	return nil, nil
 }
 
 func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {

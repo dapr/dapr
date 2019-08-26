@@ -5,9 +5,12 @@ dependencies:
 - name: actions_rbac
   version: "0.1.0"
   repository: "file://actions_rbac"
-- name: actions_controller
+- name: actions_operator
   version: "0.1.0"
-  repository: "file://actions_controller"
+  repository: "file://actions_operator"
 - name: actions_placement
   version: "0.1.0"
-  repository: "file://actions_placement"      
+  repository: "file://actions_placement"
+- name: actions_sidecar_injector
+  version: "0.1.0"
+  repository: "file://actions_sidecar_injector"      

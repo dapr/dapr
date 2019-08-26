@@ -9,7 +9,9 @@ This sample shows method invocation and state persistent capabilities of Actions
 
 The front-end application consists of a server and a client written in [React](https://reactjs.org/). 
 Kudos to [ahfarmer](https://github.com/ahfarmer) whose [React calculator](https://github.com/ahfarmer/calculator) 
-sample was used for the client.
+sample was used for the client. The following architecture diagram illustrates the components that make up this sample: 
+
+![Architecture Diagram](./img/Architecture_Diagram.jpg)
 
 ## Prerequisites
 
@@ -37,7 +39,7 @@ Each of these deployments will spin up a pod with two containers: one for your s
 
 NAME                                    READY     STATUS    RESTARTS   AGE
 actions-assigner-5c5bfb956f-ppgqr       1/1       Running   0          5d
-actions-controller-b9fc5578b-htxsm      1/1       Running   0          5d
+actions-operator-b9fc5578b-htxsm        1/1       Running   0          5d
 addapp-db749bff9-kpkn6                  2/2       Running   0          2m
 calculator-front-end-7c549cc84d-m24cb   2/2       Running   0          3m
 divideapp-6d85b88cb4-vh7nz              2/2       Running   0          1m

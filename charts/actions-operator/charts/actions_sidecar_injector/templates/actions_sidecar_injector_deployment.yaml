@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: actions-sidecar-injector
+  labels:
+    app: actions-sidecar-injector
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: actions-sidecar-injector
+  template:
+    metadata:
+      labels:
+         app: actions-sidecar-injector
+    spec:
+      serviceAccountName: actions-operator
+      containers:
+      - name: sidecar-injector
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          runAsUser: 1000
+        command: ["./injector"]
+        env:
+        - name: TLS_CERT_FILE
+          value: /actions/cert/tls.crt
+        - name: TLS_KEY_FILE
+          value: /actions/cert/tls.key
+        - name: SIDECAR_IMAGE
+          value: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+        ports:
+        - name: https
+          containerPort: 4000
+          protocol: TCP
+        volumeMounts:
+        - name: cert
+          mountPath: /actions/cert
+          readOnly: true
+      volumes:
+      - name: cert
+        secret:
+          secretName: actions-sidecar-injector-cert

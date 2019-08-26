@@ -1,0 +1,15 @@
+replicaCount: 1
+
+image:
+  repository: actionscore.azurecr.io/actions
+  tag: latest
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+ports:
+  protocol: TCP
+  port: 80
+  targetPort: 6500
+  

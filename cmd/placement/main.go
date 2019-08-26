@@ -36,8 +36,8 @@ func init() {
 	parsedLogLevel, err := log.ParseLevel(*logLevel)
 	if err == nil {
 		log.SetLevel(parsedLogLevel)
-		log.Infof("Log level set to: %s", parsedLogLevel)
+		log.Infof("log level set to: %s", parsedLogLevel)
 	} else {
-		log.Fatalf("Invalid value for --log-level: %s", *logLevel)
+		log.Fatalf("invalid value for --log-level: %s", *logLevel)
 	}
 }
