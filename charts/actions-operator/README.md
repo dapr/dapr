@@ -4,7 +4,7 @@ This chart bootstraps all of Actions Operator components on a Kubernetes cluster
 ## Chart Details
 This chart installs multiple Actions components via "child-charts":
 
-* Actions Components Kubernetes CRD
+* Actions Component and Configuration Kubernetes CRDs
 * Actions RBAC components
     * Cluster Role Binding
     * Service Account
