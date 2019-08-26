@@ -103,7 +103,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
-			assert.Equal(t, "200", buffer, "failed to generate proper traces with %s", method)
+			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -124,7 +124,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
 			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
-			assert.Equal(t, "500", buffer, "failed to generate proper traces with %s", method)
+			assert.Equal(t, "13", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -251,7 +251,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "200", buffer, "failed to generate proper traces with invoke")
+		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
@@ -280,7 +280,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "200", buffer, "failed to generate proper traces with invoke")
+		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 
 	})
 
@@ -407,7 +407,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
 			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
-			assert.Equal(t, "400", buffer, "failed to generate proper traces with %s", method)
+			assert.Equal(t, "3", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -457,7 +457,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "200", buffer, "failed to generate proper traces for get actor state")
+		assert.Equal(t, "0", buffer, "failed to generate proper traces for get actor state")
 		assert.Equal(t, []byte("fakeData"), resp.Body)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
