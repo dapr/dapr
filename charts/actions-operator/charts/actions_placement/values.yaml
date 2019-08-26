@@ -1,12 +1,9 @@
 replicaCount: 1
 
-metadate:
-  namespace: actions-system
-
 image:
   repository: actionscore.azurecr.io/actions
   tag: latest
-  imagePullPolicy: Always
+  pullPolicy: Always
 
 nameOverride: ""
 fullnameOverride: ""

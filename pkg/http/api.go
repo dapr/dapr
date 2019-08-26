@@ -190,6 +190,12 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorTimer,
 		},
+		{
+			Methods: []string{http.Get},
+			Route:   "actors/<actorType>/<actorId>/reminders/<name>",
+			Version: apiVersionV1,
+			Handler: a.onGetActorReminder,
+		},
 	}
 }
 
@@ -500,6 +506,32 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 	return nil
 }
 
+func (a *api) onGetActorReminder(c *routing.Context) error {
+	if a.actor == nil {
+		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
+	actorType := c.Param(actorTypeParam)
+	actorID := c.Param(actorIDParam)
+	name := c.Param(nameParam)
+
+	resp, err := a.actor.GetReminder(&actors.GetReminderRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Name:      name,
+	})
+	b, err := a.json.Marshal(resp)
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_GET_REMINDER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+	} else {
+		respondWithJSON(c.RequestCtx, 200, b)
+	}
+	return nil
+}
+
 func (a *api) onDeleteActorTimer(c *routing.Context) error {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
@@ -554,8 +586,9 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 		msg := NewErrorResponse("ERR_INVOKE_ACTOR", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
+		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		a.setHeadersOnRequest(resp.Metadata, c)
-		respondWithJSON(c.RequestCtx, 200, resp.Data)
+		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
 	}
 
 	return nil
@@ -587,11 +620,14 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	key := c.Param(stateKeyParam)
 	body := c.PostBody()
 
+	// Deserialize body to validate JSON compatible body
+	// and remove useless characters before saving
 	var val interface{}
-	err := jsoniter.ConfigFastest.Unmarshal(body, &val)
+	err := a.json.Unmarshal(body, &val)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
 		respondWithError(c.RequestCtx, 400, msg)
+		return nil
 	}
 
 	req := actors.SaveStateRequest{
@@ -662,7 +698,7 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 		msg := NewErrorResponse("ERR_ACTOR_DELETE_STATE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
-		respondEmpty(c.RequestCtx, 201)
+		respondEmpty(c.RequestCtx, 200)
 	}
 
 	return nil

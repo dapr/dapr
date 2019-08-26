@@ -1,0 +1,41 @@
+{{- $ca := genCA "actions-sidecar-injector-ca" 3650 }}
+{{- $cn := printf "actions-sidecar-injector" }}
+{{- $altName1 := printf "actions-sidecar-injector.%s" .Release.Namespace }}
+{{- $altName2 := printf "actions-sidecar-injector.%s.svc" .Release.Namespace }}
+{{- $altName3 := printf "actions-sidecar-injector.%s.svc.cluster" .Release.Namespace }}
+{{- $altName4 := printf "actions-sidecar-injector.%s.svc.cluster.local" .Release.Namespace }}
+{{- $cert := genSignedCert $cn nil (list $altName1 $altName2 $altName3 $altName4) 3650 $ca }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: actions-sidecar-injector-cert
+  labels:
+    app: actions-sidecar-injector
+data:
+  tls.crt: {{ b64enc $cert.Cert }}
+  tls.key: {{ b64enc $cert.Key }}
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: actions-sidecar-injector
+  labels:
+    app: actions-sidecar-injector
+webhooks:
+- name: sidecar-injector.actions.io
+  clientConfig:
+    service:
+      namespace: {{ .Release.Namespace }}
+      name: actions-sidecar-injector
+      path: "/mutate"
+    caBundle: {{ b64enc $ca.Cert }}
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    resources:
+    - pods
+    operations:
+    - CREATE
+  failurePolicy: Ignore

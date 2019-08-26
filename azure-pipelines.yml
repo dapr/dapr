@@ -28,7 +28,7 @@ jobs:
     poolImage: macOS-latest
     targetOS: darwin
     targetArch: amd64
-    binaryName: controller
+    binaryName: operator
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: macOS-latest
@@ -46,7 +46,7 @@ jobs:
     poolImage: macOS-latest
     targetOS: linux
     targetArch: arm
-    binaryName: controller
+    binaryName: operator
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: ubuntu-latest
@@ -64,7 +64,7 @@ jobs:
     poolImage: ubuntu-latest
     targetOS: linux
     targetArch: amd64
-    binaryName: controller
+    binaryName: operator
 - template: 'build-binary-template.yml'
   parameters:
     poolImage: windows-2019
@@ -82,38 +82,38 @@ jobs:
     poolImage: windows-2019
     targetOS: windows
     targetArch: amd64
-    binaryName: controller
+    binaryName: operator
 - job: 'publish_edge_binaries'
   pool:
     vmImage: 'windows-2019'
   dependsOn:
   - build_darwin_amd64_actionsrt
   - build_darwin_amd64_placement
-  - build_darwin_amd64_controller
+  - build_darwin_amd64_operator
   - build_linux_amd64_actionsrt
   - build_linux_amd64_placement
-  - build_linux_amd64_controller
+  - build_linux_amd64_operator
   - build_linux_arm_actionsrt
   - build_linux_arm_placement
-  - build_linux_arm_controller
+  - build_linux_arm_operator
   - build_windows_amd64_actionsrt
   - build_windows_amd64_placement
-  - build_windows_amd64_controller
+  - build_windows_amd64_operator
   condition: |
     and
     (
       eq(dependencies.build_darwin_amd64_actionsrt.result, 'Succeeded'),
       eq(dependencies.build_darwin_amd64_placement.result, 'Succeeded'),
-      eq(dependencies.build_darwin_amd64_controller.result, 'Succeeded'),
+      eq(dependencies.build_darwin_amd64_operator.result, 'Succeeded'),
       eq(dependencies.build_linux_amd64_actionsrt.result, 'Succeeded'),
       eq(dependencies.build_linux_amd64_placement.result, 'Succeeded'),
-      eq(dependencies.build_linux_amd64_controller.result, 'Succeeded'),
+      eq(dependencies.build_linux_amd64_operator.result, 'Succeeded'),
       eq(dependencies.build_linux_arm_actionsrt.result, 'Succeeded'),
       eq(dependencies.build_linux_arm_placement.result, 'Succeeded'),
-      eq(dependencies.build_linux_arm_controller.result, 'Succeeded'),
+      eq(dependencies.build_linux_arm_operator.result, 'Succeeded'),
       eq(dependencies.build_windows_amd64_actionsrt.result, 'Succeeded'),
       eq(dependencies.build_windows_amd64_placement.result, 'Succeeded'),
-      eq(dependencies.build_windows_amd64_controller.result, 'Succeeded'),
+      eq(dependencies.build_windows_amd64_operator.result, 'Succeeded'),
       ne(variables['Build.Reason'], 'PullRequest')
     )
   steps:

@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,18 +13,17 @@ import (
 	"strings"
 	"testing"
 
-	jsoniter "github.com/json-iterator/go"
-	"github.com/valyala/fasthttp/fasthttputil"
-
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/channel/http"
 	"github.com/actionscore/actions/pkg/config"
 	diag "github.com/actionscore/actions/pkg/diagnostics"
 	"github.com/actionscore/actions/pkg/messaging"
 	actionst "github.com/actionscore/actions/pkg/testing"
+	jsoniter "github.com/json-iterator/go"
 	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttputil"
 )
 
 func TestSetHeaders(t *testing.T) {
@@ -42,6 +42,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, data []byte) error { return nil },
+		json:                  jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
 
@@ -74,7 +75,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
-			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
+			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -132,7 +133,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 }
 
 func TestV1DirectMessagingEndpoints(t *testing.T) {
-	fakeHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
+	fakeHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&Content-Type&__header_equals__&application/json&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
 	fakeDirectMessageResponse := &messaging.DirectMessageResponse{
 		Data: []byte("fakeDirectMessageResponse"),
 		Metadata: map[string]string{
@@ -146,6 +147,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		json:            jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
@@ -288,14 +290,18 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 }
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	testAPI := &api{actor: nil}
+	testAPI := &api{
+		actor: nil,
+		json:  jsoniter.ConfigFastest,
+	}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints())
 
-	apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-	fakeData := []byte("fakeData")
+	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
+	fakeData, _ := json.Marshal(fakeBodyObject)
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		testAPI.actor = nil
 
 		testMethods := []string{"POST", "PUT", "GET", "DELETE"}
@@ -306,19 +312,18 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", fakeServer.UnmarshalBody(resp.Body)["errorCode"])
+			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
 		}
 	})
 
 	t.Run("Save actor state - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actionst.MockActors)
-		var val interface{}
-		jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      val,
+			Data:      fakeBodyObject,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -336,14 +341,121 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("Save byte array state value - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
+
+		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
+
+		serializedByteArray, _ := json.Marshal(fakeBodyArray)
+		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
+		base64Encoded := make([]byte, encodedLen)
+		base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
+
+		assert.Equal(t, base64Encoded, serializedByteArray[1:len(serializedByteArray)-1], "serialized byte array must be base64-encoded data")
+
+		mockActors := new(actionst.MockActors)
+		mockActors.On("SaveState", &actors.SaveStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "bytearray",
+			Data:      string(base64Encoded),
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			mockActors.Calls = nil
+
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray)
+
+			// assert
+			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
+			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
+		}
+	})
+
+	t.Run("Save object which has byte-array member - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
+
+		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
+
+		fakeBodyObject := map[string]interface{}{
+			"data":  "fakeData",
+			"data2": fakeBodyArray,
+		}
+
+		serializedByteArray, _ := json.Marshal(fakeBodyObject)
+
+		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
+		base64Encoded := make([]byte, encodedLen)
+		base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
+
+		expectedObj := map[string]interface{}{
+			"data":  "fakeData",
+			"data2": string(base64Encoded),
+		}
+
+		mockActors := new(actionst.MockActors)
+		mockActors.On("SaveState", &actors.SaveStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "bytearray",
+			Data:      expectedObj,
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			mockActors.Calls = nil
+
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray)
+
+			// assert
+			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
+			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
+		}
+	})
+
+	t.Run("Save actor state - 400 deserialization error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		nonJSONFakeData := []byte("{\"key\":}")
+
+		mockActors := new(actionst.MockActors)
+		mockActors.On("SaveState", &actors.SaveStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+			Data:      nonJSONFakeData,
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			mockActors.Calls = nil
+
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData)
+
+			// assert
+			assert.Equal(t, 400, resp.StatusCode)
+			mockActors.AssertNumberOfCalls(t, "SaveState", 0)
+		}
+	})
+
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actionst.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
 		}).Return(&actors.StateResponse{
-			Data: []byte("fakeData"),
+			Data: fakeData,
 		}, nil)
 
 		testAPI.actor = mockActors
@@ -353,11 +465,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte("fakeData"), resp.Body)
+		assert.Equal(t, fakeData, resp.RawBody)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
 	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actionst.MockActors)
 		mockActors.On("DeleteState", &actors.DeleteStateRequest{
 			ActorID:   "fakeActorID",
@@ -371,8 +484,47 @@ func TestV1ActorEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil)
 
 		// assert
-		assert.Equal(t, 201, resp.StatusCode)
+		assert.Equal(t, 200, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
+	})
+
+	t.Run("Transaction - 201 Accepted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
+
+		testTransactionalOperations := []actors.TransactionalOperation{
+			actors.TransactionalOperation{
+				Operation: actors.Upsert,
+				Request: map[string]interface{}{
+					"key":  "fakeKey1",
+					"data": fakeBodyObject,
+				},
+			},
+			actors.TransactionalOperation{
+				Operation: actors.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
+
+		mockActors := new(actionst.MockActors)
+		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
+			ActorID:    "fakeActorID",
+			ActorType:  "fakeActorType",
+			Operations: testTransactionalOperations,
+		}).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes)
+
+		// assert
+		assert.Equal(t, 201, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 	})
 
 	fakeServer.Shutdown()
@@ -496,9 +648,12 @@ type fakeHTTPServer struct {
 }
 
 type fakeHTTPResponse struct {
-	StatusCode int
-	Header     gohttp.Header
-	Body       []byte
+	StatusCode  int
+	ContentType string
+	RawHeader   gohttp.Header
+	RawBody     []byte
+	JSONBody    interface{}
+	ErrorBody   map[string]string
 }
 
 func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
@@ -556,22 +711,27 @@ func (f *fakeHTTPServer) Shutdown() {
 
 func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) fakeHTTPResponse {
 	r, _ := gohttp.NewRequest(method, fmt.Sprintf("http://localhost/%s", path), bytes.NewBuffer(body))
+	r.Header.Set("Content-Type", "application/json")
 	res, err := f.client.Do(r)
 	if err != nil {
 		panic(fmt.Errorf("failed to request: %v", err))
 	}
 
 	bodyBytes, _ := ioutil.ReadAll(res.Body)
-
-	return fakeHTTPResponse{
-		StatusCode: res.StatusCode,
-		Header:     res.Header,
-		Body:       bodyBytes,
+	response := fakeHTTPResponse{
+		StatusCode:  res.StatusCode,
+		ContentType: res.Header.Get("Content-Type"),
+		RawHeader:   res.Header,
+		RawBody:     bodyBytes,
 	}
-}
 
-func (f *fakeHTTPServer) UnmarshalBody(respBody []byte) map[string]string {
-	var bodyObj map[string]string
-	json.Unmarshal(respBody, &bodyObj)
-	return bodyObj
+	if response.ContentType == "application/json" {
+		if response.StatusCode >= 200 && response.StatusCode < 300 {
+			json.Unmarshal(bodyBytes, &response.JSONBody)
+		} else {
+			json.Unmarshal(bodyBytes, &response.ErrorBody)
+		}
+	}
+
+	return response
 }

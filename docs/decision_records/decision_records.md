@@ -22,6 +22,9 @@ All decisions are categorized in the following folders:
   - [CLI-001: CLI and runtim versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
 * **SDKs** - Decisions on Actions SDKs.
 * **Engineering** - Decisions on Engineering practices, including CI/CD, testings and releases.
+* **Images** - Decisions on container image versioning and tagging.
+
+  - [IMAGES-001: Tagging](https://github.com/actionscore/actions/blob/master/docs/decision_records/images/IMAGES-001-tagging.MD)
 
 ## Creating new decision records
 A new decision record should be a _.md_ file named as 

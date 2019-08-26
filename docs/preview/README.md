@@ -30,9 +30,8 @@ In this Preview Kit repository, included are the following:
 This release of Actions preview kit is the very first kit version. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.   
 
 * Actions runtime 0.2.0-alpha [(release notes)](https://github.com/actionscore/actions/blob/master/docs/release_notes/v0.2.0-alpha.md)
-* C# SDK
 
-For the full release notes, go [here](https://github.com/actionscore/actions/docs/preview/release_notes/v1.0.0-alpha.md). 
+For the full release notes, go [here](https://github.com/actionscore/actions/blob/master/docs/preview/release_notes/v0.1.0.md). 
 
 
 ## Setup
@@ -103,7 +102,7 @@ Once the chart installation is done, verify the Actions operator pods are runnin
 $ kubectl get pods --namespace actions-system
 
 NAME                                  READY   STATUS    RESTARTS   AGE
-actions-controller-5fdc5c8d8d-dqs2f   1/1     Running   0          2d2h
+actions-controller-5fdc5c8d8d-dqs2f     1/1     Running   0          2d2h
 actions-placement-8df4f746b-2sbs8     1/1     Running   0          2d2h
 ```
 
@@ -117,4 +116,4 @@ helm install stable/redis --rbac.create=true
 
 ## Contributing & Support
 
-We We actively reviewing contributions into this repository via [issues](https://help.github.com/en/articles/creating-an-issue). 
+We are actively reviewing contributions into this repository via [issues](https://help.github.com/en/articles/creating-an-issue). 

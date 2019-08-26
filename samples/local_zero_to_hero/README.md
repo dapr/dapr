@@ -1,14 +1,8 @@
 # From Zero to Hero Locally
 
-This tutorial will demonstrate how to get Actions running locally on your machine. We'll be deploying a Node.js app that subscribes to order messages and persists them.
+This tutorial will demonstrate how to get Actions running locally on your machine. We'll be deploying a Node.js app that subscribes to order messages and persists them. The following architecture diagram illustrates the components that make up this sample: 
 
-By the end of the end, you will know how to:
-
-1. Set up Actions Locally
-2. Understand the Code
-3. Run the Node.js app with Actions
-4. Post Messages to your Service
-5. Confirm Successful Persistence
+![Architecture Diagram](./img/Architecture_Diagram.jpg)
 
 ## Prerequisites
 This sample requires you to have the following installed on your machine:
@@ -86,17 +80,17 @@ app.get('/order', (_req, res) => {
 });
 ```
 
-This calls out to our Redis cache to grab the latest value of the "order" key, which effectively allows our node app to be _stateless_. 
+This calls out to our Redis cache to grab the latest value of the "order" key, which effectively allows our Node.js app to be _stateless_. 
 
-**Note**: If we only expected to have a single instance of the Node app, and didn't expect anything else to update "order", we instead could have kept a local version of our order state and returned that (reducing a call to our Redis store). We would then create a `/state` POST endpoint, which would allow actions to initialize our app's state when it starts up. In that case, our Node app would be `stateful`.
+**Note**: If we only expected to have a single instance of the Node.js app, and didn't expect anything else to update "order", we instead could have kept a local version of our order state and returned that (reducing a call to our Redis store). We would then create a `/state` POST endpoint, which would allow actions to initialize our app's state when it starts up. In that case, our Node.js app would be _stateful_.
 
 ## Step 3 - Run the Node.js App with Actions
 
-1. Navigate to the zero to hero node sample project: `cd samples/local_zero_to_hero/app.js`.
+1. Navigate to the zero to hero Node.js sample app: `cd samples/local_zero_to_hero`.
 
 2. Install dependencies: `npm install`. This will install `express` and `body-parser`, dependencies that are shown in our `package.json`.
 
-3. Run node application with actions: `actions run --port 3500 --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
+3. Run Node.js app with Actions: `actions run --port 3500 --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
 
 ```
 Starting Actions with id mynode on port 3500
@@ -105,7 +99,7 @@ Starting Actions with id mynode on port 3500
 
 ## Step 4 - Post Messages to your Service
 
-Now that Actions and our Node app are running, let's POST messages against it.
+Now that Actions and our Node.js app are running, let's POST messages against it.
 
  Open Postman and create a POST request against `http://localhost:3500/<YOUR_APP_NAME>/neworder`
 ![Postman Screenshot](./img/postman1.jpg)

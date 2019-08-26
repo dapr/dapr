@@ -167,3 +167,17 @@ func (_m *MockActors) TransactionalStateOperation(req *actors.TransactionalReque
 
 	return r0
 }
+
+// GetReminder provides a mock function with given fields: req
+func (_m *MockActors) GetReminder(req *actors.GetReminderRequest) (*actors.Reminder, error) {
+	ret := _m.Called(req)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*actors.GetReminderRequest) error); ok {
+		r0 = rf(req)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return nil, r0
+}
