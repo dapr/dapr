@@ -7,11 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valyala/fasthttp"
-
 	"github.com/actionscore/actions/pkg/config"
 	"github.com/actionscore/actions/pkg/exporters"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
+	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
+	"google.golang.org/grpc"
+	grpc_go "google.golang.org/grpc"
 )
 
 const (
@@ -93,7 +96,7 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(*span.SpanContext))
 		next(ctx)
 		span.Span.SetStatus(trace.Status{
-			Code:    int32(ctx.Response.StatusCode()),
+			Code:    projectStatusCode(ctx.Response.StatusCode()),
 			Message: ctx.Response.String(),
 		})
 	}
@@ -107,5 +110,100 @@ func CreateExporter(action_id string, host_port string, spec config.TracingSpec,
 	case "string":
 		es := exporters.StringExporter{Buffer: buffer}
 		es.Init(action_id, host_port, spec.ExporterAddress)
+	}
+}
+
+func TracingGRPCMiddleware(spec config.TracingSpec) grpc_go.StreamServerInterceptor {
+	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		span := TracingSpanFromGRPCContext(stream.Context(), info.FullMethod, spec)
+		wrappedStream := grpc_middleware.WrapServerStream(stream)
+		wrappedStream.WrappedContext = context.WithValue(span.Context, CorrelationID, SerializeSpanContext(*span.SpanContext))
+		defer span.Span.End()
+		err := handler(srv, wrappedStream)
+		if err != nil {
+			span.Span.SetStatus(trace.Status{
+				Code:    trace.StatusCodeInternal,
+				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
+			})
+		} else {
+			span.Span.SetStatus(trace.Status{
+				Code:    trace.StatusCodeOK,
+				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
+			})
+		}
+		return err
+	}
+}
+
+func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		span := TracingSpanFromGRPCContext(ctx, info.FullMethod, spec)
+		defer span.Span.End()
+		newCtx := context.WithValue(span.Context, CorrelationID, SerializeSpanContext(*span.SpanContext))
+		resp, err := handler(newCtx, req)
+		if err != nil {
+			span.Span.SetStatus(trace.Status{
+				Code:    trace.StatusCodeInternal,
+				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
+			})
+		} else {
+			span.Span.SetStatus(trace.Status{
+				Code:    trace.StatusCodeOK,
+				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
+			})
+		}
+		return resp, err
+	}
+}
+
+func TracingSpanFromGRPCContext(c context.Context, method string, spec config.TracingSpec) TracerSpan {
+	var ctx context.Context
+	var span *trace.Span
+
+	md := metautils.ExtractIncoming(c)
+	corID := md.Get(CorrelationID)
+
+	if corID != "" {
+		spanContext := DeserializeSpanContext(corID)
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), method, spanContext)
+	} else {
+		ctx, span = trace.StartSpan(context.Background(), method)
+	}
+
+	addAnnotationsFromMD(md, span, spec.ExpandParams, spec.IncludeBody)
+
+	var context *trace.SpanContext
+	context = &trace.SpanContext{}
+	*context = span.SpanContext()
+	return TracerSpan{Context: ctx, Span: span, SpanContext: context}
+}
+
+func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bool, includeBody bool) {
+	if expandParams {
+		for k, vv := range md {
+			for _, v := range vv {
+				span.AddAttributes(trace.StringAttribute(string(k), v))
+			}
+		}
+	}
+	if includeBody {
+		//TODO: get request body?
+	}
+}
+
+func projectStatusCode(code int) int32 {
+	switch code {
+	case 200:
+		return trace.StatusCodeOK
+	case 400:
+		return trace.StatusCodeInvalidArgument
+	case 500:
+		return trace.StatusCodeInternal
+	case 404:
+		return trace.StatusCodeNotFound
+	case 403:
+		return trace.StatusCodePermissionDenied
+	default:
+		return int32(code)
 	}
 }

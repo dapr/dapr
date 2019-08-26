@@ -362,6 +362,17 @@
   version = "v1.7.1"
 
 [[projects]]
+  digest = "1:814ea16499ac22100fd2b3d74bcdcfb2480dd13d7a1c3eee74179dc84fcb4397"
+  name = "github.com/grpc-ecosystem/go-grpc-middleware"
+  packages = [
+    ".",
+    "util/metautils",
+  ]
+  pruneopts = "UT"
+  revision = "c250d6563d4d4c20252cd865923440e829844f4e"
+  version = "v1.0.0"
+
+[[projects]]
   digest = "1:4f30fff718a459f9be272e7aa87463cdf4ba27bb8bd7f586ac34c36d670aada4"
   name = "github.com/grpc-ecosystem/grpc-gateway"
   packages = [
@@ -1101,6 +1112,8 @@
     "github.com/golang/protobuf/ptypes/empty",
     "github.com/google/uuid",
     "github.com/gorilla/mux",
+    "github.com/grpc-ecosystem/go-grpc-middleware",
+    "github.com/grpc-ecosystem/go-grpc-middleware/util/metautils",
     "github.com/joomcode/redispipe/redis",
     "github.com/joomcode/redispipe/redisconn",
     "github.com/json-iterator/go",

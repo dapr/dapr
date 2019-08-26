@@ -10,7 +10,6 @@ import (
 
 	"github.com/actionscore/actions/pkg/channel"
 	"github.com/actionscore/actions/pkg/components"
-	diag "github.com/actionscore/actions/pkg/diagnostics"
 	"github.com/actionscore/actions/pkg/messaging"
 	pb "github.com/actionscore/actions/pkg/proto"
 )
@@ -29,18 +28,16 @@ type api struct {
 	directMessaging   messaging.DirectMessaging
 	componentsHandler components.ComponentHandler
 	id                string
-	tracer            diag.Tracer
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(actionsID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, actor actors.Actors, componentHandler components.ComponentHandler, tracer diag.Tracer) API {
+func NewAPI(actionsID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, actor actors.Actors, componentHandler components.ComponentHandler) API {
 	return &api{
 		appChannel:        appChannel,
 		directMessaging:   directMessaging,
 		componentsHandler: componentHandler,
 		actor:             actor,
 		id:                actionsID,
-		tracer:            tracer,
 	}
 }
 

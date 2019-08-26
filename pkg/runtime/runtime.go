@@ -32,7 +32,6 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 
 	"github.com/actionscore/actions/pkg/components"
-	diag "github.com/actionscore/actions/pkg/diagnostics"
 	"github.com/actionscore/actions/pkg/modes"
 
 	log "github.com/Sirupsen/logrus"
@@ -336,18 +335,16 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 }
 
 func (a *ActionsRuntime) startHTTPServer(port int, allowedOrigins string) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding,
-		diag.CreateTracer(a.runtimeConfig.ID, fmt.Sprintf("%s:%d", a.hostAddress, a.runtimeConfig.GRPCPort), a.globalConfig.Spec.TracingSpec))
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, port, allowedOrigins)
-	server := http.NewServer(api, serverConf)
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, allowedOrigins)
+	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	server.StartNonBlocking()
 }
 
 func (a *ActionsRuntime) startGRPCServer(port int) error {
-	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.actor, a,
-		diag.CreateTracer(a.runtimeConfig.ID, fmt.Sprintf("%s:%d", a.hostAddress, a.runtimeConfig.GRPCPort), a.globalConfig.Spec.TracingSpec))
-	serverConf := grpc.NewServerConfig(port)
-	server := grpc.NewServer(api, serverConf)
+	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.actor, a)
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
+	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	err := server.StartNonBlocking()
 
 	return err

@@ -41,7 +41,7 @@ func (s *server) StartNonBlocking() {
 
 	go func() {
 		if s.tracingSpec.Enabled {
-			diag.CreateExporter("action_id", string(s.config.Port), s.tracingSpec, nil)
+			diag.CreateExporter(s.config.ActionID, s.config.HostAddress, s.tracingSpec, nil)
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
 				diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(router.HandleRequest))))
 		} else {
