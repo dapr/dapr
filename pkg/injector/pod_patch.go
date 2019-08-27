@@ -57,7 +57,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace,
 	config := getConfig(pod.Annotations)
 	protocol := getProtocol(pod.Annotations)
 	id := getAppID(pod)
-	placementAddress := getKubernetesDNS(placementService, namespace)
+	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
 	apiSrvAddress := getKubernetesDNS(apiAddress, namespace)
 
 	appPortStr := ""
