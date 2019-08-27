@@ -185,7 +185,7 @@ Our publisher is broken up into a client and a server:
 
 #### Client
 
-Our client is a simple single page React application that was bootstrapped with [Create React App](<INSERTLINK>). The relevant client code sits in `react-form/client/src/MessageForm.js` where we present a form to our users. As our users update the form, we update React state with the latest aggregated JSON data. By default the data is set to:
+Our client is a simple single page React application that was bootstrapped with [Create React App](https://github.com/facebook/create-react-app). The relevant client code sits in `react-form/client/src/MessageForm.js` where we present a form to our users. As our users update the form, we update React state with the latest aggregated JSON data. By default the data is set to:
 
 ```js
 {
