@@ -29,7 +29,7 @@ func main() {
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	actionsID := flag.String("actions-id", "", "A unique ID for Actions. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for an Actions control plane")
-	placementServiceAddresss := flag.String("placement-address", "", "Address for the Actions placement service")
+	placementServiceAddress := flag.String("placement-address", "", "Address for the Actions placement service")
 	allowedOrigins := flag.String("allowed-origins", actionsrt.DefaultAllowedOrigins, "Allowed HTTP origins")
 
 	flag.Parse()
@@ -60,7 +60,7 @@ func main() {
 		}
 	}
 
-	runtimeConfig := actionsrt.NewRuntimeConfig(*actionsID, *placementServiceAddresss, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
+	runtimeConfig := actionsrt.NewRuntimeConfig(*actionsID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
 		*appProtocol, *mode, actionHTTP, actionGRPC, applicationPort)
 
 	var globalConfig *global_config.Configuration
