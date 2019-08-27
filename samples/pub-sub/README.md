@@ -168,16 +168,16 @@ Again, this is how we tell Actions what topics we want to subscribe to. In this 
 ```python
 @app.route('/A', methods=['POST'])
 def a_subscriber():
-    content = request.json
-    print(f'Topic A: {content}', file=sys.stderr)
+    print(f'A: {request.json}', flush=True)
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route('/C', methods=['POST'])
-def b_subscriber():
-    content = request.json
-    print(f'Topic C: {content}', file=sys.stderr)
-    return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+def c_subscriber():
+    print(f'C: {request.json}', flush=True)
+    return json.dumps({'success':True}), 200, {'ContentType':'application/json'}
 ```
+
+Note: if we don't set `flush=True` we won't see the logs when we run `kubectl get logs...`. This is a product of Python's output buffering.
 
 ### React Front End
 
