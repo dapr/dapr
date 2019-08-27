@@ -17,6 +17,8 @@ All decisions are categorized in the following folders:
   - [API-002: Actor API design](./api/API-002-actor-api-design.md)
   - [API-003: Messaging API names](./api/API-003-messaging-api-names.md)
   - [API-004: Binding Manifests](./api/API-004-binding-manifests.md)
+  - [API-005: State store behavior](./api/API-005-state-store-behavior.md)
+  - 
 * **CLI** - Decisions on Actions CLI architecture and behaviors.
 
   - [CLI-001: CLI and runtim versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
