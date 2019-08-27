@@ -457,6 +457,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 
 		conn, err := grpc.Dial(placementAddress, grpc.WithInsecure())
 		if err != nil {
+			log.Debugf("error connecting to placement service: %s", err)
 			time.Sleep(retryInterval)
 			continue
 		}
@@ -465,6 +466,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 		client := pb.NewPlacementServiceClient(conn)
 		stream, err := client.ReportActionStatus(ctx)
 		if err != nil {
+			log.Debugf("error establishing client to placement service: %s", err)
 			time.Sleep(retryInterval)
 			continue
 		}
