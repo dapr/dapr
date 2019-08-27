@@ -20,3 +20,6 @@ spec:
       containers:
       - name: python-subscriber
         image: actionscore.azurecr.io/samples/python-subscriber
+        ports:
+        - containerPort: 5000
+        imagePullPolicy: Always
