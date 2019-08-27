@@ -85,3 +85,7 @@ ignored = ["github.com/a8m/documentdb-go"]
 [[constraint]]
   name = "github.com/valyala/fasthttp"
   version = "1.4.0"
+
+[[override]]
+  name = "github.com/DataDog/zstd"
+  version = "1.4.1"
