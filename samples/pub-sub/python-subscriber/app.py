@@ -13,15 +13,12 @@ def subscribe():
 
 @app.route('/A', methods=['POST'])
 def a_subscriber():
-    content = request.json
-    print(f'Topic A: {content}', flush=True)
-
+    print(f'A: {request.json}', flush=True)
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route('/C', methods=['POST'])
 def c_subscriber():
-    content = request.json
-    print(f'Topic C: {content}', flush=True)
+    print(f'C: {request.json}', flush=True)
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 app.run()
