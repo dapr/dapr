@@ -30,7 +30,6 @@ BASE_PACKAGE_NAME := github.com/actionscore/actions
 .PHONY: dep
 dep:
 	go mod vendor
-	go mod why
 
 ################################################################################
 # Build																           #
