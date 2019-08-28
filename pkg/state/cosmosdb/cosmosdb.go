@@ -8,7 +8,7 @@ import (
 
 	"github.com/actionscore/actions/pkg/components/state"
 
-	documentdb "github.com/a8m/documentdb-go"
+	"github.com/a8m/documentdb"
 )
 
 // StateStore is a CosmosDB state store

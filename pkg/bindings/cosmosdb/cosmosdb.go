@@ -4,8 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	_ "github.com/a8m/documentdb" // documentdb go pkg fix
-	documentdb "github.com/a8m/documentdb-go"
+	"github.com/a8m/documentdb"
 	"github.com/actionscore/actions/pkg/components/bindings"
 	"github.com/google/uuid"
 )

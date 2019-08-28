@@ -27,37 +27,19 @@ jobs:
           shopt -s extglob
           mv !(gopath) '$(modulePath)'
           echo '##vso[task.prependpath]$(GOBIN)'
-    - task: Bash@3
-      displayName: 'Install dep'
-      inputs:
-        targetType: 'inline'
-        script: |
-          curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-    - task: Go@0
-      displayName: 'Run go get documentdb'
-      inputs:
-        command: 'get'
-        arguments: '-u github.com/a8m/documentdb-go'
-        workingDirectory: '$(modulePath)/cmd/${{ parameters.binaryName }}'
-    - task: CmdLine@2
-      displayName: 'Run make deps'
-      inputs:
-        script: 'make deps'
-        workingDirectory: '$(modulePath)'
-        failOnStderr: true
     - task: CmdLine@2
       displayName: 'Run make test'
       condition: ne('${{ parameters.targetArch }}', 'arm')
       inputs:
         script: 'make test'
         workingDirectory: '$(modulePath)'
-        failOnStderr: true
+        failOnStderr: false
     - task: CmdLine@2
       displayName: 'Run make build'
       inputs:
         script: 'make build BINARIES=${{ parameters.binaryName }} TARGETS=${{ parameters.targetOS }} ARCH=$(GOARCH)'
         workingDirectory: '$(modulePath)'
-        failOnStderr: true
+        failOnStderr: false
     - task: ArchiveFiles@2
       displayName: 'Build $(GOARCH)/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
       inputs:

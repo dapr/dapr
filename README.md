@@ -166,8 +166,6 @@ cd $GOPATH/src/github.com/actionscore/actions/cmd/actionsrt
 go build -o action
 ```
 
-**Note**: There is a known issue with a Document DB package that may cause build issues. If building throws an error containing `Cannot find package "github.com/a8m/documentdb-go"`, you'll need to get that package by running `go get -u github.com/a8m/documentdb-go`.
-
 **Windows Users**: Actions currently takes a dependency on gcc. If building throws an error containing: `"gcc": executable file not found in %PATH%`, you'll need to install gcc through the [Cygwin Project](https://sourceware.org/cygwin/) or the [MinGW Project](http://mingw-w64.org/doku.php).
 
 

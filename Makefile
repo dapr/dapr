@@ -2,6 +2,8 @@
 # Variables																       #
 ################################################################################
 
+export GO111MODULE=on
+
 GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
 TARGETS		?= darwin linux windows
@@ -22,32 +24,26 @@ endif
 BASE_PACKAGE_NAME := github.com/actionscore/actions
 
 ################################################################################
-# Dependencies																   #
+# Dependencies                                                                 #
 ################################################################################
 
 .PHONY: dep
 dep:
-ifeq ($(shell command -v dep 2> /dev/null),)
-	go get -u -v github.com/golang/dep/cmd/dep
-endif
-
-.PHONY: deps
-deps: dep
-	dep ensure -v
+	go mod vendor
 
 ################################################################################
 # Build																           #
 ################################################################################
 
 .PHONY: build
-build:
+build: dep
 	  set -e; \
 	  for b in $(BINARIES); do \
 	  		for t in $(TARGETS); do \
 			  	if test "windows" = $$t; then EXT=".exe"; else EXT=""; fi; \
 				CGO_ENABLED=$(CGO) GOOS=$$t GOARCH=$(ARCH) go build \
 				-ldflags "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(ACTIONS_VERSION)" \
-				-o dist/"$$t"_$(ARCH)/$$b$$EXT \
+				-o dist/"$$t"_$(ARCH)/$$b$$EXT -mod=vendor \
 				cmd/$$b/main.go; \
 			done; \
 	  done;
@@ -56,5 +52,5 @@ build:
 # Tests																           #
 ################################################################################
 .PHONY: test
-test:
+test: dep
 	go test ./pkg/...

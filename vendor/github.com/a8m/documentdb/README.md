@@ -2,11 +2,6 @@
 
 > Go driver for Microsoft Azure DocumentDB
 
-### Note
-
-This is a **WIP** project.  
-I'm doing it on my spare time and hope to stabilize it soon. if you want to contribute, feel free to take some task [here](https://github.com/a8m/documentdb-go/issues/3)
-
 ## Table of contents:
 
 * [Get Started](#get-started)
@@ -46,13 +41,15 @@ I'm doing it on my spare time and hope to stabilize it soon. if you want to cont
   * [Create](#createuserdefinedfunction)
   * [Replace](#replaceuserdefinedfunction)
   * [Delete](#deleteuserdefinedfunction)
+ * [Iterator](#iterator)
+  * [DocumentIterator](#documentIterator)
 
 ### Get Started
 
 #### Installation
 
 ```sh
-$ go get github.com/a8m/documentdb-go
+$ go get github.com/a8m/documentdb
 ```
 
 #### Add to your project
@@ -276,7 +273,11 @@ type User struct {
 func main() {
 	// ...
 	var users []User
-	err = client.QueryDocuments("coll_self_link", "SELECT * FROM ROOT r", &users)
+	_, err = client.QueryDocuments(
+        "coll_self_link", 
+        documentdb.NewQuery("SELECT * FROM ROOT r WHERE r.name=@name", documentdb.P{"@name", "john"}),
+        &users,
+    )
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -299,12 +300,16 @@ type User struct {
 func main() {
 	// ...
 	var users []User
-
-	partitionKey := func(reqOpts *documentdb.RequestOptions) {
-		reqOpts.PartitionKey = []string{"Your-Partition-Key"}
-	}
-
-	err = client.QueryDocumentsWithRequestOptions("coll_self_link", "SELECT * FROM ROOT r", &users, partitionKey)
+	_, err = client.QueryDocuments(
+        "coll_self_link", 
+		documentdb.NewQuery(
+			"SELECT * FROM ROOT r WHERE r.name=@name AND r.company_id = @company_id", 
+			documentdb.P{"@name", "john"}, 
+			documentdb.P{"@company_id", "1234"},
+		),
+		&users,
+		documentdb.PartitionKey("1234")
+    )
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -413,13 +418,37 @@ func main() {
 }
 ```
 
+### Iterator
+
+#### DocumentIterator
+
+```go
+func main() {
+	// ...
+	var docs []Document
+
+	iterator := documentdb.NewIterator(
+		client, documentdb.NewDocumentIterator("coll_self_link", nil, &docs, documentdb.PartitionKey("1"), documentdb.Limit(1)),
+	)
+
+	for iterator.Next() {
+		if err := iterator.Error(); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(len(docs))
+	}    
+
+	// ...
+}
+```
+
 ### Examples
 
 * [Go DocumentDB Example](https://github.com/a8m/go-documentdb-example) - A users CRUD application using Martini and DocumentDB
 
 ### License
 
-MIT
+Distributed under the MIT license, which is available in the file LICENSE.
 
-[travis-image]: https://img.shields.io/travis/a8m/documentdb-go.svg?style=flat-square
-[travis-url]: https://travis-ci.org/a8m/documentdb-go
+[travis-image]: https://img.shields.io/travis/a8m/documentdb.svg?style=flat-square
+[travis-url]: https://travis-ci.org/a8m/documentdb

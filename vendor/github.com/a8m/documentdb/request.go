@@ -1,23 +1,38 @@
 package documentdb
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	HEADER_XDATE         = "X-Ms-Date"
-	HEADER_AUTH          = "Authorization"
-	HEADER_VER           = "X-Ms-Version"
-	HEADER_CONTYPE       = "Content-Type"
-	HEADER_CONLEN        = "Content-Length"
-	HEADER_IS_QUERY      = "X-Ms-Documentdb-Isquery"
-	HEADER_UPSERT        = "x-ms-documentdb-is-upsert"
-	HEADER_PARTITION_KEY = "x-ms-documentdb-partitionkey"
+	HeaderXDate               = "X-Ms-Date"
+	HeaderAuth                = "Authorization"
+	HeaderVersion             = "X-Ms-Version"
+	HeaderContentType         = "Content-Type"
+	HeaderContentLength       = "Content-Length"
+	HeaderIsQuery             = "X-Ms-Documentdb-Isquery"
+	HeaderUpsert              = "x-ms-documentdb-is-upsert"
+	HeaderPartitionKey        = "x-ms-documentdb-partitionkey"
+	HeaderMaxItemCount        = "x-ms-max-item-count"
+	HeaderContinuation        = "x-ms-continuation"
+	HeaderConsistency         = "x-ms-consistency-level"
+	HeaderSessionToken        = "x-ms-session-token"
+	HeaderCrossPartition      = "x-ms-documentdb-query-enablecrosspartition"
+	HeaderIfMatch             = "If-Match"
+	HeaderIfNonMatch          = "If-None-Match"
+	HeaderIfModifiedSince     = "If-Modified-Since"
+	HeaderActivityID          = "x-ms-activity-id"
+	HeaderRequestCharge       = "x-ms-request-charge"
+	HeaderAIM                 = "A-IM"
+	HeaderPartitionKeyRangeID = "x-ms-documentdb-partitionkeyrangeid"
+
+	SupportedVersion = "2017-02-22"
 )
 
 // Request Error
@@ -45,81 +60,42 @@ func ResourceRequest(link string, req *http.Request) *Request {
 
 // Add 3 default headers to *Request
 // "x-ms-date", "x-ms-version", "authorization"
-func (req *Request) DefaultHeaders(mKey string) (err error) {
-	req.Header.Add(HEADER_XDATE, time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT"))
-	req.Header.Add(HEADER_VER, "2017-02-22")
+func (req *Request) DefaultHeaders(mKey *Key) (err error) {
+	req.Header.Add(HeaderXDate, formatDate(time.Now()))
+	req.Header.Add(HeaderVersion, SupportedVersion)
 
-	// Auth
-	parts := []string{req.Method, req.rType, req.rId, req.Header.Get(HEADER_XDATE), req.Header.Get("Date"), ""}
-	sign, err := authorize(strings.ToLower(strings.Join(parts, "\n")), mKey)
+	b := buffers.Get().(*bytes.Buffer)
+	b.Reset()
+	b.WriteString(req.Method)
+	b.WriteRune('\n')
+	b.WriteString(req.rType)
+	b.WriteRune('\n')
+	b.WriteString(req.rId)
+	b.WriteRune('\n')
+	b.WriteString(req.Header.Get(HeaderXDate))
+	b.WriteRune('\n')
+	b.WriteString(req.Header.Get("Date"))
+	b.WriteRune('\n')
+
+	sign, err := authorize(bytes.ToLower(b.Bytes()), mKey)
 	if err != nil {
 		return err
 	}
 
-	masterToken := "master"
-	tokenVersion := "1.0"
-	req.Header.Add(HEADER_AUTH, url.QueryEscape("type="+masterToken+"&ver="+tokenVersion+"&sig="+sign))
-	return
-}
+	buffers.Put(b)
 
-// UpsertHeaders just add a header for upsert with DefaultHeaders
-func (req *Request) UpsertHeaders(mkey string) (err error) {
-	err = req.DefaultHeaders(mkey)
-	if err != nil {
-		return err
-	}
-	req.Header.Add(HEADER_UPSERT, "true")
-	return
-}
+	req.Header.Add(HeaderAuth, url.QueryEscape("type=master&ver=1.0&sig="+sign))
 
-// Add Request Options headers
-func (req *Request) RequestOptionsHeaders(requestOptions []func(*RequestOptions)) (err error) {
-
-	if requestOptions == nil {
-		return
-	}
-
-	reqOpts := RequestOptions{}
-
-	for _, requestOption := range requestOptions {
-		requestOption(&reqOpts)
-	}
-
-	if reqOpts.PartitionKey != "" {
-		// The partition key header must be an array following the spec:
-		// https: //docs.microsoft.com/en-us/rest/api/cosmos-db/common-cosmosdb-rest-request-headers
-		// and must contain brackets
-		// example: x-ms-documentdb-partitionkey: [ "abc" ]
-
-		var (
-			partitionKey []byte
-			err          error
-		)
-		switch v := reqOpts.PartitionKey.(type) {
-		case json.Marshaler:
-			partitionKey, err = json.Marshal(v)
-		default:
-			partitionKey, err = json.Marshal([]interface{}{v})
-		}
-
-		if err != nil {
-			return err
-		}
-
-		req.Header[HEADER_PARTITION_KEY] = []string{string(partitionKey)}
-	}
 	return
 }
 
 // Add headers for query request
 func (req *Request) QueryHeaders(len int) {
-	req.Header.Add(HEADER_CONTYPE, "application/query+json")
-	req.Header.Add(HEADER_IS_QUERY, "true")
-	req.Header.Add(HEADER_CONLEN, string(len))
+	req.Header.Add(HeaderContentType, "application/query+json")
+	req.Header.Add(HeaderIsQuery, "true")
+	req.Header.Add(HeaderContentLength, strconv.Itoa(len))
 }
 
-// Get path and return resource Id and Type
-// (e.g: "/dbs/b5NCAA==/" ==> "b5NCAA==", "dbs")
 func parse(id string) (rId, rType string) {
 	if strings.HasPrefix(id, "/") == false {
 		id = "/" + id
@@ -139,4 +115,14 @@ func parse(id string) (rId, rType string) {
 		rType = parts[l-2]
 	}
 	return
+}
+
+func formatDate(t time.Time) string {
+	t = t.UTC()
+	return t.Format("Mon, 02 Jan 2006 15:04:05 GMT")
+}
+
+type queryPartitionKeyRangesRequest struct {
+	Ranges []PartitionKeyRange `json:"PartitionKeyRanges,omitempty"`
+	Count  int                 `json:"_count,omitempty"`
 }
