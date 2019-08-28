@@ -1,21 +1,13 @@
 language: go
-go_import_path: github.com/sirupsen/logrus
-git:
-  depth: 1
+go:
+  - 1.9.x
+  - 1.10.x
 env:
-  - GO111MODULE=on
-  - GO111MODULE=off
-go: [ 1.10.x, 1.11.x, 1.12.x ]
-os: [ linux, osx, windows ]
-matrix:
-  exclude:
-    - env: GO111MODULE=on
-      go: 1.10.x
+  - GOMAXPROCS=4 GORACE=halt_on_error=1
 install:
-  - if [[ "$GO111MODULE" ==  "on" ]]; then go mod download; fi
-  - if [[ "$GO111MODULE" == "off" ]]; then go get github.com/stretchr/testify/assert golang.org/x/sys/unix github.com/konsorten/go-windows-terminal-sequences; fi
+  - go get github.com/stretchr/testify/assert
+  - go get gopkg.in/gemnasium/logrus-airbrake-hook.v2
+  - go get golang.org/x/sys/unix
+  - go get golang.org/x/sys/windows
 script:
-  - export GOMAXPROCS=4
-  - export GORACE=halt_on_error=1
   - go test -race -v ./...
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then go test -race -v -tags appengine ./... ; fi

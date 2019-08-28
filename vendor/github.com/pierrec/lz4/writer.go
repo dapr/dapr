@@ -11,9 +11,6 @@ import (
 // Writer implements the LZ4 frame encoder.
 type Writer struct {
 	Header
-	// Handler called when a block has been successfully written out.
-	// It provides the number of bytes written.
-	OnBlockDone func(size int)
 
 	buf       [19]byte      // magic number(4) + header(flags(2)+[Size(8)+DictID(4)]+checksum(1)) does not exceed 19 bytes
 	dst       io.Writer     // Destination.
@@ -49,8 +46,8 @@ func (z *Writer) writeHeader() error {
 	if n := 2 * bSize; cap(z.zdata) < n {
 		z.zdata = make([]byte, n, n)
 	}
-	z.data = z.zdata[:bSize]
-	z.zdata = z.zdata[:cap(z.zdata)][bSize:]
+	z.zdata = z.zdata[:bSize]
+	z.data = z.zdata[:cap(z.zdata)][bSize:]
 	z.idx = 0
 
 	// Size is optional.
@@ -185,12 +182,8 @@ func (z *Writer) compressBlock(data []byte) error {
 	if err := z.writeUint32(bLen); err != nil {
 		return err
 	}
-	written, err := z.dst.Write(zdata)
-	if err != nil {
+	if _, err := z.dst.Write(zdata); err != nil {
 		return err
-	}
-	if h := z.OnBlockDone; h != nil {
-		h(written)
 	}
 
 	if z.BlockChecksum {
@@ -220,11 +213,7 @@ func (z *Writer) Flush() error {
 		return nil
 	}
 
-	if err := z.compressBlock(z.data[:z.idx]); err != nil {
-		return err
-	}
-	z.idx = 0
-	return nil
+	return z.compressBlock(z.data[:z.idx])
 }
 
 // Close closes the Writer, flushing any unwritten data to the underlying io.Writer, but does not close the underlying io.Writer.

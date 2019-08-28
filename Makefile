@@ -29,6 +29,7 @@ BASE_PACKAGE_NAME := github.com/actionscore/actions
 build:
 	  set -e; \
 	  export GO111MODULE=on
+	  go mod vendor
 	  for b in $(BINARIES); do \
 	  		for t in $(TARGETS); do \
 			  	if test "windows" = $$t; then EXT=".exe"; else EXT=""; fi; \

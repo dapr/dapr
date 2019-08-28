@@ -57,7 +57,6 @@ import (
 )
 
 const secondInNanos = int64(time.Second / time.Nanosecond)
-const maxSecondsInDuration = 315576000000
 
 // Marshaler is a configurable object for converting between
 // protocol buffer objects and a JSON representation for them.
@@ -165,11 +164,6 @@ type wkt interface {
 	XXX_WellKnownType() string
 }
 
-var (
-	wktType     = reflect.TypeOf((*wkt)(nil)).Elem()
-	messageType = reflect.TypeOf((*proto.Message)(nil)).Elem()
-)
-
 // marshalObject writes a struct to the Writer.
 func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeURL string) error {
 	if jsm, ok := v.(JSONPBMarshaler); ok {
@@ -188,12 +182,7 @@ func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeU
 				return fmt.Errorf("failed to marshal type URL %q to JSON: %v", typeURL, err)
 			}
 			js["@type"] = (*json.RawMessage)(&turl)
-			if m.Indent != "" {
-				b, err = json.MarshalIndent(js, indent, m.Indent)
-			} else {
-				b, err = json.Marshal(js)
-			}
-			if err != nil {
+			if b, err = json.Marshal(js); err != nil {
 				return err
 			}
 		}
@@ -217,26 +206,19 @@ func (m *Marshaler) marshalObject(out *errWriter, v proto.Message, indent, typeU
 			// Any is a bit more involved.
 			return m.marshalAny(out, v, indent)
 		case "Duration":
+			// "Generated output always contains 0, 3, 6, or 9 fractional digits,
+			//  depending on required precision."
 			s, ns := s.Field(0).Int(), s.Field(1).Int()
-			if s < -maxSecondsInDuration || s > maxSecondsInDuration {
-				return fmt.Errorf("seconds out of range %v", s)
-			}
 			if ns <= -secondInNanos || ns >= secondInNanos {
 				return fmt.Errorf("ns out of range (%v, %v)", -secondInNanos, secondInNanos)
 			}
 			if (s > 0 && ns < 0) || (s < 0 && ns > 0) {
 				return errors.New("signs of seconds and nanos do not match")
 			}
-			// Generated output always contains 0, 3, 6, or 9 fractional digits,
-			// depending on required precision, followed by the suffix "s".
-			f := "%d.%09d"
-			if ns < 0 {
+			if s < 0 {
 				ns = -ns
-				if s == 0 {
-					f = "-%d.%09d"
-				}
 			}
-			x := fmt.Sprintf(f, s, ns)
+			x := fmt.Sprintf("%d.%09d", s, ns)
 			x = strings.TrimSuffix(x, "000")
 			x = strings.TrimSuffix(x, "000")
 			x = strings.TrimSuffix(x, ".000")
@@ -536,8 +518,7 @@ func (m *Marshaler) marshalValue(out *errWriter, prop *proto.Properties, v refle
 
 	// Handle well-known types.
 	// Most are handled up in marshalObject (because 99% are messages).
-	if v.Type().Implements(wktType) {
-		wkt := v.Interface().(wkt)
+	if wkt, ok := v.Interface().(wkt); ok {
 		switch wkt.XXX_WellKnownType() {
 		case "NullValue":
 			out.write("null")
@@ -1283,8 +1264,8 @@ func checkRequiredFields(pb proto.Message) error {
 }
 
 func checkRequiredFieldsInValue(v reflect.Value) error {
-	if v.Type().Implements(messageType) {
-		return checkRequiredFields(v.Interface().(proto.Message))
+	if pm, ok := v.Interface().(proto.Message); ok {
+		return checkRequiredFields(pm)
 	}
 	return nil
 }
