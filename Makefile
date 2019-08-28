@@ -30,7 +30,6 @@ BASE_PACKAGE_NAME := github.com/actionscore/actions
 .PHONY: build
 build:
 	  set -e; \
-	  env GO111MODULE=on
 	  go mod vendor
 	  for b in $(BINARIES); do \
 	  		for t in $(TARGETS); do \
