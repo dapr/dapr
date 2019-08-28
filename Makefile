@@ -24,13 +24,20 @@ endif
 BASE_PACKAGE_NAME := github.com/actionscore/actions
 
 ################################################################################
+# Dependencies                                                                 #
+################################################################################
+
+.PHONY: dep
+dep:
+	go mod vendor
+
+################################################################################
 # Build																           #
 ################################################################################
 
 .PHONY: build
-build:
+build: dep
 	  set -e; \
-	  go mod vendor
 	  for b in $(BINARIES); do \
 	  		for t in $(TARGETS); do \
 			  	if test "windows" = $$t; then EXT=".exe"; else EXT=""; fi; \
@@ -45,5 +52,5 @@ build:
 # Tests																           #
 ################################################################################
 .PHONY: test
-test:
+test: dep
 	go test ./pkg/...
