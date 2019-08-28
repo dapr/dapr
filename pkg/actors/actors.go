@@ -126,14 +126,8 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 
 func (a *actorsRuntime) getStatusCodeFromMetadata(metadata map[string]string) int {
 	code := metadata[http.HTTPStatusCode]
-	if code != "" {
-		statusCode, err := strconv.Atoi(code)
-		if err == nil {
-			return statusCode
-		}
-	}
-
-	return 200
+	statusCode, _ := strconv.Atoi(code)
+	return statusCode
 }
 
 func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
@@ -211,18 +205,14 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	lock.Lock()
 	defer lock.Unlock()
 
-	if !exists {
-		err := a.tryActivateActor(actorType, actorID)
-		if err != nil {
-			a.actorsTable.Delete(key)
-			return nil, err
-		}
-	} else {
-		act.busy = true
-		act.lastUsedTime = time.Now()
-	}
+	act.busy = true
+	act.lastUsedTime = time.Now()
 
 	method := fmt.Sprintf("actors/%s/%s/method/%s", actorType, actorID, actorMethod)
+	if !exists {
+		method = fmt.Sprintf("%s?activate=true", method)
+	}
+
 	req := channel.InvokeRequest{
 		Method:   method,
 		Payload:  data,
@@ -237,12 +227,12 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	resp, err := a.appChannel.InvokeMethod(&req)
 	act.busy = false
 
-	if err != nil {
-		return nil, err
+	if !exists && a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+		a.actorsTable.Delete(key)
 	}
 
-	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
-		return nil, errors.New("error from actor sdk")
+	if err != nil {
+		return nil, fmt.Errorf("error calling actor type %s with id %s on method %s: %s", actorType, actorID, method, err)
 	}
 
 	return &CallResponse{
@@ -274,24 +264,6 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 		Data:     resp.Data.Value,
 		Metadata: resp.Metadata,
 	}, nil
-}
-
-func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
-	// Send the activation signal to the app
-	req := channel.InvokeRequest{
-		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
-		Metadata: map[string]string{http.HTTPVerb: http.Post},
-		Payload:  nil,
-	}
-
-	resp, err := a.appChannel.InvokeMethod(&req)
-	if err != nil || a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
-		key := a.constructCombinedActorKey(actorType, actorID)
-		a.actorsTable.Delete(key)
-		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
-	}
-
-	return nil
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
