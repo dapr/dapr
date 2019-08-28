@@ -33,13 +33,13 @@ jobs:
       inputs:
         script: 'make test'
         workingDirectory: '$(modulePath)'
-        failOnStderr: true
+        failOnStderr: false
     - task: CmdLine@2
       displayName: 'Run make build'
       inputs:
         script: 'make build BINARIES=${{ parameters.binaryName }} TARGETS=${{ parameters.targetOS }} ARCH=$(GOARCH)'
         workingDirectory: '$(modulePath)'
-        failOnStderr: true
+        failOnStderr: false
     - task: ArchiveFiles@2
       displayName: 'Build $(GOARCH)/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
       inputs:

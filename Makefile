@@ -40,7 +40,6 @@ build:
 				cmd/$$b/main.go; \
 			done; \
 	  done;
-	  2> >(while read line; do (>&2 echo "STDERROR: $line"); done)
 
 ################################################################################
 # Tests																           #
@@ -48,5 +47,3 @@ build:
 .PHONY: test
 test:
 	go test ./pkg/...
-	2> >(while read line; do (>&2 echo "STDERROR: $line"); done)
-
