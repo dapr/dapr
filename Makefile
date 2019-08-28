@@ -43,7 +43,7 @@ build: dep
 			  	if test "windows" = $$t; then EXT=".exe"; else EXT=""; fi; \
 				CGO_ENABLED=$(CGO) GOOS=$$t GOARCH=$(ARCH) go build \
 				-ldflags "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(ACTIONS_VERSION)" \
-				-o dist/"$$t"_$(ARCH)/$$b$$EXT \
+				-o dist/"$$t"_$(ARCH)/$$b$$EXT -mod=vendor \
 				cmd/$$b/main.go; \
 			done; \
 	  done;
