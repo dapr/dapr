@@ -2,6 +2,8 @@
 # Variables																       #
 ################################################################################
 
+export GO111MODULE=on
+
 GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
 TARGETS		?= darwin linux windows
@@ -28,7 +30,7 @@ BASE_PACKAGE_NAME := github.com/actionscore/actions
 .PHONY: build
 build:
 	  set -e; \
-	  export GO111MODULE=on
+	  env GO111MODULE=on
 	  go mod vendor
 	  for b in $(BINARIES); do \
 	  		for t in $(TARGETS); do \
