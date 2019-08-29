@@ -40,7 +40,6 @@ namespace Subtract
                 app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
             app.UseMvc();
         }
     }
