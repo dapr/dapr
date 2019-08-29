@@ -29,7 +29,6 @@ BASE_PACKAGE_NAME := github.com/actionscore/actions
 
 .PHONY: dep
 dep:
-	git config --unset https.proxy
 	go mod vendor
 
 ################################################################################
