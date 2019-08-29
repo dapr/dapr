@@ -118,7 +118,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	}
 
 	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
-		return fmt.Errorf("error from actor sdk: %s", string(resp.Data))
+		return fmt.Errorf("error from actor service: %s", string(resp.Data))
 	}
 
 	return nil
@@ -242,7 +242,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 
 	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
-		return nil, fmt.Errorf("error from actor sdk: %s", string(resp.Data))
+		return nil, fmt.Errorf("error from actor service: %s", string(resp.Data))
 	}
 
 	return &CallResponse{
