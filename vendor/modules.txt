@@ -222,8 +222,10 @@ github.com/stretchr/testify/assert
 github.com/valyala/bytebufferpool
 # github.com/valyala/fasthttp v1.4.0
 github.com/valyala/fasthttp
+github.com/valyala/fasthttp/pprofhandler
 github.com/valyala/fasthttp/fasthttputil
 github.com/valyala/fasthttp/stackless
+github.com/valyala/fasthttp/fasthttpadaptor
 # go.opencensus.io v0.21.0
 go.opencensus.io/trace
 go.opencensus.io/trace/propagation

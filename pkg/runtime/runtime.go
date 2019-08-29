@@ -141,7 +141,7 @@ func (a *ActionsRuntime) initRuntime() error {
 		log.Warnf("failed to init actors: %s", err)
 	}
 
-	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.AllowedOrigins)
+	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	err = a.startGRPCServer(a.runtimeConfig.GRPCPort)
@@ -334,9 +334,9 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 	return err
 }
 
-func (a *ActionsRuntime) startHTTPServer(port int, allowedOrigins string) {
+func (a *ActionsRuntime) startHTTPServer(port, profilePort int, allowedOrigins string) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, allowedOrigins)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins)
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	server.StartNonBlocking()
 }
