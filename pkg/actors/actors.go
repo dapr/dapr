@@ -314,17 +314,6 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 }
 
 func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) error {
-	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
-	val, exists := a.actorsTable.Load(actorKey)
-	if !exists {
-		return fmt.Errorf("actor id %s is not activated", req.ActorID)
-	}
-
-	act := val.(*actor)
-	lock := act.lock
-	lock.Lock()
-	defer lock.Unlock()
-
 	requests := []state.TransactionalRequest{}
 	for _, o := range req.Operations {
 		switch o.Operation {
@@ -370,17 +359,6 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 }
 
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
-	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
-	val, exists := a.actorsTable.Load(actorKey)
-	if !exists {
-		return fmt.Errorf("actor id %s is not activated", req.ActorID)
-	}
-
-	act := val.(*actor)
-	lock := act.lock
-	lock.Lock()
-	defer lock.Unlock()
-
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Set(&state.SetRequest{
 		Value: req.Data,
@@ -390,17 +368,6 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 }
 
 func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
-	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
-	val, exists := a.actorsTable.Load(actorKey)
-	if !exists {
-		return fmt.Errorf("actor id %s is not activated", req.ActorID)
-	}
-
-	act := val.(*actor)
-	lock := act.lock
-	lock.Lock()
-	defer lock.Unlock()
-
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Delete(&state.DeleteRequest{
 		Key: key,
