@@ -53,4 +53,4 @@ build: dep
 ################################################################################
 .PHONY: test
 test: dep
-	go test ./pkg/...
+	go test ./pkg/... -mod=readonly

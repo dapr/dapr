@@ -93,7 +93,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 // CreateLocalChannel creates an HTTP AppChannel
 func CreateLocalChannel(port int) (channel.AppChannel, error) {
 	return &Channel{
-		client:      &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}, ReadTimeout: time.Second * 60},
+		client:      &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}, ReadTimeout: time.Second * 60, MaxIdemponentCallAttempts: 0},
 		baseAddress: fmt.Sprintf("http://127.0.0.1:%v", port),
 	}, nil
 }
