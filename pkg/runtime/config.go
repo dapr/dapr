@@ -17,6 +17,8 @@ const (
 	DefaultActionsHTTPPort = 3500
 	// DefaultActionsGRPCPort is the default gRPC port for Actions
 	DefaultActionsGRPCPort = 50001
+	// DefaultProfilePort is the default port for profiling endpoints
+	DefaultProfilePort = 7777
 	// DefaultComponentsPath is the default dir for Actions components (standalone mode)
 	DefaultComponentsPath = "./components"
 	// DefaultAllowedOrigins is the default origins allowed for the Actions HTTP servers
@@ -27,6 +29,7 @@ const (
 type Config struct {
 	ID                      string
 	HTTPPort                int
+	ProfilePort             int
 	GRPCPort                int
 	ApplicationPort         int
 	ApplicationProtocol     Protocol
@@ -39,12 +42,13 @@ type Config struct {
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort int) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
 		GRPCPort:                grpcPort,
 		ApplicationPort:         appPort,
+		ProfilePort:             profilePort,
 		ApplicationProtocol:     Protocol(appProtocol),
 		Mode:                    modes.ActionsMode(mode),
 		PlacementServiceAddress: placementServiceAddress,

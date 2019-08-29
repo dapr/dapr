@@ -24,6 +24,7 @@ func main() {
 	actionHTTPPort := flag.String("actions-http-port", fmt.Sprintf("%v", actionsrt.DefaultActionsHTTPPort), "HTTP port for Actions to listen on")
 	actionGRPCPort := flag.String("actions-grpc-port", fmt.Sprintf("%v", actionsrt.DefaultActionsGRPCPort), "gRPC port for Actions to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
+	profilePort := flag.String("profile-port", fmt.Sprintf("%v", actionsrt.DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("protocol", string(actionsrt.HTTPProtocol), "Protocol for the application: gRPC or http")
 	componentsPath := flag.String("components-path", actionsrt.DefaultComponentsPath, "Path for components directory. Standalone mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
@@ -52,6 +53,11 @@ func main() {
 		log.Fatalf("error parsing actions-grpc-port flag: %s", err)
 	}
 
+	profPort, err := strconv.Atoi(*profilePort)
+	if err != nil {
+		log.Fatalf("error parsing profile-port flag: %s", err)
+	}
+
 	applicationPort := 0
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
@@ -61,7 +67,7 @@ func main() {
 	}
 
 	runtimeConfig := actionsrt.NewRuntimeConfig(*actionsID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, actionHTTP, actionGRPC, applicationPort)
+		*appProtocol, *mode, actionHTTP, actionGRPC, applicationPort, profPort)
 
 	var globalConfig *global_config.Configuration
 
