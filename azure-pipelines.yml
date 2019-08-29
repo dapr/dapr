@@ -13,19 +13,19 @@ variables:
 jobs:
 - template: 'build-binary-template.yml'
   parameters:
-    poolImage: macOS-latest
+    poolImage: ubuntu-latest
     targetOS: darwin
     targetArch: amd64
     binaryName: actionsrt
 - template: 'build-binary-template.yml'
   parameters:
-    poolImage: macOS-latest
+    poolImage: ubuntu-latest
     targetOS: darwin
     targetArch: amd64
     binaryName: placement
 - template: 'build-binary-template.yml'
   parameters:
-    poolImage: macOS-latest
+    poolImage: ubuntu-latest
     targetOS: darwin
     targetArch: amd64
     binaryName: operator
