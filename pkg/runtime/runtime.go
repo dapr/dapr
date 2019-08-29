@@ -206,19 +206,20 @@ func (a *ActionsRuntime) OnComponentUpdated(component components.Component) {
 
 	if strings.Index(component.Spec.Type, "state") == 0 {
 		store, err := a.stateStoreRegistry.CreateStateStore(component.Spec.Type)
-		if err == nil {
-			err := a.stateStore.Init(state.Metadata{
-				ConnectionInfo: component.Spec.ConnectionInfo,
-				Properties:     component.Spec.Properties,
-			})
-			if err != nil {
-				log.Errorf("Error on init state store: %s", err)
-			} else {
-				a.stateStore = store
-			}
+		if err != nil {
+			log.Errorf("error creating state store: %s", err)
+			return
 		}
 
-		return
+		err = store.Init(state.Metadata{
+			ConnectionInfo: component.Spec.ConnectionInfo,
+			Properties:     component.Spec.Properties,
+		})
+		if err != nil {
+			log.Errorf("error on init state store: %s", err)
+		} else {
+			a.stateStore = store
+		}
 	} else if strings.Index(component.Spec.Type, "bindings") == 0 {
 		//TODO: implement update for input bindings too
 		binding, err := a.bindingsRegistry.CreateOutputBinding(component.Spec.Type)
