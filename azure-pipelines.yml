@@ -31,19 +31,19 @@ jobs:
     binaryName: operator
 - template: 'build-binary-template.yml'
   parameters:
-    poolImage: macOS-latest
+    poolImage: ubuntu-latest
     targetOS: linux
     targetArch: arm
     binaryName: actionsrt
 - template: 'build-binary-template.yml'
   parameters:
-    poolImage: macOS-latest
+    poolImage: ubuntu-latest
     targetOS: linux
     targetArch: arm
     binaryName: placement
 - template: 'build-binary-template.yml'
   parameters:
-    poolImage: macOS-latest
+    poolImage: ubuntu-latest
     targetOS: linux
     targetArch: arm
     binaryName: operator
