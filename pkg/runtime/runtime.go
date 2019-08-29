@@ -456,6 +456,7 @@ func (a *ActionsRuntime) initState(registry state.StateStoreRegistry) error {
 				})
 				if err != nil {
 					log.Warnf("error initializing state store %s: %s", s.Spec.Type, err)
+					continue
 				}
 
 				a.stateStore = store
