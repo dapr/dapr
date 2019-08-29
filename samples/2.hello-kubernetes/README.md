@@ -1,4 +1,4 @@
-# From Zero to Hero with Kubernetes
+# Hello Kubernetes
 
 This tutorial will get you up and running with Actions in a Kubernetes cluster. We'll be deploying a python app that generates messages and a Node app that consumes and persists them. The following architecture diagram illustrates the components that make up this sample: 
 
@@ -35,7 +35,7 @@ eventsource.actions.io "statestore" configured
 
 ## Step 3 - Understand the Code
 
-Now that we've setup actions and state, let's take a look at our services. Navigate to the Node.js app in the Kubernetes sample: `cd samples/kubernetes_zero_to_hero/node.js`.
+Now that we've setup actions and state, let's take a look at our services. Navigate to the Node.js app in the Kubernetes sample: `cd samples/2.hello-kubernetes/node.js`.
 
 In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers.
 
@@ -125,7 +125,7 @@ export NODE_APP=$(kubectl get svc nodeapp --output 'jsonpath={.status.loadBalanc
 ```
 
 ## Step 5 - Deploy the Python App with the Actions Sidecar
-Next, let's take a quick look at our python app. Navigate to the python app in the kubernetes sample: `cd samples/kubernetes_zero_to_hero/python/app.py`.
+Next, let's take a quick look at our python app. Navigate to the python app in the kubernetes sample: `cd samples/2.hello-kubernetes/python/app.py`.
 
 At a quick glance, this is a basic python app that posts JSON messages to ```localhost:3500```, which is the default listening port for Actions. We invoke our Node.js application's `neworder` endpoint by posting to `v1.0/actions/nodeapp/neworder`. Our message contains some `data` with an orderId that increments once per second:
 
