@@ -173,8 +173,8 @@ go build -o action
 
 Check out the following tutorials:
 
-* [From Zero to Hero with Kubernetes](samples/kubernetes_zero_to_hero)
-* [From Zero to Hero Locally](samples/local_zero_to_hero)
+* [Run Actions Locally](samples/1.hello-world)
+* [Run Actions in Kubernetes](samples/2.hello-kubernetes)
 * [Enable state management with Redis](docs/concepts/state/redis.md)
 * [Enable state management with CosmosDB](docs/concepts/state/cosmosdb.md)<br><br>
 * [Setup an AWS SQS Event Source](docs/aws_sqs.md)

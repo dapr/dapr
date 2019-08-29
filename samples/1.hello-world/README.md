@@ -1,4 +1,4 @@
-# From Zero to Hero Locally
+# Hello World
 
 This tutorial will demonstrate how to get Actions running locally on your machine. We'll be deploying a Node.js app that subscribes to order messages and persists them. The following architecture diagram illustrates the components that make up this sample: 
 
@@ -16,7 +16,7 @@ Follow [instructions](https://github.com/actionscore/actions#install-as-standalo
 
 ## Step 2 - Understand the Code
 
-Now that we've locally set up actions and cloned the repo, let's take a look at our local zero-to-hero sample. Navigate to the local_zero_to_hero sample: `cd samples/local_zero_to_hero/app.js`.
+Now that we've locally set up actions and cloned the repo, let's navigate to the Hello World sample: `cd samples/1.hello-world`.
 
 In the `app.js` you'll find a simple `express` application, which exposes a few routes and handlers. First, let's take a look at the `stateUrl` at the top of the file: 
 
@@ -86,11 +86,9 @@ This calls out to our Redis cache to grab the latest value of the "order" key, w
 
 ## Step 3 - Run the Node.js App with Actions
 
-1. Navigate to the zero to hero Node.js sample app: `cd samples/local_zero_to_hero`.
+1. Install dependencies: `npm install`. This will install `express` and `body-parser`, dependencies that are shown in our `package.json`.
 
-2. Install dependencies: `npm install`. This will install `express` and `body-parser`, dependencies that are shown in our `package.json`.
-
-3. Run Node.js app with Actions: `actions run --port 3500 --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
+2. Run Node.js app with Actions: `actions run --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
 
 ```
 Starting Actions with id mynode on port 3500
@@ -115,3 +113,7 @@ Now, let's just make sure that our order was successfully persisted to our state
 ![Postman Screenshot 2](./img/postman2.jpg)
 
 This invokes the `/order` route, which calls out to our Redis store for the latest data. Observe the expected result!
+
+## Next Steps
+
+Now that you've gotten Actions running locally on your machine, see the [Hello Kubernetes](../2.hello-kubernetes) to get set up in Kubernetes!

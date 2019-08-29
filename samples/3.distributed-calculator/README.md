@@ -20,7 +20,7 @@ In order to run this sample, you'll need to have an Actions-enabled Kubernetes c
 ## Running the Sample
 
 1. Navigate to the deploy directory in this sample directory: `cd deploy`
-2. Follow [these instructions](https://github.com/actionscore/actions/tree/master/samples/kubernetes_zero_to_hero#step-2---set-up-a-state-store) to create and configure a Redis store
+2. Follow [these instructions](https://github.com/actionscore/actions/tree/master/samples/2.hello-kubernetes#step-2---set-up-a-state-store) to create and configure a Redis store
 3. Deploy the React front-end: `kubectl apply -f react-calculator.yaml`
 4. Deploy each of the supporting applications:
 
