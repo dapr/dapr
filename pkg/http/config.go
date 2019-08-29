@@ -6,14 +6,16 @@ type ServerConfig struct {
 	ActionID       string
 	HostAddress    string
 	Port           int
+	ProfilePort    int
 }
 
 // NewServerConfig returns a new HTTP server config
-func NewServerConfig(actionID string, hostAddress string, port int, allowedOrigins string) ServerConfig {
+func NewServerConfig(actionID string, hostAddress string, port int, profilePort int, allowedOrigins string) ServerConfig {
 	return ServerConfig{
 		AllowedOrigins: allowedOrigins,
 		ActionID:       actionID,
 		HostAddress:    hostAddress,
 		Port:           port,
+		ProfilePort:    profilePort,
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/valyala/fasthttp/pprofhandler"
+
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	log "github.com/Sirupsen/logrus"
 	"github.com/actionscore/actions/pkg/config"
@@ -47,6 +49,11 @@ func (s *server) StartNonBlocking() {
 		} else {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), corsHandler.CorsMiddleware(router.HandleRequest)))
 		}
+	}()
+
+	go func() {
+		log.Infof("starting profiling server on port %v", s.config.ProfilePort)
+		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.ProfilePort), pprofhandler.PprofHandler))
 	}()
 }
 
