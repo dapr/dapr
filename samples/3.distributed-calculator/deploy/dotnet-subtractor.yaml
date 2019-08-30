@@ -4,9 +4,6 @@ metadata:
   name: subtractapp
   labels:
     app: subtract
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "subtractapp"
 spec:
   replicas: 1
   selector:
@@ -16,6 +13,10 @@ spec:
     metadata:
       labels:
         app: subtract
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "subtractapp"
+        actions.io/port: "80"
     spec:
       containers:
       - name: subtract

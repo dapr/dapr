@@ -4,9 +4,6 @@ metadata:
   name: multiplyapp
   labels:
     app: multiply
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "multiplyapp"
 spec:
   replicas: 1
   selector:
@@ -16,6 +13,10 @@ spec:
     metadata:
       labels:
         app: multiply
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "multiplyapp"
+        actions.io/port: "5000"
     spec:
       containers:
       - name: multiply

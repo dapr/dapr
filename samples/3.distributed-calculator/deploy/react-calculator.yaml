@@ -20,9 +20,6 @@ metadata:
   name: calculator-front-end
   labels:
     app: calculator-front-end
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "calculator-front-end"
 spec:
   replicas: 1
   selector:
@@ -32,6 +29,10 @@ spec:
     metadata:
       labels:
         app: calculator-front-end
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "calculator-front-end"
+        actions.io/port: "8080"
     spec:
       containers:
       - name: calculator-front-end

@@ -4,9 +4,6 @@ metadata:
   name: pythonapp
   labels:
     app: python
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "pythonapp"
 spec:
   replicas: 1
   selector:
@@ -16,6 +13,9 @@ spec:
     metadata:
       labels:
         app: python
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "pythonapp"
     spec:
       containers:
       - name: python

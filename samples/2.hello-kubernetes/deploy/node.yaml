@@ -20,9 +20,6 @@ metadata:
   name: nodeapp
   labels:
     app: node
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "nodeapp"
 spec:
   replicas: 1
   selector:
@@ -32,6 +29,10 @@ spec:
     metadata:
       labels:
         app: node
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "nodeapp"
+        actions.io/port: "3000"
     spec:
       containers:
       - name: node
