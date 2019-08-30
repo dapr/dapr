@@ -4,9 +4,6 @@ metadata:
   name: node-subscriber
   labels:
     app: node-subscriber
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "node-subscriber"
 spec:
   replicas: 1
   selector:
@@ -16,6 +13,10 @@ spec:
     metadata:
       labels:
         app: node-subscriber
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "node-subscriber"
+        actions.io/port: "3000"
     spec:
       containers:
       - name: node-subscriber

@@ -4,9 +4,6 @@ metadata:
   name: divideapp
   labels:
     app: divide
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "divideapp"
 spec:
   replicas: 1
   selector:
@@ -16,6 +13,10 @@ spec:
     metadata:
       labels:
         app: divide
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "divideapp"
+        actions.io/port: "4000"
     spec:
       containers:
       - name: divide

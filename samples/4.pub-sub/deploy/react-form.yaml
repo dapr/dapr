@@ -20,9 +20,6 @@ metadata:
   name: react-form
   labels:
     app: react-form
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "react-form"
 spec:
   replicas: 1
   selector:
@@ -32,6 +29,10 @@ spec:
     metadata:
       labels:
         app: react-form
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "react-form"
+        actions.io/port: "8080"
     spec:
       containers:
       - name: react-form

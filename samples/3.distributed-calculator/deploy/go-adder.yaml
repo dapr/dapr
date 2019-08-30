@@ -4,9 +4,6 @@ metadata:
   name: addapp
   labels:
     app: add
-  annotations:
-    actions.io/enabled: "true"
-    actions.io/id: "addapp"
 spec:
   replicas: 1
   selector:
@@ -16,6 +13,10 @@ spec:
     metadata:
       labels:
         app: add
+      annotations:
+        actions.io/enabled: "true"
+        actions.io/id: "addapp"
+        actions.io/id: "6000"
     spec:
       containers:
       - name: add
