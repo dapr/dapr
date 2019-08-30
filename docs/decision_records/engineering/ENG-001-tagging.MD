@@ -1,4 +1,4 @@
-# IMAGES-001: Tagging
+# ENG-001: Image Tagging
 
 ## Status
 Accepted

@@ -18,15 +18,18 @@ All decisions are categorized in the following folders:
   - [API-003: Messaging API names](./api/API-003-messaging-api-names.md)
   - [API-004: Binding Manifests](./api/API-004-binding-manifests.md)
   - [API-005: State store behavior](./api/API-005-state-store-behavior.md)
+  - [API-006: Universal namespace (customer ask)](./api/API-006-universal-namespace.md)
+  - [API-007: Tracing Endpoint](./api/API-007-tracing-endpoint.md)
 
 * **CLI** - Decisions on Actions CLI architecture and behaviors.
 
   - [CLI-001: CLI and runtim versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
+  
 * **SDKs** - Decisions on Actions SDKs.
-* **Engineering** - Decisions on Engineering practices, including CI/CD, testings and releases.
-* **Images** - Decisions on container image versioning and tagging.
 
-  - [IMAGES-001: Tagging](https://github.com/actionscore/actions/blob/master/docs/decision_records/images/IMAGES-001-tagging.MD)
+* **Engineering** - Decisions on Engineering practices, including CI/CD, testings and releases.
+
+  - [ENG-001: Image Tagging](./engineering/ENG-001-tagging.MD)
 
 ## Creating new decision records
 A new decision record should be a _.md_ file named as 

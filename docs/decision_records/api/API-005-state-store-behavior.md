@@ -13,15 +13,17 @@ As we continue to solidify our API spec, we need to explicitly define component 
 * Actions supports two flavors of optimistic concurrency: first-write wins and last-write wins. First-write wins is implemented through ETag.
 * User code can express concurrency intention with a *config* annotation attached to a request. See **Config annotation** for details.
 * Future version of Actions may support call throttling through application channel. 
+* We'll choose last-write wins as the default.
 
 ### Consistency model
 
 * Actions supports both eventual consistency and strong consistency. 
 * Actors always use strong consistency.
+* We'll choose eventual consistency as default for services other than actors.
 
-### Transactions
+### Actor Transactions
 
-* Actions-compatible state stores shall support ACID transactions.
+* Actions-compatible Actor state stores shall support ACID transactions.
 * Actions doesn't mandate specific transaction isolation level at this point. However, when deemed necessary, we can easily add those to **Config annotation** as needed.
 
 ### Config annotation
