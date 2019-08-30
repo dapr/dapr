@@ -65,8 +65,12 @@ __*Note: For Linux users, if you run docker cmds with sudo, you need to use "sud
 ```
 $ actions init
 ⌛  Making the jump to hyperspace...
-✅  Success! Get ready to rumble
+Downloading binaries and setting up components
+✅  Success! Actions is up and running
 ```
+
+To see that Actions has been installed successful, from a command prompt run `docker ps` command and see that `actionscore.azurecr.io/actions:latest` and `redis` container images are both running.
+
 
 For getting started with the Actions CLI, go [here](https://github.com/actionscore/cli).
 
