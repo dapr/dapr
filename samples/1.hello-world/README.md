@@ -88,12 +88,13 @@ This calls out to our Redis cache to grab the latest value of the "order" key, w
 
 1. Install dependencies: `npm install`. This will install `express` and `body-parser`, dependencies that are shown in our `package.json`.
 
-2. Run Node.js app with Actions: `actions run --app-id mynode --app-port 3000 node app.js`. This should output text that looks like the following, along with logs:
+2. Run Node.js app with Actions: `actions run --app-id mynode --app-port 3000 --port 3500 node app.js`. This should output text that looks like the following, along with logs:
 
 ```
 Starting Actions with id mynode on port 3500
 ...
 ```
+**Note**:  The Actions `--port` with the `run` command is optional, and if not supplied a random port is generated.
 
 ## Step 4 - Post Messages to your Service
 
@@ -103,8 +104,8 @@ Now that Actions and our Node.js app are running, let's POST messages against it
 ![Postman Screenshot](./img/postman1.jpg)
 In your terminal window, you should see logs indicating that the message was received and state was updated:
 ```bash
-[0m[94;1m== APP == Got a new order! Order ID: 42
-[0m[94;1m== APP == Successfully persisted state
+== APP == Got a new order! Order ID: 42
+== APP == Successfully persisted state
 ```
 
 ## Step 5 - Confirm Successful Persistence
