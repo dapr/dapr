@@ -113,7 +113,7 @@ In your terminal window, you should see logs indicating that the message was rec
 Now, let's just make sure that our order was successfully persisted to our state store. Create a GET request against: `http://localhost:3500/<YOUR_APP_NAME>/order`
 ![Postman Screenshot 2](./img/postman2.jpg)
 
-This invokes the `/order` route, which calls out to our Redis store for the latest data. Observe the expected result!
+This invokes the `/order` route, which calls out to our Redis store for the latest data. Observe the expected result! 
 
 ## Next Steps
 
