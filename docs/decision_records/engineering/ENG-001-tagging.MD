@@ -9,7 +9,7 @@ We needed a way to construct an accepted and constant way of naming our Docker i
 
 ## Decisions
 
-* An image will conform to the following format: \<namespace>/\<epository>:\<tag>
+* An image will conform to the following format: \<namespace>/\<repository>:\<tag>
 * A valid tag conforms to the following format: \<version>-\<architecture>, or just \<version>, then arch is assumed Linux
   
 ## Consequences
