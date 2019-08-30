@@ -32,6 +32,7 @@ func main() {
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for an Actions control plane")
 	placementServiceAddress := flag.String("placement-address", "", "Address for the Actions placement service")
 	allowedOrigins := flag.String("allowed-origins", actionsrt.DefaultAllowedOrigins, "Allowed HTTP origins")
+	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default port is %v", actionsrt.DefaultComponentsPath))
 
 	flag.Parse()
 
@@ -66,8 +67,13 @@ func main() {
 		}
 	}
 
+	enableProf, err := strconv.ParseBool(*enableProfiling)
+	if err != nil {
+		log.Fatalf("error parsing enable-profiling: %s", err)
+	}
+
 	runtimeConfig := actionsrt.NewRuntimeConfig(*actionsID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, actionHTTP, actionGRPC, applicationPort, profPort)
+		*appProtocol, *mode, actionHTTP, actionGRPC, applicationPort, profPort, enableProf)
 
 	var globalConfig *global_config.Configuration
 

@@ -51,10 +51,12 @@ func (s *server) StartNonBlocking() {
 		}
 	}()
 
-	go func() {
-		log.Infof("starting profiling server on port %v", s.config.ProfilePort)
-		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.ProfilePort), pprofhandler.PprofHandler))
-	}()
+	if s.config.EnableProfiling {
+		go func() {
+			log.Infof("starting profiling server on port %v", s.config.ProfilePort)
+			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.ProfilePort), pprofhandler.PprofHandler))
+		}()
+	}
 }
 
 func (s *server) getCorsHandler(allowedOrigins []string) *cors.CorsHandler {
