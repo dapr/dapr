@@ -634,7 +634,7 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       key,
-		Data:      val,
+		Value:     val,
 	}
 
 	err = a.actor.SaveState(&req)
