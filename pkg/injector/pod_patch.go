@@ -18,6 +18,7 @@ const (
 	actionsConfigKey     = "actions.io/config"
 	actionsProtocolKey   = "actions.io/protocol"
 	actionsIDKey         = "actions.io/id"
+	actionsProfilingKey  = "actions.io/profiling"
 	sidecarHTTPPort      = 3500
 	sidecarGRPCPORT      = 50001
 	apiAddress           = "http://actions-api"
@@ -57,6 +58,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace,
 	config := getConfig(pod.Annotations)
 	protocol := getProtocol(pod.Annotations)
 	id := getAppID(pod)
+	enableProfiling := profilingEnabled(pod.Annotations)
 	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
 	apiSrvAddress := getKubernetesDNS(apiAddress, namespace)
 
@@ -65,7 +67,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace,
 		appPortStr = fmt.Sprintf("%v", appPort)
 	}
 
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling))
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -129,6 +131,19 @@ func getAppID(pod corev1.Pod) string {
 	return pod.GetName()
 }
 
+func profilingEnabled(annotations map[string]string) bool {
+	enabled, ok := annotations[actionsProfilingKey]
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(enabled) {
+	case "y", "yes", "true", "on", "1":
+		return true
+	default:
+		return false
+	}
+}
+
 func isResourceActionsEnabled(annotations map[string]string) bool {
 	enabled, ok := annotations[actionsEnabledKey]
 	if !ok {
@@ -146,7 +161,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, actionSidecarImage, namespace, controlPlaneAddress, placementServiceAddress string) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, actionSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling string) corev1.Container {
 	return corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           actionSidecarImage,
@@ -163,6 +178,6 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, actio
 		},
 		Command: []string{"/actionsrt"},
 		Env:     []corev1.EnvVar{{Name: "HOST_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
-		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--actions-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config},
+		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--actions-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling},
 	}
 }

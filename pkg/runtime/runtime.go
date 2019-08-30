@@ -337,7 +337,7 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 
 func (a *ActionsRuntime) startHTTPServer(port, profilePort int, allowedOrigins string) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	server.StartNonBlocking()
 }

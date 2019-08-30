@@ -30,6 +30,7 @@ type Config struct {
 	ID                      string
 	HTTPPort                int
 	ProfilePort             int
+	EnableProfiling         bool
 	GRPCPort                int
 	ApplicationPort         int
 	ApplicationProtocol     Protocol
@@ -42,7 +43,7 @@ type Config struct {
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
@@ -60,5 +61,6 @@ func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedO
 		Kubernetes: config.KubernetesConfig{
 			ControlPlaneAddress: controlPlaneAddress,
 		},
+		EnableProfiling: enableProfiling,
 	}
 }

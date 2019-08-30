@@ -187,7 +187,8 @@ func NewTestActionsRuntime() *ActionsRuntime {
 		DefaultActionsHTTPPort,
 		DefaultActionsGRPCPort,
 		1024,
-		DefaultProfilePort)
+		DefaultProfilePort,
+		false)
 
 	rt := NewActionsRuntime(testRuntimeConfig, &config.Configuration{})
 	rt.components = []components.Component{

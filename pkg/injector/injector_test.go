@@ -30,6 +30,29 @@ func TestGetConfig(t *testing.T) {
 	assert.Equal(t, "config1", c)
 }
 
+func TestGetProfiling(t *testing.T) {
+	t.Run("missing annotation", func(t *testing.T) {
+		m := map[string]string{}
+		e := profilingEnabled(m)
+		assert.Equal(t, e, false)
+	})
+
+	t.Run("enabled", func(t *testing.T) {
+		m := map[string]string{actionsProfilingKey: "yes"}
+		e := profilingEnabled(m)
+		assert.Equal(t, e, true)
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		m := map[string]string{actionsProfilingKey: "false"}
+		e := profilingEnabled(m)
+		assert.Equal(t, e, false)
+	})
+	m := map[string]string{actionsConfigKey: "config1"}
+	c := getConfig(m)
+	assert.Equal(t, "config1", c)
+}
+
 func TestGetAppPort(t *testing.T) {
 	t.Run("valid port", func(t *testing.T) {
 		m := map[string]string{actionsPortKey: "3000"}
@@ -89,7 +112,7 @@ func TestKubernetesDNS(t *testing.T) {
 }
 
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b")
+	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false")
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
 }
