@@ -16,7 +16,7 @@ spec:
       annotations:
         actions.io/enabled: "true"
         actions.io/id: "addapp"
-        actions.io/id: "6000"
+        actions.io/port: "6000"
     spec:
       containers:
       - name: add
