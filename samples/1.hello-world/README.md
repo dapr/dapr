@@ -92,9 +92,10 @@ This calls out to our Redis cache to grab the latest value of the "order" key, w
 
 ```
 Starting Actions with id mynode on port 3500
+You're up and running! Both Actions and your app logs will appear here.
 ...
 ```
-**Note**:  The Actions `--port` with the `run` command is optional, and if not supplied a random port is generated.
+**Note**:  The Actions `--port` parameter with the `run` command is optional, and if not supplied, a random available port is used.
 
 ## Step 4 - Post Messages to your Service
 
