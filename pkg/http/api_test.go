@@ -587,7 +587,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "201", buffer, "failed to generate proper traces with %s", method)
+			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -624,7 +624,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "201", buffer, "failed to generate proper traces with %s", method)
+			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -670,7 +670,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "201", buffer, "failed to generate proper traces with %s", method)
+			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -786,7 +786,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, "201", buffer, "failed to generate proper traces for transaction")
+		assert.Equal(t, "0", buffer, "failed to generate proper traces for transaction")
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 	})
 
