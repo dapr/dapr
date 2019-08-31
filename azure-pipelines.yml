@@ -65,13 +65,13 @@ jobs:
   steps:
     # binaries from master will be stored in edge/[date_revision] folder in blob storage
     - script: |
-        echo $REL_VERSION
-        echo '##vso[task.setvariable variable=TargetContainer]edge'
+        echo $(REL_VERSION)
+        echo ##vso[task.setvariable variable=TargetContainer]edge
       condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
     # binaries from release-* will be stored in release/release version folder in blob storage
     - script: |
-        echo '##vso[task.setvariable variable=BlobPrefix]$(REL_VERSION)'
-        echo '##vso[task.setvariable variable=TargetContainer]release'
+        echo ##vso[task.setvariable variable=BlobPrefix]$(REL_VERSION)
+        echo ##vso[task.setvariable variable=TargetContainer]release
       name: releaseSetup
       condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
     - task: DownloadPipelineArtifact@2
