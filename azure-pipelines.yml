@@ -37,7 +37,7 @@ jobs:
     binaryExtension: '.exe'
 - job: publish_edge_binaries
   pool:
-    vmImage: 'ubuntu-latest'
+    vmImage: 'windows-2019'
   dependsOn:
     - build_darwin_amd64
     - build_linux_amd64
