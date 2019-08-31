@@ -37,7 +37,7 @@ jobs:
     binaryExtension: '.exe'
 - job: release_setup
   pool:
-    vmImage: 'ubuntu-2019'
+    vmImage: 'ubuntu-latest'
   condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
   steps:
     - script: |
@@ -46,7 +46,7 @@ jobs:
         export RELEASE_VERSION=$(git tag -l "$BRANCH_VERSION-*")
         [ -z "$RELEASE_VERSION" ] && exit 1
         export RELEASE_VERSION=${RELEASE_VERSION#v*}
-        echo ##vso[task.setvariable variable=REL_VERSION]$RELEASE_VERSION
+        echo ##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELEASE_VERSION
       name: versioning
 - job: publish_edge_binaries
   pool:
@@ -56,6 +56,7 @@ jobs:
     - build_linux_amd64
     - build_linux_arm
     - build_windows_amd64
+    - release_setup
   condition: |
     and
     (
