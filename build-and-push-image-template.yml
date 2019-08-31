@@ -2,22 +2,26 @@
 
 parameters:
   targetArch: 'amd64'
+  releaseVersion: ''
 
 steps:
+  # integration build tag
   - script: |
-      echo '##vso[task.setvariable variable=DockerVersionTag]$(Build.SourceBranchName)'
+      echo '##vso[task.setvariable variable=DockerReleaseTag]edge_latest'
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
+  # release build tag for amd64 linux binaries
   - script: |
       echo '##vso[task.setvariable variable=DockerReleaseTag]latest'
-      echo '##vso[task.setvariable variable=DockerVersionTag]v$(REL_VERSION)'
+      echo '##vso[task.setvariable variable=DockerVersionTag]v${{ parameters.releaseVersion }}'
     condition: |
       and(
         eq('${{ parameters.targetArch }}', 'amd64'),
         startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
       )
+  # release build tag for non-amd64 linux binaries (e.g. arm)
   - script: |
       echo '##vso[task.setvariable variable=DockerReleaseTag]latest-${{ parameters.targetArch }}'
-      echo '##vso[task.setvariable variable=DockerVersionTag]v$(REL_VERSION)-${{ parameters.targetArch }}'
+      echo '##vso[task.setvariable variable=DockerVersionTag]v${{ parameters.releaseVersion }}-${{ parameters.targetArch }}'
     condition: |
       and(
         ne('${{ parameters.targetArch }}', 'amd64'),
@@ -37,6 +41,7 @@ steps:
       TargetFolder: '$(Pipeline.Workspace)'
       OverWrite: true
       flattenFolders: true
+  # Extract all binaries from each zip files
   - task: ExtractFiles@1
     displayName: 'Extract linux ${{ parameters.targetArch }} binaries'
     inputs:
