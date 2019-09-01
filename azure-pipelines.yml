@@ -53,8 +53,12 @@ jobs:
         
         RELVERSION=${RELEASE_VERSION#v*}
         echo Release Version in tag : $RELVERSION
+  
         echo "##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELVERSION"
         echo $RELVERSION > $(Build.ArtifactStagingDirectory)/release_version.txt
+        echo $(Build.SourceVersion) > $(Build.ArtifactStagingDirectory)/release_commit_id.txt
+
+        echo "##vso[build.addbuildtag]release"
       name: env_var_step
     - task: PublishBuildArtifacts@1
       displayName: 'Publish build artifacts'
