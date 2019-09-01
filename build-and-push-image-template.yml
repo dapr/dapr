@@ -7,7 +7,7 @@ parameters:
 steps:
   # integration build tag
   - script: |
-      echo '##vso[task.setvariable variable=DockerReleaseTag]edge_latest'
+      echo '##vso[task.setvariable variable=DockerReleaseTag]$(Build.SourceBranchName)'
       echo '##vso[task.setvariable variable=DockerVersionTag]'
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
   # release build tag for amd64 linux binaries

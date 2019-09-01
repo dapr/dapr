@@ -54,7 +54,14 @@ jobs:
         RELVERSION=${RELEASE_VERSION#v*}
         echo Release Version in tag : $RELVERSION
         echo "##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELVERSION"
+        echo $RELVERSION > $(Build.ArtifactStagingDirectory)/release_version.txt
       name: env_var_step
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish build artifacts'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
 - job: publish_edge_binaries
   pool:
     vmImage: windows-2019
