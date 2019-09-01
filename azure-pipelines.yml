@@ -10,6 +10,8 @@ variables:
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
   BlobPrefix: ''
 
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
 jobs:
 - template: 'build-binary-template.yml'
   parameters:
@@ -54,7 +56,6 @@ jobs:
         echo "##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELVERSION"
       name: env_var_step
 - job: publish_edge_binaries
-  name: actions_$(Date:yyyyMMdd)$(Rev:.r)
   pool:
     vmImage: windows-2019
   dependsOn:
