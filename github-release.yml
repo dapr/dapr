@@ -1,23 +1,13 @@
 # actionscore/actions github release pipeline
-trigger:
-  branches:
-    include:
-    - release-*
-  paths:
-    include:
-    - docs/release_notes/*
-
-pr: none
 
 variables:
   ReleaseTitle: 'Actions Runtime $(REL_VERSION) Release'
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: 'macOS-latest'
 
 steps:
 - task: DownloadPipelineArtifact@2
-  displayName: 'Download latest binaries'
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
@@ -27,32 +17,15 @@ steps:
     artifactName: 'drop'
     itemPattern: 'drop/*.zip'
     targetPath: '$(Pipeline.Workspace)'
-- script: |
-    SOURCEBRANCH=$(Build.SourceBranchName)
-    echo Source branch name : $SOURCEBRANCH
-    BRANCH_VERSION=${SOURCEBRANCH#release-}
-    echo Release branch version : $BRANCH_VERSION
-    
-    RELEASE_VERSION=$(git tag -l "v$BRANCH_VERSION-*" | tail -1)
-    [ -z "$RELEASE_VERSION" ] && echo "Cannot find the release version tag!" && exit 1
-    
-    RELVERSION=${RELEASE_VERSION#v*}
-    echo Release Version in tag : $RELVERSION
-    echo "##vso[task.setvariable variable=REL_VERSION]$RELVERSION"
-  displayName: 'Parse version from tag and branch name'
-  condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
 - task: GitHubRelease@0
-  displayName: 'Upload Actions Binaries to GitHub Release'
-  condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
   inputs:
     gitHubConnection: 'GitHub'
     repositoryName: '$(Build.Repository.Name)'
     action: 'create'
     target: '$(REL_VERSION)'
     tagSource: 'manual'
-    tag: 'v$(REL_VERSION)'
-    title: 'Actions Runtime $(REL_VERSION) Release'
+    tag: '$(REL_ITERATION)'
+    title: '$(ReleaseTitle)'
     assets: $(Pipeline.Workspace)
     releaseNotesFile: 'docs/release_notes/v$(REL_VERSION).md'
     isPreRelease: true
-    addChangeLog: false
