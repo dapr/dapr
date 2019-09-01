@@ -4,8 +4,6 @@ trigger:
 - master
 - release-*
 
-name: $(Date:yyyyMMdd)$(Rev:.r)
-
 variables:
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
   GOBIN:  '$(GOPATH)/bin'
