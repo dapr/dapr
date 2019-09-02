@@ -58,7 +58,16 @@ jobs:
         echo $RELVERSION > $(Build.ArtifactStagingDirectory)/release_version.txt
         echo $(Build.SourceVersion) > $(Build.ArtifactStagingDirectory)/release_commit_id.txt
 
-        echo "##vso[build.addbuildtag]release"
+        echo Checking release note for $(REL_VERSION)...
+        RELNOTE_PATH="docs/release_notes/v$(REL_VERSION).md"
+        if [ -f "$RELNOTE_PATH" ]; then
+          echo Found release note $RELNOTE_PATH and copying to artifact directory
+          cp $RELNOTE_PATH $(Build.ArtifactStagingDirectory)/release_note.md
+          echo Add release tag
+          echo "##vso[build.addbuildtag]release"
+        else
+          echo Skip releasing release note. this is not final release.
+        fi
       name: env_var_step
     - task: PublishBuildArtifacts@1
       displayName: 'Publish build artifacts'
