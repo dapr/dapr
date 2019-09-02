@@ -2,22 +2,27 @@
 
 parameters:
   targetArch: 'amd64'
+  releaseVersion: ''
 
 steps:
+  # integration build tag
   - script: |
-      echo '##vso[task.setvariable variable=DockerVersionTag]$(Build.SourceBranchName)'
+      echo '##vso[task.setvariable variable=DockerReleaseTag]$(Build.SourceBranchName)'
+      echo '##vso[task.setvariable variable=DockerVersionTag]'
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
+  # release build tag for amd64 linux binaries
   - script: |
       echo '##vso[task.setvariable variable=DockerReleaseTag]latest'
-      echo '##vso[task.setvariable variable=DockerVersionTag]v$(REL_VERSION)'
+      echo '##vso[task.setvariable variable=DockerVersionTag]v${{ parameters.releaseVersion }}'
     condition: |
       and(
         eq('${{ parameters.targetArch }}', 'amd64'),
         startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
       )
+  # release build tag for non-amd64 linux binaries (e.g. arm)
   - script: |
       echo '##vso[task.setvariable variable=DockerReleaseTag]latest-${{ parameters.targetArch }}'
-      echo '##vso[task.setvariable variable=DockerVersionTag]v$(REL_VERSION)-${{ parameters.targetArch }}'
+      echo '##vso[task.setvariable variable=DockerVersionTag]v${{ parameters.releaseVersion }}-${{ parameters.targetArch }}'
     condition: |
       and(
         ne('${{ parameters.targetArch }}', 'amd64'),
@@ -28,20 +33,21 @@ steps:
     inputs:
       buildType: 'current'
       itemPattern: '**/*_linux_${{ parameters.targetArch }}.zip'
-      targetPath: '$(Pipeline.Workspace)'
+      targetPath: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
   - task: CopyFiles@2
     displayName: 'Copy Dockerfile to workspace'
     inputs:
       SourceFolder: '$(Build.SourcesDirectory)'
       Contents: 'Dockerfile'
-      TargetFolder: '$(Pipeline.Workspace)'
+      TargetFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
       OverWrite: true
       flattenFolders: true
+  # Extract all binaries from each zip files
   - task: ExtractFiles@1
     displayName: 'Extract linux ${{ parameters.targetArch }} binaries'
     inputs:
       archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_linux_${{ parameters.targetArch }}.zip'
-      destinationFolder: '$(Pipeline.Workspace)/dist'
+      destinationFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/dist'
       cleanDestinationFolder: false
   - task: Docker@2
     displayName: 'Build and push ${{ parameters.targetArch }} Docker image'
@@ -49,7 +55,7 @@ steps:
       containerRegistry: 'ACR Actions Core'
       repository: 'actions'
       command: 'buildAndPush'
-      Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
+      Dockerfile: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/Dockerfile'
       tags: |
         $(DockerVersionTag)
         $(DockerReleaseTag)
