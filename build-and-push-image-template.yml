@@ -7,27 +7,32 @@ parameters:
 steps:
   # integration build tag
   - script: |
+      VERSION_TAG=$(Build.SourceBranchName)
+      if [ "${{ parameters.releaseVersion }}" != "amd64" ]; then
+        VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
+      fi
+
       echo '##vso[task.setvariable variable=DockerReleaseTag]'
-      echo '##vso[task.setvariable variable=DockerVersionTag]$(Build.SourceBranchName)'
+      echo '##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG'
+
+      echo Integration Build - Docker Version TAG: $VERSION_TAG
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
-  # release build tag for amd64 linux binaries
+  # release build tag
   - script: |
-      echo '##vso[task.setvariable variable=DockerReleaseTag]latest'
-      echo '##vso[task.setvariable variable=DockerVersionTag]v${{ parameters.releaseVersion }}'
-    condition: |
-      and(
-        eq('${{ parameters.targetArch }}', 'amd64'),
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
-      )
-  # release build tag for non-amd64 linux binaries (e.g. arm)
-  - script: |
-      echo '##vso[task.setvariable variable=DockerReleaseTag]latest-${{ parameters.targetArch }}'
-      echo '##vso[task.setvariable variable=DockerVersionTag]v${{ parameters.releaseVersion }}-${{ parameters.targetArch }}'
-    condition: |
-      and(
-        ne('${{ parameters.targetArch }}', 'amd64'),
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
-      )
+      RELEASE_TAG=latest
+      VERSION_TAG=v${{ parameters.releaseVersion }}
+
+      if [ "${{ parameters.releaseVersion }}" != "amd64" ]; then
+        RELEASE_TAG=$RELEASE_TAG-${{ parameters.targetArch }}
+        VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
+      fi
+
+      echo '##vso[task.setvariable variable=DockerReleaseTag]$RELEASE_TAG'
+      echo '##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG'
+
+      echo Release Build - Docker Release TAG: $RELEASE_TAG
+      echo Release Build - Docker Version TAG: $VERSION_TAG
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
   - task: DownloadPipelineArtifact@2
     displayName: 'Download pipeline artifacts to workspace'
     inputs:
