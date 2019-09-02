@@ -58,8 +58,8 @@ jobs:
         echo $RELVERSION > $(Build.ArtifactStagingDirectory)/release_version.txt
         echo $(Build.SourceVersion) > $(Build.ArtifactStagingDirectory)/release_commit_id.txt
 
-        echo Checking release note for $(RELVERSION)...
-        RELNOTE_PATH="docs/release_notes/v$(RELVERSION).md"
+        echo Checking release note for $RELVERSION...
+        RELNOTE_PATH="docs/release_notes/v$RELVERSION.md"
         if [ -f "$RELNOTE_PATH" ]; then
           echo Found release note $RELNOTE_PATH and copying to artifact directory
           cp $RELNOTE_PATH $(Build.ArtifactStagingDirectory)/release_note.md
