@@ -7,8 +7,8 @@ parameters:
 steps:
   # integration build tag
   - script: |
-      echo '##vso[task.setvariable variable=DockerReleaseTag]$(Build.SourceBranchName)'
-      echo '##vso[task.setvariable variable=DockerVersionTag]'
+      echo '##vso[task.setvariable variable=DockerReleaseTag]'
+      echo '##vso[task.setvariable variable=DockerVersionTag]$(Build.SourceBranchName)'
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
   # release build tag for amd64 linux binaries
   - script: |
@@ -46,7 +46,7 @@ steps:
   - task: ExtractFiles@1
     displayName: 'Extract linux ${{ parameters.targetArch }} binaries'
     inputs:
-      archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_linux_${{ parameters.targetArch }}.zip'
+      archiveFilePatterns: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/drop/*_linux_${{ parameters.targetArch }}.zip'
       destinationFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/dist'
       cleanDestinationFolder: false
   - task: Docker@2
