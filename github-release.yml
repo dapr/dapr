@@ -15,21 +15,20 @@ steps:
     itemPattern: 'drop/*.zip'
     targetPath: '$(Pipeline.Workspace)'
 - script: |
+    echo "checking the requried file for release..."
     [ ! -f "$(Pipeline.Workspace)/release_version.txt" ] && echo "release_version.txt not found" && exit 1
     [ ! -f "$(Pipeline.Workspace)/release_commit_id.txt" ] && echo "release_commit_id.txt not found" && exit 1
+    [ ! -f "$(Pipeline.Workspace)/release_note.md" ] && echo "release_note.md not found" && exit 1
+
     RELVERSION=`cat $(Pipeline.Workspace)/release_version.txt`
     RELCOMMITID=`cat $(Pipeline.Workspace)/release_commit_id.txt`
     rm -f $(Pipeline.Workspace)/release_*.txt
     echo "##vso[task.setvariable variable=REL_VERSION]$RELVERSION"
     echo "##vso[task.setvariable variable=RELEASE_COMMIT_ID]$RELCOMMITID"
+    echo "##vso[task.setvariable variable=RELEASE_NOTE_PATH]$(Pipeline.Workspace)/release_note.md"
 
     echo Release version : $RELVERSION
     echo Release commit id : $RELCOMMITID
-
-    echo "checking release note for $RELVERSION.."
-
-    REL_NOTE_PATH="docs/release_notes/v$(REL_VERSION).md"
-    [ ! -f "$REL_NOTE_PATH" ] && echo "$REL_NOTE_PATH not found" && exit 1
   displayName: 'Parse release version and commit id'
 - task: GitHubRelease@0
   displayName: 'Upload Actions binaries to GitHub Release'
@@ -42,6 +41,6 @@ steps:
     tag: 'v$(REL_VERSION)'
     title: 'Actions Runtime $(REL_VERSION) Release'
     assets: '$(Pipeline.Workspace)/*.zip'
-    releaseNotesFile: 'docs/release_notes/v$(REL_VERSION).md'
+    releaseNotesFile: '$(RELEASE_NOTE_PATH)'
     isPreRelease: true
     addChangeLog: false
