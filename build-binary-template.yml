@@ -43,6 +43,7 @@ jobs:
     # Zip binaries separately
     - task: ArchiveFiles@2
       displayName: 'Build $(GOARCH)/actionsrt_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
         rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)/actionsrt${{ parameters.binaryExtension }}'
         includeRootFolder: false
@@ -51,6 +52,7 @@ jobs:
         replaceExistingArchive: true
     - task: ArchiveFiles@2
       displayName: 'Build $(GOARCH)/injector_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
         rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)/injector${{ parameters.binaryExtension }}'
         includeRootFolder: false
@@ -59,6 +61,7 @@ jobs:
         replaceExistingArchive: true
     - task: ArchiveFiles@2
       displayName: 'Build $(GOARCH)/operator_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
         rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)/operator${{ parameters.binaryExtension }}'
         includeRootFolder: false
@@ -67,6 +70,7 @@ jobs:
         replaceExistingArchive: true
     - task: ArchiveFiles@2
       displayName: 'Build $(GOARCH)/placement_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
         rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)/placement${{ parameters.binaryExtension }}'
         includeRootFolder: false
@@ -75,6 +79,7 @@ jobs:
         replaceExistingArchive: true
     - task: PublishBuildArtifacts@1
       displayName: 'Publish build artifacts'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
         PathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)'
         ArtifactName: 'drop'
