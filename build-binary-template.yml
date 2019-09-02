@@ -2,13 +2,13 @@ parameters:
   poolImage: 'macOS-latest'
   targetOS: 'darwin'
   targetArch: 'amd64'
-  binaryName: 'actionsrt'
-
+  binaryExtension: ''
 jobs:
-- job: build_${{ parameters.targetOS }}_${{ parameters.targetArch }}_${{ parameters.binaryName }}
+- job: build_${{ parameters.targetOS }}_${{ parameters.targetArch }}
   variables:
     GOOS: ${{ parameters.targetOS }}
     GOARCH: ${{ parameters.targetArch }}
+    GOPROXY: https://proxy.golang.org
   pool:
     vmImage: '${{ parameters.poolImage }}'
   steps:
@@ -37,19 +37,49 @@ jobs:
     - task: CmdLine@2
       displayName: 'Run make build'
       inputs:
-        script: 'make build BINARIES=${{ parameters.binaryName }} TARGETS=${{ parameters.targetOS }} ARCH=$(GOARCH)'
+        script: 'make build TARGETS=${{ parameters.targetOS }} ARCH=$(GOARCH)'
         workingDirectory: '$(modulePath)'
         failOnStderr: false
+    # Zip binaries separately
     - task: ArchiveFiles@2
-      displayName: 'Build $(GOARCH)/${{ parameters.binaryName }}_${{ parameters.targetOS }}.zip'
+      displayName: 'Build $(GOARCH)/actionsrt_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
-        rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)'
+        rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)/actionsrt${{ parameters.binaryExtension }}'
         includeRootFolder: false
         archiveType: 'zip'
-        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)/${{ parameters.binaryName }}_${{ parameters.targetOS }}_$(GOARCH).zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)/actionsrt_${{ parameters.targetOS }}_$(GOARCH).zip'
+        replaceExistingArchive: true
+    - task: ArchiveFiles@2
+      displayName: 'Build $(GOARCH)/injector_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
+      inputs:
+        rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)/injector${{ parameters.binaryExtension }}'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)/injector_${{ parameters.targetOS }}_$(GOARCH).zip'
+        replaceExistingArchive: true
+    - task: ArchiveFiles@2
+      displayName: 'Build $(GOARCH)/operator_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
+      inputs:
+        rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)/operator${{ parameters.binaryExtension }}'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)/operator_${{ parameters.targetOS }}_$(GOARCH).zip'
+        replaceExistingArchive: true
+    - task: ArchiveFiles@2
+      displayName: 'Build $(GOARCH)/placement_${{ parameters.targetOS }}.zip'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
+      inputs:
+        rootFolderOrFile: '$(modulePath)/dist/${{ parameters.targetOS }}_$(GOARCH)/placement${{ parameters.binaryExtension }}'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)/placement_${{ parameters.targetOS }}_$(GOARCH).zip'
         replaceExistingArchive: true
     - task: PublishBuildArtifacts@1
       displayName: 'Publish build artifacts'
+      condition: ne(variables['Build.Reason'], 'PullRequest')
       inputs:
         PathtoPublish: '$(Build.ArtifactStagingDirectory)/${{ parameters.targetOS }}_$(GOARCH)'
         ArtifactName: 'drop'
