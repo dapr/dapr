@@ -8,6 +8,7 @@ jobs:
   variables:
     GOOS: ${{ parameters.targetOS }}
     GOARCH: ${{ parameters.targetArch }}
+    GOPROXY: https://proxy.golang.org
   pool:
     vmImage: '${{ parameters.poolImage }}'
   steps:
