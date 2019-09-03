@@ -64,7 +64,7 @@ jobs:
     targetOS: darwin
     targetArch: amd64
     binaryExtension: ''
-    dependsOn: release_environment
+    dependStep: release_environment
     relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
 - template: 'build-binary-template.yml'
   parameters:
@@ -72,7 +72,7 @@ jobs:
     targetOS: linux
     targetArch: arm
     binaryExtension: ''
-    dependsOn: release_environment
+    dependStep: release_environment
     relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
 - template: 'build-binary-template.yml'
   parameters:
@@ -80,7 +80,7 @@ jobs:
     targetOS: linux
     targetArch: amd64
     binaryExtension: ''
-    dependsOn: release_environment
+    dependStep: release_environment
     relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
 - template: 'build-binary-template.yml'
   parameters:
@@ -88,7 +88,7 @@ jobs:
     targetOS: windows
     targetArch: amd64
     binaryExtension: '.exe'
-    dependsOn: release_environment
+    dependStep: release_environment
     relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
 - job: publish_edge_binaries
   pool:
