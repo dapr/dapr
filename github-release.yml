@@ -1,10 +1,7 @@
 # actionscore/actions github release pipeline
 
-variables:
-  ReleaseTitle: 'Actions Runtime $(REL_VERSION) Release'
-
 pool:
-  vmImage: 'macOS-latest'
+  vmImage: ubuntu-latest
 
 steps:
 - task: DownloadPipelineArtifact@2
@@ -17,15 +14,33 @@ steps:
     artifactName: 'drop'
     itemPattern: 'drop/*.zip'
     targetPath: '$(Pipeline.Workspace)'
+- script: |
+    echo "checking the requried file for release..."
+    [ ! -f "$(Pipeline.Workspace)/release_version.txt" ] && echo "release_version.txt not found" && exit 1
+    [ ! -f "$(Pipeline.Workspace)/release_commit_id.txt" ] && echo "release_commit_id.txt not found" && exit 1
+    [ ! -f "$(Pipeline.Workspace)/release_note.md" ] && echo "release_note.md not found" && exit 1
+
+    RELVERSION=`cat $(Pipeline.Workspace)/release_version.txt`
+    RELCOMMITID=`cat $(Pipeline.Workspace)/release_commit_id.txt`
+    rm -f $(Pipeline.Workspace)/release_*.txt
+    echo "##vso[task.setvariable variable=REL_VERSION]$RELVERSION"
+    echo "##vso[task.setvariable variable=RELEASE_COMMIT_ID]$RELCOMMITID"
+    echo "##vso[task.setvariable variable=RELEASE_NOTE_PATH]$(Pipeline.Workspace)/release_note.md"
+
+    echo Release version : $RELVERSION
+    echo Release commit id : $RELCOMMITID
+  displayName: 'Parse release version and commit id'
 - task: GitHubRelease@0
+  displayName: 'Upload Actions binaries to GitHub Release'
   inputs:
     gitHubConnection: 'GitHub'
     repositoryName: '$(Build.Repository.Name)'
     action: 'create'
-    target: '$(REL_VERSION)'
+    target: '$(RELEASE_COMMIT_ID)'
     tagSource: 'manual'
-    tag: '$(REL_ITERATION)'
-    title: '$(ReleaseTitle)'
-    assets: $(Pipeline.Workspace)
-    releaseNotesFile: 'docs/release_notes/v$(REL_VERSION).md'
+    tag: 'v$(REL_VERSION)'
+    title: 'Actions Runtime $(REL_VERSION) Release'
+    assets: '$(Pipeline.Workspace)/*.zip'
+    releaseNotesFile: '$(RELEASE_NOTE_PATH)'
     isPreRelease: true
+    addChangeLog: false
