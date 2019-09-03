@@ -22,8 +22,8 @@ type TransactionalOperation struct {
 }
 
 type TransactionalUpsert struct {
-	Key  string      `json:"key"`
-	Data interface{} `json:"data"`
+	Key   string      `json:"key"`
+	Value interface{} `json:"value"`
 }
 
 type TransactionalDelete struct {

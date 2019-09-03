@@ -10,115 +10,117 @@ variables:
   modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)'
   BlobPrefix: ''
 
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
 jobs:
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: macOS-latest
-    targetOS: darwin
-    targetArch: amd64
-    binaryName: actionsrt
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: macOS-latest
-    targetOS: darwin
-    targetArch: amd64
-    binaryName: placement
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: macOS-latest
-    targetOS: darwin
-    targetArch: amd64
-    binaryName: operator
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: ubuntu-latest
-    targetOS: linux
-    targetArch: arm
-    binaryName: actionsrt
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: ubuntu-latest
-    targetOS: linux
-    targetArch: arm
-    binaryName: placement
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: ubuntu-latest
-    targetOS: linux
-    targetArch: arm
-    binaryName: operator
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: ubuntu-latest
-    targetOS: linux
-    targetArch: amd64
-    binaryName: actionsrt
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: ubuntu-latest
-    targetOS: linux
-    targetArch: amd64
-    binaryName: placement
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: ubuntu-latest
-    targetOS: linux
-    targetArch: amd64
-    binaryName: operator
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: windows-2019
-    targetOS: windows
-    targetArch: amd64
-    binaryName: actionsrt
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: windows-2019
-    targetOS: windows
-    targetArch: amd64
-    binaryName: placement
-- template: 'build-binary-template.yml'
-  parameters:
-    poolImage: windows-2019
-    targetOS: windows
-    targetArch: amd64
-    binaryName: operator
-- job: 'publish_edge_binaries'
+- job: release_environment
   pool:
-    vmImage: 'windows-2019'
+    vmImage: ubuntu-latest
+  steps:
+    - script: |
+        SOURCEBRANCH=$(Build.SourceBranchName)
+        echo Source branch name : $SOURCEBRANCH
+
+        if [[ $SOURCEBRANCH != release-* ]]; then
+          echo Clearing REL_VERSION value unless $SOURCEBRANCH is release-*.
+          RELVERSION=""
+          echo "##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELVERSION"
+          exit 0
+        fi
+
+        BRANCH_VERSION=${SOURCEBRANCH#release-}
+        echo Release branch version : $BRANCH_VERSION
+        
+        RELEASE_VERSION=$(git tag -l "v$BRANCH_VERSION-*" | tail -1)
+        [ -z "$RELEASE_VERSION" ] && echo "Cannot find the release version tag!" && exit 1
+        
+        RELVERSION=${RELEASE_VERSION#v*}
+        echo Release Version in tag : $RELVERSION
+  
+        echo "##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELVERSION"
+        echo $RELVERSION > $(Build.ArtifactStagingDirectory)/release_version.txt
+        echo $(Build.SourceVersion) > $(Build.ArtifactStagingDirectory)/release_commit_id.txt
+
+        echo Checking release note for $RELVERSION...
+        RELNOTE_PATH="docs/release_notes/v$RELVERSION.md"
+        if [ -f "$RELNOTE_PATH" ]; then
+          echo Found release note $RELNOTE_PATH and copying to artifact directory
+          cp $RELNOTE_PATH $(Build.ArtifactStagingDirectory)/release_note.md
+          echo Add release tag
+          echo "##vso[build.addbuildtag]release"
+        else
+          echo Skip releasing release note. this is not final release.
+        fi
+      name: env_var_step
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish build artifacts'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: macOS-latest
+    targetOS: darwin
+    targetArch: amd64
+    binaryExtension: ''
+    dependStep: release_environment
+    relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: ubuntu-latest
+    targetOS: linux
+    targetArch: arm
+    binaryExtension: ''
+    dependStep: release_environment
+    relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: ubuntu-latest
+    targetOS: linux
+    targetArch: amd64
+    binaryExtension: ''
+    dependStep: release_environment
+    relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
+- template: 'build-binary-template.yml'
+  parameters:
+    poolImage: windows-2019
+    targetOS: windows
+    targetArch: amd64
+    binaryExtension: '.exe'
+    dependStep: release_environment
+    relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
+- job: publish_edge_binaries
+  pool:
+    vmImage: windows-2019
   dependsOn:
-  - build_darwin_amd64_actionsrt
-  - build_darwin_amd64_placement
-  - build_darwin_amd64_operator
-  - build_linux_amd64_actionsrt
-  - build_linux_amd64_placement
-  - build_linux_amd64_operator
-  - build_linux_arm_actionsrt
-  - build_linux_arm_placement
-  - build_linux_arm_operator
-  - build_windows_amd64_actionsrt
-  - build_windows_amd64_placement
-  - build_windows_amd64_operator
+    - build_darwin_amd64
+    - build_linux_amd64
+    - build_linux_arm
+    - build_windows_amd64
+    - release_environment
+  variables:
+    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   condition: |
     and
     (
-      eq(dependencies.build_darwin_amd64_actionsrt.result, 'Succeeded'),
-      eq(dependencies.build_darwin_amd64_placement.result, 'Succeeded'),
-      eq(dependencies.build_darwin_amd64_operator.result, 'Succeeded'),
-      eq(dependencies.build_linux_amd64_actionsrt.result, 'Succeeded'),
-      eq(dependencies.build_linux_amd64_placement.result, 'Succeeded'),
-      eq(dependencies.build_linux_amd64_operator.result, 'Succeeded'),
-      eq(dependencies.build_linux_arm_actionsrt.result, 'Succeeded'),
-      eq(dependencies.build_linux_arm_placement.result, 'Succeeded'),
-      eq(dependencies.build_linux_arm_operator.result, 'Succeeded'),
-      eq(dependencies.build_windows_amd64_actionsrt.result, 'Succeeded'),
-      eq(dependencies.build_windows_amd64_placement.result, 'Succeeded'),
-      eq(dependencies.build_windows_amd64_operator.result, 'Succeeded'),
+      eq(dependencies.build_darwin_amd64.result, 'Succeeded'),
+      eq(dependencies.build_linux_amd64.result, 'Succeeded'),
+      eq(dependencies.build_linux_arm.result, 'Succeeded'),
+      eq(dependencies.build_windows_amd64.result, 'Succeeded'),
       ne(variables['Build.Reason'], 'PullRequest')
     )
   steps:
-    - script: echo '##vso[task.setvariable variable=BlobPrefix]$(Build.SourceBranchName)/$(REL_VERSION)
+    # binaries from master will be stored in edge/[branch_date.revision] folder in blob storage
+    - script: |
+        echo ##vso[task.setvariable variable=BlobPrefix]$(Build.BuildNumber)
+        echo ##vso[task.setvariable variable=TargetContainer]edge
       condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
+    # binaries from release-* will be stored in release/release version folder in blob storage
+    - script: |
+        echo ##vso[task.setvariable variable=BlobPrefix]$(REL_VERSION)
+        echo ##vso[task.setvariable variable=TargetContainer]release
+      condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
     - task: DownloadPipelineArtifact@2
       displayName: 'Download pipeline artifacts to workspace'
       inputs:
@@ -126,39 +128,39 @@ jobs:
         itemPattern: '**/*.zip'
         targetPath: '$(Pipeline.Workspace)'
     - task: AzureFileCopy@3
-      displayName: 'Publish archives to blob storage'
+      displayName: 'Publish archives to version folder'
       inputs:
         SourcePath: '$(Pipeline.Workspace)/drop'
         azureSubscription: 'Actions Releases'
         Destination: 'AzureBlob'
         storage: 'actionsreleases'
-        ContainerName: 'bin'
+        ContainerName: '$(TargetContainer)'
         blobPrefix: '$(BlobPrefix)'
-- job: 'build_and_push_amd64_docker_image'
-  variables:
-    DockerVersionTag: ''
-    DockerReleaseTag: ''
+    - task: AzureFileCopy@3
+      displayName: 'Publish archives to latest folder'
+      inputs:
+        SourcePath: '$(Pipeline.Workspace)/drop'
+        azureSubscription: 'Actions Releases'
+        Destination: 'AzureBlob'
+        storage: 'actionsreleases'
+        ContainerName: '$(TargetContainer)'
+        blobPrefix: 'latest'
+- job: 'build_and_push_docker_image'
   pool: 
     vmImage: 'ubuntu-latest'
   dependsOn:
     - publish_edge_binaries
+    - release_environment
   condition: |
     eq(dependencies.publish_edge_binaries.result, 'Succeeded')
+  variables:
+    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   steps:
     - template: 'build-and-push-image-template.yml'
       parameters:
         targetArch: amd64
-- job: 'build_and_push_arm_docker_image'
-  variables:
-    DockerVersionTag: ''
-    DockerReleaseTag: ''
-  pool: 
-    vmImage: 'ubuntu-latest'
-  dependsOn:
-    - publish_edge_binaries
-  condition: |
-    eq(dependencies.publish_edge_binaries.result, 'Succeeded')
-  steps:
+        releaseVersion: $(REL_VERSION)
     - template: 'build-and-push-image-template.yml'
       parameters:
         targetArch: arm
+        releaseVersion: $(REL_VERSION)

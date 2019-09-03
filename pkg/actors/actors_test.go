@@ -417,7 +417,7 @@ func TestSaveState(t *testing.T) {
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       keyName,
-		Data:      val,
+		Value:     val,
 	})
 	assert.NoError(t, err)
 
@@ -448,7 +448,7 @@ func TestGetState(t *testing.T) {
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       keyName,
-		Data:      val,
+		Value:     val,
 	})
 
 	// act
@@ -480,7 +480,7 @@ func TestDeleteState(t *testing.T) {
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       keyName,
-		Data:      val,
+		Value:     val,
 	})
 
 	// make sure that state is stored.
@@ -527,8 +527,8 @@ func TestTransactionalState(t *testing.T) {
 				TransactionalOperation{
 					Operation: Upsert,
 					Request: TransactionalUpsert{
-						Key:  "key1",
-						Data: "fakeData",
+						Key:   "key1",
+						Value: "fakeData",
 					},
 				},
 			},
@@ -550,8 +550,8 @@ func TestTransactionalState(t *testing.T) {
 				TransactionalOperation{
 					Operation: Upsert,
 					Request: TransactionalUpsert{
-						Key:  "key1",
-						Data: "fakeData",
+						Key:   "key1",
+						Value: "fakeData",
 					},
 				},
 				TransactionalOperation{

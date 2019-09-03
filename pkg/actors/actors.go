@@ -327,7 +327,7 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 			requests = append(requests, state.TransactionalRequest{
 				Request: state.SetRequest{
 					Key:   key,
-					Value: upsert.Data,
+					Value: upsert.Value,
 				},
 				Operation: state.Upsert,
 			})
@@ -361,7 +361,7 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Set(&state.SetRequest{
-		Value: req.Data,
+		Value: req.Value,
 		Key:   key,
 	})
 	return err

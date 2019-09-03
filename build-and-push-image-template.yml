@@ -2,46 +2,60 @@
 
 parameters:
   targetArch: 'amd64'
+  releaseVersion: ''
 
 steps:
+  # integration build tag
   - script: |
-      echo '##vso[task.setvariable variable=DockerVersionTag]$(Build.SourceBranchName)'
+      VERSION_TAG=$(Build.SourceBranchName)
+      if [ "${{ parameters.targetArch }}" != "amd64" ]; then
+        VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
+      fi
+
+      echo "##vso[task.setvariable variable=DockerReleaseTag]"
+      echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
+      echo Target Architecture: ${{ parameters.targetArch }}
+      echo Integration Build - Docker Version TAG: $VERSION_TAG
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
+    displayName: 'Integration build - docker image tag name setting'
+  # release build tag
   - script: |
-      echo '##vso[task.setvariable variable=DockerReleaseTag]latest'
-      echo '##vso[task.setvariable variable=DockerVersionTag]v$(REL_VERSION)'
-    condition: |
-      and(
-        eq('${{ parameters.targetArch }}', 'amd64'),
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
-      )
-  - script: |
-      echo '##vso[task.setvariable variable=DockerReleaseTag]latest-${{ parameters.targetArch }}'
-      echo '##vso[task.setvariable variable=DockerVersionTag]v$(REL_VERSION)-${{ parameters.targetArch }}'
-    condition: |
-      and(
-        ne('${{ parameters.targetArch }}', 'amd64'),
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
-      )
+      RELEASE_TAG=latest
+      VERSION_TAG=v${{ parameters.releaseVersion }}
+
+      if [ "${{ parameters.targetArch }}" != "amd64" ]; then
+        RELEASE_TAG=$RELEASE_TAG-${{ parameters.targetArch }}
+        VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
+      fi
+
+      echo "##vso[task.setvariable variable=DockerReleaseTag]$RELEASE_TAG"
+      echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
+
+      echo Target Architecture: ${{ parameters.targetArch }}
+      echo Release Build - Docker Release TAG: $RELEASE_TAG
+      echo Release Build - Docker Version TAG: $VERSION_TAG
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
+    displayName: 'Release build - docker image tag name setting'
   - task: DownloadPipelineArtifact@2
     displayName: 'Download pipeline artifacts to workspace'
     inputs:
       buildType: 'current'
       itemPattern: '**/*_linux_${{ parameters.targetArch }}.zip'
-      targetPath: '$(Pipeline.Workspace)'
+      targetPath: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
   - task: CopyFiles@2
     displayName: 'Copy Dockerfile to workspace'
     inputs:
       SourceFolder: '$(Build.SourcesDirectory)'
       Contents: 'Dockerfile'
-      TargetFolder: '$(Pipeline.Workspace)'
+      TargetFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
       OverWrite: true
       flattenFolders: true
+  # Extract all binaries from each zip files
   - task: ExtractFiles@1
     displayName: 'Extract linux ${{ parameters.targetArch }} binaries'
     inputs:
-      archiveFilePatterns: '$(Pipeline.Workspace)/drop/*_linux_${{ parameters.targetArch }}.zip'
-      destinationFolder: '$(Pipeline.Workspace)/dist'
+      archiveFilePatterns: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/drop/*_linux_${{ parameters.targetArch }}.zip'
+      destinationFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/dist'
       cleanDestinationFolder: false
   - task: Docker@2
     displayName: 'Build and push ${{ parameters.targetArch }} Docker image'
@@ -49,7 +63,7 @@ steps:
       containerRegistry: 'ACR Actions Core'
       repository: 'actions'
       command: 'buildAndPush'
-      Dockerfile: '$(Pipeline.Workspace)/Dockerfile'
+      Dockerfile: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/Dockerfile'
       tags: |
         $(DockerVersionTag)
         $(DockerReleaseTag)

@@ -323,7 +323,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      fakeBodyObject,
+			Value:     fakeBodyObject,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -358,7 +358,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "bytearray",
-			Data:      string(base64Encoded),
+			Value:     string(base64Encoded),
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -402,7 +402,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "bytearray",
-			Data:      expectedObj,
+			Value:     expectedObj,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -429,7 +429,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      nonJSONFakeData,
+			Value:     nonJSONFakeData,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -495,8 +495,8 @@ func TestV1ActorEndpoints(t *testing.T) {
 			actors.TransactionalOperation{
 				Operation: actors.Upsert,
 				Request: map[string]interface{}{
-					"key":  "fakeKey1",
-					"data": fakeBodyObject,
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
 				},
 			},
 			actors.TransactionalOperation{
@@ -572,7 +572,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      fakeBodyObject,
+			Value:     fakeBodyObject,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -609,7 +609,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "bytearray",
-			Data:      string(base64Encoded),
+			Value:     string(base64Encoded),
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -655,7 +655,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "bytearray",
-			Data:      expectedObj,
+			Value:     expectedObj,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -685,7 +685,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Data:      nonJSONFakeData,
+			Value:     nonJSONFakeData,
 		}).Return(nil)
 
 		testAPI.actor = mockActors
@@ -757,8 +757,8 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			actors.TransactionalOperation{
 				Operation: actors.Upsert,
 				Request: map[string]interface{}{
-					"key":  "fakeKey1",
-					"data": fakeBodyObject,
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
 				},
 			},
 			actors.TransactionalOperation{

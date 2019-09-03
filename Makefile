@@ -24,19 +24,11 @@ endif
 BASE_PACKAGE_NAME := github.com/actionscore/actions
 
 ################################################################################
-# Dependencies                                                                 #
-################################################################################
-
-.PHONY: dep
-dep:
-	go mod vendor
-
-################################################################################
 # Build																           #
 ################################################################################
 
 .PHONY: build
-build: dep
+build:
 	  set -e; \
 	  for b in $(BINARIES); do \
 	  		for t in $(TARGETS); do \
@@ -52,5 +44,5 @@ build: dep
 # Tests																           #
 ################################################################################
 .PHONY: test
-test: dep
-	go test ./pkg/... -mod=readonly
+test:
+	go test ./pkg/... -mod=vendor
