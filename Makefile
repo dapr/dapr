@@ -45,4 +45,4 @@ build:
 ################################################################################
 .PHONY: test
 test:
-	go test ./pkg/... -mod=readonly
+	go test ./pkg/... -mod=vendor
