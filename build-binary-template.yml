@@ -3,11 +3,15 @@ parameters:
   targetOS: 'darwin'
   targetArch: 'amd64'
   binaryExtension: ''
+  dependsOn: 'release_environment'
+  relVersion: ''
 jobs:
 - job: build_${{ parameters.targetOS }}_${{ parameters.targetArch }}
+  dependsOn: ${{ parameters.dependsStep }}
   variables:
     GOOS: ${{ parameters.targetOS }}
     GOARCH: ${{ parameters.targetArch }}
+    REL_VERSION: ${{ parameters.relVersion }}
     GOPROXY: https://proxy.golang.org
   pool:
     vmImage: '${{ parameters.poolImage }}'

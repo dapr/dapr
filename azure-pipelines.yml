@@ -59,45 +59,37 @@ jobs:
         ArtifactName: 'drop'
         publishLocation: 'Container'
 - template: 'build-binary-template.yml'
-  dependsOn:
-    - release_environment
-  variables:
-    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   parameters:
     poolImage: macOS-latest
     targetOS: darwin
     targetArch: amd64
     binaryExtension: ''
+    dependsOn: release_environment
+    relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
 - template: 'build-binary-template.yml'
-  dependsOn:
-    - release_environment
-  variables:
-    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   parameters:
     poolImage: ubuntu-latest
     targetOS: linux
     targetArch: arm
     binaryExtension: ''
+    dependsOn: release_environment
+    relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
 - template: 'build-binary-template.yml'
-  dependsOn:
-    - release_environment
-  variables:
-    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   parameters:
     poolImage: ubuntu-latest
     targetOS: linux
     targetArch: amd64
     binaryExtension: ''
+    dependsOn: release_environment
+    relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
 - template: 'build-binary-template.yml'
-  dependsOn:
-    - release_environment
-  variables:
-    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   parameters:
     poolImage: windows-2019
     targetOS: windows
     targetArch: amd64
     binaryExtension: '.exe'
+    dependsOn: release_environment
+    relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
 - job: publish_edge_binaries
   pool:
     vmImage: windows-2019
