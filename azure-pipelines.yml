@@ -91,6 +91,8 @@ jobs:
 - template: 'build-binary-template.yml'
   dependsOn:
     - release_environment
+  variables:
+    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   parameters:
     poolImage: windows-2019
     targetOS: windows
