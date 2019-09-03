@@ -34,7 +34,7 @@ steps:
   displayName: 'Upload Actions binaries to GitHub Release'
   inputs:
     gitHubConnection: 'GitHub'
-    repositoryName: 'actionscore/actions'
+    repositoryName: '$(Build.Repository.Name)'
     action: 'create'
     target: '$(RELEASE_COMMIT_ID)'
     tagSource: 'manual'
