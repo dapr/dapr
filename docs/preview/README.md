@@ -27,11 +27,11 @@ In this Preview Kit repository, included are the following:
 
 ## Release notes
 
-This release of Actions preview kit is the very first kit version. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.   
+This release of Actions preview kit is the very first kit version. It is focused on providing users an easy way to install and get started with Actions in both standalone and Kubernetes mode as well as "getting started" samples.
 
-* Actions runtime 0.2.0-alpha [(release notes)](https://github.com/actionscore/actions/blob/master/docs/release_notes/v0.2.0-alpha.md)
+* Actions runtime 0.3.0-alpha [(release notes)](https://github.com/actionscore/actions/blob/master/docs/release_notes/v0.3.0-alpha.md)
 
-For the full release notes, go [here](https://github.com/actionscore/actions/blob/master/docs/preview/release_notes/v0.1.0.md). 
+For the full release notes, go [here](https://github.com/actionscore/actions/blob/master/docs/preview/release_notes/v0.2.0.md).
 
 
 ## Setup
