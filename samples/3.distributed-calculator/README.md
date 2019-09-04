@@ -21,19 +21,11 @@ In order to run this sample, you'll need to have an Actions-enabled Kubernetes c
 
 1. Navigate to the deploy directory in this sample directory: `cd deploy`
 2. Follow [these instructions](https://github.com/actionscore/actions/tree/master/samples/2.hello-kubernetes#step-2---set-up-a-state-store) to create and configure a Redis store
-3. Deploy the React front-end: `kubectl apply -f react-calculator.yaml`
-4. Deploy each of the supporting applications:
+3. Deploy all of your resources: `kubectl apply -f .`. **Note**: Services could also be deployed one-by-one by specifying the .yaml file: `kubectl apply -f go-adder.yaml`.
 
-```bash
-kubectl apply -f go-adder.yaml
-kubectl apply -f dotnet-subtractor.yaml
-kubectl apply -f python-multiplier.yaml
-kubectl apply -f node-divider.yaml
-```
+Each of the services will spin up a pod with two containers: one for your service and one for the actions sidecar. It will also configure a service for each sidecar and an external IP for our front-end, which allows us to connect to it externally.
 
-Each of these deployments will spin up a pod with two containers: one for your service and one for the actions sidecar. It will also configure a service for each sidecar and an external IP for our front-end, which allows us to connect to it externally.
-
-5. Wait until your pods are in a running state: `kubectl get pods -w`
+4. Wait until your pods are in a running state: `kubectl get pods -w`
 
 ```bash
 
