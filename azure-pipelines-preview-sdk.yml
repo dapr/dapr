@@ -107,7 +107,10 @@ steps:
 
       echo "removing arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
-      
+
+      echo "removing *.txt"
+      rm -f $(System.ArtifactsDirectory)/release/drop/*.txt
+
       if [ -d "$(System.ArtifactsDirectory)/dotnet-sdk/release_drop" ]
       then
         echo "copying nuget pkgs..."
