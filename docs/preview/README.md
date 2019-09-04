@@ -54,7 +54,7 @@ Docker login actionscore.azurecr.io --username 390401a7-d7a6-46da-b10f-3ceff7a1c
 
 __*Note: For Windows users, run the cmd terminal in administrator mode*__
 
-__*Note: For Linux users, if you run docker cmds with sudo, yuu need to use "sudo actions init*__
+__*Note: For Linux users, if you run docker cmds with sudo, you need to use "sudo actions init*__
 
 
 #### Install
