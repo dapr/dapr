@@ -99,8 +99,7 @@ jobs:
     - build_linux_arm
     - build_windows_amd64
     - release_environment
-  condition: |
-    ne(variables['Build.Reason'], 'PullRequest')
+  condition: and(ne(variables['Build.Reason'], 'PullRequest'), eq(dependencies.build_darwin_amd64.result, 'Succeeded'), eq(dependencies.build_linux_amd64.result, 'Succeeded'), eq(dependencies.build_linux_arm.result, 'Succeeded'), eq(dependencies.build_windows_amd64.result, 'Succeeded'))
   variables:
     REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   steps:
