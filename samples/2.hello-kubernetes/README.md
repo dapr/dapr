@@ -186,6 +186,16 @@ curl $NODE_APP/order
 
 You should see the latest JSON in response!
 
+## Step 8 - Cleanup
+
+Once you're done using the sample, you can spin down your Kubernetes resources by navigating to the `./deploy` directory and running:
+
+```bash
+kubectl delete -f .
+```
+
+This will spin down each resource defined by the .yaml files in the `deploy` directory, including the state component.
+
 ## Next Steps
 
 Now that you're successfully working with actions, you probably want to update the sample code to fit your scenario. The Node.js and Python apps that make up this sample are deployed from container images hosted on a private [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/). To create new images with updated code, you'll first need to install docker on your machine. Next, follow these steps:

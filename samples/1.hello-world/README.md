@@ -116,6 +116,16 @@ Now, let's just make sure that our order was successfully persisted to our state
 
 This invokes the `/order` route, which calls out to our Redis store for the latest data. Observe the expected result!
 
+## Step 6 - Cleanup
+
+To stop your services from running, simply stop the "actions run" process. Alternatively, you can spin down each of your services with the Actions CLI "stop" command. For example, to spin down your Node service, run: 
+
+```bash
+actions stop --app-id mynode
+```
+
+To see that services have stopped running, run `actions list`, noting that your service no longer appears!
+
 ## Next Steps
 
 Now that you've gotten Actions running locally on your machine, see the [Hello Kubernetes](../2.hello-kubernetes) to get set up in Kubernetes!

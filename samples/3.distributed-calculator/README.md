@@ -21,19 +21,11 @@ In order to run this sample, you'll need to have an Actions-enabled Kubernetes c
 
 1. Navigate to the deploy directory in this sample directory: `cd deploy`
 2. Follow [these instructions](https://github.com/actionscore/actions/tree/master/samples/2.hello-kubernetes#step-2---set-up-a-state-store) to create and configure a Redis store
-3. Deploy the React front-end: `kubectl apply -f react-calculator.yaml`
-4. Deploy each of the supporting applications:
+3. Deploy all of your resources: `kubectl apply -f .`. **Note**: Services could also be deployed one-by-one by specifying the .yaml file: `kubectl apply -f go-adder.yaml`.
 
-```bash
-kubectl apply -f go-adder.yaml
-kubectl apply -f dotnet-subtractor.yaml
-kubectl apply -f python-multiplier.yaml
-kubectl apply -f node-divider.yaml
-```
+Each of the services will spin up a pod with two containers: one for your service and one for the actions sidecar. It will also configure a service for each sidecar and an external IP for our front-end, which allows us to connect to it externally.
 
-Each of these deployments will spin up a pod with two containers: one for your service and one for the actions sidecar. It will also configure a service for each sidecar and an external IP for our front-end, which allows us to connect to it externally.
-
-5. Wait until your pods are in a running state: `kubectl get pods -w`
+4. Wait until your pods are in a running state: `kubectl get pods -w`
 
 ```bash
 
@@ -75,7 +67,7 @@ Persisting State:
 {total: "21", next: "2", operation: "x"}
 ```
 
-`total`, `next`, and `operation` reflect the three pieces of state a calculator needs to operate. Our app persists these to a Redis store (see [Simplified State Management](https://github.com/actionscore/actions/blob/calculator-fixes/samples/distributed-calculator/README.md#simplified-state-management) section below). By persisting these, we can refresh the page or take down the front-end pod and still jump right back where we were. Let's try it! Enter something into the calculator and refresh the page. The calculator should have retained the state, and your console should read: 
+`total`, `next`, and `operation` reflect the three pieces of state a calculator needs to operate. Our app persists these to a Redis store (see [Simplified State Management](#simplified-state-management) section below). By persisting these, we can refresh the page or take down the front-end pod and still jump right back where we were. Let's try it! Enter something into the calculator and refresh the page. The calculator should have retained the state, and your console should read: 
 
 ```js
 Rehydrating State:
@@ -89,6 +81,16 @@ Calling divide service
 ```
 
 Our client code calls to an Express server, which routes our calls through Actions to our back-end services. In this case we're calling the divide endpoint on our nodejs application.
+
+## Cleanup
+
+Once you're done using the sample, you can spin down your Kubernetes resources by navigating to the `./deploy` directory and running:
+
+```bash
+kubectl delete -f .
+```
+
+This will spin down each resource defined by the .yaml files in the `deploy` directory, including the state component.
 
 ## The Role of Actions
 
