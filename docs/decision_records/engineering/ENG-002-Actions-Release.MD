@@ -23,47 +23,67 @@ Integration build refers to the build from `master` branch once we merge PullReq
 
 * Official build release
 
-Official build release refers to the build from `release-*` branch with the following requirements:
+Official build release refers to the builds satisfying the following requirements:
 
 1. Branch name is `release-*` without `-` version tag
    - `release-1.0.0` is allowed, but not `release-1.0.0-alpha`
-2. Git version tag must be matched with the version in branch name
+2. Git version tag represents the official release version and must be matched with the version in branch name
    - If git version tag is `v1.0.0-alpha`, then branch name must be `release-1.0.0`
-3. Release note under ./docs/release_notes/v{semver}.md
+3. Release note `./docs/release_notes/v{semver}.md` is given
 
-Unless the build satisfies all requirements, the build could be succeeded and tagged with the specific version, but will not be released to the customer with `latest` tag. For example, given the build from `release-1.0.0` branch and `v1.0.0-alpha` tag without `./docs/release_notes/v1.0.0-alpha.md` file, the build will be succeeded and tagged with `v1.0.0-alpha` image but not be released to the latest build.
+If we want to validate the current release build in `release-*` branch branch before the official release, we can build Actions without release note, but it will not released to `latest` version.
 
 ### Release Actions binaries for standalone users
 
-* Integration build
+* Integration build release
   - Upload zipped binaries to `release/edge` in actionsreleases blob storage.
 
 * Official build release
   - If build satisfies all requirements, upload zipped binaries to `release/[release_version]` and update all files in `release/latest` in actionsrelease blob storage
-  - If build satisfies the requirement 1 and 2 without release note, upload zipped binaries to `release/[release_version]`, but will not update the binaries in `release/latest`. This practice will prevent us from accidently releasing unstable changes to the customers.
+  - If build satisfies the requirements excluding release note, upload zipped binaries to `release/[release_version]`, but will not update the binaries in `release/latest`.
 
 ### Release Actions Docker Images
 
-* Integration build
+* Integration build release
   - Publish new docker image with `edge` tag. e.g. `actionscore/actions:edge`
 
 * Official build release
-  - If build satisfies all requirements, publish docker image with version tag and latest tag
-  - If build satisfies the requirement 1 and 2 without release note, publish the docker image with only `release version` tag without `latest` tag; See [ENG-001-tagging](./ENG-001-tagging.md) for more information. This practice will prevent us from accidently releasing unstable changes to the customers.
+  - If build satisfies all requirements, publish docker image with `release version` tag and `latest` tag
+  - If build satisfies the requirements excluding release note, publish the docker image with only `release version` tag; See [ENG-001-tagging](./ENG-001-tagging.md) for more information.
 
 ### Release new Helm chart manifest
 
-* Integration build
+* Integration build release
   - Modify the helm template to point the actions docker image to `actionscore/actions:edge` and generate manifest
   - Upload manifest to `manifest/edge` in actionsreleases blob storage
 
 * Official build release
-  - If build satisfies all requirements
-    - Modify actions image location to `actionscore/actions:v[release_version]` in helm manifest and upload the manifest to actionsreleases blob storage under `manifest/v[release_version]`
-  - If build satisfies the requirement 1 and 2 without release note, publish the docker image with only `release version` tag without `latest` tag; See [ENG-001-tagging](./ENG-001-tagging.md) for more information. This practice will prevent us from accidently releasing unstable changes to the customers.
+  - If build satisfies all requirements, modify actions image location to `actionscore/actions:v[release_version]` in helm manifest and upload the manifest under `manifest/v[release_version]` and `manifest/latest` in actionsreleases blob storage
+  - If build satisfies the requirements excluding release note, upload the manifest to `manifest/v[release_version]` in actionsreleases blob storage
+
+### GitHub Release
+
+Only official build release will be released to [GitHub Release](https://github.com/actionscore/actions/releases)
 
 ## Consequences
 
+* Customers and Actions Engineering Team can use the specific version of Actions binaries, Docker images, and helm manifest selectively
+* Actions Engineering Team can release the official build without breaking customer scenario
 
 ## Examples
 
+* Integration build: from master branch
+  1. Publish actions binaries to actionsreleases blob storage under `release/edge/`
+  2. Publish docker image with `edge` build tag
+  3. Publish helm manifest to actionsreleases blob storage under `manifest/edge`
+
+* Official build without release note: from release-1.0.0 and v1.0.0-alpha tag
+  1. Publish actions binaries to actionsreleases blob storage under `release/v1.0.0-alpha/`
+  2. Publish docker image with `v1.0.0-alpha` build tag
+  3. Publish helm manifest to actionsreleases blob storage under `minifest/v1.0.0-alpha`
+
+* Official build with release note: from release-1.0.0 and v1.0.0-alpha tag
+  1. Publish actions binaries to `release/v1.0.0-alpha/` and `release/latest/` in actionsreleases blob storage
+  2. Publish docker image with `v1.0.0-alpha` and `latest` build tags
+  3. Publish helm manifest to `minifest/v1.0.0-alpha` and `minifest/latest` in actionsreleases blob storage
+  4. Publish actions binaries to GitHub Release
