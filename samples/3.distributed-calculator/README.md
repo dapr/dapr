@@ -90,6 +90,16 @@ Calling divide service
 
 Our client code calls to an Express server, which routes our calls through Actions to our back-end services. In this case we're calling the divide endpoint on our nodejs application.
 
+## Cleanup
+
+Once you're done using the sample, you can spin down your Kubernetes resources by navigating to the `./deploy` directory and running:
+
+```bash
+kubectl delete -f .
+```
+
+This will spin down each resource defined by the .yaml files in the `deploy` directory.
+
 ## The Role of Actions
 
 This sample demonstrates how we use Actions as a programming model for simplifying the development of distributed systems. In this sample, Actions is enabling polyglot programming, service discovery and simplified state management.
