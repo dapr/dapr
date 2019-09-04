@@ -21,8 +21,9 @@ In this Preview Kit repository, included are the following:
 1. Microsoft “Actions” Private Preview license
 2. README file with instruction on how to setup Actions
 3. Actions CLI binaries
-4. Samples to help you get started with Actions
-5. Documentation
+4. Actions .NET SDK
+5. Samples to help you get started with Actions
+6. Documentation
 
 
 ## Release notes
