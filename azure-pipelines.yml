@@ -99,7 +99,7 @@ jobs:
     - build_linux_arm
     - build_windows_amd64
     - release_environment
-  condition: and(ne(variables['Build.Reason'], 'PullRequest'), eq(dependencies.build_darwin_amd64.result, 'Succeeded'), eq(dependencies.build_linux_amd64.result, 'Succeeded'), eq(dependencies.build_linux_arm.result, 'Succeeded'), eq(dependencies.build_windows_amd64.result, 'Succeeded'))
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
   variables:
     REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   steps:
@@ -143,11 +143,7 @@ jobs:
   dependsOn:
     - publish_edge_binaries
     - release_environment
-  condition: |
-    and(
-      ne(variables['Build.Reason'], 'PullRequest'),
-      eq(dependencies.publish_edge_binaries.result, 'Succeeded')
-    )
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
   variables:
     REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   steps:
