@@ -39,11 +39,10 @@ steps:
     downloadPath: '$(System.ArtifactsDirectory)/spec_drop'
 - task: DownloadBuildArtifacts@0
   displayName: 'Download dotnet-sdk'
-  continueOnError: true
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
-    pipeline: '16'
+    pipeline: '17'
     buildVersionToDownload: 'latest'
     tags: 'release'
     downloadType: 'single'
