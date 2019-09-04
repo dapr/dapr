@@ -129,7 +129,7 @@ Once you're done using the sample, you can spin down your Kubernetes resources b
 kubectl delete -f .
 ```
 
-This will spin down each resource defined by the .yaml files in the `deploy` directory.
+This will spin down each resource defined by the .yaml files in the `deploy` directory, including the state component.
 
 ## How it Works
 
