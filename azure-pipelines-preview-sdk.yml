@@ -37,9 +37,8 @@ steps:
     downloadType: 'single'
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/spec_drop'
-
 - task: DownloadBuildArtifacts@0
-  displayName: 'Download cs-sdk'
+  displayName: 'Download dotnet-sdk'
   continueOnError: true
   inputs:
     buildType: 'specific'
@@ -49,7 +48,7 @@ steps:
     tags: 'release'
     downloadType: 'single'
     artifactName: 'release_drop'
-    downloadPath: '$(System.ArtifactsDirectory)/cs-sdk'
+    downloadPath: '$(System.ArtifactsDirectory)/dotnet-sdk'
 - task: Bash@3
   displayName: 'Git clone preview repo'
   inputs:
@@ -68,6 +67,13 @@ steps:
     script: |
       cd ..
       git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/cli.git
+- task: Bash@3
+  displayName: 'Git clone actions/dotnet-sdk repo'
+  inputs:
+    targetType: 'inline'
+    script: |
+      cd ..
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/dotnet-sdk.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Copy Preview Kit contents to preview repo'
@@ -85,6 +91,11 @@ steps:
       mv ../previewkit/docs/preview/README.md ../previewkit/
       mkdir ../previewkit/docs/cli
       mv ../cli/docs/preview/README.md ../previewkit/docs/cli/
+
+      # Copy sdk doc to previewkit
+      mkdir ../previewkit/docs/sdk
+      mkdir ../previewkit/docs/sdk/dotnet-sdk
+      mv ../dotnet-sdk/docs/*.md ../previewkit/docs/sdk/dotnet-sdk/
       
       # Remove unnecessary files
       rm -rf ../previewkit/docs/decision_records
@@ -98,10 +109,10 @@ steps:
       echo "removing arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
       
-      if [ -d "$(System.ArtifactsDirectory)/cs-sdk/release_drop" ]
+      if [ -d "$(System.ArtifactsDirectory)/dotnet-sdk/release_drop" ]
       then
         echo "copying nuget pkgs..."
-        cp $(System.ArtifactsDirectory)/cs-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
+        cp $(System.ArtifactsDirectory)/dotnet-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
       fi
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
