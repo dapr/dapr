@@ -39,8 +39,8 @@ If we want to validate the current release build in `release-*` branch branch be
   - Upload zipped binaries to `release/edge` in actionsreleases blob storage.
 
 * Official build release
-  - If build satisfies all requirements, upload zipped binaries to `release/[release_version]` and update all files in `release/latest` in actionsrelease blob storage
-  - If build satisfies the requirements excluding release note, upload zipped binaries to `release/[release_version]`, but will not update the binaries in `release/latest`.
+  - With release note, upload zipped binaries to `release/[release_version]` and update all files in `release/latest` in actionsrelease blob storage
+  - Without release note, upload zipped binaries to `release/[release_version]`, but will not update the binaries in `release/latest`.
 
 ### Release Actions Docker Images
 
@@ -48,8 +48,8 @@ If we want to validate the current release build in `release-*` branch branch be
   - Publish new docker image with `edge` tag. e.g. `actionscore/actions:edge`
 
 * Official build release
-  - If build satisfies all requirements, publish docker image with `release version` tag and `latest` tag
-  - If build satisfies the requirements excluding release note, publish the docker image with only `release version` tag; See [ENG-001-tagging](./ENG-001-tagging.md) for more information.
+  - With release note, publish docker image with `release version` tag and `latest` tag
+  - Without release note, publish the docker image with only `release version` tag; See [ENG-001-tagging](./ENG-001-tagging.md) for more information.
 
 ### Release new Helm chart manifest
 
@@ -58,8 +58,8 @@ If we want to validate the current release build in `release-*` branch branch be
   - Upload manifest to `manifest/edge` in actionsreleases blob storage
 
 * Official build release
-  - If build satisfies all requirements, modify actions image location to `actionscore/actions:v[release_version]` in helm manifest and upload the manifest under `manifest/v[release_version]` and `manifest/latest` in actionsreleases blob storage
-  - If build satisfies the requirements excluding release note, upload the manifest to `manifest/v[release_version]` in actionsreleases blob storage
+  - With release note, modify actions image location to `actionscore/actions:v[release_version]` in helm manifest and upload the manifest under `manifest/v[release_version]` and `manifest/latest` in actionsreleases blob storage
+  - Without release note, upload the manifest to `manifest/v[release_version]` in actionsreleases blob storage
 
 ### GitHub Release
 
