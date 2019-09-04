@@ -12,8 +12,8 @@ steps:
         VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
       fi
 
-      echo '##vso[task.setvariable variable=DockerReleaseTag]'
-      echo '##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG'
+      echo "##vso[task.setvariable variable=DockerReleaseTag]"
+      echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
       echo Target Architecture: ${{ parameters.targetArch }}
       echo Integration Build - Docker Version TAG: $VERSION_TAG
     condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
@@ -28,8 +28,8 @@ steps:
         VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
       fi
 
-      echo '##vso[task.setvariable variable=DockerReleaseTag]$RELEASE_TAG'
-      echo '##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG'
+      echo "##vso[task.setvariable variable=DockerReleaseTag]$RELEASE_TAG"
+      echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
 
       echo Target Architecture: ${{ parameters.targetArch }}
       echo Release Build - Docker Release TAG: $RELEASE_TAG
