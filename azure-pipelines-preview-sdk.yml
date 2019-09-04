@@ -107,7 +107,10 @@ steps:
 
       echo "removing arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
-      
+
+      echo "removing *.txt"
+      rm -f $(System.ArtifactsDirectory)/release/drop/*.txt
+
       if [ -d "$(System.ArtifactsDirectory)/dotnet-sdk/release_drop" ]
       then
         echo "copying nuget pkgs..."
@@ -125,6 +128,7 @@ steps:
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/previewkit\/releases/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/blob\/master\/README.md/github.com\/actionscore\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/dotnet-sdk/github.com\/actionscore\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli/github.com\/actionscore\/previewkit\/releases/gI' {} \;
 
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
