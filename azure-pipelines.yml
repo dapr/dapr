@@ -152,7 +152,11 @@ jobs:
     - publish_edge_binaries
     - release_environment
   condition: |
-    eq(dependencies.publish_edge_binaries.result, 'Succeeded')
+    and
+    (
+      eq(dependencies.publish_edge_binaries.result, 'Succeeded'),
+      ne(variables['Build.Reason'], 'PullRequest')
+    )
   variables:
     REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   steps:
