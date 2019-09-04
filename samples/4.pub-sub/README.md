@@ -121,6 +121,15 @@ Now that we've set up the Redis store, we can deploy our assets.
 
 4. Note that the Node.js subscriber receives messages of type "A" and "B", while the Python subscriber receives messages of type "A" and "C".
 
+### Cleanup
+
+Once you're done using the sample, you can spin down your Kubernetes resources by navigating to the `./deploy` directory and running:
+
+```bash
+kubectl delete -f .
+```
+
+This will spin down each resource defined by the .yaml files in the `deploy` directory.
 
 ## How it Works
 
