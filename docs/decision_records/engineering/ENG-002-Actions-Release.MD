@@ -65,6 +65,14 @@ If we want to validate the current release build in `release-*` branch branch be
 
 Only official build release will be released to [GitHub Release](https://github.com/actionscore/actions/releases)
 
+### Release instruction
+
+git checkout master
+git checkout -b release-1.0.0
+git push origin release-1.0.0
+git tag v1.0.0-alpha
+
+
 ## Consequences
 
 * Customers and Actions Engineering Team can use the specific version of Actions binaries, Docker images, and helm manifest selectively
