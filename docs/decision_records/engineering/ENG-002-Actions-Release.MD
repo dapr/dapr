@@ -61,7 +61,7 @@ $ git push origin v1.0.0-alpha
   - Upload zipped binaries to `release/edge` in actionsreleases blob storage.
 
 * Official build release
-  - Upload zipped binaries to `release/[release_version]`
+  - Upload zipped binaries to `release/v{semver}`
   - Update all files in `release/latest` in actionsrelease blob storage (only if release note is given)
 
 ### Release Actions Docker Images
@@ -77,7 +77,7 @@ $ git push origin v1.0.0-alpha
 > `latest-{arch}` tag will be added only if release note is given.
 > See [ENG-001-tagging](./ENG-001-tagging.md) for more information.
 
-### Release new Helm chart manifest
+### Release Helm manifest
 
 * Integration build release
   - Modify the helm template to point the actions docker image to `actionscore/actions:edge` and generate manifest
