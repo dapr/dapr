@@ -124,7 +124,7 @@ steps:
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/actions/github.com\/actionscore\/previewkit/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/previewkit\/releases/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/blob\/master\/README.md/github.com\/actionscore\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
-      find . -name '*.md' -type f -exec gsed -i 's/github.com\/actionscore\/dotnet-sdk/github.com\/actionscore\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/dotnet-sdk/github.com\/actionscore\/previewkit\/releases/gI' {} \;
 
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
