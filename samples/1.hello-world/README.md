@@ -118,7 +118,7 @@ This invokes the `/order` route, which calls out to our Redis store for the late
 
 ## Step 6 - Cleanup
 
-Once your done using the sample, you can spin down each of your services with the Actions CLI "stop" command. For example, to spin down your Node service, run: 
+Once you're done using the sample, you can spin down each of your services with the Actions CLI "stop" command. For example, to spin down your Node service, run: 
 
 ```bash
 actions stop --app-id mynode
