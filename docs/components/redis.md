@@ -24,7 +24,7 @@ Actions can use any Redis instance - containerized, running on your local dev ma
 
 We can use [Helm](https://helm.sh/) to quickly create a Redis instance in our Kubernetes cluster. This approach requires [Installing Helm](https://github.com/helm/helm#install).
 
-1. Install Redis into your cluster: `helm install stable/redis --name redis --set image.tag=5.0.5-debian-9-r104`. Note that we're explicitly setting an image tag to get a version greater than 5, which is what Actions' pub-sub functionality requires. If you're intending on using Redis as just a state store (and not for pub-sub), you do not have to set the image.
+1. Install Redis into your cluster: `helm install stable/redis --name redis --set image.tag=5.0.5-debian-9-r104`. Note that we're explicitly setting an image tag to get a version greater than 5, which is what Actions' pub-sub functionality requires. If you're intending on using Redis as just a state store (and not for pub-sub), you do not have to set the image version.
 2. Run `kubectl get pods` to see the Redis containers now running in your cluster.
 3. Run `kubectl get svc` and copy the cluster IP of your `redis-master`. Add this IP as the `redisHost` in your redis.yaml file, followed by ":6379". For example:
     ```yaml
