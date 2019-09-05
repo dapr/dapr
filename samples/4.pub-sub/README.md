@@ -22,7 +22,7 @@ Actions allows us to deploy the same microservices from our local machines to th
 ### Prerequisites to Run Locally
 
 - [Actions CLI with Actions initialized](/../../#Install-as-standalone)
-- [Node.js](https://nodejs.org/en/) and/or [Python](https://www.python.org/): You can run this sample with one or both microservices
+- [Node.js 10 or greater](https://nodejs.org/en/) and/or [Python 3.4 or greater](https://www.python.org/): You can run this sample with one or both microservices
 
 ### Prerequisites to Run in Kubernetes
 

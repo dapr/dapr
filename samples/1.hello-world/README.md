@@ -7,7 +7,7 @@ This tutorial will demonstrate how to get Actions running locally on your machin
 ## Prerequisites
 This sample requires you to have the following installed on your machine:
 - [Docker](https://docs.docker.com/)
-- [Node](https://nodejs.org/en/)
+- [Node.js v10 or greater](https://nodejs.org/en/) 
 - [Postman](https://www.getpostman.com/)
 
 ## Step 1 - Setup Actions 
