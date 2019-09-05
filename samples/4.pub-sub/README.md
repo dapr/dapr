@@ -84,9 +84,9 @@ To run the same sample in Kubernetes, we'll need to first set up a Redis store a
 
 ### Setting up a Redis Store
 
-Actions uses pluggable message buses to enable pub-sub, in this case we'll use Redis Streams (enabled in Redis versions => 5). We'll install Redis into our cluster using helm, but keep in mind that you could use whichever Redis host you like, as long as the version is greater than 5.
+Actions uses pluggable message buses to enable pub-sub, in this case we'll use Redis Streams (enabled in Redis version 5 and above). We'll install Redis into our cluster using helm, but keep in mind that you could use whichever Redis host you like, as long as the version is greater than 5.
 
-1. Follow [these steps](../../docs/components/redis.md#Creating-a-Redis-Cache-in-your-Kubernetes-Cluster-using-Helm) to create a Redis store. 
+1. Follow [these steps](../../docs/components/redis.md#Creating-a-Redis-Cache-in-your-Kubernetes-Cluster-using-Helm) to create a Redis store.
 2. Once your store is created, add the keys to the `redis.yaml` file in the `deploy` directory. Don't worry about applying the `redis.yaml`, as it will be covered in the next step.
 
 ### Deploy Assets
