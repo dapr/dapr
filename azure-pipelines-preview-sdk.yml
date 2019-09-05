@@ -144,7 +144,7 @@ steps:
       echo * Latest release version : $LAST_VERSION
   
       git add -A
-      git commit -am "Actions Preview Kit Update"
+      git commit -am "Actions Preview Kit Update $(Build.BuildNumber)"
       git status
 
       git push origin master
@@ -166,6 +166,6 @@ steps:
     tag: '$(RELEASE_VERSION)'
     isPreRelease: true
     addChangeLog: false
-    releaseNotesFile: './docs/preview/release_notes/$(RELEASE_VERSION).md'
+    releaseNotesFile: '$(Build.SourcesDirectory)/../previewkit/docs/preview/release_notes/$(RELEASE_VERSION).md'
     title: 'Actions Preview Kit $(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/release/drop/**'
