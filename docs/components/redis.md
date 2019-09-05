@@ -47,7 +47,7 @@ We can use [Helm](https://helm.sh/) to quickly create a Redis instance in our Ku
 
 ## Configuration
 
-Actions uses Redis as a `Component`. It can use a Redis store as `statestore` component (for state persistence and retrieval) or as a `messagebus` component (for pub-sub).
+Actions can use Redis as a `statestore` component (for state persistence and retrieval) or as a `messagebus` component (for pub-sub).
 
 ### Configuring Redis for State Persistence and Retrieval
 
