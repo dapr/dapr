@@ -38,7 +38,7 @@ In order to run the pub/sub sample locally, we need to run each of our microserv
 2. Install dependencies: `npm install`
 3. Run Node subscriber app with Actions: `actions run --app-id node-subscriber --app-port 3000 node app.js`
     
-    We assign `app-id`, which we can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `node app.js`
+    We assign `app-id`, which can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `node app.js`
 
 ### Run Python Message Subscriber with Actions
 
@@ -46,7 +46,7 @@ In order to run the pub/sub sample locally, we need to run each of our microserv
 2. Install dependencies: `pip install -r requirements.txt`
 3. Run Python subscriber app with Actions: `actions run --app-id python-subscriber --app-port 5000 python app.py`
     
-    We assign `app-id`, which we can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `python app.py`
+    We assign `app-id`, which can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `python app.py`
 
 ### Use the CLI to Publish Messages to Subscribers
 
