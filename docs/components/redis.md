@@ -1,10 +1,9 @@
 # Redis and Actions
 
-Actions can use Redis in a few ways:
+Actions can use Redis in two ways:
 
-1. For message delivery between Actions in an async manner
-2. For state persistence and restoration
-3. For enabling pub-sub (using Redis streams)
+1. For state persistence and restoration
+2. For enabling pub-sub async style message delivery
 
 ## Creating a Redis Store
 
