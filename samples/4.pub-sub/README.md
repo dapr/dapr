@@ -86,21 +86,8 @@ To run the same sample in Kubernetes, we'll need to first set up a Redis store a
 
 Actions uses pluggable message buses to enable pub-sub, in this case we'll use Redis Streams (enabled in Redis versions => 5). We'll install Redis into our cluster using helm, but keep in mind that you could use whichever Redis host you like, as long as the version is greater than 5.
 
-1. Use helm to create a Redis instance: `helm install stable/redis --name redis --set image.tag=5.0.5-debian-9-r104`. We set image tag since the default currently installs a version < 5.
-2. Run `kubectl get pods` to see the Redis containers now running in your cluster.
-3. Run `kubectl get svc` and copy the cluster IP of your `redis-master`. Add this IP as the `redisHost` in your redis.yaml file, followed by ":6379". For example:
-    ```yaml
-        redisHost: "10.0.125.130:6379"
-    ```
-4. Next, we'll get our Redis password, which is slightly different depending on the OS we're using:
-    - **Windows**: Run `kubectl get secret --namespace default redis -o jsonpath="{.data.redis-password} > encoded.64"`, which will create a file with your encoded password. Next, run `certutil -decode encoded.b64 password.txt`, which will put your redis password in a text file called `password.txt`. Copy the password and delete the two files.
-
-    - **Linux/MacOS**: Run `kubectl get secret --namespace default redis -o jsonpath="{.data.redis-password}" | base64 --decode` and copy the outputted password.
-
-    Add this password as the `password` value in your redis.yaml file. For example:
-    ```yaml
-        password: "lhDOkwTlp0"
-    ```
+1. Follow [these steps](../../docs/components/redis.md#Creating-a-Redis-Cache-in-your-Kubernetes-Cluster-using-Helm) to create a Redis store. 
+2. Once your store is created, add the keys to the `redis.yaml` file in the `deploy` directory. Don't worry about applying the `redis.yaml`, as it will be covered in the next step.
 
 ### Deploy Assets
 
