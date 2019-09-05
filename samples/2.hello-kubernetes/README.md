@@ -8,26 +8,14 @@ This tutorial will get you up and running with Actions in a Kubernetes cluster. 
 
 The first thing you need is an RBAC enabled Kubernetes cluster. This could be running on your machine using Minikube, or it could be a fully-fledged cluser in Azure using [AKS](https://azure.microsoft.com/en-us/services/kubernetes-service/). Once you have a cluster, follow [these steps](/../../#install-on-kubernetes) to deploy Actions to it.
 
-## Step 2 - Set up a State Store
 
-In this sample, a Node.js app will be persisting messages created by a Python app. Correspondingly, we'll need to create and configure a state store. We'll be using Redis, though we could use CosmosDB, DynamoDB or Cassandra. 
+## Step 2 - Create and Configure a State Store
 
-### 1. Create a Redis Store
+Actions can use a number of different state stores (Redis, CosmosDB, DynamoDB, Cassandra, etc.) to persist and retrieve state. For this demo, we'll use Redis.
 
-You can create your Redis store wherever you see fit: Azure, AWS, GCP or on a container. 
-
-For this demo, we'll create a managed instance in Azure by following [this create flow](https://ms.portal.azure.com/#create/Microsoft.Cache). Be sure to **check the "Unblock port 6379" box**, which will allow us to persist state without SSL.
-
-### 2. Configure your store
-
-Once your Redis store is created, you can use your connection string and password to connect your actions cluster to it. You can see your connection information in the "Access keys" tab under "Settings". Set the `redisHost` and `redisPassword` properties in the `./deploy/redis.yaml` file to your host and your key. If you're using an Azure managed Redis instance, your host will be `actions-redis.redis.cache.windows.net:6379` and your key will be available in Settings -> Access Keys.
-
-To connect your cluster to your Redis store simply apply the deployment file:
-
-```bash
-kubectl apply -f ./deploy/redis.yaml
-```
-Observe that your state store was successfully configured!
+1. Follow [these steps](../../docs/components/redis.md#Creating-a-Redis-Store) to create a Redis store.
+2. Once your store is created, add the keys to the `redis.yaml` file in the `deploy` directory.
+3. Apply the `redis.yaml` file: `kubectl apply -f ./deploy/redis.yaml` and observe that your state store was successfully configured!
 
 ```bash
 eventsource.actions.io "statestore" configured
