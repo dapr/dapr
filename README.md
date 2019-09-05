@@ -179,26 +179,8 @@ Check out the following tutorials:
 
 * [Run Actions Locally](samples/1.hello-world)
 * [Run Actions in Kubernetes](samples/2.hello-kubernetes)
-* [Enable state management with Redis](docs/concepts/state/redis.md)
-* [Enable state management with CosmosDB](docs/concepts/state/cosmosdb.md)<br><br>
-* [Setup an AWS SQS Event Source](docs/aws_sqs.md)
-* [Setup an AWS SNS Event Source](docs/aws_sns.md)
-* [Setup an Azure Event Hubs Event Source](docs/azure_eventhubs.md)
-* [Setup a Google Cloud Storage Event Source](docs/gcp_storage.md)
-* [Setup an HTTP Event Source](docs/http.md)<br><br>
-* [Getting started with C#](docs/getting_started/c%23/tutorial.md)
-* [Getting started with Go](docs/getting_started/go/tutorial.md)
-* [Getting started with Node.JS](docs/getting_started/node/tutorial.md)
-* [Getting started with Python](docs/getting_started/python/tutorial.md)
-* [Getting started with Java](docs/getting_started/java/tutorial.md)
-* [Getting started with Rust](docs/getting_started/rust/tutorial.md)
-* [Getting started with Ruby](docs/getting_started/ruby/tutorial.md)
-* [Getting started with C++](docs/getting_started/c++/tutorial.md)
-* [Getting started with PHP](docs/getting_started/php/tutorial.md)
-* [Getting started with Scala](docs/getting_started/scala/tutorial.md)
-* [Getting started with Kotlin](docs/getting_started/kotlin/tutorial.md)<br><br>
-
 * [Setup distributed tracing with Zipkin](docs/distributed_tracing.md)
+
 ## Concepts
 
 * [Actor Pattern](docs/concepts/actor/actor_pattern.md)
