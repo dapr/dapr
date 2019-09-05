@@ -11,9 +11,9 @@ The first thing you need is an RBAC enabled Kubernetes cluster. This could be ru
 
 ## Step 2 - Create and Configure a State Store
 
-You can create your Redis store wherever you see fit: Azure, AWS, GCP or on a container. For this demo, we'll use Redis. 
+Actions can use a number of different state stores (Redis, CosmosDB, DynamoDB, Cassandra, etc.) to persist and retrieve state. For this demo, we'll use Redis.
 
-1. Follow [these steps](../../docs/components/redis.md#Creating-a-Redis-Store) to create a Redis store. 
+1. Follow [these steps](../../docs/components/redis.md#Creating-a-Redis-Store) to create a Redis store.
 2. Once your store is created, add the keys to the `redis.yaml` file in the `deploy` directory.
 3. Apply the `redis.yaml` file: `kubectl apply -f ./deploy/redis.yaml` and observe that your state store was successfully configured!
 
