@@ -80,28 +80,24 @@ steps:
     targetType: 'inline'
     script: |
       pushd ../previewkit
-      rm -rf samples docs release_notes
-      rm -f LICENSE README.md
+      rm -rf samples
       popd
-      
-      cp LICENSE ../previewkit/
-      cp -R samples ../previewkit/
-      cp -R docs ../previewkit/
-      mv ../previewkit/docs/preview/README.md ../previewkit/
+
+      cp -Rv samples ../previewkit/
+
+      # Remove unnecessary files
+      rm -rf docs/decision_records
+      rm -rf docs/assets
+      cp -Rv docs/* ../previewkit/docs/
+
       mkdir ../previewkit/docs/cli
-      mv ../cli/docs/preview/README.md ../previewkit/docs/cli/
+      cp ../cli/docs/preview/*.md ../previewkit/docs/cli/
 
       # Copy sdk doc to previewkit
-      mkdir ../previewkit/docs/sdk
-      mkdir ../previewkit/docs/sdk/dotnet-sdk
-      mv ../dotnet-sdk/docs/*.md ../previewkit/docs/sdk/dotnet-sdk/
-      
-      # Remove unnecessary files
-      rm -rf ../previewkit/docs/decision_records
-      rm -rf ../previewkit/docs/assets
+      cp ../dotnet-sdk/docs/*.md ../previewkit/docs/sdk/dotnet-sdk/
 
       echo "copying specs..."
-      mkdir ../previewkit/docs/spec
+      rm -f ../previewkit/docs/spec/*
       unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../previewkit/docs/spec/
       cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
 
@@ -148,7 +144,7 @@ steps:
       echo * Latest release version : $LAST_VERSION
   
       git add -A
-      git commit -am "Actions Preview Kit $LAST_VERSION"
+      git commit -am "Actions Preview Kit Update"
       git status
 
       git push origin master
