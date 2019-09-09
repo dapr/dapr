@@ -10,7 +10,6 @@ This record descibes how to safely release new actions binaries and the correspo
 
 * Actions Binaries for standalone users
 * Actions Docker Images
-* Helm chart manifest
 * GitHub Release
 
 ## Decisions
@@ -27,9 +26,9 @@ Official build release refers to the builds satisfying the following requirement
 
 1. Branch name is `release-*` without `-` version tag
    - `release-1.0.0` is allowed, but not `release-1.0.0-alpha`
-2. Git version tag represents the official release version and must be matched with the version in branch name
+2. Release note `./docs/release_notes/v{semver}.md` is given
+3. Git version tag represents the official release version and must be matched with the version in branch name
    - If git version tag is `v1.0.0-alpha`, then branch name must be `release-1.0.0`
-3. Release note `./docs/release_notes/v{semver}.md` is given
 
 If we want to validate the current release build in `release-*` branch branch before the official release, we can build Actions without release note, but it will not released to `latest` version.
 
@@ -42,18 +41,24 @@ If we want to validate the current release build in `release-*` branch branch be
 # If we clone from actionscore/action branch directly
 $ git checkout master
 $ git checkout -b release-1.0.0
-$ git tag v1.0.0-alpha
 ```
 
-3. Push release branch and tag to remote origin
+3. Push release branch to remote origin
 
 ```bash
 $ git push origin release-1.0.0
-$ git push origin v1.0.0-alpha
 ```
 
-4. CI will be triggered automatically.
+4. CI will be triggered automatically
 
+5. Find the bugs and fix them
+
+6. Create git version tag and push
+
+```
+$ git tag 1.0.0-alpha
+$ git push origin 1.0.0-alpha
+```
 
 ### Release Actions binaries for standalone users
 
@@ -77,21 +82,9 @@ $ git push origin v1.0.0-alpha
 > `latest-{arch}` tag will be added only if release note is given.
 > See [ENG-001-tagging](./ENG-001-tagging.md) for more information.
 
-### Release Helm manifest
-
-* Integration build release
-  - Modify the helm template to point the actions docker image to `actionscore/actions:edge` and generate manifest
-  - Upload manifest to `manifest/edge` in actionsreleases blob storage
-
-* Official build release
-  - modify actions image location to `actionscore/actions:v{semver}` in helm manifest and upload the manifest under `manifest/v{semver}` and `manifest/latest` in actionsreleases blob storage
-
-> `manifest/latest` is updated only if release note is given.
-
 ### GitHub Release
 
 Only official build release will be released to [GitHub Release](https://github.com/actionscore/actions/releases)
-
 
 ## Consequences
 
@@ -106,13 +99,13 @@ Only official build release will be released to [GitHub Release](https://github.
   3. Publish linux arm docker image with `edge-arm` build tag
   4. Publish helm manifest to actionsreleases blob storage under `manifest/edge`
 
-* Official build without release note: from release-1.0.0 and v1.0.0-alpha tag
+* Official build without git version tag: from release-1.0.0 and v1.0.0-alpha tag
   1. Publish actions binaries to actionsreleases blob storage under `release/v1.0.0-alpha/`
   2. Publish linux amd64 docker image with `v1.0.0-alpha` build tag
   3. Publish linux arm docker image with `v1.0.0-alpha-arm` build tag
   4. Publish helm manifest to actionsreleases blob storage under `minifest/v1.0.0-alpha`
 
-* Official build with release note: from release-1.0.0 and v1.0.0-alpha tag
+* Official build with git version tag: from release-1.0.0 and v1.0.0-alpha tag
   1. Publish actions binaries to `release/v1.0.0-alpha/` and `release/latest/` in actionsreleases blob storage
   2. Publish linux amd64 docker image with `v1.0.0-alpha` and `latest` build tags
   3. Publish linux arm docker image with `v1.0.0-alpha-arm` and `latest-arm` build tags
