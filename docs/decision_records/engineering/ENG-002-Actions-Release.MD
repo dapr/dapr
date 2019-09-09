@@ -10,6 +10,7 @@ This record descibes how to safely release new actions binaries and the correspo
 
 * Actions Binaries for standalone users
 * Actions Docker Images
+* Release Helm manifest
 * GitHub Release
 
 ## Decisions
@@ -67,7 +68,7 @@ $ git push origin 1.0.0-alpha
 
 * Official build release
   - Upload zipped binaries to `release/v{semver}`
-  - Update all files in `release/latest` in actionsrelease blob storage (only if release note is given)
+  - Update all files in `release/latest` in actionsrelease blob storage (only if git version tag is created)
 
 ### Release Actions Docker Images
 
@@ -79,8 +80,19 @@ $ git push origin 1.0.0-alpha
   - Linux AMD64: publish docker image with `v{semver}` tag and `latest` tag
   - Linux ARM: publish docker image with `v{semver}-arm` tag and `latest-arm` tag
 
-> `latest-{arch}` tag will be added only if release note is given.
+> `latest-{arch}` tag will be added only if git version tag is created
 > See [ENG-001-tagging](./ENG-001-tagging.md) for more information.
+
+### Release Helm manifest
+
+* Integration build release	
+  - Modify the helm template to point the actions docker image to `actionscore/actions:edge` and generate manifest	
+  - Upload manifest to `manifest/edge` in actionsreleases blob storage	
+
+* Official build release	
+  - modify actions image location to `actionscore/actions:v{semver}` in helm manifest and upload the manifest under `manifest/v{semver}` and `manifest/latest` in actionsreleases blob storage	
+
+> `manifest/latest` is updated only if git version tag is created
 
 ### GitHub Release
 
