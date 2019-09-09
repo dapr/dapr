@@ -10,7 +10,7 @@ This record descibes how to safely release new actions binaries and the correspo
 
 * Actions Binaries for standalone users
 * Actions Docker Images
-* Release Helm manifest
+* Helm chart manifest
 * GitHub Release
 
 ## Decisions
