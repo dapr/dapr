@@ -22,7 +22,7 @@ Actions allows us to deploy the same microservices from our local machines to th
 ### Prerequisites to Run Locally
 
 - [Actions CLI with Actions initialized](/../../#Install-as-standalone)
-- [Node.js](https://nodejs.org/en/) and/or [Python](https://www.python.org/): You can run this sample with one or both microservices
+- [Node.js version 8 or greater](https://nodejs.org/en/) and/or [Python 3.4 or greater](https://www.python.org/): You can run this sample with one or both microservices
 
 ### Prerequisites to Run in Kubernetes
 
@@ -35,16 +35,18 @@ In order to run the pub/sub sample locally, we need to run each of our microserv
 ### Run Node Message Subscriber with Actions
 
 1. Navigate to Node subscriber directory in your CLI: `cd node-subscriber`
-2. Run Node subscriber app with Actions: `actions run --app-id node-subscriber --app-port 3000 node app.js`
+2. Install dependencies: `npm install`
+3. Run Node subscriber app with Actions: `actions run --app-id node-subscriber --app-port 3000 node app.js`
     
-    We assign `app-id`, which we can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `node app.js`.
+    We assign `app-id`, which can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `node app.js`
 
 ### Run Python Message Subscriber with Actions
 
 1. Open a new CLI window and navigate to Python subscriber directory in your CLI: `cd python_subscriber`
-2. Run Python subscriber app with Actions: `actions run --app-id python-subscriber --app-port 5000 python app.py`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run Python subscriber app with Actions: `actions run --app-id python-subscriber --app-port 5000 python app.py`
     
-    We assign `app-id`, which we can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `python app.py`.
+    We assign `app-id`, which can be whatever unique identifier we like. We also assign `app-port`, which is the port that our Node application is running on. Finally, we pass the command to run our app: `python app.py`
 
 ### Use the CLI to Publish Messages to Subscribers
 
@@ -82,23 +84,10 @@ To run the same sample in Kubernetes, we'll need to first set up a Redis store a
 
 ### Setting up a Redis Store
 
-Actions uses pluggable message buses to enable pub-sub, in this case we'll use Redis Streams (enabled in Redis versions => 5). We'll install Redis into our cluster using helm, but keep in mind that you could use whichever Redis host you like, as long as the version is greater than 5.
+Actions uses pluggable message buses to enable pub-sub, in this case we'll use Redis Streams (enabled in Redis version 5 and above). We'll install Redis into our cluster using helm, but keep in mind that you could use whichever Redis host you like, as long as the version is greater than 5.
 
-1. Use helm to create a Redis instance: `helm install stable/redis --name redis --set image.tag=5.0.5-debian-9-r104`. We set image tag since the default currently installs a version < 5.
-2. Run `kubectl get pods` to see the Redis containers now running in your cluster.
-3. Run `kubectl get svc` and copy the cluster IP of your `redis-master`. Add this IP as the `redisHost` in your redis.yaml file, followed by ":6379". For example:
-    ```yaml
-        redisHost: "10.0.125.130:6379"
-    ```
-4. Next, we'll get our Redis password, which is slightly different depending on the OS we're using:
-    - **Windows**: Run `kubectl get secret --namespace default redis -o jsonpath="{.data.redis-password} > encoded.64"`, which will create a file with your encoded password. Next, run `certutil -decode encoded.b64 password.txt`, which will put your redis password in a text file called `password.txt`. Copy the password and delete the two files.
-
-    - **Linux/MacOS**: Run `kubectl get secret --namespace default redis -o jsonpath="{.data.redis-password}" | base64 --decode` and copy the outputted password.
-
-    Add this password as the `password` value in your redis.yaml file. For example:
-    ```yaml
-        password: "lhDOkwTlp0"
-    ```
+1. Follow [these steps](../../docs/components/redis.md#Creating-a-Redis-Cache-in-your-Kubernetes-Cluster-using-Helm) to create a Redis store using Helm. **Note**: Currently the version of Redis supported by Azure Redis Cache is less than 5, so using Azure Redis Cache will not work.
+2. Once your store is created, add the keys to the `redis.yaml` file in the `deploy` directory. Don't worry about applying the `redis.yaml`, as it will be covered in the next step.
 
 ### Deploy Assets
 
@@ -121,6 +110,15 @@ Now that we've set up the Redis store, we can deploy our assets.
 
 4. Note that the Node.js subscriber receives messages of type "A" and "B", while the Python subscriber receives messages of type "A" and "C".
 
+### Cleanup
+
+Once you're done using the sample, you can spin down your Kubernetes resources by navigating to the `./deploy` directory and running:
+
+```bash
+kubectl delete -f .
+```
+
+This will spin down each resource defined by the .yaml files in the `deploy` directory, including the state component.
 
 ## How it Works
 

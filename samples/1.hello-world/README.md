@@ -7,7 +7,7 @@ This tutorial will demonstrate how to get Actions running locally on your machin
 ## Prerequisites
 This sample requires you to have the following installed on your machine:
 - [Docker](https://docs.docker.com/)
-- [Node](https://nodejs.org/en/)
+- [Node.js version 8 or greater](https://nodejs.org/en/) 
 - [Postman](https://www.getpostman.com/)
 
 ## Step 1 - Setup Actions 
@@ -115,6 +115,16 @@ Now, let's just make sure that our order was successfully persisted to our state
 ![Postman Screenshot 2](./img/postman2.jpg)
 
 This invokes the `/order` route, which calls out to our Redis store for the latest data. Observe the expected result!
+
+## Step 6 - Cleanup
+
+To stop your services from running, simply stop the "actions run" process. Alternatively, you can spin down each of your services with the Actions CLI "stop" command. For example, to spin down your Node service, run: 
+
+```bash
+actions stop --app-id mynode
+```
+
+To see that services have stopped running, run `actions list`, noting that your service no longer appears!
 
 ## Next Steps
 

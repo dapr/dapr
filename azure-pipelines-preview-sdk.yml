@@ -37,19 +37,17 @@ steps:
     downloadType: 'single'
     artifactName: 'drop'
     downloadPath: '$(System.ArtifactsDirectory)/spec_drop'
-
 - task: DownloadBuildArtifacts@0
-  displayName: 'Download cs-sdk'
-  continueOnError: true
+  displayName: 'Download dotnet-sdk'
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
-    pipeline: '16'
+    pipeline: '17'
     buildVersionToDownload: 'latest'
     tags: 'release'
     downloadType: 'single'
     artifactName: 'release_drop'
-    downloadPath: '$(System.ArtifactsDirectory)/cs-sdk'
+    downloadPath: '$(System.ArtifactsDirectory)/dotnet-sdk'
 - task: Bash@3
   displayName: 'Git clone preview repo'
   inputs:
@@ -68,6 +66,13 @@ steps:
     script: |
       cd ..
       git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/cli.git
+- task: Bash@3
+  displayName: 'Git clone actions/dotnet-sdk repo'
+  inputs:
+    targetType: 'inline'
+    script: |
+      cd ..
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/dotnet-sdk.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Copy Preview Kit contents to preview repo'
@@ -75,33 +80,37 @@ steps:
     targetType: 'inline'
     script: |
       pushd ../previewkit
-      rm -rf samples docs release_notes
-      rm -f LICENSE README.md
+      rm -rf samples
       popd
-      
-      cp LICENSE ../previewkit/
-      cp -R samples ../previewkit/
-      cp -R docs ../previewkit/
-      mv ../previewkit/docs/preview/README.md ../previewkit/
-      mkdir ../previewkit/docs/cli
-      mv ../cli/docs/preview/README.md ../previewkit/docs/cli/
-      
+
+      cp -Rv samples ../previewkit/
+
       # Remove unnecessary files
-      rm -rf ../previewkit/docs/decision_records
-      rm -rf ../previewkit/docs/assets
+      rm -rf docs/decision_records
+      rm -rf docs/assets
+      cp -Rv docs/* ../previewkit/docs/
+
+      mkdir ../previewkit/docs/cli
+      cp ../cli/docs/preview/*.md ../previewkit/docs/cli/
+
+      # Copy sdk doc to previewkit
+      cp ../dotnet-sdk/docs/*.md ../previewkit/docs/sdk/dotnet-sdk/
 
       echo "copying specs..."
-      mkdir ../previewkit/docs/spec
+      rm -f ../previewkit/docs/spec/*
       unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../previewkit/docs/spec/
       cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
 
       echo "removing arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
-      
-      if [ -d "$(System.ArtifactsDirectory)/cs-sdk/release_drop" ]
+
+      echo "removing *.txt"
+      rm -f $(System.ArtifactsDirectory)/release/drop/*.txt
+
+      if [ -d "$(System.ArtifactsDirectory)/dotnet-sdk/release_drop" ]
       then
         echo "copying nuget pkgs..."
-        cp $(System.ArtifactsDirectory)/cs-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
+        cp $(System.ArtifactsDirectory)/dotnet-sdk/release_drop/*.nupkg $(System.ArtifactsDirectory)/release/drop/
       fi
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
@@ -114,7 +123,9 @@ steps:
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/actions/github.com\/actionscore\/previewkit/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/previewkit\/releases/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/blob\/master\/README.md/github.com\/actionscore\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
-      
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/dotnet-sdk/github.com\/actionscore\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli/github.com\/actionscore\/previewkit\/releases/gI' {} \;
+
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
@@ -133,7 +144,7 @@ steps:
       echo * Latest release version : $LAST_VERSION
   
       git add -A
-      git commit -am "Actions Preview Kit $LAST_VERSION"
+      git commit -am "Actions Preview Kit Update $(Build.BuildNumber)"
       git status
 
       git push origin master
@@ -155,6 +166,6 @@ steps:
     tag: '$(RELEASE_VERSION)'
     isPreRelease: true
     addChangeLog: false
-    releaseNotesFile: './docs/preview/release_notes/$(RELEASE_VERSION).md'
+    releaseNotesFile: '$(Build.SourcesDirectory)/../previewkit/docs/preview/release_notes/$(RELEASE_VERSION).md'
     title: 'Actions Preview Kit $(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/release/drop/**'
