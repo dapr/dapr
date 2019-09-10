@@ -23,7 +23,7 @@ annotations:
 ### Standalone
 
 To enable profiling in Standalone mode, pass the `enable-profiling` and the `profile-port` flags to the Actions CLI:
-Note that `profile-port` is not required, and the default used is port `7777`.
+Note that `profile-port` is not required, and Actions will pick an available port.
 
 `actions run --enable-profiling true --profile-port 7777 python myapp.py`
 
