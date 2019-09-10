@@ -16,9 +16,9 @@ Integration build refers to the build from `master` branch once we merge PullReq
 
 ### Official build release
 
-#### Pre-release for validation
+#### Pre-release build
 
-Pre-release build will be from `release-<major>.<minor>` branch and versioned by git version tag suffix e.g. `-alpha.0`, `-alpha.1`, etc. This build is not supposed to impact the users who use the current stable version of actions.
+Pre-release build will be built from `release-<major>.<minor>` branch and versioned by git version tag suffix e.g. `-alpha.0`, `-alpha.1`, etc. This build is not released to the users who use the latest stable version.
 
 **Pre-release process**
 1. Create branch `release-<major>.<minor>` from master and push the branch. e.g. `release-0.1`
