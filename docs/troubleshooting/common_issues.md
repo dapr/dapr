@@ -38,7 +38,7 @@ spec:
         imagePullPolicy: Always
 </pre>
 
-If youd pod spec template is annotated correctly and you still don't see the sidecar injected, make sure Actions was deployed to the cluster before your deployment or pod were deployed.
+If your pod spec template is annotated correctly and you still don't see the sidecar injected, make sure Actions was deployed to the cluster before your deployment or pod were deployed.
 
 If this is the case, restarting the pods will fix the issue.
 
