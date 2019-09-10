@@ -2,7 +2,7 @@ package version
 
 // Values for these are injected by the build
 var (
-	version string
+	version = "edge"
 	commit  string
 )
 

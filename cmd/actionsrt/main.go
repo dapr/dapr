@@ -17,8 +17,6 @@ import (
 )
 
 func main() {
-	log.Infof("starting Actions Runtime -- version %s -- commit %s", version.Version(), version.Commit())
-
 	logLevel := flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Actions")
 	actionHTTPPort := flag.String("actions-http-port", fmt.Sprintf("%v", actionsrt.DefaultActionsHTTPPort), "HTTP port for Actions to listen on")
@@ -33,8 +31,16 @@ func main() {
 	placementServiceAddress := flag.String("placement-address", "", "Address for the Actions placement service")
 	allowedOrigins := flag.String("allowed-origins", actionsrt.DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default port is %v", actionsrt.DefaultComponentsPath))
+	runtimeVersion := flag.Bool("version", false, "prints the runtime version")
 
 	flag.Parse()
+
+	if *runtimeVersion {
+		fmt.Println(version.Version())
+		os.Exit(0)
+	}
+
+	log.Infof("starting Actions Runtime -- version %s -- commit %s", version.Version(), version.Commit())
 
 	parsedLogLevel, err := log.ParseLevel(*logLevel)
 	if err == nil {
