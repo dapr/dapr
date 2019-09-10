@@ -6,120 +6,43 @@ Proposal
 
 ## Context
 
-This record descibes how to safely release new actions binaries and the corresponding configurations without any blockers to customers and actions engineering team. It covers these release processes:
-
-* Actions Binaries for standalone users
-* Actions Docker Images
-* Helm chart manifest
-* GitHub Release
+This record descibes how to safely release new actions binaries and the corresponding configurations without any blockers to customers and actions engineering team.
 
 ## Decisions
 
-### Definitions of Actions release
-
-#### Integration build release
+### Integration build release
 
 Integration build refers to the build from `master` branch once we merge PullRequest to master branch. This build will be used for development purposes by Actions engineering team and must not be released to Actions customers and impact their environments.
 
-#### Official build release
+### Official build release
 
-Official build release refers to the builds satisfying the following requirements:
+#### Pre-release for validation
 
-1. Branch name is `release-*` without `-` version tag
-   - `release-1.0.0` is allowed, but not `release-1.0.0-alpha`
-2. Release note `./docs/release_notes/v{semver}.md` is given
-3. Git version tag represents the official release version and must be matched with the version in branch name
-   - If git version tag is `v1.0.0-alpha`, then branch name must be `release-1.0.0`
+Pre-release build will be from `release-<major>.<minor>` branch and versioned by git version tag suffix e.g. `-alpha.0`, `-alpha.1`, etc. This build will not be delivered to the users via blob storage and docker image registry.
 
-If we want to validate the current release build in `release-*` branch branch before the official release, we can build Actions without release note, but it will not released to `latest` version.
-
-##### Release process
-
-1. Create release note (`v{semver.md}`) under `./docs/release_notes/`
-2. Release driver will create release branch from master and add tag with the version.
-
-```bash
-# If we clone from actionscore/action branch directly
-$ git checkout master
-$ git checkout -b release-1.0.0
+**Pre-release process**
+1. Create branch `release-<major>.<minor>` from master and push the branch. e.g. `release-0.1`
+2. Add pre-release version tag(with suffix -alpha.0 e.g. v0.1.0-alpha.0) and push the tag
 ```
-
-3. Push release branch to remote origin
-
-```bash
-$ git push origin release-1.0.0
+$ git tag "v0.1.0-alpha.0" -m "v0.1.0-alpha.0"
+$ git push --tags
 ```
+3. CI creates new build and push the images with only version tag
+4. Test and validate the functionalities with the specific version
+5. If there are regressions and bugs, fix them in release-* branch and merge back to master
+6. Create new pre-release version tag(with suffix -alpha.1, -alpha.2, etc)
+7. Repeat from 4 to 6 until all bugs are fixed
 
-4. CI will be triggered automatically
 
-5. Find the bugs and fix them
+#### Release stable version to users
 
-6. Create git version tag and push
+Once all bugs are fixed, we will create the release note and run CI release manually in order to deliver the stable version to the users.
 
-```
-$ git tag 1.0.0-alpha
-$ git push origin 1.0.0-alpha
-```
+### Release Patch version
 
-### Release Actions binaries for standalone users
-
-* Integration build release
-  - Upload zipped binaries to `release/edge` in actionsreleases blob storage.
-
-* Official build release
-  - Upload zipped binaries to `release/v{semver}`
-  - Update all files in `release/latest` in actionsrelease blob storage (only if git version tag is created)
-
-### Release Actions Docker Images
-
-* Integration build release
-  - Linux AMD64 : Publish docker image with `edge` tag. e.g. `actionscore/actions:edge`
-  - Linux ARM : Publish docker image with `edge-arm` tag. e.g. `actionscore/actions:edge-arm`
-
-* Official build release
-  - Linux AMD64: publish docker image with `v{semver}` tag and `latest` tag
-  - Linux ARM: publish docker image with `v{semver}-arm` tag and `latest-arm` tag
-
-> `latest-{arch}` tag will be added only if git version tag is created
-> See [ENG-001-tagging](./ENG-001-tagging.md) for more information.
-
-### Release Helm manifest
-
-* Integration build release	
-  - Modify the helm template to point the actions docker image to `actionscore/actions:edge` and generate manifest	
-  - Upload manifest to `manifest/edge` in actionsreleases blob storage	
-
-* Official build release	
-  - modify actions image location to `actionscore/actions:v{semver}` in helm manifest and upload the manifest under `manifest/v{semver}` and `manifest/latest` in actionsreleases blob storage	
-
-> `manifest/latest` is updated only if git version tag is created
-
-### GitHub Release
-
-Only official build release will be released to [GitHub Release](https://github.com/actionscore/actions/releases)
+We will work on the existing `release-<major>.<minor>` branch to release patch version. Once fixing all bugs, we will add new patch version tag, such as `v0.1.1-alpha.0`, and then release the build manually.
 
 ## Consequences
 
-* Customers and Actions Engineering Team can use the specific version of Actions binaries, Docker images, and helm manifest selectively
-* Actions Engineering Team can release the official build without breaking customer scenario
-
-## Examples
-
-* Integration build: from master branch
-  1. Publish actions binaries to actionsreleases blob storage under `release/edge/`
-  2. Publish linux amd64 docker image with `edge` build tag
-  3. Publish linux arm docker image with `edge-arm` build tag
-  4. Publish helm manifest to actionsreleases blob storage under `manifest/edge`
-
-* Official build without git version tag: from release-1.0.0 and v1.0.0-alpha tag
-  1. Publish actions binaries to actionsreleases blob storage under `release/v1.0.0-alpha/`
-  2. Publish linux amd64 docker image with `v1.0.0-alpha` build tag
-  3. Publish linux arm docker image with `v1.0.0-alpha-arm` build tag
-  4. Publish helm manifest to actionsreleases blob storage under `minifest/v1.0.0-alpha`
-
-* Official build with git version tag: from release-1.0.0 and v1.0.0-alpha tag
-  1. Publish actions binaries to `release/v1.0.0-alpha/` and `release/latest/` in actionsreleases blob storage
-  2. Publish linux amd64 docker image with `v1.0.0-alpha` and `latest` build tags
-  3. Publish linux arm docker image with `v1.0.0-alpha-arm` and `latest-arm` build tags
-  4. Publish helm manifest to `minifest/v1.0.0-alpha` and `minifest/latest` in actionsreleases blob storage
-  5. Publish actions binaries to GitHub Release
+* Keep master branch in a working state
+* Deliver the stable version to user safely
