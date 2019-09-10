@@ -6,13 +6,13 @@ Proposal
 
 ## Context
 
-This record descibes how to safely release new actions binaries and the corresponding configurations without any blockers to customers and actions engineering team.
+This record descibes how to safely release new actions binaries and the corresponding configurations without any blockers to users.
 
 ## Decisions
 
 ### Integration build release
 
-Integration build refers to the build from `master` branch once we merge PullRequest to master branch. This build will be used for development purposes by Actions engineering team and must not be released to Actions customers and impact their environments.
+Integration build refers to the build from `master` branch once we merge PullRequest to master branch. This build will be used for development purposes and must not be released to users and impact their environments.
 
 ### Official build release
 
