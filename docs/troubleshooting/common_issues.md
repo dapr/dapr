@@ -45,7 +45,7 @@ If this is the case, restarting the pods will fix the issue.
 In order to further diagnost any issue, check the logs of the Actions sidecar injector:
 
 ```
- k logs -l app=actions-sidecar-injector -n actions-system
+ kubectl logs -l app=actions-sidecar-injector -n actions-system
 ```
 
 *Note: If you installed Actions to a different namespace, replace actions-system above with the desired namespace*
