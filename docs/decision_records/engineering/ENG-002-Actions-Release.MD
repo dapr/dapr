@@ -18,7 +18,7 @@ Integration build refers to the build from `master` branch once we merge PullReq
 
 #### Pre-release build
 
-Pre-release build will be built from `release-<major>.<minor>` branch and versioned by git version tag suffix e.g. `-alpha.0`, `-alpha.1`, etc. This build is not released to the users who use the latest stable version.
+Pre-release build will be built from `release-<major>.<minor>` branch and versioned by git version tag suffix e.g. `-alpha.0`, `-alpha.1`, etc. This build is not released to users who use the latest stable version.
 
 **Pre-release process**
 1. Create branch `release-<major>.<minor>` from master and push the branch. e.g. `release-0.1`
@@ -36,7 +36,7 @@ $ git push --tags
 
 #### Release the stable version to users
 
-Once all bugs are fixed, we will create the release note under [./docs/release_notes](https://github.com/actionscore/actions/tree/master/docs/release_notes) and run CI release manually in order to deliver the stable version to the users.
+Once all bugs are fixed, we will create the release note under [./docs/release_notes](https://github.com/actionscore/actions/tree/master/docs/release_notes) and run CI release manually in order to deliver the stable version to users.
 
 ### Release Patch version
 
