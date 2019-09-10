@@ -117,4 +117,4 @@ annotations:
     <b>actions.io/port: "3000"</b>
 </pre>
 
-If using Actions Standalone and the Actions cLI, make sure you pass the `--app-port` flag to the `actions run` command.
+If using Actions Standalone and the Actions CLI, make sure you pass the `--app-port` flag to the `actions run` command.
