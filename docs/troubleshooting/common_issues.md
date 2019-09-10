@@ -110,11 +110,11 @@ You're just here to complain, aren't you?
 Have you specified the port your app is listening on?
 In Kubernetes, make sure the `actions.io/port` annotation is specified:
 
-```
+<pre>
 annotations:
     actions.io/enabled: "true"
     actions.io/id: "nodeapp"
     <b>actions.io/port: "3000"</b>
-```
+</pre>
 
 If using Actions Standalone and the Actions cLI, make sure you pass the `--app-port` flag to the `actions run` command.
