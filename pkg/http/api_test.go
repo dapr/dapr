@@ -15,6 +15,7 @@ import (
 
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/channel/http"
+	"github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/config"
 	diag "github.com/actionscore/actions/pkg/diagnostics"
 	"github.com/actionscore/actions/pkg/messaging"
@@ -865,9 +866,12 @@ func (f *fakeHTTPServer) Shutdown() {
 	f.ln.Close()
 }
 
-func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) fakeHTTPResponse {
+func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, headers ...string) fakeHTTPResponse {
 	r, _ := gohttp.NewRequest(method, fmt.Sprintf("http://localhost/%s", path), bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
+	if len(headers) == 1 {
+		r.Header.Set("If-Match", headers[0])
+	}
 	res, err := f.client.Do(r)
 	if err != nil {
 		panic(fmt.Errorf("failed to request: %v", err))
@@ -890,4 +894,140 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte) fakeHTTPRes
 	}
 
 	return response
+}
+
+func TestV1StateEndpoints(t *testing.T) {
+	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		stateStore: fakeStateStore{},
+		json:       jsoniter.ConfigFastest,
+	}
+	fakeServer.StartServer(testAPI.constructStateEndpoints())
+	t.Run("Get state - 404 Not Found", func(t *testing.T) {
+		apiPath := "v1.0/state/bad-key"
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil)
+		// assert
+		assert.Equal(t, 404, resp.StatusCode, "reading non-existing key should return 404")
+	})
+	t.Run("Get state - Good Key", func(t *testing.T) {
+		apiPath := "v1.0/state/good-key"
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
+		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
+	})
+	t.Run("Update state - No ETag", func(t *testing.T) {
+		apiPath := "v1.0/state"
+		request := []state.SetRequest{state.SetRequest{
+			Key:  "good-key",
+			ETag: "",
+		}}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, b)
+		// assert
+		assert.Equal(t, 201, resp.StatusCode, "updating existing key without etag should succeed")
+	})
+	t.Run("Update state - Matching ETag", func(t *testing.T) {
+		apiPath := "v1.0/state"
+		request := []state.SetRequest{state.SetRequest{
+			Key:  "good-key",
+			ETag: etag,
+		}}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, b)
+		// assert
+		assert.Equal(t, 201, resp.StatusCode, "updating existing key with matching etag should succeed")
+	})
+	t.Run("Update state - Wrong ETag", func(t *testing.T) {
+		apiPath := "v1.0/state"
+		request := []state.SetRequest{state.SetRequest{
+			Key:  "good-key",
+			ETag: "BAD ETAG",
+		}}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, b)
+		// assert
+		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+	})
+	t.Run("Delete state - No ETag", func(t *testing.T) {
+		apiPath := "v1.0/state/good-key"
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "updating existing key without etag should succeed")
+	})
+	t.Run("Delete state - Matching ETag", func(t *testing.T) {
+		apiPath := "v1.0/state/good-key"
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, etag)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "updating existing key with matching etag should succeed")
+	})
+	t.Run("Delete state - Bad ETag", func(t *testing.T) {
+		apiPath := "v1.0/state/good-key"
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, "BAD ETAG")
+		// assert
+		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+	})
+}
+
+type fakeStateStore struct {
+}
+
+func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
+	for _, r := range req {
+		err := c.Delete(&r)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+func (c fakeStateStore) BulkSet(req []state.SetRequest) error {
+	for _, s := range req {
+		err := c.Set(&s)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
+	if req.Key == "good-key" {
+		if req.ETag != "" && req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
+			return errors.New("ETag mismatch")
+		}
+		return nil
+	}
+	return errors.New("NOT FOUND")
+}
+func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+	if req.Key == "good-key" {
+		return &state.GetResponse{
+			Data: []byte("life is good"),
+			ETag: "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+		}, nil
+	}
+	return nil, nil
+}
+func (c fakeStateStore) Init(metadata state.Metadata) error {
+	return nil
+}
+func (c fakeStateStore) Set(req *state.SetRequest) error {
+	if req.Key == "good-key" {
+		if req.ETag != "" && req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
+			return errors.New("ETag mismatch")
+		}
+		return nil
+	}
+	return errors.New("NOT FOUND")
 }

@@ -13,7 +13,7 @@ require (
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/Shopify/sarama v1.22.1
 	github.com/Sirupsen/logrus v1.0.6
-	github.com/a8m/documentdb v1.1.0
+	github.com/a8m/documentdb v1.2.0
 	github.com/aws/aws-sdk-go v1.19.30
 	github.com/eclipse/paho.mqtt.golang v1.2.0
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
@@ -47,7 +47,6 @@ require (
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/qiangxue/fasthttp-routing v0.0.0-20160225050629-6ccdc2a18d87
 	github.com/satori/go.uuid v1.2.0
-	github.com/sirupsen/logrus v1.2.0 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/streadway/amqp v0.0.0-20190404075320-75d898a42a94
 	github.com/stretchr/testify v1.3.0

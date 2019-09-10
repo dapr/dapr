@@ -13,6 +13,12 @@ func respondWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 	ctx.Response.SetBody(obj)
 }
 
+func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag string) {
+	ctx.Response.Header.SetContentType("application/json")
+	ctx.Response.Header.Set("ETag", etag)
+	ctx.Response.SetStatusCode(code)
+	ctx.Response.SetBody(obj)
+}
 func respondWithString(ctx *fasthttp.RequestCtx, code int, obj string) {
 	ctx.Response.Header.SetContentType("application/json")
 	ctx.Response.SetStatusCode(code)

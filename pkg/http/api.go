@@ -233,7 +233,6 @@ func (a *api) onGetState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
-
 	key := c.Param(stateKeyParam)
 	req := state.GetRequest{
 		Key: a.getModifiedStateKey(key),
@@ -245,7 +244,11 @@ func (a *api) onGetState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
-	respondWithJSON(c.RequestCtx, 200, resp.Data)
+	if err == nil && resp == nil {
+		respondWithError(c.RequestCtx, 404, NewErrorResponse("ERR_STATE_NOT_FOUND", ""))
+		return nil
+	}
+	respondWithETaggedJSON(c.RequestCtx, 200, resp.Data, resp.ETag)
 	return nil
 }
 
@@ -257,8 +260,10 @@ func (a *api) onDeleteState(c *routing.Context) error {
 	}
 
 	key := c.Param(stateKeyParam)
+	etag := string(c.Request.Header.Peek("If-Match"))
 	req := state.DeleteRequest{
-		Key: key,
+		Key:  key,
+		ETag: etag,
 	}
 
 	err := a.stateStore.Delete(&req)
