@@ -101,10 +101,6 @@ To diagnost, view the logs of the sidecar:
 This means you're trying to call an Actions API endpoint that either doesn't exist or the URL is malformed.
 Look at the Actions API spec [here](https://github.com/actionscore/spec) and make sure you're calling the right endpoint.
 
-### I'm getting 200 OK responses when calling Actions
-
-You're just here to complain, aren't you?
-
 ### I don't see any incoming events or calls from other services
 
 Have you specified the port your app is listening on?
@@ -118,3 +114,14 @@ annotations:
 </pre>
 
 If using Actions Standalone and the Actions CLI, make sure you pass the `--app-port` flag to the `actions run` command.
+
+### My Actions-enabled app isn't behaving correctly
+
+The first thing to do is inspect the HTTP error code returned from the Actions API, if any.
+If you still can't find the issue, try enabling `debug` log levels for the Actions runtime. See [here](logs.md) how to do so.
+
+You might also want to look at error logs from your own process. If running on Kubernetes, find the pod containing your app, and execute the following:
+
+`kubectl logs <pod-name> <name-of-your-container>`.
+
+If running in Standalone mode, you should see the stderr and stdout outputs from your app displayed in the main console session.
