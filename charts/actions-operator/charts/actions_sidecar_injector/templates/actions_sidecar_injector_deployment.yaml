@@ -21,7 +21,11 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         securityContext:
           runAsUser: 1000
-        command: ["./injector"]
+        command:
+        - "./injector"
+        args:
+        - "--log-level"
+        - {{ .Values.logLevel }}
         env:
         - name: TLS_CERT_FILE
           value: /actions/cert/tls.crt
