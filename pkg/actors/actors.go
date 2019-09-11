@@ -204,6 +204,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		lock:         &sync.RWMutex{},
 		busy:         true,
 		lastUsedTime: time.Now(),
+		busyCh:       make(chan bool, 1),
 	})
 
 	act := val.(*actor)
@@ -219,6 +220,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		}
 	} else {
 		act.busy = true
+		act.busyCh = make(chan bool, 1)
 		act.lastUsedTime = time.Now()
 	}
 
@@ -236,6 +238,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 
 	resp, err := a.appChannel.InvokeMethod(&req)
 	act.busy = false
+	close(act.busyCh)
 
 	if err != nil {
 		return nil, err
@@ -511,7 +514,17 @@ func (a *actorsRuntime) drainRebalancedActors() {
 
 		address := a.lookupActorAddress(actorType, actorID)
 		if !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
-			// actor has been moved to a different host, deactivate
+			// actor has been moved to a different host, deactivate when calls are done
+			actor := value.(*actor)
+			if actor.busy {
+				select {
+				case <-time.After(a.config.DrainOngoingCallTimeout):
+					break
+				case <-actor.busyCh:
+					break
+				}
+			}
+
 			err := a.deactivateActor(actorType, actorID)
 			if err != nil {
 				log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
@@ -779,13 +792,11 @@ func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
 	}
 
 	if a.evaluationBusy {
-		for {
-			select {
-			case <-time.After(time.Second * 5):
-				return errors.New("error creating reminder: timed out after 5s")
-			case <-a.evaluationChan:
-				break
-			}
+		select {
+		case <-time.After(time.Second * 5):
+			return errors.New("error creating reminder: timed out after 5s")
+		case <-a.evaluationChan:
+			break
 		}
 	}
 
@@ -918,13 +929,11 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 
 func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	if a.evaluationBusy {
-		for {
-			select {
-			case <-time.After(time.Second * 5):
-				return errors.New("error creating reminder: timed out after 5s")
-			case <-a.evaluationChan:
-				break
-			}
+		select {
+		case <-time.After(time.Second * 5):
+			return errors.New("error creating reminder: timed out after 5s")
+		case <-a.evaluationChan:
+			break
 		}
 	}
 

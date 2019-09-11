@@ -12,17 +12,19 @@ type Config struct {
 	HeartbeatInterval             time.Duration
 	ActorDeactivationScanInterval time.Duration
 	ActorIdleTimeout              time.Duration
+	DrainOngoingCallTimeout       time.Duration
 }
 
 const (
-	defaultActorIdleTimeout  = time.Minute * 60
-	defaultHeartbeatInterval = time.Second * 1
-	defaultActorScanInterval = time.Second * 30
+	defaultActorIdleTimeout   = time.Minute * 60
+	defaultHeartbeatInterval  = time.Second * 1
+	defaultActorScanInterval  = time.Second * 30
+	defaultOngoingCallTimeout = time.Second * 60
 )
 
 // NewConfig returns the actor runtime configuration
 func NewConfig(hostAddress, actionsID, placementAddress string, hostedActors []string, port int,
-	actorScanInterval, actorIdleTimeout string) Config {
+	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string) Config {
 	c := Config{
 		HostAddress:                   hostAddress,
 		ActionsID:                     actionsID,
@@ -32,6 +34,7 @@ func NewConfig(hostAddress, actionsID, placementAddress string, hostedActors []s
 		HeartbeatInterval:             defaultHeartbeatInterval,
 		ActorDeactivationScanInterval: defaultActorScanInterval,
 		ActorIdleTimeout:              defaultActorIdleTimeout,
+		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
 	}
 
 	scanDuration, err := time.ParseDuration(actorScanInterval)
@@ -42,6 +45,11 @@ func NewConfig(hostAddress, actionsID, placementAddress string, hostedActors []s
 	idleDuration, err := time.ParseDuration(actorIdleTimeout)
 	if err == nil {
 		c.ActorIdleTimeout = idleDuration
+	}
+
+	drainCallDuration, err := time.ParseDuration(ongoingCallTimeout)
+	if err == nil {
+		c.DrainOngoingCallTimeout = drainCallDuration
 	}
 
 	return c
