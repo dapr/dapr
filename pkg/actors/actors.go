@@ -494,10 +494,33 @@ func (a *actorsRuntime) updatePlacements(in *pb.PlacementTables) {
 		}
 
 		a.placementTables.Version = in.Version
+		a.drainRebalancedActors()
+
 		log.Info("actors: placement tables updated")
 
 		go a.evaluateReminders()
 	}
+}
+
+func (a *actorsRuntime) drainRebalancedActors() {
+	// visit all currently active actors
+	a.actorsTable.Range(func(key interface{}, value interface{}) bool {
+		// for each actor, deactivate if no longer hosted locally
+		actorKey := key.(string)
+		actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
+
+		address := a.lookupActorAddress(actorType, actorID)
+		if !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
+			// actor has been moved to a different host, deactivate
+			err := a.deactivateActor(actorType, actorID)
+			if err != nil {
+				log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
+			} else {
+				a.actorsTable.Delete(actorKey)
+			}
+		}
+		return true
+	})
 }
 
 func (a *actorsRuntime) evaluateReminders() {
