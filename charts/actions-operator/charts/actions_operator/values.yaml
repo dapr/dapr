@@ -1,4 +1,5 @@
 replicaCount: 1
+logLevel: info
 
 image:
   repository: actionscore.azurecr.io/actions

@@ -25,5 +25,9 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: 6500
-        command: ["./operator"]
+        command:
+        - "./operator"
+        args:
+        - "--log-level"
+        - {{ .Values.logLevel }}
       serviceAccountName: actions-operator            
