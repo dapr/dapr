@@ -1,8 +1,14 @@
 # actionscore/actions pipeline
 
+# Release process - https://github.com/actionscore/actions/wiki/Release-Process
+
 trigger:
-- master
-- release-*
+  branches:
+    include:
+    - master
+  tags:
+    include:
+    - v*
 
 variables:
   GOPATH: '$(system.defaultWorkingDirectory)/gopath'
@@ -18,38 +24,30 @@ jobs:
     vmImage: ubuntu-latest
   steps:
     - script: |
-        SOURCEBRANCH=$(Build.SourceBranchName)
+        SOURCEBRANCH=$(Build.SourceBranch)
         echo Source branch name : $SOURCEBRANCH
 
-        if [[ $SOURCEBRANCH != release-* ]]; then
-          echo Clearing REL_VERSION value unless $SOURCEBRANCH is release-*.
+        if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
+          echo Clearing REL_VERSION value unless $SOURCEBRANCH is refs/tags/v.
           RELVERSION=""
           echo "##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELVERSION"
           exit 0
         fi
 
-        BRANCH_VERSION=${SOURCEBRANCH#release-}
-        echo Release branch version : $BRANCH_VERSION
-        
-        RELEASE_VERSION=$(git tag -l "v$BRANCH_VERSION-*" | tail -1)
-        [ -z "$RELEASE_VERSION" ] && echo "Cannot find the release version tag!" && exit 1
-        
-        RELVERSION=${RELEASE_VERSION#v*}
-        echo Release Version in tag : $RELVERSION
+        RELVERSION=${SOURCEBRANCH#refs/tags/v}
+        echo Release version : $RELVERSION
   
         echo "##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELVERSION"
         echo $RELVERSION > $(Build.ArtifactStagingDirectory)/release_version.txt
         echo $(Build.SourceVersion) > $(Build.ArtifactStagingDirectory)/release_commit_id.txt
 
-        echo Checking release note for $RELVERSION...
-        RELNOTE_PATH="docs/release_notes/v$RELVERSION.md"
-        if [ -f "$RELNOTE_PATH" ]; then
-          echo Found release note $RELNOTE_PATH and copying to artifact directory
-          cp $RELNOTE_PATH $(Build.ArtifactStagingDirectory)/release_note.md
+        if [ "$LATEST_RELEASE" == "true" ]; then
+          echo Checking release note for $RELVERSION...
+          RELNOTE_PATH="docs/release_notes/v$RELVERSION.md"
+          [ ! -f "$RELNOTE_PATH" ] && echo "$RELNOTE_PATH not found" && exit 1
+
           echo Add release tag
           echo "##vso[build.addbuildtag]release"
-        else
-          echo Skip releasing release note. this is not final release.
         fi
       name: env_var_step
     - task: PublishBuildArtifacts@1
@@ -105,14 +103,14 @@ jobs:
   steps:
     # binaries from master will be stored in edge/[branch_date.revision] folder in blob storage
     - script: |
-        echo ##vso[task.setvariable variable=BlobPrefix]$(Build.BuildNumber)
-        echo ##vso[task.setvariable variable=TargetContainer]edge
-      condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
+        echo ##vso[task.setvariable variable=BlobPrefix]edge
+        echo ##vso[task.setvariable variable=TargetContainer]release
+      condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
     # binaries from release-* will be stored in release/release version folder in blob storage
     - script: |
-        echo ##vso[task.setvariable variable=BlobPrefix]$(REL_VERSION)
+        echo ##vso[task.setvariable variable=BlobPrefix]v$(REL_VERSION)
         echo ##vso[task.setvariable variable=TargetContainer]release
-      condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
+      condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
     - task: DownloadPipelineArtifact@2
       displayName: 'Download pipeline artifacts to workspace'
       inputs:
@@ -129,6 +127,7 @@ jobs:
         ContainerName: '$(TargetContainer)'
         blobPrefix: '$(BlobPrefix)'
     - task: AzureFileCopy@3
+      condition: and(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'), eq(variables['LATEST_RELEASE'], 'true'))
       displayName: 'Publish archives to latest folder'
       inputs:
         SourcePath: '$(Pipeline.Workspace)/drop'
@@ -137,6 +136,21 @@ jobs:
         storage: 'actionsreleases'
         ContainerName: '$(TargetContainer)'
         blobPrefix: 'latest'
+    - task: GitHubRelease@0
+      condition: and(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'), eq(variables['LATEST_RELEASE'], 'true'))
+      displayName: 'Upload Actions binaries to GitHub Release'
+      inputs:
+        gitHubConnection: 'GitHub'
+        repositoryName: '$(Build.Repository.Name)'
+        action: 'create'
+        target: '$(Build.SourceVersion)'
+        tagSource: 'manual'
+        tag: 'v$(REL_VERSION)'
+        title: 'Actions Runtime $(REL_VERSION) Release'
+        assets: '$(Pipeline.Workspace)/drop/**'
+        releaseNotesFile: './docs/release_notes/v$(REL_VERSION).md'
+        isPreRelease: true
+        addChangeLog: false
 - job: 'build_and_push_docker_image'
   pool: 
     vmImage: 'ubuntu-latest'
@@ -151,7 +165,9 @@ jobs:
       parameters:
         targetArch: amd64
         releaseVersion: $(REL_VERSION)
+        isLatest: $(LATEST_RELEASE)
     - template: 'build-and-push-image-template.yml'
       parameters:
         targetArch: arm
         releaseVersion: $(REL_VERSION)
+        isLatest: $(LATEST_RELEASE)
