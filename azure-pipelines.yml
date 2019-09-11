@@ -27,7 +27,7 @@ jobs:
         SOURCEBRANCH=$(Build.SourceBranch)
         echo Source branch name : $SOURCEBRANCH
 
-        if [[ $SOURCEBRANCH != "refs/tags/v" ]]; then
+        if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
           echo Clearing REL_VERSION value unless $SOURCEBRANCH is refs/tags/v.
           RELVERSION=""
           echo "##vso[task.setvariable variable=REL_VERSION;isOutput=true]$RELVERSION"
@@ -42,6 +42,10 @@ jobs:
         echo $(Build.SourceVersion) > $(Build.ArtifactStagingDirectory)/release_commit_id.txt
 
         if [ "$LATEST_RELEASE" == "true" ]; then
+          echo Checking release note for $RELVERSION...
+          RELNOTE_PATH="docs/release_notes/v$RELVERSION.md"
+          [ ! -f "$RELNOTE_PATH" ] && echo "$RELNOTE_PATH not found" && exit 1
+
           echo Add release tag
           echo "##vso[build.addbuildtag]release"
         fi
@@ -104,16 +108,8 @@ jobs:
       condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
     # binaries from release-* will be stored in release/release version folder in blob storage
     - script: |
-        echo ##vso[task.setvariable variable=BlobPrefix]$(REL_VERSION)
+        echo ##vso[task.setvariable variable=BlobPrefix]v$(REL_VERSION)
         echo ##vso[task.setvariable variable=TargetContainer]release
-
-        echo Checking release note for $REL_VERSION...
-        RELNOTE_PATH="docs/release_notes/v$REL_VERSION.md"
-        if [ -f "$RELNOTE_PATH" ]; then
-          echo ##vso[task.setvariable variable=RELEASE_NOTE_PATH]$RELNOTE_PATH
-        else
-          echo Skip releasing release note. this is not final release.
-        fi
       condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
     - task: DownloadPipelineArtifact@2
       displayName: 'Download pipeline artifacts to workspace'
@@ -131,7 +127,7 @@ jobs:
         ContainerName: '$(TargetContainer)'
         blobPrefix: '$(BlobPrefix)'
     - task: AzureFileCopy@3
-      condition: and(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'), eq($(LATEST_RELEASE), 'true'))
+      condition: and(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'), eq(variables['LATEST_RELEASE'], 'true'))
       displayName: 'Publish archives to latest folder'
       inputs:
         SourcePath: '$(Pipeline.Workspace)/drop'
@@ -141,7 +137,7 @@ jobs:
         ContainerName: '$(TargetContainer)'
         blobPrefix: 'latest'
     - task: GitHubRelease@0
-      condition: and(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'), eq($(LATEST_RELEASE), 'true'), ne($(RELEASE_NOTE_PATH), ''))
+      condition: and(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'), eq(variables['LATEST_RELEASE'], 'true'))
       displayName: 'Upload Actions binaries to GitHub Release'
       inputs:
         gitHubConnection: 'GitHub'
@@ -151,8 +147,8 @@ jobs:
         tagSource: 'manual'
         tag: 'v$(REL_VERSION)'
         title: 'Actions Runtime $(REL_VERSION) Release'
-        assets: '$(Pipeline.Workspace)/drop'
-        releaseNotesFile: '$(RELEASE_NOTE_PATH)'
+        assets: '$(Pipeline.Workspace)/drop/**'
+        releaseNotesFile: './docs/release_notes/v$(REL_VERSION).md'
         isPreRelease: true
         addChangeLog: false
 - job: 'build_and_push_docker_image'
