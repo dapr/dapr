@@ -3,11 +3,12 @@
 parameters:
   targetArch: 'amd64'
   releaseVersion: ''
+  isLatest: 'false'
 
 steps:
   # integration build tag
   - script: |
-      VERSION_TAG=$(Build.SourceBranchName)
+      VERSION_TAG="edge"
       if [ "${{ parameters.targetArch }}" != "amd64" ]; then
         VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
       fi
@@ -16,7 +17,7 @@ steps:
       echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
       echo Target Architecture: ${{ parameters.targetArch }}
       echo Integration Build - Docker Version TAG: $VERSION_TAG
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
     displayName: 'Integration build - docker image tag name setting'
   # release build tag
   - script: |
@@ -28,13 +29,19 @@ steps:
         VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
       fi
 
-      echo "##vso[task.setvariable variable=DockerReleaseTag]$RELEASE_TAG"
       echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
 
+      # Release latest tag if LATEST_TAG is true
+      if [ "${{ parameters.isLatest }}" == "true" ]; then
+        echo "##vso[task.setvariable variable=DockerReleaseTag]$RELEASE_TAG"
+        echo Release Build - Docker Release TAG: $RELEASE_TAG
+      else
+        echo "##vso[task.setvariable variable=DockerReleaseTag]"
+      fi
+
       echo Target Architecture: ${{ parameters.targetArch }}
-      echo Release Build - Docker Release TAG: $RELEASE_TAG
       echo Release Build - Docker Version TAG: $VERSION_TAG
-    condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
     displayName: 'Release build - docker image tag name setting'
   - task: DownloadPipelineArtifact@2
     displayName: 'Download pipeline artifacts to workspace'
