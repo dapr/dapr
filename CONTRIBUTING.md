@@ -102,7 +102,7 @@ A good way to communicate before investing too much time is to create a "Work-in
 
 ### Third-party code
 * All third-party code must be placed in the `vendor/` folders.
-* `vendor/` folder is managed by dep and stores the source code of third-party Go dependencies. `vendor/` folder should not be modified manually.
+* `vendor/` folder is managed by Go modules and stores the source code of third-party Go dependencies. `vendor/` folder should not be modified manually.
 * Third-party code must include licenses.
 
 A non-exclusive list of code that must be places in `vendor/`:
