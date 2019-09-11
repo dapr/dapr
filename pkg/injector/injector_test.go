@@ -106,13 +106,27 @@ func TestGetAppID(t *testing.T) {
 	})
 }
 
+func TestLogLevel(t *testing.T) {
+	t.Run("empty log level - get default", func(t *testing.T) {
+		m := map[string]string{}
+		logLevel := getLogLevel(m)
+		assert.Equal(t, "info", logLevel)
+	})
+
+	t.Run("error log level", func(t *testing.T) {
+		m := map[string]string{actionsLogLevel: "error"}
+		logLevel := getLogLevel(m)
+		assert.Equal(t, "error", logLevel)
+	})
+}
+
 func TestKubernetesDNS(t *testing.T) {
 	dns := getKubernetesDNS("a", "b")
 	assert.Equal(t, "a.b.svc.cluster.local", dns)
 }
 
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false")
+	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info")
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
 }
