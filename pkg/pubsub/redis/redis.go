@@ -13,7 +13,7 @@ import (
 
 const (
 	host       = "redisHost"
-	password   = "password"
+	password   = "redisPassword"
 	consumerID = "consumerID"
 )
 

@@ -77,7 +77,7 @@ spec:
   type: pubsub.redis
   connectionInfo:
     redisHost: "YOUR_REDIS_HOST_HERE"
-    password: "YOUR_REDIS_PASSWORD_HERE"
+    redisPassword: "YOUR_REDIS_PASSWORD_HERE"
 ```
 
 ## Apply the configuration
