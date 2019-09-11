@@ -2,13 +2,13 @@ package state
 
 // GetRequest is the object describing a state fetch request
 type GetRequest struct {
-	Key  string `json:"key"`
-	ETag string `json:"etag,omitempty"`
+	Key string `json:"key"`
 }
 
 // DeleteRequest is the object describing a delete state request
 type DeleteRequest struct {
-	Key string `json:"key"`
+	Key  string `json:"key"`
+	ETag string `json:"etag,omitempty"`
 }
 
 // SetRequest is the object describing an upsert request

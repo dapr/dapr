@@ -70,8 +70,10 @@ This section will guide you on how to view logs for Actions system components as
 When deployed in Kubernetes, the Actions sidecar injector will inject an Actions container named `actionsrt` into your annotated pod.
 In order to view logs for the sidecar, simply find the pod in question by running `kubectl get pods`:
 
+```
 NAME                                        READY     STATUS    RESTARTS   AGE
 addapp-74b57fb78c-67zm6                     2/2       Running   0          40h
+```
 
 Next, get the logs for the Actions sidecar container:
 

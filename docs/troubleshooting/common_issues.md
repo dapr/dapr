@@ -42,7 +42,7 @@ If your pod spec template is annotated correctly and you still don't see the sid
 
 If this is the case, restarting the pods will fix the issue.
 
-In order to further diagnost any issue, check the logs of the Actions sidecar injector:
+In order to further diagnose any issue, check the logs of the Actions sidecar injector:
 
 ```
  kubectl logs -l app=actions-sidecar-injector -n actions-system
@@ -92,7 +92,7 @@ If two pods appear, delete the redundant Actions installation.
 ### I'm getting 500 Error responses when calling Actions
 
 This means there are some internal issue inside the Actions runtime.
-To diagnost, view the logs of the sidecar:
+To diagnose, view the logs of the sidecar:
 
 `kubectl logs <name-of-pod> actionsrt`.
 
