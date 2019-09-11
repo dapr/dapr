@@ -106,38 +106,20 @@ func (c *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 	return &state.GetResponse{
 		Data: b,
+		ETag: items[0].Etag,
 	}, nil
 }
 
 // Set saves a CosmosDB item
 func (c *StateStore) Set(req *state.SetRequest) error {
-	items := []CosmosItem{}
-	_, err := c.client.QueryDocuments(
-		c.collection.Self,
-		documentdb.NewQuery("SELECT * FROM ROOT r WHERE r.id=@id", documentdb.P{"@id", req.Key}),
-		&items,
-		documentdb.PartitionKey(req.Key),
-	)
-	if err != nil || len(items) > 0 {
-		// Update
-		i := items[0]
-		i.Value = req.Value
-		_, err := c.client.ReplaceDocument(i.Self, i, documentdb.PartitionKey(req.Key))
-		if err != nil {
-			return err
-		}
-
+	var err error
+	if req.ETag != "" {
+		_, err = c.client.UpsertDocument(c.collection.Self, CosmosItem{ID: req.Key, Value: req.Value}, documentdb.PartitionKey(req.Key), documentdb.IfMatch(req.ETag))
 	} else {
-		// Create
-		i := CosmosItem{
-			ID:    req.Key,
-			Value: req.Value,
-		}
-
-		_, err := c.client.CreateDocument(c.collection.Self, i, documentdb.PartitionKey(req.Key))
-		if err != nil {
-			return err
-		}
+		_, err = c.client.UpsertDocument(c.collection.Self, CosmosItem{ID: req.Key, Value: req.Value}, documentdb.PartitionKey(req.Key))
+	}
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -157,8 +139,13 @@ func (c *StateStore) BulkSet(req []state.SetRequest) error {
 
 // Delete performs a delete operation
 func (c *StateStore) Delete(req *state.DeleteRequest) error {
-	selfLink := fmt.Sprintf("dbs/%s/colls/%s/documents/%s", c.db.Id, c.collection.Id, req.Key)
-	_, err := c.client.DeleteDocument(selfLink)
+	selfLink := fmt.Sprintf("dbs/%s/colls/%s/docs/%s", c.db.Id, c.collection.Id, req.Key)
+	var err error
+	if req.ETag != "" {
+		_, err = c.client.DeleteDocument(selfLink, documentdb.PartitionKey(req.Key), documentdb.IfMatch(req.ETag))
+	} else {
+		_, err = c.client.DeleteDocument(selfLink, documentdb.PartitionKey(req.Key))
+	}
 	return err
 }
 
