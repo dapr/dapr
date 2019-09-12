@@ -16,9 +16,9 @@ Actions E2E tests require the test infrastructure in order to not only test Acti
 
 Although Actions is designed for multi cloud environments, e2e tests will be run under Kubenertes environments for now. We will support two different options to run e2e tests with local machine and CI on the pre-built Kubernetes cluster.
 
-* With local machine, contributors or developers will use [Minikube](https://github.com/kubernetes/minikube) to validate their changes and run new tests before creating Pull Request.
+* **Local machine**. contributors or developers will use [Minikube](https://github.com/kubernetes/minikube) to validate their changes and run new tests before creating Pull Request.
 
-* With CI, E2E tests will be run in the pre-built [Azure Kubernetes Serivce](https://azure.microsoft.com/en-us/services/kubernetes-service/) before/after PR is merged or by a scheduler. Even if we will use [Azure Kubernetes Serivce](https://azure.microsoft.com/en-us/services/kubernetes-service/) in our test infrastructure, contributors should run e2e tests in any  RBAC-enabled Kubenetes clusters.
+* **Continuous Integration**. E2E tests will be run in the pre-built [Azure Kubernetes Serivce](https://azure.microsoft.com/en-us/services/kubernetes-service/) before/after PR is merged or by a scheduler. Even if we will use [Azure Kubernetes Serivce](https://azure.microsoft.com/en-us/services/kubernetes-service/) in our test infrastructure, contributors should run e2e tests in any  RBAC-enabled Kubenetes clusters.
 
 ### Bring up test cluster
 
@@ -32,7 +32,6 @@ Instead, Actions will use [Azure Pipeline](https://azure.microsoft.com/en-us/ser
 
 ## Consequences
 
-* Actions E2E tests will run in [Minikube](https://github.com/kubernetes/minikube) with local machine and [Azure Kubernetes Serivce](https://azure.microsoft.com/en-us/services/kubernetes-service/) with CI
-* We will ensure that the tests will run in any RBAC-enabled Kubenetes clusters
-* We will provide the manual instruction and scripts to build test cluster.
+* Actions E2E tests will run in [Minikube](https://github.com/kubernetes/minikube) with local machine and [Azure Kubernetes Serivce](https://azure.microsoft.com/en-us/services/kubernetes-service/) with CI, but the tests will run in any RBAC-enabled Kubenetes clusters
+* We will provide the manual instruction and scripts to build test Kubernetes cluster
 * [Azure Pipeline](https://azure.microsoft.com/en-us/services/devops/pipelines/) will run e2e tests before/after PR is merged or by a scheduler and report test results
