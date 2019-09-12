@@ -38,6 +38,7 @@ type Actors interface {
 	DeleteReminder(req *DeleteReminderRequest) error
 	CreateTimer(req *CreateTimerRequest) error
 	DeleteTimer(req *DeleteTimerRequest) error
+	IsActorHosted(req *ActorHostedRequest) bool
 }
 
 type actorsRuntime struct {
@@ -121,6 +122,8 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 		return fmt.Errorf("error from actor service: %s", string(resp.Data))
 	}
 
+	actorKey := a.constructCombinedActorKey(actorType, actorID)
+	a.actorsTable.Delete(actorKey)
 	return nil
 }
 
@@ -159,8 +162,6 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
 							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
-						} else {
-							a.actorsTable.Delete(actorKey)
 						}
 					}(key.(string))
 				}
@@ -361,6 +362,12 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 	return err
 }
 
+func (a *actorsRuntime) IsActorHosted(req *ActorHostedRequest) bool {
+	key := a.constructCombinedActorKey(req.ActorType, req.ActorID)
+	_, exists := a.actorsTable.Load(key)
+	return exists
+}
+
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Set(&state.SetRequest{
@@ -507,31 +514,47 @@ func (a *actorsRuntime) updatePlacements(in *pb.PlacementTables) {
 
 func (a *actorsRuntime) drainRebalancedActors() {
 	// visit all currently active actors
-	a.actorsTable.Range(func(key interface{}, value interface{}) bool {
-		// for each actor, deactivate if no longer hosted locally
-		actorKey := key.(string)
-		actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
+	var wg sync.WaitGroup
 
-		address := a.lookupActorAddress(actorType, actorID)
-		if !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
-			// actor has been moved to a different host, deactivate when calls are done
-			actor := value.(*actor)
-			if actor.busy {
-				select {
-				case <-time.After(a.config.DrainOngoingCallTimeout):
-					break
-				case <-actor.busyCh:
-					break
+	a.actorsTable.Range(func(key interface{}, value interface{}) bool {
+		go func(key interface{}, value interface{}, wg *sync.WaitGroup) {
+			wg.Add(1)
+			defer wg.Done()
+			// for each actor, deactivate if no longer hosted locally
+			actorKey := key.(string)
+			actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
+			address := a.lookupActorAddress(actorType, actorID)
+			if address != "" && !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
+				// actor has been moved to a different host, deactivate when calls are done
+				actor := value.(*actor)
+				if a.config.DrainRebalancedActors {
+					// wait until actor isn't busy or timeout hits
+					if actor.busy {
+						select {
+						case <-time.After(a.config.DrainOngoingCallTimeout):
+							break
+						case <-actor.busyCh:
+							// if a call comes in from the actor for state changes, that's still allowed
+							break
+						}
+					}
+				}
+
+				// don't allow state changes
+				a.actorsTable.Delete(key)
+
+				for {
+					// wait until actor is not busy, then deactivate
+					if !actor.busy {
+						err := a.deactivateActor(actorType, actorID)
+						if err != nil {
+							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
+						}
+					}
+					time.Sleep(time.Millisecond * 500)
 				}
 			}
-
-			err := a.deactivateActor(actorType, actorID)
-			if err != nil {
-				log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
-			} else {
-				a.actorsTable.Delete(actorKey)
-			}
-		}
+		}(key, value, &wg)
 		return true
 	})
 }
