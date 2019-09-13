@@ -327,6 +327,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Value:     fakeBodyObject,
 		}).Return(nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		testMethods := []string{"POST", "PUT"}
@@ -361,6 +366,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Key:       "bytearray",
 			Value:     string(base64Encoded),
 		}).Return(nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -406,6 +416,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Value:     expectedObj,
 		}).Return(nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		testMethods := []string{"POST", "PUT"}
@@ -432,6 +447,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Key:       "key1",
 			Value:     nonJSONFakeData,
 		}).Return(nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -479,6 +499,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Key:       "key1",
 		}).Return(nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		// act
@@ -514,6 +539,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorType:  "fakeActorType",
 			Operations: testTransactionalOperations,
 		}).Return(nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -576,6 +606,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			Value:     fakeBodyObject,
 		}).Return(nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		testMethods := []string{"POST", "PUT"}
@@ -612,6 +647,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			Key:       "bytearray",
 			Value:     string(base64Encoded),
 		}).Return(nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -659,6 +699,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			Value:     expectedObj,
 		}).Return(nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		testMethods := []string{"POST", "PUT"}
@@ -688,6 +733,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			Key:       "key1",
 			Value:     nonJSONFakeData,
 		}).Return(nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
 		testAPI.actor = mockActors
 
@@ -739,6 +789,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			Key:       "key1",
 		}).Return(nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		// act
@@ -776,6 +831,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			ActorType:  "fakeActorType",
 			Operations: testTransactionalOperations,
 		}).Return(nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
 		testAPI.actor = mockActors
 

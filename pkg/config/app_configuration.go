@@ -7,4 +7,7 @@ type ApplicationConfig struct {
 	ActorIdleTimeout string `json:"actorIdleTimeout"`
 	// Duration. example: "30s"
 	ActorScanInterval string `json:"actorScanInterval"`
+	// Duration. example: "30s"
+	DrainOngoingCallTimeout string `json:"drainOngoingCallTimeout"`
+	DrainRebalancedActors   bool   `json:"drainRebalancedActors"`
 }
