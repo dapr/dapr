@@ -37,3 +37,20 @@ func TestGetKeyVersion(t *testing.T) {
 		assert.NotNil(t, err, "failed to respond to missing fields")
 	})
 }
+func TestParseEtag(t *testing.T) {
+	store := NewRedisStateStore()
+	t.Run("Empty ETag", func(t *testing.T) {
+		ver, err := store.parseETag("")
+		assert.Equal(t, nil, err, "failed to parse ETag")
+		assert.Equal(t, 0, ver, "default version should be 0")
+	})
+	t.Run("Number ETag", func(t *testing.T) {
+		ver, err := store.parseETag("354")
+		assert.Equal(t, nil, err, "failed to parse ETag")
+		assert.Equal(t, 354, ver, "version should be 254")
+	})
+	t.Run("String ETag", func(t *testing.T) {
+		_, err := store.parseETag("dragon")
+		assert.NotNil(t, err, "shouldn't recognize string ETag")
+	})
+}
