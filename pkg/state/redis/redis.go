@@ -16,6 +16,11 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
+const (
+	setQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
+	delQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
+)
+
 // StateStore is a Redis state store
 type StateStore struct {
 	client *redis.SyncCtx
@@ -70,7 +75,7 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 // Delete performs a delete operation
 func (r *StateStore) Delete(req *state.DeleteRequest) error {
 
-	res := r.client.Do(context.Background(), "EVAL", "local var1 = redis.call(\"HGET\", KEYS[1], \"version\") if not var1 or var1 == ARGV[1] then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end", 1, req.Key, req.ETag)
+	res := r.client.Do(context.Background(), "EVAL", delQuery, 1, req.Key, req.ETag)
 
 	if err := redis.AsError(res); err != nil {
 		return fmt.Errorf("failed to delete key '%s' due to ETag mismatch", req.Key)
@@ -91,11 +96,27 @@ func (r *StateStore) BulkDelete(req []state.DeleteRequest) error {
 	return nil
 }
 
-// Get retrieves state from redis with a key
-func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
-	res := r.client.Do(context.Background(), "HGETALL", req.Key)
+func (r *StateStore) directGet(req *state.GetRequest) (*state.GetResponse, error) {
+	res := r.client.Do(context.Background(), "GET", req.Key)
 	if err := redis.AsError(res); err != nil {
 		return nil, err
+	}
+
+	if res == nil {
+		return &state.GetResponse{}, nil
+	}
+
+	s, _ := strconv.Unquote(fmt.Sprintf("%q", res))
+	return &state.GetResponse{
+		Data: []byte(s),
+	}, nil
+}
+
+// Get retrieves state from redis with a key
+func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+	res := r.client.Do(context.Background(), "HGETALL", req.Key) // Prefer values with ETags
+	if err := redis.AsError(res); err != nil {
+		return r.directGet(req) //Falls back to original get
 	}
 	if res == nil {
 		return &state.GetResponse{}, nil
@@ -110,8 +131,10 @@ func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 		return nil, err
 	}
 
+	s, _ := strconv.Unquote(data)
+
 	return &state.GetResponse{
-		Data: []byte(data),
+		Data: []byte(s),
 		ETag: version,
 	}, nil
 }
@@ -119,12 +142,13 @@ func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 // Set saves state into redis
 func (r *StateStore) Set(req *state.SetRequest) error {
 	b, _ := r.json.Marshal(req.Value)
+
 	ver, err := r.parseETag(req.ETag)
 	if err != nil {
 		return err
 	}
 
-	res := r.client.Do(context.Background(), "EVAL", "local var1 = redis.call(\"HGET\", KEYS[1], \"version\") if not var1 or var1 == ARGV[1] then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end", 1, req.Key, ver, b)
+	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, b)
 	if err := redis.AsError(res); err != nil {
 		return fmt.Errorf("failed to set key '%s' due to ETag mismatch", req.Key)
 	}
