@@ -14,6 +14,7 @@ import (
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/components/pubsub"
 	"github.com/actionscore/actions/pkg/components/state"
+	"github.com/actionscore/actions/pkg/discovery"
 	"github.com/actionscore/actions/pkg/messaging"
 	pubsub_loader "github.com/actionscore/actions/pkg/pubsub"
 	state_loader "github.com/actionscore/actions/pkg/state"
@@ -149,6 +150,11 @@ func (a *ActionsRuntime) initRuntime() error {
 		log.Fatalf("failed to start gRPC server: %s", err)
 	}
 	log.Infof("gRPC server is running on port %v", a.runtimeConfig.GRPCPort)
+
+	err = a.announceSelf()
+	if err != nil {
+		log.Warnf("failed to broadcast address to local network: %s", err)
+	}
 
 	return nil
 }
@@ -693,6 +699,19 @@ func (a *ActionsRuntime) createAppChannel() error {
 		}
 
 		a.appChannel = ch
+	}
+
+	return nil
+}
+
+func (a *ActionsRuntime) announceSelf() error {
+	switch a.runtimeConfig.Mode {
+	case modes.StandaloneMode:
+		err := discovery.RegisterMDNS(a.runtimeConfig.ID, a.runtimeConfig.GRPCPort)
+		if err != nil {
+			return err
+		}
+		log.Info("local service entry announced")
 	}
 
 	return nil
