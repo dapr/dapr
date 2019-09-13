@@ -52,8 +52,16 @@ In order to run the pub/sub sample locally, we need to run each of our microserv
 
 The Actions CLI provides a mechanism to publish messages for testing purposes. Let's test that our subscribers are listening!
 
-1. Run `actions publish --topic A --payload '{ "message": "This is a test" }'` 
-
+1. Use Actions CLI to publish a message:
+   
+    * Linux/Mac:
+    ```bash
+    actions publish --topic A --payload '{ "message": "This is a test" }'
+    ```
+    * Windows
+    ```bash
+    actions publish --topic A --payload "{ \"message\": \"This is a test\" }"
+    ```
     Both our Node.js and Python subscribers subscribe to topic A and log when they receive a message. Note that logs are showing up in the console window where we ran each one: 
     
     ```bash
