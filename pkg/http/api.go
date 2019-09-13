@@ -486,6 +486,17 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 	actorID := c.Param(actorIDParam)
 	body := c.PostBody()
 
+	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
 	var ops []actors.TransactionalOperation
 	err := a.json.Unmarshal(body, &ops)
 	if err != nil {
@@ -625,6 +636,17 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	key := c.Param(stateKeyParam)
 	body := c.PostBody()
 
+	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
 	// Deserialize body to validate JSON compatible body
 	// and remove useless characters before saving
 	var val interface{}
@@ -691,6 +713,17 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 	actorType := c.Param(actorTypeParam)
 	actorID := c.Param(actorIDParam)
 	key := c.Param(stateKeyParam)
+
+	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
 
 	req := actors.DeleteStateRequest{
 		ActorID:   actorID,

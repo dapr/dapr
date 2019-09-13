@@ -47,6 +47,20 @@ func (_m *MockActors) CreateReminder(req *actors.CreateReminderRequest) error {
 	return r0
 }
 
+// IsActorHosted provides a mock function with given fields: req
+func (_m *MockActors) IsActorHosted(req *actors.ActorHostedRequest) bool {
+	ret := _m.Called(req)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(*actors.ActorHostedRequest) bool); ok {
+		r0 = rf(req)
+	} else {
+		r0 = true
+	}
+
+	return r0
+}
+
 // CreateTimer provides a mock function with given fields: req
 func (_m *MockActors) CreateTimer(req *actors.CreateTimerRequest) error {
 	ret := _m.Called(req)

@@ -75,7 +75,7 @@ func newTestActorsRuntime() *actorsRuntime {
 		mock.AnythingOfType("*channel.InvokeRequest")).Return(fakeHTTPResponse, nil)
 
 	store := fakeStore()
-	config := NewConfig("", TestActionsID, "", nil, 0, "", "")
+	config := NewConfig("", TestActionsID, "", nil, 0, "", "", "", false)
 	a := NewActors(store, mockAppChannel, nil, config)
 
 	return a.(*actorsRuntime)
@@ -97,6 +97,7 @@ func fakeCallAndActivateActor(actors *actorsRuntime, actorKey string) {
 		lastUsedTime: time.Now(),
 		lock:         &sync.RWMutex{},
 		busy:         false,
+		busyCh:       make(chan bool, 1),
 	})
 }
 
