@@ -21,6 +21,44 @@ To set the output level, you can use the `--log-level` command-line option. For 
 
 This will start the Actions runtime binary with a log level of `error` and the Actions Actor Placement Service with a log level of `debug`.
 
+## Configuring logs on Standalone Mode
+
+As outlined above, every Actions binary takes a `--log-level` argument. For example, to launch the placement service with a log level of warning:
+
+`./placement --log-level warning`
+
+To set the log level when running your app with the Actions CLI, pass the `log-level` param:
+
+`actions run --log-level warning node myapp.js`
+
+## Viewing Logs on Standalone Mode
+
+When running Actions with the Actions CLI, both your app's log output and the runtime's output will be redirected to the same session, for easy debugging.
+For example, this is the output when running Actions:
+
+```
+actions run node myapp.js
+ℹ️  Starting Actions with id Trackgreat-Lancer on port 56730
+✅  You're up and running! Both Actions and your app logs will appear here.
+
+== APP == App listening on port 3000!
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="starting Actions Runtime -- version 0.3.0-alpha -- commit b6f2810-dirty"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="log level set to: info"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="standalone mode configured"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="action id: Trackgreat-Lancer"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="loaded component statestore (state.redis)"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="loaded component messagebus (pubsub.redis)"
+== ACTIONS == 2019/09/05 12:26:43 redis: connecting to localhost:6379
+== ACTIONS == 2019/09/05 12:26:43 redis: connected to localhost:6379 (localAddr: [::1]:56734, remAddr: [::1]:6379)
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=warning msg="failed to init input bindings: app channel not initialized"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="actor runtime started. actor idle timeout: 1h0m0s. actor scan interval: 30s"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="actors: starting connection attempt to placement service at localhost:50005"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="http server is running on port 56730"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="gRPC server is running on port 56731"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="actions initialized. Status: Running. Init Elapsed 8.772922000000001ms"
+== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="actors: established connection to placement service at localhost:50005"
+```
+
 ## Configuring Logs on Kubernetes
 
 This section shows you how to configure the log levels for Actions system pods and the Actions sidecar running on Kubernetes.
@@ -40,25 +78,17 @@ When deploying Actions to your cluster using Helm, you can individually set the 
 
 #### Setting the Operator log level
 
-`helm intstall actionscore/actions-operator -n actions --namespace actions-system --set actions_operator.logLevel=error`
+`helm install actionscore/actions-operator -n actions --namespace actions-system --set actions_operator.logLevel=error`
 
 #### Setting the Placement Service log level
 
-`helm intstall actionscore/actions-operator -n actions --namespace actions-system --set actions_placement.logLevel=error`
+`helm install actionscore/actions-placement -n actions --namespace actions-system --set actions_placement.logLevel=error`
 
-### Setting the Sidecar Injector log level
+#### Setting the Sidecar Injector log level
 
-`helm intstall actionscore/actions-operator -n actions --namespace actions-system --set actions_sidecar_injector.logLevel=error`
+`helm install actionscore/actions-sidecar-injector -n actions --namespace actions-system --set actions_sidecar_injector.logLevel=error`
 
-## Configuring logs on Standalone Mode
 
-As outlined above, every Actions binary takes a `--log-level` argument. For example, to launch the placement service with a log level of warning:
-
-`./placement --log-level warning`
-
-To set the log level when running your app with the Actions CLI, pass the `log-level` param:
-
-`actions run --log-level warning node myapp.js`
 
 ## Viewing Logs on Kubernetes
 
@@ -95,11 +125,11 @@ time="2019-09-04T02:52:27Z" level=info msg="actors: established connection to pl
 
 ### System Logs
 
-Actions runs three main system pods:
+Actions runs the following system pods:
 
-* Actions Operator
-* Actions Sidecar Injector
-* Actions Placement Service
+* Actions operator
+* Actions sidecar injector
+* Actions placement service
 
 #### Viewing Operator Logs
 
@@ -136,32 +166,5 @@ time="2019-09-04T00:21:57Z" level=info msg="host added: 10.244.1.89"
 
 ### Non Kubernetes Environments
 
-The examples above are mostly specific to Kubernetes, but the principal is the same for any kind of container based environment: simply grab the container ID of the Actions sidecar and/or system component (if applicable) and view its logs.
+The examples above are specific specific to Kubernetes, but the principal is the same for any kind of container based environment: simply grab the container ID of the Actions sidecar and/or system component (if applicable) and view its logs.
 
-## Viewing Logs on Standalone Mode
-
-When running Actions with the Actions CLI, both your app's log output and the runtime's output will be redirected to the same session, for easy debugging.
-For example, this is the output when running Actions:
-
-```
-actions run node myapp.js
-ℹ️  Starting Actions with id Trackgreat-Lancer on port 56730
-✅  You're up and running! Both Actions and your app logs will appear here.
-
-== APP == App listening on port 3000!
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="starting Actions Runtime -- version 0.3.0-alpha -- commit b6f2810-dirty"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="log level set to: info"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="standalone mode configured"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="action id: Trackgreat-Lancer"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="loaded component statestore (state.redis)"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="loaded component messagebus (pubsub.redis)"
-== ACTIONS == 2019/09/05 12:26:43 redis: connecting to localhost:6379
-== ACTIONS == 2019/09/05 12:26:43 redis: connected to localhost:6379 (localAddr: [::1]:56734, remAddr: [::1]:6379)
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=warning msg="failed to init input bindings: app channel not initialized"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="actor runtime started. actor idle timeout: 1h0m0s. actor scan interval: 30s"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="actors: starting connection attempt to placement service at localhost:50005"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="http server is running on port 56730"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="gRPC server is running on port 56731"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="actions initialized. Status: Running. Init Elapsed 8.772922000000001ms"
-== ACTIONS == time="2019-09-05T12:26:43-07:00" level=info msg="actors: established connection to placement service at localhost:50005"
-```
