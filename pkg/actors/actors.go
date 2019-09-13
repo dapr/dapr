@@ -526,6 +526,19 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			address := a.lookupActorAddress(actorType, actorID)
 			if address != "" && !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done
+				// cancel any reminders
+				reminders := a.reminders[actorType]
+				for _, r := range reminders {
+					if r.ActorType == actorType && r.ActorID == actorID {
+						reminderKey := fmt.Sprintf("%s-%s", actorKey, r.Name)
+						stopChan, exists := a.activeReminders.Load(reminderKey)
+						if exists {
+							close(stopChan.(chan bool))
+							a.activeReminders.Delete(reminderKey)
+						}
+					}
+				}
+
 				actor := value.(*actor)
 				if a.config.DrainRebalancedActors {
 					// wait until actor isn't busy or timeout hits
@@ -961,6 +974,15 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	}
 
 	key := fmt.Sprintf("actors-%s", req.ActorType)
+	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
+	reminderKey := fmt.Sprintf("%s-%s", actorKey, req.Name)
+
+	stopChan, exists := a.activeReminders.Load(reminderKey)
+	if exists {
+		close(stopChan.(chan bool))
+		a.activeReminders.Delete(reminderKey)
+	}
+
 	reminders, err := a.getRemindersForActorType(req.ActorType)
 	if err != nil {
 		return err
@@ -970,15 +992,6 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 		if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
 			reminders = append(reminders[:i], reminders[i+1:]...)
 		}
-	}
-
-	actorKey := a.constructCombinedActorKey(req.ActorType, req.ActorID)
-	reminderKey := fmt.Sprintf("%s-%s", actorKey, req.Name)
-
-	stopChan, exists := a.activeReminders.Load(reminderKey)
-	if exists {
-		close(stopChan.(chan bool))
-		a.activeReminders.Delete(reminderKey)
 	}
 
 	err = a.store.Set(&state.SetRequest{
