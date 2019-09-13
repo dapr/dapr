@@ -162,17 +162,16 @@ func (r *StateStore) Multi(operations []state.TransactionalRequest) error {
 	return err
 }
 
-func (r *StateStore) getKeyVersion(vals []interface{}) (string, string, error) {
-	data := ""
-	version := ""
+func (r *StateStore) getKeyVersion(vals []interface{}) (data string, version string, err error) {
 	seenData := false
 	seenVersion := false
 	for i := 0; i < len(vals); i += 2 {
 		field, _ := strconv.Unquote(fmt.Sprintf("%q", vals[i]))
-		if field == "data" {
+		switch field {
+		case "data":
 			data, _ = strconv.Unquote(fmt.Sprintf("%q", vals[i+1]))
 			seenData = true
-		} else if field == "version" {
+		case "version":
 			version, _ = strconv.Unquote(fmt.Sprintf("%q", vals[i+1]))
 			seenVersion = true
 		}
