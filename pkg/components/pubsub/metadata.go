@@ -1,6 +1,7 @@
 package pubsub
 
+// Metadata represents a set of message-bus specific properties
 type Metadata struct {
-	ConnectionInfo map[string]string `json:"connectionInfo"`
-	Properties     map[string]string `json:"properties"`
+	Properties map[string]string `json:"properties"`
+	Mock       MockPubSub
 }

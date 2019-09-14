@@ -1,7 +1,7 @@
 package bindings
 
+// Metadata represents a set of binding specific properties
 type Metadata struct {
-	Name           string
-	ConnectionInfo map[string]string `json:"connectionInfo"`
-	Properties     map[string]string `json:"properties"`
+	Name       string
+	Properties map[string]string `json:"properties"`
 }

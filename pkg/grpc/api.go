@@ -9,10 +9,12 @@ import (
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 
+	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
 	"github.com/actionscore/actions/pkg/channel"
 	"github.com/actionscore/actions/pkg/components"
 	"github.com/actionscore/actions/pkg/messaging"
 	pb "github.com/actionscore/actions/pkg/proto"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // API is the gRPC interface for the Actions runtime
@@ -107,18 +109,26 @@ func (a *api) CallActor(ctx context.Context, in *pb.CallActorEnvelope) (*pb.Invo
 
 // UpdateComponent is fired by the Actions control plane when a component state changes
 func (a *api) UpdateComponent(ctx context.Context, in *pb.Component) (*empty.Empty, error) {
-	c := components.Component{
-		Metadata: components.ComponentMetadata{
-			Name: in.Name,
+	c := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: in.Metadata.Name,
 		},
-		Spec: components.ComponentSpec{
-			ConnectionInfo: in.Spec.ConnectionInfo,
-			Properties:     in.Spec.Properties,
-			Type:           in.Spec.Type,
+		Auth: components_v1alpha1.Auth{
+			SecretStore: in.Auth.SecretStore,
 		},
 	}
 
-	a.componentsHandler.OnComponentUpdated(c)
+	for _, m := range in.Spec.Metadata {
+		c.Spec.Metadata = append(c.Spec.Metadata, components_v1alpha1.MetadataItem{
+			Name:  m.Name,
+			Value: m.Value,
+			SecretKeyRef: components_v1alpha1.SecretKeyRef{
+				Key:  m.SecretKeyRef.Key,
+				Name: m.SecretKeyRef.Name,
+			},
+		})
+	}
 
+	a.componentsHandler.OnComponentUpdated(c)
 	return &empty.Empty{}, nil
 }

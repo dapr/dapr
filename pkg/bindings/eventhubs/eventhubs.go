@@ -37,7 +37,7 @@ func NewAzureEventHubs() *AzureEventHubs {
 // Init performs metadata init
 func (a *AzureEventHubs) Init(metadata bindings.Metadata) error {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	b, err := json.Marshal(metadata.ConnectionInfo)
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return err
 	}

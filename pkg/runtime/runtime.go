@@ -9,7 +9,10 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/actionscore/actions/pkg/components/secretstores"
 
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/components/pubsub"
@@ -17,6 +20,7 @@ import (
 	"github.com/actionscore/actions/pkg/discovery"
 	"github.com/actionscore/actions/pkg/messaging"
 	pubsub_loader "github.com/actionscore/actions/pkg/pubsub"
+	secretstores_loader "github.com/actionscore/actions/pkg/secretstores"
 	state_loader "github.com/actionscore/actions/pkg/state"
 
 	bindings_loader "github.com/actionscore/actions/pkg/bindings"
@@ -36,6 +40,7 @@ import (
 	"github.com/actionscore/actions/pkg/modes"
 
 	log "github.com/Sirupsen/logrus"
+	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
 	pb "github.com/actionscore/actions/pkg/proto"
 )
 
@@ -47,37 +52,41 @@ const (
 
 // ActionsRuntime holds all the core components of the runtime
 type ActionsRuntime struct {
-	runtimeConfig      *Config
-	globalConfig       *config.Configuration
-	components         []components.Component
-	grpc               *grpc.Manager
-	appChannel         channel.AppChannel
-	appConfig          config.ApplicationConfig
-	directMessaging    messaging.DirectMessaging
-	stateStoreRegistry state.StateStoreRegistry
-	stateStore         state.StateStore
-	actor              actors.Actors
-	bindingsRegistry   bindings.BindingsRegistry
-	inputBindings      map[string]bindings.InputBinding
-	outputBindings     map[string]bindings.OutputBinding
-	pubSubRegistry     pubsub.PubSubRegistry
-	pubSub             pubsub.PubSub
-	json               jsoniter.API
-	hostAddress        string
+	runtimeConfig        *Config
+	globalConfig         *config.Configuration
+	components           []components_v1alpha1.Component
+	grpc                 *grpc.Manager
+	appChannel           channel.AppChannel
+	appConfig            config.ApplicationConfig
+	directMessaging      messaging.DirectMessaging
+	stateStoreRegistry   state.StateStoreRegistry
+	secretStoresRegistry secretstores.SecretStoreRegistry
+	stateStore           state.StateStore
+	actor                actors.Actors
+	bindingsRegistry     bindings.BindingsRegistry
+	inputBindings        map[string]bindings.InputBinding
+	outputBindings       map[string]bindings.OutputBinding
+	secretStores         map[string]secretstores.SecretStore
+	pubSubRegistry       pubsub.PubSubRegistry
+	pubSub               pubsub.PubSub
+	json                 jsoniter.API
+	hostAddress          string
 }
 
 // NewActionsRuntime returns a new runtime with the given runtime config and global config
 func NewActionsRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *ActionsRuntime {
 	return &ActionsRuntime{
-		runtimeConfig:      runtimeConfig,
-		globalConfig:       globalConfig,
-		grpc:               grpc.NewGRPCManager(),
-		json:               jsoniter.ConfigFastest,
-		inputBindings:      map[string]bindings.InputBinding{},
-		outputBindings:     map[string]bindings.OutputBinding{},
-		stateStoreRegistry: state.NewStateStoreRegistry(),
-		bindingsRegistry:   bindings.NewBindingsRegistry(),
-		pubSubRegistry:     pubsub.NewPubSubRegsitry(),
+		runtimeConfig:        runtimeConfig,
+		globalConfig:         globalConfig,
+		grpc:                 grpc.NewGRPCManager(),
+		json:                 jsoniter.ConfigFastest,
+		inputBindings:        map[string]bindings.InputBinding{},
+		outputBindings:       map[string]bindings.OutputBinding{},
+		secretStores:         map[string]secretstores.SecretStore{},
+		stateStoreRegistry:   state.NewStateStoreRegistry(),
+		bindingsRegistry:     bindings.NewBindingsRegistry(),
+		pubSubRegistry:       pubsub.NewPubSubRegsitry(),
+		secretStoresRegistry: secretstores.NewSecretStoreRegistry(),
 	}
 }
 
@@ -191,12 +200,12 @@ func (a *ActionsRuntime) initDirectMessaging() {
 
 // OnComponentUpdated updates the Actions runtime with new or changed components
 // This method is invoked from the Actions Control Plane whenever a component update happens
-func (a *ActionsRuntime) OnComponentUpdated(component components.Component) {
+func (a *ActionsRuntime) OnComponentUpdated(component components_v1alpha1.Component) {
 	update := false
 
 	for i, c := range a.components {
-		if c.Spec.Type == component.Spec.Type && c.Metadata.Name == component.Metadata.Name {
-			if reflect.DeepEqual(c, component) {
+		if c.Spec.Type == component.Spec.Type && c.ObjectMeta.Name == component.ObjectMeta.Name {
+			if reflect.DeepEqual(c.Spec.Metadata, component.Spec.Metadata) {
 				return
 			}
 
@@ -218,8 +227,7 @@ func (a *ActionsRuntime) OnComponentUpdated(component components.Component) {
 		}
 
 		err = store.Init(state.Metadata{
-			ConnectionInfo: component.Spec.ConnectionInfo,
-			Properties:     component.Spec.Properties,
+			Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata),
 		})
 		if err != nil {
 			log.Errorf("error on init state store: %s", err)
@@ -235,12 +243,11 @@ func (a *ActionsRuntime) OnComponentUpdated(component components.Component) {
 		}
 
 		err = binding.Init(bindings.Metadata{
-			ConnectionInfo: component.Spec.ConnectionInfo,
-			Properties:     component.Spec.Properties,
-			Name:           component.Metadata.Name,
+			Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata),
+			Name:       component.ObjectMeta.Name,
 		})
 		if err == nil {
-			a.outputBindings[component.Metadata.Name] = binding
+			a.outputBindings[component.ObjectMeta.Name] = binding
 		}
 	}
 }
@@ -386,7 +393,7 @@ func (a *ActionsRuntime) initInputBindings(registry bindings.BindingsRegistry) e
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			req := channel.InvokeRequest{
-				Method:   c.Metadata.Name,
+				Method:   c.ObjectMeta.Name,
 				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Options},
 			}
 
@@ -401,18 +408,16 @@ func (a *ActionsRuntime) initInputBindings(registry bindings.BindingsRegistry) e
 				log.Warnf("failed to create input binding %s: %s", c.Spec.Type, err)
 				continue
 			}
-
 			err = binding.Init(bindings.Metadata{
-				ConnectionInfo: c.Spec.ConnectionInfo,
-				Properties:     c.Spec.Properties,
-				Name:           c.Metadata.Name,
+				Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+				Name:       c.ObjectMeta.Name,
 			})
 			if err != nil {
 				log.Warnf("failed to init input binding %s: %s", c.Spec.Type, err)
 				continue
 			}
 
-			a.inputBindings[c.Metadata.Name] = binding
+			a.inputBindings[c.ObjectMeta.Name] = binding
 		}
 	}
 
@@ -429,15 +434,14 @@ func (a *ActionsRuntime) initOutputBindings(registry bindings.BindingsRegistry) 
 
 			if binding != nil {
 				err := binding.Init(bindings.Metadata{
-					ConnectionInfo: c.Spec.ConnectionInfo,
-					Properties:     c.Spec.Properties,
+					Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
 				})
 				if err != nil {
 					log.Warnf("failed to init output binding %s: %s", c.Spec.Type, err)
 					continue
 				}
 
-				a.outputBindings[c.Metadata.Name] = binding
+				a.outputBindings[c.ObjectMeta.Name] = binding
 			}
 		}
 	}
@@ -455,11 +459,9 @@ func (a *ActionsRuntime) initState(registry state.StateStoreRegistry) error {
 				log.Warnf("error creating state store %s: %s", s.Spec.Type, err)
 				continue
 			}
-
 			if store != nil {
 				err := store.Init(state.Metadata{
-					ConnectionInfo: s.Spec.ConnectionInfo,
-					Properties:     s.Spec.Properties,
+					Properties: a.convertMetadataItemsToProperties(s.Spec.Metadata),
 				})
 				if err != nil {
 					log.Warnf("error initializing state store %s: %s", s.Spec.Type, err)
@@ -507,15 +509,11 @@ func (a *ActionsRuntime) initPubSub() error {
 				continue
 			}
 
-			properties := c.Spec.Properties
-			if properties == nil {
-				properties = make(map[string]string, 1)
-			}
+			properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
 			properties["consumerID"] = a.runtimeConfig.ID
 
 			err = pubSub.Init(pubsub.Metadata{
-				ConnectionInfo: c.Spec.ConnectionInfo,
-				Properties:     properties,
+				Properties: properties,
 			})
 			if err != nil {
 				log.Warnf("error initializing pub sub %s: %s", c.Spec.Type, err)
@@ -578,23 +576,82 @@ func (a *ActionsRuntime) loadComponents() error {
 		return fmt.Errorf("components loader for mode %s not found", a.runtimeConfig.Mode)
 	}
 
-	allComponents, err := loader.LoadComponents()
+	comps, err := loader.LoadComponents()
 	if err != nil {
 		return err
 	}
+	a.components = comps
 
-	a.components = allComponents
-
-	for _, c := range a.components {
-		log.Infof("loaded component %s (%s)", c.Metadata.Name, c.Spec.Type)
+	err = a.initSecretStores()
+	if err != nil {
+		log.Warnf("failed to init secret stores: %s", err)
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(len(a.components))
+
+	for i, c := range a.components {
+		go func(wg *sync.WaitGroup, component components_v1alpha1.Component, index int) {
+			modified := a.processComponentSecrets(component)
+			a.components[index] = modified
+			log.Infof("loaded component %s (%s)", modified.ObjectMeta.Name, modified.Spec.Type)
+			wg.Done()
+		}(&wg, c, i)
+	}
+	wg.Wait()
 	return nil
 }
 
 // Stop allows for a graceful shutdown of all runtime internal operations or components
 func (a *ActionsRuntime) Stop() {
 	log.Info("stop command issued. Shutting down all operations")
+}
+
+func (a *ActionsRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {
+	cache := map[string]secretstores.GetSecretResponse{}
+	for i, m := range component.Spec.Metadata {
+		if m.SecretKeyRef.Name != "" && m.SecretKeyRef.Key != "" {
+			secretStore := a.getSecretStore(component.SecretStore)
+			if secretStore != nil {
+				var resp secretstores.GetSecretResponse
+				if val, ok := cache[m.SecretKeyRef.Name]; ok {
+					resp = val
+				} else {
+					r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
+						Name: m.SecretKeyRef.Name,
+						Metadata: map[string]string{
+							"namespace": component.ObjectMeta.Namespace,
+						},
+					})
+					if err != nil {
+						log.Errorf("error getting secret: %s", err)
+						continue
+					}
+					resp = r
+				}
+				val, ok := resp.Data[m.SecretKeyRef.Key]
+				if ok {
+					component.Spec.Metadata[i].Value = val
+				}
+				cache[m.SecretKeyRef.Name] = resp
+			}
+		}
+	}
+	return component
+}
+
+func (a *ActionsRuntime) getSecretStore(storeName string) secretstores.SecretStore {
+	if storeName == "" {
+		switch a.runtimeConfig.Mode {
+		case modes.KubernetesMode:
+			return a.secretStores["kubernetes"]
+		case modes.StandaloneMode:
+			return nil
+		}
+	} else {
+		return a.secretStores[storeName]
+	}
+	return nil
 }
 
 func (a *ActionsRuntime) blockUntilAppIsReady() {
@@ -715,4 +772,46 @@ func (a *ActionsRuntime) announceSelf() error {
 	}
 
 	return nil
+}
+
+func (a *ActionsRuntime) initSecretStores() error {
+	secretstores_loader.Load()
+
+	switch a.runtimeConfig.Mode {
+	case modes.KubernetesMode:
+		kubeSecretStore, err := a.secretStoresRegistry.CreateSecretStore("secretstores.kubernetes")
+		if err != nil {
+			return err
+		}
+		err = kubeSecretStore.Init(nil)
+		if err != nil {
+			return err
+		}
+		a.secretStores["kubernetes"] = kubeSecretStore
+	}
+
+	for _, c := range a.components {
+		if strings.Index(c.Spec.Type, "secretstores") == 0 {
+			secretStore, err := a.secretStoresRegistry.CreateSecretStore(c.Spec.Type)
+			if err != nil {
+				log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
+				continue
+			}
+			err = secretStore.Init(nil)
+			if err != nil {
+				log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
+				continue
+			}
+			a.secretStores[c.ObjectMeta.Name] = secretStore
+		}
+	}
+	return nil
+}
+
+func (a *ActionsRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
+	properties := map[string]string{}
+	for _, c := range items {
+		properties[c.Name] = c.Value
+	}
+	return properties
 }

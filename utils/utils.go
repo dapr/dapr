@@ -2,7 +2,6 @@ package utils
 
 import (
 	"flag"
-	"fmt"
 	"path/filepath"
 
 	"k8s.io/client-go/rest"
@@ -38,7 +37,6 @@ func GetConfig() *rest.Config {
 
 		conf, err := rest.InClusterConfig()
 		if err != nil {
-			fmt.Println("ERR - " + err.Error())
 			conf, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
 			if err != nil {
 				panic(err)

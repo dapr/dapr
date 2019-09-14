@@ -1,9 +1,10 @@
-# ROOT_PACKAGE :: the package (relative to $GOPATH/src) that is the target for code generation
-ROOT_PACKAGE="github.com/actionscore/actions"
+set -o errexit
+set -o nounset
+set -o pipefail
 
-# retrieve the code-generator scripts and bins
-go get -u k8s.io/code-generator/...
-cd $GOPATH/src/k8s.io/code-generator
+SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
+CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
 
-# run the code-generator entrypoint script
-./generate-groups.sh all "$ROOT_PACKAGE/pkg/client" "$ROOT_PACKAGE/pkg/apis" "components:v1alpha1 configuration:v1alpha1"
+bash ".${CODEGEN_PKG}"/generate-groups.sh "deepcopy,client,informer,lister" \
+  "github.com/actionscore/actions/pkg/client" "github.com/actionscore/actions/pkg/apis" \
+  "components:v1alpha1 configuration:v1alpha1"

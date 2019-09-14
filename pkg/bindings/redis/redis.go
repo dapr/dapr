@@ -30,7 +30,7 @@ func NewRedis() *Redis {
 
 // Init performs metadata parsing and connection creation
 func (r *Redis) Init(metadata bindings.Metadata) error {
-	connInfo := metadata.ConnectionInfo
+	connInfo := metadata.Properties
 	b, err := json.Marshal(connInfo)
 	if err != nil {
 		return err

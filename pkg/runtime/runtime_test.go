@@ -9,18 +9,36 @@ import (
 	"github.com/actionscore/actions/pkg/channel"
 	http_channel "github.com/actionscore/actions/pkg/channel/http"
 	channelt "github.com/actionscore/actions/pkg/channel/testing"
-	"github.com/actionscore/actions/pkg/components"
 	"github.com/actionscore/actions/pkg/components/pubsub"
-	cpubsub "github.com/actionscore/actions/pkg/components/pubsub"
+	"github.com/actionscore/actions/pkg/components/secretstores"
 	"github.com/actionscore/actions/pkg/modes"
 
+	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
 	"github.com/actionscore/actions/pkg/config"
 	"github.com/stretchr/testify/assert"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
 	TestRuntimeConfigID = "consumer0"
 )
+
+type MockKubernetesStateStore struct {
+}
+
+func (m *MockKubernetesStateStore) Init(metadata map[string]string) error {
+	return nil
+}
+
+func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{"key1": "value1"},
+	}, nil
+}
+
+func NewMockKubernetesStore() secretstores.SecretStore {
+	return &MockKubernetesStateStore{}
+}
 
 func TestNewRuntime(t *testing.T) {
 	// act
@@ -33,13 +51,12 @@ func TestNewRuntime(t *testing.T) {
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestActionsRuntime()
 
-	initMockPubSubForRuntime := func(rt *ActionsRuntime) *cpubsub.MockPubSub {
-		mockPubSub := new(cpubsub.MockPubSub)
-		cpubsub.RegisterMessageBus("mockPubSub", mockPubSub)
+	initMockPubSubForRuntime := func(rt *ActionsRuntime) *pubsub.MockPubSub {
+		mockPubSub := new(pubsub.MockPubSub)
+		pubsub.RegisterMessageBus("mockPubSub", mockPubSub)
 
 		expectedMetadata := pubsub.Metadata{
-			ConnectionInfo: getFakeConnectionInfo(),
-			Properties:     map[string]string{"consumerID": TestRuntimeConfigID},
+			Properties: getFakeProperties(),
 		}
 
 		mockPubSub.On("Init", expectedMetadata).Return(nil)
@@ -112,6 +129,128 @@ func TestInitPubSub(t *testing.T) {
 	})
 }
 
+func TestInitSecretStores(t *testing.T) {
+	t.Run("init with no store", func(t *testing.T) {
+		rt := NewTestActionsRuntime()
+		err := rt.initSecretStores()
+		assert.Nil(t, err)
+	})
+
+	t.Run("init with store", func(t *testing.T) {
+		rt := NewTestActionsRuntime()
+		m := NewMockKubernetesStore()
+		secretstores.RegisterSecretStore("kubernetesMock", m)
+
+		rt.components = append(rt.components, components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetesMock",
+			},
+		})
+
+		err := rt.initSecretStores()
+		assert.Nil(t, err)
+	})
+
+	t.Run("secret store is registered", func(t *testing.T) {
+		rt := NewTestActionsRuntime()
+		m := NewMockKubernetesStore()
+		secretstores.RegisterSecretStore("kubernetesMock", m)
+
+		rt.components = append(rt.components, components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetesMock",
+			},
+		})
+
+		rt.initSecretStores()
+		assert.NotNil(t, rt.secretStores["kubernetesMock"])
+	})
+
+	t.Run("get secret store", func(t *testing.T) {
+		rt := NewTestActionsRuntime()
+		m := NewMockKubernetesStore()
+		secretstores.RegisterSecretStore("kubernetesMock", m)
+
+		rt.components = append(rt.components, components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetesMock",
+			},
+		})
+
+		rt.initSecretStores()
+		s := rt.getSecretStore("kubernetesMock")
+		assert.NotNil(t, s)
+	})
+}
+
+func TestMetadataItemsToPropertiesConversion(t *testing.T) {
+	rt := NewTestActionsRuntime()
+	items := []components_v1alpha1.MetadataItem{
+		components_v1alpha1.MetadataItem{
+			Name:  "a",
+			Value: "b",
+		},
+	}
+	m := rt.convertMetadataItemsToProperties(items)
+	assert.Equal(t, 1, len(m))
+	assert.Equal(t, "b", m["a"])
+}
+
+func TestProcessComponentSecrets(t *testing.T) {
+	rt := NewTestActionsRuntime()
+	m := NewMockKubernetesStore()
+	secretstores.RegisterSecretStore("kubernetesMock", m)
+
+	rt.components = append(rt.components, components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "kubernetesMock",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type: "secretstores.kubernetesMock",
+		},
+	})
+
+	rt.initSecretStores()
+
+	mockBinding := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "mockBinding",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type: "bindings.mock",
+			Metadata: []components_v1alpha1.MetadataItem{
+				components_v1alpha1.MetadataItem{
+					Name: "a",
+					SecretKeyRef: components_v1alpha1.SecretKeyRef{
+						Key:  "key1",
+						Name: "name1",
+					},
+				},
+				components_v1alpha1.MetadataItem{
+					Name:  "b",
+					Value: "value2",
+				},
+			},
+		},
+		Auth: components_v1alpha1.Auth{
+			SecretStore: "kubernetesMock",
+		},
+	}
+
+	mod := rt.processComponentSecrets(mockBinding)
+	assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+	assert.Equal(t, "value2", mod.Spec.Metadata[1].Value)
+}
+
 func TestOnNewPublishedMessage(t *testing.T) {
 	testPubSubMessage := &pubsub.NewMessage{
 		Topic: "topic1",
@@ -167,10 +306,28 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	})
 }
 
-func getFakeConnectionInfo() map[string]string {
+func getFakeProperties() map[string]string {
 	return map[string]string{
-		"host":     "localhost",
-		"password": "fakePassword",
+		"host":       "localhost",
+		"password":   "fakePassword",
+		"consumerID": TestRuntimeConfigID,
+	}
+}
+
+func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
+	return []components_v1alpha1.MetadataItem{
+		components_v1alpha1.MetadataItem{
+			Name:  "host",
+			Value: "localhost",
+		},
+		components_v1alpha1.MetadataItem{
+			Name:  "password",
+			Value: "fakePassword",
+		},
+		components_v1alpha1.MetadataItem{
+			Name:  "consumerID",
+			Value: TestRuntimeConfigID,
+		},
 	}
 }
 
@@ -191,15 +348,14 @@ func NewTestActionsRuntime() *ActionsRuntime {
 		false)
 
 	rt := NewActionsRuntime(testRuntimeConfig, &config.Configuration{})
-	rt.components = []components.Component{
+	rt.components = []components_v1alpha1.Component{
 		{
-			Metadata: components.ComponentMetadata{
+			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "Components",
 			},
-			Spec: components.ComponentSpec{
-				Type:           "pubsub.mockPubSub",
-				ConnectionInfo: getFakeConnectionInfo(),
-				Properties:     nil,
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:     "pubsub.mockPubSub",
+				Metadata: getFakeMetadataItems(),
 			},
 		},
 	}

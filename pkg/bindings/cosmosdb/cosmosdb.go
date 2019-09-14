@@ -38,7 +38,7 @@ func NewCosmosDB() *CosmosDB {
 
 // Init performs CosmosDB connection parsing and connecting
 func (c *CosmosDB) Init(metadata bindings.Metadata) error {
-	connInfo := metadata.ConnectionInfo
+	connInfo := metadata.Properties
 	b, err := json.Marshal(connInfo)
 	if err != nil {
 		return err

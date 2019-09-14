@@ -20,26 +20,26 @@
 //
 // Basic examples:
 //
-//	glog.Info("Prepare to repel boarders")
+//	klog.Info("Prepare to repel boarders")
 //
-//	glog.Fatalf("Initialization failed: %s", err)
+//	klog.Fatalf("Initialization failed: %s", err)
 //
 // See the documentation for the V function for an explanation of these examples:
 //
-//	if glog.V(2) {
-//		glog.Info("Starting transaction...")
+//	if klog.V(2) {
+//		klog.Info("Starting transaction...")
 //	}
 //
-//	glog.V(2).Infoln("Processed", nItems, "elements")
+//	klog.V(2).Infoln("Processed", nItems, "elements")
 //
 // Log output is buffered and written periodically using Flush. Programs
 // should call Flush before exiting to guarantee all log output is written.
 //
-// By default, all log statements write to files in a temporary directory.
+// By default, all log statements write to standard error.
 // This package provides several flags that modify this behavior.
 // As a result, flag.Parse must be called before any logging is done.
 //
-//	-logtostderr=false
+//	-logtostderr=true
 //		Logs are written to standard error instead of to files.
 //	-alsologtostderr=false
 //		Logs are written to standard error as well as to files.
@@ -404,21 +404,38 @@ func init() {
 	go logging.flushDaemon()
 }
 
-// InitFlags is for explicitly initializing the flags
+var initDefaultsOnce sync.Once
+
+// InitFlags is for explicitly initializing the flags.
 func InitFlags(flagset *flag.FlagSet) {
+
+	// Initialize defaults.
+	initDefaultsOnce.Do(func() {
+		logging.logDir = ""
+		logging.logFile = ""
+		logging.logFileMaxSizeMB = 1800
+		logging.toStderr = true
+		logging.alsoToStderr = false
+		logging.skipHeaders = false
+		logging.addDirHeader = false
+		logging.skipLogHeaders = false
+	})
+
 	if flagset == nil {
 		flagset = flag.CommandLine
 	}
-	flagset.StringVar(&logging.logDir, "log_dir", "", "If non-empty, write log files in this directory")
-	flagset.StringVar(&logging.logFile, "log_file", "", "If non-empty, use this log file")
-	flagset.Uint64Var(&logging.logFileMaxSizeMB, "log_file_max_size", 1800,
+
+	flagset.StringVar(&logging.logDir, "log_dir", logging.logDir, "If non-empty, write log files in this directory")
+	flagset.StringVar(&logging.logFile, "log_file", logging.logFile, "If non-empty, use this log file")
+	flagset.Uint64Var(&logging.logFileMaxSizeMB, "log_file_max_size", logging.logFileMaxSizeMB,
 		"Defines the maximum size a log file can grow to. Unit is megabytes. "+
 			"If the value is 0, the maximum file size is unlimited.")
-	flagset.BoolVar(&logging.toStderr, "logtostderr", true, "log to standard error instead of files")
-	flagset.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
+	flagset.BoolVar(&logging.toStderr, "logtostderr", logging.toStderr, "log to standard error instead of files")
+	flagset.BoolVar(&logging.alsoToStderr, "alsologtostderr", logging.alsoToStderr, "log to standard error as well as files")
 	flagset.Var(&logging.verbosity, "v", "number for the log level verbosity")
-	flagset.BoolVar(&logging.skipHeaders, "skip_headers", false, "If true, avoid header prefixes in the log messages")
-	flagset.BoolVar(&logging.skipLogHeaders, "skip_log_headers", false, "If true, avoid headers when openning log files")
+	flagset.BoolVar(&logging.skipHeaders, "add_dir_header", logging.addDirHeader, "If true, adds the file directory to the header")
+	flagset.BoolVar(&logging.skipHeaders, "skip_headers", logging.skipHeaders, "If true, avoid header prefixes in the log messages")
+	flagset.BoolVar(&logging.skipLogHeaders, "skip_log_headers", logging.skipLogHeaders, "If true, avoid headers when opening log files")
 	flagset.Var(&logging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
 	flagset.Var(&logging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
 	flagset.Var(&logging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
@@ -485,6 +502,9 @@ type loggingT struct {
 
 	// If true, do not add the headers to log files
 	skipLogHeaders bool
+
+	// If true, add the file directory to the header
+	addDirHeader bool
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -570,9 +590,14 @@ func (l *loggingT) header(s severity, depth int) (*buffer, string, int) {
 		file = "???"
 		line = 1
 	} else {
-		slash := strings.LastIndex(file, "/")
-		if slash >= 0 {
-			file = file[slash+1:]
+		if slash := strings.LastIndex(file, "/"); slash >= 0 {
+			path := file
+			file = path[slash+1:]
+			if l.addDirHeader {
+				if dirsep := strings.LastIndex(path[:slash], "/"); dirsep >= 0 {
+					file = path[dirsep+1:]
+				}
+			}
 		}
 	}
 	return l.formatHeader(s, file, line), file, line
@@ -721,6 +746,8 @@ func (rb *redirectBuffer) Write(bytes []byte) (n int, err error) {
 
 // SetOutput sets the output destination for all severities
 func SetOutput(w io.Writer) {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 	for s := fatalLog; s >= infoLog; s-- {
 		rb := &redirectBuffer{
 			w: w,
@@ -731,6 +758,8 @@ func SetOutput(w io.Writer) {
 
 // SetOutputBySeverity sets the output destination for specific severity
 func SetOutputBySeverity(name string, w io.Writer) {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
 	sev, ok := severityByName(name)
 	if !ok {
 		panic(fmt.Sprintf("SetOutputBySeverity(%q): unrecognized severity name", name))
@@ -756,24 +785,38 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 		if alsoToStderr || l.alsoToStderr || s >= l.stderrThreshold.get() {
 			os.Stderr.Write(data)
 		}
-		if l.file[s] == nil {
-			if err := l.createFiles(s); err != nil {
-				os.Stderr.Write(data) // Make sure the message appears somewhere.
-				l.exit(err)
+
+		if logging.logFile != "" {
+			// Since we are using a single log file, all of the items in l.file array
+			// will point to the same file, so just use one of them to write data.
+			if l.file[infoLog] == nil {
+				if err := l.createFiles(infoLog); err != nil {
+					os.Stderr.Write(data) // Make sure the message appears somewhere.
+					l.exit(err)
+				}
 			}
-		}
-		switch s {
-		case fatalLog:
-			l.file[fatalLog].Write(data)
-			fallthrough
-		case errorLog:
-			l.file[errorLog].Write(data)
-			fallthrough
-		case warningLog:
-			l.file[warningLog].Write(data)
-			fallthrough
-		case infoLog:
 			l.file[infoLog].Write(data)
+		} else {
+			if l.file[s] == nil {
+				if err := l.createFiles(s); err != nil {
+					os.Stderr.Write(data) // Make sure the message appears somewhere.
+					l.exit(err)
+				}
+			}
+
+			switch s {
+			case fatalLog:
+				l.file[fatalLog].Write(data)
+				fallthrough
+			case errorLog:
+				l.file[errorLog].Write(data)
+				fallthrough
+			case warningLog:
+				l.file[warningLog].Write(data)
+				fallthrough
+			case infoLog:
+				l.file[infoLog].Write(data)
+			}
 		}
 	}
 	if s == fatalLog {
@@ -812,7 +855,7 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 
 // timeoutFlush calls Flush and returns when it completes or after timeout
 // elapses, whichever happens first.  This is needed because the hooks invoked
-// by Flush may deadlock when glog.Fatal is called from a hook that holds
+// by Flush may deadlock when klog.Fatal is called from a hook that holds
 // a lock.
 func timeoutFlush(timeout time.Duration) {
 	done := make(chan bool, 1)
@@ -823,7 +866,7 @@ func timeoutFlush(timeout time.Duration) {
 	select {
 	case <-done:
 	case <-time.After(timeout):
-		fmt.Fprintln(os.Stderr, "glog: Flush took longer than", timeout)
+		fmt.Fprintln(os.Stderr, "klog: Flush took longer than", timeout)
 	}
 }
 
@@ -1079,9 +1122,9 @@ type Verbose bool
 // The returned value is a boolean of type Verbose, which implements Info, Infoln
 // and Infof. These methods will write to the Info log if called.
 // Thus, one may write either
-//	if glog.V(2) { glog.Info("log this") }
+//	if klog.V(2) { klog.Info("log this") }
 // or
-//	glog.V(2).Info("log this")
+//	klog.V(2).Info("log this")
 // The second form is shorter but the first is cheaper if logging is off because it does
 // not evaluate its arguments.
 //
@@ -1155,7 +1198,7 @@ func InfoDepth(depth int, args ...interface{}) {
 }
 
 // Infoln logs to the INFO log.
-// Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
+// Arguments are handled in the manner of fmt.Println; a newline is always appended.
 func Infoln(args ...interface{}) {
 	logging.println(infoLog, args...)
 }
@@ -1179,7 +1222,7 @@ func WarningDepth(depth int, args ...interface{}) {
 }
 
 // Warningln logs to the WARNING and INFO logs.
-// Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
+// Arguments are handled in the manner of fmt.Println; a newline is always appended.
 func Warningln(args ...interface{}) {
 	logging.println(warningLog, args...)
 }
@@ -1203,7 +1246,7 @@ func ErrorDepth(depth int, args ...interface{}) {
 }
 
 // Errorln logs to the ERROR, WARNING, and INFO logs.
-// Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
+// Arguments are handled in the manner of fmt.Println; a newline is always appended.
 func Errorln(args ...interface{}) {
 	logging.println(errorLog, args...)
 }
@@ -1229,7 +1272,7 @@ func FatalDepth(depth int, args ...interface{}) {
 
 // Fatalln logs to the FATAL, ERROR, WARNING, and INFO logs,
 // including a stack trace of all running goroutines, then calls os.Exit(255).
-// Arguments are handled in the manner of fmt.Println; a newline is appended if missing.
+// Arguments are handled in the manner of fmt.Println; a newline is always appended.
 func Fatalln(args ...interface{}) {
 	logging.println(fatalLog, args...)
 }

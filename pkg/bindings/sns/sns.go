@@ -41,7 +41,7 @@ func (a *AWSSns) Init(metadata bindings.Metadata) error {
 }
 
 func (a *AWSSns) Write(req *bindings.WriteRequest) error {
-	b, err := json.Marshal(a.Spec.ConnectionInfo)
+	b, err := json.Marshal(a.Spec.Properties)
 	if err != nil {
 		return err
 	}

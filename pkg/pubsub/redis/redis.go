@@ -29,13 +29,13 @@ func NewRedisStreams() pubsub.PubSub {
 
 func parseRedisMetadata(meta pubsub.Metadata) (metadata, error) {
 	m := metadata{}
-	if val, ok := meta.ConnectionInfo[host]; ok && val != "" {
+	if val, ok := meta.Properties[host]; ok && val != "" {
 		m.host = val
 	} else {
 		return m, errors.New("redis streams error: missing host address")
 	}
 
-	if val, ok := meta.ConnectionInfo[password]; ok && val != "" {
+	if val, ok := meta.Properties[password]; ok && val != "" {
 		m.password = val
 	}
 

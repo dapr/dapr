@@ -87,7 +87,7 @@ func (d *DynamoDB) Write(req *bindings.WriteRequest) error {
 
 // GetDynamoDBMetadata parses DynamoDB metadata
 func (d *DynamoDB) GetDynamoDBMetadata(spec bindings.Metadata) (*Metadata, error) {
-	b, err := json.Marshal(spec.ConnectionInfo)
+	b, err := json.Marshal(spec.Properties)
 	if err != nil {
 		return nil, err
 	}

@@ -39,7 +39,7 @@ func NewCosmosDBStateStore() *StateStore {
 
 // Init does metadata and connection parsing
 func (c *StateStore) Init(metadata state.Metadata) error {
-	connInfo := metadata.ConnectionInfo
+	connInfo := metadata.Properties
 	b, err := json.Marshal(connInfo)
 	if err != nil {
 		return err
