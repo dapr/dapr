@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/actionscore/actions/pkg/discovery"
+
 	"github.com/golang/protobuf/ptypes/any"
 
 	"github.com/actionscore/actions/pkg/modes"
@@ -113,6 +115,12 @@ func (d *directMessaging) getAddress(target string) (string, error) {
 	switch d.mode {
 	case modes.KubernetesMode:
 		return fmt.Sprintf("%s-actions.%s.svc.cluster.local:%v", target, d.namespace, d.grpcPort), nil
+	case modes.StandaloneMode:
+		port, err := discovery.LookupPortMDNS(target)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("localhost:%v", port), nil
 	default:
 		return "", fmt.Errorf("remote calls not supported for %s mode", string(d.mode))
 	}
