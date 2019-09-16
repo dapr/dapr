@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -13,6 +14,11 @@ import (
 	"github.com/joomcode/redispipe/redis"
 	"github.com/joomcode/redispipe/redisconn"
 	jsoniter "github.com/json-iterator/go"
+)
+
+const (
+	setQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
+	delQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
 )
 
 // StateStore is a Redis state store
@@ -68,9 +74,11 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 
 // Delete performs a delete operation
 func (r *StateStore) Delete(req *state.DeleteRequest) error {
-	res := r.client.Do(context.Background(), "DEL", req.Key)
+
+	res := r.client.Do(context.Background(), "EVAL", delQuery, 1, req.Key, req.ETag)
+
 	if err := redis.AsError(res); err != nil {
-		return err
+		return fmt.Errorf("failed to delete key '%s' due to ETag mismatch", req.Key)
 	}
 
 	return nil
@@ -78,21 +86,17 @@ func (r *StateStore) Delete(req *state.DeleteRequest) error {
 
 // BulkDelete performs a bulk delete operation
 func (r *StateStore) BulkDelete(req []state.DeleteRequest) error {
-	keys := make([]interface{}, len(req))
-	for i, r := range req {
-		keys[i] = r
-	}
-
-	res := r.client.Do(context.Background(), "DEL", keys...)
-	if err := redis.AsError(res); err != nil {
-		return err
+	for _, re := range req {
+		err := r.Delete(&re)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// Get retrieves state from redis with a key
-func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+func (r *StateStore) directGet(req *state.GetRequest) (*state.GetResponse, error) {
 	res := r.client.Do(context.Background(), "GET", req.Key)
 	if err := redis.AsError(res); err != nil {
 		return nil, err
@@ -101,19 +105,52 @@ func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if res == nil {
 		return &state.GetResponse{}, nil
 	}
+
 	s, _ := strconv.Unquote(fmt.Sprintf("%q", res))
+	return &state.GetResponse{
+		Data: []byte(s),
+	}, nil
+}
+
+// Get retrieves state from redis with a key
+func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
+	res := r.client.Do(context.Background(), "HGETALL", req.Key) // Prefer values with ETags
+	if err := redis.AsError(res); err != nil {
+		return r.directGet(req) //Falls back to original get
+	}
+	if res == nil {
+		return &state.GetResponse{}, nil
+	}
+	vals := res.([]interface{})
+	if len(vals) == 0 {
+		return &state.GetResponse{}, nil
+	}
+
+	data, version, err := r.getKeyVersion(vals)
+	if err != nil {
+		return nil, err
+	}
+
+	s, _ := strconv.Unquote(data)
 
 	return &state.GetResponse{
 		Data: []byte(s),
+		ETag: version,
 	}, nil
 }
 
 // Set saves state into redis
 func (r *StateStore) Set(req *state.SetRequest) error {
 	b, _ := r.json.Marshal(req.Value)
-	res := r.client.Do(context.Background(), "SET", req.Key, b)
-	if err := redis.AsError(res); err != nil {
+
+	ver, err := r.parseETag(req.ETag)
+	if err != nil {
 		return err
+	}
+
+	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, b)
+	if err := redis.AsError(res); err != nil {
+		return fmt.Errorf("failed to set key '%s' due to ETag mismatch", req.Key)
 	}
 
 	return nil
@@ -147,4 +184,36 @@ func (r *StateStore) Multi(operations []state.TransactionalRequest) error {
 
 	_, err := r.client.SendTransaction(context.Background(), redisReqs)
 	return err
+}
+
+func (r *StateStore) getKeyVersion(vals []interface{}) (data string, version string, err error) {
+	seenData := false
+	seenVersion := false
+	for i := 0; i < len(vals); i += 2 {
+		field, _ := strconv.Unquote(fmt.Sprintf("%q", vals[i]))
+		switch field {
+		case "data":
+			data, _ = strconv.Unquote(fmt.Sprintf("%q", vals[i+1]))
+			seenData = true
+		case "version":
+			version, _ = strconv.Unquote(fmt.Sprintf("%q", vals[i+1]))
+			seenVersion = true
+		}
+	}
+	if !seenData || !seenVersion {
+		return "", "", errors.New("required hash field 'data' or 'version' was not found")
+	}
+	return data, version, nil
+}
+
+func (r *StateStore) parseETag(etag string) (int, error) {
+	ver := 0
+	var err error
+	if etag != "" {
+		ver, err = strconv.Atoi(etag)
+		if err != nil {
+			return -1, err
+		}
+	}
+	return ver, nil
 }
