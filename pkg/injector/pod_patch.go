@@ -27,7 +27,7 @@ const (
 	sidecarHTTPPortName  = "actions-http"
 	sidecarGRPCPortName  = "actions-grpc"
 	defaultLogLevel      = "info"
-	kubeernetesMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
+	kubernetesMountPath  = "/var/run/secrets/kubernetes.io/serviceaccount"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace, image string) ([]PatchOperation, error) {
@@ -100,7 +100,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace,
 func getTokenVolumeMount(pod corev1.Pod) *corev1.VolumeMount {
 	for _, c := range pod.Spec.Containers {
 		for _, v := range c.VolumeMounts {
-			if v.MountPath == kubeernetesMountPath {
+			if v.MountPath == kubernetesMountPath {
 				return &v
 			}
 		}
