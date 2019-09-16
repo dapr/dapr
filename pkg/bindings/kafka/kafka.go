@@ -92,7 +92,7 @@ func (k *Kafka) Write(req *bindings.WriteRequest) error {
 
 // GetKafkaMetadata returns new Kafka metadata
 func (k *Kafka) GetKafkaMetadata(metadata bindings.Metadata) (*Metadata, error) {
-	b, err := json.Marshal(metadata.ConnectionInfo)
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return nil, err
 	}

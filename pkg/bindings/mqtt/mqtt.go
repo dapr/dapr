@@ -58,7 +58,7 @@ func (m *MQTT) Init(metadata bindings.Metadata) error {
 
 // GetMQTTMetadata returns new MQTT metadata
 func (m *MQTT) GetMQTTMetadata(metadata bindings.Metadata) (*Metadata, error) {
-	b, err := json.Marshal(metadata.ConnectionInfo)
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return nil, err
 	}

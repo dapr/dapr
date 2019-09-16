@@ -28,7 +28,7 @@ func NewHTTP() *HTTPSource {
 
 // Init performs metadata parsing
 func (h *HTTPSource) Init(metadata bindings.Metadata) error {
-	b, err := json.Marshal(metadata.ConnectionInfo)
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return err
 	}

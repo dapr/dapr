@@ -56,12 +56,27 @@ func (c *ComponentsHandler) ObjectCreated(obj interface{}) {
 
 func (c *ComponentsHandler) publishComponentToActionsRuntimes(component *components_v1alpha1.Component) error {
 	payload := pb.Component{
-		Name: component.GetName(),
-		Spec: &pb.ComponentSpec{
-			Type:           component.Spec.Type,
-			ConnectionInfo: component.Spec.ConnectionInfo,
-			Properties:     component.Spec.Properties,
+		Auth: &pb.ComponentAuth{
+			SecretStore: component.Auth.SecretStore,
 		},
+		Metadata: &pb.ComponentMetadata{
+			Name:      component.ObjectMeta.Name,
+			Namespace: component.GetNamespace(),
+		},
+		Spec: &pb.ComponentSpec{
+			Type: component.Spec.Type,
+		},
+	}
+
+	for _, m := range component.Spec.Metadata {
+		payload.Spec.Metadata = append(payload.Spec.Metadata, &pb.ComponentMetadataItem{
+			Name:  m.Name,
+			Value: m.Value,
+			SecretKeyRef: &pb.ComponentSecretKeyRef{
+				Name: m.SecretKeyRef.Name,
+				Key:  m.SecretKeyRef.Key,
+			},
+		})
 	}
 
 	services, err := c.kubeClient.CoreV1().Services(meta_v1.NamespaceAll).List(meta_v1.ListOptions{

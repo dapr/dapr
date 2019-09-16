@@ -71,7 +71,7 @@ func (r *RabbitMQ) Write(req *bindings.WriteRequest) error {
 
 // GetRabbitMQMetadata gets rabbitmq metadata
 func (r *RabbitMQ) GetRabbitMQMetadata(metadata bindings.Metadata) (*Metadata, error) {
-	b, err := json.Marshal(metadata.ConnectionInfo)
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return nil, err
 	}

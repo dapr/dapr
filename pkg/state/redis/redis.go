@@ -43,7 +43,7 @@ func NewRedisStateStore() *StateStore {
 func (r *StateStore) Init(metadata state.Metadata) error {
 	rand.Seed(time.Now().Unix())
 
-	connInfo := metadata.ConnectionInfo
+	connInfo := metadata.Properties
 	b, err := json.Marshal(connInfo)
 	if err != nil {
 		return err

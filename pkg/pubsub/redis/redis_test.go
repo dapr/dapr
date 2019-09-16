@@ -11,19 +11,20 @@ import (
 	"github.com/actionscore/actions/pkg/components/pubsub"
 )
 
-func TestParseRedisMetadata(t *testing.T) {
-	fakeConnectionInfo := map[string]string{
-		host:     "fake.redis.com",
-		password: "fakePassword",
-	}
-	fakeProperties := map[string]string{
+func getFakeProperties() map[string]string {
+	return map[string]string{
 		consumerID: "fakeConsumer",
+		host:       "fake.redis.com",
+		password:   "fakePassword",
 	}
+}
 
+func TestParseRedisMetadata(t *testing.T) {
 	t.Run("metadata is correct", func(t *testing.T) {
+		fakeProperties := getFakeProperties()
+
 		fakeMetaData := pubsub.Metadata{
-			ConnectionInfo: fakeConnectionInfo,
-			Properties:     fakeProperties,
+			Properties: fakeProperties,
 		}
 
 		// act
@@ -31,16 +32,18 @@ func TestParseRedisMetadata(t *testing.T) {
 
 		// assert
 		assert.NoError(t, err)
-		assert.Equal(t, fakeConnectionInfo[host], m.host)
-		assert.Equal(t, fakeConnectionInfo[password], m.password)
+		assert.Equal(t, fakeProperties[host], m.host)
+		assert.Equal(t, fakeProperties[password], m.password)
 		assert.Equal(t, fakeProperties[consumerID], m.consumerID)
 	})
 
 	t.Run("host is not given", func(t *testing.T) {
+		fakeProperties := getFakeProperties()
+
 		fakeMetaData := pubsub.Metadata{
-			ConnectionInfo: nil,
-			Properties:     fakeProperties,
+			Properties: fakeProperties,
 		}
+		fakeMetaData.Properties[host] = ""
 
 		// act
 		m, err := parseRedisMetadata(fakeMetaData)
@@ -53,18 +56,19 @@ func TestParseRedisMetadata(t *testing.T) {
 	})
 
 	t.Run("consumerID is not given", func(t *testing.T) {
+		fakeProperties := getFakeProperties()
+
 		fakeMetaData := pubsub.Metadata{
-			ConnectionInfo: fakeConnectionInfo,
-			Properties:     nil,
+			Properties: fakeProperties,
 		}
+		fakeMetaData.Properties[consumerID] = ""
 
 		// act
 		m, err := parseRedisMetadata(fakeMetaData)
-
 		// assert
 		assert.Error(t, errors.New("redis streams error: missing consumerID"), err)
-		assert.Equal(t, fakeConnectionInfo[host], m.host)
-		assert.Equal(t, fakeConnectionInfo[password], m.password)
+		assert.Equal(t, fakeProperties[host], m.host)
+		assert.Equal(t, fakeProperties[password], m.password)
 		assert.Empty(t, m.consumerID)
 	})
 }

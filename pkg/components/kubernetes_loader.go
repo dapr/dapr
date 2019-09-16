@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
 	config "github.com/actionscore/actions/pkg/config/modes"
 	"github.com/valyala/fasthttp"
 )
@@ -22,7 +23,7 @@ func NewKubernetesComponents(configuration config.KubernetesConfig) *KubernetesC
 }
 
 // LoadComponents returns components from a given control plane address
-func (k *KubernetesComponents) LoadComponents() ([]Component, error) {
+func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	url := fmt.Sprintf("%s/components", k.config.ControlPlaneAddress)
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI(url)
@@ -39,7 +40,7 @@ func (k *KubernetesComponents) LoadComponents() ([]Component, error) {
 
 	body := resp.Body()
 
-	var components []Component
+	var components []components_v1alpha1.Component
 	err = json.Unmarshal(body, &components)
 	if err != nil {
 		return nil, err

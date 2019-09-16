@@ -118,7 +118,7 @@ func (a *AWSSQS) Read(handler func(*bindings.ReadResponse) error) error {
 
 // GetAWSMetadata gets AWS metadata
 func (a *AWSSQS) GetAWSMetadata() (*Metadata, error) {
-	b, err := json.Marshal(a.Spec.ConnectionInfo)
+	b, err := json.Marshal(a.Spec.Properties)
 	if err != nil {
 		return nil, err
 	}

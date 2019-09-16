@@ -39,14 +39,34 @@ message InvokeResponse {
 }
 
 message Component {
-  string name = 1;
+  ComponentMetadata metadata = 1;
   ComponentSpec spec = 2;
+  ComponentAuth auth = 3;
+}
+
+message ComponentMetadata {
+  string name = 1;
+  string namespace = 2;
 }
 
 message ComponentSpec {
   string type = 1;
-  map<string,string> connection_info = 2;
-  map<string,string> properties = 3;
+  repeated ComponentMetadataItem metadata = 2;
+}
+
+message ComponentMetadataItem {
+  string name = 1;
+  string value = 2;
+  ComponentSecretKeyRef secretKeyRef = 3;
+}
+
+message ComponentSecretKeyRef {
+  string name = 1;
+  string key = 2;
+}
+
+message ComponentAuth {
+  string secretStore = 1;
 }
 
 message SaveStateEnvelope {

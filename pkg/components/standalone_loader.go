@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 
 	log "github.com/Sirupsen/logrus"
+	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
 	config "github.com/actionscore/actions/pkg/config/modes"
 	"github.com/ghodss/yaml"
 )
@@ -22,14 +23,14 @@ func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneC
 }
 
 // LoadComponents loads actions components from a given directory
-func (s *StandaloneComponents) LoadComponents() ([]Component, error) {
+func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	dir := s.config.ComponentsPath
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	list := []Component{}
+	list := []components_v1alpha1.Component{}
 
 	for _, file := range files {
 		if !file.IsDir() {
@@ -39,7 +40,7 @@ func (s *StandaloneComponents) LoadComponents() ([]Component, error) {
 				continue
 			}
 
-			var component Component
+			var component components_v1alpha1.Component
 			err = yaml.Unmarshal(b, &component)
 			if err != nil {
 				log.Warnf("error parsing file: %s", err)

@@ -47,7 +47,7 @@ func (g *GCPStorage) Init(metadata bindings.Metadata) error {
 func (g *GCPStorage) Write(req *bindings.WriteRequest) error {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
-	b, err := json.Marshal(g.Spec.ConnectionInfo)
+	b, err := json.Marshal(g.Spec.Properties)
 	if err != nil {
 		return err
 	}
