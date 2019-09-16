@@ -8,11 +8,11 @@ This tutorial will demonstrate how to get Actions running locally on your machin
 This sample requires you to have the following installed on your machine:
 - [Docker](https://docs.docker.com/)
 - [Node.js version 8 or greater](https://nodejs.org/en/) 
-- [Postman](https://www.getpostman.com/)
+- [Postman](https://www.getpostman.com/) [Optional]
 
 ## Step 1 - Setup Actions 
 
-Follow [instructions](https://github.com/actionscore/actions#install-as-standalone) to download the Actions CLI and initialize Actions.
+Follow [instructions](https://github.com/actionscore/previewkit#install-as-standalone) to download the Actions CLI and initialize Actions.
 
 ## Step 2 - Understand the Code
 
@@ -101,7 +101,15 @@ You're up and running! Both Actions and your app logs will appear here.
 
 Now that Actions and our Node.js app are running, let's POST messages against it.
 
- Open Postman and create a POST request against `http://localhost:3500/v1.0/actions/<YOUR_APP_NAME>/neworder`
+You can do this using `curl` with:
+
+```sh
+curl -XPOST -d @sample.json http://localhost:3500/v1.0/actions/mynode/neworder
+```
+
+Or you can use the Postman GUI
+
+Open Postman and create a POST request against `http://localhost:3500/v1.0/actions/mynode/neworder`
 ![Postman Screenshot](./img/postman1.jpg)
 In your terminal window, you should see logs indicating that the message was received and state was updated:
 ```bash
@@ -111,7 +119,14 @@ In your terminal window, you should see logs indicating that the message was rec
 
 ## Step 5 - Confirm Successful Persistence
 
-Now, let's just make sure that our order was successfully persisted to our state store. Create a GET request against: `http://localhost:3500/v1.0/actions/<YOUR_APP_NAME>/order`
+Now, let's just make sure that our order was successfully persisted to our state store. Create a GET request against: `http://localhost:3500/v1.0/actions/mynode/order`
+
+```sh
+curl http://localhost:3500/v1.0/actions/mynode/order
+```
+
+Or use the Postman GUI
+
 ![Postman Screenshot 2](./img/postman2.jpg)
 
 This invokes the `/order` route, which calls out to our Redis store for the latest data. Observe the expected result!
