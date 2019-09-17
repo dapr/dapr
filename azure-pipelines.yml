@@ -119,7 +119,7 @@ jobs:
       displayName: 'Download pipeline artifacts to workspace'
       inputs:
         buildType: 'current'
-        itemPattern: '**/*.zip'
+        itemPattern: '**'
         targetPath: '$(Pipeline.Workspace)'
     - task: AzureFileCopy@3
       displayName: 'Publish archives to version folder'

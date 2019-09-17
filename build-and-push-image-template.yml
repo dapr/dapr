@@ -47,7 +47,7 @@ steps:
     displayName: 'Download pipeline artifacts to workspace'
     inputs:
       buildType: 'current'
-      itemPattern: '**/*_linux_${{ parameters.targetArch }}.zip'
+      itemPattern: '**/*_linux_${{ parameters.targetArch }}.*'
       targetPath: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
   - task: CopyFiles@2
     displayName: 'Copy Dockerfile to workspace'
@@ -61,7 +61,7 @@ steps:
   - task: ExtractFiles@1
     displayName: 'Extract linux ${{ parameters.targetArch }} binaries'
     inputs:
-      archiveFilePatterns: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/drop/*_linux_${{ parameters.targetArch }}.zip'
+      archiveFilePatterns: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/drop/*_linux_${{ parameters.targetArch }}.*'
       destinationFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/dist'
       cleanDestinationFolder: false
   - task: Docker@2
