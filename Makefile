@@ -69,7 +69,6 @@ LDFLAGS := "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_
 ################################################################################
 # Target: build                                                                #
 ################################################################################
-
 .PHONY: build
 build: $(BINARIES)
 
@@ -81,18 +80,17 @@ define genBinariesForTarget
 .PHONY: $(1)
 $(1):
 	CGO_ENABLED=$(CGO) GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GCFLAGS) -ldflags $(LDFLAGS) \
-	-o $(ACTIONS_OUT_DIR)/$(1) -mod=vendor \
+	-o $(ACTIONS_OUT_DIR)/$(1)$(BINARY_EXT) -mod=vendor \
 	$(2)/main.go;
 endef
 
 # Generate binary targets
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),./cmd/$(ITEM))))
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM))))
 
 
 ################################################################################
 # Target: archive                                                              #
 ################################################################################
-
 ARCHIVE_OUT_DIR ?= $(ACTIONS_OUT_DIR)
 ARCHIVE_FILE_EXTS:=$(foreach ITEM,$(BINARIES),archive-$(ITEM)$(ARCHIVE_EXT))
 
@@ -104,7 +102,7 @@ archive: build $(ARCHIVE_FILE_EXTS)
 define genArchiveBinary
 ifeq ($(GOOS),windows)
 archive-$(1).zip:
-	7z.exe a -tzip "$(2)/$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" "$(ACTIONS_OUT_DIR)/$(1)$(BINARY_EXT)"
+	7z.exe a -tzip "$(2)\\$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" "$(ACTIONS_OUT_DIR)\\$(1)$(BINARY_EXT)"
 else
 archive-$(1).tar.gz:
 	tar czf "$(2)/$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" -C "$(ACTIONS_OUT_DIR)" "$(1)$(BINARY_EXT)"
