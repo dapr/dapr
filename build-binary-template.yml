@@ -39,9 +39,9 @@ jobs:
         workingDirectory: '$(modulePath)'
         failOnStderr: false
     - task: CmdLine@2
-      displayName: 'Run make archive to build and archive binaries'
+      displayName: 'Run make release to build and archive binaries'
       inputs:
-        script: 'make archive GOOS=${{ parameters.targetOS }} GOARCH=${{ parameters.targetArch }} ARCHIVE_OUT_DIR=$(Build.ArtifactStagingDirectory)'
+        script: 'make release GOOS=${{ parameters.targetOS }} GOARCH=${{ parameters.targetArch }} ARCHIVE_OUT_DIR=$(Build.ArtifactStagingDirectory)'
         workingDirectory: '$(modulePath)'
         failOnStderr: false
     - task: PublishBuildArtifacts@1

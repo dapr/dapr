@@ -94,7 +94,7 @@ $(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(IT
 ARCHIVE_OUT_DIR ?= $(ACTIONS_OUT_DIR)
 ARCHIVE_FILE_EXTS:=$(foreach ITEM,$(BINARIES),archive-$(ITEM)$(ARCHIVE_EXT))
 
-archive: build $(ARCHIVE_FILE_EXTS)
+archive: $(ARCHIVE_FILE_EXTS)
 
 # Generate archive files for each binary
 # $(1): the binary name to be archived
@@ -111,6 +111,11 @@ endef
 
 # Generate archive-*.[zip|tar.gz] targets
 $(foreach ITEM,$(BINARIES),$(eval $(call genArchiveBinary,$(ITEM),$(ARCHIVE_OUT_DIR))))
+
+################################################################################
+# Target: archive                                                              #
+################################################################################
+release: build archive
 
 ################################################################################
 # Target: test															       #
