@@ -203,9 +203,9 @@ make test
 
 ### Debug actions
 
-We highly recommend to use [VSCode with Go plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode.Go) for your productivity. If you want to use the different editors, you can find the [list of editor plugins](https://github.com/go-delve/delve/blob/master/Documentation/EditorIntegration.md).
+We highly recommend to use [VSCode with Go plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode.Go) for your productivity. If you want to use the different editors, you can find the [list of editor plugins](https://github.com/go-delve/delve/blob/master/Documentation/EditorIntegration.md) for Delve.
 
-This section introduces a few options to start debugging with Delve with cli, but does not include the detail usage of debugger. Please look at [Delve documentation](https://github.com/go-delve/delve/tree/master/Documentation).
+This section introduces how to start debugging with Delve CLI. Please see [Delve documentation](https://github.com/go-delve/delve/tree/master/Documentation) for the detail usage.
 
 #### Start with debugger
 
