@@ -12,7 +12,7 @@ This sample requires you to have the following installed on your machine:
 
 ## Step 1 - Setup Actions 
 
-Follow [instructions](https://github.com/actionscore/previewkit#install-as-standalone) to download the Actions CLI and initialize Actions.
+Follow [instructions](https://github.com/actionscore/actions#install-as-standalone) to download the Actions CLI and initialize Actions.
 
 ## Step 2 - Understand the Code
 
