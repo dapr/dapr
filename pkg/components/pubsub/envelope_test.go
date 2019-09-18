@@ -31,4 +31,15 @@ func TestCreateCloudEventsEnvelopeDefaults(t *testing.T) {
 		envelope := NewCloudEventsEnvelope("a", "source", "", []byte("data"))
 		assert.Equal(t, "data", envelope.Data.(string))
 	})
+
+	t.Run("string data content type", func(t *testing.T) {
+		envelope := NewCloudEventsEnvelope("a", "source", "", []byte("data"))
+		assert.Equal(t, "text/plain", envelope.DataContentType)
+	})
+
+	t.Run("json data content type", func(t *testing.T) {
+		str := `{ "data": "1" }`
+		envelope := NewCloudEventsEnvelope("a", "source", "", []byte(str))
+		assert.Equal(t, "application/json", envelope.DataContentType)
+	})
 }
