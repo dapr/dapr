@@ -105,6 +105,7 @@ archive-$(1).zip:
 	7z.exe a -tzip "$(2)\\$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" "$(ACTIONS_OUT_DIR)\\$(1)$(BINARY_EXT)"
 else
 archive-$(1).tar.gz:
+	chmod +x $(ACTIONS_OUT_DIR)/$(1)$(BINARY_EXT)
 	tar czf "$(2)/$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" -C "$(ACTIONS_OUT_DIR)" "$(1)$(BINARY_EXT)"
 endif
 endef
