@@ -4,7 +4,7 @@ const (
 	// DefaultCloudEventType is the default event type for an Actions published event
 	DefaultCloudEventType = "com.actions.event.sent"
 	// CloudEventsSpecVersion is the specversion used by Actions for the cloud events implementation
-	CloudEventsSpecVersion = "0.4-wip"
+	CloudEventsSpecVersion = "0.3"
 )
 
 // CloudEventsEnvelope describes the Actions implementation of the Cloud Events spec
