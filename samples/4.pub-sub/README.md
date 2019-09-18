@@ -11,7 +11,7 @@ and two subscribers:
 - Node.js subscriber
 - Python subscriber
 
-Actions uses pluggable message buses to enable pub-sub, in this case we'll use Redis Streams (enabled in Redis versions => 5). The following architecture diagram illustrates how components interconnect locally:
+Actions uses pluggable message buses to enable pub-sub, and delivers messages to subscribers in a [Cloud Events](https://github.com/cloudevents/spec) compliant message envelope. in this case we'll use Redis Streams (enabled in Redis versions => 5). The following architecture diagram illustrates how components interconnect locally:
 
 ![Architecture Diagram](./img/Local_Architecture_Diagram.JPG)
 
@@ -65,7 +65,7 @@ The Actions CLI provides a mechanism to publish messages for testing purposes. L
     Both our Node.js and Python subscribers subscribe to topic A and log when they receive a message. Note that logs are showing up in the console window where we ran each one: 
     
     ```bash
-        [0m?[94;1m== APP == Topic A: {'message': 'This is a test'}
+        [0m?[94;1m== APP == Topic A: { id: '5780e2ca-f526-4839-92e5-a0a30aff829a', source: 'react-form', type: 'com.actions.event.sent', specversion: '0.3',data: { message: 'this is a test' } }
     ```
 
 2. **Optional**: If you're running both the Node and Python apps, try publishing a message of topic B. You'll notice that only the Node app will receive this message. We'll discuss how these microservices are subscribing to specific topics in [How it Works](#How-it-Works).

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/actionscore/actions/pkg/components/pubsub"
+	"github.com/google/uuid"
 
 	jsoniter "github.com/json-iterator/go"
 
@@ -757,12 +758,19 @@ func (a *api) onPublish(c *routing.Context) error {
 	topic := c.Param(topicParam)
 	body := c.PostBody()
 
-	req := pubsub.PublishRequest{
-		Topic: topic,
-		Data:  body,
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
+	b, err := a.json.Marshal(envelope)
+	if err != nil {
+		msg := NewErrorResponse("ERR_CLOUD_EVENTS_SER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+		return nil
 	}
 
-	err := a.pubSub.Publish(&req)
+	req := pubsub.PublishRequest{
+		Topic: topic,
+		Data:  b,
+	}
+	err = a.pubSub.Publish(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBLISH_MESSAGE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
