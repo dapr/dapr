@@ -147,44 +147,99 @@ For getting a state store up and running on your Kubernetes cluster in a swift m
 helm install stable/redis --set rbac.create=true
 ```   
 
+## Samples
+
+For more samples, please look at [samples](./samples).
+* [Run Actions Locally](samples/1.hello-world)
+* [Run Actions in Kubernetes](samples/2.hello-kubernetes)
+
+
+## Developing Actions
+
+### Prerequisites
+
+1. The Go language environment [(instructions)](https://golang.org/doc/install).
+   * Make sure that your GOPATH and PATH are configured correctly
+   ```bash
+   export GOPATH=~/go
+   export PATH=$PATH:$GOPATH/bin
+   ```
+1. [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Debugging
+1. *(for windows)* [MinGW](http://www.mingw.org/) to install gcc and make
+   * Recommend to use [chocolatey mingw package](https://chocolatey.org/packages/mingw) and ensure that MinGW bin directory is in PATH environment variable
+
 ### Clone the repo
 
-#### Prerequisites
-
-1. The Go language environment [(instructions)]( https://golang.org/doc/install).
-
-    Make sure you've already configured your GOPATH and GOROOT environment variables.
-
-#### Clone the repo
-
-```
+```bash
 cd $GOPATH/src
 mkdir -p github.com/actionscore/actions
 git clone https://github.com/actionscore/actions.git github.com/actionscore/actions
 ```
 
-#### Build the Actions binary
+### Build the Actions binary
 
+You can build actions binaries via `make` tool and find the binaries in `./dist/{os}_{arch}/release/`.
+
+> Note : for windows environment with MinGW, use `mingw32-make.exe` instead of `make`.
+
+* Build for your current local environment
+
+```bash
+cd $GOPATH/src/github.com/actionscore/actions/
+make build
 ```
-cd $GOPATH/src/github.com/actionscore/actions/cmd/actionsrt
-go build -o action
+
+* Cross compile for multi platforms
+
+```bash
+make build GOOS=linux GOARCH=amd64
 ```
 
-**Windows Users**: Actions currently takes a dependency on gcc. If building throws an error containing: `"gcc": executable file not found in %PATH%`, you'll need to install gcc through the [Cygwin Project](https://sourceware.org/cygwin/) or the [MinGW Project](http://mingw-w64.org/doku.php).
+### Run unit-test
 
+```bash
+make test
+```
 
-## Usage
+### Debug actions
 
-Check out the following tutorials:
+We highly recommend to use [VSCode with Go plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode.Go) for your productivity. If you want to use the different editors, you can find the [list of editor plugins](https://github.com/go-delve/delve/blob/master/Documentation/EditorIntegration.md) for Delve.
 
-* [Run Actions Locally](samples/1.hello-world)
-* [Run Actions in Kubernetes](samples/2.hello-kubernetes)
-* [Setup distributed tracing with Zipkin](docs/distributed_tracing.md)
+This section introduces how to start debugging with Delve CLI. Please see [Delve documentation](https://github.com/go-delve/delve/tree/master/Documentation) for the detail usage.
 
-## Concepts
+#### Start with debugger
 
-* [Actor Pattern](docs/concepts/actor/actor_pattern.md)
+```bash
+$ cd $GOPATH/src/github.com/actionscore/actions/actionsrt
+$ dlv debug .
+Type 'help' for list of commands.
+(dlv) break main.main
+(dlv) continue
+```
 
-## How Actions Works
+#### Attach Debugger to running binary
 
-* [Enabling the Actor Pattern](docs/topics/enable_actor_pattern.md)
+This is useful to debug actions when the process is running.
+
+1. Build actions binaries for debugging
+   With `DEBUG=1` option, actions binaries will be generated without code optimization in `./dist/{os}_{arch}/debug/`
+
+```bash
+$ make DEBUG=1 build
+```
+
+2. Create component yaml file under `./dist/{os}_{arch}/debug/components` e.g. statstore component yaml
+3. Run actions runtime
+4. Find the process id and attach the debugger
+
+```bash
+$ dlv attach [pid]
+```
+
+#### Debug unit-tests
+
+```bash
+# Specify the package that you want to test
+# e.g. debuggin ./pkg/actors
+$ dlv test ./pkg/actors
+```
