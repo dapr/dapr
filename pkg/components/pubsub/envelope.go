@@ -1,5 +1,9 @@
 package pubsub
 
+import (
+	jsoniter "github.com/json-iterator/go"
+)
+
 const (
 	// DefaultCloudEventType is the default event type for an Actions published event
 	DefaultCloudEventType = "com.actions.event.sent"
@@ -22,11 +26,17 @@ func NewCloudEventsEnvelope(id, source, eventType string, data []byte) *CloudEve
 	if eventType == "" {
 		eventType = DefaultCloudEventType
 	}
+	var i interface{}
+	err := jsoniter.Unmarshal(data, &i)
+	if err != nil {
+		i = string(data)
+	}
+
 	return &CloudEventsEnvelope{
 		ID:          id,
 		Source:      source,
 		Type:        eventType,
-		Data:        string(data),
+		Data:        i,
 		SpecVersion: CloudEventsSpecVersion,
 	}
 }
