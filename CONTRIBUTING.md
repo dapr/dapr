@@ -1,6 +1,6 @@
-# Contributing to Actions
+# Contribution Guidelines
 
-Thank you for your interest in Actions! 
+Thank you for your interest in Actions!
 
 Contributions come in many forms, not just writing code. active participation in discussions and community calls are encouraged.
 This document provides a high-level overview of how you can get involved.
@@ -77,30 +77,27 @@ Once submitted, your report will go through an issue tracking workflow and be la
 
 ## Contributing to Actions
 
-So you're working on a bug fix or a new feature? that's great! please familiarize yourself with these guidelines:
+So you're working on a bug fix or a new feature? that's great! Please familiarize yourself with these guidelines:
 
 ### Pull Requests
 
 To submit a proposed change:
 
 * Fork the relevant repo
-
 * Create a new branch
-
 * Hack
-
 * Add tests! this is really important. We will not approve PRs that do not contain tests
-
 * Modify documentation if needed. Clarity is of high importance
-
 * Wait for the CI process to finish. remember: Always Green!
 
 Always make sure there's an issue backing up the PR.
 
 #### Use work-in-progress PRs for early feedback
-A good way to communicate before investing too much time is to create a "Work-in-progress" PR and share it with your reviewers. The standard way of doing this is to add a "WIP:" prefix in your PR's title and assign the "do-not-merge" label. This will let people looking at your PR know that it is not well baked yet.
+
+A good way to communicate before investing too much time is to create a "Work-in-progress" PR and share it with your reviewers. The standard way of doing this is to add a "[WIP]" prefix in your PR's title and assign the "do-not-merge" label. This will let people looking at your PR know that it is not well baked yet.
 
 ### Third-party code
+
 * All third-party code must be placed in the `vendor/` folders.
 * `vendor/` folder is managed by Go modules and stores the source code of third-party Go dependencies. `vendor/` folder should not be modified manually.
 * Third-party code must include licenses.
@@ -110,6 +107,4 @@ A non-exclusive list of code that must be places in `vendor/`:
 * Open source, free software, or commercially-licensed code.
 * Tools or libraries or protocols that are open source, free software, or commercially licensed.
 
-# Thank You!
-
-Your contributions to open source, large or small, make projects like this possible. Thank you for taking the time to contribute.
+**Thank You!** - Your contributions to open source, large or small, make projects like this possible. Thank you for taking the time to contribute.
