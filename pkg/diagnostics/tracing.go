@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	correlationID = "correlation-id"
+	correlationID = "X-Correlation-ID"
 )
 
 // TracerSpan defines a tracing span that a tracer users to keep track of call scopes
@@ -168,8 +168,8 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 
 	md := metautils.ExtractIncoming(c)
 	headers := extractHeaders(req)
-	re := regexp.MustCompile(`(&__header_delim__&)?Correlation-Id&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
-	corID := strings.Replace(strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1), "Correlation-Id&__header_equals__&", "", 1)
+	re := regexp.MustCompile(`(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
+	corID := strings.Replace(strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1), "X-Correlation-ID&__header_equals__&", "", 1)
 
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
