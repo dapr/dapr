@@ -104,12 +104,12 @@ Now that Actions and our Node.js app are running, let's POST messages against it
 You can do this using `curl` with:
 
 ```sh
-curl -XPOST -d @sample.json http://localhost:3500/v1.0/actions/mynode/neworder
+curl -XPOST -d @sample.json http://localhost:3500/v1.0/invoke/mynode/method/neworder
 ```
 
 Or you can use the Postman GUI
 
-Open Postman and create a POST request against `http://localhost:3500/v1.0/actions/mynode/neworder`
+Open Postman and create a POST request against `http://localhost:3500/v1.0/invoke/mynode/method/neworder`
 ![Postman Screenshot](./img/postman1.jpg)
 In your terminal window, you should see logs indicating that the message was received and state was updated:
 ```bash
@@ -119,10 +119,10 @@ In your terminal window, you should see logs indicating that the message was rec
 
 ## Step 5 - Confirm Successful Persistence
 
-Now, let's just make sure that our order was successfully persisted to our state store. Create a GET request against: `http://localhost:3500/v1.0/actions/mynode/order`
+Now, let's just make sure that our order was successfully persisted to our state store. Create a GET request against: `http://localhost:3500/v1.0/invoke/mynode/method/order`
 
 ```sh
-curl http://localhost:3500/v1.0/actions/mynode/order
+curl http://localhost:3500/v1.0/invoke/mynode/method/order
 ```
 
 Or use the Postman GUI
