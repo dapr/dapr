@@ -799,7 +799,7 @@ func (a *ActionsRuntime) initSecretStores() error {
 
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "secretstores") == 0 {
-			// look up the secrets to authenticate this secretstore from kubernetes
+			// look up the secrets to authenticate this secretstore from K8S secret store
 			a.processComponentSecrets(c)
 
 			secretStore, err := a.secretStoresRegistry.CreateSecretStore(c.Spec.Type)
