@@ -115,10 +115,10 @@ export NODE_APP=$(kubectl get svc nodeapp --output 'jsonpath={.status.loadBalanc
 ## Step 5 - Deploy the Python App with the Actions Sidecar
 Next, let's take a quick look at our python app. Navigate to the python app in the kubernetes sample: `cd samples/2.hello-kubernetes/python/app.py`.
 
-At a quick glance, this is a basic python app that posts JSON messages to ```localhost:3500```, which is the default listening port for Actions. We invoke our Node.js application's `neworder` endpoint by posting to `v1.0/actions/nodeapp/neworder`. Our message contains some `data` with an orderId that increments once per second:
+At a quick glance, this is a basic python app that posts JSON messages to ```localhost:3500```, which is the default listening port for Actions. We invoke our Node.js application's `neworder` endpoint by posting to `v1.0/invoke/nodeapp/method/neworder`. Our message contains some `data` with an orderId that increments once per second:
 
 ```python
-actions_url = "http://localhost:3500/v1.0/actions/nodeapp/neworder"
+actions_url = "http://localhost:3500/v1.0/invoke/nodeapp/method/neworder"
 n = 0
 while True:
     n += 1

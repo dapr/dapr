@@ -106,15 +106,15 @@ When our front-end server calls the respective operation services (see `server.j
 
 The code below shows calls to the “add” and “subtract” services via the Actions URLs:
 ```js
-const actionsUrl = `http://localhost:3500/v1.0/actions`;
+const actionsUrl = `http://localhost:3500/v1.0/invoke`;
 
 app.post('/calculate/add', async (req, res) => {
-  const addUrl = `${actionsUrl}/addapp/add`;
+  const addUrl = `${actionsUrl}/addapp/method/add`;
   req.pipe(request(addUrl)).pipe(res);
 });
 
 app.post('/calculate/subtract', async (req, res) => {
-  const subtractUrl = `${actionsUrl}/subtractapp/subtract`;
+  const subtractUrl = `${actionsUrl}/subtractapp/method/subtract`;
   req.pipe(request(subtractUrl)).pipe(res);
 });
 ...
