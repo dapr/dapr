@@ -12,8 +12,8 @@ import (
 	"golang.org/x/crypto/pkcs12"
 )
 
-// KeyvaultAADResource represents Azure Keyvault Resource Name in AAD
-const KeyvaultAADResource = "https://vault.azure.net"
+// keyvaultAADResource represents Azure Keyvault Resource Name in AAD
+const keyvaultAADResource = "https://vault.azure.net"
 
 // ClientAuthorizer provides the options to get a bearer authorizer from a client certificate.
 type ClientAuthorizer struct {
@@ -29,7 +29,7 @@ func NewClientAuthorizer(certificatePath string, certificateBytes []byte, certif
 			CertificatePassword: certificatePassword,
 			ClientID:            clientID,
 			TenantID:            tenantID,
-			Resource:            KeyvaultAADResource,
+			Resource:            keyvaultAADResource,
 			AADEndpoint:         azure.PublicCloud.ActiveDirectoryEndpoint,
 		},
 		certificateBytes,
@@ -39,8 +39,10 @@ func NewClientAuthorizer(certificatePath string, certificateBytes []byte, certif
 // Authorizer gets an authorizer object from client certificate.
 func (c ClientAuthorizer) Authorizer() (autorest.Authorizer, error) {
 	if c.ClientCertificateConfig.CertificatePath != "" {
+		// in standalone mode, component yaml will pass cert path
 		return c.ClientCertificateConfig.Authorizer()
 	} else if len(c.CertificateData) > 0 {
+		// in kubernetes mode, runtime will get the secret from K8S secret store and pass byte array
 		spToken, err := c.ServicePrincipalTokenByCertBytes()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get oauth token from certificate auth: %v", err)

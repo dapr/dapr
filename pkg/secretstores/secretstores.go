@@ -9,5 +9,5 @@ import (
 // Load secret stores
 func Load() {
 	secretstores.RegisterSecretStore("kubernetes", kubernetes.NewKubernetesSecretStore())
-	secretstores.RegisterSecretStore("keyvault", keyvault.NewKeyvaultSecretStore())
+	secretstores.RegisterSecretStore("azure.keyvault", keyvault.NewKeyvaultSecretStore())
 }

@@ -11,11 +11,11 @@ import (
 
 // Keyvault secret store component metadata properties
 const (
-	ComponentVaultName          = "vaultName"
-	ComponentSPNCertificateFile = "spnCertificateFile"
-	ComponentSPNCertificate     = "spnCertificate"
-	ComponentSPNTenantID        = "spnTenantId"
-	ComponentSPNClientID        = "spnClientId"
+	componentSPNCertificate     = "spnCertificate"
+	componentSPNCertificateFile = "spnCertificateFile"
+	componentSPNClientID        = "spnClientId"
+	componentSPNTenantID        = "spnTenantId"
+	componentVaultName          = "vaultName"
 )
 
 type keyvaultSecretStore struct {
@@ -24,8 +24,8 @@ type keyvaultSecretStore struct {
 	clientAuthorizer ClientAuthorizer
 }
 
-// NewKeyvaultSecretStore returns a new Kubernetes secret store
-func NewKeyvaultSecretStore() secretstores.SecretStore {
+// NewAzureKeyvaultSecretStore returns a new Kubernetes secret store
+func NewAzureKeyvaultSecretStore() secretstores.SecretStore {
 	return &keyvaultSecretStore{
 		vaultName:   "",
 		vaultClient: kv.New(),
@@ -35,17 +35,17 @@ func NewKeyvaultSecretStore() secretstores.SecretStore {
 // Init creates a Kubernetes client
 func (k *keyvaultSecretStore) Init(metadata secretstores.Metadata) error {
 	props := metadata.Properties
-	k.vaultName = props[ComponentVaultName]
-	certFilePath := props[ComponentSPNCertificateFile]
-	certBytes := []byte(props[ComponentSPNCertificate])
+	k.vaultName = props[componentVaultName]
+	certFilePath := props[componentSPNCertificateFile]
+	certBytes := []byte(props[componentSPNCertificate])
 	certPassword := ""
 
 	k.clientAuthorizer = NewClientAuthorizer(
 		certFilePath,
 		certBytes,
 		certPassword,
-		props[ComponentSPNClientID],
-		props[ComponentSPNTenantID])
+		props[componentSPNClientID],
+		props[componentSPNTenantID])
 
 	authorizer, err := k.clientAuthorizer.Authorizer()
 	if err == nil {
@@ -62,12 +62,16 @@ func (k *keyvaultSecretStore) GetSecret(req secretstores.GetSecretRequest) (secr
 		return secretstores.GetSecretResponse{Data: nil}, err
 	}
 
-	resp := secretstores.GetSecretResponse{
-		Data: map[string]string{
-			secretstores.DefaultSecretRefKeyName: *secretResp.Value,
-		},
+	secretValue := ""
+	if secretResp.Value != nil {
+		secretValue = *secretResp.Value
 	}
-	return resp, nil
+
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{
+			secretstores.DefaultSecretRefKeyName: secretValue,
+		},
+	}, nil
 }
 
 // getVaultURI returns Azure Key Vault URI
