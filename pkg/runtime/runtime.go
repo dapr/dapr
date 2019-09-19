@@ -610,8 +610,8 @@ func (a *ActionsRuntime) Stop() {
 func (a *ActionsRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {
 	cache := map[string]secretstores.GetSecretResponse{}
 	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name != "" && m.SecretKeyRef.Key != "" {
-			secretStore := a.getSecretStore(component.SecretStore)
+		if m.SecretKeyRef.Name != "" {
+			secretStore := a.getSecretStore(component.Auth.SecretStore)
 			if secretStore != nil {
 				var resp secretstores.GetSecretResponse
 				if val, ok := cache[m.SecretKeyRef.Name]; ok {
@@ -629,7 +629,14 @@ func (a *ActionsRuntime) processComponentSecrets(component components_v1alpha1.C
 					}
 					resp = r
 				}
-				val, ok := resp.Data[m.SecretKeyRef.Key]
+
+				// Use the default DefaultSecretRefKeyName key if SecretKeyRef.Key is not given
+				secretKeyName := m.SecretKeyRef.Key
+				if secretKeyName == "" {
+					secretKeyName = secretstores.DefaultSecretRefKeyName
+				}
+
+				val, ok := resp.Data[secretKeyName]
 				if ok {
 					component.Spec.Metadata[i].Value = val
 				}
@@ -783,7 +790,7 @@ func (a *ActionsRuntime) initSecretStores() error {
 		if err != nil {
 			return err
 		}
-		err = kubeSecretStore.Init(nil)
+		err = kubeSecretStore.Init(secretstores.Metadata{Properties: nil})
 		if err != nil {
 			return err
 		}
@@ -792,12 +799,17 @@ func (a *ActionsRuntime) initSecretStores() error {
 
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "secretstores") == 0 {
+			// look up the secrets to authenticate this secretstore from kubernetes
+			a.processComponentSecrets(c)
+
 			secretStore, err := a.secretStoresRegistry.CreateSecretStore(c.Spec.Type)
 			if err != nil {
 				log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
 				continue
 			}
-			err = secretStore.Init(nil)
+			err = secretStore.Init(secretstores.Metadata{
+				Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+			})
 			if err != nil {
 				log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
 				continue
