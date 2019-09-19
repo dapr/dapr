@@ -8,8 +8,8 @@ require (
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/Azure/azure-event-hubs-go v1.3.0
-	github.com/Azure/azure-sdk-for-go v29.0.0+incompatible // indirect
-	github.com/Azure/go-autorest v12.0.0+incompatible // indirect
+	github.com/Azure/azure-sdk-for-go v29.0.0+incompatible
+	github.com/Azure/go-autorest v12.0.0+incompatible
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/Shopify/sarama v1.22.1
 	github.com/Sirupsen/logrus v1.0.6
@@ -53,12 +53,11 @@ require (
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/qiangxue/fasthttp-routing v0.0.0-20160225050629-6ccdc2a18d87
 	github.com/satori/go.uuid v1.2.0
-	github.com/sirupsen/logrus v1.2.0 // indirect
 	github.com/streadway/amqp v0.0.0-20190404075320-75d898a42a94
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasthttp v1.4.0
 	go.opencensus.io v0.21.0
-	golang.org/x/crypto v0.0.0-20190911031432-227b76d455e7 // indirect
+	golang.org/x/crypto v0.0.0-20190911031432-227b76d455e7
 	golang.org/x/exp v0.0.0-20190912063710-ac5d2bfcbfe0 // indirect
 	golang.org/x/net v0.0.0-20190912160710-24e19bdeb0f2 // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect
