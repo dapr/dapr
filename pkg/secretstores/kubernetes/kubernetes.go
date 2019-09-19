@@ -19,7 +19,7 @@ func NewKubernetesSecretStore() secretstores.SecretStore {
 }
 
 // Init creates a Kubernetes client
-func (k *kubernetesSecretStore) Init(metadata map[string]string) error {
+func (k *kubernetesSecretStore) Init(metadata secretstores.Metadata) error {
 	k.kubeClient = utils.GetKubeClient()
 	return nil
 }
