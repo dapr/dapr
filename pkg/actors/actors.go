@@ -91,7 +91,7 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 
 func (a *actorsRuntime) Init() error {
 	if a.config.PlacementServiceAddress == "" {
-		return errors.New("couldn't connect to placement service: address is empty")
+		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 	if a.store == nil {
 		return errors.New("actors: state store must be present to initialize the actor runtime")
