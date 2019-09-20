@@ -19,9 +19,9 @@ const (
 
 func TestClientAuthorizer(t *testing.T) {
 	testSecretStore := NewClientAuthorizer(
-		"testfile", // ignore
+		"testfile",
 		[]byte("testcert"),
-		"1234", // No password for cert
+		"1234",
 		fakeClientID,
 		fakeTenantID)
 
@@ -41,7 +41,7 @@ func TestAuthorizorWithCertFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	testSecretStore := NewClientAuthorizer(
-		testCertFileName, // ignore
+		testCertFileName,
 		nil,
 		"", // No password for cert
 		fakeClientID,
