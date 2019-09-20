@@ -3,11 +3,11 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/actionscore/actions/pkg/components/bindings"
 
-	"github.com/google/uuid"
 	"github.com/joomcode/redispipe/redis"
 	"github.com/joomcode/redispipe/redisconn"
 )
@@ -17,54 +17,60 @@ type Redis struct {
 	client *redis.SyncCtx
 }
 
-// Credentials is the connection config object for redis
-type Credentials struct {
+type redisMetadata struct {
 	Host     string `json:"redisHost"`
 	Password string `json:"redisPassword"`
 }
 
-// NewRedis returns a new redis instance
+// NewRedis returns a new redis bindings instance
 func NewRedis() *Redis {
 	return &Redis{}
 }
 
 // Init performs metadata parsing and connection creation
 func (r *Redis) Init(metadata bindings.Metadata) error {
-	connInfo := metadata.Properties
-	b, err := json.Marshal(connInfo)
+	m, err := r.parseMetadata(metadata)
 	if err != nil {
 		return err
 	}
-
-	var redisCreds Credentials
-	err = json.Unmarshal(b, &redisCreds)
-	if err != nil {
-		return err
-	}
-
 	ctx := context.Background()
 	opts := redisconn.Opts{
 		DB:       0,
-		Password: redisCreds.Password,
+		Password: m.Password,
 	}
-	conn, err := redisconn.Connect(ctx, redisCreds.Host, opts)
+	conn, err := redisconn.Connect(ctx, m.Host, opts)
 	if err != nil {
 		return err
 	}
-
 	r.client = &redis.SyncCtx{
 		S: conn,
 	}
-
 	return nil
 }
 
-func (r *Redis) Write(req *bindings.WriteRequest) error {
-	key := fmt.Sprintf("es_%s", uuid.New().String())
-	res := r.client.Do(context.Background(), "SET", key, req.Data)
-	if err := redis.AsError(res); err != nil {
-		return err
+func (r *Redis) parseMetadata(metadata bindings.Metadata) (*redisMetadata, error) {
+	connInfo := metadata.Properties
+	b, err := json.Marshal(connInfo)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	var m redisMetadata
+	err = json.Unmarshal(b, &m)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func (r *Redis) Write(req *bindings.WriteRequest) error {
+	if val, ok := req.Metadata["key"]; ok && val != "" {
+		key := fmt.Sprintf(val)
+		res := r.client.Do(context.Background(), "SET", key, req.Data)
+		if err := redis.AsError(res); err != nil {
+			return err
+		}
+		return nil
+	}
+	return errors.New("redis binding: missing key on write request metadata")
 }

@@ -6,29 +6,22 @@ import (
 
 	"github.com/a8m/documentdb"
 	"github.com/actionscore/actions/pkg/components/bindings"
-	"github.com/google/uuid"
 )
 
 // CosmosDB allows performing state operations on collections
 type CosmosDB struct {
-	client     *documentdb.DocumentDB
-	collection *documentdb.Collection
-	db         *documentdb.Database
+	client       *documentdb.DocumentDB
+	collection   *documentdb.Collection
+	db           *documentdb.Database
+	partitionKey string
 }
 
-// CosmosDBCredentials is the credentials config for the CosmosDB client
-type CosmosDBCredentials struct {
-	URL        string `json:"url"`
-	MasterKey  string `json:"masterKey"`
-	Database   string `json:"database"`
-	Collection string `json:"collection"`
-}
-
-// CosmosItem is a wrapper item around a CosmosDB document
-type CosmosItem struct {
-	documentdb.Document
-	ID    string      `json:"id"`
-	Value interface{} `json:"value"`
+type cosmosDBCredentials struct {
+	URL          string `json:"url"`
+	MasterKey    string `json:"masterKey"`
+	Database     string `json:"database"`
+	Collection   string `json:"collection"`
+	PartitionKey string `json:"partitionKey"`
 }
 
 // NewCosmosDB returns a new CosmosDB instance
@@ -38,47 +31,55 @@ func NewCosmosDB() *CosmosDB {
 
 // Init performs CosmosDB connection parsing and connecting
 func (c *CosmosDB) Init(metadata bindings.Metadata) error {
-	connInfo := metadata.Properties
-	b, err := json.Marshal(connInfo)
+	m, err := c.parseMetadata(metadata)
 	if err != nil {
 		return err
 	}
 
-	var creds CosmosDBCredentials
-	err = json.Unmarshal(b, &creds)
-	if err != nil {
-		return err
-	}
-
-	client := documentdb.New(creds.URL, &documentdb.Config{
+	c.partitionKey = m.PartitionKey
+	client := documentdb.New(m.URL, &documentdb.Config{
 		MasterKey: &documentdb.Key{
-			Key: creds.MasterKey,
+			Key: m.MasterKey,
 		},
 	})
 
 	dbs, err := client.QueryDatabases(&documentdb.Query{
-		Query: fmt.Sprintf("SELECT * FROM ROOT r WHERE r.id='%s'", creds.Database),
+		Query: fmt.Sprintf("SELECT * FROM ROOT r WHERE r.id='%s'", m.Database),
 	})
 	if err != nil {
 		return err
 	} else if len(dbs) == 0 {
-		return fmt.Errorf("Database %s for CosmosDB state store not found", creds.Database)
+		return fmt.Errorf("Database %s for CosmosDB state store not found", m.Database)
 	}
 
 	c.db = &dbs[0]
 	colls, err := client.QueryCollections(c.db.Self, &documentdb.Query{
-		Query: fmt.Sprintf("SELECT * FROM ROOT r WHERE r.id='%s'", creds.Collection),
+		Query: fmt.Sprintf("SELECT * FROM ROOT r WHERE r.id='%s'", m.Collection),
 	})
 	if err != nil {
 		return err
 	} else if len(colls) == 0 {
-		return fmt.Errorf("Collection %s for CosmosDB state store not found", creds.Collection)
+		return fmt.Errorf("Collection %s for CosmosDB state store not found", m.Collection)
 	}
 
 	c.collection = &colls[0]
 	c.client = client
-
 	return nil
+}
+
+func (c *CosmosDB) parseMetadata(metadata bindings.Metadata) (*cosmosDBCredentials, error) {
+	connInfo := metadata.Properties
+	b, err := json.Marshal(connInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	var creds cosmosDBCredentials
+	err = json.Unmarshal(b, &creds)
+	if err != nil {
+		return nil, err
+	}
+	return &creds, nil
 }
 
 func (c *CosmosDB) Write(req *bindings.WriteRequest) error {
@@ -88,14 +89,7 @@ func (c *CosmosDB) Write(req *bindings.WriteRequest) error {
 		return err
 	}
 
-	key := uuid.New()
-
-	i := CosmosItem{
-		ID:    key.String(),
-		Value: obj,
-	}
-
-	_, err = c.client.CreateDocument(c.collection.Self, i, documentdb.PartitionKey(key))
+	_, err = c.client.CreateDocument(c.collection.Self, obj, documentdb.PartitionKey(c.partitionKey))
 	if err != nil {
 		return err
 	}
