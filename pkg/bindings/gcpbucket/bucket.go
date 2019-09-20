@@ -2,12 +2,9 @@ package gcpbucket
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
-	"net/http"
 
 	"cloud.google.com/go/storage"
-	log "github.com/Sirupsen/logrus"
 	"github.com/actionscore/actions/pkg/components/bindings"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/api/option"
@@ -15,11 +12,11 @@ import (
 
 // GCPStorage allows saving data to GCP bucket storage
 type GCPStorage struct {
-	Spec bindings.Metadata
+	metadata gcpMetadata
+	client   *storage.Client
 }
 
-// GCPMetadata represents a GCP bucket config
-type GCPMetadata struct {
+type gcpMetadata struct {
 	Bucket              string `json:"bucket"`
 	Type                string `json:"type"`
 	ProjectID           string `json:"project_id"`
@@ -40,43 +37,46 @@ func NewGCPStorage() *GCPStorage {
 
 // Init performs connction parsing
 func (g *GCPStorage) Init(metadata bindings.Metadata) error {
-	g.Spec = metadata
-	return nil
-}
-
-func (g *GCPStorage) Write(req *bindings.WriteRequest) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	b, err := json.Marshal(g.Spec.Properties)
+	b, err := g.parseMetadata(metadata)
 	if err != nil {
 		return err
 	}
 
+	var gm gcpMetadata
+	err = json.Unmarshal(b, &gm)
+	if err != nil {
+		return err
+	}
 	clientOptions := option.WithCredentialsJSON(b)
-
-	var metadata GCPMetadata
-	err = json.Unmarshal(b, &metadata)
-	if err != nil {
-		return err
-	}
-
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx, clientOptions)
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	name := uuid.NewV4()
-	wc := client.Bucket(metadata.Bucket).Object(name.String()).NewWriter(ctx)
-
-	if _, err := wc.Write(req.Data); err != nil {
 		return err
 	}
 
-	err = wc.Close()
+	g.client = client
+	return nil
+}
+
+func (g *GCPStorage) parseMetadata(metadata bindings.Metadata) ([]byte, error) {
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func (g *GCPStorage) Write(req *bindings.WriteRequest) error {
+	name := ""
+	if val, ok := req.Metadata["name"]; ok && val != "" {
+		name = val
+	} else {
+		name = uuid.NewV4().String()
+	}
+	h := g.client.Bucket(g.metadata.Bucket).Object(name).NewWriter(context.Background())
+	defer h.Close()
+	if _, err := h.Write(req.Data); err != nil {
 		return err
 	}
-
 	return nil
 }

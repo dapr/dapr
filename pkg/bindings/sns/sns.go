@@ -3,64 +3,82 @@ package sns
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+
+	"github.com/aws/aws-sdk-go/aws"
 
 	"github.com/actionscore/actions/pkg/components/bindings"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sns"
 )
 
-// AWSSns is an AWS SNS binding
-type AWSSns struct {
-	Spec bindings.Metadata
+// AWSSNS is an AWS SNS binding
+type AWSSNS struct {
+	client   *sns.SNS
+	topicARN string
 }
 
-// AWSSnsMetadata is the config object for AWSSns
-type AWSSnsMetadata struct {
+type snsMetadata struct {
 	TopicArn  string `json:"topicArn"`
 	Region    string `json:"region"`
 	AccessKey string `json:"accessKey"`
 	SecretKey string `json:"secretKey"`
 }
 
-// DataPayload is a wrapper object around SNS payloads
-type DataPayload struct {
+type dataPayload struct {
 	Message interface{} `json:"message"`
 	Subject interface{} `json:"subject"`
 }
 
-// NewAWSSns creates a new SNS
-func NewAWSSns() *AWSSns {
-	return &AWSSns{}
+// NewAWSSNS creates a new AWSSNS binding instance
+func NewAWSSNS() *AWSSNS {
+	return &AWSSNS{}
 }
 
 // Init does metadata parsing
-func (a *AWSSns) Init(metadata bindings.Metadata) error {
-	a.Spec = metadata
+func (a *AWSSNS) Init(metadata bindings.Metadata) error {
+	m, err := a.parseMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	client, err := a.getClient(m)
+	if err != nil {
+		return err
+	}
+	a.client = client
+	a.topicARN = m.TopicArn
 	return nil
 }
 
-func (a *AWSSns) Write(req *bindings.WriteRequest) error {
-	b, err := json.Marshal(a.Spec.Properties)
+func (a *AWSSNS) parseMetadata(metadata bindings.Metadata) (*snsMetadata, error) {
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	var metadata AWSSnsMetadata
-	err = json.Unmarshal(b, &metadata)
+	var m snsMetadata
+	err = json.Unmarshal(b, &m)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	return &m, nil
+}
 
-	os.Setenv("AWS_ACCESS_KEY_ID", metadata.AccessKey)
-	os.Setenv("AWS_SECRET_ACCESS_KEY", metadata.SecretKey)
-	os.Setenv("AWS_REGION", metadata.Region)
+func (a *AWSSNS) getClient(metadata *snsMetadata) (*sns.SNS, error) {
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(metadata.Region),
+		Credentials: credentials.NewStaticCredentials(metadata.AccessKey, metadata.SecretKey, ""),
+	})
+	if err != nil {
+		return nil, err
+	}
+	c := sns.New(sess)
+	return c, nil
+}
 
-	s := session.Must(session.NewSession())
-	c := sns.New(s)
-
-	var payload DataPayload
-	err = json.Unmarshal(req.Data, &payload)
+func (a *AWSSNS) Write(req *bindings.WriteRequest) error {
+	var payload dataPayload
+	err := json.Unmarshal(req.Data, &payload)
 	if err != nil {
 		return err
 	}
@@ -71,13 +89,12 @@ func (a *AWSSns) Write(req *bindings.WriteRequest) error {
 	input := &sns.PublishInput{
 		Message:  &msg,
 		Subject:  &subject,
-		TopicArn: &metadata.TopicArn,
+		TopicArn: &a.topicARN,
 	}
 
-	_, err = c.Publish(input)
+	_, err = a.client.Publish(input)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }

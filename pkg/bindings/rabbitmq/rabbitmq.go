@@ -11,15 +11,15 @@ import (
 type RabbitMQ struct {
 	connection *amqp.Connection
 	channel    *amqp.Channel
-	metadata   *Metadata
+	metadata   *rabbitMQMetadata
 }
 
 // Metadata is the rabbitmq config
-type Metadata struct {
+type rabbitMQMetadata struct {
 	QueueName        string `json:"queueName"`
 	Host             string `json:"host"`
-	Durable          bool   `json:"durable"`
-	DeleteWhenUnused bool   `json:"deleteWhenUnused"`
+	Durable          bool   `json:"durable,string"`
+	DeleteWhenUnused bool   `json:"deleteWhenUnused,string"`
 }
 
 // NewRabbitMQ returns a new rabbitmq instance
@@ -29,7 +29,7 @@ func NewRabbitMQ() *RabbitMQ {
 
 // Init does metadata parsing and connection creation
 func (r *RabbitMQ) Init(metadata bindings.Metadata) error {
-	meta, err := r.GetRabbitMQMetadata(metadata)
+	meta, err := r.getRabbitMQMetadata(metadata)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,6 @@ func (r *RabbitMQ) Init(metadata bindings.Metadata) error {
 
 	r.connection = conn
 	r.channel = ch
-
 	return nil
 }
 
@@ -65,23 +64,20 @@ func (r *RabbitMQ) Write(req *bindings.WriteRequest) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
-// GetRabbitMQMetadata gets rabbitmq metadata
-func (r *RabbitMQ) GetRabbitMQMetadata(metadata bindings.Metadata) (*Metadata, error) {
+func (r *RabbitMQ) getRabbitMQMetadata(metadata bindings.Metadata) (*rabbitMQMetadata, error) {
 	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return nil, err
 	}
 
-	var rabbitMQMeta Metadata
+	var rabbitMQMeta rabbitMQMetadata
 	err = json.Unmarshal(b, &rabbitMQMeta)
 	if err != nil {
 		return nil, err
 	}
-
 	return &rabbitMQMeta, nil
 }
 
@@ -108,13 +104,11 @@ func (r *RabbitMQ) Read(handler func(*bindings.ReadResponse) error) error {
 
 	go func() {
 		for d := range msgs {
-			if len(d.Body) > 0 {
-				err := handler(&bindings.ReadResponse{
-					Data: d.Body,
-				})
-				if err == nil {
-					r.channel.Ack(d.DeliveryTag, false)
-				}
+			err := handler(&bindings.ReadResponse{
+				Data: d.Body,
+			})
+			if err == nil {
+				r.channel.Ack(d.DeliveryTag, false)
 			}
 		}
 	}()
