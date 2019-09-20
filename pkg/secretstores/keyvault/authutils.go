@@ -12,9 +12,6 @@ import (
 	"golang.org/x/crypto/pkcs12"
 )
 
-// keyvaultAADResource represents Azure Keyvault Resource Name in AAD
-const keyvaultAADResource = "https://vault.azure.net"
-
 // ClientAuthorizer provides the options to get a bearer authorizer from a client certificate.
 type ClientAuthorizer struct {
 	*auth.ClientCertificateConfig
@@ -29,7 +26,7 @@ func NewClientAuthorizer(certificatePath string, certificateBytes []byte, certif
 			CertificatePassword: certificatePassword,
 			ClientID:            clientID,
 			TenantID:            tenantID,
-			Resource:            keyvaultAADResource,
+			Resource:            azure.PublicCloud.ResourceIdentifiers.KeyVault,
 			AADEndpoint:         azure.PublicCloud.ActiveDirectoryEndpoint,
 		},
 		certificateBytes,
