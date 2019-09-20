@@ -18,7 +18,7 @@ type DynamoDB struct {
 	table  string
 }
 
-type metadata struct {
+type dynamoDBMetadata struct {
 	Region    string `json:"region"`
 	AccessKey string `json:"accessKey"`
 	SecretKey string `json:"secretKey"`
@@ -78,13 +78,13 @@ func (d *DynamoDB) Write(req *bindings.WriteRequest) error {
 	return nil
 }
 
-func (d *DynamoDB) getDynamoDBMetadata(spec bindings.Metadata) (*metadata, error) {
+func (d *DynamoDB) getDynamoDBMetadata(spec bindings.Metadata) (*dynamoDBMetadata, error) {
 	b, err := json.Marshal(spec.Properties)
 	if err != nil {
 		return nil, err
 	}
 
-	var meta metadata
+	var meta dynamoDBMetadata
 	err = json.Unmarshal(b, &meta)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (d *DynamoDB) getDynamoDBMetadata(spec bindings.Metadata) (*metadata, error
 	return &meta, nil
 }
 
-func (d *DynamoDB) getClient(meta *metadata) (*dynamodb.DynamoDB, error) {
+func (d *DynamoDB) getClient(meta *dynamoDBMetadata) (*dynamodb.DynamoDB, error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region:      aws.String(meta.Region),
 		Credentials: credentials.NewStaticCredentials(meta.AccessKey, meta.SecretKey, ""),
