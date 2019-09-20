@@ -2,9 +2,9 @@ package kafka
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/Shopify/sarama"
@@ -20,8 +20,7 @@ type Kafka struct {
 	publishTopic  string
 }
 
-// Metadata is the config object for Kafka
-type Metadata struct {
+type kafkaMetadata struct {
 	Brokers       []string `json:"brokers"`
 	Topics        []string `json:"topics"`
 	PublishTopic  string   `json:"publishTopic"`
@@ -44,7 +43,6 @@ func (consumer *consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -53,14 +51,14 @@ func (consumer *consumer) Setup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-// NewKafka returns a new kafka instance
+// NewKafka returns a new kafka binding instance
 func NewKafka() *Kafka {
 	return &Kafka{}
 }
 
 // Init does metadata parsing and connection establishment
 func (k *Kafka) Init(metadata bindings.Metadata) error {
-	meta, err := k.GetKafkaMetadata(metadata)
+	meta, err := k.getKafkaMetadata(metadata)
 	if err != nil {
 		return err
 	}
@@ -91,22 +89,21 @@ func (k *Kafka) Write(req *bindings.WriteRequest) error {
 }
 
 // GetKafkaMetadata returns new Kafka metadata
-func (k *Kafka) GetKafkaMetadata(metadata bindings.Metadata) (*Metadata, error) {
-	b, err := json.Marshal(metadata.Properties)
-	if err != nil {
-		return nil, err
-	}
+func (k *Kafka) getKafkaMetadata(metadata bindings.Metadata) (*kafkaMetadata, error) {
+	meta := kafkaMetadata{}
+	meta.ConsumerGroup = metadata.Properties["consumerGroup"]
+	meta.PublishTopic = metadata.Properties["publishTopic"]
 
-	var meta Metadata
-	err = json.Unmarshal(b, &meta)
-	if err != nil {
-		return nil, err
+	if val, ok := metadata.Properties["brokers"]; ok && val != "" {
+		meta.Brokers = strings.Split(val, ",")
 	}
-
+	if val, ok := metadata.Properties["topics"]; ok && val != "" {
+		meta.Topics = strings.Split(val, ",")
+	}
 	return &meta, nil
 }
 
-func (k *Kafka) getSyncProducer(meta *Metadata) (sarama.SyncProducer, error) {
+func (k *Kafka) getSyncProducer(meta *kafkaMetadata) (sarama.SyncProducer, error) {
 	config := sarama.NewConfig()
 	config.Producer.RequiredAcks = sarama.WaitForLocal
 	config.Producer.Retry.Max = 10
@@ -116,7 +113,6 @@ func (k *Kafka) getSyncProducer(meta *Metadata) (sarama.SyncProducer, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return producer, nil
 }
 
@@ -151,7 +147,6 @@ func (k *Kafka) Read(handler func(*bindings.ReadResponse) error) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 

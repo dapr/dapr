@@ -128,15 +128,9 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{http.Get, http.Post, http.Delete, http.Put},
-			Route:   "actions/<id>/<method>",
+			Route:   "invoke/<id>/method/*",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
-		},
-		{
-			Methods: []string{http.Post},
-			Route:   "invoke/*",
-			Version: apiVersionV1,
-			Handler: a.onInvokeLocal,
 		},
 	}
 }
@@ -366,7 +360,8 @@ func (a *api) setHeaders(c *routing.Context, metadata map[string]string) {
 
 func (a *api) onDirectMessage(c *routing.Context) error {
 	targetID := c.Param(idParam)
-	method := c.Param(methodParam)
+	path := string(c.Path())
+	method := path[strings.Index(path, "method/")+7:]
 	body := c.PostBody()
 	verb := string(c.Method())
 	queryString := string(c.QueryArgs().QueryString())
