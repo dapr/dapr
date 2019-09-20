@@ -1,14 +1,30 @@
 package state
 
+import "time"
+
 // GetRequest is the object describing a state fetch request
 type GetRequest struct {
-	Key string `json:"key"`
+	Key     string         `json:"key"`
+	Options GetStateOption `json:"options,omitempty"`
+}
+
+// GetStateOption controls how a state store reacts to a get request
+type GetStateOption struct {
+	Consistency string `json:"consistency"` //"eventual, strong"
 }
 
 // DeleteRequest is the object describing a delete state request
 type DeleteRequest struct {
-	Key  string `json:"key"`
-	ETag string `json:"etag,omitempty"`
+	Key     string            `json:"key"`
+	ETag    string            `json:"etag,omitempty"`
+	Options DeleteStateOption `json:"options,omitempty"`
+}
+
+// DeleteStateOption controls how a state store reacts to a delete request
+type DeleteStateOption struct {
+	Concurrency string      `json:"concurrency,omitempty"` //"concurrency"
+	Consistency string      `json:"consistency"`           //"eventual, strong"
+	RetryPolicy RetryPolicy `json:"retryPolicy,omitempty"`
 }
 
 // SetRequest is the object describing an upsert request
@@ -17,6 +33,21 @@ type SetRequest struct {
 	Value    interface{}       `json:"value"`
 	ETag     string            `json:"etag,omitempty"`
 	Metadata map[string]string `json:"metadata"`
+	Options  SetStateOption    `json:"options,omitempty"`
+}
+
+//RetryPolicy describes how retries should be handled
+type RetryPolicy struct {
+	Interval  time.Duration `json:"interval"`
+	Threshold int           `josn:"threshold"`
+	Pattern   string        `json:"pattern,omitempty"` //linear, exponential
+}
+
+// SetStateOption controls how a state store reacts to a set request
+type SetStateOption struct {
+	Concurrency string      `json:"concurrency,omitempty"` //first-write, last-write
+	Consistency string      `json:"consistency"`           //"eventual, strong"
+	RetryPolicy RetryPolicy `json:"retryPolicy,omitempty"`
 }
 
 // OperationType describes a CRUD operation performed against a state store

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/actionscore/actions/pkg/components/pubsub"
 	"github.com/google/uuid"
@@ -36,14 +37,19 @@ type api struct {
 }
 
 const (
-	apiVersionV1   = "v1.0"
-	idParam        = "id"
-	methodParam    = "method"
-	actorTypeParam = "actorType"
-	actorIDParam   = "actorId"
-	stateKeyParam  = "key"
-	topicParam     = "topic"
-	nameParam      = "name"
+	apiVersionV1        = "v1.0"
+	idParam             = "id"
+	methodParam         = "method"
+	actorTypeParam      = "actorType"
+	actorIDParam        = "actorId"
+	stateKeyParam       = "key"
+	topicParam          = "topic"
+	nameParam           = "name"
+	consistencyParam    = "consistency"
+	retryIntervalParam  = "retryInterval"
+	retryPatternParam   = "retryPattern"
+	retryThresholdParam = "retryThreshold"
+	concurrencyParam    = "concurrency"
 )
 
 // NewAPI returns a new API
@@ -235,8 +241,12 @@ func (a *api) onGetState(c *routing.Context) error {
 		return nil
 	}
 	key := c.Param(stateKeyParam)
+	consistency := string(c.QueryArgs().Peek(consistencyParam))
 	req := state.GetRequest{
 		Key: a.getModifiedStateKey(key),
+		Options: state.GetStateOption{
+			Consistency: consistency,
+		},
 	}
 
 	resp, err := a.stateStore.Get(&req)
@@ -262,9 +272,34 @@ func (a *api) onDeleteState(c *routing.Context) error {
 
 	key := c.Param(stateKeyParam)
 	etag := string(c.Request.Header.Peek("If-Match"))
+
+	concurrency := string(c.QueryArgs().Peek(concurrencyParam))
+	consistency := string(c.QueryArgs().Peek(consistencyParam))
+	retryInterval := string(c.QueryArgs().Peek(retryIntervalParam))
+	retryPattern := string(c.QueryArgs().Peek(retryPatternParam))
+	retryThredhold := string(c.QueryArgs().Peek(retryThresholdParam))
+	iRetryInterval := 0
+	iRetryThreshold := 0
+
+	if retryInterval != "" {
+		iRetryInterval, _ = strconv.Atoi(retryInterval)
+	}
+	if retryThredhold != "" {
+		iRetryThreshold, _ = strconv.Atoi(retryThredhold)
+	}
+
 	req := state.DeleteRequest{
 		Key:  key,
 		ETag: etag,
+		Options: state.DeleteStateOption{
+			Concurrency: concurrency,
+			Consistency: consistency,
+			RetryPolicy: state.RetryPolicy{
+				Interval:  time.Duration(iRetryInterval) * time.Millisecond,
+				Threshold: iRetryThreshold,
+				Pattern:   retryPattern,
+			},
+		},
 	}
 
 	err := a.stateStore.Delete(&req)

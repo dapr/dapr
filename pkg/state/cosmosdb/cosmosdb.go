@@ -87,11 +87,19 @@ func (c *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	key := req.Key
 
 	items := []CosmosItem{}
+	options := []documentdb.CallOption{documentdb.PartitionKey(req.Key)}
+	if req.Options.Consistency == "strong" {
+		options = append(options, documentdb.ConsistencyLevel(documentdb.Strong))
+	}
+	if req.Options.Consistency == "eventual" {
+		options = append(options, documentdb.ConsistencyLevel(documentdb.Eventual))
+	}
+
 	_, err := c.client.QueryDocuments(
 		c.collection.Self,
 		documentdb.NewQuery("SELECT * FROM ROOT r WHERE r.id=@id", documentdb.P{"@id", key}),
 		&items,
-		documentdb.PartitionKey(key),
+		options...,
 	)
 	if err != nil {
 		return nil, err
@@ -112,12 +120,25 @@ func (c *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 // Set saves a CosmosDB item
 func (c *StateStore) Set(req *state.SetRequest) error {
-	var err error
-	if req.ETag != "" {
-		_, err = c.client.UpsertDocument(c.collection.Self, CosmosItem{ID: req.Key, Value: req.Value}, documentdb.PartitionKey(req.Key), documentdb.IfMatch(req.ETag))
-	} else {
-		_, err = c.client.UpsertDocument(c.collection.Self, CosmosItem{ID: req.Key, Value: req.Value}, documentdb.PartitionKey(req.Key))
+	err := state.CheckSetRequestOptions(req)
+	if err != nil {
+		return err
 	}
+
+	options := []documentdb.CallOption{documentdb.PartitionKey(req.Key)}
+
+	if req.ETag != "" {
+		options = append(options, documentdb.IfMatch((req.ETag)))
+	}
+	if req.Options.Consistency == "strong" {
+		options = append(options, documentdb.ConsistencyLevel(documentdb.Strong))
+	}
+	if req.Options.Consistency == "eventual" {
+		options = append(options, documentdb.ConsistencyLevel(documentdb.Eventual))
+	}
+
+	_, err = c.client.UpsertDocument(c.collection.Self, CosmosItem{ID: req.Key, Value: req.Value}, options...)
+
 	if err != nil {
 		return err
 	}
@@ -139,13 +160,26 @@ func (c *StateStore) BulkSet(req []state.SetRequest) error {
 
 // Delete performs a delete operation
 func (c *StateStore) Delete(req *state.DeleteRequest) error {
-	selfLink := fmt.Sprintf("dbs/%s/colls/%s/docs/%s", c.db.Id, c.collection.Id, req.Key)
-	var err error
-	if req.ETag != "" {
-		_, err = c.client.DeleteDocument(selfLink, documentdb.PartitionKey(req.Key), documentdb.IfMatch(req.ETag))
-	} else {
-		_, err = c.client.DeleteDocument(selfLink, documentdb.PartitionKey(req.Key))
+	err := state.CheckDeleteRequestOptions(req)
+	if err != nil {
+		return err
 	}
+
+	selfLink := fmt.Sprintf("dbs/%s/colls/%s/docs/%s", c.db.Id, c.collection.Id, req.Key)
+
+	options := []documentdb.CallOption{documentdb.PartitionKey(req.Key)}
+
+	if req.ETag != "" {
+		options = append(options, documentdb.IfMatch((req.ETag)))
+	}
+	if req.Options.Consistency == "strong" {
+		options = append(options, documentdb.ConsistencyLevel(documentdb.Strong))
+	}
+	if req.Options.Concurrency == "eventual" {
+		options = append(options, documentdb.ConsistencyLevel(documentdb.Eventual))
+	}
+
+	_, err = c.client.DeleteDocument(selfLink, options...)
 	return err
 }
 
