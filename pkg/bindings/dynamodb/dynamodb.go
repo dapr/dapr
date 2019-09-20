@@ -2,14 +2,14 @@ package dynamodb
 
 import (
 	"encoding/json"
-	"os"
+
+	"github.com/aws/aws-sdk-go/aws/credentials"
 
 	"github.com/actionscore/actions/pkg/components/bindings"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/google/uuid"
 )
 
 //DynamoDB allows performing stateful operations on AWS DynamoDB
@@ -18,8 +18,7 @@ type DynamoDB struct {
 	table  string
 }
 
-// Metadata is the metadata for DynamoDB
-type Metadata struct {
+type metadata struct {
 	Region    string `json:"region"`
 	AccessKey string `json:"accessKey"`
 	SecretKey string `json:"secretKey"`
@@ -39,7 +38,7 @@ func NewDynamoDB() *DynamoDB {
 
 // Init performs connection parsing for DynamoDB
 func (d *DynamoDB) Init(metadata bindings.Metadata) error {
-	meta, err := d.GetDynamoDBMetadata(metadata)
+	meta, err := d.getDynamoDBMetadata(metadata)
 	if err != nil {
 		return err
 	}
@@ -51,7 +50,6 @@ func (d *DynamoDB) Init(metadata bindings.Metadata) error {
 
 	d.client = client
 	d.table = meta.Table
-
 	return nil
 }
 
@@ -62,12 +60,7 @@ func (d *DynamoDB) Write(req *bindings.WriteRequest) error {
 		return err
 	}
 
-	i := DynamoItem{
-		ID:    uuid.New().String(),
-		Value: obj,
-	}
-
-	item, err := dynamodbattribute.MarshalMap(i)
+	item, err := dynamodbattribute.MarshalMap(obj)
 	if err != nil {
 		return err
 	}
@@ -85,29 +78,29 @@ func (d *DynamoDB) Write(req *bindings.WriteRequest) error {
 	return nil
 }
 
-// GetDynamoDBMetadata parses DynamoDB metadata
-func (d *DynamoDB) GetDynamoDBMetadata(spec bindings.Metadata) (*Metadata, error) {
+func (d *DynamoDB) getDynamoDBMetadata(spec bindings.Metadata) (*metadata, error) {
 	b, err := json.Marshal(spec.Properties)
 	if err != nil {
 		return nil, err
 	}
 
-	var meta Metadata
+	var meta metadata
 	err = json.Unmarshal(b, &meta)
 	if err != nil {
 		return nil, err
 	}
-
 	return &meta, nil
 }
 
-func (d *DynamoDB) getClient(awsMeta *Metadata) (*dynamodb.DynamoDB, error) {
-	os.Setenv("AWS_ACCESS_KEY_ID", awsMeta.AccessKey)
-	os.Setenv("AWS_SECRET_ACCESS_KEY", awsMeta.SecretKey)
-	os.Setenv("AWS_REGION", awsMeta.Region)
+func (d *DynamoDB) getClient(meta *metadata) (*dynamodb.DynamoDB, error) {
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(meta.Region),
+		Credentials: credentials.NewStaticCredentials(meta.AccessKey, meta.SecretKey, ""),
+	})
+	if err != nil {
+		return nil, err
+	}
 
-	s := session.Must(session.NewSession())
-	c := dynamodb.New(s)
-
+	c := dynamodb.New(sess)
 	return c, nil
 }
