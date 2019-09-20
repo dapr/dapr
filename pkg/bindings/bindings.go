@@ -19,7 +19,7 @@ import (
 func Load() {
 	bindings.RegisterInputBinding("aws.sqs", sqs.NewAWSSQS())
 	bindings.RegisterOutputBinding("aws.sqs", sqs.NewAWSSQS())
-	bindings.RegisterOutputBinding("aws.sns", sns.NewAWSSns())
+	bindings.RegisterOutputBinding("aws.sns", sns.NewAWSSNS())
 	bindings.RegisterInputBinding("azure.eventhubs", eventhubs.NewAzureEventHubs())
 	bindings.RegisterOutputBinding("azure.eventhubs", eventhubs.NewAzureEventHubs())
 	bindings.RegisterOutputBinding("aws.dynamodb", dynamodb.NewDynamoDB())

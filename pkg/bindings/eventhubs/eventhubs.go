@@ -1,12 +1,8 @@
 package eventhubs
 
 import (
-	"bytes"
 	"context"
-	"crypto/tls"
-	"encoding/gob"
 	"encoding/json"
-	"net/http"
 	"os"
 	"os/signal"
 	"time"
@@ -18,12 +14,11 @@ import (
 
 // AzureEventHubs allows sending/receiving Azure Event Hubs events
 type AzureEventHubs struct {
-	hub  *eventhub.Hub
-	meta AzureEventHubsMetadata
+	hub      *eventhub.Hub
+	metadata *azureEventHubsMetadata
 }
 
-// AzureEventHubsMetadata is Azure Event Hubs connection metadata
-type AzureEventHubsMetadata struct {
+type azureEventHubsMetadata struct {
 	ConnectionString string `json:"connectionString"`
 	ConsumerGroup    string `json:"consumerGroup"`
 	MessageAge       string `json:"messageAge"`
@@ -36,20 +31,12 @@ func NewAzureEventHubs() *AzureEventHubs {
 
 // Init performs metadata init
 func (a *AzureEventHubs) Init(metadata bindings.Metadata) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	b, err := json.Marshal(metadata.Properties)
+	m, err := a.parseMetadata(metadata)
 	if err != nil {
 		return err
 	}
-
-	var ehMetadata AzureEventHubsMetadata
-	err = json.Unmarshal(b, &ehMetadata)
-	if err != nil {
-		return err
-	}
-
-	a.meta = ehMetadata
-	hub, err := eventhub.NewHubFromConnectionString(a.meta.ConnectionString)
+	a.metadata = m
+	hub, err := eventhub.NewHubFromConnectionString(a.metadata.ConnectionString)
 	if err != nil {
 		return err
 	}
@@ -58,15 +45,18 @@ func (a *AzureEventHubs) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-// GetBytes turns an interface{} to a byte array representation
-func GetBytes(key interface{}) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(key)
+func (a *AzureEventHubs) parseMetadata(metadata bindings.Metadata) (*azureEventHubsMetadata, error) {
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+
+	var eventHubsMetadata azureEventHubsMetadata
+	err = json.Unmarshal(b, &eventHubsMetadata)
+	if err != nil {
+		return nil, err
+	}
+	return &eventHubsMetadata, nil
 }
 
 // Write posts an event hubs message
@@ -84,9 +74,9 @@ func (a *AzureEventHubs) Write(req *bindings.WriteRequest) error {
 // Read gets messages from eventhubs in a non-blocking fashion
 func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error {
 	callback := func(c context.Context, event *eventhub.Event) error {
-		if a.meta.MessageAge != "" && event.SystemProperties != nil && event.SystemProperties.EnqueuedTime != nil {
+		if a.metadata.MessageAge != "" && event.SystemProperties != nil && event.SystemProperties.EnqueuedTime != nil {
 			enqTime := *event.SystemProperties.EnqueuedTime
-			d, err := time.ParseDuration(a.meta.MessageAge)
+			d, err := time.ParseDuration(a.metadata.MessageAge)
 			if err != nil {
 				log.Errorf("error parsing duration: %s", err)
 				return nil
@@ -113,9 +103,9 @@ func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error 
 		eventhub.ReceiveWithLatestOffset(),
 	}
 
-	if a.meta.ConsumerGroup != "" {
-		log.Infof("eventhubs: using consumer group %s", a.meta.ConsumerGroup)
-		ops = append(ops, eventhub.ReceiveWithConsumerGroup(a.meta.ConsumerGroup))
+	if a.metadata.ConsumerGroup != "" {
+		log.Infof("eventhubs: using consumer group %s", a.metadata.ConsumerGroup)
+		ops = append(ops, eventhub.ReceiveWithConsumerGroup(a.metadata.ConsumerGroup))
 
 	}
 
@@ -131,6 +121,5 @@ func (a *AzureEventHubs) Read(handler func(*bindings.ReadResponse) error) error 
 	<-signalChan
 
 	a.hub.Close(context.Background())
-
 	return nil
 }
