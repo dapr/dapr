@@ -583,6 +583,7 @@ func (a *ActionsRuntime) loadComponents() error {
 	}
 	a.components = comps
 
+	secretstores_loader.Load()
 	err = a.initSecretStores()
 	if err != nil {
 		log.Warnf("failed to init secret stores: %s", err)
@@ -610,34 +611,46 @@ func (a *ActionsRuntime) Stop() {
 
 func (a *ActionsRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {
 	cache := map[string]secretstores.GetSecretResponse{}
+
 	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name != "" && m.SecretKeyRef.Key != "" {
-			secretStore := a.getSecretStore(component.SecretStore)
-			if secretStore != nil {
-				var resp secretstores.GetSecretResponse
-				if val, ok := cache[m.SecretKeyRef.Name]; ok {
-					resp = val
-				} else {
-					r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
-						Name: m.SecretKeyRef.Name,
-						Metadata: map[string]string{
-							"namespace": component.ObjectMeta.Namespace,
-						},
-					})
-					if err != nil {
-						log.Errorf("error getting secret: %s", err)
-						continue
-					}
-					resp = r
-				}
-				val, ok := resp.Data[m.SecretKeyRef.Key]
-				if ok {
-					component.Spec.Metadata[i].Value = val
-				}
-				cache[m.SecretKeyRef.Name] = resp
-			}
+		if m.SecretKeyRef.Name == "" {
+			continue
 		}
+
+		secretStore := a.getSecretStore(component.Auth.SecretStore)
+		if secretStore == nil {
+			continue
+		}
+
+		resp, ok := cache[m.SecretKeyRef.Name]
+		if !ok {
+			r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
+				Name: m.SecretKeyRef.Name,
+				Metadata: map[string]string{
+					"namespace": component.ObjectMeta.Namespace,
+				},
+			})
+			if err != nil {
+				log.Errorf("error getting secret: %s", err)
+				continue
+			}
+			resp = r
+		}
+
+		// Use the default DefaultSecretRefKeyName key if SecretKeyRef.Key is not given
+		secretKeyName := m.SecretKeyRef.Key
+		if secretKeyName == "" {
+			secretKeyName = secretstores.DefaultSecretRefKeyName
+		}
+
+		val, ok := resp.Data[secretKeyName]
+		if ok {
+			component.Spec.Metadata[i].Value = val
+		}
+
+		cache[m.SecretKeyRef.Name] = resp
 	}
+
 	return component
 }
 
@@ -645,14 +658,13 @@ func (a *ActionsRuntime) getSecretStore(storeName string) secretstores.SecretSto
 	if storeName == "" {
 		switch a.runtimeConfig.Mode {
 		case modes.KubernetesMode:
-			return a.secretStores["kubernetes"]
+			storeName = "kubernetes"
 		case modes.StandaloneMode:
 			return nil
 		}
-	} else {
-		return a.secretStores[storeName]
 	}
-	return nil
+
+	return a.secretStores[storeName]
 }
 
 func (a *ActionsRuntime) blockUntilAppIsReady() {
@@ -776,36 +788,47 @@ func (a *ActionsRuntime) announceSelf() error {
 }
 
 func (a *ActionsRuntime) initSecretStores() error {
-	secretstores_loader.Load()
-
+	// Preload Kubernetes secretstore
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		kubeSecretStore, err := a.secretStoresRegistry.CreateSecretStore("secretstores.kubernetes")
 		if err != nil {
 			return err
 		}
-		err = kubeSecretStore.Init(nil)
-		if err != nil {
+
+		if err = kubeSecretStore.Init(secretstores.Metadata{}); err != nil {
 			return err
 		}
+
 		a.secretStores["kubernetes"] = kubeSecretStore
 	}
 
+	// Initialize all secretstore components
 	for _, c := range a.components {
-		if strings.Index(c.Spec.Type, "secretstores") == 0 {
-			secretStore, err := a.secretStoresRegistry.CreateSecretStore(c.Spec.Type)
-			if err != nil {
-				log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
-				continue
-			}
-			err = secretStore.Init(nil)
-			if err != nil {
-				log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
-				continue
-			}
-			a.secretStores[c.ObjectMeta.Name] = secretStore
+		if strings.Index(c.Spec.Type, "secretstores") < 0 {
+			continue
 		}
+
+		// Look up the secrets to authenticate this secretstore from K8S secret store
+		a.processComponentSecrets(c)
+
+		secretStore, err := a.secretStoresRegistry.CreateSecretStore(c.Spec.Type)
+		if err != nil {
+			log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
+			continue
+		}
+
+		err = secretStore.Init(secretstores.Metadata{
+			Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+		})
+		if err != nil {
+			log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
+			continue
+		}
+
+		a.secretStores[c.ObjectMeta.Name] = secretStore
 	}
+
 	return nil
 }
 
