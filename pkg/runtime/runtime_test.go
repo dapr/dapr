@@ -32,7 +32,10 @@ func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
 
 func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
-		Data: map[string]string{"key1": "value1"},
+		Data: map[string]string{
+			"key1":   "value1",
+			"_value": "_value_data",
+		},
 	}, nil
 }
 
@@ -233,10 +236,14 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 	t.Run("Standalone Mode", func(t *testing.T) {
 		mockBinding.Spec.Metadata[0].Value = ""
-		m := NewMockKubernetesStore()
-		secretstores.RegisterSecretStore("kubernetes", m)
+		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
+			Key:  "key1",
+			Name: "name1",
+		}
 
 		rt := NewTestActionsRuntime(modes.StandaloneMode)
+		m := NewMockKubernetesStore()
+		secretstores.RegisterSecretStore("kubernetes", m)
 
 		// add Kubernetes component manually
 		rt.components = append(rt.components, components_v1alpha1.Component{
@@ -256,10 +263,14 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 	t.Run("Kubernetes Mode", func(t *testing.T) {
 		mockBinding.Spec.Metadata[0].Value = ""
-		m := NewMockKubernetesStore()
-		secretstores.RegisterSecretStore("kubernetes", m)
+		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
+			Key:  "key1",
+			Name: "name1",
+		}
 
 		rt := NewTestActionsRuntime(modes.KubernetesMode)
+		m := NewMockKubernetesStore()
+		secretstores.RegisterSecretStore("kubernetes", m)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
 		err := rt.initSecretStores()
@@ -267,6 +278,24 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 		mod := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+	})
+
+	t.Run("Look up name only", func(t *testing.T) {
+		mockBinding.Spec.Metadata[0].Value = ""
+		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
+			Name: "name1",
+		}
+
+		rt := NewTestActionsRuntime(modes.KubernetesMode)
+		m := NewMockKubernetesStore()
+		secretstores.RegisterSecretStore("kubernetes", m)
+
+		// initSecretStore appends Kubernetes component even if kubernetes component is not added
+		err := rt.initSecretStores()
+		assert.NoError(t, err)
+
+		mod := rt.processComponentSecrets(mockBinding)
+		assert.Equal(t, "_value_data", mod.Spec.Metadata[0].Value)
 	})
 }
 
