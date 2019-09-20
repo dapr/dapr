@@ -1059,6 +1059,27 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 3, retryCounter, "should have tried 3 times")
 	})
+	t.Run("Set state - With Retries", func(t *testing.T) {
+		apiPath := "v1.0/state"
+		retryCounter = 0
+		request := []state.SetRequest{state.SetRequest{
+			Key:  "failed-key",
+			ETag: "BAD ETAG",
+			Options: state.SetStateOption{
+				RetryPolicy: state.RetryPolicy{
+					Interval:  100,
+					Pattern:   state.Linear,
+					Threshold: 5,
+				},
+			},
+		}}
+		b, _ := json.Marshal(request)
+
+		// act
+		_ = fakeServer.DoRequest("POST", apiPath, b, nil, "BAD ETAG")
+		// assert
+		assert.Equal(t, 5, retryCounter, "should have tried 5 times")
+	})
 }
 
 type fakeStateStore struct {
@@ -1121,6 +1142,14 @@ func (c fakeStateStore) Set(req *state.SetRequest) error {
 			return errors.New("ETag mismatch")
 		}
 		return nil
+	} else if req.Key == "failed-key" {
+		return state.SetWithRetries(func(req *state.SetRequest) error {
+			retryCounter++
+			if retryCounter < 5 {
+				return errors.New("Simulated failure")
+			}
+			return nil
+		}, req)
 	}
 	return errors.New("NOT FOUND")
 }

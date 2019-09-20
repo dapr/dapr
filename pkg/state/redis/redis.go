@@ -77,7 +77,10 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 	}
 	s, _ := strconv.Unquote(fmt.Sprintf("%q", res))
 	pattern := regexp.MustCompile(`connected_slaves:[0-9]+`)
-	r.replicas, _ = strconv.Atoi(string(pattern.Find([]byte(s))[17:]))
+	r.replicas, err = strconv.Atoi(string(pattern.Find([]byte(s))[17:]))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

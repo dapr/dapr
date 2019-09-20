@@ -88,10 +88,10 @@ func (c *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 	items := []CosmosItem{}
 	options := []documentdb.CallOption{documentdb.PartitionKey(req.Key)}
-	if req.Options.Consistency == "strong" {
+	if req.Options.Consistency == state.Strong {
 		options = append(options, documentdb.ConsistencyLevel(documentdb.Strong))
 	}
-	if req.Options.Consistency == "eventual" {
+	if req.Options.Consistency == state.Eventual {
 		options = append(options, documentdb.ConsistencyLevel(documentdb.Eventual))
 	}
 
@@ -130,10 +130,10 @@ func (c *StateStore) Set(req *state.SetRequest) error {
 	if req.ETag != "" {
 		options = append(options, documentdb.IfMatch((req.ETag)))
 	}
-	if req.Options.Consistency == "strong" {
+	if req.Options.Consistency == state.Strong {
 		options = append(options, documentdb.ConsistencyLevel(documentdb.Strong))
 	}
-	if req.Options.Consistency == "eventual" {
+	if req.Options.Consistency == state.Eventual {
 		options = append(options, documentdb.ConsistencyLevel(documentdb.Eventual))
 	}
 
@@ -172,10 +172,10 @@ func (c *StateStore) Delete(req *state.DeleteRequest) error {
 	if req.ETag != "" {
 		options = append(options, documentdb.IfMatch((req.ETag)))
 	}
-	if req.Options.Consistency == "strong" {
+	if req.Options.Consistency == state.Strong {
 		options = append(options, documentdb.ConsistencyLevel(documentdb.Strong))
 	}
-	if req.Options.Concurrency == "eventual" {
+	if req.Options.Concurrency == state.Eventual {
 		options = append(options, documentdb.ConsistencyLevel(documentdb.Eventual))
 	}
 
