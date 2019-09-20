@@ -175,7 +175,7 @@ func (c *StateStore) Delete(req *state.DeleteRequest) error {
 	if req.Options.Consistency == state.Strong {
 		options = append(options, documentdb.ConsistencyLevel(documentdb.Strong))
 	}
-	if req.Options.Concurrency == state.Eventual {
+	if req.Options.Consistency == state.Eventual {
 		options = append(options, documentdb.ConsistencyLevel(documentdb.Eventual))
 	}
 
