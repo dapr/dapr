@@ -27,6 +27,8 @@ import (
 	"github.com/valyala/fasthttp/fasthttputil"
 )
 
+var retryCounter = 0
+
 func TestSetHeaders(t *testing.T) {
 	testAPI := &api{}
 	c := &routing.Context{}
@@ -54,7 +56,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
@@ -72,7 +74,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
@@ -101,7 +103,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		for _, method := range testMethods {
 			buffer = ""
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
@@ -121,7 +123,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		for _, method := range testMethods {
 			buffer = ""
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
@@ -171,7 +173,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
@@ -197,7 +199,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
@@ -250,7 +252,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
@@ -278,7 +280,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData)
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
@@ -309,7 +311,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -339,7 +341,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -379,7 +381,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray)
+			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -428,7 +430,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray)
+			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -460,7 +462,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData)
+			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData, nil)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -482,7 +484,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
@@ -507,7 +509,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil)
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
@@ -551,7 +553,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
 
 		assert.NoError(t, err)
-		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
 		assert.Equal(t, 201, resp.StatusCode)
@@ -587,7 +589,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		for _, method := range testMethods {
 			buffer = ""
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -619,7 +621,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData)
+			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -661,7 +663,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray)
+			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -712,7 +714,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray)
+			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -746,7 +748,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData)
+			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData, nil)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -770,7 +772,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
@@ -797,7 +799,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil)
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
@@ -843,7 +845,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
 
 		assert.NoError(t, err)
-		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
 		assert.Equal(t, 201, resp.StatusCode)
@@ -926,8 +928,16 @@ func (f *fakeHTTPServer) Shutdown() {
 	f.ln.Close()
 }
 
-func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, headers ...string) fakeHTTPResponse {
-	r, _ := gohttp.NewRequest(method, fmt.Sprintf("http://localhost/%s", path), bytes.NewBuffer(body))
+func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
+	url := fmt.Sprintf("http://localhost/%s", path)
+	if params != nil {
+		url += "?"
+		for k, v := range params {
+			url += k + "=" + v + "&"
+		}
+		url = url[:len(url)-1]
+	}
+	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	if len(headers) == 1 {
 		r.Header.Set("If-Match", headers[0])
@@ -959,22 +969,23 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, headers ...
 func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
+	fakeStore := fakeStateStore{}
 	testAPI := &api{
-		stateStore: fakeStateStore{},
+		stateStore: fakeStore,
 		json:       jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	t.Run("Get state - 404 Not Found", func(t *testing.T) {
 		apiPath := "v1.0/state/bad-key"
 		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 404, resp.StatusCode, "reading non-existing key should return 404")
 	})
 	t.Run("Get state - Good Key", func(t *testing.T) {
 		apiPath := "v1.0/state/good-key"
 		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
 		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
@@ -987,7 +998,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		}}
 		b, _ := json.Marshal(request)
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, b)
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
 		assert.Equal(t, 201, resp.StatusCode, "updating existing key without etag should succeed")
 	})
@@ -999,7 +1010,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		}}
 		b, _ := json.Marshal(request)
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, b)
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
 		assert.Equal(t, 201, resp.StatusCode, "updating existing key with matching etag should succeed")
 	})
@@ -1011,34 +1022,68 @@ func TestV1StateEndpoints(t *testing.T) {
 		}}
 		b, _ := json.Marshal(request)
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, b)
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
 	t.Run("Delete state - No ETag", func(t *testing.T) {
 		apiPath := "v1.0/state/good-key"
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil)
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "updating existing key without etag should succeed")
 	})
 	t.Run("Delete state - Matching ETag", func(t *testing.T) {
 		apiPath := "v1.0/state/good-key"
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, etag)
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, etag)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "updating existing key with matching etag should succeed")
 	})
 	t.Run("Delete state - Bad ETag", func(t *testing.T) {
 		apiPath := "v1.0/state/good-key"
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, "BAD ETAG")
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "BAD ETAG")
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+	})
+	t.Run("Delete state - With Retries", func(t *testing.T) {
+		apiPath := "v1.0/state/failed-key"
+		retryCounter = 0
+		// act
+		_ = fakeServer.DoRequest("DELETE", apiPath, nil, map[string]string{
+			"retryInterval":  "100",
+			"retryPattern":   "linear",
+			"retryThreshold": "3",
+		}, "BAD ETAG")
+		// assert
+		assert.Equal(t, 3, retryCounter, "should have tried 3 times")
+	})
+	t.Run("Set state - With Retries", func(t *testing.T) {
+		apiPath := "v1.0/state"
+		retryCounter = 0
+		request := []state.SetRequest{state.SetRequest{
+			Key:  "failed-key",
+			ETag: "BAD ETAG",
+			Options: state.SetStateOption{
+				RetryPolicy: state.RetryPolicy{
+					Interval:  100,
+					Pattern:   state.Linear,
+					Threshold: 5,
+				},
+			},
+		}}
+		b, _ := json.Marshal(request)
+
+		// act
+		_ = fakeServer.DoRequest("POST", apiPath, b, nil, "BAD ETAG")
+		// assert
+		assert.Equal(t, 5, retryCounter, "should have tried 5 times")
 	})
 }
 
 type fakeStateStore struct {
+	counter int
 }
 
 func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
@@ -1067,6 +1112,14 @@ func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 			return errors.New("ETag mismatch")
 		}
 		return nil
+	} else if req.Key == "failed-key" {
+		return state.DeleteWithRetries(func(req *state.DeleteRequest) error {
+			retryCounter++
+			if retryCounter < 3 {
+				return errors.New("Simulated failure")
+			}
+			return nil
+		}, req)
 	}
 	return errors.New("NOT FOUND")
 }
@@ -1080,6 +1133,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	return nil, nil
 }
 func (c fakeStateStore) Init(metadata state.Metadata) error {
+	c.counter = 0
 	return nil
 }
 func (c fakeStateStore) Set(req *state.SetRequest) error {
@@ -1088,6 +1142,14 @@ func (c fakeStateStore) Set(req *state.SetRequest) error {
 			return errors.New("ETag mismatch")
 		}
 		return nil
+	} else if req.Key == "failed-key" {
+		return state.SetWithRetries(func(req *state.SetRequest) error {
+			retryCounter++
+			if retryCounter < 5 {
+				return errors.New("Simulated failure")
+			}
+			return nil
+		}, req)
 	}
 	return errors.New("NOT FOUND")
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -17,14 +18,15 @@ import (
 )
 
 const (
-	setQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
+	setQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] or ARGV[1] == \"0\" then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
 	delQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
 )
 
 // StateStore is a Redis state store
 type StateStore struct {
-	client *redis.SyncCtx
-	json   jsoniter.API
+	client   *redis.SyncCtx
+	json     jsoniter.API
+	replicas int
 }
 
 type credenials struct {
@@ -69,12 +71,20 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 		S: conn,
 	}
 
+	res := r.client.Do(context.Background(), "INFO replication")
+	if err := redis.AsError(res); err != nil {
+		return fmt.Errorf("failed to query Redis replica number")
+	}
+	s, _ := strconv.Unquote(fmt.Sprintf("%q", res))
+	pattern := regexp.MustCompile(`connected_slaves:[0-9]+`)
+	r.replicas, err = strconv.Atoi(string(pattern.Find([]byte(s))[17:]))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-// Delete performs a delete operation
-func (r *StateStore) Delete(req *state.DeleteRequest) error {
-
+func (r *StateStore) deleteValue(req *state.DeleteRequest) error {
 	res := r.client.Do(context.Background(), "EVAL", delQuery, 1, req.Key, req.ETag)
 
 	if err := redis.AsError(res); err != nil {
@@ -82,6 +92,15 @@ func (r *StateStore) Delete(req *state.DeleteRequest) error {
 	}
 
 	return nil
+}
+
+// Delete performs a delete operation
+func (r *StateStore) Delete(req *state.DeleteRequest) error {
+	err := state.CheckDeleteRequestOptions(req)
+	if err != nil {
+		return err
+	}
+	return state.DeleteWithRetries(r.deleteValue, req)
 }
 
 // BulkDelete performs a bulk delete operation
@@ -139,21 +158,39 @@ func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	}, nil
 }
 
-// Set saves state into redis
-func (r *StateStore) Set(req *state.SetRequest) error {
-	b, _ := r.json.Marshal(req.Value)
+func (r *StateStore) setValue(req *state.SetRequest) error {
+	err := state.CheckSetRequestOptions(req)
+	if err != nil {
+		return err
+	}
 
+	b, _ := r.json.Marshal(req.Value)
 	ver, err := r.parseETag(req.ETag)
 	if err != nil {
 		return err
 	}
 
+	if req.Options.Concurrency == "last-write" {
+		ver = 0
+	}
 	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, b)
 	if err := redis.AsError(res); err != nil {
 		return fmt.Errorf("failed to set key '%s' due to ETag mismatch", req.Key)
 	}
 
+	if req.Options.Concurrency == "strong" && r.replicas > 0 {
+		res = r.client.Do(context.Background(), "WAIT", r.replicas, 1000)
+		if err := redis.AsError(res); err != nil {
+			return fmt.Errorf("timed out while wating for %d replicas to acknowledge", r.replicas)
+		}
+	}
+
 	return nil
+}
+
+// Set saves state into redis
+func (r *StateStore) Set(req *state.SetRequest) error {
+	return state.SetWithRetries(r.setValue, req)
 }
 
 // BulkSet performs a bulks save operation

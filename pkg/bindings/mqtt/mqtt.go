@@ -1,11 +1,9 @@
 package mqtt
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -15,16 +13,17 @@ import (
 	"github.com/actionscore/actions/pkg/components/bindings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/google/uuid"
 )
 
 // MQTT allows sending and receving data to/from an MQTT broker
 type MQTT struct {
-	Metadata *Metadata
-	Client   mqtt.Client
+	metadata *mqttMetadata
+	client   mqtt.Client
 }
 
 // Metadata is the MQTT config
-type Metadata struct {
+type mqttMetadata struct {
 	URL   string `json:"url"`
 	Topic string `json:"topic"`
 }
@@ -36,81 +35,61 @@ func NewMQTT() *MQTT {
 
 // Init does MQTT connection parsing
 func (m *MQTT) Init(metadata bindings.Metadata) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	mqttMeta, err := m.GetMQTTMetadata(metadata)
+	mqttMeta, err := m.getMQTTMetadata(metadata)
 	if err != nil {
 		return err
 	}
 
-	m.Metadata = mqttMeta
-
-	if m.Metadata.URL == "" {
+	m.metadata = mqttMeta
+	if m.metadata.URL == "" {
 		return errors.New("MQTT Error: URL required")
 	}
 
-	if m.Metadata.Topic == "" {
+	if m.metadata.Topic == "" {
 		return errors.New("MQTT error: topic required")
 	}
 
+	uri, err := url.Parse(m.metadata.URL)
+	if err != nil {
+		return err
+	}
+	client, err := m.connect(uuid.New().String(), uri)
+	if err != nil {
+		return err
+	}
+	m.client = client
 	return nil
 }
 
-// GetMQTTMetadata returns new MQTT metadata
-func (m *MQTT) GetMQTTMetadata(metadata bindings.Metadata) (*Metadata, error) {
+func (m *MQTT) getMQTTMetadata(metadata bindings.Metadata) (*mqttMetadata, error) {
 	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return nil, err
 	}
 
-	var mqttMetadata Metadata
+	var mqttMetadata mqttMetadata
 	err = json.Unmarshal(b, &mqttMetadata)
 	if err != nil {
 		return nil, err
 	}
-
 	return &mqttMetadata, nil
 }
 
 func (m *MQTT) Write(req *bindings.WriteRequest) error {
-	uri, err := url.Parse(m.Metadata.URL)
-	if err != nil {
-		return err
-	}
-
-	client, err := m.connect("pub", uri)
-	if err != nil {
-		return err
-	}
-
-	client.Publish(m.Metadata.Topic, 0, false, string(req.Data))
-	client.Disconnect(0)
-
+	m.client.Publish(m.metadata.Topic, 0, false, string(req.Data))
+	m.client.Disconnect(0)
 	return nil
 }
 
 func (m *MQTT) Read(handler func(*bindings.ReadResponse) error) error {
-	uri, err := url.Parse(m.Metadata.URL)
-	if err != nil {
-		return err
-	}
-
-	client, err := m.connect("sub", uri)
-	if err != nil {
-		return err
-	}
-
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-	client.Subscribe(m.Metadata.Topic, 0, func(client mqtt.Client, msg mqtt.Message) {
-		if len(msg.Payload()) > 0 {
-			handler(&bindings.ReadResponse{
-				Data: msg.Payload(),
-			})
-		}
+	m.client.Subscribe(m.metadata.Topic, 0, func(client mqtt.Client, msg mqtt.Message) {
+		handler(&bindings.ReadResponse{
+			Data: msg.Payload(),
+		})
 	})
-
 	<-c
 	return nil
 }

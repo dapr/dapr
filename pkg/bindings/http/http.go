@@ -10,13 +10,12 @@ import (
 	"github.com/actionscore/actions/pkg/components/bindings"
 )
 
-// HTTPSource allows sending data to an HTTP URL
+// HTTPSource is a binding for an http url endpoint invocation
 type HTTPSource struct {
-	Spec Metadata
+	metadata httpMetadata
 }
 
-// Metadata is the config object for HTTPSource
-type Metadata struct {
+type httpMetadata struct {
 	URL    string `json:"url"`
 	Method string `json:"method"`
 }
@@ -33,21 +32,19 @@ func (h *HTTPSource) Init(metadata bindings.Metadata) error {
 		return err
 	}
 
-	var httpMetadata Metadata
-	err = json.Unmarshal(b, &httpMetadata)
+	var m httpMetadata
+	err = json.Unmarshal(b, &m)
 	if err != nil {
 		return err
 	}
 
-	h.Spec = httpMetadata
-
+	h.metadata = m
 	return nil
 }
 
-// HTTPGet performs an HTTP get request
-func (h *HTTPSource) HTTPGet(url string) ([]byte, error) {
-	client := http.Client{Timeout: time.Second * 5}
-	resp, err := client.Get(h.Spec.URL)
+func (h *HTTPSource) get(url string) ([]byte, error) {
+	client := http.Client{Timeout: time.Second * 60}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -60,12 +57,11 @@ func (h *HTTPSource) HTTPGet(url string) ([]byte, error) {
 	if resp != nil && resp.Body != nil {
 		resp.Body.Close()
 	}
-
 	return b, nil
 }
 
 func (h *HTTPSource) Read(handler func(*bindings.ReadResponse) error) error {
-	b, err := h.HTTPGet(h.Spec.URL)
+	b, err := h.get(h.metadata.URL)
 	if err != nil {
 		return err
 	}
@@ -73,20 +69,17 @@ func (h *HTTPSource) Read(handler func(*bindings.ReadResponse) error) error {
 	handler(&bindings.ReadResponse{
 		Data: b,
 	})
-
 	return nil
 }
 
 func (h *HTTPSource) Write(req *bindings.WriteRequest) error {
 	client := http.Client{Timeout: time.Second * 5}
-	resp, err := client.Post(h.Spec.URL, "application/json; charset=utf-8", bytes.NewBuffer(req.Data))
+	resp, err := client.Post(h.metadata.URL, "application/json; charset=utf-8", bytes.NewBuffer(req.Data))
 	if err != nil {
 		return err
 	}
-
 	if resp != nil && resp.Body != nil {
 		resp.Body.Close()
 	}
-
 	return nil
 }

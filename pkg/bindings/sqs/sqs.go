@@ -1,11 +1,10 @@
 package sqs
 
 import (
-	"crypto/tls"
 	"encoding/json"
-	"net/http"
-	"os"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws/credentials"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/actionscore/actions/pkg/components/bindings"
@@ -16,13 +15,11 @@ import (
 
 // AWSSQS allows receiving and sending data to/from AWS SQS
 type AWSSQS struct {
-	Spec     bindings.Metadata
 	Client   *sqs.SQS
 	QueueURL *string
 }
 
-// Metadata is the config for AWS SQS
-type Metadata struct {
+type sqsMetadata struct {
 	QueueName string `json:"queueName"`
 	Region    string `json:"region"`
 	AccessKey string `json:"accessKey"`
@@ -36,21 +33,17 @@ func NewAWSSQS() *AWSSQS {
 
 // Init does metadata parsing and connection creation
 func (a *AWSSQS) Init(metadata bindings.Metadata) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	a.Spec = metadata
-
-	awsMeta, err := a.GetAWSMetadata()
+	m, err := a.parseSQSMetadata(metadata)
 	if err != nil {
 		return err
 	}
 
-	client, err := a.getClient(awsMeta)
+	client, err := a.getClient(m)
 	if err != nil {
 		return err
 	}
 
-	queueName := awsMeta.QueueName
-
+	queueName := m.QueueName
 	resultURL, err := client.GetQueueUrl(&sqs.GetQueueUrlInput{
 		QueueName: aws.String(queueName),
 	})
@@ -60,13 +53,10 @@ func (a *AWSSQS) Init(metadata bindings.Metadata) error {
 
 	a.QueueURL = resultURL.QueueUrl
 	a.Client = client
-
 	return nil
 }
 
 func (a *AWSSQS) Write(req *bindings.WriteRequest) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
 	msgBody := string(req.Data)
 	_, err := a.Client.SendMessage(&sqs.SendMessageInput{
 		MessageBody: &msgBody,
@@ -76,8 +66,6 @@ func (a *AWSSQS) Write(req *bindings.WriteRequest) error {
 }
 
 func (a *AWSSQS) Read(handler func(*bindings.ReadResponse) error) error {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
 	for {
 		result, err := a.Client.ReceiveMessage(&sqs.ReceiveMessageInput{
 			QueueUrl: a.QueueURL,
@@ -116,29 +104,29 @@ func (a *AWSSQS) Read(handler func(*bindings.ReadResponse) error) error {
 	}
 }
 
-// GetAWSMetadata gets AWS metadata
-func (a *AWSSQS) GetAWSMetadata() (*Metadata, error) {
-	b, err := json.Marshal(a.Spec.Properties)
+func (a *AWSSQS) parseSQSMetadata(metadata bindings.Metadata) (*sqsMetadata, error) {
+	b, err := json.Marshal(metadata.Properties)
 	if err != nil {
 		return nil, err
 	}
 
-	var awsMeta Metadata
-	err = json.Unmarshal(b, &awsMeta)
+	var m sqsMetadata
+	err = json.Unmarshal(b, &m)
 	if err != nil {
 		return nil, err
 	}
-
-	return &awsMeta, nil
+	return &m, nil
 }
 
-func (a *AWSSQS) getClient(awsMeta *Metadata) (*sqs.SQS, error) {
-	os.Setenv("AWS_ACCESS_KEY_ID", awsMeta.AccessKey)
-	os.Setenv("AWS_SECRET_ACCESS_KEY", awsMeta.SecretKey)
-	os.Setenv("AWS_REGION", awsMeta.Region)
+func (a *AWSSQS) getClient(metadata *sqsMetadata) (*sqs.SQS, error) {
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(metadata.Region),
+		Credentials: credentials.NewStaticCredentials(metadata.AccessKey, metadata.SecretKey, ""),
+	})
+	if err != nil {
+		return nil, err
+	}
 
-	s := session.Must(session.NewSession())
-	c := sqs.New(s)
-
+	c := sqs.New(sess)
 	return c, nil
 }
