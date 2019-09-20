@@ -149,11 +149,8 @@ func (r *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	s, _ := strconv.Unquote(data)
-
 	return &state.GetResponse{
-		Data: []byte(s),
+		Data: []byte(data),
 		ETag: version,
 	}, nil
 }
@@ -163,8 +160,6 @@ func (r *StateStore) setValue(req *state.SetRequest) error {
 	if err != nil {
 		return err
 	}
-
-	b, _ := r.json.Marshal(req.Value)
 	ver, err := r.parseETag(req.ETag)
 	if err != nil {
 		return err
@@ -173,7 +168,7 @@ func (r *StateStore) setValue(req *state.SetRequest) error {
 	if req.Options.Concurrency == "last-write" {
 		ver = 0
 	}
-	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, b)
+	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, req.Value)
 	if err := redis.AsError(res); err != nil {
 		return fmt.Errorf("failed to set key '%s' due to ETag mismatch", req.Key)
 	}
