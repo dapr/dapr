@@ -26,7 +26,7 @@ const (
 type MockKubernetesStateStore struct {
 }
 
-func (m *MockKubernetesStateStore) Init(metadata map[string]string) error {
+func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
 
@@ -49,7 +49,7 @@ func TestNewRuntime(t *testing.T) {
 }
 
 func TestInitPubSub(t *testing.T) {
-	rt := NewTestActionsRuntime()
+	rt := NewTestActionsRuntime(modes.StandaloneMode)
 
 	initMockPubSubForRuntime := func(rt *ActionsRuntime) *pubsub.MockPubSub {
 		mockPubSub := new(pubsub.MockPubSub)
@@ -131,13 +131,13 @@ func TestInitPubSub(t *testing.T) {
 
 func TestInitSecretStores(t *testing.T) {
 	t.Run("init with no store", func(t *testing.T) {
-		rt := NewTestActionsRuntime()
+		rt := NewTestActionsRuntime(modes.StandaloneMode)
 		err := rt.initSecretStores()
 		assert.Nil(t, err)
 	})
 
 	t.Run("init with store", func(t *testing.T) {
-		rt := NewTestActionsRuntime()
+		rt := NewTestActionsRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
 		secretstores.RegisterSecretStore("kubernetesMock", m)
 
@@ -155,7 +155,7 @@ func TestInitSecretStores(t *testing.T) {
 	})
 
 	t.Run("secret store is registered", func(t *testing.T) {
-		rt := NewTestActionsRuntime()
+		rt := NewTestActionsRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
 		secretstores.RegisterSecretStore("kubernetesMock", m)
 
@@ -173,7 +173,7 @@ func TestInitSecretStores(t *testing.T) {
 	})
 
 	t.Run("get secret store", func(t *testing.T) {
-		rt := NewTestActionsRuntime()
+		rt := NewTestActionsRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
 		secretstores.RegisterSecretStore("kubernetesMock", m)
 
@@ -193,7 +193,7 @@ func TestInitSecretStores(t *testing.T) {
 }
 
 func TestMetadataItemsToPropertiesConversion(t *testing.T) {
-	rt := NewTestActionsRuntime()
+	rt := NewTestActionsRuntime(modes.StandaloneMode)
 	items := []components_v1alpha1.MetadataItem{
 		components_v1alpha1.MetadataItem{
 			Name:  "a",
@@ -206,21 +206,6 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 }
 
 func TestProcessComponentSecrets(t *testing.T) {
-	rt := NewTestActionsRuntime()
-	m := NewMockKubernetesStore()
-	secretstores.RegisterSecretStore("kubernetesMock", m)
-
-	rt.components = append(rt.components, components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: "kubernetesMock",
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type: "secretstores.kubernetesMock",
-		},
-	})
-
-	rt.initSecretStores()
-
 	mockBinding := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name: "mockBinding",
@@ -242,13 +227,85 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		},
 		Auth: components_v1alpha1.Auth{
-			SecretStore: "kubernetesMock",
+			SecretStore: "kubernetes",
 		},
 	}
 
-	mod := rt.processComponentSecrets(mockBinding)
-	assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
-	assert.Equal(t, "value2", mod.Spec.Metadata[1].Value)
+	t.Run("Standalone Mode", func(t *testing.T) {
+		mockBinding.Spec.Metadata[0].Value = ""
+		m := NewMockKubernetesStore()
+		secretstores.RegisterSecretStore("kubernetes", m)
+
+		rt := NewTestActionsRuntime(modes.StandaloneMode)
+
+		// add Kubernetes component manually
+		rt.components = append(rt.components, components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetes",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetes",
+			},
+		})
+
+		rt.initSecretStores()
+
+		mod := rt.processComponentSecrets(mockBinding)
+		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+	})
+
+	t.Run("Kubernetes Mode", func(t *testing.T) {
+		mockBinding.Spec.Metadata[0].Value = ""
+		m := NewMockKubernetesStore()
+		secretstores.RegisterSecretStore("kubernetes", m)
+
+		rt := NewTestActionsRuntime(modes.KubernetesMode)
+
+		// initSecretStore appends Kubernetes component even if kubernetes component is not added
+		err := rt.initSecretStores()
+		assert.NoError(t, err)
+
+		mod := rt.processComponentSecrets(mockBinding)
+		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+	})
+}
+
+// Test InitSecretStore if secretstore.* refers to Kubernetes secret store
+func TestInitSecretStoresInKubernetesMode(t *testing.T) {
+	fakeSecretStoreWithAuth := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "fakeSecretStore",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type: "secretstores.fake.secretstore",
+			Metadata: []components_v1alpha1.MetadataItem{
+				components_v1alpha1.MetadataItem{
+					Name: "a",
+					SecretKeyRef: components_v1alpha1.SecretKeyRef{
+						Key:  "key1",
+						Name: "name1",
+					},
+				},
+				components_v1alpha1.MetadataItem{
+					Name:  "b",
+					Value: "value2",
+				},
+			},
+		},
+		Auth: components_v1alpha1.Auth{
+			SecretStore: "kubernetes",
+		},
+	}
+
+	rt := NewTestActionsRuntime(modes.KubernetesMode)
+	rt.components = append(rt.components, fakeSecretStoreWithAuth)
+
+	m := NewMockKubernetesStore()
+	secretstores.RegisterSecretStore("kubernetes", m)
+
+	err := rt.initSecretStores()
+	assert.NoError(t, err)
+	assert.Equal(t, "value1", fakeSecretStoreWithAuth.Spec.Metadata[0].Value)
 }
 
 func TestOnNewPublishedMessage(t *testing.T) {
@@ -263,7 +320,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post},
 	}
 
-	rt := NewTestActionsRuntime()
+	rt := NewTestActionsRuntime(modes.StandaloneMode)
 
 	t.Run("succeeded to publish message to user app", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -331,7 +388,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 	}
 }
 
-func NewTestActionsRuntime() *ActionsRuntime {
+func NewTestActionsRuntime(mode modes.ActionsMode) *ActionsRuntime {
 	testRuntimeConfig := NewRuntimeConfig(
 		TestRuntimeConfigID,
 		"10.10.10.12",
@@ -340,7 +397,7 @@ func NewTestActionsRuntime() *ActionsRuntime {
 		"globalConfig",
 		DefaultComponentsPath,
 		string(HTTPProtocol),
-		string(modes.StandaloneMode),
+		string(mode),
 		DefaultActionsHTTPPort,
 		DefaultActionsGRPCPort,
 		1024,
