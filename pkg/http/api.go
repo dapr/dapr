@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/actionscore/actions/pkg/components/bindings"
+
 	"github.com/actionscore/actions/pkg/components/pubsub"
 	"github.com/google/uuid"
 
@@ -32,7 +34,7 @@ type api struct {
 	json                  jsoniter.API
 	actor                 actors.Actors
 	pubSub                pubsub.PubSub
-	sendToOutputBindingFn func(name string, data []byte) error
+	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
 }
 
@@ -53,7 +55,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, data []byte) error) API {
+func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -215,9 +217,26 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 	name := c.Param(nameParam)
 	body := c.PostBody()
 
-	err := a.sendToOutputBindingFn(name, body)
+	var req OutputBindingRequest
+	err := a.json.Unmarshal(body, &req)
 	if err != nil {
+		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request: %s", err))
+		respondWithError(c.RequestCtx, 500, msg)
+		return nil
+	}
 
+	b, err := a.json.Marshal(req.Data)
+	if err != nil {
+		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request data field: %s", err))
+		respondWithError(c.RequestCtx, 500, msg)
+		return nil
+
+	}
+	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
+		Metadata: req.Metadata,
+		Data:     b,
+	})
+	if err != nil {
 		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", errMsg)
 		respondWithError(c.RequestCtx, 500, msg)
