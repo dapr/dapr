@@ -255,7 +255,9 @@ func (a *ActionsRuntime) OnComponentUpdated(component components_v1alpha1.Compon
 func (a *ActionsRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
 	for _, dst := range to {
 		go func(name string) {
-			err := a.sendToOutputBinding(name, data)
+			err := a.sendToOutputBinding(name, &bindings.WriteRequest{
+				Data: data,
+			})
 			if err != nil {
 				log.Error(err)
 			}
@@ -265,7 +267,9 @@ func (a *ActionsRuntime) sendBatchOutputBindingsParallel(to []string, data []byt
 
 func (a *ActionsRuntime) sendBatchOutputBindingsSequential(to []string, data []byte) error {
 	for _, dst := range to {
-		err := a.sendToOutputBinding(dst, data)
+		err := a.sendToOutputBinding(dst, &bindings.WriteRequest{
+			Data: data,
+		})
 		if err != nil {
 			return err
 		}
@@ -274,14 +278,11 @@ func (a *ActionsRuntime) sendBatchOutputBindingsSequential(to []string, data []b
 	return nil
 }
 
-func (a *ActionsRuntime) sendToOutputBinding(name string, data []byte) error {
+func (a *ActionsRuntime) sendToOutputBinding(name string, req *bindings.WriteRequest) error {
 	if binding, ok := a.outputBindings[name]; ok {
-		err := binding.Write(&bindings.WriteRequest{
-			Data: data,
-		})
+		err := binding.Write(req)
 		return err
 	}
-
 	return fmt.Errorf("couldn't find output binding %s", name)
 }
 
