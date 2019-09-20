@@ -17,7 +17,7 @@ Actions can use any Redis instance - containerized, running on your local dev ma
 2. Fill out necessary information and **check the "Unblock port 6379" box**, which will allow us to persist state without SSL.
 3. Click "Create" to kickoff deployment of your Redis instance.
 4. Once your instance is created, you'll need to grab your access key. Navigate to "Access Keys" under "Settings" and copy your key.
-5. Finally, we need to add our key and our host to a `redis.yaml` file that Actions can apply to our cluster. If you're running a sample, you'll add the host and key to the provided `redis.yaml`. If you're creating a project from the ground up, you'll create a `redis.yaml` file as specified in [Configuration](#configuration). Set the `redisHost` key to `actions-redis.redis.cache.windows.net:6379` and the `redisPassword` key to the key you copied in step 4.
+5. Finally, we need to add our key and our host to a `redis.yaml` file that Actions can apply to our cluster. If you're running a sample, you'll add the host and key to the provided `redis.yaml`. If you're creating a project from the ground up, you'll create a `redis.yaml` file as specified in [Configuration](#configuration). Set the `redisHost` key to `actions-redis.redis.cache.windows.net:6379` and the `redisPassword` key to the key you copied in step 4. **Note:** In a production-grade application, follow [secret management](https://github.com/actionscore/docs/blob/master/concepts/components/secrets.md) instructions to securely manage your secrets.
 
 ### Creating a Redis Cache in your Kubernetes Cluster using Helm
 
@@ -46,7 +46,7 @@ We can use [Helm](https://helm.sh/) to quickly create a Redis instance in our Ku
 
 ## Configuration
 
-Actions can use Redis as a `statestore` component (for state persistence and retrieval) or as a `messagebus` component (for pub-sub).
+Actions can use Redis as a `statestore` component (for state persistence and retrieval) or as a `messagebus` component (for pub-sub). The following yaml files demonstrates how to define each. **Note:** yaml files below illustrate secret management in plain text. In a production-grade application, follow [secret management](https://github.com/actionscore/docs/blob/master/concepts/components/secrets.md) instructions to securely manage your secrets.
 
 ### Configuring Redis for State Persistence and Retrieval
 
