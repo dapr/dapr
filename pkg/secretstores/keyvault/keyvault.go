@@ -11,11 +11,12 @@ import (
 
 // Keyvault secret store component metadata properties
 const (
-	componentSPNCertificate     = "spnCertificate"
-	componentSPNCertificateFile = "spnCertificateFile"
-	componentSPNClientID        = "spnClientId"
-	componentSPNTenantID        = "spnTenantId"
-	componentVaultName          = "vaultName"
+	componentSPNCertificate         = "spnCertificate"
+	componentSPNCertificateFile     = "spnCertificateFile"
+	componentSPNCertificatePassword = "spnCertificatePassword"
+	componentSPNClientID            = "spnClientId"
+	componentSPNTenantID            = "spnTenantId"
+	componentVaultName              = "vaultName"
 )
 
 type keyvaultSecretStore struct {
@@ -38,7 +39,7 @@ func (k *keyvaultSecretStore) Init(metadata secretstores.Metadata) error {
 	k.vaultName = props[componentVaultName]
 	certFilePath := props[componentSPNCertificateFile]
 	certBytes := []byte(props[componentSPNCertificate])
-	certPassword := ""
+	certPassword := props[componentSPNCertificatePassword]
 
 	k.clientAuthorizer = NewClientAuthorizer(
 		certFilePath,
