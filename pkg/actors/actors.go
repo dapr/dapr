@@ -93,6 +93,9 @@ func (a *actorsRuntime) Init() error {
 	if a.config.PlacementServiceAddress == "" {
 		return errors.New("couldn't connect to placement service: address is empty")
 	}
+	if a.store == nil {
+		return errors.New("actors: state store must be present to initialize the actor runtime")
+	}
 
 	go a.connectToPlacementService(a.config.PlacementServiceAddress, a.config.HostAddress, a.config.HeartbeatInterval)
 	a.startDeactivationTicker(a.config.ActorDeactivationScanInterval, a.config.ActorIdleTimeout)
