@@ -15,6 +15,7 @@ import (
 
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/channel/http"
+	"github.com/actionscore/actions/pkg/components/bindings"
 	"github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/config"
 	diag "github.com/actionscore/actions/pkg/diagnostics"
@@ -44,20 +45,21 @@ func TestSetHeaders(t *testing.T) {
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		sendToOutputBindingFn: func(name string, data []byte) error { return nil },
+		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
 		json:                  jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
 
 	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
-		fakeData := []byte("fake output")
-
+		req := OutputBindingRequest{
+			Data: "fake output",
+		}
+		b, _ := json.Marshal(&req)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
-
+			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
 		}
@@ -65,16 +67,19 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 
 	t.Run("Invoke output bindings - 500 InternalError", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/notfound", apiVersionV1)
-		fakeData := []byte("fake output")
+		req := OutputBindingRequest{
+			Data: "fake output",
+		}
+		b, _ := json.Marshal(&req)
 
-		testAPI.sendToOutputBindingFn = func(name string, data []byte) error {
+		testAPI.sendToOutputBindingFn = func(name string, req *bindings.WriteRequest) error {
 			return errors.New("missing binding name")
 		}
 
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
@@ -91,19 +96,23 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	spec := config.TracingSpec{ExporterType: "string"}
 	diag.CreateExporter("", "", spec, &buffer)
 	testAPI := &api{
-		sendToOutputBindingFn: func(name string, data []byte) error { return nil },
+		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
+		json:                  jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
 
 	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
-		fakeData := []byte("fake output")
+		req := OutputBindingRequest{
+			Data: "fake output",
+		}
+		b, _ := json.Marshal(&req)
 
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			buffer = ""
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
@@ -113,9 +122,12 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Invoke output bindings - 500 InternalError", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/notfound", apiVersionV1)
-		fakeData := []byte("fake output")
+		req := OutputBindingRequest{
+			Data: "fake output",
+		}
+		b, _ := json.Marshal(&req)
 
-		testAPI.sendToOutputBindingFn = func(name string, data []byte) error {
+		testAPI.sendToOutputBindingFn = func(name string, req *bindings.WriteRequest) error {
 			return errors.New("missing binding name")
 		}
 
@@ -123,7 +135,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		for _, method := range testMethods {
 			buffer = ""
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
