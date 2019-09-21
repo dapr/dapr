@@ -165,8 +165,16 @@ For more samples, please look at [samples](./samples).
    export PATH=$PATH:$GOPATH/bin
    ```
 1. [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Debugging
-1. *(for windows)* [MinGW](http://www.mingw.org/) to install gcc and make
-   * Recommend to use [chocolatey mingw package](https://chocolatey.org/packages/mingw) and ensure that MinGW bin directory is in PATH environment variable
+2. *(for windows)* [Git for Windows](https://gitforwindows.org) and [MinGW](http://www.mingw.org/)
+     * Install [Git with chocolatey](https://chocolatey.org/packages/git) and ensure that Git bin directory is in PATH environment variable
+    ```bash
+    choco install git -y --package-parameters="/GitAndUnixToolsOnPath /WindowsTerminal /NoShellIntegration"
+    ```
+      * Install [MinGW with chocolatey](https://chocolatey.org/packages/mingw) and ensure that MinGW bin directory is in PATH environment variable
+
+    ```bash
+    choco install mingw
+    ```
 
 ### Clone the repo
 
