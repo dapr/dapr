@@ -168,7 +168,10 @@ func (r *StateStore) setValue(req *state.SetRequest) error {
 	if req.Options.Concurrency == state.LastWrite {
 		ver = 0
 	}
-	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, req.Value)
+
+	b, _ := r.json.Marshal(req.Value)
+
+	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, b)
 	if err := redis.AsError(res); err != nil {
 		return fmt.Errorf("failed to set key '%s' due to ETag mismatch", req.Key)
 	}
