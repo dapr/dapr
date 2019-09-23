@@ -4,6 +4,8 @@ metadata:
   name: messagebus
 spec:
   type: pubsub.redis
-  connectionInfo:
-    redisHost: "YOUR_REDIS_HOST_HERE"
-    redisPassword: "YOUR_REDIS_PASSWORD_HERE"
+  metadata:
+  - name: "redisHost"
+    value: "YOUR_REDIS_HOST_HERE"
+  - name: "redisPassword"
+    value: "YOUR_REDIS_PASSWORD_HERE"
