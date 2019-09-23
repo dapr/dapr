@@ -16,7 +16,7 @@ This section describes the guidelines for submitting issues
 
 ### Issue Types
 
-There are 4 types of issues (each with their own corresponding [label](#labels)):
+There are 4 types of issues:
 
 - Issue/Bug: You've found a bug with the code, and want to report it, or create an issue to track the bug.
 - Issue/Discussion: You have something on your mind, which requires input form others in a discussion, before it eventually manifests as a proposal.
