@@ -82,7 +82,7 @@ app.get('/order', (_req, res) => {
 
 This calls out to our Redis cache to grab the latest value of the "order" key, which effectively allows our Node.js app to be _stateless_. 
 
-**Note**: If we only expected to have a single instance of the Node.js app, and didn't expect anything else to update "order", we instead could have kept a local version of our order state and returned that (reducing a call to our Redis store). We would then create a `/state` POST endpoint, which would allow actions to initialize our app's state when it starts up. In that case, our Node.js app would be _stateful_.
+> **Note**: If we only expected to have a single instance of the Node.js app, and didn't expect anything else to update "order", we instead could have kept a local version of our order state and returned that (reducing a call to our Redis store). We would then create a `/state` POST endpoint, which would allow actions to initialize our app's state when it starts up. In that case, our Node.js app would be _stateful_.
 
 ## Step 3 - Run the Node.js App with Actions
 
@@ -95,7 +95,7 @@ Starting Actions with id mynode on port 3500
 You're up and running! Both Actions and your app logs will appear here.
 ...
 ```
-**Note**:  The Actions `--port` parameter with the `run` command is optional, and if not supplied, a random available port is used.
+> **Note**:  The Actions `--port` parameter with the `run` command is optional, and if not supplied, a random available port is used.
 
 ## Step 4 - Post Messages to your Service
 
