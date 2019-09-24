@@ -168,8 +168,11 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 
 	md := metautils.ExtractIncoming(c)
 	headers := extractHeaders(req)
-	re := regexp.MustCompile(`(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
-	corID := strings.Replace(strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1), "X-Correlation-ID&__header_equals__&", "", 1)
+	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
+	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)
+	if len(corID) > 35 {
+		corID = corID[35:]
+	}
 
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
