@@ -9,6 +9,7 @@ import (
 	"github.com/actionscore/actions/pkg/operator/api"
 	"github.com/actionscore/actions/pkg/operator/handlers"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
@@ -79,6 +80,7 @@ func (o *operator) syncDeletedDeployment(obj interface{}) {
 }
 
 func (o *operator) Run(ctx context.Context) {
+	defer runtime.HandleCrash()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	o.ctx = ctx
