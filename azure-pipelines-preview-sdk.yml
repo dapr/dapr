@@ -102,7 +102,7 @@ steps:
       cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
 
       echo "removing arm binary..."
-      rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.zip
+      rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.*
 
       echo "removing *.txt"
       rm -f $(System.ArtifactsDirectory)/release/drop/*.txt
