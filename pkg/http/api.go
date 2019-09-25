@@ -269,7 +269,7 @@ func (a *api) onGetState(c *routing.Context) error {
 		return nil
 	}
 	if err == nil && resp == nil {
-		respondWithError(c.RequestCtx, 404, NewErrorResponse("ERR_STATE_NOT_FOUND", ""))
+		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_STATE_NOT_FOUND", ""))
 		return nil
 	}
 	respondWithETaggedJSON(c.RequestCtx, 200, resp.Data, resp.ETag)

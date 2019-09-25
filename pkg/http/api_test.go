@@ -987,12 +987,12 @@ func TestV1StateEndpoints(t *testing.T) {
 		json:       jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
-	t.Run("Get state - 404 Not Found", func(t *testing.T) {
+	t.Run("Get state - 204 No Content Found", func(t *testing.T) {
 		apiPath := "v1.0/state/bad-key"
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
-		assert.Equal(t, 404, resp.StatusCode, "reading non-existing key should return 404")
+		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
 	})
 	t.Run("Get state - Good Key", func(t *testing.T) {
 		apiPath := "v1.0/state/good-key"
