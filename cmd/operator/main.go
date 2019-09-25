@@ -4,6 +4,8 @@ import (
 	"flag"
 	"time"
 
+	"k8s.io/klog"
+
 	log "github.com/Sirupsen/logrus"
 	k8s "github.com/actionscore/actions/pkg/kubernetes"
 	"github.com/actionscore/actions/pkg/operator"
@@ -31,6 +33,11 @@ func main() {
 }
 
 func init() {
+	// This resets the flags on klog, which will otherwise try to log to the FS.
+	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+	klogFlags.Set("logtostderr", "true")
+
 	flag.Parse()
 
 	parsedLogLevel, err := log.ParseLevel(*logLevel)
