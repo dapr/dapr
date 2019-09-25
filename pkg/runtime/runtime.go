@@ -680,6 +680,7 @@ func (a *ActionsRuntime) blockUntilAppIsReady() {
 			conn.Close()
 			break
 		}
+		time.Sleep(time.Millisecond * 50)
 	}
 
 	log.Infof("application discovered on port %v", a.runtimeConfig.ApplicationPort)
