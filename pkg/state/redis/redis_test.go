@@ -37,6 +37,7 @@ func TestGetKeyVersion(t *testing.T) {
 		assert.NotNil(t, err, "failed to respond to missing fields")
 	})
 }
+
 func TestParseEtag(t *testing.T) {
 	store := NewRedisStateStore()
 	t.Run("Empty ETag", func(t *testing.T) {
@@ -52,5 +53,29 @@ func TestParseEtag(t *testing.T) {
 	t.Run("String ETag", func(t *testing.T) {
 		_, err := store.parseETag("dragon")
 		assert.NotNil(t, err, "shouldn't recognize string ETag")
+	})
+}
+
+func TestParseConnectedSlavs(t *testing.T) {
+	store := NewRedisStateStore()
+
+	t.Run("Empty info", func(t *testing.T) {
+		slaves := store.parseConnectedSlaves("")
+		assert.Equal(t, 0, slaves, "connected slaves must be 0")
+	})
+
+	t.Run("connectedSlaves property is not included", func(t *testing.T) {
+		slaves := store.parseConnectedSlaves("# Replication\r\nrole:master\r\n")
+		assert.Equal(t, 0, slaves, "connected slaves must be 0")
+	})
+
+	t.Run("connectedSlaves is 2", func(t *testing.T) {
+		slaves := store.parseConnectedSlaves("# Replication\r\nrole:master\r\nconnected_slaves:2\r\n")
+		assert.Equal(t, 2, slaves, "connected slaves must be 2")
+	})
+
+	t.Run("connectedSlaves is 1", func(t *testing.T) {
+		slaves := store.parseConnectedSlaves("# Replication\r\nrole:master\r\nconnected_slaves:1")
+		assert.Equal(t, 1, slaves, "connected slaves must be 1")
 	})
 }

@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/actionscore/actions/pkg/components/state"
@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	setQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] or ARGV[1] == \"0\" then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
-	delQuery = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
+	setQuery                 = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] or ARGV[1] == \"0\" then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
+	delQuery                 = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
+	connectedSlavesReplicas  = "connected_slaves:"
+	infoReplicationDelimiter = "\r\n"
 )
 
 // StateStore is a Redis state store
@@ -71,17 +73,38 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 		S: conn,
 	}
 
+	r.replicas, err = r.getConnectedSlaves()
+
+	return err
+}
+
+func (r *StateStore) getConnectedSlaves() (int, error) {
 	res := r.client.Do(context.Background(), "INFO replication")
 	if err := redis.AsError(res); err != nil {
-		return fmt.Errorf("failed to query Redis replica number")
+		return 0, err
 	}
+
+	// Response example: https://redis.io/commands/info#return-value
+	// # Replication\r\nrole:master\r\nconnected_slaves:1\r\n
 	s, _ := strconv.Unquote(fmt.Sprintf("%q", res))
-	pattern := regexp.MustCompile(`connected_slaves:[0-9]+`)
-	r.replicas, err = strconv.Atoi(string(pattern.Find([]byte(s))[17:]))
-	if err != nil {
-		return err
+	if len(s) == 0 {
+		return 0, nil
 	}
-	return nil
+
+	return r.parseConnectedSlaves(s), nil
+
+}
+
+func (r *StateStore) parseConnectedSlaves(res string) int {
+	infos := strings.Split(res, infoReplicationDelimiter)
+	for _, info := range infos {
+		if strings.Index(info, connectedSlavesReplicas) >= 0 {
+			parsedReplicas, _ := strconv.ParseUint(info[len(connectedSlavesReplicas):], 10, 32)
+			return int(parsedReplicas)
+		}
+	}
+
+	return 0
 }
 
 func (r *StateStore) deleteValue(req *state.DeleteRequest) error {
