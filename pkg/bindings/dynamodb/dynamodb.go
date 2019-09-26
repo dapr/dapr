@@ -25,12 +25,6 @@ type dynamoDBMetadata struct {
 	Table     string `json:"table"`
 }
 
-// DynamoItem is a wrapper around a DynamoDB value
-type DynamoItem struct {
-	ID    string      `json:"id"`
-	Value interface{} `json:"value"`
-}
-
 // NewDynamoDB returns a new DynamoDB instance
 func NewDynamoDB() *DynamoDB {
 	return &DynamoDB{}
