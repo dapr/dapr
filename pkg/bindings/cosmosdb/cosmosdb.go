@@ -89,10 +89,13 @@ func (c *CosmosDB) Write(req *bindings.WriteRequest) error {
 		return err
 	}
 
-	_, err = c.client.CreateDocument(c.collection.Self, obj, documentdb.PartitionKey(c.partitionKey))
-	if err != nil {
-		return err
-	}
+	if val, ok := obj.(map[string]interface{})[c.partitionKey]; ok && val != "" {
+		_, err = c.client.CreateDocument(c.collection.Self, obj, documentdb.PartitionKey(val))
+		if err != nil {
+			return err
+		}
 
-	return nil
+		return nil
+	}
+	return fmt.Errorf("missing partitionKey field %s from request body", c.partitionKey)
 }
