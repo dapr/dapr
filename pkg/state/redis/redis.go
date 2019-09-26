@@ -74,10 +74,8 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 	}
 
 	r.replicas, err = r.getConnectedSlaves()
-	if err != nil {
-		return err
-	}
-	return nil
+
+	return err
 }
 
 func (r *StateStore) getConnectedSlaves() (int, error) {
