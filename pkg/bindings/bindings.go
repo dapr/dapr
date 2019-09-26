@@ -24,7 +24,7 @@ func Load() {
 	bindings.RegisterOutputBinding("azure.eventhubs", eventhubs.NewAzureEventHubs())
 	bindings.RegisterOutputBinding("aws.dynamodb", dynamodb.NewDynamoDB())
 	bindings.RegisterOutputBinding("azure.cosmosdb", cosmosdb.NewCosmosDB())
-	bindings.RegisterOutputBinding("gcp.storage", gcpbucket.NewGCPStorage())
+	bindings.RegisterOutputBinding("gcp.bucket", gcpbucket.NewGCPStorage())
 	bindings.RegisterInputBinding("http", http.NewHTTP())
 	bindings.RegisterOutputBinding("http", http.NewHTTP())
 	bindings.RegisterInputBinding("kafka", kafka.NewKafka())
