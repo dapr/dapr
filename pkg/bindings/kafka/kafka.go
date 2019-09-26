@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/Shopify/sarama"
@@ -122,29 +123,45 @@ func (k *Kafka) Read(handler func(*bindings.ReadResponse) error) error {
 
 	consumer := consumer{
 		callback: handler,
+		ready:    make(chan bool),
 	}
 
-	ctx := context.Background()
 	client, err := sarama.NewConsumerGroup(k.brokers, k.consumerGroup, config)
 	if err != nil {
 		return err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
-			consumer.ready = make(chan bool, 0)
-			client.Consume(ctx, k.topics, &consumer)
+			if err = client.Consume(ctx, k.topics, &consumer); err != nil {
+				return
+			}
+			// check if context was cancelled, signaling that the consumer should stop
+			if ctx.Err() != nil {
+				return
+			}
+			consumer.ready = make(chan bool)
 		}
 	}()
+
+	if err != nil {
+		cancel()
+		return err
+	}
 
 	<-consumer.ready
 
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 	<-sigterm
-
-	err = client.Close()
-	if err != nil {
+	cancel()
+	wg.Wait()
+	if err = client.Close(); err != nil {
 		return err
 	}
 	return nil
