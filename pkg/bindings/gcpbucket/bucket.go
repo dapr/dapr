@@ -54,6 +54,7 @@ func (g *GCPStorage) Init(metadata bindings.Metadata) error {
 		return err
 	}
 
+	g.metadata = gm
 	g.client = client
 	return nil
 }
