@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/Shopify/sarama"
+	log "github.com/Sirupsen/logrus"
 	"github.com/actionscore/actions/pkg/components/bindings"
 )
 
@@ -139,7 +140,7 @@ func (k *Kafka) Read(handler func(*bindings.ReadResponse) error) error {
 		defer wg.Done()
 		for {
 			if err = client.Consume(ctx, k.topics, &consumer); err != nil {
-				return
+				log.Errorf("error from consumer: %s", err)
 			}
 			// check if context was cancelled, signaling that the consumer should stop
 			if ctx.Err() != nil {
@@ -148,11 +149,6 @@ func (k *Kafka) Read(handler func(*bindings.ReadResponse) error) error {
 			consumer.ready = make(chan bool)
 		}
 	}()
-
-	if err != nil {
-		cancel()
-		return err
-	}
 
 	<-consumer.ready
 
