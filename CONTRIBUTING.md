@@ -20,7 +20,7 @@ There are 4 types of issues:
 
 - Issue/Bug: You've found a bug with the code, and want to report it, or create an issue to track the bug.
 - Issue/Discussion: You have something on your mind, which requires input form others in a discussion, before it eventually manifests as a proposal.
-- Issue/Proposal: Used for items that propose a new idea or functionality. This allows for feedback from others teams before code is written.
+- Issue/Proposal: Used for items that propose a new idea or functionality. This allows feedback from others before code is written.
 - Issue/Question: Use this issue type, if you need help or have a question.
 
 ### Before You File
@@ -35,10 +35,11 @@ Before you file an issue, make sure you've checked the following:
         - 👍 up-vote
         - 👎 down-vote
 1. For bugs
-    - It's not an environment issue. if running on Kubernetes, make sure all prerequisites are in place. (state stores, message buses, etc.)
-    - You have as much data as possible. this usually comes in the form of logs and/or stacktrace. if running on Kubernetes or any other containerized environment, look at the logs of the appropriate Actions service (runtime, operator or placement service).
+    - Check it's not an environment issue. For example, if running on Kubernetes, make sure prerequisites are in place. (state stores, bindings, etc.)
+    - You have as much data as possible. This usually comes in the form of logs and/or stacktrace. If running on Kubernetes or other environment, look at the logs of the Actions services (runtime, operator, placement service). More details on how to get logs can be found [here](docs/concepts/best-practices/troubleshooting/logs.md).
 1. For proposals
-    - Many changes to the Actions runtime may require changes to the API. in that case, the best place to discuss the potential feature is the [Actions Spec repo](https://github.com/actionscore/spec).
+    - Many changes to the Actions runtime may require changes to the API. In that case, the best place to discuss the potential feature is the [Actions Spec repo](https://github.com/actionscore/spec).
+    - Other example could include bindings, state stores or entirely new components.
 
 ## Contributing to Actions
 
@@ -50,12 +51,12 @@ All contributions come through Pull requests. To submit a proposed change, we re
 
 1. Make sure there's an issue (bug or proposal) raised, which sets the expectations for the contribution you are about to make.
 1. Fork the relevant repo and create a new branch
-1. Create your changed
-    - For code changes, we require tests
+1. Create your change
+    - Code changes require tests
 1. Update relevant documentation for the change
 1. Commit and open a PR
 1. Wait for the CI process to finish and make sure all checks are green
-1. A maintainer of the project, will be assigned, and you can expect a review within the next few days
+1. A maintainer of the project, will be assigned, and you can expect a review within a few days
 
 #### Use work-in-progress PRs for early feedback
 
