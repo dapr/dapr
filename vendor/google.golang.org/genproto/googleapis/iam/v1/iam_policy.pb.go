@@ -11,8 +11,6 @@ import (
 	proto "github.com/golang/protobuf/proto"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -352,20 +350,6 @@ type IAMPolicyServer interface {
 	// UIs and command-line tools, not for authorization checking. This operation
 	// may "fail open" without warning.
 	TestIamPermissions(context.Context, *TestIamPermissionsRequest) (*TestIamPermissionsResponse, error)
-}
-
-// UnimplementedIAMPolicyServer can be embedded to have forward compatible implementations.
-type UnimplementedIAMPolicyServer struct {
-}
-
-func (*UnimplementedIAMPolicyServer) SetIamPolicy(ctx context.Context, req *SetIamPolicyRequest) (*Policy, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetIamPolicy not implemented")
-}
-func (*UnimplementedIAMPolicyServer) GetIamPolicy(ctx context.Context, req *GetIamPolicyRequest) (*Policy, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetIamPolicy not implemented")
-}
-func (*UnimplementedIAMPolicyServer) TestIamPermissions(ctx context.Context, req *TestIamPermissionsRequest) (*TestIamPermissionsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method TestIamPermissions not implemented")
 }
 
 func RegisterIAMPolicyServer(s *grpc.Server, srv IAMPolicyServer) {
