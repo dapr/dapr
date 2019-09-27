@@ -12,21 +12,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/actionscore/actions/pkg/components/secretstores"
+	"github.com/actionscore/components-contrib/bindings"
+
+	"github.com/actionscore/components-contrib/pubsub"
+	"github.com/actionscore/components-contrib/secretstores"
+	"github.com/actionscore/components-contrib/state"
 
 	"github.com/actionscore/actions/pkg/actors"
-	"github.com/actionscore/actions/pkg/components/pubsub"
-	"github.com/actionscore/actions/pkg/components/state"
+	bindings_loader "github.com/actionscore/actions/pkg/components/bindings"
+	pubsub_loader "github.com/actionscore/actions/pkg/components/pubsub"
+	secretstores_loader "github.com/actionscore/actions/pkg/components/secretstores"
+	state_loader "github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/discovery"
-	"github.com/actionscore/actions/pkg/messaging"
-	pubsub_loader "github.com/actionscore/actions/pkg/pubsub"
-	secretstores_loader "github.com/actionscore/actions/pkg/secretstores"
-	state_loader "github.com/actionscore/actions/pkg/state"
-
-	bindings_loader "github.com/actionscore/actions/pkg/bindings"
-	"github.com/actionscore/actions/pkg/components/bindings"
-
 	"github.com/actionscore/actions/pkg/http"
+	"github.com/actionscore/actions/pkg/messaging"
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/actionscore/actions/pkg/channel"
@@ -59,15 +58,15 @@ type ActionsRuntime struct {
 	appChannel           channel.AppChannel
 	appConfig            config.ApplicationConfig
 	directMessaging      messaging.DirectMessaging
-	stateStoreRegistry   state.StateStoreRegistry
-	secretStoresRegistry secretstores.SecretStoreRegistry
+	stateStoreRegistry   state_loader.StateStoreRegistry
+	secretStoresRegistry secretstores_loader.SecretStoreRegistry
 	stateStore           state.StateStore
 	actor                actors.Actors
-	bindingsRegistry     bindings.BindingsRegistry
+	bindingsRegistry     bindings_loader.BindingsRegistry
 	inputBindings        map[string]bindings.InputBinding
 	outputBindings       map[string]bindings.OutputBinding
 	secretStores         map[string]secretstores.SecretStore
-	pubSubRegistry       pubsub.PubSubRegistry
+	pubSubRegistry       pubsub_loader.PubSubRegistry
 	pubSub               pubsub.PubSub
 	json                 jsoniter.API
 	hostAddress          string
@@ -83,10 +82,10 @@ func NewActionsRuntime(runtimeConfig *Config, globalConfig *config.Configuration
 		inputBindings:        map[string]bindings.InputBinding{},
 		outputBindings:       map[string]bindings.OutputBinding{},
 		secretStores:         map[string]secretstores.SecretStore{},
-		stateStoreRegistry:   state.NewStateStoreRegistry(),
-		bindingsRegistry:     bindings.NewBindingsRegistry(),
-		pubSubRegistry:       pubsub.NewPubSubRegsitry(),
-		secretStoresRegistry: secretstores.NewSecretStoreRegistry(),
+		stateStoreRegistry:   state_loader.NewStateStoreRegistry(),
+		bindingsRegistry:     bindings_loader.NewBindingsRegistry(),
+		pubSubRegistry:       pubsub_loader.NewPubSubRegsitry(),
+		secretStoresRegistry: secretstores_loader.NewSecretStoreRegistry(),
 	}
 }
 
@@ -386,7 +385,7 @@ func (a *ActionsRuntime) setHostAddress() error {
 	return nil
 }
 
-func (a *ActionsRuntime) initInputBindings(registry bindings.BindingsRegistry) error {
+func (a *ActionsRuntime) initInputBindings(registry bindings_loader.BindingsRegistry) error {
 	if a.appChannel == nil {
 		return fmt.Errorf("app channel not initialized")
 	}
@@ -425,7 +424,7 @@ func (a *ActionsRuntime) initInputBindings(registry bindings.BindingsRegistry) e
 	return nil
 }
 
-func (a *ActionsRuntime) initOutputBindings(registry bindings.BindingsRegistry) error {
+func (a *ActionsRuntime) initOutputBindings(registry bindings_loader.BindingsRegistry) error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
@@ -450,7 +449,7 @@ func (a *ActionsRuntime) initOutputBindings(registry bindings.BindingsRegistry) 
 	return nil
 }
 
-func (a *ActionsRuntime) initState(registry state.StateStoreRegistry) error {
+func (a *ActionsRuntime) initState(registry state_loader.StateStoreRegistry) error {
 	state_loader.Load()
 
 	for _, s := range a.components {

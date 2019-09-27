@@ -6,9 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/actionscore/actions/pkg/components/bindings"
-
-	"github.com/actionscore/actions/pkg/components/pubsub"
+	"github.com/actionscore/components-contrib/bindings"
+	"github.com/actionscore/components-contrib/pubsub"
 	"github.com/google/uuid"
 
 	jsoniter "github.com/json-iterator/go"
@@ -16,8 +15,8 @@ import (
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/channel"
 	"github.com/actionscore/actions/pkg/channel/http"
-	"github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/messaging"
+	"github.com/actionscore/components-contrib/state"
 	routing "github.com/qiangxue/fasthttp-routing"
 )
 

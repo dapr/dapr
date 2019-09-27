@@ -3,6 +3,7 @@ package sarama
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -561,6 +562,14 @@ func (child *partitionConsumer) parseResponse(response *FetchResponse) ([]*Consu
 		consumerBatchSizeMetric = getOrRegisterHistogram("consumer-batch-size", metricRegistry)
 	}
 
+	// If request was throttled and empty we log and return without error
+	if response.ThrottleTime != time.Duration(0) && len(response.Blocks) == 0 {
+		Logger.Printf(
+			"consumer/broker/%d FetchResponse throttled %v\n",
+			child.broker.broker.ID(), response.ThrottleTime)
+		return nil, nil
+	}
+
 	block := response.GetBlock(child.topic, child.partition)
 	if block == nil {
 		return nil, ErrIncompleteResponse
@@ -591,6 +600,10 @@ func (child *partitionConsumer) parseResponse(response *FetchResponse) ([]*Consu
 				child.offset++ // skip this one so we can keep processing future messages
 			} else {
 				child.fetchSize *= 2
+				// check int32 overflow
+				if child.fetchSize < 0 {
+					child.fetchSize = math.MaxInt32
+				}
 				if child.conf.Consumer.Fetch.Max > 0 && child.fetchSize > child.conf.Consumer.Fetch.Max {
 					child.fetchSize = child.conf.Consumer.Fetch.Max
 				}

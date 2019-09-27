@@ -401,6 +401,9 @@ func (ch *Channel) recvContent(f frame) error {
 		return ch.transition((*Channel).recvMethod)
 
 	case *bodyFrame:
+		if cap(ch.body) == 0 {
+			ch.body = make([]byte, 0, ch.header.Size)
+		}
 		ch.body = append(ch.body, frame.Body...)
 
 		if uint64(len(ch.body)) >= ch.header.Size {

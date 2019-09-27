@@ -559,6 +559,12 @@ func (c *conn) connReader() {
 func (c *conn) connWriter() {
 	defer close(c.txDone)
 
+	// disable write timeout
+	if c.connectTimeout != 0 {
+		c.connectTimeout = 0
+		_ = c.net.SetWriteDeadline(time.Time{})
+	}
+
 	var (
 		// keepalives are sent at a rate of 1/2 idle timeout
 		keepaliveInterval = c.peerIdleTimeout / 2

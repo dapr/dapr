@@ -18,9 +18,9 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/actionscore/actions/pkg/channel"
-	"github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/placement"
 	pb "github.com/actionscore/actions/pkg/proto"
+	"github.com/actionscore/components-contrib/state"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

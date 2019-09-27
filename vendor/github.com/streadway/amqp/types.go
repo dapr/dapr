@@ -246,7 +246,7 @@ func validateField(f interface{}) error {
 		return nil
 	}
 
-	return fmt.Errorf("value %t not supported", f)
+	return fmt.Errorf("value %T not supported", f)
 }
 
 // Validate returns and error if any Go types in the table are incompatible with AMQP types.
