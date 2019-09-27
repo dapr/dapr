@@ -12,21 +12,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/actionscore/actions/pkg/components/secretstores"
+	"github.com/actionscore/components-contrib/bindings"
+
+	"github.com/actionscore/components-contrib/pubsub"
+	"github.com/actionscore/components-contrib/secretstores"
+	"github.com/actionscore/components-contrib/state"
 
 	"github.com/actionscore/actions/pkg/actors"
-	"github.com/actionscore/actions/pkg/components/pubsub"
-	"github.com/actionscore/actions/pkg/components/state"
+	bindings_loader "github.com/actionscore/actions/pkg/components/bindings"
+	pubsub_loader "github.com/actionscore/actions/pkg/components/pubsub"
+	secretstores_loader "github.com/actionscore/actions/pkg/components/secretstores"
+	state_loader "github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/discovery"
-	"github.com/actionscore/actions/pkg/messaging"
-	pubsub_loader "github.com/actionscore/actions/pkg/pubsub"
-	secretstores_loader "github.com/actionscore/actions/pkg/secretstores"
-	state_loader "github.com/actionscore/actions/pkg/state"
-
-	bindings_loader "github.com/actionscore/actions/pkg/bindings"
-	"github.com/actionscore/actions/pkg/components/bindings"
-
 	"github.com/actionscore/actions/pkg/http"
+	"github.com/actionscore/actions/pkg/messaging"
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/actionscore/actions/pkg/channel"
@@ -59,15 +58,15 @@ type ActionsRuntime struct {
 	appChannel           channel.AppChannel
 	appConfig            config.ApplicationConfig
 	directMessaging      messaging.DirectMessaging
-	stateStoreRegistry   state.StateStoreRegistry
-	secretStoresRegistry secretstores.SecretStoreRegistry
+	stateStoreRegistry   state_loader.StateStoreRegistry
+	secretStoresRegistry secretstores_loader.SecretStoreRegistry
 	stateStore           state.StateStore
 	actor                actors.Actors
-	bindingsRegistry     bindings.BindingsRegistry
+	bindingsRegistry     bindings_loader.BindingsRegistry
 	inputBindings        map[string]bindings.InputBinding
 	outputBindings       map[string]bindings.OutputBinding
 	secretStores         map[string]secretstores.SecretStore
-	pubSubRegistry       pubsub.PubSubRegistry
+	pubSubRegistry       pubsub_loader.PubSubRegistry
 	pubSub               pubsub.PubSub
 	json                 jsoniter.API
 	hostAddress          string
@@ -83,10 +82,10 @@ func NewActionsRuntime(runtimeConfig *Config, globalConfig *config.Configuration
 		inputBindings:        map[string]bindings.InputBinding{},
 		outputBindings:       map[string]bindings.OutputBinding{},
 		secretStores:         map[string]secretstores.SecretStore{},
-		stateStoreRegistry:   state.NewStateStoreRegistry(),
-		bindingsRegistry:     bindings.NewBindingsRegistry(),
-		pubSubRegistry:       pubsub.NewPubSubRegsitry(),
-		secretStoresRegistry: secretstores.NewSecretStoreRegistry(),
+		stateStoreRegistry:   state_loader.NewStateStoreRegistry(),
+		bindingsRegistry:     bindings_loader.NewBindingsRegistry(),
+		pubSubRegistry:       pubsub_loader.NewPubSubRegsitry(),
+		secretStoresRegistry: secretstores_loader.NewSecretStoreRegistry(),
 	}
 }
 
@@ -255,7 +254,9 @@ func (a *ActionsRuntime) OnComponentUpdated(component components_v1alpha1.Compon
 func (a *ActionsRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
 	for _, dst := range to {
 		go func(name string) {
-			err := a.sendToOutputBinding(name, data)
+			err := a.sendToOutputBinding(name, &bindings.WriteRequest{
+				Data: data,
+			})
 			if err != nil {
 				log.Error(err)
 			}
@@ -265,7 +266,9 @@ func (a *ActionsRuntime) sendBatchOutputBindingsParallel(to []string, data []byt
 
 func (a *ActionsRuntime) sendBatchOutputBindingsSequential(to []string, data []byte) error {
 	for _, dst := range to {
-		err := a.sendToOutputBinding(dst, data)
+		err := a.sendToOutputBinding(dst, &bindings.WriteRequest{
+			Data: data,
+		})
 		if err != nil {
 			return err
 		}
@@ -274,14 +277,11 @@ func (a *ActionsRuntime) sendBatchOutputBindingsSequential(to []string, data []b
 	return nil
 }
 
-func (a *ActionsRuntime) sendToOutputBinding(name string, data []byte) error {
+func (a *ActionsRuntime) sendToOutputBinding(name string, req *bindings.WriteRequest) error {
 	if binding, ok := a.outputBindings[name]; ok {
-		err := binding.Write(&bindings.WriteRequest{
-			Data: data,
-		})
+		err := binding.Write(req)
 		return err
 	}
-
 	return fmt.Errorf("couldn't find output binding %s", name)
 }
 
@@ -385,7 +385,7 @@ func (a *ActionsRuntime) setHostAddress() error {
 	return nil
 }
 
-func (a *ActionsRuntime) initInputBindings(registry bindings.BindingsRegistry) error {
+func (a *ActionsRuntime) initInputBindings(registry bindings_loader.BindingsRegistry) error {
 	if a.appChannel == nil {
 		return fmt.Errorf("app channel not initialized")
 	}
@@ -424,7 +424,7 @@ func (a *ActionsRuntime) initInputBindings(registry bindings.BindingsRegistry) e
 	return nil
 }
 
-func (a *ActionsRuntime) initOutputBindings(registry bindings.BindingsRegistry) error {
+func (a *ActionsRuntime) initOutputBindings(registry bindings_loader.BindingsRegistry) error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
@@ -449,7 +449,7 @@ func (a *ActionsRuntime) initOutputBindings(registry bindings.BindingsRegistry) 
 	return nil
 }
 
-func (a *ActionsRuntime) initState(registry state.StateStoreRegistry) error {
+func (a *ActionsRuntime) initState(registry state_loader.StateStoreRegistry) error {
 	state_loader.Load()
 
 	for _, s := range a.components {
@@ -582,6 +582,7 @@ func (a *ActionsRuntime) loadComponents() error {
 	}
 	a.components = comps
 
+	secretstores_loader.Load()
 	err = a.initSecretStores()
 	if err != nil {
 		log.Warnf("failed to init secret stores: %s", err)
@@ -609,34 +610,46 @@ func (a *ActionsRuntime) Stop() {
 
 func (a *ActionsRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {
 	cache := map[string]secretstores.GetSecretResponse{}
+
 	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name != "" && m.SecretKeyRef.Key != "" {
-			secretStore := a.getSecretStore(component.SecretStore)
-			if secretStore != nil {
-				var resp secretstores.GetSecretResponse
-				if val, ok := cache[m.SecretKeyRef.Name]; ok {
-					resp = val
-				} else {
-					r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
-						Name: m.SecretKeyRef.Name,
-						Metadata: map[string]string{
-							"namespace": component.ObjectMeta.Namespace,
-						},
-					})
-					if err != nil {
-						log.Errorf("error getting secret: %s", err)
-						continue
-					}
-					resp = r
-				}
-				val, ok := resp.Data[m.SecretKeyRef.Key]
-				if ok {
-					component.Spec.Metadata[i].Value = val
-				}
-				cache[m.SecretKeyRef.Name] = resp
-			}
+		if m.SecretKeyRef.Name == "" {
+			continue
 		}
+
+		secretStore := a.getSecretStore(component.Auth.SecretStore)
+		if secretStore == nil {
+			continue
+		}
+
+		resp, ok := cache[m.SecretKeyRef.Name]
+		if !ok {
+			r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
+				Name: m.SecretKeyRef.Name,
+				Metadata: map[string]string{
+					"namespace": component.ObjectMeta.Namespace,
+				},
+			})
+			if err != nil {
+				log.Errorf("error getting secret: %s", err)
+				continue
+			}
+			resp = r
+		}
+
+		// Use the default DefaultSecretRefKeyName key if SecretKeyRef.Key is not given
+		secretKeyName := m.SecretKeyRef.Key
+		if secretKeyName == "" {
+			secretKeyName = secretstores.DefaultSecretRefKeyName
+		}
+
+		val, ok := resp.Data[secretKeyName]
+		if ok {
+			component.Spec.Metadata[i].Value = val
+		}
+
+		cache[m.SecretKeyRef.Name] = resp
 	}
+
 	return component
 }
 
@@ -644,14 +657,13 @@ func (a *ActionsRuntime) getSecretStore(storeName string) secretstores.SecretSto
 	if storeName == "" {
 		switch a.runtimeConfig.Mode {
 		case modes.KubernetesMode:
-			return a.secretStores["kubernetes"]
+			storeName = "kubernetes"
 		case modes.StandaloneMode:
 			return nil
 		}
-	} else {
-		return a.secretStores[storeName]
 	}
-	return nil
+
+	return a.secretStores[storeName]
 }
 
 func (a *ActionsRuntime) blockUntilAppIsReady() {
@@ -667,6 +679,8 @@ func (a *ActionsRuntime) blockUntilAppIsReady() {
 			conn.Close()
 			break
 		}
+		// prevents overwhelming the OS with open connections
+		time.Sleep(time.Millisecond * 50)
 	}
 
 	log.Infof("application discovered on port %v", a.runtimeConfig.ApplicationPort)
@@ -775,36 +789,47 @@ func (a *ActionsRuntime) announceSelf() error {
 }
 
 func (a *ActionsRuntime) initSecretStores() error {
-	secretstores_loader.Load()
-
+	// Preload Kubernetes secretstore
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		kubeSecretStore, err := a.secretStoresRegistry.CreateSecretStore("secretstores.kubernetes")
 		if err != nil {
 			return err
 		}
-		err = kubeSecretStore.Init(nil)
-		if err != nil {
+
+		if err = kubeSecretStore.Init(secretstores.Metadata{}); err != nil {
 			return err
 		}
+
 		a.secretStores["kubernetes"] = kubeSecretStore
 	}
 
+	// Initialize all secretstore components
 	for _, c := range a.components {
-		if strings.Index(c.Spec.Type, "secretstores") == 0 {
-			secretStore, err := a.secretStoresRegistry.CreateSecretStore(c.Spec.Type)
-			if err != nil {
-				log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
-				continue
-			}
-			err = secretStore.Init(nil)
-			if err != nil {
-				log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
-				continue
-			}
-			a.secretStores[c.ObjectMeta.Name] = secretStore
+		if strings.Index(c.Spec.Type, "secretstores") < 0 {
+			continue
 		}
+
+		// Look up the secrets to authenticate this secretstore from K8S secret store
+		a.processComponentSecrets(c)
+
+		secretStore, err := a.secretStoresRegistry.CreateSecretStore(c.Spec.Type)
+		if err != nil {
+			log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
+			continue
+		}
+
+		err = secretStore.Init(secretstores.Metadata{
+			Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+		})
+		if err != nil {
+			log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
+			continue
+		}
+
+		a.secretStores[c.ObjectMeta.Name] = secretStore
 	}
+
 	return nil
 }
 

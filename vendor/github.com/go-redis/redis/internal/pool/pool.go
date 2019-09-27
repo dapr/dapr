@@ -38,7 +38,7 @@ type Pooler interface {
 
 	Get() (*Conn, error)
 	Put(*Conn)
-	Remove(*Conn)
+	Remove(*Conn, error)
 
 	Len() int
 	IdleLen() int
@@ -289,7 +289,7 @@ func (p *ConnPool) popIdle() *Conn {
 
 func (p *ConnPool) Put(cn *Conn) {
 	if !cn.pooled {
-		p.Remove(cn)
+		p.Remove(cn, nil)
 		return
 	}
 
@@ -300,7 +300,7 @@ func (p *ConnPool) Put(cn *Conn) {
 	p.freeTurn()
 }
 
-func (p *ConnPool) Remove(cn *Conn) {
+func (p *ConnPool) Remove(cn *Conn, reason error) {
 	p.removeConn(cn)
 	p.freeTurn()
 	_ = p.closeConn(cn)

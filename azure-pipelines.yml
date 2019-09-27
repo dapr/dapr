@@ -143,7 +143,9 @@ jobs:
         tagSource: 'manual'
         tag: 'v$(REL_VERSION)'
         title: 'Actions Runtime $(REL_VERSION) Release'
-        assets: '$(Pipeline.Workspace)/drop/**'
+        assets: |
+          $(Pipeline.Workspace)/drop/*.zip
+          $(Pipeline.Workspace)/drop/*.tar.gz
         releaseNotesFile: './docs/release_notes/v$(REL_VERSION).md'
         isPreRelease: true
         addChangeLog: false

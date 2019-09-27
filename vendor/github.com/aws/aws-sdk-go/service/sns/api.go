@@ -1467,7 +1467,7 @@ func (c *SNS) ListEndpointsByPlatformApplicationWithContext(ctx aws.Context, inp
 //    // Example iterating over at most 3 pages of a ListEndpointsByPlatformApplication operation.
 //    pageNum := 0
 //    err := client.ListEndpointsByPlatformApplicationPages(params,
-//        func(page *ListEndpointsByPlatformApplicationOutput, lastPage bool) bool {
+//        func(page *sns.ListEndpointsByPlatformApplicationOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -1714,7 +1714,7 @@ func (c *SNS) ListPlatformApplicationsWithContext(ctx aws.Context, input *ListPl
 //    // Example iterating over at most 3 pages of a ListPlatformApplications operation.
 //    pageNum := 0
 //    err := client.ListPlatformApplicationsPages(params,
-//        func(page *ListPlatformApplicationsOutput, lastPage bool) bool {
+//        func(page *sns.ListPlatformApplicationsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -1860,7 +1860,7 @@ func (c *SNS) ListSubscriptionsWithContext(ctx aws.Context, input *ListSubscript
 //    // Example iterating over at most 3 pages of a ListSubscriptions operation.
 //    pageNum := 0
 //    err := client.ListSubscriptionsPages(params,
-//        func(page *ListSubscriptionsOutput, lastPage bool) bool {
+//        func(page *sns.ListSubscriptionsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2009,7 +2009,7 @@ func (c *SNS) ListSubscriptionsByTopicWithContext(ctx aws.Context, input *ListSu
 //    // Example iterating over at most 3 pages of a ListSubscriptionsByTopic operation.
 //    pageNum := 0
 //    err := client.ListSubscriptionsByTopicPages(params,
-//        func(page *ListSubscriptionsByTopicOutput, lastPage bool) bool {
+//        func(page *sns.ListSubscriptionsByTopicOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2249,7 +2249,7 @@ func (c *SNS) ListTopicsWithContext(ctx aws.Context, input *ListTopicsInput, opt
 //    // Example iterating over at most 3 pages of a ListTopics operation.
 //    pageNum := 0
 //    err := client.ListTopicsPages(params,
-//        func(page *ListTopicsOutput, lastPage bool) bool {
+//        func(page *sns.ListTopicsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -3656,8 +3656,8 @@ type CheckIfPhoneNumberIsOptedOutOutput struct {
 	//    * true – The phone number is opted out, meaning you cannot publish SMS
 	//    messages to it.
 	//
-	//    * false – The phone number is opted in, meaning you can publish SMS messages
-	//    to it.
+	//    * false – The phone number is opted in, meaning you can publish SMS
+	//    messages to it.
 	IsOptedOut *bool `locationName:"isOptedOut" type:"boolean"`
 }
 
@@ -4522,9 +4522,9 @@ type GetSubscriptionAttributesOutput struct {
 	//    * DeliveryPolicy – The JSON serialization of the subscription's delivery
 	//    policy.
 	//
-	//    * EffectiveDeliveryPolicy – The JSON serialization of the effective delivery
-	//    policy that takes into account the topic delivery policy and account system
-	//    defaults.
+	//    * EffectiveDeliveryPolicy – The JSON serialization of the effective
+	//    delivery policy that takes into account the topic delivery policy and
+	//    account system defaults.
 	//
 	//    * FilterPolicy – The filter policy JSON that is assigned to the subscription.
 	//
@@ -4611,21 +4611,22 @@ type GetTopicAttributesOutput struct {
 	//
 	//    * Policy – the JSON serialization of the topic's access control policy
 	//
-	//    * DisplayName – the human-readable name used in the "From" field for notifications
-	//    to email and email-json endpoints
+	//    * DisplayName – the human-readable name used in the "From" field for
+	//    notifications to email and email-json endpoints
 	//
 	//    * SubscriptionsPending – the number of subscriptions pending confirmation
 	//    on this topic
 	//
-	//    * SubscriptionsConfirmed – the number of confirmed subscriptions on this
-	//    topic
+	//    * SubscriptionsConfirmed – the number of confirmed subscriptions on
+	//    this topic
 	//
-	//    * SubscriptionsDeleted – the number of deleted subscriptions on this topic
+	//    * SubscriptionsDeleted – the number of deleted subscriptions on this
+	//    topic
 	//
 	//    * DeliveryPolicy – the JSON serialization of the topic's delivery policy
 	//
-	//    * EffectiveDeliveryPolicy – the JSON serialization of the effective delivery
-	//    policy that takes into account system defaults
+	//    * EffectiveDeliveryPolicy – the JSON serialization of the effective
+	//    delivery policy that takes into account system defaults
 	Attributes map[string]*string `type:"map"`
 }
 
@@ -5285,18 +5286,16 @@ type PublishInput struct {
 	//
 	// Constraints:
 	//
-	// With the exception of SMS, messages must be UTF-8 encoded strings and at
-	// most 256 KB in size (262,144 bytes, not 262,144 characters).
+	//    * With the exception of SMS, messages must be UTF-8 encoded strings and
+	//    at most 256 KB in size (262,144 bytes, not 262,144 characters).
 	//
 	//    * For SMS, each message can contain up to 140 characters. This character
 	//    limit depends on the encoding schema. For example, an SMS message can
 	//    contain 160 GSM characters, 140 ASCII characters, or 70 UCS-2 characters.
-	//
-	//    * If you publish a message that exceeds this size limit, Amazon SNS sends
+	//    If you publish a message that exceeds this size limit, Amazon SNS sends
 	//    the message as multiple messages, each fitting within the size limit.
 	//    Messages aren't truncated mid-word but are cut off at whole-word boundaries.
-	//
-	//    * The total size limit for a single SMS Publish action is 1,600 characters.
+	//    The total size limit for a single SMS Publish action is 1,600 characters.
 	//
 	// JSON-specific constraints:
 	//
@@ -5631,9 +5630,10 @@ type SetPlatformApplicationAttributesInput struct {
 	// A map of the platform application attributes. Attributes in this map include
 	// the following:
 	//
-	//    * PlatformCredential – The credential received from the notification service.
-	//    For APNS/APNS_SANDBOX, PlatformCredential is private key. For GCM, PlatformCredential
-	//    is "API key". For ADM, PlatformCredential is "client secret".
+	//    * PlatformCredential – The credential received from the notification
+	//    service. For APNS/APNS_SANDBOX, PlatformCredential is private key. For
+	//    GCM, PlatformCredential is "API key". For ADM, PlatformCredential is "client
+	//    secret".
 	//
 	//    * PlatformPrincipal – The principal received from the notification service.
 	//    For APNS/APNS_SANDBOX, PlatformPrincipal is SSL certificate. For GCM,
@@ -5745,8 +5745,8 @@ type SetSMSAttributesInput struct {
 	// Description field, explain that you are requesting an SMS monthly spend limit
 	// increase.
 	//
-	// DeliveryStatusIAMRole – The ARN of the IAM role that allows Amazon SNS to
-	// write logs about SMS deliveries in CloudWatch Logs. For each SMS message
+	// DeliveryStatusIAMRole – The ARN of the IAM role that allows Amazon SNS
+	// to write logs about SMS deliveries in CloudWatch Logs. For each SMS message
 	// that you send, Amazon SNS writes a log that includes the message price, the
 	// success or failure status, the reason for failure (if the message failed),
 	// the message dwell time, and other information.
@@ -5762,8 +5762,8 @@ type SetSMSAttributesInput struct {
 	// The sender ID can be 1 - 11 alphanumeric characters, and it must contain
 	// at least one letter.
 	//
-	// DefaultSMSType – The type of SMS message that you will send by default. You
-	// can assign the following values:
+	// DefaultSMSType – The type of SMS message that you will send by default.
+	// You can assign the following values:
 	//
 	//    * Promotional – (Default) Noncritical messages, such as marketing messages.
 	//    Amazon SNS optimizes the message delivery to incur the lowest cost.
@@ -5772,8 +5772,8 @@ type SetSMSAttributesInput struct {
 	//    such as one-time passcodes for multi-factor authentication. Amazon SNS
 	//    optimizes the message delivery to achieve the highest reliability.
 	//
-	// UsageReportS3Bucket – The name of the Amazon S3 bucket to receive daily SMS
-	// usage reports from Amazon SNS. Each day, Amazon SNS will deliver a usage
+	// UsageReportS3Bucket – The name of the Amazon S3 bucket to receive daily
+	// SMS usage reports from Amazon SNS. Each day, Amazon SNS will deliver a usage
 	// report as a CSV file to the bucket. The report includes the following information
 	// for each SMS message that was successfully delivered by your account:
 	//

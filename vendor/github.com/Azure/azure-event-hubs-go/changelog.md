@@ -1,5 +1,8 @@
 # Change Log
 
+## `v1.3.1`
+- cleanup connection after making management request
+
 ## `v1.3.0`
 - add `SystemProperties` to `Event` which contains immutable broker provided metadata (squence number, offset, 
   enqueued time)

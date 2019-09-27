@@ -493,6 +493,12 @@ func (h *Hub) GetRuntimeInformation(ctx context.Context) (*HubRuntimeInformation
 		return nil, err
 	}
 
+	defer func() {
+		if err := c.Close(); err != nil {
+			log.For(ctx).Error(err)
+		}
+	}()
+
 	info, err := client.GetHubRuntimeInformation(ctx, c)
 	if err != nil {
 		log.For(ctx).Error(err)
@@ -509,8 +515,15 @@ func (h *Hub) GetPartitionInformation(ctx context.Context, partitionID string) (
 	client := newClient(h.namespace, h.name)
 	c, err := h.namespace.newConnection()
 	if err != nil {
+		log.For(ctx).Error(err)
 		return nil, err
 	}
+
+	defer func() {
+		if err := c.Close(); err != nil {
+			log.For(ctx).Error(err)
+		}
+	}()
 
 	info, err := client.GetHubPartitionRuntimeInformation(ctx, c, partitionID)
 	if err != nil {

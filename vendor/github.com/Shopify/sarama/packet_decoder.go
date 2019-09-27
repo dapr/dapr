@@ -27,6 +27,7 @@ type packetDecoder interface {
 	remaining() int
 	getSubset(length int) (packetDecoder, error)
 	peek(offset, length int) (packetDecoder, error) // similar to getSubset, but it doesn't advance the offset
+	peekInt8(offset int) (int8, error)              // similar to peek, but just one byte
 
 	// Stacks, see PushDecoder
 	push(in pushDecoder) error

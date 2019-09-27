@@ -267,11 +267,8 @@ type BucketAttrs struct {
 
 	// StorageClass is the default storage class of the bucket. This defines
 	// how objects in the bucket are stored and determines the SLA
-	// and the cost of storage. Typical values are "MULTI_REGIONAL",
-	// "REGIONAL", "NEARLINE", "COLDLINE", "STANDARD" and
-	// "DURABLE_REDUCED_AVAILABILITY". Defaults to "STANDARD", which
-	// is equivalent to "MULTI_REGIONAL" or "REGIONAL" depending on
-	// the bucket's location settings.
+	// and the cost of storage. Typical values are "NEARLINE", "COLDLINE" and
+	// "STANDARD". Defaults to "STANDARD".
 	StorageClass string
 
 	// Created is the creation time of the bucket.
@@ -313,6 +310,15 @@ type BucketAttrs struct {
 
 	// The website configuration.
 	Website *BucketWebsite
+
+	// Etag is the HTTP/1.1 Entity tag for the bucket.
+	// This field is read-only.
+	Etag string
+
+	// LocationType describes how data is stored and replicated.
+	// Typical values are "multi-region", "region" and "dual-region".
+	// This field is read-only.
+	LocationType string
 }
 
 // BucketPolicyOnly configures access checks to use only bucket-level IAM
@@ -434,8 +440,7 @@ type LifecycleCondition struct {
 	// MatchesStorageClasses is the condition matching the object's storage
 	// class.
 	//
-	// Values include "MULTI_REGIONAL", "REGIONAL", "NEARLINE", "COLDLINE",
-	// "STANDARD", and "DURABLE_REDUCED_AVAILABILITY".
+	// Values include "NEARLINE", "COLDLINE" and "STANDARD".
 	MatchesStorageClasses []string
 
 	// NumNewerVersions is the condition matching objects with a number of newer versions.
@@ -501,6 +506,8 @@ func newBucket(b *raw.Bucket) (*BucketAttrs, error) {
 		Logging:               toBucketLogging(b.Logging),
 		Website:               toBucketWebsite(b.Website),
 		BucketPolicyOnly:      toBucketPolicyOnly(b.IamConfiguration),
+		Etag:                  b.Etag,
+		LocationType:          b.LocationType,
 	}, nil
 }
 

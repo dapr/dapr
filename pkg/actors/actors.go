@@ -18,9 +18,9 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/actionscore/actions/pkg/channel"
-	"github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/placement"
 	pb "github.com/actionscore/actions/pkg/proto"
+	"github.com/actionscore/components-contrib/state"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -91,7 +91,10 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 
 func (a *actorsRuntime) Init() error {
 	if a.config.PlacementServiceAddress == "" {
-		return errors.New("couldn't connect to placement service: address is empty")
+		return errors.New("actors: couldn't connect to placement service: address is empty")
+	}
+	if a.store == nil {
+		return errors.New("actors: state store must be present to initialize the actor runtime")
 	}
 
 	go a.connectToPlacementService(a.config.PlacementServiceAddress, a.config.HostAddress, a.config.HeartbeatInterval)

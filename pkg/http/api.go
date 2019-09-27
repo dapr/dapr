@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/actionscore/actions/pkg/components/pubsub"
+	"github.com/actionscore/components-contrib/bindings"
+	"github.com/actionscore/components-contrib/pubsub"
 	"github.com/google/uuid"
 
 	jsoniter "github.com/json-iterator/go"
@@ -13,8 +15,8 @@ import (
 	"github.com/actionscore/actions/pkg/actors"
 	"github.com/actionscore/actions/pkg/channel"
 	"github.com/actionscore/actions/pkg/channel/http"
-	"github.com/actionscore/actions/pkg/components/state"
 	"github.com/actionscore/actions/pkg/messaging"
+	"github.com/actionscore/components-contrib/state"
 	routing "github.com/qiangxue/fasthttp-routing"
 )
 
@@ -31,23 +33,28 @@ type api struct {
 	json                  jsoniter.API
 	actor                 actors.Actors
 	pubSub                pubsub.PubSub
-	sendToOutputBindingFn func(name string, data []byte) error
+	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
 }
 
 const (
-	apiVersionV1   = "v1.0"
-	idParam        = "id"
-	methodParam    = "method"
-	actorTypeParam = "actorType"
-	actorIDParam   = "actorId"
-	stateKeyParam  = "key"
-	topicParam     = "topic"
-	nameParam      = "name"
+	apiVersionV1        = "v1.0"
+	idParam             = "id"
+	methodParam         = "method"
+	actorTypeParam      = "actorType"
+	actorIDParam        = "actorId"
+	stateKeyParam       = "key"
+	topicParam          = "topic"
+	nameParam           = "name"
+	consistencyParam    = "consistency"
+	retryIntervalParam  = "retryInterval"
+	retryPatternParam   = "retryPattern"
+	retryThresholdParam = "retryThreshold"
+	concurrencyParam    = "concurrency"
 )
 
 // NewAPI returns a new API
-func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, data []byte) error) API {
+func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -209,9 +216,26 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 	name := c.Param(nameParam)
 	body := c.PostBody()
 
-	err := a.sendToOutputBindingFn(name, body)
+	var req OutputBindingRequest
+	err := a.json.Unmarshal(body, &req)
 	if err != nil {
+		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request: %s", err))
+		respondWithError(c.RequestCtx, 500, msg)
+		return nil
+	}
 
+	b, err := a.json.Marshal(req.Data)
+	if err != nil {
+		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request data field: %s", err))
+		respondWithError(c.RequestCtx, 500, msg)
+		return nil
+
+	}
+	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
+		Metadata: req.Metadata,
+		Data:     b,
+	})
+	if err != nil {
 		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", errMsg)
 		respondWithError(c.RequestCtx, 500, msg)
@@ -229,8 +253,12 @@ func (a *api) onGetState(c *routing.Context) error {
 		return nil
 	}
 	key := c.Param(stateKeyParam)
+	consistency := string(c.QueryArgs().Peek(consistencyParam))
 	req := state.GetRequest{
 		Key: a.getModifiedStateKey(key),
+		Options: state.GetStateOption{
+			Consistency: consistency,
+		},
 	}
 
 	resp, err := a.stateStore.Get(&req)
@@ -240,7 +268,7 @@ func (a *api) onGetState(c *routing.Context) error {
 		return nil
 	}
 	if err == nil && resp == nil {
-		respondWithError(c.RequestCtx, 404, NewErrorResponse("ERR_STATE_NOT_FOUND", ""))
+		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_STATE_NOT_FOUND", ""))
 		return nil
 	}
 	respondWithETaggedJSON(c.RequestCtx, 200, resp.Data, resp.ETag)
@@ -256,9 +284,34 @@ func (a *api) onDeleteState(c *routing.Context) error {
 
 	key := c.Param(stateKeyParam)
 	etag := string(c.Request.Header.Peek("If-Match"))
+
+	concurrency := string(c.QueryArgs().Peek(concurrencyParam))
+	consistency := string(c.QueryArgs().Peek(consistencyParam))
+	retryInterval := string(c.QueryArgs().Peek(retryIntervalParam))
+	retryPattern := string(c.QueryArgs().Peek(retryPatternParam))
+	retryThredhold := string(c.QueryArgs().Peek(retryThresholdParam))
+	iRetryInterval := 0
+	iRetryThreshold := 0
+
+	if retryInterval != "" {
+		iRetryInterval, _ = strconv.Atoi(retryInterval)
+	}
+	if retryThredhold != "" {
+		iRetryThreshold, _ = strconv.Atoi(retryThredhold)
+	}
+
 	req := state.DeleteRequest{
 		Key:  key,
 		ETag: etag,
+		Options: state.DeleteStateOption{
+			Concurrency: concurrency,
+			Consistency: consistency,
+			RetryPolicy: state.RetryPolicy{
+				Interval:  time.Duration(iRetryInterval) * time.Millisecond,
+				Threshold: iRetryThreshold,
+				Pattern:   retryPattern,
+			},
+		},
 	}
 
 	err := a.stateStore.Delete(&req)

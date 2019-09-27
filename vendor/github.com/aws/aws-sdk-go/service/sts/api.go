@@ -106,7 +106,7 @@ func (c *STS) AssumeRoleRequest(input *AssumeRoleInput) (req *request.Request, o
 // AWS API calls to access resources in the account that owns the role. You
 // cannot use session policies to grant more permissions than those allowed
 // by the identity-based policy of the role that is being assumed. For more
-// information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+// information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 // in the IAM User Guide.
 //
 // To assume a role from a different account, your AWS account must be trusted
@@ -286,7 +286,7 @@ func (c *STS) AssumeRoleWithSAMLRequest(input *AssumeRoleWithSAMLInput) (req *re
 // AWS API calls to access resources in the account that owns the role. You
 // cannot use session policies to grant more permissions than those allowed
 // by the identity-based policy of the role that is being assumed. For more
-// information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+// information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 // in the IAM User Guide.
 //
 // Before your application can call AssumeRoleWithSAML, you must configure your
@@ -484,7 +484,7 @@ func (c *STS) AssumeRoleWithWebIdentityRequest(input *AssumeRoleWithWebIdentityI
 // AWS API calls to access resources in the account that owns the role. You
 // cannot use session policies to grant more permissions than those allowed
 // by the identity-based policy of the role that is being assumed. For more
-// information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+// information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 // in the IAM User Guide.
 //
 // Before your application can call AssumeRoleWithWebIdentity, you must have
@@ -506,8 +506,7 @@ func (c *STS) AssumeRoleWithWebIdentityRequest(input *AssumeRoleWithWebIdentityI
 //    * Using Web Identity Federation API Operations for Mobile Apps (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_oidc_manual.html)
 //    and Federation Through a Web-based Identity Provider (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_request.html#api_assumerolewithwebidentity).
 //
-//
-//    *  Web Identity Federation Playground (https://web-identity-federation-playground.s3.amazonaws.com/index.html).
+//    * Web Identity Federation Playground (https://web-identity-federation-playground.s3.amazonaws.com/index.html).
 //    Walk through the process of authenticating through Login with Amazon,
 //    Facebook, or Google, getting temporary security credentials, and then
 //    using those credentials to make a request to AWS.
@@ -703,6 +702,102 @@ func (c *STS) DecodeAuthorizationMessageWithContext(ctx aws.Context, input *Deco
 	return out, req.Send()
 }
 
+const opGetAccessKeyInfo = "GetAccessKeyInfo"
+
+// GetAccessKeyInfoRequest generates a "aws/request.Request" representing the
+// client's request for the GetAccessKeyInfo operation. The "output" return
+// value will be populated with the request's response once the request completes
+// successfully.
+//
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
+//
+// See GetAccessKeyInfo for more information on using the GetAccessKeyInfo
+// API call, and error handling.
+//
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
+//
+//    // Example sending a request using the GetAccessKeyInfoRequest method.
+//    req, resp := client.GetAccessKeyInfoRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
+//
+// See also, https://docs.aws.amazon.com/goto/WebAPI/sts-2011-06-15/GetAccessKeyInfo
+func (c *STS) GetAccessKeyInfoRequest(input *GetAccessKeyInfoInput) (req *request.Request, output *GetAccessKeyInfoOutput) {
+	op := &request.Operation{
+		Name:       opGetAccessKeyInfo,
+		HTTPMethod: "POST",
+		HTTPPath:   "/",
+	}
+
+	if input == nil {
+		input = &GetAccessKeyInfoInput{}
+	}
+
+	output = &GetAccessKeyInfoOutput{}
+	req = c.newRequest(op, input, output)
+	return
+}
+
+// GetAccessKeyInfo API operation for AWS Security Token Service.
+//
+// Returns the account identifier for the specified access key ID.
+//
+// Access keys consist of two parts: an access key ID (for example, AKIAIOSFODNN7EXAMPLE)
+// and a secret access key (for example, wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY).
+// For more information about access keys, see Managing Access Keys for IAM
+// Users (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html)
+// in the IAM User Guide.
+//
+// When you pass an access key ID to this operation, it returns the ID of the
+// AWS account to which the keys belong. Access key IDs beginning with AKIA
+// are long-term credentials for an IAM user or the AWS account root user. Access
+// key IDs beginning with ASIA are temporary credentials that are created using
+// STS operations. If the account in the response belongs to you, you can sign
+// in as the root user and review your root user access keys. Then, you can
+// pull a credentials report (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_getting-report.html)
+// to learn which IAM user owns the keys. To learn who requested the temporary
+// credentials for an ASIA access key, view the STS events in your CloudTrail
+// logs (https://docs.aws.amazon.com/IAM/latest/UserGuide/cloudtrail-integration.html).
+//
+// This operation does not indicate the state of the access key. The key might
+// be active, inactive, or deleted. Active keys might not have permissions to
+// perform an operation. Providing a deleted access key might return an error
+// that the key doesn't exist.
+//
+// Returns awserr.Error for service API and SDK errors. Use runtime type assertions
+// with awserr.Error's Code and Message methods to get detailed information about
+// the error.
+//
+// See the AWS API reference guide for AWS Security Token Service's
+// API operation GetAccessKeyInfo for usage and error information.
+// See also, https://docs.aws.amazon.com/goto/WebAPI/sts-2011-06-15/GetAccessKeyInfo
+func (c *STS) GetAccessKeyInfo(input *GetAccessKeyInfoInput) (*GetAccessKeyInfoOutput, error) {
+	req, out := c.GetAccessKeyInfoRequest(input)
+	return out, req.Send()
+}
+
+// GetAccessKeyInfoWithContext is the same as GetAccessKeyInfo with the addition of
+// the ability to pass a context and additional request options.
+//
+// See GetAccessKeyInfo for details on how to use this API operation.
+//
+// The context must be non-nil and will be used for request cancellation. If
+// the context is nil a panic will occur. In the future the SDK may create
+// sub-contexts for http.Requests. See https://golang.org/pkg/context/
+// for more information on using Contexts.
+func (c *STS) GetAccessKeyInfoWithContext(ctx aws.Context, input *GetAccessKeyInfoInput, opts ...request.Option) (*GetAccessKeyInfoOutput, error) {
+	req, out := c.GetAccessKeyInfoRequest(input)
+	req.SetContext(ctx)
+	req.ApplyOptions(opts...)
+	return out, req.Send()
+}
+
 const opGetCallerIdentity = "GetCallerIdentity"
 
 // GetCallerIdentityRequest generates a "aws/request.Request" representing the
@@ -747,8 +842,15 @@ func (c *STS) GetCallerIdentityRequest(input *GetCallerIdentityInput) (req *requ
 
 // GetCallerIdentity API operation for AWS Security Token Service.
 //
-// Returns details about the IAM identity whose credentials are used to call
-// the API.
+// Returns details about the IAM user or role whose credentials are used to
+// call the operation.
+//
+// No permissions are required to perform this operation. If an administrator
+// adds a policy to your IAM user or role that explicitly denies access to the
+// sts:GetCallerIdentity action, you can still perform this operation. Permissions
+// are not required because the same information is returned when an IAM user
+// or role is denied access. To view an example response, see I Am Not Authorized
+// to Perform: iam:DeleteVirtualMFADevice (https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_access-denied-delete-mfa).
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -880,7 +982,7 @@ func (c *STS) GetFederationTokenRequest(input *GetFederationTokenInput) (req *re
 // you pass. This gives you a way to further restrict the permissions for a
 // federated user. You cannot use session policies to grant more permissions
 // than those that are defined in the permissions policy of the IAM user. For
-// more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+// more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 // in the IAM User Guide. For information about using GetFederationToken to
 // create temporary security credentials, see GetFederationToken—Federation
 // Through a Custom Identity Broker (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_request.html#api_getfederationtoken).
@@ -1003,7 +1105,7 @@ func (c *STS) GetSessionTokenRequest(input *GetSessionTokenInput) (req *request.
 //    * You cannot call any IAM API operations unless MFA authentication information
 //    is included in the request.
 //
-//    * You cannot call any STS API exceptAssumeRole or GetCallerIdentity.
+//    * You cannot call any STS API except AssumeRole or GetCallerIdentity.
 //
 // We recommend that you do not call GetSessionToken with AWS account root user
 // credentials. Instead, follow our best practices (https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#create-iam-users)
@@ -1107,7 +1209,7 @@ type AssumeRoleInput struct {
 	// the role's temporary credentials in subsequent AWS API calls to access resources
 	// in the account that owns the role. You cannot use session policies to grant
 	// more permissions than those allowed by the identity-based policy of the role
-	// that is being assumed. For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+	// that is being assumed. For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 	// in the IAM User Guide.
 	//
 	// The plain text that you use for both inline and managed session policies
@@ -1130,7 +1232,7 @@ type AssumeRoleInput struct {
 	// This parameter is optional. You can provide up to 10 managed policy ARNs.
 	// However, the plain text that you use for both inline and managed session
 	// policies shouldn't exceed 2048 characters. For more information about ARNs,
-	// see Amazon Resource Names (ARNs) and AWS Service Namespaces (general/latest/gr/aws-arns-and-namespaces.html)
+	// see Amazon Resource Names (ARNs) and AWS Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html)
 	// in the AWS General Reference.
 	//
 	// The characters in this parameter count towards the 2048 character session
@@ -1145,7 +1247,7 @@ type AssumeRoleInput struct {
 	// in subsequent AWS API calls to access resources in the account that owns
 	// the role. You cannot use session policies to grant more permissions than
 	// those allowed by the identity-based policy of the role that is being assumed.
-	// For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+	// For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 	// in the IAM User Guide.
 	PolicyArns []*PolicyDescriptorType `type:"list"`
 
@@ -1385,7 +1487,7 @@ type AssumeRoleWithSAMLInput struct {
 	// the role's temporary credentials in subsequent AWS API calls to access resources
 	// in the account that owns the role. You cannot use session policies to grant
 	// more permissions than those allowed by the identity-based policy of the role
-	// that is being assumed. For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+	// that is being assumed. For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 	// in the IAM User Guide.
 	//
 	// The plain text that you use for both inline and managed session policies
@@ -1408,7 +1510,7 @@ type AssumeRoleWithSAMLInput struct {
 	// This parameter is optional. You can provide up to 10 managed policy ARNs.
 	// However, the plain text that you use for both inline and managed session
 	// policies shouldn't exceed 2048 characters. For more information about ARNs,
-	// see Amazon Resource Names (ARNs) and AWS Service Namespaces (general/latest/gr/aws-arns-and-namespaces.html)
+	// see Amazon Resource Names (ARNs) and AWS Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html)
 	// in the AWS General Reference.
 	//
 	// The characters in this parameter count towards the 2048 character session
@@ -1423,7 +1525,7 @@ type AssumeRoleWithSAMLInput struct {
 	// in subsequent AWS API calls to access resources in the account that owns
 	// the role. You cannot use session policies to grant more permissions than
 	// those allowed by the identity-based policy of the role that is being assumed.
-	// For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+	// For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 	// in the IAM User Guide.
 	PolicyArns []*PolicyDescriptorType `type:"list"`
 
@@ -1680,7 +1782,7 @@ type AssumeRoleWithWebIdentityInput struct {
 	// the role's temporary credentials in subsequent AWS API calls to access resources
 	// in the account that owns the role. You cannot use session policies to grant
 	// more permissions than those allowed by the identity-based policy of the role
-	// that is being assumed. For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+	// that is being assumed. For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 	// in the IAM User Guide.
 	//
 	// The plain text that you use for both inline and managed session policies
@@ -1703,7 +1805,7 @@ type AssumeRoleWithWebIdentityInput struct {
 	// This parameter is optional. You can provide up to 10 managed policy ARNs.
 	// However, the plain text that you use for both inline and managed session
 	// policies shouldn't exceed 2048 characters. For more information about ARNs,
-	// see Amazon Resource Names (ARNs) and AWS Service Namespaces (general/latest/gr/aws-arns-and-namespaces.html)
+	// see Amazon Resource Names (ARNs) and AWS Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html)
 	// in the AWS General Reference.
 	//
 	// The characters in this parameter count towards the 2048 character session
@@ -1718,7 +1820,7 @@ type AssumeRoleWithWebIdentityInput struct {
 	// in subsequent AWS API calls to access resources in the account that owns
 	// the role. You cannot use session policies to grant more permissions than
 	// those allowed by the identity-based policy of the role that is being assumed.
-	// For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+	// For more information, see Session Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 	// in the IAM User Guide.
 	PolicyArns []*PolicyDescriptorType `type:"list"`
 
@@ -2157,6 +2259,73 @@ func (s *FederatedUser) SetFederatedUserId(v string) *FederatedUser {
 	return s
 }
 
+type GetAccessKeyInfoInput struct {
+	_ struct{} `type:"structure"`
+
+	// The identifier of an access key.
+	//
+	// This parameter allows (through its regex pattern) a string of characters
+	// that can consist of any upper- or lowercased letter or digit.
+	//
+	// AccessKeyId is a required field
+	AccessKeyId *string `min:"16" type:"string" required:"true"`
+}
+
+// String returns the string representation
+func (s GetAccessKeyInfoInput) String() string {
+	return awsutil.Prettify(s)
+}
+
+// GoString returns the string representation
+func (s GetAccessKeyInfoInput) GoString() string {
+	return s.String()
+}
+
+// Validate inspects the fields of the type to determine if they are valid.
+func (s *GetAccessKeyInfoInput) Validate() error {
+	invalidParams := request.ErrInvalidParams{Context: "GetAccessKeyInfoInput"}
+	if s.AccessKeyId == nil {
+		invalidParams.Add(request.NewErrParamRequired("AccessKeyId"))
+	}
+	if s.AccessKeyId != nil && len(*s.AccessKeyId) < 16 {
+		invalidParams.Add(request.NewErrParamMinLen("AccessKeyId", 16))
+	}
+
+	if invalidParams.Len() > 0 {
+		return invalidParams
+	}
+	return nil
+}
+
+// SetAccessKeyId sets the AccessKeyId field's value.
+func (s *GetAccessKeyInfoInput) SetAccessKeyId(v string) *GetAccessKeyInfoInput {
+	s.AccessKeyId = &v
+	return s
+}
+
+type GetAccessKeyInfoOutput struct {
+	_ struct{} `type:"structure"`
+
+	// The number used to identify the AWS account.
+	Account *string `type:"string"`
+}
+
+// String returns the string representation
+func (s GetAccessKeyInfoOutput) String() string {
+	return awsutil.Prettify(s)
+}
+
+// GoString returns the string representation
+func (s GetAccessKeyInfoOutput) GoString() string {
+	return s.String()
+}
+
+// SetAccount sets the Account field's value.
+func (s *GetAccessKeyInfoOutput) SetAccount(v string) *GetAccessKeyInfoOutput {
+	s.Account = &v
+	return s
+}
+
 type GetCallerIdentityInput struct {
 	_ struct{} `type:"structure"`
 }
@@ -2259,7 +2428,7 @@ type GetFederationTokenInput struct {
 	// you a way to further restrict the permissions for a federated user. You cannot
 	// use session policies to grant more permissions than those that are defined
 	// in the permissions policy of the IAM user. For more information, see Session
-	// Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+	// Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 	// in the IAM User Guide.
 	//
 	// The plain text that you use for both inline and managed session policies
@@ -2285,7 +2454,7 @@ type GetFederationTokenInput struct {
 	// use as managed session policies. The plain text that you use for both inline
 	// and managed session policies shouldn't exceed 2048 characters. You can provide
 	// up to 10 managed policy ARNs. For more information about ARNs, see Amazon
-	// Resource Names (ARNs) and AWS Service Namespaces (general/latest/gr/aws-arns-and-namespaces.html)
+	// Resource Names (ARNs) and AWS Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html)
 	// in the AWS General Reference.
 	//
 	// This parameter is optional. However, if you do not pass any session policies,
@@ -2299,7 +2468,7 @@ type GetFederationTokenInput struct {
 	// you a way to further restrict the permissions for a federated user. You cannot
 	// use session policies to grant more permissions than those that are defined
 	// in the permissions policy of the IAM user. For more information, see Session
-	// Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/IAM/latest/UserGuide/access_policies.html#policies_session)
+	// Policies (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html#policies_session)
 	// in the IAM User Guide.
 	//
 	// The characters in this parameter count towards the 2048 character session
@@ -2546,7 +2715,7 @@ type PolicyDescriptorType struct {
 
 	// The Amazon Resource Name (ARN) of the IAM managed policy to use as a session
 	// policy for the role. For more information about ARNs, see Amazon Resource
-	// Names (ARNs) and AWS Service Namespaces (general/latest/gr/aws-arns-and-namespaces.html)
+	// Names (ARNs) and AWS Service Namespaces (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html)
 	// in the AWS General Reference.
 	Arn *string `locationName:"arn" min:"20" type:"string"`
 }
