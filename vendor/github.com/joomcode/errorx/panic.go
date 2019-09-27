@@ -38,33 +38,29 @@ func ErrorFromPanic(recoverResult interface{}) (error, bool) {
 	}
 
 	if wrapper, ok := err.(*panicErrorWrapper); ok {
-		return wrapper.errorWithStackTrace, true
+		return wrapper.inner, true
 	}
 
 	return err, true
 }
 
 func newPanicErrorWrapper(err error) *panicErrorWrapper {
-	originalError, errWithStackTrace := err, err
-	if typedErr, ok := errWithStackTrace.(*Error); !ok || typedErr.stackTrace == nil {
-		builder := NewErrorBuilder(panicPayloadWrap).WithConditionallyFormattedMessage("").WithCause(err)
-		errWithStackTrace = builder.Create()
-	}
-
 	return &panicErrorWrapper{
-		originalError:       originalError,
-		errorWithStackTrace: errWithStackTrace,
+		inner: NewErrorBuilder(panicPayloadWrap).
+			WithConditionallyFormattedMessage("panic").
+			WithCause(err).
+			EnhanceStackTrace().
+			Create(),
 	}
 }
 
+// panicErrorWrapper is designed for the original stack trace not to be lost in any way it may be handled
 type panicErrorWrapper struct {
-	originalError       error
-	errorWithStackTrace error
+	inner error
 }
 
-// Original error is used, as the wrapped one contains only the same stack trace as the panic
 func (w *panicErrorWrapper) Error() string {
-	return fmt.Sprintf("%+v", w.originalError)
+	return fmt.Sprintf("%+v", w.inner)
 }
 
 func (w *panicErrorWrapper) String() string {

@@ -86,7 +86,10 @@ func (c *baseClient) _getConn() (*pool.Conn, error) {
 
 	err = c.initConn(cn)
 	if err != nil {
-		c.connPool.Remove(cn)
+		c.connPool.Remove(cn, err)
+		if err := internal.Unwrap(err); err != nil {
+			return nil, err
+		}
 		return nil, err
 	}
 
@@ -99,7 +102,7 @@ func (c *baseClient) releaseConn(cn *pool.Conn, err error) {
 	}
 
 	if internal.IsBadConn(err, false) {
-		c.connPool.Remove(cn)
+		c.connPool.Remove(cn, err)
 	} else {
 		c.connPool.Put(cn)
 	}
@@ -113,7 +116,7 @@ func (c *baseClient) releaseConnStrict(cn *pool.Conn, err error) {
 	if err == nil || internal.IsRedisError(err) {
 		c.connPool.Put(cn)
 	} else {
-		c.connPool.Remove(cn)
+		c.connPool.Remove(cn, err)
 	}
 }
 
@@ -541,10 +544,12 @@ type Conn struct {
 }
 
 func newConn(opt *Options, cn *pool.Conn) *Conn {
+	connPool := pool.NewSingleConnPool(nil)
+	connPool.SetConn(cn)
 	c := Conn{
 		baseClient: baseClient{
 			opt:      opt,
-			connPool: pool.NewSingleConnPool(cn),
+			connPool: connPool,
 		},
 	}
 	c.baseClient.init()

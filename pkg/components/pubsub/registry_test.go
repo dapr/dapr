@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/actionscore/components-contrib/pubsub"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -30,7 +31,7 @@ func TestCreatePubSub(t *testing.T) {
 	t.Run("pubsub messagebus is registered", func(t *testing.T) {
 		const PubSubName = "mockPubSub"
 		// Initiate mock object
-		mockPubSub := new(MockPubSub)
+		mockPubSub := new(pubsub.MockPubSub)
 
 		// act
 		RegisterMessageBus(PubSubName, mockPubSub)

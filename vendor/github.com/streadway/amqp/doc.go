@@ -19,7 +19,7 @@ Design
 
 Most other broker clients publish to queues, but in AMQP, clients publish
 Exchanges instead.  AMQP is programmable, meaning that both the producers and
-consumers agree on the configuration of the broker, instead requiring an
+consumers agree on the configuration of the broker, instead of requiring an
 operator or system configuration that declares the logical topology in the
 broker.  The routing between producers and consumer queues is via Bindings.
 These bindings form the logical topology of the broker.

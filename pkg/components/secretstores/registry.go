@@ -3,15 +3,17 @@ package secretstores
 import (
 	"fmt"
 	"sync"
+
+	"github.com/actionscore/components-contrib/secretstores"
 )
 
 // SecretStoreRegistry is used to get registered secret store implementations
 type SecretStoreRegistry interface {
-	CreateSecretStore(name string) (SecretStore, error)
+	CreateSecretStore(name string) (secretstores.SecretStore, error)
 }
 
 type secretStoreRegistry struct {
-	secretStores map[string]SecretStore
+	secretStores map[string]secretstores.SecretStore
 }
 
 var instance *secretStoreRegistry
@@ -21,14 +23,14 @@ var once sync.Once
 func NewSecretStoreRegistry() SecretStoreRegistry {
 	once.Do(func() {
 		instance = &secretStoreRegistry{
-			secretStores: map[string]SecretStore{},
+			secretStores: map[string]secretstores.SecretStore{},
 		}
 	})
 	return instance
 }
 
 // RegisterSecretStore registers a new secret store
-func RegisterSecretStore(name string, secretStore SecretStore) {
+func RegisterSecretStore(name string, secretStore secretstores.SecretStore) {
 	instance.secretStores[createFullName(name)] = secretStore
 }
 
@@ -36,7 +38,7 @@ func createFullName(name string) string {
 	return fmt.Sprintf("secretstores.%s", name)
 }
 
-func (s *secretStoreRegistry) CreateSecretStore(name string) (SecretStore, error) {
+func (s *secretStoreRegistry) CreateSecretStore(name string) (secretstores.SecretStore, error) {
 	if val, ok := s.secretStores[name]; ok {
 		return val, nil
 	}

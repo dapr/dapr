@@ -172,7 +172,7 @@ func decodeJSONPb(d *json.Decoder, v interface{}) error {
 	if !ok {
 		return decodeNonProtoField(d, v)
 	}
-	unmarshaler := &jsonpb.Unmarshaler{AllowUnknownFields: true}
+	unmarshaler := &jsonpb.Unmarshaler{AllowUnknownFields: allowUnknownFields}
 	return unmarshaler.UnmarshalNext(d, p)
 }
 
@@ -186,7 +186,7 @@ func decodeNonProtoField(d *json.Decoder, v interface{}) error {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
 		if rv.Type().ConvertibleTo(typeProtoMessage) {
-			unmarshaler := &jsonpb.Unmarshaler{AllowUnknownFields: true}
+			unmarshaler := &jsonpb.Unmarshaler{AllowUnknownFields: allowUnknownFields}
 			return unmarshaler.UnmarshalNext(d, rv.Interface().(proto.Message))
 		}
 		rv = rv.Elem()
@@ -247,4 +247,16 @@ var typeProtoMessage = reflect.TypeOf((*proto.Message)(nil)).Elem()
 // Delimiter for newline encoded JSON streams.
 func (j *JSONPb) Delimiter() []byte {
 	return []byte("\n")
+}
+
+// allowUnknownFields helps not to return an error when the destination
+// is a struct and the input contains object keys which do not match any
+// non-ignored, exported fields in the destination.
+var allowUnknownFields = true
+
+// DisallowUnknownFields enables option in decoder (unmarshaller) to
+// return an error when it finds an unknown field. This function must be
+// called before using the JSON marshaller.
+func DisallowUnknownFields() {
+	allowUnknownFields = false
 }

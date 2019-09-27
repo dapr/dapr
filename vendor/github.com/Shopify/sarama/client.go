@@ -435,7 +435,11 @@ func (client *client) RefreshMetadata(topics ...string) error {
 		}
 	}
 
-	return client.tryRefreshMetadata(topics, client.conf.Metadata.Retry.Max)
+	deadline := time.Time{}
+	if client.conf.Metadata.Timeout > 0 {
+		deadline = time.Now().Add(client.conf.Metadata.Timeout)
+	}
+	return client.tryRefreshMetadata(topics, client.conf.Metadata.Retry.Max, deadline)
 }
 
 func (client *client) GetOffset(topic string, partitionID int32, time int64) (int64, error) {
@@ -737,20 +741,32 @@ func (client *client) refreshMetadata() error {
 	return nil
 }
 
-func (client *client) tryRefreshMetadata(topics []string, attemptsRemaining int) error {
+func (client *client) tryRefreshMetadata(topics []string, attemptsRemaining int, deadline time.Time) error {
+	pastDeadline := func(backoff time.Duration) bool {
+		if !deadline.IsZero() && time.Now().Add(backoff).After(deadline) {
+			// we are past the deadline
+			return true
+		}
+		return false
+	}
 	retry := func(err error) error {
 		if attemptsRemaining > 0 {
 			backoff := client.computeBackoff(attemptsRemaining)
+			if pastDeadline(backoff) {
+				Logger.Println("client/metadata skipping last retries as we would go past the metadata timeout")
+				return err
+			}
 			Logger.Printf("client/metadata retrying after %dms... (%d attempts remaining)\n", client.conf.Metadata.Retry.Backoff/time.Millisecond, attemptsRemaining)
 			if backoff > 0 {
 				time.Sleep(backoff)
 			}
-			return client.tryRefreshMetadata(topics, attemptsRemaining-1)
+			return client.tryRefreshMetadata(topics, attemptsRemaining-1, deadline)
 		}
 		return err
 	}
 
-	for broker := client.any(); broker != nil; broker = client.any() {
+	broker := client.any()
+	for ; broker != nil && !pastDeadline(0); broker = client.any() {
 		allowAutoTopicCreation := true
 		if len(topics) > 0 {
 			Logger.Printf("client/metadata fetching metadata for %v from broker %s\n", topics, broker.addr)
@@ -798,6 +814,11 @@ func (client *client) tryRefreshMetadata(topics []string, attemptsRemaining int)
 			_ = broker.Close()
 			client.deregisterBroker(broker)
 		}
+	}
+
+	if broker != nil {
+		Logger.Println("client/metadata not fetching metadata from broker %s as we would go past the metadata timeout\n", broker.addr)
+		return retry(ErrOutOfBrokers)
 	}
 
 	Logger.Println("client/metadata no available broker to send metadata request to")

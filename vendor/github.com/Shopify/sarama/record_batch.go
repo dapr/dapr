@@ -116,7 +116,10 @@ func (b *RecordBatch) decode(pd packetDecoder) (err error) {
 		return err
 	}
 
-	if err = pd.push(&crc32Field{polynomial: crcCastagnoli}); err != nil {
+	crc32Decoder := acquireCrc32Field(crcCastagnoli)
+	defer releaseCrc32Field(crc32Decoder)
+
+	if err = pd.push(crc32Decoder); err != nil {
 		return err
 	}
 
