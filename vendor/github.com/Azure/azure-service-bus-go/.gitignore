@@ -1,0 +1,29 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Project-local configuration
+.env
+
+# Test Infrastructure
+terraform.tfvars
+*.auto.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.tfstate.lock.info
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
+.glide/
+
+.idea
+
+vendor/

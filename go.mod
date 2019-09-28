@@ -6,7 +6,7 @@ require (
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/Sirupsen/logrus v1.0.6
-	github.com/actionscore/components-contrib v0.0.0-20190926231927-925f8a4d2d71
+	github.com/actionscore/components-contrib v0.0.0-20190927234345-80358f0a1122
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
@@ -39,10 +39,8 @@ require (
 	github.com/valyala/fasthttp v1.4.0
 	go.opencensus.io v0.22.1
 	golang.org/x/build v0.0.0-20190111050920-041ab4dc3f9d // indirect
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect
 	gonum.org/v1/gonum v0.0.0-20190911200027-40d3308efe80 // indirect
 	google.golang.org/grpc v1.24.0
-	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 	k8s.io/api v0.0.0-20190819141258-3544db3b9e44
 	k8s.io/apimachinery v0.0.0-20190817020851-f2f3a405f61d

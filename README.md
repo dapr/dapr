@@ -149,9 +149,9 @@ helm install stable/redis --set rbac.create=true
 
 ## Samples
 
-For more samples, please look at [samples](./samples).
-* [Run Actions Locally](samples/1.hello-world)
-* [Run Actions in Kubernetes](samples/2.hello-kubernetes)
+For more samples, please look at [samples](https://github.com/actionscore/samples).
+* [Run Actions Locally](https://github.com/actionscore/samples/tree/master/1.hello-world)
+* [Run Actions in Kubernetes](https://github.com/actionscore/samples/tree/master/2.hello-kubernetes)
 
 
 ## Developing Actions
