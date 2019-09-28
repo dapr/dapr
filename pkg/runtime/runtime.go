@@ -405,7 +405,7 @@ func (a *ActionsRuntime) initInputBindings(registry bindings_loader.BindingsRegi
 
 			binding, err := registry.CreateInputBinding(c.Spec.Type)
 			if err != nil {
-				log.Warnf("failed to create input binding %s: %s", c.Spec.Type, err)
+				log.Debugf("failed to create input binding %s: %s", c.Spec.Type, err)
 				continue
 			}
 			err = binding.Init(bindings.Metadata{
@@ -429,6 +429,7 @@ func (a *ActionsRuntime) initOutputBindings(registry bindings_loader.BindingsReg
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
 			if err != nil {
+				log.Debugf("failed to create output binding %s: %s", c.Spec.Type, err)
 				continue
 			}
 
