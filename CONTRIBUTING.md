@@ -2,7 +2,7 @@
 
 Thank you for your interest in Actions!
 
-Contributions come in many forms: submitting issues, writing code and participating in discussions and community calls.
+Contributions come in many forms: submitting issues, writing code, participating in discussions and community calls.
 
 This document provides the guidelines for how to contribute to the Actions project.
 
@@ -39,7 +39,7 @@ Before you file an issue, make sure you've checked the following:
     - You have as much data as possible. This usually comes in the form of logs and/or stacktrace. If running on Kubernetes or other environment, look at the logs of the Actions services (runtime, operator, placement service). More details on how to get logs can be found [here](docs/concepts/best-practices/troubleshooting/logs.md).
 1. For proposals
     - Many changes to the Actions runtime may require changes to the API. In that case, the best place to discuss the potential feature is the [Actions Spec repo](https://github.com/actionscore/spec).
-    - Other example could include bindings, state stores or entirely new components.
+    - Other examples could include bindings, state stores or entirely new components.
 
 ## Contributing to Actions
 
@@ -47,7 +47,7 @@ This section describes the guidelines for contributing code / docs to Actions.
 
 ### Pull Requests
 
-All contributions come through Pull requests. To submit a proposed change, we recommend following the following workflow:
+All contributions come through pull requests. To submit a proposed change, we recommend following this workflow:
 
 1. Make sure there's an issue (bug or proposal) raised, which sets the expectations for the contribution you are about to make.
 1. Fork the relevant repo and create a new branch
@@ -56,7 +56,7 @@ All contributions come through Pull requests. To submit a proposed change, we re
 1. Update relevant documentation for the change
 1. Commit and open a PR
 1. Wait for the CI process to finish and make sure all checks are green
-1. A maintainer of the project, will be assigned, and you can expect a review within a few days
+1. A maintainer of the project will be assigned, and you can expect a review within a few days
 
 #### Use work-in-progress PRs for early feedback
 
