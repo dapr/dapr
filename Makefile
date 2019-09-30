@@ -209,7 +209,7 @@ actions-operator.yaml: check-docker-env $(HOME)/.helm
 ################################################################################
 
 docker-deploy-k8s: check-docker-env $(HOME)/.helm
-	$(info Deploying ${ACTIONS_REGISTRY}/actions:${ACTIONS_TAG} to the current K8S context...)
+	$(info Deploying ${ACTIONS_REGISTRY}/${RELEASE_NAME}:${ACTIONS_TAG} to the current K8S context...)
 	$(HELM) install \
 		--name=$(RELEASE_NAME) \
 		--namespace=$(HELM_NAMESPACE) \
