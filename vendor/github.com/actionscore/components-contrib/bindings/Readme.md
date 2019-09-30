@@ -11,6 +11,7 @@ List of bindings and their status:
 | RabbitMQ | V  | V | Experimental |
 | AWS SQS | V | V | Experimental |
 | AWS SNS |  | V | Experimental |
+| GCP Cloud Pub/Sub | V | V | Experimental |
 | Azure EventHubs | V | V | Experimental |
 | Azure CosmosDB | | V | Experimental |
 | GCP Storage Bucket  | | V | Experimental |
