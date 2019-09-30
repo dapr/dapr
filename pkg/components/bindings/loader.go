@@ -9,6 +9,7 @@ import (
 	"github.com/actionscore/components-contrib/bindings/http"
 	"github.com/actionscore/components-contrib/bindings/kafka"
 	"github.com/actionscore/components-contrib/bindings/mqtt"
+	"github.com/actionscore/components-contrib/bindings/pubsub"
 	"github.com/actionscore/components-contrib/bindings/rabbitmq"
 	"github.com/actionscore/components-contrib/bindings/redis"
 	"github.com/actionscore/components-contrib/bindings/s3"
@@ -40,4 +41,6 @@ func Load() {
 	RegisterOutputBinding("azure.blobstorage", blobstorage.NewAzureBlobStorage())
 	RegisterInputBinding("azure.servicebusqueues", servicebusqueues.NewAzureServiceBusQueues())
 	RegisterOutputBinding("azure.servicebusqueues", servicebusqueues.NewAzureServiceBusQueues())
+	RegisterInputBinding("gcp.pubsub", pubsub.NewGCPPubSub())
+	RegisterOutputBinding("gcp.pubsub", pubsub.NewGCPPubSub())
 }
