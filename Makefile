@@ -35,16 +35,21 @@ export GOARCH ?= $(TARGET_ARCH_LOCAL)
 LOCAL_OS := $(shell uname)
 ifeq ($(LOCAL_OS),Linux)
    TARGET_OS_LOCAL = linux
-   export ARCHIVE_EXT = .tar.gz
 else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
-   export ARCHIVE_EXT = .tar.gz
 else
    TARGET_OS_LOCAL ?= windows
-   BINARY_EXT_LOCAL = .exe
-   export ARCHIVE_EXT = .zip
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
+
+ifeq ($(GOOS),windows)
+BINARY_EXT_LOCAL:=.exe
+export ARCHIVE_EXT = .zip
+else
+BINARY_EXT_LOCAL:=
+export ARCHIVE_EXT = .tar.gz
+endif
+
 export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
 
 # Docker image build and push setting
@@ -85,7 +90,7 @@ LDFLAGS := "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_
 # Target: build                                                                #
 ################################################################################
 .PHONY: build
-ACTIONS_BINS:=$(foreach ITEM,$(BINARIES),$(ACTIONS_OUT_DIR)/$(ITEM))
+ACTIONS_BINS:=$(foreach ITEM,$(BINARIES),$(ACTIONS_OUT_DIR)/$(ITEM)$(BINARY_EXT))
 build: $(ACTIONS_BINS)
 
 # Generate builds for actions binaries for the target
@@ -104,9 +109,9 @@ $(5)/$(1):
 endef
 
 # Generate binary targets
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM)$(BINARY_EXT),$(GOOS),$(GOARCH),$(ACTIONS_OUT_DIR))))
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),./cmd/$(ITEM),$(GOOS),$(GOARCH),$(ACTIONS_OUT_DIR))))
 
-# Generate binary targets
+# Generate binary targets for linux to generate docker image
 ifneq ($(GOOS), linux)
 $(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM),linux,$(GOARCH),$(ACTIONS_LINUX_OUT_DIR))))
 endif
