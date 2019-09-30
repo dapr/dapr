@@ -111,14 +111,16 @@ endef
 # Generate binary targets
 $(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),./cmd/$(ITEM),$(GOOS),$(GOARCH),$(ACTIONS_OUT_DIR))))
 
-# Generate binary targets for linux to generate docker image
+################################################################################
+# Target: build-linux                                                          #
+################################################################################
+BUILD_LINUX_BINS:=$(foreach ITEM,$(BINARIES),$(ACTIONS_LINUX_OUT_DIR)/$(ITEM))
+build-linux: $(BUILD_LINUX_BINS)
+
+# Generate linux binaries targets to build linux docker image
 ifneq ($(GOOS), linux)
 $(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM),linux,$(GOARCH),$(ACTIONS_LINUX_OUT_DIR))))
 endif
-
-# target: build-linux
-BUILD_LINUX_BINS:=$(foreach ITEM,$(BINARIES),$(ACTIONS_LINUX_OUT_DIR)/$(ITEM))
-build-linux: $(BUILD_LINUX_BINS)
 
 ################################################################################
 # Target: archive                                                              #
