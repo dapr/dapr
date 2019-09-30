@@ -1,0 +1,5 @@
+FROM 
+ENTRYPOINT []
+WORKDIR /
+COPY --from=alpine /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+ADD ../debug/. /
