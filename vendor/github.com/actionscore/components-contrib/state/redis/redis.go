@@ -196,13 +196,13 @@ func (r *StateStore) setValue(req *state.SetRequest) error {
 
 	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, b)
 	if err := redis.AsError(res); err != nil {
-		return fmt.Errorf("failed to set key '%s' due to ETag mismatch", req.Key)
+		return fmt.Errorf("failed to set key %s: %s", req.Key, err)
 	}
 
 	if req.Options.Consistency == state.Strong && r.replicas > 0 {
 		res = r.client.Do(context.Background(), "WAIT", r.replicas, 1000)
 		if err := redis.AsError(res); err != nil {
-			return fmt.Errorf("timed out while wating for %d replicas to acknowledge", r.replicas)
+			return fmt.Errorf("timed out while waiting for %v replicas to acknowledge write", r.replicas)
 		}
 	}
 
