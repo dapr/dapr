@@ -8,6 +8,7 @@ import (
 	"github.com/actionscore/components-contrib/bindings/gcpbucket"
 	"github.com/actionscore/components-contrib/bindings/http"
 	"github.com/actionscore/components-contrib/bindings/kafka"
+	"github.com/actionscore/components-contrib/bindings/kubernetes"
 	"github.com/actionscore/components-contrib/bindings/mqtt"
 	"github.com/actionscore/components-contrib/bindings/pubsub"
 	"github.com/actionscore/components-contrib/bindings/rabbitmq"
@@ -28,7 +29,6 @@ func Load() {
 	RegisterOutputBinding("aws.dynamodb", dynamodb.NewDynamoDB())
 	RegisterOutputBinding("azure.cosmosdb", cosmosdb.NewCosmosDB())
 	RegisterOutputBinding("gcp.bucket", gcpbucket.NewGCPStorage())
-	RegisterInputBinding("http", http.NewHTTP())
 	RegisterOutputBinding("http", http.NewHTTP())
 	RegisterInputBinding("kafka", kafka.NewKafka())
 	RegisterOutputBinding("kafka", kafka.NewKafka())
@@ -43,4 +43,5 @@ func Load() {
 	RegisterOutputBinding("azure.servicebusqueues", servicebusqueues.NewAzureServiceBusQueues())
 	RegisterInputBinding("gcp.pubsub", pubsub.NewGCPPubSub())
 	RegisterOutputBinding("gcp.pubsub", pubsub.NewGCPPubSub())
+	RegisterInputBinding("kubernetes", kubernetes.NewKubernetes())
 }
