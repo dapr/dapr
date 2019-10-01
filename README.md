@@ -155,4 +155,4 @@ For more samples, please look at [samples](https://github.com/actionscore/sample
 
 ## Contributing to the project
 
-* [Development Guide](./docs/devel/development.md)
+* [Development Guide](./docs/development/development.md)
