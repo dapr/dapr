@@ -1,7 +1,7 @@
 
 # Development Guide
 
-This documents helps you get started developing Actions.
+This document helps you get started developing Actions. If you find any problem while following this guide, please create a Pull Request to update this document.
 
 ## Prerequisites
 
