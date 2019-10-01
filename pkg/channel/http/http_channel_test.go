@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/valyala/fasthttp"
@@ -13,6 +14,21 @@ import (
 	"github.com/actionscore/actions/pkg/channel"
 	"github.com/stretchr/testify/assert"
 )
+
+type testConcurrencyHandler struct {
+	maxCalls     int
+	currentCalls int
+	testFailed   bool
+}
+
+func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.currentCalls++
+	if t.currentCalls > t.maxCalls {
+		t.testFailed = true
+	}
+	t.currentCalls--
+	io.WriteString(w, r.URL.RawQuery)
+}
 
 type testHandler struct {
 }
@@ -42,6 +58,56 @@ func TestInvokeMethod(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "param1=val1&param2=val2", string(response.Data))
 	server.Close()
+}
+
+func TestInvokeMethodSingleConcurrency(t *testing.T) {
+	t.Run("single concurrency", func(t *testing.T) {
+		handler := testConcurrencyHandler{
+			maxCalls: 1,
+		}
+		server := httptest.NewServer(&handler)
+		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
+		c.ch = make(chan int, 1)
+
+		var wg sync.WaitGroup
+		wg.Add(5)
+		for i := 0; i < 5; i++ {
+			go func() {
+				request2 := &channel.InvokeRequest{
+					Payload: []byte(""),
+				}
+				c.InvokeMethod(request2)
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+		assert.False(t, handler.testFailed)
+		server.Close()
+	})
+
+	t.Run("10 concurrent calls", func(t *testing.T) {
+		handler := testConcurrencyHandler{
+			maxCalls: 10,
+		}
+		server := httptest.NewServer(&handler)
+		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
+		c.ch = make(chan int, 1)
+
+		var wg sync.WaitGroup
+		wg.Add(20)
+		for i := 0; i < 20; i++ {
+			go func() {
+				request2 := &channel.InvokeRequest{
+					Payload: []byte(""),
+				}
+				c.InvokeMethod(request2)
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+		assert.False(t, handler.testFailed)
+		server.Close()
+	})
 }
 
 func TestInvokeWithHeaders(t *testing.T) {

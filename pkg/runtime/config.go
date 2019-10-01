@@ -40,10 +40,11 @@ type Config struct {
 	AllowedOrigins          string
 	Standalone              config.StandaloneConfig
 	Kubernetes              config.KubernetesConfig
+	MaxConcurrency          int
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
@@ -62,5 +63,6 @@ func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedO
 			ControlPlaneAddress: controlPlaneAddress,
 		},
 		EnableProfiling: enableProfiling,
+		MaxConcurrency:  maxConcurrency,
 	}
 }
