@@ -33,6 +33,7 @@ const (
 type Channel struct {
 	client      *fasthttp.Client
 	baseAddress string
+	ch          chan int
 }
 
 // InvokeMethod invokes user code via HTTP
@@ -62,7 +63,14 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	req.Header.SetMethod(method)
 
 	resp := fasthttp.AcquireResponse()
+
+	if h.ch != nil {
+		h.ch <- 1
+	}
 	err := h.client.Do(req, resp)
+	if h.ch != nil {
+		<-h.ch
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +99,13 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
-func CreateLocalChannel(port int) (channel.AppChannel, error) {
-	return &Channel{
+func CreateLocalChannel(port, maxConcurrency int) (channel.AppChannel, error) {
+	c := &Channel{
 		client:      &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}, ReadTimeout: time.Second * 60, MaxIdemponentCallAttempts: 0},
 		baseAddress: fmt.Sprintf("http://127.0.0.1:%v", port),
-	}, nil
+	}
+	if maxConcurrency > 0 {
+		c.ch = make(chan int, maxConcurrency)
+	}
+	return c, nil
 }

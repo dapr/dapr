@@ -32,6 +32,7 @@ func main() {
 	allowedOrigins := flag.String("allowed-origins", actionsrt.DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default port is %v", actionsrt.DefaultComponentsPath))
 	runtimeVersion := flag.Bool("version", false, "prints the runtime version")
+	maxConcurrency := flag.Int("max-concurrency", -1, "controls the concurrency level when forwarding requests to user code")
 
 	flag.Parse()
 
@@ -79,7 +80,7 @@ func main() {
 	}
 
 	runtimeConfig := actionsrt.NewRuntimeConfig(*actionsID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, actionHTTP, actionGRPC, applicationPort, profPort, enableProf)
+		*appProtocol, *mode, actionHTTP, actionGRPC, applicationPort, profPort, enableProf, *maxConcurrency)
 
 	var globalConfig *global_config.Configuration
 

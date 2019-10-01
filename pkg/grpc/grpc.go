@@ -26,14 +26,14 @@ func NewGRPCManager() *Manager {
 }
 
 // CreateLocalChannel creates a new gRPC AppChannel
-func (g *Manager) CreateLocalChannel(port int) (channel.AppChannel, error) {
+func (g *Manager) CreateLocalChannel(port, maxConcurrency int) (channel.AppChannel, error) {
 	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port))
 	if err != nil {
 		return nil, fmt.Errorf("error establishing connection to app grpc on port %v: %s", port, err)
 	}
 
 	g.AppClient = conn
-	ch := grpc_channel.CreateLocalChannel(port, conn)
+	ch := grpc_channel.CreateLocalChannel(port, maxConcurrency, conn)
 	return ch, nil
 }
 

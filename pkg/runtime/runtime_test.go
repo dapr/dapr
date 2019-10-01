@@ -433,7 +433,8 @@ func NewTestActionsRuntime(mode modes.ActionsMode) *ActionsRuntime {
 		DefaultActionsGRPCPort,
 		1024,
 		DefaultProfilePort,
-		false)
+		false,
+		-1)
 
 	rt := NewActionsRuntime(testRuntimeConfig, &config.Configuration{})
 	rt.components = []components_v1alpha1.Component{

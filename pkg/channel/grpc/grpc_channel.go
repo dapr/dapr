@@ -18,14 +18,19 @@ import (
 type Channel struct {
 	client      *grpc.ClientConn
 	baseAddress string
+	ch          chan int
 }
 
 // CreateLocalChannel creates a gRPC connection with user code
-func CreateLocalChannel(port int, conn *grpc.ClientConn) *Channel {
-	return &Channel{
+func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn) *Channel {
+	c := &Channel{
 		client:      conn,
 		baseAddress: fmt.Sprintf("127.0.0.1:%v", port),
 	}
+	if maxConcurrency > 0 {
+		c.ch = make(chan int, maxConcurrency)
+	}
+	return c
 }
 
 const (
@@ -50,7 +55,13 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 		Metadata: metadata,
 	}
 
+	if g.ch != nil {
+		g.ch <- 1
+	}
 	resp, err := c.OnMethodCall(ctx, &msg)
+	if g.ch != nil {
+		<-g.ch
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -12,22 +12,23 @@ import (
 )
 
 const (
-	sidecarContainerName = "actionsrt"
-	actionsEnabledKey    = "actions.io/enabled"
-	actionsPortKey       = "actions.io/port"
-	actionsConfigKey     = "actions.io/config"
-	actionsProtocolKey   = "actions.io/protocol"
-	actionsIDKey         = "actions.io/id"
-	actionsProfilingKey  = "actions.io/profiling"
-	actionsLogLevel      = "actions.io/log-level"
-	sidecarHTTPPort      = 3500
-	sidecarGRPCPORT      = 50001
-	apiAddress           = "http://actions-api"
-	placementService     = "actions-placement"
-	sidecarHTTPPortName  = "actions-http"
-	sidecarGRPCPortName  = "actions-grpc"
-	defaultLogLevel      = "info"
-	kubernetesMountPath  = "/var/run/secrets/kubernetes.io/serviceaccount"
+	sidecarContainerName     = "actionsrt"
+	actionsEnabledKey        = "actions.io/enabled"
+	actionsPortKey           = "actions.io/port"
+	actionsConfigKey         = "actions.io/config"
+	actionsProtocolKey       = "actions.io/protocol"
+	actionsIDKey             = "actions.io/id"
+	actionsProfilingKey      = "actions.io/profiling"
+	actionsLogLevel          = "actions.io/log-level"
+	actionsMaxConcurrencyKey = "actions.io/max-concurrency"
+	sidecarHTTPPort          = 3500
+	sidecarGRPCPORT          = 50001
+	apiAddress               = "http://actions-api"
+	placementService         = "actions-placement"
+	sidecarHTTPPortName      = "actions-http"
+	sidecarGRPCPortName      = "actions-grpc"
+	defaultLogLevel          = "info"
+	kubernetesMountPath      = "/var/run/secrets/kubernetes.io/serviceaccount"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace, image string) ([]PatchOperation, error) {
@@ -65,14 +66,19 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace,
 	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
 	apiSrvAddress := getKubernetesDNS(apiAddress, namespace)
 	logLevel := getLogLevel(pod.Annotations)
+	maxConcurrency, err := getMaxConcurrency(pod.Annotations)
+	if err != nil {
+		log.Warn(err)
+	}
 
 	appPortStr := ""
 	if appPort > 0 {
 		appPortStr = fmt.Sprintf("%v", appPort)
 	}
+	maxConcurrencyStr := fmt.Sprintf("%v", maxConcurrency)
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, tokenMount)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, maxConcurrencyStr, tokenMount)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -115,6 +121,18 @@ func podContainsSidecarContainer(pod *corev1.Pod) bool {
 		}
 	}
 	return false
+}
+
+func getMaxConcurrency(annotations map[string]string) (int32, error) {
+	m, ok := annotations[actionsMaxConcurrencyKey]
+	if !ok {
+		return -1, nil
+	}
+	maxConcurrency, err := strconv.ParseInt(m, 10, 32)
+	if err != nil {
+		return -1, fmt.Errorf("error parsing max concurrency int value %s: %s", m, err)
+	}
+	return int32(maxConcurrency), nil
 }
 
 func getAppPort(annotations map[string]string) (int32, error) {
@@ -184,7 +202,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, actionSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, tokenVolumeMount *corev1.VolumeMount) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, actionSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           actionSidecarImage,
@@ -201,7 +219,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, actio
 		},
 		Command: []string{"/actionsrt"},
 		Env:     []corev1.EnvVar{{Name: "HOST_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
-		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--actions-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel},
+		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--actions-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency},
 	}
 
 	if tokenVolumeMount != nil {
