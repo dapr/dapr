@@ -120,13 +120,35 @@ func TestLogLevel(t *testing.T) {
 	})
 }
 
+func TestMaxConcurrency(t *testing.T) {
+	t.Run("empty max concurrency - shuould be -1", func(t *testing.T) {
+		m := map[string]string{}
+		maxConcurrency, err := getMaxConcurrency(m)
+		assert.Nil(t, err)
+		assert.Equal(t, int32(-1), maxConcurrency)
+	})
+
+	t.Run("invalid max concurrency - should be -1", func(t *testing.T) {
+		m := map[string]string{actionsMaxConcurrencyKey: "invalid"}
+		_, err := getMaxConcurrency(m)
+		assert.NotNil(t, err)
+	})
+
+	t.Run("valid max concurrency - should be 10", func(t *testing.T) {
+		m := map[string]string{actionsMaxConcurrencyKey: "10"}
+		maxConcurrency, err := getMaxConcurrency(m)
+		assert.Nil(t, err)
+		assert.Equal(t, int32(10), maxConcurrency)
+	})
+}
+
 func TestKubernetesDNS(t *testing.T) {
 	dns := getKubernetesDNS("a", "b")
 	assert.Equal(t, "a.b.svc.cluster.local", dns)
 }
 
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", nil)
+	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", "-1", nil)
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
 }

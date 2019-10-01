@@ -11,6 +11,9 @@ GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
 CGO			?= 0
 BINARIES    ?= actionsrt placement operator injector
 
+# Add latest tag if LATEST_RELEASE is true
+LATEST_RELEASE ?=
+
 ifdef REL_VERSION
 	ACTIONS_VERSION := $(REL_VERSION)
 else
@@ -32,30 +35,46 @@ export GOARCH ?= $(TARGET_ARCH_LOCAL)
 LOCAL_OS := $(shell uname)
 ifeq ($(LOCAL_OS),Linux)
    TARGET_OS_LOCAL = linux
-   export ARCHIVE_EXT = .tar.gz
 else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
-   export ARCHIVE_EXT = .tar.gz
 else
    TARGET_OS_LOCAL ?= windows
-   BINARY_EXT_LOCAL = .exe
-   export ARCHIVE_EXT = .zip
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
+
+ifeq ($(GOOS),windows)
+BINARY_EXT_LOCAL:=.exe
+export ARCHIVE_EXT = .zip
+else
+BINARY_EXT_LOCAL:=
+export ARCHIVE_EXT = .tar.gz
+endif
+
 export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
 
-# Use the variable H to add a header (equivalent to =>) to informational output
-H = $(shell printf "\033[34;1m=>\033[0m")
+# Docker image build and push setting
+DOCKER:=docker
+DOCKERFILE_DIR?=./docker
+DOCKERFILE:=Dockerfile
 
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
 else ifeq ($(DEBUG),0)
   BUILDTYPE_DIR:=release
 else
+  DOCKERFILE:=Dockerfile-debug
   BUILDTYPE_DIR:=debug
   GCFLAGS:=-gcflags="all=-N -l"
-  $(info $(H) Build with debugger information)
+  $(info Build with debugger information)
 endif
+
+# Helm template and install setting
+HELM:=helm
+RELEASE_NAME?=actions
+HELM_NAMESPACE?=actions-system
+HELM_CHART_DIR:=./charts/actions-operator
+HELM_OUT_DIR:=$(OUT_DIR)/install
+HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 
 ################################################################################
 # Go build details                                                             #
@@ -64,29 +83,44 @@ BASE_PACKAGE_NAME := github.com/actionscore/actions
 OUT_DIR := ./dist
 
 ACTIONS_OUT_DIR := $(OUT_DIR)/$(GOOS)_$(GOARCH)/$(BUILDTYPE_DIR)
+ACTIONS_LINUX_OUT_DIR := $(OUT_DIR)/linux_$(GOARCH)/$(BUILDTYPE_DIR)
 LDFLAGS := "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(ACTIONS_VERSION)"
 
 ################################################################################
 # Target: build                                                                #
 ################################################################################
 .PHONY: build
-build: $(BINARIES)
+ACTIONS_BINS:=$(foreach ITEM,$(BINARIES),$(ACTIONS_OUT_DIR)/$(ITEM)$(BINARY_EXT))
+build: $(ACTIONS_BINS)
 
 # Generate builds for actions binaries for the target
 # Params:
 # $(1): the binary name for the target
-# $(2): the output directory for the binary
+# $(2): the binary main directory
+# $(3): the target os
+# $(4): the target arch
+# $(5): the output directory
 define genBinariesForTarget
-.PHONY: $(1)
-$(1):
-	CGO_ENABLED=$(CGO) GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GCFLAGS) -ldflags $(LDFLAGS) \
-	-o $(ACTIONS_OUT_DIR)/$(1)$(BINARY_EXT) -mod=vendor \
+.PHONY: $(5)/$(1)
+$(5)/$(1):
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags $(LDFLAGS) \
+	-o $(5)/$(1) -mod=vendor \
 	$(2)/main.go;
 endef
 
 # Generate binary targets
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM))))
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),./cmd/$(ITEM),$(GOOS),$(GOARCH),$(ACTIONS_OUT_DIR))))
 
+################################################################################
+# Target: build-linux                                                          #
+################################################################################
+BUILD_LINUX_BINS:=$(foreach ITEM,$(BINARIES),$(ACTIONS_LINUX_OUT_DIR)/$(ITEM))
+build-linux: $(BUILD_LINUX_BINS)
+
+# Generate linux binaries targets to build linux docker image
+ifneq ($(GOOS), linux)
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM),linux,$(GOARCH),$(ACTIONS_LINUX_OUT_DIR))))
+endif
 
 ################################################################################
 # Target: archive                                                              #
@@ -111,6 +145,77 @@ endef
 
 # Generate archive-*.[zip|tar.gz] targets
 $(foreach ITEM,$(BINARIES),$(eval $(call genArchiveBinary,$(ITEM),$(ARCHIVE_OUT_DIR))))
+
+################################################################################
+# Target: docker-build, docker-push                                            #
+################################################################################
+
+LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)
+DOCKER_IMAGE_TAG=$(ACTIONS_REGISTRY)/$(RELEASE_NAME):$(ACTIONS_TAG)
+
+ifeq ($(LATEST_RELEASE),true)
+DOCKER_IMAGE_LATEST_TAG=$(ACTIONS_REGISTRY)/$(RELEASE_NAME):latest
+endif
+
+# check the required environment variables
+check-docker-env:
+ifeq ($(ACTIONS_REGISTRY),)
+	$(error ACTIONS_REGISTRY environment variable must be set)
+endif
+ifeq ($(ACTIONS_TAG),)
+	$(error ACTIONS_TAG environment variable must be set)
+endif
+
+# build docker image for linux
+docker-build: check-docker-env build-linux
+	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) build -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)
+ifeq ($(LATEST_RELEASE),true)
+	$(info Building $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
+	$(DOCKER) tag $(DOCKER_IMAGE_TAG) $(DOCKER_IMAGE_LATEST_TAG)
+endif
+
+# push docker image to the registry
+docker-push: docker-build
+	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
+	$(DOCKER) push $(DOCKER_IMAGE_TAG)
+ifeq ($(LATEST_RELEASE),true)
+	$(info Pushing $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
+	$(DOCKER) push $(DOCKER_IMAGE_LATEST_TAG)
+endif
+
+################################################################################
+# Target: manifest-gen                                                         #
+################################################################################
+
+# Generate helm chart manifest
+manifest-gen: actions-operator.yaml
+
+$(HOME)/.helm:
+	$(HELM) init --client-only
+
+actions-operator.yaml: check-docker-env $(HOME)/.helm
+	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
+	@mkdir -p $(HELM_OUT_DIR)
+	$(HELM) template \
+		--name=$(RELEASE_NAME) \
+		--namespace=$(HELM_NAMESPACE) \
+		--set-string global.tag=${ACTIONS_TAG} \ 
+		--set-string global.registry=${ACTIONS_REGISTRY} \
+		$(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
+
+################################################################################
+# Target: docker-deploy-k8s                                                    #
+################################################################################
+
+docker-deploy-k8s: check-docker-env $(HOME)/.helm
+	$(info Deploying ${ACTIONS_REGISTRY}/${RELEASE_NAME}:${ACTIONS_TAG} to the current K8S context...)
+	$(HELM) install \
+		--name=$(RELEASE_NAME) \
+		--namespace=$(HELM_NAMESPACE) \
+		--set-string global.tag=${ACTIONS_TAG}
+		--set-string global.registry=${ACTIONS_REGISTRY} \
+		$(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #

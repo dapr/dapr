@@ -754,7 +754,7 @@ func (a *ActionsRuntime) getConfigurationGRPC() (*config.ApplicationConfig, erro
 
 func (a *ActionsRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port int) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -765,11 +765,13 @@ func (a *ActionsRuntime) createAppChannel() error {
 			return fmt.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency)
 		if err != nil {
 			return err
 		}
-
+		if a.runtimeConfig.MaxConcurrency > 0 {
+			log.Infof("app max concurrency set to %v", a.runtimeConfig.MaxConcurrency)
+		}
 		a.appChannel = ch
 	}
 
