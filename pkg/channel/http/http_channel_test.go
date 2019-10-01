@@ -19,14 +19,21 @@ type testConcurrencyHandler struct {
 	maxCalls     int
 	currentCalls int
 	testFailed   bool
+	lock         sync.Mutex
 }
 
 func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.lock.Lock()
 	t.currentCalls++
+	t.lock.Unlock()
+
 	if t.currentCalls > t.maxCalls {
 		t.testFailed = true
 	}
+
+	t.lock.Lock()
 	t.currentCalls--
+	t.lock.Unlock()
 	io.WriteString(w, r.URL.RawQuery)
 }
 
@@ -60,10 +67,11 @@ func TestInvokeMethod(t *testing.T) {
 	server.Close()
 }
 
-func TestInvokeMethodSingleConcurrency(t *testing.T) {
+func TestInvokeMethodMaxConcurrency(t *testing.T) {
 	t.Run("single concurrency", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls: 1,
+			lock:     sync.Mutex{},
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
@@ -88,6 +96,7 @@ func TestInvokeMethodSingleConcurrency(t *testing.T) {
 	t.Run("10 concurrent calls", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls: 10,
+			lock:     sync.Mutex{},
 		}
 		server := httptest.NewServer(&handler)
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
