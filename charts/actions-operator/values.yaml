@@ -1,6 +1,4 @@
-replicaCount: 1
-
-image:
-  repository: actionscore.azurecr.io/actions
+global:
+  registry: actionscore.azurecr.io
   tag: latest
-  
+  imagePullPolicy: Always

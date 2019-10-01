@@ -17,8 +17,12 @@ spec:
       serviceAccountName: actions-operator
       containers:
       - name: sidecar-injector
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{- if contains "/" .Values.image.name }}
+        image: "{{ .Values.image.name }}"
+{{- else }}
+        image: "{{ $.Values.global.registry }}/actions:{{ $.Values.global.tag }}"
+{{- end }}
+        imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
         securityContext:
           runAsUser: 1000
         command:
