@@ -22,6 +22,7 @@ List of bindings and their status:
 | AWS S3 | | V | Experimental |
 | Azure Blob Storage | | V | Experimental |
 | Azure Service Bus Queues | V | V | Experimental |
+| Kubernetes Events | V | | Experimental |
 
 ## Implementing a new binding
 

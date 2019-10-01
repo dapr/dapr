@@ -87,7 +87,7 @@ github.com/Shopify/sarama
 github.com/Sirupsen/logrus
 # github.com/a8m/documentdb v1.2.0
 github.com/a8m/documentdb
-# github.com/actionscore/components-contrib v0.0.0-20190930200230-ec74d90bf409
+# github.com/actionscore/components-contrib v0.0.0-20191001172122-96bfa841c27e
 github.com/actionscore/components-contrib/state
 github.com/actionscore/components-contrib/bindings
 github.com/actionscore/components-contrib/bindings/blobstorage
@@ -97,6 +97,7 @@ github.com/actionscore/components-contrib/bindings/eventhubs
 github.com/actionscore/components-contrib/bindings/gcpbucket
 github.com/actionscore/components-contrib/bindings/http
 github.com/actionscore/components-contrib/bindings/kafka
+github.com/actionscore/components-contrib/bindings/kubernetes
 github.com/actionscore/components-contrib/bindings/mqtt
 github.com/actionscore/components-contrib/bindings/pubsub
 github.com/actionscore/components-contrib/bindings/rabbitmq
@@ -201,6 +202,8 @@ github.com/go-redis/redis/internal/util
 # github.com/gogo/protobuf v1.3.0
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
+# github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+github.com/golang/glog
 # github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6
 github.com/golang/groupcache/lru
 # github.com/golang/protobuf v1.3.2
@@ -274,6 +277,10 @@ github.com/klauspost/compress/gzip
 github.com/klauspost/compress/zlib
 # github.com/klauspost/cpuid v1.2.1
 github.com/klauspost/cpuid
+# github.com/kubernetes-client/go v0.0.0-20190625181339-cd8e39e789c7
+github.com/kubernetes-client/go/kubernetes/client
+github.com/kubernetes-client/go/kubernetes/config
+github.com/kubernetes-client/go/kubernetes/config/api
 # github.com/mailru/easyjson v0.7.0
 github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
