@@ -5,8 +5,8 @@ import (
 	"io/ioutil"
 
 	log "github.com/Sirupsen/logrus"
-	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	config "github.com/actionscore/actions/pkg/config/modes"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/ghodss/yaml"
 )
 
@@ -22,7 +22,7 @@ func NewStandaloneComponents(configuration config.StandaloneConfig) *StandaloneC
 	}
 }
 
-// LoadComponents loads actions components from a given directory
+// LoadComponents loads dapr components from a given directory
 func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	dir := s.config.ComponentsPath
 	files, err := ioutil.ReadDir(dir)

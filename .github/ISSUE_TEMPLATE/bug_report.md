@@ -1,12 +1,12 @@
 ---
 name: Bug report
-about: Report a bug in Actions
+about: Report a bug in Dapr
 title: ''
 labels: kind/bug
 assignees: ''
 
 ---
-<!-- If you need to report a security issue with Actions, send an email to actionsct@microsoft.com. -->
+<!-- If you need to report a security issue with Dapr, send an email to daprct@microsoft.com. -->
 ## In what area(s)?
 
 <!-- Remove the '> ' to select -->
@@ -17,7 +17,7 @@ assignees: ''
 > /area docs
 > /area test-and-release
 
-## What version of Actions?
+## What version of Dapr?
 
 <!-- Delete all but your choice -->
 

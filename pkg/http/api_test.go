@@ -13,14 +13,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/actionscore/actions/pkg/actors"
-	"github.com/actionscore/actions/pkg/channel/http"
-	"github.com/actionscore/actions/pkg/config"
-	diag "github.com/actionscore/actions/pkg/diagnostics"
-	"github.com/actionscore/actions/pkg/messaging"
-	actionst "github.com/actionscore/actions/pkg/testing"
-	"github.com/actionscore/components-contrib/bindings"
-	"github.com/actionscore/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messaging"
+	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/state"
 	jsoniter "github.com/json-iterator/go"
 	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/stretchr/testify/assert"
@@ -157,7 +157,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		},
 	}
 
-	mockDirectMessaging := new(actionst.MockDirectMessaging)
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
@@ -167,7 +167,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/invoke/fakeActionsID/method/fakeMethod"
+		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -181,7 +181,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 					http.HTTPVerb:    "POST",
 					http.QueryString: "", // without query string
 				},
-				Target: "fakeActionsID",
+				Target: "fakeDaprID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -193,7 +193,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/invoke/fakeActionsID/method/fakeMethod?param1=val1&param2=val2"
+		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -207,7 +207,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 					http.HTTPVerb:    "POST",
 					http.QueryString: "param1=val1&param2=val2",
 				},
-				Target: "fakeActionsID",
+				Target: "fakeDaprID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -231,7 +231,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		},
 	}
 
-	mockDirectMessaging := new(actionst.MockDirectMessaging)
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	fakeServer := newFakeHTTPServer()
 
@@ -246,7 +246,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeActionsID/method/fakeMethod"
+		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -260,7 +260,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 					http.HTTPVerb:    "POST",
 					http.QueryString: "", // without query string
 				},
-				Target: "fakeActionsID",
+				Target: "fakeDaprID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -274,7 +274,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeActionsID/method/fakeMethod?param1=val1&param2=val2"
+		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -288,7 +288,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 					http.HTTPVerb:    "POST",
 					http.QueryString: "param1=val1&param2=val2",
 				},
-				Target: "fakeActionsID",
+				Target: "fakeDaprID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -333,7 +333,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Save actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -373,7 +373,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		assert.Equal(t, base64Encoded, serializedByteArray[1:len(serializedByteArray)-1], "serialized byte array must be base64-encoded data")
 
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -422,7 +422,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			"data2": string(base64Encoded),
 		}
 
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -454,7 +454,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		nonJSONFakeData := []byte("{\"key\":}")
 
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -484,7 +484,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -506,7 +506,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("DeleteState", &actors.DeleteStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -547,7 +547,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
@@ -612,7 +612,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Save actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -654,7 +654,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		assert.Equal(t, base64Encoded, serializedByteArray[1:len(serializedByteArray)-1], "serialized byte array must be base64-encoded data")
 
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -705,7 +705,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			"data2": string(base64Encoded),
 		}
 
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -740,7 +740,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		nonJSONFakeData := []byte("{\"key\":}")
 
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -772,7 +772,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -796,7 +796,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("DeleteState", &actors.DeleteStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
@@ -839,7 +839,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			},
 		}
 
-		mockActors := new(actionst.MockActors)
+		mockActors := new(daprt.MockActors)
 		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",

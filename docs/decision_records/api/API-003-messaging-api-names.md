@@ -8,7 +8,7 @@ Our existing messaging interface names lack of clarity. This review was to make 
 
 ## Decisions
 
-### Actions 
+### Dapr 
 
 * All messaging APIs are grouped under a **messaging** namespace/package.
 * We define three distinct messaging interfaces:

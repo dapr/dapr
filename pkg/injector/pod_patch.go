@@ -12,23 +12,23 @@ import (
 )
 
 const (
-	sidecarContainerName     = "actionsrt"
-	actionsEnabledKey        = "actions.io/enabled"
-	actionsPortKey           = "actions.io/port"
-	actionsConfigKey         = "actions.io/config"
-	actionsProtocolKey       = "actions.io/protocol"
-	actionsIDKey             = "actions.io/id"
-	actionsProfilingKey      = "actions.io/profiling"
-	actionsLogLevel          = "actions.io/log-level"
-	actionsMaxConcurrencyKey = "actions.io/max-concurrency"
-	sidecarHTTPPort          = 3500
-	sidecarGRPCPORT          = 50001
-	apiAddress               = "http://actions-api"
-	placementService         = "actions-placement"
-	sidecarHTTPPortName      = "actions-http"
-	sidecarGRPCPortName      = "actions-grpc"
-	defaultLogLevel          = "info"
-	kubernetesMountPath      = "/var/run/secrets/kubernetes.io/serviceaccount"
+	sidecarContainerName  = "daprd"
+	daprEnabledKey        = "dapr.io/enabled"
+	daprPortKey           = "dapr.io/port"
+	daprConfigKey         = "dapr.io/config"
+	daprProtocolKey       = "dapr.io/protocol"
+	daprIDKey             = "dapr.io/id"
+	daprProfilingKey      = "dapr.io/profiling"
+	daprLogLevel          = "dapr.io/log-level"
+	daprMaxConcurrencyKey = "dapr.io/max-concurrency"
+	sidecarHTTPPort       = 3500
+	sidecarGRPCPORT       = 50001
+	apiAddress            = "http://dapr-api"
+	placementService      = "dapr-placement"
+	sidecarHTTPPortName   = "dapr-http"
+	sidecarGRPCPortName   = "dapr-grpc"
+	defaultLogLevel       = "info"
+	kubernetesMountPath   = "/var/run/secrets/kubernetes.io/serviceaccount"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace, image string) ([]PatchOperation, error) {
@@ -51,7 +51,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview, namespace,
 		req.UserInfo,
 	)
 
-	if !isResourceActionsEnabled(pod.Annotations) || podContainsSidecarContainer(&pod) {
+	if !isResourceDaprEnabled(pod.Annotations) || podContainsSidecarContainer(&pod) {
 		return nil, nil
 	}
 
@@ -124,7 +124,7 @@ func podContainsSidecarContainer(pod *corev1.Pod) bool {
 }
 
 func getMaxConcurrency(annotations map[string]string) (int32, error) {
-	m, ok := annotations[actionsMaxConcurrencyKey]
+	m, ok := annotations[daprMaxConcurrencyKey]
 	if !ok {
 		return -1, nil
 	}
@@ -136,7 +136,7 @@ func getMaxConcurrency(annotations map[string]string) (int32, error) {
 }
 
 func getAppPort(annotations map[string]string) (int32, error) {
-	p, ok := annotations[actionsPortKey]
+	p, ok := annotations[daprPortKey]
 	if !ok {
 		return -1, nil
 	}
@@ -148,32 +148,32 @@ func getAppPort(annotations map[string]string) (int32, error) {
 }
 
 func getConfig(annotations map[string]string) string {
-	return annotations[actionsConfigKey]
+	return annotations[daprConfigKey]
 }
 
 func getProtocol(annotations map[string]string) string {
-	if val, ok := annotations[actionsProtocolKey]; ok && val != "" {
+	if val, ok := annotations[daprProtocolKey]; ok && val != "" {
 		return val
 	}
 	return "http"
 }
 
 func getAppID(pod corev1.Pod) string {
-	if val, ok := pod.Annotations[actionsIDKey]; ok && val != "" {
+	if val, ok := pod.Annotations[daprIDKey]; ok && val != "" {
 		return val
 	}
 	return pod.GetName()
 }
 
 func getLogLevel(annotations map[string]string) string {
-	if val, ok := annotations[actionsLogLevel]; ok && val != "" {
+	if val, ok := annotations[daprLogLevel]; ok && val != "" {
 		return val
 	}
 	return defaultLogLevel
 }
 
 func profilingEnabled(annotations map[string]string) bool {
-	enabled, ok := annotations[actionsProfilingKey]
+	enabled, ok := annotations[daprProfilingKey]
 	if !ok {
 		return false
 	}
@@ -185,8 +185,8 @@ func profilingEnabled(annotations map[string]string) bool {
 	}
 }
 
-func isResourceActionsEnabled(annotations map[string]string) bool {
-	enabled, ok := annotations[actionsEnabledKey]
+func isResourceDaprEnabled(annotations map[string]string) bool {
+	enabled, ok := annotations[daprEnabledKey]
 	if !ok {
 		return false
 	}
@@ -202,10 +202,10 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, actionSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
-		Image:           actionSidecarImage,
+		Image:           daprSidecarImage,
 		ImagePullPolicy: corev1.PullAlways,
 		Ports: []corev1.ContainerPort{
 			{
@@ -217,9 +217,9 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, actio
 				Name:          sidecarGRPCPortName,
 			},
 		},
-		Command: []string{"/actionsrt"},
+		Command: []string{"/daprd"},
 		Env:     []corev1.EnvVar{{Name: "HOST_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
-		Args:    []string{"--mode", "kubernetes", "--actions-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--actions-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--actions-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency},
+		Args:    []string{"--mode", "kubernetes", "--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--dapr-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency},
 	}
 
 	if tokenVolumeMount != nil {

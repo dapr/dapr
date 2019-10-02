@@ -1,4 +1,4 @@
-# actionscore/actions build and push image template
+# dapr/dapr build and push image template
 
 parameters:
   targetArch: 'amd64'

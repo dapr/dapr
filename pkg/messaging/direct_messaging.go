@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/actionscore/actions/pkg/discovery"
+	"github.com/dapr/dapr/pkg/discovery"
 
 	"github.com/golang/protobuf/ptypes/any"
 
-	"github.com/actionscore/actions/pkg/modes"
+	"github.com/dapr/dapr/pkg/modes"
 
-	"github.com/actionscore/actions/pkg/channel"
+	"github.com/dapr/dapr/pkg/channel"
 	"google.golang.org/grpc"
 
-	pb "github.com/actionscore/actions/pkg/proto"
+	pb "github.com/dapr/dapr/pkg/proto"
 )
 
 // DirectMessaging is the API interface for invoking a remote app
@@ -26,18 +26,18 @@ type DirectMessaging interface {
 type directMessaging struct {
 	appChannel          channel.AppChannel
 	connectionCreatorFn func(address string) (*grpc.ClientConn, error)
-	actionsID           string
-	mode                modes.ActionsMode
+	daprID           string
+	mode                modes.DaprMode
 	grpcPort            int
 	namespace           string
 }
 
 // NewDirectMessaging returns a new direct messaging api
-func NewDirectMessaging(actionsID, namespace string, port int, mode modes.ActionsMode, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error)) DirectMessaging {
+func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error)) DirectMessaging {
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: grpcConnectionFn,
-		actionsID:           actionsID,
+		daprID:           daprID,
 		mode:                mode,
 		grpcPort:            port,
 		namespace:           namespace,
@@ -48,7 +48,7 @@ func NewDirectMessaging(actionsID, namespace string, port int, mode modes.Action
 func (d *directMessaging) Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error) {
 	var invokeFn func(*DirectMessageRequest) (*DirectMessageResponse, error)
 
-	if req.Target == d.actionsID {
+	if req.Target == d.daprID {
 		invokeFn = d.invokeLocal
 	} else {
 		invokeFn = d.invokeRemote
@@ -99,7 +99,7 @@ func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessag
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
 	defer cancel()
 
-	client := pb.NewActionsClient(conn)
+	client := pb.NewDaprClient(conn)
 	resp, err := client.CallLocal(ctx, &msg)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessag
 func (d *directMessaging) getAddress(target string) (string, error) {
 	switch d.mode {
 	case modes.KubernetesMode:
-		return fmt.Sprintf("%s-actions.%s.svc.cluster.local:%v", target, d.namespace, d.grpcPort), nil
+		return fmt.Sprintf("%s-dapr.%s.svc.cluster.local:%v", target, d.namespace, d.grpcPort), nil
 	case modes.StandaloneMode:
 		port, err := discovery.LookupPortMDNS(target)
 		if err != nil {

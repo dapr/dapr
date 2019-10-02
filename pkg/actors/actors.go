@@ -12,15 +12,15 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 
-	"github.com/actionscore/actions/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/channel/http"
 
 	"github.com/golang/protobuf/ptypes/any"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/actionscore/actions/pkg/channel"
-	"github.com/actionscore/actions/pkg/placement"
-	pb "github.com/actionscore/actions/pkg/proto"
-	"github.com/actionscore/components-contrib/state"
+	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/placement"
+	pb "github.com/dapr/dapr/pkg/proto"
+	"github.com/dapr/components-contrib/state"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -271,7 +271,7 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 		return nil, err
 	}
 
-	client := pb.NewActionsClient(conn)
+	client := pb.NewDaprClient(conn)
 	resp, err := client.CallActor(context.Background(), &req)
 	if err != nil {
 		return nil, err
@@ -359,7 +359,7 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 
 	transactionalStore, ok := a.store.(state.TransactionalStateStore)
 	if !ok {
-		return errors.New("state store does not support transactions")
+		return errors.New("state store does not support transaction")
 	}
 	err := transactionalStore.Multi(requests)
 	return err
@@ -389,7 +389,7 @@ func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
 }
 
 func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) string {
-	return fmt.Sprintf("%s-%s-%s-%s", a.config.ActionsID, actorType, actorID, key)
+	return fmt.Sprintf("%s-%s-%s-%s", a.config.DaprID, actorType, actorID, key)
 }
 
 func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
@@ -431,7 +431,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
-func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) pb.PlacementService_ReportActionStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) pb.PlacementService_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
@@ -444,7 +444,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
 		client := pb.NewPlacementServiceClient(conn)
-		stream, err := client.ReportActionStatus(ctx)
+		stream, err := client.ReportDaprStatus(ctx)
 		if err != nil {
 			log.Debugf("error establishing client to placement service: %s", err)
 			time.Sleep(retryInterval)

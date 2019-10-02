@@ -1,0 +1,8 @@
+replicaCount: 1
+logLevel: info
+
+image:
+  name: dapr
+
+nameOverride: ""
+fullnameOverride: ""

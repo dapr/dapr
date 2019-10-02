@@ -1,0 +1,12 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: dapr-placement
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: dapr-placement
+  ports:
+  - protocol: TCP
+    port: {{ .Values.ports.port }} 
+    targetPort: {{ .Values.ports.targetPort }}

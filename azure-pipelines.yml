@@ -1,6 +1,6 @@
-# actionscore/actions pipeline
+# dapr/dapr pipeline
 
-# Release process - https://github.com/actionscore/actions/wiki/Release-Process
+# Release process - https://github.com/dapr/dapr/wiki/Release-Process
 
 trigger:
   branches:
@@ -117,9 +117,9 @@ jobs:
       displayName: 'Publish archives to version folder'
       inputs:
         SourcePath: '$(Pipeline.Workspace)/drop'
-        azureSubscription: 'Actions Releases'
+        azureSubscription: 'dapr-releases'
         Destination: 'AzureBlob'
-        storage: 'actionsreleases'
+        storage: 'daprreleases'
         ContainerName: '$(TargetContainer)'
         blobPrefix: '$(BlobPrefix)'
     - task: AzureFileCopy@3
@@ -127,14 +127,14 @@ jobs:
       displayName: 'Publish archives to latest folder'
       inputs:
         SourcePath: '$(Pipeline.Workspace)/drop'
-        azureSubscription: 'Actions Releases'
+        azureSubscription: 'dapr-releases'
         Destination: 'AzureBlob'
-        storage: 'actionsreleases'
+        storage: 'daprreleases'
         ContainerName: '$(TargetContainer)'
         blobPrefix: 'latest'
     - task: GitHubRelease@0
       condition: and(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'), eq(variables['LATEST_RELEASE'], 'true'))
-      displayName: 'Upload Actions binaries to GitHub Release'
+      displayName: 'Upload Dapr binaries to GitHub Release'
       inputs:
         gitHubConnection: 'GitHub'
         repositoryName: '$(Build.Repository.Name)'
@@ -142,7 +142,7 @@ jobs:
         target: '$(Build.SourceVersion)'
         tagSource: 'manual'
         tag: 'v$(REL_VERSION)'
-        title: 'Actions Runtime $(REL_VERSION) Release'
+        title: 'Dapr Runtime $(REL_VERSION) Release'
         assets: |
           $(Pipeline.Workspace)/drop/*.zip
           $(Pipeline.Workspace)/drop/*.tar.gz

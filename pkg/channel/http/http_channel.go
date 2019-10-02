@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/actionscore/actions/pkg/channel"
+	"github.com/dapr/dapr/pkg/channel"
 	"github.com/valyala/fasthttp"
 )
 
 const (
-	// HTTPVerb is an actions http channel verb
+	// HTTPVerb is an dapr http channel verb
 	HTTPVerb = "http.verb"
-	// HTTPStatusCode is an actions http channel status code
+	// HTTPStatusCode is an dapr http channel status code
 	HTTPStatusCode = "http.status_code"
 	// Get is an HTTP Get method
 	Get = "GET"

@@ -6,8 +6,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/actionscore/actions/pkg/channel"
-	grpc_channel "github.com/actionscore/actions/pkg/channel/grpc"
+	"github.com/dapr/dapr/pkg/channel"
+	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
 )
 
 // Manager is a wrapper around gRPC connection pooling

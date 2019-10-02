@@ -12,45 +12,45 @@ import (
 	"sync"
 	"time"
 
-	"github.com/actionscore/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings"
 
-	"github.com/actionscore/components-contrib/pubsub"
-	"github.com/actionscore/components-contrib/secretstores"
-	"github.com/actionscore/components-contrib/state"
+	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
 
-	"github.com/actionscore/actions/pkg/actors"
-	bindings_loader "github.com/actionscore/actions/pkg/components/bindings"
-	pubsub_loader "github.com/actionscore/actions/pkg/components/pubsub"
-	secretstores_loader "github.com/actionscore/actions/pkg/components/secretstores"
-	state_loader "github.com/actionscore/actions/pkg/components/state"
-	"github.com/actionscore/actions/pkg/discovery"
-	"github.com/actionscore/actions/pkg/http"
-	"github.com/actionscore/actions/pkg/messaging"
+	"github.com/dapr/dapr/pkg/actors"
+	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
+	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
+	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
+	state_loader "github.com/dapr/dapr/pkg/components/state"
+	"github.com/dapr/dapr/pkg/discovery"
+	"github.com/dapr/dapr/pkg/http"
+	"github.com/dapr/dapr/pkg/messaging"
 	jsoniter "github.com/json-iterator/go"
 
-	"github.com/actionscore/actions/pkg/channel"
-	http_channel "github.com/actionscore/actions/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/channel"
+	http_channel "github.com/dapr/dapr/pkg/channel/http"
 
-	"github.com/actionscore/actions/pkg/config"
-	"github.com/actionscore/actions/pkg/grpc"
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/golang/protobuf/ptypes/empty"
 
-	"github.com/actionscore/actions/pkg/components"
-	"github.com/actionscore/actions/pkg/modes"
+	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/modes"
 
 	log "github.com/Sirupsen/logrus"
-	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	pb "github.com/actionscore/actions/pkg/proto"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	pb "github.com/dapr/dapr/pkg/proto"
 )
 
 const (
-	appConfigEndpoint   = "actions/config"
+	appConfigEndpoint   = "dapr/config"
 	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
 )
 
-// ActionsRuntime holds all the core components of the runtime
-type ActionsRuntime struct {
+// DaprRuntime holds all the core components of the runtime
+type DaprRuntime struct {
 	runtimeConfig        *Config
 	globalConfig         *config.Configuration
 	components           []components_v1alpha1.Component
@@ -72,9 +72,9 @@ type ActionsRuntime struct {
 	hostAddress          string
 }
 
-// NewActionsRuntime returns a new runtime with the given runtime config and global config
-func NewActionsRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *ActionsRuntime {
-	return &ActionsRuntime{
+// NewDaprRuntime returns a new runtime with the given runtime config and global config
+func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *DaprRuntime {
+	return &DaprRuntime{
 		runtimeConfig:        runtimeConfig,
 		globalConfig:         globalConfig,
 		grpc:                 grpc.NewGRPCManager(),
@@ -90,10 +90,10 @@ func NewActionsRuntime(runtimeConfig *Config, globalConfig *config.Configuration
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations
-func (a *ActionsRuntime) Run() error {
+func (a *DaprRuntime) Run() error {
 	start := time.Now()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
-	log.Infof("action id: %s", a.runtimeConfig.ID)
+	log.Infof("dapr id: %s", a.runtimeConfig.ID)
 
 	err := a.initRuntime()
 	if err != nil {
@@ -106,12 +106,12 @@ func (a *ActionsRuntime) Run() error {
 	}
 
 	d := time.Since(start).Seconds() * 1000
-	log.Infof("actions initialized. Status: Running. Init Elapsed %vms", d)
+	log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
 
 	return nil
 }
 
-func (a *ActionsRuntime) initRuntime() error {
+func (a *DaprRuntime) initRuntime() error {
 	err := a.loadComponents()
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
@@ -167,7 +167,7 @@ func (a *ActionsRuntime) initRuntime() error {
 	return nil
 }
 
-func (a *ActionsRuntime) initBindings() {
+func (a *DaprRuntime) initBindings() {
 	bindings_loader.Load()
 	err := a.initOutputBindings(a.bindingsRegistry)
 	if err != nil {
@@ -180,7 +180,7 @@ func (a *ActionsRuntime) initBindings() {
 	}
 }
 
-func (a *ActionsRuntime) beginReadInputBindings() error {
+func (a *DaprRuntime) beginReadInputBindings() error {
 	for key, b := range a.inputBindings {
 		go func(name string, binding bindings.InputBinding) {
 			err := a.readFromBinding(name, binding)
@@ -193,13 +193,13 @@ func (a *ActionsRuntime) beginReadInputBindings() error {
 	return nil
 }
 
-func (a *ActionsRuntime) initDirectMessaging() {
+func (a *DaprRuntime) initDirectMessaging() {
 	a.directMessaging = messaging.NewDirectMessaging(a.runtimeConfig.ID, os.Getenv("NAMESPACE"), a.runtimeConfig.GRPCPort, a.runtimeConfig.Mode, a.appChannel, a.grpc.GetGRPCConnection)
 }
 
-// OnComponentUpdated updates the Actions runtime with new or changed components
-// This method is invoked from the Actions Control Plane whenever a component update happens
-func (a *ActionsRuntime) OnComponentUpdated(component components_v1alpha1.Component) {
+// OnComponentUpdated updates the Dapr runtime with new or changed components
+// This method is invoked from the Dapr Control Plane whenever a component update happens
+func (a *DaprRuntime) OnComponentUpdated(component components_v1alpha1.Component) {
 	update := false
 
 	for i, c := range a.components {
@@ -251,7 +251,7 @@ func (a *ActionsRuntime) OnComponentUpdated(component components_v1alpha1.Compon
 	}
 }
 
-func (a *ActionsRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
+func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
 	for _, dst := range to {
 		go func(name string) {
 			err := a.sendToOutputBinding(name, &bindings.WriteRequest{
@@ -264,7 +264,7 @@ func (a *ActionsRuntime) sendBatchOutputBindingsParallel(to []string, data []byt
 	}
 }
 
-func (a *ActionsRuntime) sendBatchOutputBindingsSequential(to []string, data []byte) error {
+func (a *DaprRuntime) sendBatchOutputBindingsSequential(to []string, data []byte) error {
 	for _, dst := range to {
 		err := a.sendToOutputBinding(dst, &bindings.WriteRequest{
 			Data: data,
@@ -277,7 +277,7 @@ func (a *ActionsRuntime) sendBatchOutputBindingsSequential(to []string, data []b
 	return nil
 }
 
-func (a *ActionsRuntime) sendToOutputBinding(name string, req *bindings.WriteRequest) error {
+func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.WriteRequest) error {
 	if binding, ok := a.outputBindings[name]; ok {
 		err := binding.Write(req)
 		return err
@@ -285,7 +285,7 @@ func (a *ActionsRuntime) sendToOutputBinding(name string, req *bindings.WriteReq
 	return fmt.Errorf("couldn't find output binding %s", name)
 }
 
-func (a *ActionsRuntime) onAppResponse(response *bindings.AppResponse) error {
+func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStore != nil {
@@ -313,7 +313,7 @@ func (a *ActionsRuntime) onAppResponse(response *bindings.AppResponse) error {
 	return nil
 }
 
-func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
+func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
 	err := binding.Read(func(resp *bindings.ReadResponse) error {
 		if resp != nil {
 			req := channel.InvokeRequest{
@@ -348,14 +348,14 @@ func (a *ActionsRuntime) readFromBinding(name string, binding bindings.InputBind
 	return err
 }
 
-func (a *ActionsRuntime) startHTTPServer(port, profilePort int, allowedOrigins string) {
+func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	server.StartNonBlocking()
 }
 
-func (a *ActionsRuntime) startGRPCServer(port int) error {
+func (a *DaprRuntime) startGRPCServer(port int) error {
 	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.actor, a)
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
@@ -364,7 +364,7 @@ func (a *ActionsRuntime) startGRPCServer(port int) error {
 	return err
 }
 
-func (a *ActionsRuntime) setHostAddress() error {
+func (a *DaprRuntime) setHostAddress() error {
 	a.hostAddress = os.Getenv(hostIPEnvVar)
 	if a.hostAddress == "" {
 		addrs, err := net.InterfaceAddrs()
@@ -385,7 +385,7 @@ func (a *ActionsRuntime) setHostAddress() error {
 	return nil
 }
 
-func (a *ActionsRuntime) initInputBindings(registry bindings_loader.BindingsRegistry) error {
+func (a *DaprRuntime) initInputBindings(registry bindings_loader.BindingsRegistry) error {
 	if a.appChannel == nil {
 		return fmt.Errorf("app channel not initialized")
 	}
@@ -424,7 +424,7 @@ func (a *ActionsRuntime) initInputBindings(registry bindings_loader.BindingsRegi
 	return nil
 }
 
-func (a *ActionsRuntime) initOutputBindings(registry bindings_loader.BindingsRegistry) error {
+func (a *DaprRuntime) initOutputBindings(registry bindings_loader.BindingsRegistry) error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
@@ -450,7 +450,7 @@ func (a *ActionsRuntime) initOutputBindings(registry bindings_loader.BindingsReg
 	return nil
 }
 
-func (a *ActionsRuntime) initState(registry state_loader.StateStoreRegistry) error {
+func (a *DaprRuntime) initState(registry state_loader.StateStoreRegistry) error {
 	state_loader.Load()
 
 	for _, s := range a.components {
@@ -478,7 +478,7 @@ func (a *ActionsRuntime) initState(registry state_loader.StateStoreRegistry) err
 	return nil
 }
 
-func (a *ActionsRuntime) getSubscribedTopicsFromApp() []string {
+func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 	topics := []string{}
 
 	if a.appChannel == nil {
@@ -486,7 +486,7 @@ func (a *ActionsRuntime) getSubscribedTopicsFromApp() []string {
 	}
 
 	req := &channel.InvokeRequest{
-		Method:   "actions/subscribe",
+		Method:   "dapr/subscribe",
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
 	}
 
@@ -501,7 +501,7 @@ func (a *ActionsRuntime) getSubscribedTopicsFromApp() []string {
 	return topics
 }
 
-func (a *ActionsRuntime) initPubSub() error {
+func (a *DaprRuntime) initPubSub() error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
 			pubSub, err := a.pubSubRegistry.CreatePubSub(c.Spec.Type)
@@ -541,7 +541,7 @@ func (a *ActionsRuntime) initPubSub() error {
 	return nil
 }
 
-func (a *ActionsRuntime) onNewPublishedMessage(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) onNewPublishedMessage(msg *pubsub.NewMessage) error {
 	req := channel.InvokeRequest{
 		Method:   msg.Topic,
 		Payload:  msg.Data,
@@ -556,7 +556,7 @@ func (a *ActionsRuntime) onNewPublishedMessage(msg *pubsub.NewMessage) error {
 	return nil
 }
 
-func (a *ActionsRuntime) initActors() error {
+func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.GRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
 	act := actors.NewActors(a.stateStore, a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
@@ -565,7 +565,7 @@ func (a *ActionsRuntime) initActors() error {
 	return err
 }
 
-func (a *ActionsRuntime) loadComponents() error {
+func (a *DaprRuntime) loadComponents() error {
 	var loader components.ComponentLoader
 
 	switch a.runtimeConfig.Mode {
@@ -605,11 +605,11 @@ func (a *ActionsRuntime) loadComponents() error {
 }
 
 // Stop allows for a graceful shutdown of all runtime internal operations or components
-func (a *ActionsRuntime) Stop() {
+func (a *DaprRuntime) Stop() {
 	log.Info("stop command issued. Shutting down all operations")
 }
 
-func (a *ActionsRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {
+func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {
 	cache := map[string]secretstores.GetSecretResponse{}
 
 	for i, m := range component.Spec.Metadata {
@@ -654,7 +654,7 @@ func (a *ActionsRuntime) processComponentSecrets(component components_v1alpha1.C
 	return component
 }
 
-func (a *ActionsRuntime) getSecretStore(storeName string) secretstores.SecretStore {
+func (a *DaprRuntime) getSecretStore(storeName string) secretstores.SecretStore {
 	if storeName == "" {
 		switch a.runtimeConfig.Mode {
 		case modes.KubernetesMode:
@@ -667,7 +667,7 @@ func (a *ActionsRuntime) getSecretStore(storeName string) secretstores.SecretSto
 	return a.secretStores[storeName]
 }
 
-func (a *ActionsRuntime) blockUntilAppIsReady() {
+func (a *DaprRuntime) blockUntilAppIsReady() {
 	if a.runtimeConfig.ApplicationPort <= 0 {
 		return
 	}
@@ -687,7 +687,7 @@ func (a *ActionsRuntime) blockUntilAppIsReady() {
 	log.Infof("application discovered on port %v", a.runtimeConfig.ApplicationPort)
 }
 
-func (a *ActionsRuntime) loadAppConfiguration() {
+func (a *DaprRuntime) loadAppConfiguration() {
 	if a.appChannel == nil {
 		return
 	}
@@ -716,7 +716,7 @@ func (a *ActionsRuntime) loadAppConfiguration() {
 	return
 }
 
-func (a *ActionsRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
+func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
 	req := channel.InvokeRequest{
 		Method:   appConfigEndpoint,
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
@@ -736,7 +736,7 @@ func (a *ActionsRuntime) getConfigurationHTTP() (*config.ApplicationConfig, erro
 	return &config, nil
 }
 
-func (a *ActionsRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) {
+func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) {
 	client := pb.NewAppClient(a.grpc.AppClient)
 	resp, err := client.GetConfig(context.Background(), &empty.Empty{})
 	if err != nil {
@@ -752,7 +752,7 @@ func (a *ActionsRuntime) getConfigurationGRPC() (*config.ApplicationConfig, erro
 	return nil, nil
 }
 
-func (a *ActionsRuntime) createAppChannel() error {
+func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
 		var channelCreatorFn func(port, maxConcurrency int) (channel.AppChannel, error)
 
@@ -778,7 +778,7 @@ func (a *ActionsRuntime) createAppChannel() error {
 	return nil
 }
 
-func (a *ActionsRuntime) announceSelf() error {
+func (a *DaprRuntime) announceSelf() error {
 	switch a.runtimeConfig.Mode {
 	case modes.StandaloneMode:
 		err := discovery.RegisterMDNS(a.runtimeConfig.ID, a.runtimeConfig.GRPCPort)
@@ -791,7 +791,7 @@ func (a *ActionsRuntime) announceSelf() error {
 	return nil
 }
 
-func (a *ActionsRuntime) initSecretStores() error {
+func (a *DaprRuntime) initSecretStores() error {
 	// Preload Kubernetes secretstore
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
@@ -836,7 +836,7 @@ func (a *ActionsRuntime) initSecretStores() error {
 	return nil
 }
 
-func (a *ActionsRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
+func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
 	properties := map[string]string{}
 	for _, c := range items {
 		properties[c.Name] = c.Value

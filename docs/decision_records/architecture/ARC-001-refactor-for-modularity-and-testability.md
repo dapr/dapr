@@ -4,19 +4,19 @@
 Accepted
 
 ## Context
-As we keep building up Actions features, it becomes apparent that we need to refactor the existing code base to reinforce component modularity. This will improve testability and maintainability in long run. And this refactor also lays the foundation of opening up extensible points (such as Bindings) to the community.
+As we keep building up Dapr features, it becomes apparent that we need to refactor the existing code base to reinforce component modularity. This will improve testability and maintainability in long run. And this refactor also lays the foundation of opening up extensible points (such as Bindings) to the community.
 
 ## Decisions
 
-### Actions
-* Formally seprate hosting and API implementations. Hosting provides communication protocols (HTTP/gRPC) as different access heads to the same Actions API implementation.
+### Dapr
+* Formally seprate hosting and API implementations. Hosting provides communication protocols (HTTP/gRPC) as different access heads to the same Dapr API implementation.
 * Ensure consistency between gRPC and HTTP interface.
 * Separate binding implementations to a separate repository. 
 * Use smart defaults for configurable parameters.
-* Rename Actions runtime binary from **action** to **actionsrt**.
+* Rename Dapr runtime binary from **dapr** to **daprd**.
 
-### Non-Actions
-* We may consider allowing Actions to dynamically load bindings during runtime. However, we are not going to implement this unless it's justified by customer asks.
+### Non-Dapr
+* We may consider allowing Dapr to dynamically load bindings during runtime. However, we are not going to implement this unless it's justified by customer asks.
 * A unified configuration file that includes paths to individual configuration files.
 * Provide a Discovery building block with hopefully pluggable discovery mechanisms (such as a custom DNS).
 

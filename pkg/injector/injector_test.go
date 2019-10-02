@@ -25,7 +25,7 @@ func TestConfigCorrectValues(t *testing.T) {
 }
 
 func TestGetConfig(t *testing.T) {
-	m := map[string]string{actionsConfigKey: "config1"}
+	m := map[string]string{daprConfigKey: "config1"}
 	c := getConfig(m)
 	assert.Equal(t, "config1", c)
 }
@@ -38,31 +38,31 @@ func TestGetProfiling(t *testing.T) {
 	})
 
 	t.Run("enabled", func(t *testing.T) {
-		m := map[string]string{actionsProfilingKey: "yes"}
+		m := map[string]string{daprProfilingKey: "yes"}
 		e := profilingEnabled(m)
 		assert.Equal(t, e, true)
 	})
 
 	t.Run("disabled", func(t *testing.T) {
-		m := map[string]string{actionsProfilingKey: "false"}
+		m := map[string]string{daprProfilingKey: "false"}
 		e := profilingEnabled(m)
 		assert.Equal(t, e, false)
 	})
-	m := map[string]string{actionsConfigKey: "config1"}
+	m := map[string]string{daprConfigKey: "config1"}
 	c := getConfig(m)
 	assert.Equal(t, "config1", c)
 }
 
 func TestGetAppPort(t *testing.T) {
 	t.Run("valid port", func(t *testing.T) {
-		m := map[string]string{actionsPortKey: "3000"}
+		m := map[string]string{daprPortKey: "3000"}
 		p, err := getAppPort(m)
 		assert.Nil(t, err)
 		assert.Equal(t, int32(3000), p)
 	})
 
 	t.Run("invalid port", func(t *testing.T) {
-		m := map[string]string{actionsPortKey: "a"}
+		m := map[string]string{daprPortKey: "a"}
 		p, err := getAppPort(m)
 		assert.NotNil(t, err)
 		assert.Equal(t, int32(-1), p)
@@ -71,13 +71,13 @@ func TestGetAppPort(t *testing.T) {
 
 func TestGetProtocol(t *testing.T) {
 	t.Run("valid grpc protocol", func(t *testing.T) {
-		m := map[string]string{actionsProtocolKey: "grpc"}
+		m := map[string]string{daprProtocolKey: "grpc"}
 		p := getProtocol(m)
 		assert.Equal(t, "grpc", p)
 	})
 
 	t.Run("valid http protocol", func(t *testing.T) {
-		m := map[string]string{actionsProtocolKey: "http"}
+		m := map[string]string{daprProtocolKey: "http"}
 		p := getProtocol(m)
 		assert.Equal(t, "http", p)
 	})
@@ -91,7 +91,7 @@ func TestGetProtocol(t *testing.T) {
 
 func TestGetAppID(t *testing.T) {
 	t.Run("get app id", func(t *testing.T) {
-		m := map[string]string{actionsIDKey: "app"}
+		m := map[string]string{daprIDKey: "app"}
 		pod := corev1.Pod{}
 		pod.Annotations = m
 		id := getAppID(pod)
@@ -114,7 +114,7 @@ func TestLogLevel(t *testing.T) {
 	})
 
 	t.Run("error log level", func(t *testing.T) {
-		m := map[string]string{actionsLogLevel: "error"}
+		m := map[string]string{daprLogLevel: "error"}
 		logLevel := getLogLevel(m)
 		assert.Equal(t, "error", logLevel)
 	})
@@ -129,13 +129,13 @@ func TestMaxConcurrency(t *testing.T) {
 	})
 
 	t.Run("invalid max concurrency - should be -1", func(t *testing.T) {
-		m := map[string]string{actionsMaxConcurrencyKey: "invalid"}
+		m := map[string]string{daprMaxConcurrencyKey: "invalid"}
 		_, err := getMaxConcurrency(m)
 		assert.NotNil(t, err)
 	})
 
 	t.Run("valid max concurrency - should be 10", func(t *testing.T) {
-		m := map[string]string{actionsMaxConcurrencyKey: "10"}
+		m := map[string]string{daprMaxConcurrencyKey: "10"}
 		maxConcurrency, err := getMaxConcurrency(m)
 		assert.Nil(t, err)
 		assert.Equal(t, int32(10), maxConcurrency)

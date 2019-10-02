@@ -17,7 +17,7 @@ import (
 
 const port = 4000
 
-// Injector is the interface for the Actions runtime sidecar injection component
+// Injector is the interface for the Dapr runtime sidecar injection component
 type Injector interface {
 	Run(ctx context.Context)
 }
@@ -64,7 +64,7 @@ func (i *injector) Run(ctx context.Context) {
 		}
 	}()
 
-	log.Infof("Sidecar injector is listening on %s, patching Actions-enabled pods", i.server.Addr)
+	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
 	err := i.server.ListenAndServeTLS(i.config.TLSCertFile, i.config.TLSKeyFile)
 	if err != http.ErrServerClosed {
 		log.Errorf("Sidecar injector error: %s", err)

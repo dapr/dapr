@@ -18,10 +18,10 @@ This keeps us constant with widely accepted naming conventions and sets clear gu
 
 ## Examples
 
-Actions Runtime, latest Linux:
+Dapr Runtime, latest Linux:
 
-actionscore.azurecr.io/actions:latest
+actionscore.azurecr.io/dapr:latest
 
-Actions Runtime, v0.1.0-alpha for ARM:
+Dapr Runtime, v0.1.0-alpha for ARM:
 
-actionscore.azurecr.io/actions:v0.1.0-alpha-arm
+actionscore.azurecr.io/dapr:v0.1.0-alpha-arm

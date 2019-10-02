@@ -5,8 +5,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/actionscore/actions/pkg/channel"
-	pb "github.com/actionscore/actions/pkg/proto"
+	"github.com/dapr/dapr/pkg/channel"
+	pb "github.com/dapr/dapr/pkg/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/stretchr/testify/assert"

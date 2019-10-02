@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/actionscore/components-contrib/state"
+	"github.com/dapr/components-contrib/state"
 )
 
 type StateStoreRegistry interface {

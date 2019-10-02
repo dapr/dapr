@@ -2,16 +2,16 @@
 
 Architecture Decision Records (ADRs or simply decision records) are a collection of records for "architecturally significant" decisions. A decision record is a short markdown file in a specific light-weight format.
 
-This folder contains all the decisions we have recorded in Actions, including Actions runtime, Actions CLI as well as Actions SDKs in different languages.
+This folder contains all the decisions we have recorded in Dapr, including Dapr runtime, Dapr CLI as well as Dapr SDKs in different languages.
 
-## Actions decision record organization and index
+## Dapr decision record organization and index
 All decisions are categorized in the following folders:
 * **Architecture** - Decisions on general architecture, code structure, coding conventions and common practices.
   
   - [ARC-001: Refactor for modularity and testability](./architecture/ARC-001-refactor-for-modularity-and-testability.md)
   - [ARC-002: Multitenancy](./architecture/ARC-002-multitenancy.md)
   
-* **API** - Decisions on Actions runtime API designs.
+* **API** - Decisions on Dapr runtime API designs.
 
   - [API-001: State store API design](./api/API-001-state-store-api-design.md)
   - [API-002: Actor API design](./api/API-002-actor-api-design.md)
@@ -21,16 +21,16 @@ All decisions are categorized in the following folders:
   - [API-006: Universal namespace (customer ask)](./api/API-006-universal-namespace.md)
   - [API-007: Tracing Endpoint](./api/API-007-tracing-endpoint.md)
 
-* **CLI** - Decisions on Actions CLI architecture and behaviors.
+* **CLI** - Decisions on Dapr CLI architecture and behaviors.
 
   - [CLI-001: CLI and runtim versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
   
-* **SDKs** - Decisions on Actions SDKs.
+* **SDKs** - Decisions on Dapr SDKs.
 
 * **Engineering** - Decisions on Engineering practices, including CI/CD, testings and releases.
 
   - [ENG-001: Image Tagging](./engineering/ENG-001-tagging.MD)
-  - [ENG-002: Actions Release](./engineering/ENG-001-Actions-Release.MD)
+  - [ENG-002: Dapr Release](./engineering/ENG-001-Dapr-Release.MD)
 
 ## Creating new decision records
 A new decision record should be a _.md_ file named as 

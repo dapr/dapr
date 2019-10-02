@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dapr-sidecar-injector
+  labels:
+    app: dapr-sidecar-injector
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: dapr-sidecar-injector
+  template:
+    metadata:
+      labels:
+         app: dapr-sidecar-injector
+    spec:
+      serviceAccountName: dapr-operator
+      containers:
+      - name: sidecar-injector
+{{- if contains "/" .Values.image.name }}
+        image: "{{ .Values.image.name }}"
+{{- else }}
+        image: "{{ $.Values.global.registry }}/dapr:{{ $.Values.global.tag }}"
+{{- end }}
+        imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+        securityContext:
+          runAsUser: 1000
+        command:
+        - "./injector"
+        args:
+        - "--log-level"
+        - {{ .Values.logLevel }}
+        env:
+        - name: TLS_CERT_FILE
+          value: /dapr/cert/tls.crt
+        - name: TLS_KEY_FILE
+          value: /dapr/cert/tls.key
+        - name: SIDECAR_IMAGE
+          value: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+        ports:
+        - name: https
+          containerPort: 4000
+          protocol: TCP
+        volumeMounts:
+        - name: cert
+          mountPath: /dapr/cert
+          readOnly: true
+      volumes:
+      - name: cert
+        secret:
+          secretName: dapr-sidecar-injector-cert

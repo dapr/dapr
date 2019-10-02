@@ -19,8 +19,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	"github.com/actionscore/actions/pkg/client/clientset/versioned/scheme"
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 
@@ -29,7 +29,7 @@ type ComponentsV1alpha1Interface interface {
 	ComponentsGetter
 }
 
-// ComponentsV1alpha1Client is used to interact with features provided by the components.actions.io group.
+// ComponentsV1alpha1Client is used to interact with features provided by the components.dapr.io group.
 type ComponentsV1alpha1Client struct {
 	restClient rest.Interface
 }

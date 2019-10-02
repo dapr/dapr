@@ -1,0 +1,14 @@
+replicaCount: 1
+logLevel: info
+
+image:
+  name: dapr
+
+nameOverride: ""
+fullnameOverride: ""
+
+ports:
+  protocol: TCP
+  port: 80
+  targetPort: 6500
+  

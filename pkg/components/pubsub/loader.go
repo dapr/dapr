@@ -1,7 +1,7 @@
 package pubsub
 
 import (
-	"github.com/actionscore/components-contrib/pubsub/redis"
+	"github.com/dapr/components-contrib/pubsub/redis"
 )
 
 // Load message buses

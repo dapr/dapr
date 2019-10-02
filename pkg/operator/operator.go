@@ -4,36 +4,36 @@ import (
 	"context"
 
 	log "github.com/Sirupsen/logrus"
-	scheme "github.com/actionscore/actions/pkg/client/clientset/versioned"
-	k8s "github.com/actionscore/actions/pkg/kubernetes"
-	"github.com/actionscore/actions/pkg/operator/api"
-	"github.com/actionscore/actions/pkg/operator/handlers"
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	k8s "github.com/dapr/dapr/pkg/kubernetes"
+	"github.com/dapr/dapr/pkg/operator/api"
+	"github.com/dapr/dapr/pkg/operator/handlers"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
 
-// Operator is an Actions Kubernetes Operator for managing components and sidecar lifecycle
+// Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle
 type Operator interface {
 	Run(ctx context.Context)
 }
 
 type operator struct {
 	kubeClient          kubernetes.Interface
-	actionsClient       scheme.Interface
+	daprClient       scheme.Interface
 	deploymentsInformer cache.SharedInformer
 	componentsInformer  cache.SharedInformer
 	ctx                 context.Context
-	actionsHandler      handlers.Handler
+	daprHandler      handlers.Handler
 	componentsHandler   handlers.Handler
 }
 
-// NewOperator returns a new Actions Operator
-func NewOperator(kubeClient kubernetes.Interface, actionsClient scheme.Interface) Operator {
+// NewOperator returns a new Dapr Operator
+func NewOperator(kubeClient kubernetes.Interface, daprClient scheme.Interface) Operator {
 	o := &operator{
 		kubeClient:    kubeClient,
-		actionsClient: actionsClient,
+		daprClient: daprClient,
 		deploymentsInformer: k8s.DeploymentsIndexInformer(
 			kubeClient,
 			meta_v1.NamespaceAll,
@@ -41,12 +41,12 @@ func NewOperator(kubeClient kubernetes.Interface, actionsClient scheme.Interface
 			nil,
 		),
 		componentsInformer: k8s.ComponentsIndexInformer(
-			actionsClient,
+			daprClient,
 			meta_v1.NamespaceAll,
 			nil,
 			nil,
 		),
-		actionsHandler:    handlers.NewActionsHandler(actionsClient),
+		daprHandler:    handlers.NewDaprHandler(daprClient),
 		componentsHandler: handlers.NewComponentsHandler(kubeClient),
 	}
 
@@ -72,11 +72,11 @@ func (o *operator) syncComponent(obj interface{}) {
 }
 
 func (o *operator) syncDeployment(obj interface{}) {
-	o.actionsHandler.ObjectCreated(obj)
+	o.daprHandler.ObjectCreated(obj)
 }
 
 func (o *operator) syncDeletedDeployment(obj interface{}) {
-	o.actionsHandler.ObjectDeleted(obj)
+	o.daprHandler.ObjectDeleted(obj)
 }
 
 func (o *operator) Run(ctx context.Context) {
@@ -86,9 +86,9 @@ func (o *operator) Run(ctx context.Context) {
 	o.ctx = ctx
 	go func() {
 		<-ctx.Done()
-		log.Infof("Actions Operator is shutting down")
+		log.Infof("Dapr Operator is shutting down")
 	}()
-	log.Infof("Actions Operator is started")
+	log.Infof("Dapr Operator is started")
 	go func() {
 		o.deploymentsInformer.Run(ctx.Done())
 		cancel()
@@ -97,7 +97,7 @@ func (o *operator) Run(ctx context.Context) {
 		o.componentsInformer.Run(ctx.Done())
 		cancel()
 	}()
-	apiSrv := api.NewAPIServer(o.actionsClient)
+	apiSrv := api.NewAPIServer(o.daprClient)
 	apiSrv.Run(ctx)
 	cancel()
 }

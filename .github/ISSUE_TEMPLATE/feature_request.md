@@ -1,12 +1,12 @@
 ---
 name: Feature Request
-about: Create a Feature Request for Actions
+about: Create a Feature Request for Dapr
 title: ''
 labels: kind/enhancement
 assignees: ''
 
 ---
-<!-- If you need to report a security issue with Actions, send an email to actionsct@microsoft.com. -->
+<!-- If you need to report a security issue with Dapr, send an email to daprct@microsoft.com. -->
 ## In what area(s)?
 
 <!-- Remove the '> ' to select -->

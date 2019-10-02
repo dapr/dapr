@@ -5,13 +5,13 @@ import (
 	"net"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/actionscore/actions/pkg/config"
-	diag "github.com/actionscore/actions/pkg/diagnostics"
-	pb "github.com/actionscore/actions/pkg/proto"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	pb "github.com/dapr/dapr/pkg/proto"
 	grpc_go "google.golang.org/grpc"
 )
 
-// Server is an interface for the actions gRPC server
+// Server is an interface for the dapr gRPC server
 type Server interface {
 	StartNonBlocking() error
 }
@@ -40,13 +40,13 @@ func (s *server) StartNonBlocking() error {
 
 	server := grpc_go.NewServer()
 	if s.tracingSpec.Enabled {
-		diag.CreateExporter(s.config.ActionID, s.config.HostAddress, s.tracingSpec, nil)
+		diag.CreateExporter(s.config.DaprID, s.config.HostAddress, s.tracingSpec, nil)
 		server = grpc_go.NewServer(
 			grpc_go.StreamInterceptor(diag.TracingGRPCMiddleware(s.tracingSpec)),
 			grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)),
 		)
 	}
-	pb.RegisterActionsServer(server, s.api)
+	pb.RegisterDaprServer(server, s.api)
 
 	go func() {
 		if err := server.Serve(lis); err != nil {

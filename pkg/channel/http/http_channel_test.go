@@ -11,7 +11,7 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/actionscore/actions/pkg/channel"
+	"github.com/dapr/dapr/pkg/channel"
 	"github.com/stretchr/testify/assert"
 )
 

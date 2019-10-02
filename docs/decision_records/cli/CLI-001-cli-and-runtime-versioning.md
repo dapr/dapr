@@ -4,7 +4,7 @@
 Accepted
 
 ## Context
-As we formally establish Actions component version, we need to decide if we want to couple CLI versions with runtime versions.
+As we formally establish Dapr component version, we need to decide if we want to couple CLI versions with runtime versions.
 
 ## Decisions
 
@@ -14,4 +14,4 @@ As we formally establish Actions component version, we need to decide if we want
   
 ## Consequences
 
-This allows us each Action component to evolve independently.
+This allows us each Dapr component to evolve independently.

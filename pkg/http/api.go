@@ -6,21 +6,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/actionscore/components-contrib/bindings"
-	"github.com/actionscore/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/pubsub"
 	"github.com/google/uuid"
 
 	jsoniter "github.com/json-iterator/go"
 
-	"github.com/actionscore/actions/pkg/actors"
-	"github.com/actionscore/actions/pkg/channel"
-	"github.com/actionscore/actions/pkg/channel/http"
-	"github.com/actionscore/actions/pkg/messaging"
-	"github.com/actionscore/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/messaging"
+	"github.com/dapr/components-contrib/state"
 	routing "github.com/qiangxue/fasthttp-routing"
 )
 
-// API returns a list of HTTP endpoints for Actions
+// API returns a list of HTTP endpoints for Dapr
 type API interface {
 	APIEndpoints() []Endpoint
 }
@@ -54,7 +54,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -63,7 +63,7 @@ func NewAPI(actionID string, appChannel channel.AppChannel, directMessaging mess
 		actor:                 actor,
 		pubSub:                pubSub,
 		sendToOutputBindingFn: sendToOutputBindingFn,
-		id:                    actionID,
+		id:                    daprID,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)

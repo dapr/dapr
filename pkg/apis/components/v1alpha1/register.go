@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"github.com/actionscore/actions/pkg/apis/components"
+	"github.com/dapr/dapr/pkg/apis/components"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"

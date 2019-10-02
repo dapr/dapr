@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dapr-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dapr-operator
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: dapr-operator
+  template:
+    metadata:
+      labels:
+        app: dapr-operator
+    spec:
+      containers:
+      - name: dapr-operator
+{{- if contains "/" .Values.image.name }}
+        image: "{{ .Values.image.name }}"
+{{- else }}
+        image: "{{ $.Values.global.registry }}/dapr:{{ $.Values.global.tag }}"
+{{- end }}
+        imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+        env:
+        - name: NAMESPACE
+          value: {{ .Release.Namespace }}
+        ports:
+        - containerPort: 6500
+        command:
+        - "./operator"
+        args:
+        - "--log-level"
+        - {{ .Values.logLevel }}
+      serviceAccountName: dapr-operator            

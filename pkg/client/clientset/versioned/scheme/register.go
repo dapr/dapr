@@ -19,8 +19,8 @@ limitations under the License.
 package scheme
 
 import (
-	componentsv1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	configurationv1alpha1 "github.com/actionscore/actions/pkg/apis/configuration/v1alpha1"
+	componentsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

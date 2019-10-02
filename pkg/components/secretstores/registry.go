@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/actionscore/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/secretstores"
 )
 
 // SecretStoreRegistry is used to get registered secret store implementations

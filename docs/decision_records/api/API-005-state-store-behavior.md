@@ -10,21 +10,21 @@ As we continue to solidify our API spec, we need to explicitly define component 
 
 ### Concurrency model
 
-* Actions supports two flavors of optimistic concurrency: first-write wins and last-write wins. First-write wins is implemented through ETag.
+* Dapr supports two flavors of optimistic concurrency: first-write wins and last-write wins. First-write wins is implemented through ETag.
 * User code can express concurrency intention with a *config* annotation attached to a request. See **Config annotation** for details.
-* Future version of Actions may support call throttling through application channel. 
+* Future version of Dapr may support call throttling through application channel. 
 * We'll choose last-write wins as the default.
 
 ### Consistency model
 
-* Actions supports both eventual consistency and strong consistency. 
+* Dapr supports both eventual consistency and strong consistency. 
 * Actors always use strong consistency.
 * We'll choose eventual consistency as default for services other than actors.
 
-### Actor Transactions
+### Actor Transaction
 
-* Actions-compatible Actor state stores shall support ACID transactions.
-* Actions doesn't mandate specific transaction isolation level at this point. However, when deemed necessary, we can easily add those to **Config annotation** as needed.
+* Dapr-compatible Actor state stores shall support ACID transaction.
+* Dapr doesn't mandate specific transaction isolation level at this point. However, when deemed necessary, we can easily add those to **Config annotation** as needed.
 
 ### Config annotation
 
@@ -38,13 +38,13 @@ As we continue to solidify our API spec, we need to explicitly define component 
 
 ### State store configuration probe
 
-* An Actions-comptaible state store shall provide an endpoint that answers to configuration probe and returns (among others):
+* An Dapr-comptaible state store shall provide an endpoint that answers to configuration probe and returns (among others):
   * Supported concurrency model
   * Supported consistency model
 * A state store instance shall return the specific configuration of the current instance.
 * It's considered out of scope to require state store to dynamically apply new configurations.
   
-### Actions
+### Dapr
 
 * Update state store API spec to reflect above decisions
 * Create backlog of issues to implement above decisions

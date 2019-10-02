@@ -1,0 +1,41 @@
+{{- $ca := genCA "dapr-sidecar-injector-ca" 3650 }}
+{{- $cn := printf "dapr-sidecar-injector" }}
+{{- $altName1 := printf "dapr-sidecar-injector.%s" .Release.Namespace }}
+{{- $altName2 := printf "dapr-sidecar-injector.%s.svc" .Release.Namespace }}
+{{- $altName3 := printf "dapr-sidecar-injector.%s.svc.cluster" .Release.Namespace }}
+{{- $altName4 := printf "dapr-sidecar-injector.%s.svc.cluster.local" .Release.Namespace }}
+{{- $cert := genSignedCert $cn nil (list $altName1 $altName2 $altName3 $altName4) 3650 $ca }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dapr-sidecar-injector-cert
+  labels:
+    app: dapr-sidecar-injector
+data:
+  tls.crt: {{ b64enc $cert.Cert }}
+  tls.key: {{ b64enc $cert.Key }}
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: dapr-sidecar-injector
+  labels:
+    app: dapr-sidecar-injector
+webhooks:
+- name: sidecar-injector.dapr.io
+  clientConfig:
+    service:
+      namespace: {{ .Release.Namespace }}
+      name: dapr-sidecar-injector
+      path: "/mutate"
+    caBundle: {{ b64enc $ca.Cert }}
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    resources:
+    - pods
+    operations:
+    - CREATE
+  failurePolicy: Ignore

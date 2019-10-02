@@ -21,8 +21,8 @@ package externalversions
 import (
 	"fmt"
 
-	v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	configurationv1alpha1 "github.com/actionscore/actions/pkg/apis/configuration/v1alpha1"
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -53,11 +53,11 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=components.actions.io, Version=v1alpha1
+	// Group=components.dapr.io, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("components"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Components().V1alpha1().Components().Informer()}, nil
 
-		// Group=configuration.actions.io, Version=v1alpha1
+		// Group=configuration.dapr.io, Version=v1alpha1
 	case configurationv1alpha1.SchemeGroupVersion.WithResource("configurations"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Configuration().V1alpha1().Configurations().Informer()}, nil
 

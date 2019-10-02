@@ -3,7 +3,7 @@ package http
 // ServerConfig holds config values for an HTTP server
 type ServerConfig struct {
 	AllowedOrigins  string
-	ActionID        string
+	DaprID        string
 	HostAddress     string
 	Port            int
 	ProfilePort     int
@@ -11,10 +11,10 @@ type ServerConfig struct {
 }
 
 // NewServerConfig returns a new HTTP server config
-func NewServerConfig(actionID string, hostAddress string, port int, profilePort int, allowedOrigins string, enableProfiling bool) ServerConfig {
+func NewServerConfig(daprID string, hostAddress string, port int, profilePort int, allowedOrigins string, enableProfiling bool) ServerConfig {
 	return ServerConfig{
 		AllowedOrigins:  allowedOrigins,
-		ActionID:        actionID,
+		DaprID:        daprID,
 		HostAddress:     hostAddress,
 		Port:            port,
 		ProfilePort:     profilePort,

@@ -8,18 +8,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/actionscore/components-contrib/state"
+	"github.com/dapr/components-contrib/state"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/actionscore/actions/pkg/channel"
-	"github.com/actionscore/actions/pkg/channel/http"
-	channelt "github.com/actionscore/actions/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/channel/http"
+	channelt "github.com/dapr/dapr/pkg/channel/testing"
 )
 
 const (
-	TestActionsID = "fakeActionsID"
+	TestDaprID = "fakeDaprID"
 )
 
 type fakeStateStore struct {
@@ -75,7 +75,7 @@ func newTestActorsRuntime() *actorsRuntime {
 		mock.AnythingOfType("*channel.InvokeRequest")).Return(fakeHTTPResponse, nil)
 
 	store := fakeStore()
-	config := NewConfig("", TestActionsID, "", nil, 0, "", "", "", false)
+	config := NewConfig("", TestDaprID, "", nil, 0, "", "", "", false)
 	a := NewActors(store, mockAppChannel, nil, config)
 
 	return a.(*actorsRuntime)
@@ -392,7 +392,7 @@ func TestConstructActorStateKey(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	keyName := "key0"
-	expected := fmt.Sprintf("%s-%s-%s-%s", TestActionsID, actorType, actorID, keyName)
+	expected := fmt.Sprintf("%s-%s-%s-%s", TestDaprID, actorType, actorID, keyName)
 
 	// act
 	stateKey := testActorsRuntime.constructActorStateKey(actorType, actorID, keyName)
