@@ -117,9 +117,9 @@ jobs:
       displayName: 'Publish archives to version folder'
       inputs:
         SourcePath: '$(Pipeline.Workspace)/drop'
-        azureSubscription: 'Dapr Releases'
+        azureSubscription: 'dapr-releases'
         Destination: 'AzureBlob'
-        storage: 'actionsreleases'
+        storage: 'daprreleases'
         ContainerName: '$(TargetContainer)'
         blobPrefix: '$(BlobPrefix)'
     - task: AzureFileCopy@3
@@ -127,9 +127,9 @@ jobs:
       displayName: 'Publish archives to latest folder'
       inputs:
         SourcePath: '$(Pipeline.Workspace)/drop'
-        azureSubscription: 'Dapr Releases'
+        azureSubscription: 'dapr-releases'
         Destination: 'AzureBlob'
-        storage: 'actionsreleases'
+        storage: 'daprreleases'
         ContainerName: '$(TargetContainer)'
         blobPrefix: 'latest'
     - task: GitHubRelease@0
