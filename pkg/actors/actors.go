@@ -17,10 +17,10 @@ import (
 	"github.com/golang/protobuf/ptypes/any"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/placement"
 	pb "github.com/dapr/dapr/pkg/proto"
-	"github.com/dapr/components-contrib/state"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -409,7 +409,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 
 			if stream != nil {
 				if err := stream.Send(&host); err != nil {
-					log.Error("actors: connection failure to placement service: retrying")
+					log.Debug("actors: connection failure to placement service: retrying")
 					stream = a.getPlacementClientPersistently(placementAddress, hostAddress)
 				}
 			}
