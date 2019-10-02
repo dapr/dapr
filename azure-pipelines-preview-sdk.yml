@@ -57,7 +57,7 @@ steps:
       git config --global user.email "daprvt@service.microsoft.com"
       git config --global user.name "Dapr Release"
 
-      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/daprcore/previewkit.git
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/previewkit.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Git clone dapr/cli repo'
@@ -65,14 +65,14 @@ steps:
     targetType: 'inline'
     script: |
       cd ..
-      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/daprcore/cli.git
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/cli.git
 - task: Bash@3
   displayName: 'Git clone dapr/dotnet-sdk repo'
   inputs:
     targetType: 'inline'
     script: |
       cd ..
-      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/daprcore/dotnet-sdk.git
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/dotnet-sdk.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Copy Preview Kit contents to preview repo'
@@ -120,11 +120,11 @@ steps:
     script: |
       pushd ../previewkit
       
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/dapr/github.com\/daprcore\/previewkit/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/cli\/releases/github.com\/daprcore\/previewkit\/releases/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/cli\/blob\/master\/README.md/github.com\/daprcore\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/dotnet-sdk/github.com\/daprcore\/previewkit\/releases/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/cli/github.com\/daprcore\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/dapr/github.com\/dapr\/previewkit/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/cli\/releases/github.com\/dapr\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/cli\/blob\/master\/README.md/github.com\/dapr\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/dotnet-sdk/github.com\/dapr\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/cli/github.com\/dapr\/previewkit\/releases/gI' {} \;
 
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
@@ -159,7 +159,7 @@ steps:
   displayName: 'Upload Dapr CLI to GitHub Release'  
   inputs:
     gitHubConnection: 'GitHub'
-    repositoryName: 'daprcore/previewkit'
+    repositoryName: 'dapr/previewkit'
     action: 'create'
     target: '$(RELEASE_COMMIT)'
     tagSource: 'manual'
