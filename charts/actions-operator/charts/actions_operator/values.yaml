@@ -2,7 +2,7 @@ replicaCount: 1
 logLevel: info
 
 image:
-  name: actions
+  name: dapr
 
 nameOverride: ""
 fullnameOverride: ""

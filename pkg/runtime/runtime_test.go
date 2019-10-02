@@ -6,17 +6,17 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/actionscore/actions/pkg/channel"
-	http_channel "github.com/actionscore/actions/pkg/channel/http"
-	channelt "github.com/actionscore/actions/pkg/channel/testing"
-	pubsub_loader "github.com/actionscore/actions/pkg/components/pubsub"
-	secretstores_loader "github.com/actionscore/actions/pkg/components/secretstores"
-	"github.com/actionscore/actions/pkg/modes"
-	"github.com/actionscore/components-contrib/pubsub"
-	"github.com/actionscore/components-contrib/secretstores"
+	"github.com/dapr/dapr/pkg/channel"
+	http_channel "github.com/dapr/dapr/pkg/channel/http"
+	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
+	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
 
-	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	"github.com/actionscore/actions/pkg/config"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -47,16 +47,16 @@ func NewMockKubernetesStore() secretstores.SecretStore {
 
 func TestNewRuntime(t *testing.T) {
 	// act
-	r := NewActionsRuntime(&Config{}, &config.Configuration{})
+	r := NewDaprRuntime(&Config{}, &config.Configuration{})
 
 	// assert
 	assert.NotNil(t, r, "runtime must be initiated")
 }
 
 func TestInitPubSub(t *testing.T) {
-	rt := NewTestActionsRuntime(modes.StandaloneMode)
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
-	initMockPubSubForRuntime := func(rt *ActionsRuntime) *pubsub.MockPubSub {
+	initMockPubSubForRuntime := func(rt *DaprRuntime) *pubsub.MockPubSub {
 		mockPubSub := new(pubsub.MockPubSub)
 		pubsub_loader.RegisterMessageBus("mockPubSub", mockPubSub)
 
@@ -91,7 +91,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On(
 			"InvokeMethod",
 			&channel.InvokeRequest{
-				Method:   "actions/subscribe",
+				Method:   "dapr/subscribe",
 				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
 			}).Return(fakeHttpResponse, nil)
 
@@ -119,7 +119,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On(
 			"InvokeMethod",
 			&channel.InvokeRequest{
-				Method:   "actions/subscribe",
+				Method:   "dapr/subscribe",
 				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
 			}).Return(fakeHttpResponse, nil)
 
@@ -136,13 +136,13 @@ func TestInitPubSub(t *testing.T) {
 
 func TestInitSecretStores(t *testing.T) {
 	t.Run("init with no store", func(t *testing.T) {
-		rt := NewTestActionsRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		err := rt.initSecretStores()
 		assert.Nil(t, err)
 	})
 
 	t.Run("init with store", func(t *testing.T) {
-		rt := NewTestActionsRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
 		secretstores_loader.RegisterSecretStore("kubernetesMock", m)
 
@@ -160,7 +160,7 @@ func TestInitSecretStores(t *testing.T) {
 	})
 
 	t.Run("secret store is registered", func(t *testing.T) {
-		rt := NewTestActionsRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
 		secretstores_loader.RegisterSecretStore("kubernetesMock", m)
 
@@ -178,7 +178,7 @@ func TestInitSecretStores(t *testing.T) {
 	})
 
 	t.Run("get secret store", func(t *testing.T) {
-		rt := NewTestActionsRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
 		secretstores_loader.RegisterSecretStore("kubernetesMock", m)
 
@@ -198,7 +198,7 @@ func TestInitSecretStores(t *testing.T) {
 }
 
 func TestMetadataItemsToPropertiesConversion(t *testing.T) {
-	rt := NewTestActionsRuntime(modes.StandaloneMode)
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	items := []components_v1alpha1.MetadataItem{
 		components_v1alpha1.MetadataItem{
 			Name:  "a",
@@ -243,7 +243,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			Name: "name1",
 		}
 
-		rt := NewTestActionsRuntime(modes.StandaloneMode)
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
 		secretstores_loader.RegisterSecretStore("kubernetes", m)
 
@@ -270,7 +270,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			Name: "name1",
 		}
 
-		rt := NewTestActionsRuntime(modes.KubernetesMode)
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		m := NewMockKubernetesStore()
 		secretstores_loader.RegisterSecretStore("kubernetes", m)
 
@@ -288,7 +288,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 			Name: "name1",
 		}
 
-		rt := NewTestActionsRuntime(modes.KubernetesMode)
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		m := NewMockKubernetesStore()
 		secretstores_loader.RegisterSecretStore("kubernetes", m)
 
@@ -328,7 +328,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		},
 	}
 
-	rt := NewTestActionsRuntime(modes.KubernetesMode)
+	rt := NewTestDaprRuntime(modes.KubernetesMode)
 	rt.components = append(rt.components, fakeSecretStoreWithAuth)
 
 	m := NewMockKubernetesStore()
@@ -351,7 +351,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post},
 	}
 
-	rt := NewTestActionsRuntime(modes.StandaloneMode)
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 	t.Run("succeeded to publish message to user app", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -419,7 +419,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 	}
 }
 
-func NewTestActionsRuntime(mode modes.ActionsMode) *ActionsRuntime {
+func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 	testRuntimeConfig := NewRuntimeConfig(
 		TestRuntimeConfigID,
 		"10.10.10.12",
@@ -429,14 +429,14 @@ func NewTestActionsRuntime(mode modes.ActionsMode) *ActionsRuntime {
 		DefaultComponentsPath,
 		string(HTTPProtocol),
 		string(mode),
-		DefaultActionsHTTPPort,
-		DefaultActionsGRPCPort,
+		DefaultDaprHTTPPort,
+		DefaultDaprGRPCPort,
 		1024,
 		DefaultProfilePort,
 		false,
 		-1)
 
-	rt := NewActionsRuntime(testRuntimeConfig, &config.Configuration{})
+	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
 	rt.components = []components_v1alpha1.Component{
 		{
 			ObjectMeta: meta_v1.ObjectMeta{

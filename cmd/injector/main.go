@@ -5,9 +5,9 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/actionscore/actions/pkg/injector"
-	"github.com/actionscore/actions/pkg/signals"
-	"github.com/actionscore/actions/pkg/version"
+	"github.com/dapr/dapr/pkg/injector"
+	"github.com/dapr/dapr/pkg/signals"
+	"github.com/dapr/dapr/pkg/version"
 )
 
 var (
@@ -15,7 +15,7 @@ var (
 )
 
 func main() {
-	log.Infof("starting Actions Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
 	cfg, err := injector.GetConfigFromEnvironment()

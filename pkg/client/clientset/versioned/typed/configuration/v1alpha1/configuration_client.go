@@ -19,8 +19,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1alpha1 "github.com/actionscore/actions/pkg/apis/configuration/v1alpha1"
-	"github.com/actionscore/actions/pkg/client/clientset/versioned/scheme"
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 
@@ -29,7 +29,7 @@ type ConfigurationV1alpha1Interface interface {
 	ConfigurationsGetter
 }
 
-// ConfigurationV1alpha1Client is used to interact with features provided by the configuration.actions.io group.
+// ConfigurationV1alpha1Client is used to interact with features provided by the configuration.dapr.io group.
 type ConfigurationV1alpha1Client struct {
 	restClient rest.Interface
 }

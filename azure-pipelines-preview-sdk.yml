@@ -1,4 +1,4 @@
-# actionscore/actions preview-kit
+# dapr/dapr preview-kit
 
 trigger: none
 
@@ -16,7 +16,7 @@ pool:
 
 steps:
 - task: DownloadBuildArtifacts@0
-  displayName: 'Download Actions CLI Binaries'
+  displayName: 'Download Dapr CLI Binaries'
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
@@ -54,25 +54,25 @@ steps:
     targetType: 'inline'
     script: |
       cd ..
-      git config --global user.email "actionsvt@service.microsoft.com"
-      git config --global user.name "Actions Release"
+      git config --global user.email "daprvt@service.microsoft.com"
+      git config --global user.name "Dapr Release"
 
-      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/previewkit.git
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/daprcore/previewkit.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
-  displayName: 'Git clone actions/cli repo'
+  displayName: 'Git clone dapr/cli repo'
   inputs:
     targetType: 'inline'
     script: |
       cd ..
-      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/cli.git
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/daprcore/cli.git
 - task: Bash@3
-  displayName: 'Git clone actions/dotnet-sdk repo'
+  displayName: 'Git clone dapr/dotnet-sdk repo'
   inputs:
     targetType: 'inline'
     script: |
       cd ..
-      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/actionscore/dotnet-sdk.git
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/daprcore/dotnet-sdk.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Copy Preview Kit contents to preview repo'
@@ -98,8 +98,8 @@ steps:
 
       echo "copying specs..."
       rm -f ../previewkit/docs/spec/*
-      unzip $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-md.zip -d ../previewkit/docs/spec/
-      cp $(System.ArtifactsDirectory)/spec_drop/drop/actions-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
+      unzip $(System.ArtifactsDirectory)/spec_drop/drop/dapr-spec-md.zip -d ../previewkit/docs/spec/
+      cp $(System.ArtifactsDirectory)/spec_drop/drop/dapr-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
 
       echo "removing arm binary..."
       rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.*
@@ -120,11 +120,11 @@ steps:
     script: |
       pushd ../previewkit
       
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/actions/github.com\/actionscore\/previewkit/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/releases/github.com\/actionscore\/previewkit\/releases/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli\/blob\/master\/README.md/github.com\/actionscore\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/dotnet-sdk/github.com\/actionscore\/previewkit\/releases/gI' {} \;
-      find . -name '*.md' -type f -exec sed -i 's/github.com\/actionscore\/cli/github.com\/actionscore\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/dapr/github.com\/daprcore\/previewkit/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/cli\/releases/github.com\/daprcore\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/cli\/blob\/master\/README.md/github.com\/daprcore\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/dotnet-sdk/github.com\/daprcore\/previewkit\/releases/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/daprcore\/cli/github.com\/daprcore\/previewkit\/releases/gI' {} \;
 
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
@@ -144,7 +144,7 @@ steps:
       echo * Latest release version : $LAST_VERSION
   
       git add -A
-      git commit -am "Actions Preview Kit Update $(Build.BuildNumber)"
+      git commit -am "Dapr Preview Kit Update $(Build.BuildNumber)"
       git status
 
       git push origin master
@@ -156,10 +156,10 @@ steps:
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: GitHubRelease@0
   condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
-  displayName: 'Upload Actions CLI to GitHub Release'  
+  displayName: 'Upload Dapr CLI to GitHub Release'  
   inputs:
     gitHubConnection: 'GitHub'
-    repositoryName: 'actionscore/previewkit'
+    repositoryName: 'daprcore/previewkit'
     action: 'create'
     target: '$(RELEASE_COMMIT)'
     tagSource: 'manual'
@@ -167,5 +167,5 @@ steps:
     isPreRelease: true
     addChangeLog: false
     releaseNotesFile: '$(Build.SourcesDirectory)/../previewkit/docs/preview/release_notes/$(RELEASE_VERSION).md'
-    title: 'Actions Preview Kit $(RELEASE_VERSION)'
+    title: 'Dapr Preview Kit $(RELEASE_VERSION)'
     assets: '$(System.ArtifactsDirectory)/release/drop/**'

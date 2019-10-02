@@ -19,8 +19,8 @@ limitations under the License.
 package components
 
 import (
-	v1alpha1 "github.com/actionscore/actions/pkg/client/informers/externalversions/components/v1alpha1"
-	internalinterfaces "github.com/actionscore/actions/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/dapr/dapr/pkg/client/informers/externalversions/components/v1alpha1"
+	internalinterfaces "github.com/dapr/dapr/pkg/client/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to each of this group's versions.

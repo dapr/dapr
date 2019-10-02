@@ -1,26 +1,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: actions-sidecar-injector
+  name: dapr-sidecar-injector
   labels:
-    app: actions-sidecar-injector
+    app: dapr-sidecar-injector
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: actions-sidecar-injector
+      app: dapr-sidecar-injector
   template:
     metadata:
       labels:
-         app: actions-sidecar-injector
+         app: dapr-sidecar-injector
     spec:
-      serviceAccountName: actions-operator
+      serviceAccountName: dapr-operator
       containers:
       - name: sidecar-injector
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
-        image: "{{ $.Values.global.registry }}/actions:{{ $.Values.global.tag }}"
+        image: "{{ $.Values.global.registry }}/dapr:{{ $.Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
         securityContext:
@@ -32,9 +32,9 @@ spec:
         - {{ .Values.logLevel }}
         env:
         - name: TLS_CERT_FILE
-          value: /actions/cert/tls.crt
+          value: /dapr/cert/tls.crt
         - name: TLS_KEY_FILE
-          value: /actions/cert/tls.key
+          value: /dapr/cert/tls.key
         - name: SIDECAR_IMAGE
           value: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         - name: NAMESPACE
@@ -45,9 +45,9 @@ spec:
           protocol: TCP
         volumeMounts:
         - name: cert
-          mountPath: /actions/cert
+          mountPath: /dapr/cert
           readOnly: true
       volumes:
       - name: cert
         secret:
-          secretName: actions-sidecar-injector-cert
+          secretName: dapr-sidecar-injector-cert

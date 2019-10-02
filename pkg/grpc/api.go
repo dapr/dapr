@@ -4,20 +4,20 @@ import (
 	"context"
 	"errors"
 
-	"github.com/actionscore/actions/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors"
 
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 
-	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	"github.com/actionscore/actions/pkg/channel"
-	"github.com/actionscore/actions/pkg/components"
-	"github.com/actionscore/actions/pkg/messaging"
-	pb "github.com/actionscore/actions/pkg/proto"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/messaging"
+	pb "github.com/dapr/dapr/pkg/proto"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// API is the gRPC interface for the Actions runtime
+// API is the gRPC interface for the Dapr runtime
 type API interface {
 	CallActor(ctx context.Context, in *pb.CallActorEnvelope) (*pb.InvokeResponse, error)
 	CallRemoteApp(ctx context.Context, in *pb.CallRemoteAppEnvelope) (*pb.InvokeResponse, error)
@@ -34,13 +34,13 @@ type api struct {
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(actionsID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, actor actors.Actors, componentHandler components.ComponentHandler) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, actor actors.Actors, componentHandler components.ComponentHandler) API {
 	return &api{
 		appChannel:        appChannel,
 		directMessaging:   directMessaging,
 		componentsHandler: componentHandler,
 		actor:             actor,
-		id:                actionsID,
+		id:                daprID,
 	}
 }
 
@@ -64,7 +64,7 @@ func (a *api) CallRemoteApp(ctx context.Context, in *pb.CallRemoteAppEnvelope) (
 	}, nil
 }
 
-// CallLocal is used for internal Actions-Actions calls
+// CallLocal is used for internal Dapr-Dapr calls
 func (a *api) CallLocal(ctx context.Context, in *pb.LocalCallEnvelope) (*pb.InvokeResponse, error) {
 	if a.appChannel == nil {
 		return nil, errors.New("app channel is not initialized")
@@ -107,7 +107,7 @@ func (a *api) CallActor(ctx context.Context, in *pb.CallActorEnvelope) (*pb.Invo
 	}, nil
 }
 
-// UpdateComponent is fired by the Actions control plane when a component state changes
+// UpdateComponent is fired by the Dapr control plane when a component state changes
 func (a *api) UpdateComponent(ctx context.Context, in *pb.Component) (*empty.Empty, error) {
 	c := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{

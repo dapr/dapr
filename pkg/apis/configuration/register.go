@@ -1,5 +1,5 @@
 package configuration
 
 const (
-	GroupName = "actions.io"
+	GroupName = "dapr.io"
 )

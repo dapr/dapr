@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	config "github.com/actionscore/actions/pkg/config/modes"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/valyala/fasthttp"
 )
 

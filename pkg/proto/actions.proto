@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package actions;
+package dapr;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 
-// Actions Runtime definitions
-service Actions {
+// Dapr Runtime definitions
+service Dapr {
   rpc CallRemoteApp (CallRemoteAppEnvelope) returns (InvokeResponse) {}
   rpc CallActor (CallActorEnvelope) returns (InvokeResponse) {}
   rpc CallLocal (LocalCallEnvelope) returns (InvokeResponse) {}
@@ -105,7 +105,7 @@ message ApplicationConfig {
 
 // Placement service
 service PlacementService {
-    rpc ReportActionStatus(stream Host) returns (stream PlacementOrder) {}
+    rpc ReportDaprStatus(stream Host) returns (stream PlacementOrder) {}
 }
 
 message PlacementOrder {

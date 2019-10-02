@@ -6,8 +6,8 @@ import (
 	"os/signal"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/actionscore/actions/pkg/placement"
-	"github.com/actionscore/actions/pkg/version"
+	"github.com/dapr/dapr/pkg/placement"
+	"github.com/dapr/dapr/pkg/version"
 )
 
 var (
@@ -15,7 +15,7 @@ var (
 )
 
 func main() {
-	log.Infof("starting Actions Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 
 	port := flag.String("port", "50005", "")
 	flag.Parse()

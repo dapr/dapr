@@ -1,8 +1,8 @@
 package secretstores
 
 import (
-	"github.com/actionscore/components-contrib/secretstores/keyvault"
-	"github.com/actionscore/components-contrib/secretstores/kubernetes"
+	"github.com/dapr/components-contrib/secretstores/keyvault"
+	"github.com/dapr/components-contrib/secretstores/kubernetes"
 )
 
 // Load secret stores

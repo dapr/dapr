@@ -17,7 +17,7 @@ func (se StringExporter) ExportSpan(sd *trace.SpanData) {
 }
 
 // Init creates a new zipkin endpoint and reporter
-func (se StringExporter) Init(actionsID string, actionsAddress string, exporterAddress string) error {
+func (se StringExporter) Init(daprID string, daprAddress string, exporterAddress string) error {
 	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
 	trace.RegisterExporter(se)
 	return nil

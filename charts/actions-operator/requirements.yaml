@@ -1,16 +1,16 @@
 dependencies:
-- name: actions_crd
+- name: dapr_crd
   version: "0.1.0"
-  repository: "file://actions_crd"
-- name: actions_rbac
+  repository: "file://dapr_crd"
+- name: dapr_rbac
   version: "0.1.0"
-  repository: "file://actions_rbac"
-- name: actions_operator
+  repository: "file://dapr_rbac"
+- name: dapr_operator
   version: "0.1.0"
-  repository: "file://actions_operator"
-- name: actions_placement
+  repository: "file://dapr_operator"
+- name: dapr_placement
   version: "0.1.0"
-  repository: "file://actions_placement"
-- name: actions_sidecar_injector
+  repository: "file://dapr_placement"
+- name: dapr_sidecar_injector
   version: "0.1.0"
-  repository: "file://actions_sidecar_injector"      
+  repository: "file://dapr_sidecar_injector"      

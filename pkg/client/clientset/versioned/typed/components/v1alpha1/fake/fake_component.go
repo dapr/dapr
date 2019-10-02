@@ -19,7 +19,7 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -34,9 +34,9 @@ type FakeComponents struct {
 	ns   string
 }
 
-var componentsResource = schema.GroupVersionResource{Group: "components.actions.io", Version: "v1alpha1", Resource: "components"}
+var componentsResource = schema.GroupVersionResource{Group: "components.dapr.io", Version: "v1alpha1", Resource: "components"}
 
-var componentsKind = schema.GroupVersionKind{Group: "components.actions.io", Version: "v1alpha1", Kind: "Component"}
+var componentsKind = schema.GroupVersionKind{Group: "components.dapr.io", Version: "v1alpha1", Kind: "Component"}
 
 // Get takes name of the component, and returns the corresponding component object, and an error if there is any.
 func (c *FakeComponents) Get(name string, options v1.GetOptions) (result *v1alpha1.Component, err error) {

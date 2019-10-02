@@ -2,26 +2,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: actions-placement
+  name: dapr-placement
   namespace: {{ .Release.Namespace }}
   labels:
-    app: actions-placement
+    app: dapr-placement
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: actions-placement
+      app: dapr-placement
   template:
     metadata:
       labels:
-        app: actions-placement
+        app: dapr-placement
     spec:
       containers:
-      - name: actions-placement
+      - name: dapr-placement
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
-        image: "{{ $.Values.global.registry }}/actions:{{ $.Values.global.tag }}"
+        image: "{{ $.Values.global.registry }}/dapr:{{ $.Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
         ports:
@@ -31,4 +31,4 @@ spec:
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
-      serviceAccountName: actions-operator
+      serviceAccountName: dapr-operator

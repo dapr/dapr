@@ -10,8 +10,8 @@ import (
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
 
-	"github.com/actionscore/actions/pkg/channel"
-	pb "github.com/actionscore/actions/pkg/proto"
+	"github.com/dapr/dapr/pkg/channel"
+	pb "github.com/dapr/dapr/pkg/proto"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code

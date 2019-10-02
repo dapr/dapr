@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/actionscore/actions/pkg/config"
-	"github.com/actionscore/actions/pkg/exporters"
-	actions "github.com/actionscore/actions/pkg/proto"
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/exporters"
+	dapr "github.com/dapr/dapr/pkg/proto"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
 	"github.com/valyala/fasthttp"
@@ -106,14 +106,14 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 }
 
 // CreateExporter creates Opencensus exported as per specified in the tracing spec
-func CreateExporter(actionID string, hostAddress string, spec config.TracingSpec, buffer *string) {
+func CreateExporter(daprID string, hostAddress string, spec config.TracingSpec, buffer *string) {
 	switch spec.ExporterType {
 	case "zipkin":
 		ex := exporters.ZipkinExporter{}
-		ex.Init(actionID, hostAddress, spec.ExporterAddress)
+		ex.Init(daprID, hostAddress, spec.ExporterAddress)
 	case "string":
 		es := exporters.StringExporter{Buffer: buffer}
-		es.Init(actionID, hostAddress, spec.ExporterAddress)
+		es.Init(daprID, hostAddress, spec.ExporterAddress)
 	}
 }
 
@@ -223,13 +223,13 @@ func extractHeaders(req interface{}) string {
 	if req == nil {
 		return ""
 	}
-	if s, ok := req.(*actions.LocalCallEnvelope); ok {
+	if s, ok := req.(*dapr.LocalCallEnvelope); ok {
 		return s.Metadata["headers"]
 	}
-	if s, ok := req.(*actions.AppMethodCallEnvelope); ok {
+	if s, ok := req.(*dapr.AppMethodCallEnvelope); ok {
 		return s.Metadata["headers"]
 	}
-	if s, ok := req.(*actions.CallRemoteAppEnvelope); ok {
+	if s, ok := req.(*dapr.CallRemoteAppEnvelope); ok {
 		return s.Metadata["headers"]
 	}
 	return ""

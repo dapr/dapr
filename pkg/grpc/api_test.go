@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/actionscore/actions/pkg/config"
-	diag "github.com/actionscore/actions/pkg/diagnostics"
-	pb "github.com/actionscore/actions/pkg/proto"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	pb "github.com/dapr/dapr/pkg/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
@@ -49,7 +49,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	)
 
 	go func() {
-		pb.RegisterActionsServer(server, &mockGRPCAPI{})
+		pb.RegisterDaprServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -61,7 +61,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	defer conn.Close()
 	assert.NoError(t, err)
 
-	client := pb.NewActionsClient(conn)
+	client := pb.NewDaprClient(conn)
 
 	request := &pb.CallActorEnvelope{
 		ActorID:   "actor-1",
@@ -90,7 +90,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	)
 
 	go func() {
-		pb.RegisterActionsServer(server, &mockGRPCAPI{})
+		pb.RegisterDaprServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -102,7 +102,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	defer conn.Close()
 	assert.NoError(t, err)
 
-	client := pb.NewActionsClient(conn)
+	client := pb.NewDaprClient(conn)
 
 	request := &pb.CallRemoteAppEnvelope{
 		Target: "actor-1",

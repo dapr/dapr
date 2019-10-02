@@ -1,4 +1,4 @@
-# ENG-002: Actions Release
+# ENG-002: Dapr Release
 
 ## Status
 
@@ -6,7 +6,7 @@ Proposal
 
 ## Context
 
-This record descibes how to safely release new actions binaries and the corresponding configurations without any blockers to users.
+This record descibes how to safely release new dapr binaries and the corresponding configurations without any blockers to users.
 
 ## Decisions
 
@@ -36,7 +36,7 @@ $ git push --tags
 
 #### Release the stable version to users
 
-Once all bugs are fixed, we will create the release note under [./docs/release_notes](https://github.com/actionscore/actions/tree/master/docs/release_notes) and run CI release manually in order to deliver the stable version to users.
+Once all bugs are fixed, we will create the release note under [./docs/release_notes](https://github.com/dapr/dapr/tree/master/docs/release_notes) and run CI release manually in order to deliver the stable version to users.
 
 ### Release Patch version
 

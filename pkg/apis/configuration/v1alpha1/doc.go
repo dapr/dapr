@@ -1,3 +1,3 @@
 // +k8s:deepcopy-gen=package
-// +groupName=configuration.actions.io
+// +groupName=configuration.dapr.io
 package v1alpha1

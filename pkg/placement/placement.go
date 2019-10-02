@@ -7,17 +7,17 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
-	pb "github.com/actionscore/actions/pkg/proto"
+	pb "github.com/dapr/dapr/pkg/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
-// PlacementService updates the Actions runtimes with distributed hash tables for stateful entities.
+// PlacementService updates the Dapr runtimes with distributed hash tables for stateful entities.
 type PlacementService struct {
 	generation        int
 	entriesLock       *sync.RWMutex
 	entries           map[string]*Consistent
-	hosts             []pb.PlacementService_ReportActionStatusServer
+	hosts             []pb.PlacementService_ReportDaprStatusServer
 	hostsEntitiesLock *sync.RWMutex
 	hostsEntities     map[string][]string
 	hostsLock         *sync.Mutex
@@ -36,8 +36,8 @@ func NewPlacementService() *PlacementService {
 	}
 }
 
-// ReportActionStatus gets a heartbeat report from different Actions hosts
-func (p *PlacementService) ReportActionStatus(srv pb.PlacementService_ReportActionStatusServer) error {
+// ReportDaprStatus gets a heartbeat report from different Dapr hosts
+func (p *PlacementService) ReportDaprStatus(srv pb.PlacementService_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 	p.hostsLock.Lock()
 	md, _ := metadata.FromIncomingContext(srv.Context())
@@ -73,7 +73,7 @@ func (p *PlacementService) ReportActionStatus(srv pb.PlacementService_ReportActi
 }
 
 // RemoveHost removes the host from the hosts list
-func (p *PlacementService) RemoveHost(srv pb.PlacementService_ReportActionStatusServer) {
+func (p *PlacementService) RemoveHost(srv pb.PlacementService_ReportDaprStatusServer) {
 	for i := len(p.hosts) - 1; i >= 0; i-- {
 		if p.hosts[i] == srv {
 			p.hosts = append(p.hosts[:i], p.hosts[i+1:]...)
@@ -81,7 +81,7 @@ func (p *PlacementService) RemoveHost(srv pb.PlacementService_ReportActionStatus
 	}
 }
 
-// PerformTablesUpdate updates the connected actions runtimes using a 3 stage commit. first it locks so no further action can be taken
+// PerformTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
 // it then proceeds to update and then unlock once all runtimes have been updated
 func (p *PlacementService) PerformTablesUpdate() {
 	p.updateLock.Lock()

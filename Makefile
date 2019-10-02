@@ -9,15 +9,15 @@ export GOSUMDB ?= sum.golang.org
 GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
 CGO			?= 0
-BINARIES    ?= actionsrt placement operator injector
+BINARIES    ?= daprd placement operator injector
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
 
 ifdef REL_VERSION
-	ACTIONS_VERSION := $(REL_VERSION)
+	DAPR_VERSION := $(REL_VERSION)
 else
-	ACTIONS_VERSION := edge
+	DAPR_VERSION := edge
 endif
 
 LOCAL_ARCH := $(shell uname -m)
@@ -70,30 +70,30 @@ endif
 
 # Helm template and install setting
 HELM:=helm
-RELEASE_NAME?=actions
-HELM_NAMESPACE?=actions-system
-HELM_CHART_DIR:=./charts/actions-operator
+RELEASE_NAME?=dapr
+HELM_NAMESPACE?=dapr-system
+HELM_CHART_DIR:=./charts/dapr-operator
 HELM_OUT_DIR:=$(OUT_DIR)/install
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 
 ################################################################################
 # Go build details                                                             #
 ################################################################################
-BASE_PACKAGE_NAME := github.com/actionscore/actions
+BASE_PACKAGE_NAME := github.com/dapr/dapr
 OUT_DIR := ./dist
 
-ACTIONS_OUT_DIR := $(OUT_DIR)/$(GOOS)_$(GOARCH)/$(BUILDTYPE_DIR)
-ACTIONS_LINUX_OUT_DIR := $(OUT_DIR)/linux_$(GOARCH)/$(BUILDTYPE_DIR)
-LDFLAGS := "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(ACTIONS_VERSION)"
+DAPR_OUT_DIR := $(OUT_DIR)/$(GOOS)_$(GOARCH)/$(BUILDTYPE_DIR)
+DAPR_LINUX_OUT_DIR := $(OUT_DIR)/linux_$(GOARCH)/$(BUILDTYPE_DIR)
+LDFLAGS := "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)"
 
 ################################################################################
 # Target: build                                                                #
 ################################################################################
 .PHONY: build
-ACTIONS_BINS:=$(foreach ITEM,$(BINARIES),$(ACTIONS_OUT_DIR)/$(ITEM)$(BINARY_EXT))
-build: $(ACTIONS_BINS)
+DAPR_BINS:=$(foreach ITEM,$(BINARIES),$(DAPR_OUT_DIR)/$(ITEM)$(BINARY_EXT))
+build: $(DAPR_BINS)
 
-# Generate builds for actions binaries for the target
+# Generate builds for dapr binaries for the target
 # Params:
 # $(1): the binary name for the target
 # $(2): the binary main directory
@@ -109,23 +109,23 @@ $(5)/$(1):
 endef
 
 # Generate binary targets
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),./cmd/$(ITEM),$(GOOS),$(GOARCH),$(ACTIONS_OUT_DIR))))
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM)$(BINARY_EXT),./cmd/$(ITEM),$(GOOS),$(GOARCH),$(DAPR_OUT_DIR))))
 
 ################################################################################
 # Target: build-linux                                                          #
 ################################################################################
-BUILD_LINUX_BINS:=$(foreach ITEM,$(BINARIES),$(ACTIONS_LINUX_OUT_DIR)/$(ITEM))
+BUILD_LINUX_BINS:=$(foreach ITEM,$(BINARIES),$(DAPR_LINUX_OUT_DIR)/$(ITEM))
 build-linux: $(BUILD_LINUX_BINS)
 
 # Generate linux binaries targets to build linux docker image
 ifneq ($(GOOS), linux)
-$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM),linux,$(GOARCH),$(ACTIONS_LINUX_OUT_DIR))))
+$(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM),linux,$(GOARCH),$(DAPR_LINUX_OUT_DIR))))
 endif
 
 ################################################################################
 # Target: archive                                                              #
 ################################################################################
-ARCHIVE_OUT_DIR ?= $(ACTIONS_OUT_DIR)
+ARCHIVE_OUT_DIR ?= $(DAPR_OUT_DIR)
 ARCHIVE_FILE_EXTS:=$(foreach ITEM,$(BINARIES),archive-$(ITEM)$(ARCHIVE_EXT))
 
 archive: $(ARCHIVE_FILE_EXTS)
@@ -136,10 +136,10 @@ archive: $(ARCHIVE_FILE_EXTS)
 define genArchiveBinary
 ifeq ($(GOOS),windows)
 archive-$(1).zip:
-	7z.exe a -tzip "$(2)\\$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" "$(ACTIONS_OUT_DIR)\\$(1)$(BINARY_EXT)"
+	7z.exe a -tzip "$(2)\\$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" "$(DAPR_OUT_DIR)\\$(1)$(BINARY_EXT)"
 else
 archive-$(1).tar.gz:
-	tar czf "$(2)/$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" -C "$(ACTIONS_OUT_DIR)" "$(1)$(BINARY_EXT)"
+	tar czf "$(2)/$(1)_$(GOOS)_$(GOARCH)$(ARCHIVE_EXT)" -C "$(DAPR_OUT_DIR)" "$(1)$(BINARY_EXT)"
 endif
 endef
 
@@ -151,19 +151,19 @@ $(foreach ITEM,$(BINARIES),$(eval $(call genArchiveBinary,$(ITEM),$(ARCHIVE_OUT_
 ################################################################################
 
 LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)
-DOCKER_IMAGE_TAG=$(ACTIONS_REGISTRY)/$(RELEASE_NAME):$(ACTIONS_TAG)
+DOCKER_IMAGE_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):$(DAPR_TAG)
 
 ifeq ($(LATEST_RELEASE),true)
-DOCKER_IMAGE_LATEST_TAG=$(ACTIONS_REGISTRY)/$(RELEASE_NAME):latest
+DOCKER_IMAGE_LATEST_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):latest
 endif
 
 # check the required environment variables
 check-docker-env:
-ifeq ($(ACTIONS_REGISTRY),)
-	$(error ACTIONS_REGISTRY environment variable must be set)
+ifeq ($(DAPR_REGISTRY),)
+	$(error DAPR_REGISTRY environment variable must be set)
 endif
-ifeq ($(ACTIONS_TAG),)
-	$(error ACTIONS_TAG environment variable must be set)
+ifeq ($(DAPR_TAG),)
+	$(error DAPR_TAG environment variable must be set)
 endif
 
 # build docker image for linux
@@ -189,19 +189,19 @@ endif
 ################################################################################
 
 # Generate helm chart manifest
-manifest-gen: actions-operator.yaml
+manifest-gen: dapr-operator.yaml
 
 $(HOME)/.helm:
 	$(HELM) init --client-only
 
-actions-operator.yaml: check-docker-env $(HOME)/.helm
+dapr-operator.yaml: check-docker-env $(HOME)/.helm
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
 		--name=$(RELEASE_NAME) \
 		--namespace=$(HELM_NAMESPACE) \
-		--set-string global.tag=${ACTIONS_TAG} \ 
-		--set-string global.registry=${ACTIONS_REGISTRY} \
+		--set-string global.tag=${DAPR_TAG} \ 
+		--set-string global.registry=${DAPR_REGISTRY} \
 		$(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
@@ -209,12 +209,12 @@ actions-operator.yaml: check-docker-env $(HOME)/.helm
 ################################################################################
 
 docker-deploy-k8s: check-docker-env $(HOME)/.helm
-	$(info Deploying ${ACTIONS_REGISTRY}/${RELEASE_NAME}:${ACTIONS_TAG} to the current K8S context...)
+	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
 		--name=$(RELEASE_NAME) \
 		--namespace=$(HELM_NAMESPACE) \
-		--set-string global.tag=${ACTIONS_TAG}
-		--set-string global.registry=${ACTIONS_REGISTRY} \
+		--set-string global.tag=${DAPR_TAG}
+		--set-string global.registry=${DAPR_REGISTRY} \
 		$(HELM_CHART_DIR)
 
 ################################################################################

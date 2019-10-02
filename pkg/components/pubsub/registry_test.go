@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/actionscore/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/pubsub"
 	"github.com/stretchr/testify/assert"
 )
 

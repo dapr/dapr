@@ -1,8 +1,8 @@
 package kubernetes
 
 import (
-	scheme "github.com/actionscore/actions/pkg/client/clientset/versioned"
-	"github.com/actionscore/actions/utils"
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// Clients returns a new Kubernetes and Actions clients
+// Clients returns a new Kubernetes and Dapr clients
 func Clients() (kubernetes.Interface, scheme.Interface, error) {
 	client := utils.GetKubeClient()
 	config := utils.GetConfig()

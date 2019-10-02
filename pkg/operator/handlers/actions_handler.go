@@ -8,43 +8,43 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	log "github.com/Sirupsen/logrus"
-	scheme "github.com/actionscore/actions/pkg/client/clientset/versioned"
-	"github.com/actionscore/actions/pkg/kubernetes"
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/kubernetes"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	actionsEnabledAnnotationKey = "actions.io/enabled"
-	actionsIDAnnotationKey      = "actions.io/id"
-	actionSidecarHTTPPortName   = "actions-http"
-	actionSidecarGRPCPortName   = "actions-grpc"
-	actionSidecarHTTPPort       = 3500
-	actionSidecarGRPCPort       = 50001
+	daprEnabledAnnotationKey = "dapr.io/enabled"
+	daprIDAnnotationKey      = "dapr.io/id"
+	daprSidecarHTTPPortName   = "dapr-http"
+	daprSidecarGRPCPortName   = "dapr-grpc"
+	daprSidecarHTTPPort       = 3500
+	daprSidecarGRPCPort       = 50001
 )
 
-// ActionsHandler handles the lifetime for Actions CRDs
-type ActionsHandler struct {
+// DaprHandler handles the lifetime for Dapr CRDs
+type DaprHandler struct {
 	client          scheme.Interface
 	deploymentsLock *sync.Mutex
 }
 
-// NewActionsHandler returns a new Actions handler
-func NewActionsHandler(client scheme.Interface) *ActionsHandler {
-	return &ActionsHandler{
+// NewDaprHandler returns a new Dapr handler
+func NewDaprHandler(client scheme.Interface) *DaprHandler {
+	return &DaprHandler{
 		client:          client,
 		deploymentsLock: &sync.Mutex{},
 	}
 }
 
 // Init allows for various startup tasks
-func (h *ActionsHandler) Init() error {
+func (h *DaprHandler) Init() error {
 	return nil
 }
 
-func (h *ActionsHandler) createActionsService(name string, deployment *appsv1.Deployment) error {
-	serviceName := fmt.Sprintf("%s-actions", name)
+func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployment) error {
+	serviceName := fmt.Sprintf("%s-dapr", name)
 	exists := kubernetes.ServiceExists(serviceName, deployment.GetNamespace())
 	if exists {
 		log.Infof("service exists: %s", serviceName)
@@ -54,7 +54,7 @@ func (h *ActionsHandler) createActionsService(name string, deployment *appsv1.De
 	service := &corev1.Service{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name:   serviceName,
-			Labels: map[string]string{actionsEnabledAnnotationKey: "true"},
+			Labels: map[string]string{daprEnabledAnnotationKey: "true"},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: deployment.Spec.Selector.MatchLabels,
@@ -62,14 +62,14 @@ func (h *ActionsHandler) createActionsService(name string, deployment *appsv1.De
 				{
 					Protocol:   corev1.ProtocolTCP,
 					Port:       80,
-					TargetPort: intstr.FromInt(actionSidecarHTTPPort),
-					Name:       actionSidecarHTTPPortName,
+					TargetPort: intstr.FromInt(daprSidecarHTTPPort),
+					Name:       daprSidecarHTTPPortName,
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(actionSidecarGRPCPort),
-					TargetPort: intstr.FromInt(actionSidecarGRPCPort),
-					Name:       actionSidecarGRPCPortName,
+					Port:       int32(daprSidecarGRPCPort),
+					TargetPort: intstr.FromInt(daprSidecarGRPCPort),
+					Name:       daprSidecarGRPCPortName,
 				},
 			},
 		},
@@ -84,18 +84,18 @@ func (h *ActionsHandler) createActionsService(name string, deployment *appsv1.De
 	return nil
 }
 
-func (h *ActionsHandler) getActionsID(deployment *appsv1.Deployment) string {
+func (h *DaprHandler) getDaprID(deployment *appsv1.Deployment) string {
 	annotations := deployment.Spec.Template.ObjectMeta.Annotations
-	if val, ok := annotations[actionsIDAnnotationKey]; ok && val != "" {
+	if val, ok := annotations[daprIDAnnotationKey]; ok && val != "" {
 		return val
 	}
 
 	return ""
 }
 
-func (h *ActionsHandler) isAnnotatedForActions(deployment *appsv1.Deployment) bool {
+func (h *DaprHandler) isAnnotatedForDapr(deployment *appsv1.Deployment) bool {
 	annotations := deployment.Spec.Template.ObjectMeta.Annotations
-	enabled, ok := annotations[actionsEnabledAnnotationKey]
+	enabled, ok := annotations[daprEnabledAnnotationKey]
 	if !ok {
 		return false
 	}
@@ -107,31 +107,31 @@ func (h *ActionsHandler) isAnnotatedForActions(deployment *appsv1.Deployment) bo
 	}
 }
 
-// ObjectCreated handles Actions enabled deployment state changes
-func (h *ActionsHandler) ObjectCreated(obj interface{}) {
+// ObjectCreated handles Dapr enabled deployment state changes
+func (h *DaprHandler) ObjectCreated(obj interface{}) {
 	h.deploymentsLock.Lock()
 	defer h.deploymentsLock.Unlock()
 
 	deployment := obj.(*appsv1.Deployment)
-	annotated := h.isAnnotatedForActions(deployment)
+	annotated := h.isAnnotatedForDapr(deployment)
 	if annotated {
-		id := h.getActionsID(deployment)
+		id := h.getDaprID(deployment)
 		if id == "" {
 			log.Errorf("skipping service creation: id for deployment %s is empty", deployment.GetName())
 			return
 		}
 
-		err := h.createActionsService(id, deployment)
+		err := h.createDaprService(id, deployment)
 		if err != nil {
 			log.Errorf("failed creating service for deployment %s: %s", deployment.GetName(), err)
 		}
 	}
 }
 
-// ObjectUpdated handles Actions crd updates
-func (h *ActionsHandler) ObjectUpdated(old interface{}, new interface{}) {
+// ObjectUpdated handles Dapr crd updates
+func (h *DaprHandler) ObjectUpdated(old interface{}, new interface{}) {
 }
 
-// ObjectDeleted handles Actions crd deletion
-func (h *ActionsHandler) ObjectDeleted(obj interface{}) {
+// ObjectDeleted handles Dapr crd deletion
+func (h *DaprHandler) ObjectDeleted(obj interface{}) {
 }

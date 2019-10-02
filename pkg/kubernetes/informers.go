@@ -1,8 +1,8 @@
 package kubernetes
 
 import (
-	components_v1alpha1 "github.com/actionscore/actions/pkg/apis/components/v1alpha1"
-	scheme "github.com/actionscore/actions/pkg/client/clientset/versioned"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -53,7 +53,7 @@ func ComponentsIndexInformer(
 	fieldSelector fields.Selector,
 	labelSelector labels.Selector,
 ) cache.SharedIndexInformer {
-	actionsClient := client.ComponentsV1alpha1().Components(namespace)
+	daprClient := client.ComponentsV1alpha1().Components(namespace)
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
@@ -63,7 +63,7 @@ func ComponentsIndexInformer(
 				if labelSelector != nil {
 					options.LabelSelector = labelSelector.String()
 				}
-				return actionsClient.List(options)
+				return daprClient.List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				if fieldSelector != nil {
@@ -72,7 +72,7 @@ func ComponentsIndexInformer(
 				if labelSelector != nil {
 					options.LabelSelector = labelSelector.String()
 				}
-				return actionsClient.Watch(options)
+				return daprClient.Watch(options)
 			},
 		},
 		&components_v1alpha1.Component{},

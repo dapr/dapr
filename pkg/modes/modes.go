@@ -1,11 +1,11 @@
 package modes
 
-// ActionsMode is the runtime mode for Actions
-type ActionsMode string
+// DaprMode is the runtime mode for Dapr
+type DaprMode string
 
 const (
-	// KubernetesMode is a Kubernetes Actions mode
-	KubernetesMode ActionsMode = "kubernetes"
-	// StandaloneMode is a Standalone Actions mode
-	StandaloneMode ActionsMode = "standalone"
+	// KubernetesMode is a Kubernetes Dapr mode
+	KubernetesMode DaprMode = "kubernetes"
+	// StandaloneMode is a Standalone Dapr mode
+	StandaloneMode DaprMode = "standalone"
 )

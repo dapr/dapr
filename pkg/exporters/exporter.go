@@ -1,6 +1,6 @@
 package exporters
 
-// Exporter is an interface for an Actions metrics exporter
+// Exporter is an interface for an Dapr metrics exporter
 type Exporter interface {
-	Init(actionsID string, actionsAddress string, exporterAddress string) error
+	Init(daprID string, daprAddress string, exporterAddress string) error
 }

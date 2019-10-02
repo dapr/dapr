@@ -12,8 +12,8 @@ type ZipkinExporter struct {
 }
 
 // Init creates a new zipkin endpoint and reporter
-func (z ZipkinExporter) Init(actionsID string, hostPort string, exporterAddress string) error {
-	localEndpoint, err := openzipkin.NewEndpoint(actionsID, hostPort)
+func (z ZipkinExporter) Init(daprID string, hostPort string, exporterAddress string) error {
+	localEndpoint, err := openzipkin.NewEndpoint(daprID, hostPort)
 	if err != nil {
 		return err
 	}

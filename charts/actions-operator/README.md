@@ -1,15 +1,15 @@
 # Introduction
-This chart bootstraps all of Actions Operator components on a Kubernetes cluster using the Helm package manager.
+This chart bootstraps all of Dapr Operator components on a Kubernetes cluster using the Helm package manager.
 
 ## Chart Details
-This chart installs multiple Actions components via "child-charts":
+This chart installs multiple Dapr components via "child-charts":
 
-* Actions Component and Configuration Kubernetes CRDs
-* Actions RBAC components
+* Dapr Component and Configuration Kubernetes CRDs
+* Dapr RBAC components
     * Cluster Role Binding
     * Service Account
-* Actions Operator
-* Actions Placement
+* Dapr Operator
+* Dapr Placement
 
 ## Prerequisites
 * Kubernetes 1.9 or newer cluster with RBAC (Role-Based Access Control) enabled is required
@@ -30,9 +30,9 @@ The chart deploys pods that consume minimum resources as specified in the resour
 
 ## Installing the Chart
 
-Actions' Helm chart is hosted in an [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/),
+Dapr' Helm chart is hosted in an [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/),
 which does not yet support anonymous access to charts therein. Until this is
-resolved, adding the Helm repository from which Actions can be installed requires
+resolved, adding the Helm repository from which Dapr can be installed requires
 use of a shared set of read-only credentials.
 
 Make sure helm is initialized in your running kubernetes cluster.
@@ -41,33 +41,33 @@ For more details on initializing helm, Go [here](https://docs.helm.sh/helm/#helm
 
 1. Add Azure Container Registry as an helm repo
     ```
-    helm repo add actionscore https://actionscore.azurecr.io/helm/v1/repo \
+    helm repo add dapr https://actionscore.azurecr.io/helm/v1/repo \
     --username 390401a7-d7a6-46da-b10f-3ceff7a1cdd5 \
     --password 485b3522-59bb-4152-8938-ca8b90108af6
     ```
 
-2. Install the Actions chart on your cluster in the actions-system namespace:
+2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
-    helm install actionscore/actions-operator --name actions --namespace actions-system
+    helm install dapr/dapr-operator --name dapr --namespace dapr-system
     ``` 
 
 ## Verify installation
 
-Once the chart installation is done, verify the Actions operator pods are running in the `actions-system` namespace:
+Once the chart installation is done, verify the Dapr operator pods are running in the `dapr-system` namespace:
 ```
-kubectl get pods --namespace actions-system
+kubectl get pods --namespace dapr-system
 ```
  
-![actions_helm_success](/charts/actions-operator/img/actions_helm_success.png)
+![dapr_helm_success](/charts/dapr-operator/img/dapr_helm_success.png)
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `actions` release but continue to track the release:
+To uninstall/delete the `dapr` release but continue to track the release:
 ```
-helm delete actions
+helm delete dapr
 ```
 
-To uninstall/delete the `actions` release completely and make its name free for later use:
+To uninstall/delete the `dapr` release completely and make its name free for later use:
 ```
-helm delete --purge actions
+helm delete --purge dapr
 ```

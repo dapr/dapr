@@ -1,9 +1,9 @@
-Thank you for installing Actions: High-performance, lightweight serverless runtime for cloud and edge
+Thank you for installing Dapr: High-performance, lightweight serverless runtime for cloud and edge
 
 Your release is named {{ .Release.Name }}.
 
-To get started with Actions, we recommend using our samples page:
-https://github.com/actionscore/actions/tree/master/samples/1.hello-world
+To get started with Dapr, we recommend using our samples page:
+https://github.com/dapr/dapr/tree/master/samples/1.hello-world
 
-For more information on running Actions, visit:
-https://github.com/actionscore
+For more information on running Dapr, visit:
+https://github.com/dapr

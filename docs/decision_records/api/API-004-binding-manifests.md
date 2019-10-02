@@ -8,7 +8,7 @@ As we rename Event Sources to Bindings, and formally separate State Stores, Mess
 
 ## Decisions
 
-### Actions 
+### Dapr 
 
 * All components use the same **Component** manifests, identified by a component **type**.
 * We'll come up with a mechanism to support pluggable secret stores. We'll support Kubernetes native secret store and Azure Key Vault in the initial release.

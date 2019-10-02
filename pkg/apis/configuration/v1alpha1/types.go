@@ -8,7 +8,7 @@ import (
 // +genclient:noStatus
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Configuration describes an Action configuration setting
+// Configuration describes an Dapr configuration setting
 type Configuration struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional
@@ -33,7 +33,7 @@ type TracingSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ConfigurationList is a list of Action event sources
+// ConfigurationList is a list of Dapr event sources
 type ConfigurationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`

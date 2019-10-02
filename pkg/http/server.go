@@ -8,13 +8,13 @@ import (
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	log "github.com/Sirupsen/logrus"
-	"github.com/actionscore/actions/pkg/config"
-	diag "github.com/actionscore/actions/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/valyala/fasthttp"
 )
 
-// Server is an interface for the Actions HTTP server
+// Server is an interface for the Dapr HTTP server
 type Server interface {
 	StartNonBlocking()
 }
@@ -43,7 +43,7 @@ func (s *server) StartNonBlocking() {
 
 	go func() {
 		if s.tracingSpec.Enabled {
-			diag.CreateExporter(s.config.ActionID, s.config.HostAddress, s.tracingSpec, nil)
+			diag.CreateExporter(s.config.DaprID, s.config.HostAddress, s.tracingSpec, nil)
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
 				diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(router.HandleRequest))))
 		} else {

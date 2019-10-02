@@ -19,7 +19,7 @@ limitations under the License.
 package fake
 
 import (
-	v1alpha1 "github.com/actionscore/actions/pkg/apis/configuration/v1alpha1"
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -34,9 +34,9 @@ type FakeConfigurations struct {
 	ns   string
 }
 
-var configurationsResource = schema.GroupVersionResource{Group: "configuration.actions.io", Version: "v1alpha1", Resource: "configurations"}
+var configurationsResource = schema.GroupVersionResource{Group: "configuration.dapr.io", Version: "v1alpha1", Resource: "configurations"}
 
-var configurationsKind = schema.GroupVersionKind{Group: "configuration.actions.io", Version: "v1alpha1", Kind: "Configuration"}
+var configurationsKind = schema.GroupVersionKind{Group: "configuration.dapr.io", Version: "v1alpha1", Kind: "Configuration"}
 
 // Get takes name of the configuration, and returns the corresponding configuration object, and an error if there is any.
 func (c *FakeConfigurations) Get(name string, options v1.GetOptions) (result *v1alpha1.Configuration, err error) {

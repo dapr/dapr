@@ -1,6 +1,6 @@
 package handlers
 
-// Handler is the interface for dealing with Actions CRDs state changes
+// Handler is the interface for dealing with Dapr CRDs state changes
 type Handler interface {
 	Init() error
 	ObjectCreated(obj interface{})

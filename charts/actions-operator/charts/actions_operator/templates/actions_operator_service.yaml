@@ -1,11 +1,11 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: actions-api
+  name: dapr-api
   namespace: {{ .Release.Namespace }}
 spec:
   selector:
-    app: actions-operator
+    app: dapr-operator
   ports:
   - protocol: TCP
     port: {{ .Values.ports.port }} 

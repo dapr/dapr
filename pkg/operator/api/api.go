@@ -9,14 +9,14 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	scheme "github.com/actionscore/actions/pkg/client/clientset/versioned"
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/gorilla/mux"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var httpPort = 6500
 
-//APIServer runs the Actions API server for components and configurations
+//APIServer runs the Dapr API server for components and configurations
 type APIServer interface {
 	Run(ctx context.Context)
 }
@@ -87,7 +87,7 @@ func (a *apiServer) Run(ctx context.Context) {
 	close(doneCh)
 }
 
-// GetConfiguration returns an Actions configuration
+// GetConfiguration returns an Dapr configuration
 func (a *apiServer) GetConfiguration(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["name"]
@@ -119,7 +119,7 @@ func (a *apiServer) GetConfiguration(w http.ResponseWriter, r *http.Request) {
 	RespondWithJSON(w, 200, nil)
 }
 
-// GetComponents returns a list of Actions components
+// GetComponents returns a list of Dapr components
 func (a *apiServer) GetComponents(w http.ResponseWriter, r *http.Request) {
 	components, err := a.Client.ComponentsV1alpha1().Components(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {

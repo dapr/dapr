@@ -5,7 +5,7 @@ package testing
 import (
 	"regexp"
 
-	messaging "github.com/actionscore/actions/pkg/messaging"
+	messaging "github.com/dapr/dapr/pkg/messaging"
 	mock "github.com/stretchr/testify/mock"
 )
 

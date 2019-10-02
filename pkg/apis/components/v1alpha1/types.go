@@ -8,7 +8,7 @@ import (
 // +genclient:noStatus
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Component describes an Actions component type
+// Component describes an Dapr component type
 type Component struct {
 	metav1.TypeMeta `json:",inline"`
 	// +optional
@@ -45,7 +45,7 @@ type Auth struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ComponentList is a list of Actions components
+// ComponentList is a list of Dapr components
 type ComponentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`

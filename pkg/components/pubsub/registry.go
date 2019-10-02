@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/actionscore/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/pubsub"
 )
 
 // PubSubRegistry is used to get registered message bus implementations

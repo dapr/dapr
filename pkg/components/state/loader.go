@@ -1,8 +1,8 @@
 package state
 
 import (
-	"github.com/actionscore/components-contrib/state/cosmosdb"
-	"github.com/actionscore/components-contrib/state/redis"
+	"github.com/dapr/components-contrib/state/cosmosdb"
+	"github.com/dapr/components-contrib/state/redis"
 )
 
 // Load state stores

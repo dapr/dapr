@@ -19,11 +19,11 @@ limitations under the License.
 package fake
 
 import (
-	clientset "github.com/actionscore/actions/pkg/client/clientset/versioned"
-	componentsv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/components/v1alpha1"
-	fakecomponentsv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/components/v1alpha1/fake"
-	configurationv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/configuration/v1alpha1"
-	fakeconfigurationv1alpha1 "github.com/actionscore/actions/pkg/client/clientset/versioned/typed/configuration/v1alpha1/fake"
+	clientset "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
+	fakecomponentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1/fake"
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/configuration/v1alpha1"
+	fakeconfigurationv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/configuration/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
