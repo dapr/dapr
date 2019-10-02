@@ -127,7 +127,7 @@ For more details on initializing helm, go [here](https://docs.helm.sh/helm/#helm
 
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
-    helm install dapr/dapr-operator --name dapr --namespace dapr-system
+    helm install actionscore/dapr-operator --name dapr --namespace dapr-system
     ``` 
 
 ### Verify installation
