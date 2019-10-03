@@ -82,7 +82,7 @@ else ifeq ($(DEBUG),0)
 else
   DOCKERFILE:=Dockerfile-debug
   BUILDTYPE_DIR:=debug
-  GCFLAGS:="all=-N -l"
+  GCFLAGS:=-gcflags="all=-N -l"
   LDFLAGS:="$(DEFAULT_LDFLAGS)"
   $(info Build with debugger information)
 endif
@@ -107,7 +107,7 @@ build: $(DAPR_BINS)
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
-	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build -gcflags=$(GCFLAGS) -ldflags=$(LDFLAGS) \
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
 	-o $(5)/$(1) -mod=vendor \
 	$(2)/main.go;
 endef
