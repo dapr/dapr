@@ -31,11 +31,11 @@ In summary, Dapr:
 
 <br>
 ###### Dapr Standalone Deployment
-![Dapr Standalone](https://github.com/dapr/docs/images/dapr_standalone.png)
+![Dapr Standalone](/img/dapr_standalone.png)
 <br>
 <br>
 ###### Dapr Kubernetes Deployment
-![Dapr on Kubernetes](https://github.com/dapr/docs/images/dapr_k8s.png)
+![Dapr on Kubernetes](/img/dapr_k8s.png)
 
 ## Why Dapr
 
