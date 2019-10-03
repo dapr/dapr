@@ -57,17 +57,6 @@ DOCKER:=docker
 DOCKERFILE_DIR?=./docker
 DOCKERFILE:=Dockerfile
 
-ifeq ($(origin DEBUG), undefined)
-  BUILDTYPE_DIR:=release
-else ifeq ($(DEBUG),0)
-  BUILDTYPE_DIR:=release
-else
-  DOCKERFILE:=Dockerfile-debug
-  BUILDTYPE_DIR:=debug
-  GCFLAGS:=-gcflags="all=-N -l"
-  $(info Build with debugger information)
-endif
-
 # Helm template and install setting
 HELM:=helm
 RELEASE_NAME?=dapr
@@ -82,9 +71,24 @@ HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 BASE_PACKAGE_NAME := github.com/dapr/dapr
 OUT_DIR := ./dist
 
+DEFAULT_LDFLAGS := "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)"
+
+ifeq ($(origin DEBUG), undefined)
+  BUILDTYPE_DIR:=release
+  LDFLAG:="$(DEFAULT_LDFLAGS) -s -w"
+else ifeq ($(DEBUG),0)
+  BUILDTYPE_DIR:=release
+  LDFLAG:="$(DEFAULT_LDFLAGS) -s -w"
+else
+  DOCKERFILE:=Dockerfile-debug
+  BUILDTYPE_DIR:=debug
+  GCFLAGS:=-gcflags="all=-N -l"
+  LDFLAG:="$(DEFAULT_LDFLAGS)"
+  $(info Build with debugger information)
+endif
+
 DAPR_OUT_DIR := $(OUT_DIR)/$(GOOS)_$(GOARCH)/$(BUILDTYPE_DIR)
 DAPR_LINUX_OUT_DIR := $(OUT_DIR)/linux_$(GOARCH)/$(BUILDTYPE_DIR)
-LDFLAGS := "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION) -s -w"
 
 ################################################################################
 # Target: build                                                                #
