@@ -213,7 +213,7 @@ docker-deploy-k8s: check-docker-env $(HOME)/.helm
 	$(HELM) install \
 		--name=$(RELEASE_NAME) \
 		--namespace=$(HELM_NAMESPACE) \
-		--set-string global.tag=${DAPR_TAG}
+		--set-string global.tag=${DAPR_TAG} \
 		--set-string global.registry=${DAPR_REGISTRY} \
 		$(HELM_CHART_DIR)
 

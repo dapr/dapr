@@ -92,8 +92,14 @@ docker images
 ## Push the Container Image
 
 To push the image to DockerHub, run:
+
+Linux/macOS:
 ```
 make docker-push
+```
+Windows:
+```
+mingw32-make.exe docker-push
 ```
 
 ## Deploy Dapr With Your Changes
@@ -107,17 +113,18 @@ helm del --purge dapr
 Then go to 
 
 ```
-[place you cloned to]/dapr/dapr/charts/dapr-operator
+<repo root>/dapr/dapr/charts/dapr-operator
 ```
 
 and run the following to deploy:
-```
-helm install --name=dapr --namespace=dapr-system --set-string global.registry=docker.io/[your Docker Hub id],global.tag=[the tag of the image you just built] .
-```
 
-For the example above, this is what the command should be:
+Linux/macOS:
 ```
-helm install --name=dapr --namespace=dapr-system --set global.registry=docker.io/user123,global.tag=dev .
+make docker-deploy-k8s
+```
+Windows:
+```
+mingw32-make.exe docker-deploy-k8s
 ```
 
 ## Verifying your changes
