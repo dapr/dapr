@@ -36,7 +36,11 @@ spec:
         - name: TLS_KEY_FILE
           value: /dapr/cert/tls.key
         - name: SIDECAR_IMAGE
-          value: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+{{- if contains "/" .Values.image.name }}
+          value: "{{ .Values.image.name }}"
+{{- else }}
+          value: "{{ $.Values.global.registry }}/dapr:{{ $.Values.global.tag }}"
+          {{- end }}
         - name: NAMESPACE
           value: {{ .Release.Namespace }}
         ports:
