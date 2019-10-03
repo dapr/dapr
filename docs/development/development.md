@@ -112,7 +112,7 @@ $ dlv attach [pid]
 $ dlv test ./pkg/actors
 ```
 
-### Developing Actions and Deploying to a Cluster
-Please see the following for steps on how to make a simple change to Actions and then on how deploy them to a cluster:
+### Developing Dapr and Deploying to a Cluster
+Please see the following for steps on how to make a simple change to Dapr and then on how deploy them to a cluster:
 - [Local cluster using Minikube](./setup_minikube.md)
 - [Non-local cluster using AKS](./setup_aks.md)

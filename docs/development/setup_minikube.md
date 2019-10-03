@@ -65,16 +65,8 @@ You may get `AlreadyExists`.  That is ok.
 
 ## Install Helm and Deploy Tiller
 
-1. Install Helm if you haven't already:
+1. [Install Helm](https://helm.sh/docs/using_helm/#installing-the-helm-client) if you haven't already:
 
-Linux/macOS:
-```
-sudo snap install helm --classic
-```
-
-Windows:
-
-See this: https://helm.sh/docs/using_helm/#from-chocolatey-or-scoop-windows
 
 2. Create the tiller service account
 ```
@@ -104,4 +96,4 @@ Then repeat step 3.
 kubectl describe deployment tiller-deploy --namespace kube-system
 ```
 
-Your Minikube cluster is now ready!  Please see [Modify Actions and Deploy to the Cluster](./edit_and_deploy.md) to deploy a local change to the cluster.
+Your Minikube cluster is now ready!  Please see [Modify Daprs and Deploy to the Cluster](./edit_and_deploy.md) to deploy a local change to the cluster.

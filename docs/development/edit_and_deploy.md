@@ -1,24 +1,24 @@
 
-## Modify Actions and Deploy to the Cluster
+## Developing Dapr and Deploying to a Cluster
 
-This guide will walk through the steps to make a small change to Actions, then deploy the change to your cluster.
+This guide will walk through the steps to make a small change to Dapr, then deploy the change to your cluster.
 
 This guide assumes you have a local or AKS cluster set up.  If you haven't done this, follow the appropriate link:
 - [Local Minikube cluster](./setup_minikube.md)
 - [AKS cluster](/setup_aks.md)
 
-1. If you haven't already cloned the code, clone https://github.com/actionscore/actions.
+1. If you haven't already cloned the code, clone https://github.com/dapr/dapr.
 
 2. Open the following file and add a log statement of your choice in main().  We'll look for this log statement after we deploy our changes to confirm everything worked.
 ```
-[location you cloned to]/actionscore/actions/cmd/operator/main.go
+[location you cloned to]/dapr/dapr/cmd/operator/main.go
 ```
 
 Save the file.
 
 3.  Go up two levels to 
 ```
-[location you cloned to]/actionscore/actions
+[location you cloned to]/dapr/dapr
 ```
 
 and build.  We're going to build for a Linux container.
@@ -42,39 +42,28 @@ After creating the account, log into Docker Hub:
 docker login
 ```
 
-5. Open the Dockerfile in the current directory and replace the last line, the `ADD`, with:
-
-```
-ADD ./dist/linux_amd64/release/. /
-```
-
-For Windows, use the following instead:
-```
-ADD dist/linux_amd64/release/. /
-```
-
-6. Now set the following environment varariables, which will be used by make:
-- `ACTIONS_REGISTRY` should be set to docker.io/[your Docker Hub account name].
-- `ACTIONS_TAG` should be set to whatever value you wish to use for a container image tag.
+5. Now set the following environment varariables, which will be used by make:
+- `DAPR_REGISTRY` should be set to docker.io/[your Docker Hub account name].
+- `DAPR_TAG` should be set to whatever value you wish to use for a container image tag.
 
 
 Linux/macOS:
 ```
-export ACTIONS_REGISTRY=docker.io/[your Docker Hub account name]
-export ACTIONS_TAG=dev1
+export DAPR_REGISTRY=docker.io/[your Docker Hub account name]
+export DAPR_TAG=dev1
 ```
 
 Windows:
 
 ```
-set ACTIONS_REGISTRY=docker.io/[your Docker Hub account name]
-set ACTIONS_TAG=dev1
+set DAPR_REGISTRY=docker.io/[your Docker Hub account name]
+set DAPR_TAG=dev1
 ```
 
 ## Building the Container Image
 From
 ```
-[location you cloned to]/actionscore/actions
+[location you cloned to]/daprscore/dapr
 ```
 
 Run the appropriate command below to build the container image.
@@ -91,10 +80,10 @@ mingw32-make.exe docker-build
 ```
 
 For example, if our environment variables are set like so:
-- `ACTIONS_REGISTRY1=docker.io/user123` 
-- `ACTIONS_TAG=dev`
+- `DAPR_REGISTRY=docker.io/user123` 
+- `DAPR_TAG=dev`
 
-The command above will create an image with repo `user123/actions` (note `actions` is added) and tag `dev`.
+The command above will create an image with repo `user123/dapr` (note `dapr` is added) and tag `dev`.
 
 You should see the new image if you run:
 ```
@@ -107,39 +96,45 @@ To push the image to DockerHub, run:
 make docker-push
 ```
 
-## Deploy Actions With Your Changes
-Now we'll deploy Actions with your changes.
+## Deploy Dapr With Your Changes
+Now we'll deploy Dapr with your changes.
 
-If you deployed Actions to your cluster before, delete it now using:
+If you deployed Dapr to your cluster before, delete it now using:
 ```
-helm del --purge actions
+helm del --purge dapr
 ```
 
 Then go to 
 
 ```
-[place you cloned to]/actionscore/actions/charts/actions-operator
+[place you cloned to]/dapr/dapr/charts/dapr-operator
 ```
 
 and run the following to deploy:
 ```
-helm install --name=actions --namespace=actions-system --set-string global.registry=docker.io/[your Docker Hub id],global.tag=[the tag of the image you just built] .
+helm install --name=dapr --namespace=dapr-system --set-string global.registry=docker.io/[your Docker Hub id],global.tag=[the tag of the image you just built] .
 ```
 
-For the settings above, here's an example with the variables filled in:
+For the example above, this is what the command should be:
 ```
-helm install --name=actions --namespace=actions-system --set global.registry=docker.io/user123,global.tag=dev .
+helm install --name=dapr --namespace=dapr-system --set global.registry=docker.io/user123,global.tag=dev .
 ```
 
 ## Verifying your changes
 
-Once Actions is deployed, you should see the print statement you added by running:
+Once Dapr is deployed, print the Dapr pods:
+
 ```
-kubectl logs [your actions-operator pod name]
+kubectl.exe get po -n dapr-system
+
 ```
 
-For example:
+Find the one with a name starting with dapr-operator (e.g. dapr-operator-123-456), and run
+
 ```
-kubectl logs actions-operator-123-456
+kubectl logs [your dapr-operator pod name]
 ```
+
+you should see the print statement you added.
+
  

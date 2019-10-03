@@ -3,7 +3,6 @@
 
 ## Prerequisites
 
-Install
 - Install Docker
 - Install [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 - If on Windows,
@@ -72,4 +71,4 @@ Then repeat step 2.
 kubectl describe deployment tiller-deploy --namespace kube-system
 ```
 
-Your cluster is now ready!  Please see [Modify Actions and Deploy to the Cluster](./edit_and_deploy.md) to deploy a change to the cluster.
+Your cluster is now ready!  Please see [Modify Dapr and Deploy to the Cluster](./edit_and_deploy.md) to deploy a change to the cluster.
