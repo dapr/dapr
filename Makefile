@@ -71,19 +71,19 @@ HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 BASE_PACKAGE_NAME := github.com/dapr/dapr
 OUT_DIR := ./dist
 
-DEFAULT_LDFLAGS := "-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)"
+DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)
 
 ifeq ($(origin DEBUG), undefined)
   BUILDTYPE_DIR:=release
-  LDFLAG:="$(DEFAULT_LDFLAGS) -s -w"
+  LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
 else ifeq ($(DEBUG),0)
   BUILDTYPE_DIR:=release
-  LDFLAG:="$(DEFAULT_LDFLAGS) -s -w"
+  LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
 else
   DOCKERFILE:=Dockerfile-debug
   BUILDTYPE_DIR:=debug
-  GCFLAGS:=-gcflags="all=-N -l"
-  LDFLAG:="$(DEFAULT_LDFLAGS)"
+  GCFLAGS:="all=-N -l"
+  LDFLAGS:="$(DEFAULT_LDFLAGS)"
   $(info Build with debugger information)
 endif
 
@@ -107,7 +107,7 @@ build: $(DAPR_BINS)
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
-	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags $(LDFLAGS) \
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build -gcflags=$(GCFLAGS) -ldflags=$(LDFLAGS) \
 	-o $(5)/$(1) -mod=vendor \
 	$(2)/main.go;
 endef
