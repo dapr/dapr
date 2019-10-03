@@ -421,7 +421,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
-				log.Error("actors: connection failure to placement service: retrying")
+				log.Debug("actors: connection failure to placement service: retrying")
 				stream = a.getPlacementClientPersistently(placementAddress, hostAddress)
 			}
 			if resp != nil {
