@@ -52,6 +52,8 @@ endif
 
 export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
 
+OUT_DIR := ./dist
+
 # Docker image build and push setting
 DOCKER:=docker
 DOCKERFILE_DIR?=./docker
@@ -69,7 +71,6 @@ HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 # Go build details                                                             #
 ################################################################################
 BASE_PACKAGE_NAME := github.com/dapr/dapr
-OUT_DIR := ./dist
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/version.commit=$(GIT_VERSION) -X $(BASE_PACKAGE_NAME)/pkg/version.version=$(DAPR_VERSION)
 
@@ -202,11 +203,8 @@ dapr-operator.yaml: check-docker-env $(HOME)/.helm
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
-		--name=$(RELEASE_NAME) \
-		--namespace=$(HELM_NAMESPACE) \
-		--set-string global.tag=${DAPR_TAG} \ 
-		--set-string global.registry=${DAPR_REGISTRY} \
-		$(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
+		--name=$(RELEASE_NAME) --namespace=$(HELM_NAMESPACE) \
+		--set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #
@@ -215,11 +213,8 @@ dapr-operator.yaml: check-docker-env $(HOME)/.helm
 docker-deploy-k8s: check-docker-env $(HOME)/.helm
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
-		--name=$(RELEASE_NAME) \
-		--namespace=$(HELM_NAMESPACE) \
-		--set-string global.tag=${DAPR_TAG} \
-		--set-string global.registry=${DAPR_REGISTRY} \
-		$(HELM_CHART_DIR)
+		--name=$(RELEASE_NAME) --namespace=$(HELM_NAMESPACE) \
+		--set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #
