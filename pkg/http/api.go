@@ -12,11 +12,11 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 
+	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/messaging"
-	"github.com/dapr/components-contrib/state"
 	routing "github.com/qiangxue/fasthttp-routing"
 )
 

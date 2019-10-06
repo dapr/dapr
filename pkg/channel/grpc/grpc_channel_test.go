@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/pkg/channel"
-	pb "github.com/dapr/dapr/pkg/proto"
+	pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	any "github.com/golang/protobuf/ptypes/any"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/stretchr/testify/assert"
@@ -16,18 +16,24 @@ import (
 type mockServer struct {
 }
 
-func (m *mockServer) OnMethodCall(context context.Context, envelope *pb.AppMethodCallEnvelope) (*any.Any, error) {
+func (m *mockServer) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any, error) {
 	ret := ""
-	for k, v := range envelope.Metadata {
+	for k, v := range in.Metadata {
 		ret += k + "=" + v + "&"
 	}
 	return &any.Any{Value: []byte(ret)}, nil
 }
-func (m *mockServer) RestoreState(context.Context, *pb.State) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (m *mockServer) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetTopicSubscriptionsEnvelope, error) {
+	return &pb.GetTopicSubscriptionsEnvelope{}, nil
 }
-func (m *mockServer) GetConfig(context.Context, *empty.Empty) (*pb.ApplicationConfig, error) {
-	return &pb.ApplicationConfig{}, nil
+func (m *mockServer) GetBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetBindingsSubscriptionsEnvelope, error) {
+	return &pb.GetBindingsSubscriptionsEnvelope{}, nil
+}
+func (m *mockServer) OnBindingEvent(ctx context.Context, in *pb.BindingEventEnvelope) (*pb.BindingResponseEnvelope, error) {
+	return &pb.BindingResponseEnvelope{}, nil
+}
+func (m *mockServer) OnTopicEvent(ctx context.Context, in *pb.CloudEventEnvelope) (*empty.Empty, error) {
+	return &empty.Empty{}, nil
 }
 
 func TestInvokeMethod(t *testing.T) {
@@ -36,7 +42,7 @@ func TestInvokeMethod(t *testing.T) {
 
 	grpcServer := grpc.NewServer()
 	go func() {
-		pb.RegisterAppServer(grpcServer, &mockServer{})
+		pb.RegisterDaprClientServer(grpcServer, &mockServer{})
 		grpcServer.Serve(lis)
 	}()
 

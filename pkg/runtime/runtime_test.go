@@ -6,14 +6,14 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
+	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/dapr/pkg/channel"
 	http_channel "github.com/dapr/dapr/pkg/channel/http"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
@@ -365,7 +365,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHttpResponse, nil)
 
 		// act
-		err := rt.onNewPublishedMessage(testPubSubMessage)
+		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -386,10 +386,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHttpResponse, expectedClientError)
 
 		// act
-		err := rt.onNewPublishedMessage(testPubSubMessage)
+		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
-		assert.Equal(t, fmt.Errorf("error from app: %s", expectedClientError), err)
+		assert.Equal(t, expectedClientError, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 }

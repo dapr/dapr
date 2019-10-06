@@ -10,7 +10,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/exporters"
-	dapr "github.com/dapr/dapr/pkg/proto"
+	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
+	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
+	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
 	"github.com/valyala/fasthttp"
@@ -223,13 +225,13 @@ func extractHeaders(req interface{}) string {
 	if req == nil {
 		return ""
 	}
-	if s, ok := req.(*dapr.LocalCallEnvelope); ok {
+	if s, ok := req.(*daprinternal_pb.LocalCallEnvelope); ok {
 		return s.Metadata["headers"]
 	}
-	if s, ok := req.(*dapr.AppMethodCallEnvelope); ok {
+	if s, ok := req.(*daprclient_pb.InvokeEnvelope); ok {
 		return s.Metadata["headers"]
 	}
-	if s, ok := req.(*dapr.CallRemoteAppEnvelope); ok {
+	if s, ok := req.(*dapr_pb.InvokeServiceEnvelope); ok {
 		return s.Metadata["headers"]
 	}
 	return ""

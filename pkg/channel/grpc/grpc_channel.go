@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/channel"
-	pb "github.com/dapr/dapr/pkg/proto"
+	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code
@@ -43,13 +43,11 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
 	defer cancel()
 
-	c := pb.NewAppClient(g.client)
-
 	metadata, err := getQueryStringFromMetadata(req)
 	if err != nil {
 		return nil, err
 	}
-	msg := pb.AppMethodCallEnvelope{
+	msg := daprclient_pb.InvokeEnvelope{
 		Data:     &any.Any{Value: req.Payload},
 		Method:   req.Method,
 		Metadata: metadata,
@@ -58,7 +56,8 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 	if g.ch != nil {
 		g.ch <- 1
 	}
-	resp, err := c.OnMethodCall(ctx, &msg)
+	c := daprclient_pb.NewDaprClientClient(g.client)
+	resp, err := c.OnInvoke(ctx, &msg)
 	if g.ch != nil {
 		<-g.ch
 	}
