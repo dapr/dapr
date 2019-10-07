@@ -275,7 +275,6 @@ func (a *DaprRuntime) sendBatchOutputBindingsSequential(to []string, data []byte
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -360,14 +359,18 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			Method:   bindingName,
 			Payload:  data,
 		}
+
 		resp, err := a.appChannel.InvokeMethod(&req)
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
+
 		if resp != nil {
 			var r bindings.AppResponse
-			err := a.json.Unmarshal(resp.Data, &response)
-			if err == nil {
+			err := a.json.Unmarshal(resp.Data, &r)
+			if err != nil {
+				log.Debugf("error deserializing app response: %s", err)
+			} else {
 				response = &r
 			}
 		}
@@ -386,7 +389,9 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 	err := binding.Read(func(resp *bindings.ReadResponse) error {
 		if resp != nil {
 			err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
-			log.Debugf("bindings: %s", err)
+			if err != nil {
+				log.Debugf("binding error [%s]: %s", name, err)
+			}
 		}
 		return nil
 	})
