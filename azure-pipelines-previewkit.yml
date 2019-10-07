@@ -83,6 +83,14 @@ steps:
       git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/samples.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
+  displayName: 'Git clone dapr/docs repo'
+  inputs:
+    targetType: 'inline'
+    script: |
+      cd ..
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/docs.git
+    workingDirectory: '$(Build.SourcesDirectory)'
+- task: Bash@3
   displayName: 'Copy Preview Kit contents to preview repo'
   inputs:
     targetType: 'inline'
