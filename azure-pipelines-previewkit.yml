@@ -155,8 +155,7 @@ steps:
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/dotnet-sdk/github.com\/dapr\/previewkit\/releases/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/cli/github.com\/dapr\/previewkit\/releases/gI' {} \;
 
-      tar czvf ../previewkit.tgz .
-
+      echo "Print preview kit contents"
       ls -R
 
       popd
