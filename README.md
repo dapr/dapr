@@ -5,7 +5,7 @@ Dapr is a portable, event-driven, serverless runtime for building distributed ap
 [![Build Status](https://dev.azure.com/azure-octo/Dapr/_apis/build/status/builds/dapr%20build?branchName=master)](https://dev.azure.com/azure-octo/Dapr/_build/latest?definitionId=5&branchName=master)
 
 - [dapr.io](https://dapr.io)
-- [twitter.com/DaprDev](https://twitter.com/DaprDev)
+- [twitter.com/DaprDev](https://twitter.com/DaprDev/community)
 - [gitter.im/Dapr](https://gitter.im/Dapr)
 
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
