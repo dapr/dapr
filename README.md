@@ -7,19 +7,8 @@ Dapr is a portable, event-driven, serverless runtime for building distributed ap
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
 Dapr is a programming model runtime for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
-<br>
-<br>
-Dapr injects a side-car container/process to each compute unit. The side-car interacts with event triggers and communicates with the compute unit via standard HTTP or GRPC protocols. This enables Dapr to support all existing and future programming languages without requiring developers to import frameworks or libraries.
-<br>
-Dapr offers built-in state management, reliable messaging (at least once delivery), triggers and bindings through standard HTTP verbs or GRPC interfaces. This allows developers to write stateless, stateful and actor-like services following the same programming paradigm. Developers can freely choose consistency model, threading model and message delivery patterns.
 
-Dapr runs natively on Kubernetes, as a standalone binary on a developer's machine, on an IoT device, or as a container than can be injected into any system, in the cloud or on-premises.
-
-Dapr uses pluggable state stores and message buses such as Redis as well as gRPC to offer a wide range of communication methods, including direct dapr-to-dapr using gRPC and async Pub-Sub with guaranteed delivery and at-least-once semantics.
-
-The Dapr runtime is designed for hyper-scale performance in the cloud and on the edge.
-
-In summary, Dapr:
+![Dapr Conceptual Model](/img/dapr_conceptual_model.jpg)
 
 - Enables easy, event-driven, stateless and stateful, microservices development
 - Is community driven, open source and vendor neutral
@@ -29,15 +18,25 @@ In summary, Dapr:
 - Works with any programming language and any developer framework
 - Has pluggable bindings to state, messaging and storage systems
 
-<br>
+Dapr injects a side-car container/process to each compute unit. The side-car interacts with event triggers and communicates with the compute unit via standard HTTP or GRPC protocols. This enables Dapr to support all existing and future programming languages without requiring developers to import frameworks or libraries.
+
+Dapr offers built-in state management, reliable messaging (at least once delivery), triggers and bindings through standard HTTP verbs or GRPC interfaces. This allows developers to write stateless, stateful and actor-like services following the same programming paradigm. Developers can freely choose consistency model, threading model and message delivery patterns.
+
+Dapr runs natively on Kubernetes, as a standalone binary on a developer's machine, on an IoT device, or as a container than can be injected into any system, in the cloud or on-premises.
+
+Dapr uses pluggable state stores and message buses such as Redis as well as gRPC to offer a wide range of communication methods, including direct dapr-to-dapr using gRPC and async Pub-Sub with guaranteed delivery and at-least-once semantics.
+
+The Dapr runtime is designed for hyper-scale performance in the cloud and on the edge.
+
 ###### Dapr Standalone Deployment
+
 ![Dapr Standalone](/img/dapr_standalone.jpg)
-<br>
-<br>
+
 ###### Dapr Kubernetes Deployment
+
 ![Dapr on Kubernetes](/img/dapr_k8s.jpg)
 
-## Why Dapr
+## Why Dapr?
 
 Writing high performance, scalable and reliable distributed application is hard. Dapr brings proven patterns and practices to every developer. It unifies event-driven and actors semantics into a simple, consistent programming model. It supports all programming languages without framework lock-in. Developers are not exposed to low-level primitives such as threading, concurrency control, partitioning and scaling. Instead, they can write their code by implementing a simple web server using familiar web frameworks of their choice.
 
