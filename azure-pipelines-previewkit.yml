@@ -163,7 +163,7 @@ steps:
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Git Push the changes to preview Repo'
-  condition: false
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   inputs:
     targetType: 'inline'
     script: |
@@ -189,8 +189,7 @@ steps:
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: GitHubRelease@0
-  # condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
-  condition: false
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   displayName: 'Upload Dapr CLI to GitHub Release'  
   inputs:
     gitHubConnection: 'GitHub'
