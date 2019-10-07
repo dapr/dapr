@@ -81,6 +81,7 @@ steps:
     script: |
       cd ..
       git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/samples.git
+      rm -rf ./samples/.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Git clone dapr/docs repo'
@@ -95,6 +96,7 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
+      # Remove .git in samples repo
       pushd ../previewkit
       rm -rf samples
       popd
