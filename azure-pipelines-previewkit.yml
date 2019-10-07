@@ -20,7 +20,7 @@ steps:
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
-    pipeline: '6'
+    pipeline: '23'
     buildVersionToDownload: 'latest'
     tags: 'release'
     downloadType: 'single'
@@ -31,7 +31,7 @@ steps:
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
-    pipeline: '15'
+    pipeline: '24'
     buildVersionToDownload: 'latestFromBranch'
     branchName: 'refs/heads/master'
     downloadType: 'single'
@@ -42,7 +42,7 @@ steps:
   inputs:
     buildType: 'specific'
     project: 'bf44e908-7feb-4695-9882-2ec74aa9f834'
-    pipeline: '17'
+    pipeline: '22'
     buildVersionToDownload: 'latest'
     tags: 'release'
     downloadType: 'single'
@@ -54,7 +54,7 @@ steps:
     targetType: 'inline'
     script: |
       cd ..
-      git config --global user.email "daprvt@service.microsoft.com"
+      git config --global user.email "actionsvt@service.microsoft.com"
       git config --global user.name "Dapr Release"
 
       git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/previewkit.git
@@ -75,6 +75,14 @@ steps:
       git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/dotnet-sdk.git
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
+  displayName: 'Git clone dapr/samples repo'
+  inputs:
+    targetType: 'inline'
+    script: |
+      cd ..
+      git clone https://$(PREVIEW_GITHUB_USERNAME):$(PREVIEW_GITHUB_SECRET)@github.com/dapr/samples.git
+    workingDirectory: '$(Build.SourcesDirectory)'
+- task: Bash@3
   displayName: 'Copy Preview Kit contents to preview repo'
   inputs:
     targetType: 'inline'
@@ -83,26 +91,37 @@ steps:
       rm -rf samples
       popd
 
-      cp -Rv samples ../previewkit/
+      # Copy samples to previewkit
+      cp -Rv ../samples ../previewkit/
 
-      # Remove unnecessary files
-      rm -rf docs/decision_records
-      rm -rf docs/assets
-      cp -Rv docs/* ../previewkit/docs/
+      # Copy docs to previewkit
+      cp ../docs/readme.md ../previewkit/docs/
+      cp -Rv ../docs/best-practices ../previewkit/docs/
+      cp -Rv ../docs/concepts ../previewkit/docs/
+      cp -Rv ../docs/contributing ../previewkit/docs/
+      cp -Rv ../docs/getting-started ../previewkit/docs/
+      cp -Rv ../docs/howto ../previewkit/docs/
+      cp -Rv ../docs/images ../previewkit/docs/
+      cp -Rv ../docs/quickstart ../previewkit/docs/
+      cp -Rv ../docs/tutorials ../previewkit/docs/
 
-      mkdir ../previewkit/docs/cli
-      cp ../cli/docs/preview/*.md ../previewkit/docs/cli/
+      # Create cli under docs/reference/
+      [ ! -d "../previewkit/docs/reference/cli" ] && mkdir -p ../previewkit/docs/reference/cli
+      cp ../cli/docs/preview/*.md ../previewkit/docs/reference/cli/
 
-      # Copy sdk doc to previewkit
-      cp ../dotnet-sdk/docs/*.md ../previewkit/docs/sdk/dotnet-sdk/
+      # Create release_notes under docs/reference/
+      [ ! -d "../previewkit/docs/reference/release_notes" ] && mkdir -p ../previewkit/docs/reference/release_notes
+      cp docs/release_notes/* ../previewkit/docs/reference/release_notes/
 
+      # Create dotnet-sdk under docs/reference/
+      [ ! -d "../previewkit/docs/reference/dotnet-sdk" ] && mkdir -p ../previewkit/docs/reference/dotnet-sdk
+      cp ../dotnet-sdk/docs/*.md  ../previewkit/docs/reference/dotnet-sdk/
+
+      # Create spec under docs/reference/
       echo "copying specs..."
-      rm -f ../previewkit/docs/spec/*
-      unzip $(System.ArtifactsDirectory)/spec_drop/drop/dapr-spec-md.zip -d ../previewkit/docs/spec/
+      [ ! -d "../previewkit/docs/reference/spec" ] && mkdir -p ../previewkit/docs/reference/spec
+      unzip $(System.ArtifactsDirectory)/spec_drop/drop/dapr-spec-md.zip -d ../previewkit/docs/reference/spec/
       cp $(System.ArtifactsDirectory)/spec_drop/drop/dapr-spec-pdf.zip $(System.ArtifactsDirectory)/release/drop/
-
-      echo "removing arm binary..."
-      rm -f $(System.ArtifactsDirectory)/release/drop/*_linux_arm.*
 
       echo "removing *.txt"
       rm -f $(System.ArtifactsDirectory)/release/drop/*.txt
@@ -126,10 +145,15 @@ steps:
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/dotnet-sdk/github.com\/dapr\/previewkit\/releases/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/cli/github.com\/dapr\/previewkit\/releases/gI' {} \;
 
+      tar czvf ../previewkit.tgz .
+
+      ls -R
+
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: Bash@3
   displayName: 'Git Push the changes to preview Repo'
+  condition: false
   inputs:
     targetType: 'inline'
     script: |
@@ -155,7 +179,8 @@ steps:
       popd
     workingDirectory: '$(Build.SourcesDirectory)'
 - task: GitHubRelease@0
-  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
+  # condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
+  condition: false
   displayName: 'Upload Dapr CLI to GitHub Release'  
   inputs:
     gitHubConnection: 'GitHub'
