@@ -68,7 +68,7 @@ steps:
     displayName: 'Build and push ${{ parameters.targetArch }} Docker image'
     inputs:
       containerRegistry: 'ACR Actions Core'
-      repository: 'actions'
+      repository: 'dapr'
       command: 'buildAndPush'
       Dockerfile: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/Dockerfile'
       tags: |
