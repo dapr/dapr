@@ -113,7 +113,6 @@ steps:
       cp -Rv ../docs/howto ../previewkit/docs/
       cp -Rv ../docs/images ../previewkit/docs/
       cp -Rv ../docs/quickstart ../previewkit/docs/
-      cp -Rv ../docs/tutorials ../previewkit/docs/
 
       # Create cli under docs/reference/
       [ ! -d "../previewkit/docs/reference/cli" ] && mkdir -p ../previewkit/docs/reference/cli
