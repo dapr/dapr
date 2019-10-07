@@ -4,6 +4,10 @@ Dapr is a portable, event-driven, serverless runtime for building distributed ap
 
 [![Build Status](https://dev.azure.com/azure-octo/Dapr/_apis/build/status/builds/dapr%20build?branchName=master)](https://dev.azure.com/azure-octo/Dapr/_build/latest?definitionId=5&branchName=master)
 
+- [dapr.io]()https://dapr.io)
+- [twitter.com/DaprDev](https://twitter.com/DaprDev)
+- [gitter.im/Dapr](https://gitter.im/Dapr)
+
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
 Dapr is a programming model runtime for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
@@ -67,6 +71,10 @@ See [Getting Started](https://github.com/dapr/docs/getting-started/getting-start
 * [Run Dapr in Kubernetes](https://github.com/dapr/samples/tree/master/2.hello-kubernetes)
 
 See [Samples](https://github.com/dapr/samples) for additional samples.
+
+## Roadmap
+
+See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for the Dapr project.
 
 ## Contributing to Dapr
 
