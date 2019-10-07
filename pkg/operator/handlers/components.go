@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	pb "github.com/dapr/dapr/pkg/proto"
+	pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 )
 
 // ComponentsHandler handles the lifetime management of Component CRDs
@@ -120,7 +120,7 @@ func (c *ComponentsHandler) updateDaprRuntime(component pb.Component, address st
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	client := pb.NewDaprClient(conn)
+	client := pb.NewDaprInternalClient(conn)
 	_, err = client.UpdateComponent(ctx, &component)
 	if err != nil {
 		log.Warnf("error updating Dapr Runtime with component: %s", err)

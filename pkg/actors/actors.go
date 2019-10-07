@@ -20,7 +20,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/placement"
-	pb "github.com/dapr/dapr/pkg/proto"
+	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -259,7 +259,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 }
 
 func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) (*CallResponse, error) {
-	req := pb.CallActorEnvelope{
+	req := daprinternal_pb.CallActorEnvelope{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Method:    actorMethod,
@@ -271,7 +271,7 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 		return nil, err
 	}
 
-	client := pb.NewDaprClient(conn)
+	client := daprinternal_pb.NewDaprInternalClient(conn)
 	resp, err := client.CallActor(context.Background(), &req)
 	if err != nil {
 		return nil, err
@@ -400,7 +400,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 
 	go func() {
 		for {
-			host := pb.Host{
+			host := daprinternal_pb.Host{
 				Name:     hostAddress,
 				Load:     1,
 				Entities: a.config.HostedActorTypes,
@@ -431,7 +431,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
-func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) pb.PlacementService_ReportDaprStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) daprinternal_pb.PlacementService_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
@@ -443,7 +443,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 		}
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
-		client := pb.NewPlacementServiceClient(conn)
+		client := daprinternal_pb.NewPlacementServiceClient(conn)
 		stream, err := client.ReportDaprStatus(ctx)
 		if err != nil {
 			log.Debugf("error establishing client to placement service: %s", err)
@@ -455,7 +455,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 	}
 }
 
-func (a *actorsRuntime) onPlacementOrder(in *pb.PlacementOrder) {
+func (a *actorsRuntime) onPlacementOrder(in *daprinternal_pb.PlacementOrder) {
 	log.Infof("actors: placement order received: %s", in.Operation)
 
 	// lock all incoming calls when an updated table arrives
@@ -495,7 +495,7 @@ func (a *actorsRuntime) unblockPlacements() {
 	}
 }
 
-func (a *actorsRuntime) updatePlacements(in *pb.PlacementTables) {
+func (a *actorsRuntime) updatePlacements(in *daprinternal_pb.PlacementTables) {
 	if in.Version != a.placementTables.Version {
 		for k, v := range in.Entries {
 			loadMap := map[string]*placement.Host{}

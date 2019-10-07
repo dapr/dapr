@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	log "github.com/Sirupsen/logrus"
-	pb "github.com/dapr/dapr/pkg/proto"
+	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -17,7 +17,7 @@ type PlacementService struct {
 	generation        int
 	entriesLock       *sync.RWMutex
 	entries           map[string]*Consistent
-	hosts             []pb.PlacementService_ReportDaprStatusServer
+	hosts             []daprinternal_pb.PlacementService_ReportDaprStatusServer
 	hostsEntitiesLock *sync.RWMutex
 	hostsEntities     map[string][]string
 	hostsLock         *sync.Mutex
@@ -37,7 +37,7 @@ func NewPlacementService() *PlacementService {
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts
-func (p *PlacementService) ReportDaprStatus(srv pb.PlacementService_ReportDaprStatusServer) error {
+func (p *PlacementService) ReportDaprStatus(srv daprinternal_pb.PlacementService_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 	p.hostsLock.Lock()
 	md, _ := metadata.FromIncomingContext(srv.Context())
@@ -73,7 +73,7 @@ func (p *PlacementService) ReportDaprStatus(srv pb.PlacementService_ReportDaprSt
 }
 
 // RemoveHost removes the host from the hosts list
-func (p *PlacementService) RemoveHost(srv pb.PlacementService_ReportDaprStatusServer) {
+func (p *PlacementService) RemoveHost(srv daprinternal_pb.PlacementService_ReportDaprStatusServer) {
 	for i := len(p.hosts) - 1; i >= 0; i-- {
 		if p.hosts[i] == srv {
 			p.hosts = append(p.hosts[:i], p.hosts[i+1:]...)
@@ -88,7 +88,7 @@ func (p *PlacementService) PerformTablesUpdate() {
 	defer p.updateLock.Unlock()
 
 	p.generation++
-	o := pb.PlacementOrder{
+	o := daprinternal_pb.PlacementOrder{
 		Operation: "lock",
 	}
 
@@ -103,22 +103,22 @@ func (p *PlacementService) PerformTablesUpdate() {
 	v := fmt.Sprintf("%v", p.generation)
 
 	o.Operation = "update"
-	o.Tables = &pb.PlacementTables{
+	o.Tables = &daprinternal_pb.PlacementTables{
 		Version: v,
-		Entries: map[string]*pb.PlacementTable{},
+		Entries: map[string]*daprinternal_pb.PlacementTable{},
 	}
 
 	for k, v := range p.entries {
 		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
-		table := pb.PlacementTable{
+		table := daprinternal_pb.PlacementTable{
 			Hosts:     hosts,
 			SortedSet: sortedSet,
 			TotalLoad: totalLoad,
-			LoadMap:   make(map[string]*pb.Host),
+			LoadMap:   make(map[string]*daprinternal_pb.Host),
 		}
 
 		for lk, lv := range loadMap {
-			h := pb.Host{
+			h := daprinternal_pb.Host{
 				Name: lv.Name,
 				Load: lv.Load,
 				Port: lv.Port,
@@ -174,7 +174,7 @@ func (p *PlacementService) ProcessRemovedHost(id string) {
 }
 
 // ProcessHost updates the distributed has list based on a new host and its entities
-func (p *PlacementService) ProcessHost(host *pb.Host) {
+func (p *PlacementService) ProcessHost(host *daprinternal_pb.Host) {
 	updateRequired := false
 
 	for _, e := range host.Entities {
@@ -207,7 +207,7 @@ func (p *PlacementService) Run(port string) {
 	}
 
 	s := grpc.NewServer()
-	pb.RegisterPlacementServiceServer(s, p)
+	daprinternal_pb.RegisterPlacementServiceServer(s, p)
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

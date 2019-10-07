@@ -15,7 +15,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"google.golang.org/grpc"
 
-	pb "github.com/dapr/dapr/pkg/proto"
+	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 )
 
 // DirectMessaging is the API interface for invoking a remote app
@@ -26,7 +26,7 @@ type DirectMessaging interface {
 type directMessaging struct {
 	appChannel          channel.AppChannel
 	connectionCreatorFn func(address string) (*grpc.ClientConn, error)
-	daprID           string
+	daprID              string
 	mode                modes.DaprMode
 	grpcPort            int
 	namespace           string
@@ -37,7 +37,7 @@ func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode,
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: grpcConnectionFn,
-		daprID:           daprID,
+		daprID:              daprID,
 		mode:                mode,
 		grpcPort:            port,
 		namespace:           namespace,
@@ -90,7 +90,7 @@ func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessag
 		return nil, err
 	}
 
-	msg := pb.LocalCallEnvelope{
+	msg := daprinternal_pb.LocalCallEnvelope{
 		Data:     &any.Any{Value: req.Data},
 		Metadata: req.Metadata,
 		Method:   req.Method,
@@ -99,7 +99,7 @@ func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessag
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
 	defer cancel()
 
-	client := pb.NewDaprClient(conn)
+	client := daprinternal_pb.NewDaprInternalClient(conn)
 	resp, err := client.CallLocal(ctx, &msg)
 	if err != nil {
 		return nil, err

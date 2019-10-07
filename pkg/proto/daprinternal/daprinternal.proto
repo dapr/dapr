@@ -1,13 +1,12 @@
 syntax = "proto3";
 
-package dapr;
+package daprinternal;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 
-// Dapr Runtime definitions
-service Dapr {
-  rpc CallRemoteApp (CallRemoteAppEnvelope) returns (InvokeResponse) {}
+// Dapr Internal definitions
+service DaprInternal {
   rpc CallActor (CallActorEnvelope) returns (InvokeResponse) {}
   rpc CallLocal (LocalCallEnvelope) returns (InvokeResponse) {}
   rpc UpdateComponent (Component) returns (google.protobuf.Empty) {}
@@ -17,13 +16,6 @@ message LocalCallEnvelope {
     google.protobuf.Any data = 1;
     string method = 2;
     map<string,string> metadata = 3;
-}
-
-message CallRemoteAppEnvelope {
-  string target = 1;
-  google.protobuf.Any data = 2;
-  string method = 3;
-  map<string,string> metadata = 4;
 }
 
 message CallActorEnvelope {
@@ -73,34 +65,13 @@ message SaveStateEnvelope {
   repeated KeyVal state = 1;
 }
 
-message GetStateEnvelope {
-  string key = 1;
-}
-
-// User Code definitions
-service App {
-  rpc OnMethodCall (AppMethodCallEnvelope) returns (google.protobuf.Any) {}
-  rpc RestoreState (State) returns (google.protobuf.Empty) {}
-  rpc GetConfig(google.protobuf.Empty) returns (ApplicationConfig) {}
-}
-
-message AppMethodCallEnvelope {
-    string method = 1;
-    google.protobuf.Any data = 2;
-    map<string,string> metadata = 3;
-}
-
-message State {
-  repeated KeyVal state = 1;
-}
-
 message KeyVal {
   string key = 1;
   google.protobuf.Any value = 2;
 }
 
-message ApplicationConfig {
-  repeated string entities = 1;
+message GetStateEnvelope {
+  string key = 1;
 }
 
 // Placement service

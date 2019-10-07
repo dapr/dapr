@@ -7,7 +7,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	pb "github.com/dapr/dapr/pkg/proto"
+	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
+	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	grpc_go "google.golang.org/grpc"
 )
 
@@ -46,13 +47,13 @@ func (s *server) StartNonBlocking() error {
 			grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)),
 		)
 	}
-	pb.RegisterDaprServer(server, s.api)
+	daprinternal_pb.RegisterDaprInternalServer(server, s.api)
+	dapr_pb.RegisterDaprServer(server, s.api)
 
 	go func() {
 		if err := server.Serve(lis); err != nil {
 			log.Fatalf("gRPC serve error: %v", err)
 		}
 	}()
-
 	return nil
 }
