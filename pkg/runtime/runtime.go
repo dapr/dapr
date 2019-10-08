@@ -445,18 +445,24 @@ func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
 }
 
 func (a *DaprRuntime) isAppSubscribedToBinding(binding string, bindingsList []string) bool {
-	for _, b := range bindingsList {
-		if b == binding {
-			return true
+	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+		for _, b := range bindingsList {
+			if b == binding {
+				return true
+			}
+		}
+	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+		req := channel.InvokeRequest{
+			Method:   binding,
+			Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Options},
+		}
+		resp, err := a.appChannel.InvokeMethod(&req)
+		if err == nil && resp != nil {
+			statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
+			return statusCode != 404
 		}
 	}
-	req := channel.InvokeRequest{
-		Method:   binding,
-		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Options},
-	}
-
-	_, err := a.appChannel.InvokeMethod(&req)
-	return err == nil
+	return false
 }
 
 func (a *DaprRuntime) initInputBindings(registry bindings_loader.BindingsRegistry) error {
