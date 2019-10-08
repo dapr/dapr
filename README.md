@@ -63,7 +63,7 @@ Dapr is flexible in threading and state consistency models. Developers can lever
 
 ## Get Started using Dapr
 
-See [Getting Started](https://github.com/dapr/docs/getting-started/readme.md).
+See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
 
 ## Samples
 
