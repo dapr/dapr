@@ -7,6 +7,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 )
 
+// StateStoreRegistry is an abstraction to create state store
 type StateStoreRegistry interface {
 	CreateStateStore(name string) (state.StateStore, error)
 }
@@ -18,6 +19,7 @@ type stateStoreRegistry struct {
 var instance *stateStoreRegistry
 var once sync.Once
 
+// NewStateStoreRegistry is used to create state store registry
 func NewStateStoreRegistry() StateStoreRegistry {
 	once.Do(func() {
 		instance = &stateStoreRegistry{
