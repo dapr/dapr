@@ -441,6 +441,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 			time.Sleep(retryInterval)
 			continue
 		}
+
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
 		client := daprinternal_pb.NewPlacementServiceClient(conn)
@@ -448,9 +449,9 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 		if err != nil {
 			log.Debugf("error establishing client to placement service: %s", err)
 			time.Sleep(retryInterval)
+			conn.Close()
 			continue
 		}
-
 		return stream
 	}
 }
