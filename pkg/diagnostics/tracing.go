@@ -32,12 +32,12 @@ type TracerSpan struct {
 	SpanContext *trace.SpanContext
 }
 
-//SerializeSpanContext seralizes a span context into a simple string
+//SerializeSpanContext serializes a span context into a simple string
 func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
 
-//DeserializeSpanContext deseralizes a span cotnext from a string
+//DeserializeSpanContext deserializes a span context from a string
 func DeserializeSpanContext(ctx string) trace.SpanContext {
 	parts := strings.Split(ctx, ";")
 	spanID, _ := hex.DecodeString(parts[0])
@@ -50,7 +50,7 @@ func DeserializeSpanContext(ctx string) trace.SpanContext {
 	return ret
 }
 
-// DeserializeSpanContextPointer deseralizes a span context from a trace pointer
+// DeserializeSpanContextPointer deserializes a span context from a trace pointer
 func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 	if ctx == "" {
 		return nil

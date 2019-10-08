@@ -9,7 +9,7 @@ const Upsert OperationType = "upsert"
 // Delete is a delete operation
 const Delete OperationType = "delete"
 
-// TransactionalRequest describes a set of stateful operations for a given actors that are performed in a transactional manner
+// TransactionalRequest describes a set of stateful operations for a given actor that are performed in a transactional manner
 type TransactionalRequest struct {
 	Operations []TransactionalOperation `json:"operations"`
 	ActorType  string

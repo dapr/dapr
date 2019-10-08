@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// Actors allow calling into virtual actors as well as actor state mangements
+// Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
 	Call(req *CallRequest) (*CallResponse, error)
 	Init() error
