@@ -445,6 +445,7 @@ func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
 }
 
 func (a *DaprRuntime) isAppSubscribedToBinding(binding string, bindingsList []string) bool {
+	// if gRPC, looks for the binding in the list of bindings returned from the app
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		for _, b := range bindingsList {
 			if b == binding {
@@ -452,6 +453,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string, bindingsList []st
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+		// if HTTP, check if there's an endpoint listening for that binding
 		req := channel.InvokeRequest{
 			Method:   binding,
 			Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Options},
