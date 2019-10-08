@@ -6,10 +6,6 @@ Contributions come in many forms: submitting issues, writing code, participating
 
 This document provides the guidelines for how to contribute to the Dapr project.
 
-## Governance
-
-The project is governed by Microsoft.
-
 ## Issues
 
 This section describes the guidelines for submitting issues

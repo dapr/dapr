@@ -5,12 +5,12 @@ Dapr is a portable, event-driven, serverless runtime for building distributed ap
 [![Build Status](https://dev.azure.com/azure-octo/Dapr/_apis/build/status/builds/dapr%20build?branchName=master)](https://dev.azure.com/azure-octo/Dapr/_build/latest?definitionId=5&branchName=master)
 
 - [dapr.io](https://dapr.io)
-- [twitter.com/DaprDev](https://twitter.com/DaprDev)
+- [@DaprDev](https://twitter.com/DaprDev)
 - [gitter.im/Dapr](https://gitter.im/Dapr/community)
 
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
-Dapr is a programming model runtime for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
+Dapr is a programming model runtime for writing cloud-native and edge applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
 
 ![Dapr Conceptual Model](/img/dapr_conceptual_model.png)
 
@@ -63,7 +63,7 @@ Dapr is flexible in threading and state consistency models. Developers can lever
 
 ## Get Started using Dapr
 
-See [Getting Started](https://github.com/dapr/docs/getting-started/getting-started.md).
+See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
 
 ## Samples
 
@@ -79,3 +79,10 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 ## Contributing to Dapr
 
 See the [Wiki](https://github.com/dapr/dapr/wiki) for information on contributing to Dapr.
+
+See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development/development.md) to get started with building and developing.
+
+## Code of Conduct
+
+ This project has adopted the [Microsoft Open Source Code of conduct](https://opensource.microsoft.com/codeofconduct/).
+ For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
