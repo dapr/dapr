@@ -10,7 +10,7 @@ Dapr is a portable, event-driven, serverless runtime for building distributed ap
 
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
-Dapr is a programming model runtime for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
+Dapr is a programming model runtime for writing cloud-native and edge applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
 
 ![Dapr Conceptual Model](/img/dapr_conceptual_model.png)
 
