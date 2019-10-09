@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package redis
 
 import (
@@ -192,9 +197,15 @@ func (r *StateStore) setValue(req *state.SetRequest) error {
 		ver = 0
 	}
 
-	b, _ := r.json.Marshal(req.Value)
+	bt := []byte{}
+	b, ok := req.Value.([]byte)
+	if ok {
+		bt = b
+	} else {
+		bt, _ = r.json.Marshal(req.Value)
+	}
 
-	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, b)
+	res := r.client.Do(context.Background(), "EVAL", setQuery, 1, req.Key, ver, bt)
 	if err := redis.AsError(res); err != nil {
 		return fmt.Errorf("failed to set key %s: %s", req.Key, err)
 	}
