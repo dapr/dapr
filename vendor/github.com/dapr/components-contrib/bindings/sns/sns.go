@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package sns
 
 import (
@@ -6,10 +11,10 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 
-	"github.com/dapr/components-contrib/bindings"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sns"
+	"github.com/dapr/components-contrib/bindings"
 )
 
 // AWSSNS is an AWS SNS binding

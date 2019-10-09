@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package sqs
 
 import (
@@ -7,10 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/dapr/components-contrib/bindings"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/dapr/components-contrib/bindings"
 )
 
 // AWSSQS allows receiving and sending data to/from AWS SQS
