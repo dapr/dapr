@@ -155,9 +155,10 @@ steps:
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/dapr/github.com\/dapr\/previewkit/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/cli\/releases/github.com\/dapr\/previewkit\/releases/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/cli\/blob\/master\/README.md/github.com\/dapr\/previewkit\/blob\/master\/docs\/cli\/README.md/gI' {} \;
+      find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/dotnet-sdk\/blob\/master\/docs/github.com\/dapr\/previewkit\/blob\/master\/docs\/reference\/dotnet-sdk/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/dotnet-sdk/github.com\/dapr\/previewkit\/releases/gI' {} \;
       find . -name '*.md' -type f -exec sed -i 's/github.com\/dapr\/cli/github.com\/dapr\/previewkit\/releases/gI' {} \;
-
+      
       echo "Print preview kit contents"
       ls -R
 
