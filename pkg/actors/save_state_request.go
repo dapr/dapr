@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package actors
 
 // SaveStateRequest is the request object for saving an actor state

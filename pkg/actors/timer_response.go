@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package actors
 
 // TimerResponse is the response object send to an Actor SDK API when a timer fires
