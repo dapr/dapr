@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package secretstores
 
 // DefaultSecretRefKeyName is the default key if secretKeyRef.key is not given
