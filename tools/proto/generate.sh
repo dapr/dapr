@@ -52,7 +52,6 @@ unzip ${root}/${file} -d ${root}
 
 # find grpc_tools_node_protoc_plugin location
 PROTOC_PLUGIN=$(which grpc_tools_node_protoc_plugin)
-echo $PROTOC_PLUGIN
 
 # generate javascript
 generate javascript js src 'import_style=commonjs' '--plugin=protoc-gen-grpc='${PROTOC_PLUGIN} --grpc_out=${top_root}/../dapr-javascript/src
