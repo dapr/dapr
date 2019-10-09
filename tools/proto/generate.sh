@@ -24,7 +24,7 @@ generate() {
     
     for proto_file in "daprclient/daprclient.proto" "dapr/dapr.proto"; do
         echo "Generating ${language} for ${proto_file}"
-        ./bin/protoc --proto_path ${top_root}/pkg/proto/ \
+        ${root}/bin/protoc --proto_path ${top_root}/pkg/proto/ \
             --${2}_out=${args}:${top_root}/../dapr-${language}/${path} \
             ${top_root}/pkg/proto/${proto_file} ${@:5}
     done
