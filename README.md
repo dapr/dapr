@@ -12,7 +12,7 @@ __Note: Dapr is currently under community development in alpha phase. Dapr is no
 
 Dapr is a programming model runtime for writing cloud-native and edge applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
 
-![Dapr Conceptual Model](/img/dapr_conceptual_model.png)
+![Dapr Conceptual Model](/img/dapr_conceptual_model.jpg)
 
 - Enables easy, event-driven, stateless and stateful, microservices development
 - Is community driven, open source and vendor neutral
@@ -80,7 +80,8 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 
 See the [Wiki](https://github.com/dapr/dapr/wiki) for information on contributing to Dapr.
 
-See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development/development.md) to get started with building and developing.
+See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development/development.md) to get started 
+with building and developing.
 
 ## Code of Conduct
 
