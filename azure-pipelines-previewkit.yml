@@ -106,6 +106,7 @@ steps:
 
       # Copy docs to previewkit
       cp ../docs/readme.md ../previewkit/docs/
+      cp ../docs/overview.md ../previewkit/docs/
       cp -Rv ../docs/best-practices ../previewkit/docs/
       cp -Rv ../docs/concepts ../previewkit/docs/
       cp -Rv ../docs/contributing ../previewkit/docs/
