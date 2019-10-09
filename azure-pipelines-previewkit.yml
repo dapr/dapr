@@ -127,6 +127,8 @@ steps:
       cp ../dotnet-sdk/docs/*.md  ../previewkit/docs/reference/dotnet-sdk/
 
       # Create spec under docs/reference/
+      echo "clean up all references..."
+      rm -rf ../previewkit/docs/reference/*
       echo "copying specs..."
       [ ! -d "../previewkit/docs/reference/spec" ] && mkdir -p ../previewkit/docs/reference/spec
       unzip $(System.ArtifactsDirectory)/spec_drop/drop/dapr-spec-md.zip -d ../previewkit/docs/reference/spec/
