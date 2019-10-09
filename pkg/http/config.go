@@ -1,9 +1,14 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package http
 
 // ServerConfig holds config values for an HTTP server
 type ServerConfig struct {
 	AllowedOrigins  string
-	DaprID        string
+	DaprID          string
 	HostAddress     string
 	Port            int
 	ProfilePort     int
@@ -14,7 +19,7 @@ type ServerConfig struct {
 func NewServerConfig(daprID string, hostAddress string, port int, profilePort int, allowedOrigins string, enableProfiling bool) ServerConfig {
 	return ServerConfig{
 		AllowedOrigins:  allowedOrigins,
-		DaprID:        daprID,
+		DaprID:          daprID,
 		HostAddress:     hostAddress,
 		Port:            port,
 		ProfilePort:     profilePort,
