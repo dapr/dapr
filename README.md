@@ -53,13 +53,13 @@ Dapr is flexible in threading and state consistency models. Developers can lever
 * State management with pluggable data stores
 * Consistent service-to-service discovery and invocation
 * Opt-in stateful models: Strong/Eventual consistency, First-write/Last-write wins
+* Cross platform Virtual Actors
 * Rate limiting
 * Built-in distributed tracing using Open Telemetry
 * Runs natively on Kubernetes using a dedicated Operator and CRDs
 * Supports all programming languages via HTTP and gRPC
 * Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
 * Runs anywhere - as a process or containerized
-* Cross platform Actor model
 * Lightweight (58MB binary, 4MB physical memory)
 * Runs as a sidecar - removes need for special SDKs or libraries
 * Dedicated CLI - developer friendly experience with easy debugging
