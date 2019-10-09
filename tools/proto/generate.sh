@@ -45,12 +45,20 @@ unzip ${root}/${file} -d ${root}
 
 # generate javascript
 generate javascript js src 'import_style=commonjs' '--plugin=protoc-gen-grpc=/usr/bin/grpc_tools_node_protoc_plugin' --grpc_out=${top_root}/../dapr-javascript/src
+
 # generate java
-generate java java src/main/java
+generate java java src/main/java '' --grpc-java_out=${top_root}/../dapr-java/src/main/java 
+
 # generate dotnet
-generate dotnet csharp src
+# dotnet generates their own via dotnet build...
+
 # generate python
-generate python python src
+echo 'Generating python for all protos'
+python3 -m grpc.tools.protoc -I${top_root}/pkg/proto \
+   --python_out=${top_root}/../dapr-python/src \
+   --grpc_python_out=${top_root}/../dapr-python/src \
+   dapr/dapr.proto \
+   daprclient/daprclient.proto
 
 # cleanup
 rm -r ${root}/include ${root}/bin ${root}/${file} ${root}/readme.txt
