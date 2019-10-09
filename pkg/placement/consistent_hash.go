@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 // Package placement is an implementation of Consistent Hashing and
 // Consistent Hashing With Bounded Loads.
 //

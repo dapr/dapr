@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package http
 
 import (
@@ -13,14 +18,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/state"
 	jsoniter "github.com/json-iterator/go"
 	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/stretchr/testify/assert"
