@@ -6,6 +6,9 @@ import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
 
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr";
+
 // Dapr definitions
 service Dapr {
   rpc PublishEvent(PublishEventEnvelope) returns (google.protobuf.Empty) {}
