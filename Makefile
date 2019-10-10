@@ -13,7 +13,6 @@ export GOSUMDB ?= sum.golang.org
 
 GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
-CGO			?= 0
 BINARIES    ?= daprd placement operator injector
 
 # Add latest tag if LATEST_RELEASE is true
@@ -113,7 +112,7 @@ build: $(DAPR_BINS)
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
-	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
+	GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
 	-o $(5)/$(1) -mod=vendor \
 	$(2)/main.go;
 endef
