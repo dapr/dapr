@@ -36,10 +36,13 @@ top_root=${root}/../..
 
 # Detect OS
 OS=""
+full_os=""
 if [[ "$OSTYPE" == "linux-gnu" ]]; then
         OS="linux"
+        full_os="linux"
 elif [[ "$OSTYPE" == "darwin"* ]]; then
         OS="osx"
+        full_os="macosx"
 fi
 
 file="protoc-${VERSION}-${OS}-x86_64.zip"
@@ -61,21 +64,31 @@ unzip ${root}/${file} -d ${root}
 # find grpc_tools_node_protoc_plugin location
 PROTOC_PLUGIN=$(which grpc_tools_node_protoc_plugin)
 
+dotnet_grpc_plugin_file="${HOME}/.nuget/packages/grpc.tools/2.24.0/tools/${full_os}_x64/grpc_csharp_plugin"
+
 # generate javascript
-generate javascript js src 'import_style=commonjs' '--plugin=protoc-gen-grpc='${PROTOC_PLUGIN} --grpc_out=${top_root}/../dapr-javascript/src
+generate javascript js src 'import_style=commonjs' \
+  --plugin=protoc-gen-grpc=${PROTOC_PLUGIN} \
+  --grpc_out=${top_root}/../dapr-javascript/src
 
 # generate java
-generate java java src/main/java '' --plugin=protoc-gen-grpc-java=${java_grpc_plugin_path} --grpc-java_out=${top_root}/../dapr-java/src/main/java 
+mkdir -p ${top_root}/../dapr-java/src/main/java
+generate java java src/main/java '' \
+  --plugin=protoc-gen-grpc-java=${java_grpc_plugin_path} \
+  --grpc-java_out=${top_root}/../dapr-java/src/main/java
 
 # generate dotnet
 # dotnet generates their own via dotnet build...
+generate dotnet csharp src '' \
+  --plugin=protoc-gen-grpc=${dotnet_grpc_plugin_file} \
+  --grpc_out=${top_root}/../dapr-dotnet/src
 
 # generate python
 echo 'Generating python for all protos'
-mkdir -p ${top_root}/../dapr-python/src
+mkdir -p ${top_root}/../dapr-python
 python3 -m grpc.tools.protoc -I${top_root}/pkg/proto \
-   --python_out=${top_root}/../dapr-python/src \
-   --grpc_python_out=${top_root}/../dapr-python/src \
+   --python_out=${top_root}/../dapr-python \
+   --grpc_python_out=${top_root}/../dapr-python \
    dapr/dapr.proto \
    daprclient/daprclient.proto
 
