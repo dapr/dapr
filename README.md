@@ -76,6 +76,17 @@ See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
 
 See [Samples](https://github.com/dapr/samples) for additional samples.
 
+## Repositories
+
+| Repo | Description |
+|:-----|:------------|
+| [Dapr](https://github.com/dapr/dapr) | The main repository that you are currently in. Contains the Dapr runtime code and overview documentation.
+| [CLI](https://github.com/dapr/cli) | The Dapr CLI allows you to setup Dapr on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Dapr instances.
+| [Docs](https://github.com/dapr/docs) | The documentation repository for Dapr.
+| [Samples](https://github.com/dapr/samples) | This repository contains a series of samples that highlight Dapr capabilities.
+| [Contributions](https://github.com/dapr/components-contrib) | The purpose of Components Contrib is to provide open, community driven reusable components for building distributed applications. 
+| [Spec](https://github.com/dapr/spec) | This repository holds the specifications for the Dapr runtime.
+
 ## Roadmap
 
 See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for the Dapr project.
