@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package version
 
 // Values for these are injected by the build

@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package secretstores
 
 // SecretStore is the interface for a component that handles secrets management

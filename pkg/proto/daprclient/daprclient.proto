@@ -6,6 +6,9 @@ import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
 
+option java_outer_classname = "DaprClientProtos";
+option java_package = "io.dapr";
+
 // User Code definitions
 service DaprClient {
   rpc OnInvoke (InvokeEnvelope) returns (google.protobuf.Any) {}

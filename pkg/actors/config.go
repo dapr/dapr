@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package actors
 
 import "time"
@@ -5,7 +10,7 @@ import "time"
 // Config is the actor runtime configuration
 type Config struct {
 	HostAddress                   string
-	DaprID                     string
+	DaprID                        string
 	PlacementServiceAddress       string
 	HostedActorTypes              []string
 	Port                          int
@@ -28,7 +33,7 @@ func NewConfig(hostAddress, daprID, placementAddress string, hostedActors []stri
 	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool) Config {
 	c := Config{
 		HostAddress:                   hostAddress,
-		DaprID:                     daprID,
+		DaprID:                        daprID,
 		PlacementServiceAddress:       placementAddress,
 		HostedActorTypes:              hostedActors,
 		Port:                          port,

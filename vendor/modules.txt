@@ -133,7 +133,7 @@ github.com/aws/aws-sdk-go/private/protocol/restxml
 github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil
 github.com/aws/aws-sdk-go/private/protocol/query/queryutil
 github.com/aws/aws-sdk-go/internal/sdkuri
-# github.com/dapr/components-contrib v0.0.0-20191002202122-2b8dbd2b4459
+# github.com/dapr/components-contrib v0.0.0-20191009175808-04bef3ac3f90
 github.com/dapr/components-contrib/state
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage

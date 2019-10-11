@@ -10,9 +10,9 @@ Dapr is a portable, event-driven, serverless runtime for building distributed ap
 
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
-Dapr is a programming model runtime for writing cloud-native applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
+Dapr is a programming model runtime for writing cloud-native and edge applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
 
-![Dapr Conceptual Model](/img/dapr_conceptual_model.png)
+![Dapr Conceptual Model](/img/dapr_conceptual_model.jpg)
 
 - Enables easy, event-driven, stateless and stateful, microservices development
 - Is community driven, open source and vendor neutral
@@ -48,18 +48,22 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 
 ## Features
 
-* Supports all programming languages
-* Does not require any libraries or SDKs
-* Built-in Eventing system
-* Built-in service discovery
-* Asynchronous Pub-Sub with guaranteed delivery and at-least-once semantics
-* Dapr to Dapr request response using gRPC
-* State management - persist and restore
-* Choice of concurrency model: Single-Threaded or Multiple
-* Triggers (Azure, AWS, GCP, etc.)
-* Lightweight (20.4MB binary, 4MB physical memory needed)
-* Runs natively on Kubernetes
-* Easy to debug - runs locally on your machine
+* Event-driven Pub-Sub system with pluggable providers and at-least-once semantics
+* Input and Output bindings with pluggable providers
+* State management with pluggable data stores
+* Consistent service-to-service discovery and invocation
+* Opt-in stateful models: Strong/Eventual consistency, First-write/Last-write wins
+* Cross platform Virtual Actors
+* Rate limiting
+* Built-in distributed tracing using Open Telemetry
+* Runs natively on Kubernetes using a dedicated Operator and CRDs
+* Supports all programming languages via HTTP and gRPC
+* Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
+* Runs anywhere - as a process or containerized
+* Lightweight (58MB binary, 4MB physical memory)
+* Runs as a sidecar - removes need for special SDKs or libraries
+* Dedicated CLI - developer friendly experience with easy debugging
+* Clients for Java, Dotnet, Go, Javascript and Python
 
 ## Get Started using Dapr
 
@@ -71,6 +75,17 @@ See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
 * [Run Dapr in Kubernetes](https://github.com/dapr/samples/tree/master/2.hello-kubernetes)
 
 See [Samples](https://github.com/dapr/samples) for additional samples.
+
+## Repositories
+
+| Repo | Description |
+|:-----|:------------|
+| [Dapr](https://github.com/dapr/dapr) | The main repository that you are currently in. Contains the Dapr runtime code and overview documentation.
+| [CLI](https://github.com/dapr/cli) | The Dapr CLI allows you to setup Dapr on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Dapr instances.
+| [Docs](https://github.com/dapr/docs) | The documentation repository for Dapr.
+| [Samples](https://github.com/dapr/samples) | This repository contains a series of samples that highlight Dapr capabilities.
+| [Contributions](https://github.com/dapr/components-contrib) | The purpose of Components Contrib is to provide open, community driven reusable components for building distributed applications. 
+| [Spec](https://github.com/dapr/spec) | This repository holds the specifications for the Dapr runtime.
 
 ## Roadmap
 

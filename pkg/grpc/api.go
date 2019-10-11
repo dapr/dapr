@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package grpc
 
 import (
@@ -236,13 +241,10 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 
 	reqs := []state.SetRequest{}
 	for _, s := range in.Requests {
-		var i interface{}
-		jsoniter.ConfigFastest.Unmarshal(s.Value.Value, &i)
-
 		req := state.SetRequest{
-			Key:      a.getModifiedStateKey(s.Etag),
+			Key:      a.getModifiedStateKey(s.Key),
 			Metadata: s.Metadata,
-			Value:    i,
+			Value:    s.Value.Value,
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{

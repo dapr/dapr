@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package actors
 
 // ActorHostedRequest is the request object for checking if an actor is hosted on this instance

@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package operator
 
 import (
@@ -21,18 +26,18 @@ type Operator interface {
 
 type operator struct {
 	kubeClient          kubernetes.Interface
-	daprClient       scheme.Interface
+	daprClient          scheme.Interface
 	deploymentsInformer cache.SharedInformer
 	componentsInformer  cache.SharedInformer
 	ctx                 context.Context
-	daprHandler      handlers.Handler
+	daprHandler         handlers.Handler
 	componentsHandler   handlers.Handler
 }
 
 // NewOperator returns a new Dapr Operator
 func NewOperator(kubeClient kubernetes.Interface, daprClient scheme.Interface) Operator {
 	o := &operator{
-		kubeClient:    kubeClient,
+		kubeClient: kubeClient,
 		daprClient: daprClient,
 		deploymentsInformer: k8s.DeploymentsIndexInformer(
 			kubeClient,
@@ -46,7 +51,7 @@ func NewOperator(kubeClient kubernetes.Interface, daprClient scheme.Interface) O
 			nil,
 			nil,
 		),
-		daprHandler:    handlers.NewDaprHandler(daprClient),
+		daprHandler:       handlers.NewDaprHandler(daprClient),
 		componentsHandler: handlers.NewComponentsHandler(kubeClient),
 	}
 

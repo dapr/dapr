@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package bindings
 
 import (
@@ -7,6 +12,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 )
 
+// BindingsRegistry is an abstraction for creating input and output bindings
 type BindingsRegistry interface {
 	CreateInputBinding(name string) (bindings.InputBinding, error)
 	CreateOutputBinding(name string) (bindings.OutputBinding, error)
@@ -20,6 +26,7 @@ type bindingsRegistry struct {
 var instance *bindingsRegistry
 var once sync.Once
 
+// NewBindingsRegistry is used to create new bindings
 func NewBindingsRegistry() BindingsRegistry {
 	once.Do(func() {
 		instance = &bindingsRegistry{
