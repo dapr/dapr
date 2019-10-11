@@ -2,7 +2,6 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   name: configurations.dapr.io
-  namespace: {{ .Release.Namespace }}
 spec:
   group: dapr.io
   version: v1alpha1

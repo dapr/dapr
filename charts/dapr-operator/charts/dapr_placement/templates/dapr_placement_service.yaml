@@ -2,7 +2,6 @@ kind: Service
 apiVersion: v1
 metadata:
   name: dapr-placement
-  namespace: {{ .Release.Namespace }}
 spec:
   selector:
     app: dapr-placement
