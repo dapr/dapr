@@ -2,7 +2,6 @@ kind: Service
 apiVersion: v1
 metadata:
   name: dapr-api
-  namespace: {{ .Release.Namespace }}
 spec:
   selector:
     app: dapr-operator
