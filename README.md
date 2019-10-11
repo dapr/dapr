@@ -48,18 +48,22 @@ Dapr is flexible in threading and state consistency models. Developers can lever
 
 ## Features
 
-* Supports all programming languages
-* Does not require any libraries or SDKs
-* Built-in Eventing system
-* Built-in service discovery
-* Asynchronous Pub-Sub with guaranteed delivery and at-least-once semantics
-* Dapr to Dapr request response using gRPC
-* State management - persist and restore
-* Choice of concurrency model: Single-Threaded or Multiple
-* Triggers (Azure, AWS, GCP, etc.)
-* Lightweight (20.4MB binary, 4MB physical memory needed)
-* Runs natively on Kubernetes
-* Easy to debug - runs locally on your machine
+* Event-driven Pub-Sub system with pluggable providers and at-least-once semantics
+* Input and Output bindings with pluggable providers
+* State management with pluggable data stores
+* Consistent service-to-service discovery and invocation
+* Opt-in stateful models: Strong/Eventual consistency, First-write/Last-write wins
+* Cross platform Virtual Actors
+* Rate limiting
+* Built-in distributed tracing using Open Telemetry
+* Runs natively on Kubernetes using a dedicated Operator and CRDs
+* Supports all programming languages via HTTP and gRPC
+* Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
+* Runs anywhere - as a process or containerized
+* Lightweight (58MB binary, 4MB physical memory)
+* Runs as a sidecar - removes need for special SDKs or libraries
+* Dedicated CLI - developer friendly experience with easy debugging
+* Clients for Java, Dotnet, Go, Javascript and Python
 
 ## Get Started using Dapr
 
