@@ -77,20 +77,22 @@ generate java java src/main/java '' \
   --plugin=protoc-gen-grpc-java=${java_grpc_plugin_path} \
   --grpc-java_out=${top_root}/../dapr-java/src/main/java
 
-# generate dotnet
-# dotnet generates their own via dotnet build...
-generate dotnet csharp src '' \
-  --plugin=protoc-gen-grpc=${dotnet_grpc_plugin_file} \
-  --grpc_out=${top_root}/../dapr-dotnet/src
-
 # generate python
-echo 'Generating python for all protos'
 mkdir -p ${top_root}/../dapr-python
 python3 -m grpc.tools.protoc -I${top_root}/pkg/proto \
    --python_out=${top_root}/../dapr-python \
    --grpc_python_out=${top_root}/../dapr-python \
    dapr/dapr.proto \
    daprclient/daprclient.proto
+
+# generate golang
+generate go go . `` --plugin=grpc
+
+# generate dotnet
+# dotnet generates their own via dotnet build...
+generate dotnet csharp src '' \
+  --plugin=protoc-gen-grpc=${dotnet_grpc_plugin_file} \
+  --grpc_out=${top_root}/../dapr-dotnet/src
 
 # cleanup
 rm -r ${root}/include ${root}/bin ${root}/${file} ${root}/readme.txt ${java_grpc_plugin_path}
