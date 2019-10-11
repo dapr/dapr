@@ -3,7 +3,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dapr-placement
-  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-placement
 spec:
@@ -21,9 +20,9 @@ spec:
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
-        image: "{{ $.Values.global.registry }}/dapr:{{ $.Values.global.tag }}"
+        image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
-        imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         ports:
           - containerPort: 50005
         command:

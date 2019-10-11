@@ -3,7 +3,6 @@ kind: Service
 metadata:
   metadata:
   name: dapr-sidecar-injector
-  namespace: {{ .Release.Namespace }}
 spec:
   type: ClusterIP
   ports:
