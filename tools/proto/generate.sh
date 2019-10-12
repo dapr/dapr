@@ -92,9 +92,9 @@ generate go go . `` --plugin=grpc
 
 # generate dotnet
 # dotnet generates their own via dotnet build...
-generate dotnet csharp src/Dapr.Grpc.Client '' \
+generate dotnet csharp src/Dapr.Client.Grpc '' \
   --plugin=protoc-gen-grpc=${dotnet_grpc_plugin_file} \
-  --grpc_out=${top_root}/../dotnet-sdk/src/Dapr.Grpc.Client
+  --grpc_out=${top_root}/../dotnet-sdk/src/Dapr.Client.Grpc
 
 # cleanup
 rm -r ${root}/include ${root}/bin ${root}/${file} ${root}/readme.txt ${java_grpc_plugin_path}
