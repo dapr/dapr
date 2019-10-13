@@ -353,7 +353,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	expectedRequest := &channel.InvokeRequest{
 		Method:   testPubSubMessage.Topic,
 		Payload:  testPubSubMessage.Data,
-		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post},
+		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post, http_channel.ContentType: pubsub.ContentType},
 	}
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
