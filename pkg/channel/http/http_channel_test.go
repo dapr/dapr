@@ -42,6 +42,15 @@ func (t *testConcurrencyHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	io.WriteString(w, r.URL.RawQuery)
 }
 
+type testContentTypeHandler struct {
+	ContentType string
+}
+
+func (t *testContentTypeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.ContentType = r.Header.Get("Content-Type")
+	w.Write([]byte(""))
+}
+
 type testHandler struct {
 }
 
@@ -137,4 +146,40 @@ func TestInvokeWithHeaders(t *testing.T) {
 	assert.Contains(t, string(response.Data), "H1&__header_equals__&v1")
 	assert.Contains(t, string(response.Data), "H2&__header_equals__&v2")
 	server.Close()
+}
+
+func TestContentType(t *testing.T) {
+	t.Run("default application/json", func(t *testing.T) {
+		handler := &testContentTypeHandler{}
+		server := httptest.NewServer(handler)
+		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
+		request := &channel.InvokeRequest{}
+		c.InvokeMethod(request)
+		assert.Equal(t, "application/json", handler.ContentType)
+		server.Close()
+	})
+
+	t.Run("application/json", func(t *testing.T) {
+		handler := &testContentTypeHandler{}
+		server := httptest.NewServer(handler)
+		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
+		request := &channel.InvokeRequest{
+			Metadata: map[string]string{ContentType: "application/json"},
+		}
+		c.InvokeMethod(request)
+		assert.Equal(t, "application/json", handler.ContentType)
+		server.Close()
+	})
+
+	t.Run("custom", func(t *testing.T) {
+		handler := &testContentTypeHandler{}
+		server := httptest.NewServer(handler)
+		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
+		request := &channel.InvokeRequest{
+			Metadata: map[string]string{ContentType: "custom"},
+		}
+		c.InvokeMethod(request)
+		assert.Equal(t, "custom", handler.ContentType)
+		server.Close()
+	})
 }

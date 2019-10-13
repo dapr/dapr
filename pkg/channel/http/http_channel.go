@@ -32,6 +32,9 @@ const (
 	Options = "OPTIONS"
 	// QueryString is the query string passed by the request
 	QueryString = "http.query_string"
+	// ContentType is the header for Content-Type
+	ContentType        = "Content-Type"
+	defaultContentType = "application/json"
 )
 
 // Channel is an HTTP implementation of an AppChannel
@@ -39,6 +42,15 @@ type Channel struct {
 	client      *fasthttp.Client
 	baseAddress string
 	ch          chan int
+}
+
+func getContentType(metadata map[string]string) string {
+	if metadata != nil {
+		if val, ok := metadata[ContentType]; ok && val != "" {
+			return val
+		}
+	}
+	return defaultContentType
 }
 
 // InvokeMethod invokes user code via HTTP
@@ -59,7 +71,8 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 			}
 		}
 	}
-	req.Header.SetContentType("application/json")
+	contentType := getContentType(invokeRequest.Metadata)
+	req.Header.SetContentType(contentType)
 
 	method := invokeRequest.Metadata[HTTPVerb]
 	if method == "" {

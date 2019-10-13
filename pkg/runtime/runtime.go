@@ -639,9 +639,10 @@ func (a *DaprRuntime) initPubSub() error {
 
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	req := channel.InvokeRequest{
-		Method:   msg.Topic,
-		Payload:  msg.Data,
-		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post},
+		Method:  msg.Topic,
+		Payload: msg.Data,
+		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post,
+			http_channel.ContentType: pubsub.ContentType},
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
