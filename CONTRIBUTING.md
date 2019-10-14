@@ -2,6 +2,15 @@
 
 Thank you for your interest in Dapr!
 
+This project welcomes contributions and suggestions. Most contributions require you to
+agree to a Contributor License Agreement (CLA) declaring that you have the right to,
+and actually do, grant us the rights to use your contribution. For details, visit
+https://cla.microsoft.com.
+
+This project has adopted the Microsoft Open Source Code of Conduct.
+For more information see the Code of Conduct FAQ
+or contact opencode@microsoft.com with any additional questions or comments.
+
 Contributions come in many forms: submitting issues, writing code, participating in discussions and community calls.
 
 This document provides the guidelines for how to contribute to the Dapr project.
