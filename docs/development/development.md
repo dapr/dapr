@@ -63,7 +63,7 @@ make build
 make build GOOS=linux GOARCH=amd64
 ```
 
-## Run unit-test
+## Run tests
 
 ```bash
 make test
