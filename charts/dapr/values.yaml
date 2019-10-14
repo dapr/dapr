@@ -1,4 +1,4 @@
 global:
-  registry: actionscore.azurecr.io
+  registry: docker.io/daprio
   tag: latest
   imagePullPolicy: Always

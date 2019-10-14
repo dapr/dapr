@@ -48,7 +48,7 @@ For more details on initializing helm, Go [here](https://docs.helm.sh/helm/#helm
 
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
-    helm install dapr/dapr-operator --name dapr --namespace dapr-system
+    helm install dapr/dapr --name dapr --namespace dapr-system
     ``` 
 
 ## Verify installation
@@ -57,8 +57,6 @@ Once the chart installation is done, verify the Dapr operator pods are running i
 ```
 kubectl get pods --namespace dapr-system
 ```
- 
-![dapr_helm_success](/charts/dapr-operator/img/dapr_helm_success.png)
 
 ## Uninstalling the Chart
 

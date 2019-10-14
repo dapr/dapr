@@ -67,7 +67,7 @@ DOCKERFILE:=Dockerfile
 HELM:=helm
 RELEASE_NAME?=dapr
 HELM_NAMESPACE?=dapr-system
-HELM_CHART_DIR:=./charts/dapr-operator
+HELM_CHART_DIR:=./charts/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 
@@ -198,12 +198,12 @@ endif
 ################################################################################
 
 # Generate helm chart manifest
-manifest-gen: dapr-operator.yaml
+manifest-gen: dapr.yaml
 
 $(HOME)/.helm:
 	$(HELM) init --client-only
 
-dapr-operator.yaml: check-docker-env $(HOME)/.helm
+dapr.yaml: check-docker-env $(HOME)/.helm
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
