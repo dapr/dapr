@@ -95,7 +95,7 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 
 See the [Wiki](https://github.com/dapr/dapr/wiki) for information on contributing to Dapr.
 
-See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development/development.md) to get started with building and developing.
+See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development) to get started with building and developing.
 
 ## Code of Conduct
 
