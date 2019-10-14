@@ -29,6 +29,10 @@ type PlacementService struct {
 	updateLock        *sync.Mutex
 }
 
+type placementOptions struct {
+	incrementGeneration bool
+}
+
 // NewPlacementService returns a new placement service
 func NewPlacementService() *PlacementService {
 	return &PlacementService{
@@ -55,6 +59,10 @@ func (p *PlacementService) ReportDaprStatus(srv daprinternal_pb.PlacementService
 	p.hosts = append(p.hosts, srv)
 	log.Infof("host added: %s", id)
 	p.hostsLock.Unlock()
+
+	// send the current placements
+	p.PerformTablesUpdate([]daprinternal_pb.PlacementService_ReportDaprStatusServer{srv},
+		placementOptions{incrementGeneration: false})
 
 	for {
 		select {
@@ -88,16 +96,19 @@ func (p *PlacementService) RemoveHost(srv daprinternal_pb.PlacementService_Repor
 
 // PerformTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
 // it then proceeds to update and then unlock once all runtimes have been updated
-func (p *PlacementService) PerformTablesUpdate() {
+func (p *PlacementService) PerformTablesUpdate(hosts []daprinternal_pb.PlacementService_ReportDaprStatusServer, options placementOptions) {
 	p.updateLock.Lock()
 	defer p.updateLock.Unlock()
 
-	p.generation++
+	if options.incrementGeneration {
+		p.generation++
+	}
+
 	o := daprinternal_pb.PlacementOrder{
 		Operation: "lock",
 	}
 
-	for _, host := range p.hosts {
+	for _, host := range hosts {
 		err := host.Send(&o)
 		if err != nil {
 			log.Errorf("error updating host on lock operation: %s", err)
@@ -128,14 +139,12 @@ func (p *PlacementService) PerformTablesUpdate() {
 				Load: lv.Load,
 				Port: lv.Port,
 			}
-
 			table.LoadMap[lk] = &h
 		}
-
 		o.Tables.Entries[k] = &table
 	}
 
-	for _, host := range p.hosts {
+	for _, host := range hosts {
 		err := host.Send(&o)
 		if err != nil {
 			log.Errorf("error updating host on update operation: %s", err)
@@ -146,7 +155,7 @@ func (p *PlacementService) PerformTablesUpdate() {
 	o.Tables = nil
 	o.Operation = "unlock"
 
-	for _, host := range p.hosts {
+	for _, host := range hosts {
 		err := host.Send(&o)
 		if err != nil {
 			log.Errorf("error updating host on unlock operation: %s", err)
@@ -174,7 +183,7 @@ func (p *PlacementService) ProcessRemovedHost(id string) {
 	p.entriesLock.Unlock()
 
 	if updateRequired {
-		p.PerformTablesUpdate()
+		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
 	}
 }
 
@@ -196,7 +205,7 @@ func (p *PlacementService) ProcessHost(host *daprinternal_pb.Host) {
 	}
 
 	if updateRequired {
-		p.PerformTablesUpdate()
+		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
 	}
 
 	p.hostsEntitiesLock.Lock()
