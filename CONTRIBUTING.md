@@ -27,7 +27,7 @@ Before you file an issue, make sure you've checked the following:
     - The Dapr project is distributed across multiple repositories. Check the list of [repositories](https://github.com/dapr) if you aren't sure which repo is the correct one.
 1. Check for existing issues
     - Before you create a new issue, please do a search in [open issues](https://github.com/dapr/dapr/issues) to see if the issue or feature request has already been filed.
-    - If you find your issue already exists, make relevant comments and add your [redapr](https://github.com/blog/2119-add-redapr-to-pull-requests-issues-and-comments). Use a redapr:
+    - If you find your issue already exists, make relevant comments and add your [reaction](https://github.com/blog/2119-add-reaction-to-pull-requests-issues-and-comments). Use a reaction:
         - 👍 up-vote
         - 👎 down-vote
 1. For bugs
