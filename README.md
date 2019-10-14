@@ -22,9 +22,9 @@ Dapr is a programming model runtime for writing cloud-native and edge applicatio
 - Works with any programming language and any developer framework
 - Has pluggable bindings to state, messaging and storage systems
 
-Dapr injects a side-car container/process to each compute unit. The side-car interacts with event triggers and communicates with the compute unit via standard HTTP or GRPC protocols. This enables Dapr to support all existing and future programming languages without requiring you to import frameworks or libraries.
+Dapr injects a side-car container/process to each compute unit. The side-car interacts with event triggers and communicates with the compute unit via standard HTTP or gRPC protocols. This enables Dapr to support all existing and future programming languages without requiring you to import frameworks or libraries.
 
-Dapr offers built-in state management, reliable messaging (at least once delivery), triggers and bindings through standard HTTP verbs or GRPC interfaces. This allows you to write stateless, stateful and actor-like services following the same programming paradigm. You can freely choose consistency model, threading model and message delivery patterns.
+Dapr offers built-in state management, reliable messaging (at least once delivery), triggers and bindings through standard HTTP verbs or gRPC interfaces. This allows you to write stateless, stateful and actor-like services following the same programming paradigm. You can freely choose consistency model, threading model and message delivery patterns.
 
 Dapr runs natively on Kubernetes, as a standalone binary on your machine, on an IoT device, or as a container than can be injected into any system, in the cloud or on-premises.
 
