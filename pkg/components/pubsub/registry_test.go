@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/dapr/components-contrib/pubsub"
+	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +37,7 @@ func TestCreatePubSub(t *testing.T) {
 	t.Run("pubsub messagebus is registered", func(t *testing.T) {
 		const PubSubName = "mockPubSub"
 		// Initiate mock object
-		mockPubSub := new(pubsub.MockPubSub)
+		mockPubSub := new(daprt.MockPubSub)
 
 		// act
 		RegisterMessageBus(PubSubName, func() pubsub.PubSub {
