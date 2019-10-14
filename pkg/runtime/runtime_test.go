@@ -19,6 +19,7 @@ import (
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/modes"
+	daprt "github.com/dapr/dapr/pkg/testing"
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
@@ -61,8 +62,8 @@ func TestNewRuntime(t *testing.T) {
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
-	initMockPubSubForRuntime := func(rt *DaprRuntime) *pubsub.MockPubSub {
-		mockPubSub := new(pubsub.MockPubSub)
+	initMockPubSubForRuntime := func(rt *DaprRuntime) *daprt.MockPubSub {
+		mockPubSub := new(daprt.MockPubSub)
 		pubsub_loader.RegisterMessageBus("mockPubSub", func() pubsub.PubSub {
 			return mockPubSub
 		})

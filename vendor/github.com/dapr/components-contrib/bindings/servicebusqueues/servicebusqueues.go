@@ -15,12 +15,12 @@ import (
 )
 
 const (
-	corellationID = "corellationID"
+	correlationID = "correlationID"
 	label         = "label"
 	id            = "id"
 )
 
-// AzureServiceBusQueues is an input/outbput binding reading from and sending events to Azure Service Bus queues
+// AzureServiceBusQueues is an input/output binding reading from and sending events to Azure Service Bus queues
 type AzureServiceBusQueues struct {
 	metadata *serviceBusQueuesMetadata
 	client   *servicebus.Queue
@@ -79,7 +79,7 @@ func (a *AzureServiceBusQueues) Write(req *bindings.WriteRequest) error {
 	if val, ok := req.Metadata[id]; ok && val != "" {
 		msg.ID = val
 	}
-	if val, ok := req.Metadata[corellationID]; ok && val != "" {
+	if val, ok := req.Metadata[correlationID]; ok && val != "" {
 		msg.CorrelationID = val
 	}
 	err := a.client.Send(ctx, msg)
@@ -90,7 +90,7 @@ func (a *AzureServiceBusQueues) Read(handler func(*bindings.ReadResponse) error)
 	var sbHandler servicebus.HandlerFunc = func(ctx context.Context, msg *servicebus.Message) error {
 		err := handler(&bindings.ReadResponse{
 			Data:     msg.Data,
-			Metadata: map[string]string{id: msg.ID, corellationID: msg.CorrelationID, label: msg.Label},
+			Metadata: map[string]string{id: msg.ID, correlationID: msg.CorrelationID, label: msg.Label},
 		})
 		if err == nil {
 			return msg.Complete(ctx)

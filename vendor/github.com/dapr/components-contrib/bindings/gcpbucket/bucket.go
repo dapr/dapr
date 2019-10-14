@@ -40,7 +40,7 @@ func NewGCPStorage() *GCPStorage {
 	return &GCPStorage{}
 }
 
-// Init performs connction parsing
+// Init performs connection parsing
 func (g *GCPStorage) Init(metadata bindings.Metadata) error {
 	b, err := g.parseMetadata(metadata)
 	if err != nil {

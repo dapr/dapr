@@ -36,7 +36,7 @@ type StateStore struct {
 	replicas int
 }
 
-type credenials struct {
+type credentials struct {
 	Host     string `json:"redisHost"`
 	Password string `json:"redisPassword"`
 }
@@ -58,7 +58,7 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 		return err
 	}
 
-	var redisCreds credenials
+	var redisCreds credentials
 	err = json.Unmarshal(b, &redisCreds)
 	if err != nil {
 		return err

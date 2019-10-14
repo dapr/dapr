@@ -6,7 +6,7 @@ require (
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/Sirupsen/logrus v1.0.6
-	github.com/dapr/components-contrib v0.0.0-20191009175808-04bef3ac3f90
+	github.com/dapr/components-contrib v0.0.0-20191014200624-99461da9580e
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0

@@ -44,7 +44,7 @@ type SetRequest struct {
 //RetryPolicy describes how retries should be handled
 type RetryPolicy struct {
 	Interval  time.Duration `json:"interval"`
-	Threshold int           `josn:"threshold"`
+	Threshold int           `json:"threshold"`
 	Pattern   string        `json:"pattern,omitempty"` //linear, exponential
 }
 
