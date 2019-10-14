@@ -12,7 +12,7 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	testRegistry := NewSecretStoreRegistry()
+	testRegistry := NewRegistry()
 	Load()
 
 	t.Run("kubernetes is registered", func(t *testing.T) {

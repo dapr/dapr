@@ -24,14 +24,14 @@ func TestCreateFullName(t *testing.T) {
 }
 
 func TestNewPubSubRegsitry(t *testing.T) {
-	registry0 := NewPubSubRegsitry()
-	registry1 := NewPubSubRegsitry()
+	registry0 := NewRegistry()
+	registry1 := NewRegistry()
 
 	assert.Equal(t, registry0, registry1, "should be the same object")
 }
 
 func TestCreatePubSub(t *testing.T) {
-	testRegistry := NewPubSubRegsitry()
+	testRegistry := NewRegistry()
 
 	t.Run("pubsub messagebus is registered", func(t *testing.T) {
 		const PubSubName = "mockPubSub"
@@ -39,7 +39,9 @@ func TestCreatePubSub(t *testing.T) {
 		mockPubSub := new(pubsub.MockPubSub)
 
 		// act
-		RegisterMessageBus(PubSubName, mockPubSub)
+		RegisterMessageBus(PubSubName, func() pubsub.PubSub {
+			return mockPubSub
+		})
 		p, e := testRegistry.CreatePubSub(createFullName(PubSubName))
 
 		// assert

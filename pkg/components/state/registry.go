@@ -12,38 +12,39 @@ import (
 	"github.com/dapr/components-contrib/state"
 )
 
-// StateStoreRegistry is an abstraction to create state store
-type StateStoreRegistry interface {
+// Registry is an interface for a component that returns registered state store implementations
+type Registry interface {
 	CreateStateStore(name string) (state.StateStore, error)
 }
 
 type stateStoreRegistry struct {
-	stateStores map[string]state.StateStore
+	stateStores map[string]func() state.StateStore
 }
 
 var instance *stateStoreRegistry
 var once sync.Once
 
 // NewStateStoreRegistry is used to create state store registry
-func NewStateStoreRegistry() StateStoreRegistry {
+func NewStateStoreRegistry() Registry {
 	once.Do(func() {
 		instance = &stateStoreRegistry{
-			stateStores: map[string]state.StateStore{},
+			stateStores: map[string]func() state.StateStore{},
 		}
 	})
 	return instance
 }
 
-func RegisterStateStore(name string, store state.StateStore) {
-	instance.stateStores[fmt.Sprintf("state.%s", name)] = store
+// RegisterStateStore registers a new factory method that creates an instance of a StateStore.
+// The key is the name of the state store, eg. redis
+func RegisterStateStore(name string, factoryMethod func() state.StateStore) {
+	instance.stateStores[fmt.Sprintf("state.%s", name)] = factoryMethod
 }
 
 func (s *stateStoreRegistry) CreateStateStore(name string) (state.StateStore, error) {
-	for key, s := range s.stateStores {
+	for key, method := range s.stateStores {
 		if key == name {
-			return s, nil
+			return method(), nil
 		}
 	}
-
 	return nil, fmt.Errorf("couldn't find state store %s", name)
 }
