@@ -87,7 +87,7 @@ func (c *StateStore) Init(metadata state.Metadata) error {
 	return nil
 }
 
-// Get retreives a CosmosDB item
+// Get retrieves a CosmosDB item
 func (c *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	key := req.Key
 
