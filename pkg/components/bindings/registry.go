@@ -12,55 +12,57 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 )
 
-// BindingsRegistry is an abstraction for creating input and output bindings
-type BindingsRegistry interface {
+// Registry is the interface of a components that allows callers to get registered instances of input and output bindings
+type Registry interface {
 	CreateInputBinding(name string) (bindings.InputBinding, error)
 	CreateOutputBinding(name string) (bindings.OutputBinding, error)
 }
 
 type bindingsRegistry struct {
-	inputBindings  map[string]bindings.InputBinding
-	outputBindings map[string]bindings.OutputBinding
+	inputBindings  map[string]func() bindings.InputBinding
+	outputBindings map[string]func() bindings.OutputBinding
 }
 
 var instance *bindingsRegistry
 var once sync.Once
 
-// NewBindingsRegistry is used to create new bindings
-func NewBindingsRegistry() BindingsRegistry {
+// NewRegistry is used to create new bindings
+func NewRegistry() Registry {
 	once.Do(func() {
 		instance = &bindingsRegistry{
-			inputBindings:  map[string]bindings.InputBinding{},
-			outputBindings: map[string]bindings.OutputBinding{},
+			inputBindings:  map[string]func() bindings.InputBinding{},
+			outputBindings: map[string]func() bindings.OutputBinding{},
 		}
 	})
 	return instance
 }
 
-func RegisterInputBinding(name string, binding bindings.InputBinding) {
-	instance.inputBindings[fmt.Sprintf("bindings.%s", name)] = binding
+// RegisterInputBinding registers a new factory method that creates an instance of an InputBinding.
+// The key is the name of the binding, eg. kafka.
+func RegisterInputBinding(name string, factoryMethod func() bindings.InputBinding) {
+	instance.inputBindings[fmt.Sprintf("bindings.%s", name)] = factoryMethod
 }
 
-func RegisterOutputBinding(name string, binding bindings.OutputBinding) {
-	instance.outputBindings[fmt.Sprintf("bindings.%s", name)] = binding
+// RegisterOutputBinding registers a new factory method that creates an instance of an OutputBinding.
+// The key is the name of the binding, eg. kafka.
+func RegisterOutputBinding(name string, factoryMethod func() bindings.OutputBinding) {
+	instance.outputBindings[fmt.Sprintf("bindings.%s", name)] = factoryMethod
 }
 
 func (b *bindingsRegistry) CreateInputBinding(name string) (bindings.InputBinding, error) {
-	for key, binding := range b.inputBindings {
+	for key, method := range b.inputBindings {
 		if key == name {
-			return binding, nil
+			return method(), nil
 		}
 	}
-
 	return nil, fmt.Errorf("couldn't find input binding %s", name)
 }
 
 func (b *bindingsRegistry) CreateOutputBinding(name string) (bindings.OutputBinding, error) {
-	for key, binding := range b.outputBindings {
+	for key, method := range b.outputBindings {
 		if key == name {
-			return binding, nil
+			return method(), nil
 		}
 	}
-
 	return nil, fmt.Errorf("couldn't find output binding %s", name)
 }

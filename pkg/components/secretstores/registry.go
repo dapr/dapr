@@ -12,31 +12,31 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 )
 
-// SecretStoreRegistry is used to get registered secret store implementations
-type SecretStoreRegistry interface {
+// Registry is used to get registered secret store implementations
+type Registry interface {
 	CreateSecretStore(name string) (secretstores.SecretStore, error)
 }
 
 type secretStoreRegistry struct {
-	secretStores map[string]secretstores.SecretStore
+	secretStores map[string]func() secretstores.SecretStore
 }
 
 var instance *secretStoreRegistry
 var once sync.Once
 
-// NewSecretStoreRegistry returns a new secret store registry
-func NewSecretStoreRegistry() SecretStoreRegistry {
+// NewRegistry returns a new secret store registry
+func NewRegistry() Registry {
 	once.Do(func() {
 		instance = &secretStoreRegistry{
-			secretStores: map[string]secretstores.SecretStore{},
+			secretStores: map[string]func() secretstores.SecretStore{},
 		}
 	})
 	return instance
 }
 
 // RegisterSecretStore registers a new secret store
-func RegisterSecretStore(name string, secretStore secretstores.SecretStore) {
-	instance.secretStores[createFullName(name)] = secretStore
+func RegisterSecretStore(name string, factoryMethod func() secretstores.SecretStore) {
+	instance.secretStores[createFullName(name)] = factoryMethod
 }
 
 func createFullName(name string) string {
@@ -44,8 +44,8 @@ func createFullName(name string) string {
 }
 
 func (s *secretStoreRegistry) CreateSecretStore(name string) (secretstores.SecretStore, error) {
-	if val, ok := s.secretStores[name]; ok {
-		return val, nil
+	if method, ok := s.secretStores[name]; ok {
+		return method(), nil
 	}
 
 	return nil, fmt.Errorf("couldn't find secret store %s", name)

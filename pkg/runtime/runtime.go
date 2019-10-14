@@ -65,15 +65,15 @@ type DaprRuntime struct {
 	appChannel           channel.AppChannel
 	appConfig            config.ApplicationConfig
 	directMessaging      messaging.DirectMessaging
-	stateStoreRegistry   state_loader.StateStoreRegistry
-	secretStoresRegistry secretstores_loader.SecretStoreRegistry
+	stateStoreRegistry   state_loader.Registry
+	secretStoresRegistry secretstores_loader.Registry
 	stateStore           state.StateStore
 	actor                actors.Actors
-	bindingsRegistry     bindings_loader.BindingsRegistry
+	bindingsRegistry     bindings_loader.Registry
 	inputBindings        map[string]bindings.InputBinding
 	outputBindings       map[string]bindings.OutputBinding
 	secretStores         map[string]secretstores.SecretStore
-	pubSubRegistry       pubsub_loader.PubSubRegistry
+	pubSubRegistry       pubsub_loader.Registry
 	pubSub               pubsub.PubSub
 	json                 jsoniter.API
 	hostAddress          string
@@ -90,9 +90,9 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		outputBindings:       map[string]bindings.OutputBinding{},
 		secretStores:         map[string]secretstores.SecretStore{},
 		stateStoreRegistry:   state_loader.NewStateStoreRegistry(),
-		bindingsRegistry:     bindings_loader.NewBindingsRegistry(),
-		pubSubRegistry:       pubsub_loader.NewPubSubRegsitry(),
-		secretStoresRegistry: secretstores_loader.NewSecretStoreRegistry(),
+		bindingsRegistry:     bindings_loader.NewRegistry(),
+		pubSubRegistry:       pubsub_loader.NewRegistry(),
+		secretStoresRegistry: secretstores_loader.NewRegistry(),
 	}
 }
 
@@ -472,7 +472,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string, bindingsList []st
 	return false
 }
 
-func (a *DaprRuntime) initInputBindings(registry bindings_loader.BindingsRegistry) error {
+func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error {
 	if a.appChannel == nil {
 		return fmt.Errorf("app channel not initialized")
 	}
@@ -509,7 +509,7 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.BindingsRegistr
 	return nil
 }
 
-func (a *DaprRuntime) initOutputBindings(registry bindings_loader.BindingsRegistry) error {
+func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
@@ -534,7 +534,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.BindingsRegist
 	return nil
 }
 
-func (a *DaprRuntime) initState(registry state_loader.StateStoreRegistry) error {
+func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 	state_loader.Load()
 
 	for _, s := range a.components {

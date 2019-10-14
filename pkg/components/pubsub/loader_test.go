@@ -12,7 +12,7 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	testRegistry := NewPubSubRegsitry()
+	testRegistry := NewRegistry()
 	Load()
 
 	t.Run("redis is registered", func(t *testing.T) {

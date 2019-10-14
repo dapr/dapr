@@ -63,7 +63,9 @@ func TestInitPubSub(t *testing.T) {
 
 	initMockPubSubForRuntime := func(rt *DaprRuntime) *pubsub.MockPubSub {
 		mockPubSub := new(pubsub.MockPubSub)
-		pubsub_loader.RegisterMessageBus("mockPubSub", mockPubSub)
+		pubsub_loader.RegisterMessageBus("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		})
 
 		expectedMetadata := pubsub.Metadata{
 			Properties: getFakeProperties(),
@@ -149,7 +151,9 @@ func TestInitSecretStores(t *testing.T) {
 	t.Run("init with store", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
-		secretstores_loader.RegisterSecretStore("kubernetesMock", m)
+		secretstores_loader.RegisterSecretStore("kubernetesMock", func() secretstores.SecretStore {
+			return m
+		})
 
 		rt.components = append(rt.components, components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
@@ -167,7 +171,9 @@ func TestInitSecretStores(t *testing.T) {
 	t.Run("secret store is registered", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
-		secretstores_loader.RegisterSecretStore("kubernetesMock", m)
+		secretstores_loader.RegisterSecretStore("kubernetesMock", func() secretstores.SecretStore {
+			return m
+		})
 
 		rt.components = append(rt.components, components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
@@ -185,7 +191,9 @@ func TestInitSecretStores(t *testing.T) {
 	t.Run("get secret store", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
-		secretstores_loader.RegisterSecretStore("kubernetesMock", m)
+		secretstores_loader.RegisterSecretStore("kubernetesMock", func() secretstores.SecretStore {
+			return m
+		})
 
 		rt.components = append(rt.components, components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
@@ -250,7 +258,9 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
-		secretstores_loader.RegisterSecretStore("kubernetes", m)
+		secretstores_loader.RegisterSecretStore("kubernetes", func() secretstores.SecretStore {
+			return m
+		})
 
 		// add Kubernetes component manually
 		rt.components = append(rt.components, components_v1alpha1.Component{
@@ -277,7 +287,9 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		m := NewMockKubernetesStore()
-		secretstores_loader.RegisterSecretStore("kubernetes", m)
+		secretstores_loader.RegisterSecretStore("kubernetes", func() secretstores.SecretStore {
+			return m
+		})
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
 		err := rt.initSecretStores()
@@ -295,7 +307,9 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		m := NewMockKubernetesStore()
-		secretstores_loader.RegisterSecretStore("kubernetes", m)
+		secretstores_loader.RegisterSecretStore("kubernetes", func() secretstores.SecretStore {
+			return m
+		})
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
 		err := rt.initSecretStores()
@@ -337,7 +351,9 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 	rt.components = append(rt.components, fakeSecretStoreWithAuth)
 
 	m := NewMockKubernetesStore()
-	secretstores_loader.RegisterSecretStore("kubernetes", m)
+	secretstores_loader.RegisterSecretStore("kubernetes", func() secretstores.SecretStore {
+		return m
+	})
 
 	err := rt.initSecretStores()
 	assert.NoError(t, err)
