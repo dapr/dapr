@@ -85,7 +85,7 @@ See [Samples](https://github.com/dapr/samples) for additional samples.
 | [Docs](https://github.com/dapr/docs) | The documentation repository for Dapr.
 | [Samples](https://github.com/dapr/samples) | This repository contains a series of samples that highlight Dapr capabilities.
 | [Contributions](https://github.com/dapr/components-contrib) | The purpose of Components Contrib is to provide open, community driven reusable components for building distributed applications. 
-| [Spec](https://github.com/dapr/spec) | This repository holds the specifications for the Dapr runtime.
+| [API](https://github.com/dapr/docs/tree/master/reference/api) | API reference for the Dapr runtime.
 
 ## Roadmap
 
