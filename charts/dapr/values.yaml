@@ -1,4 +1,4 @@
 global:
   registry: docker.io/daprio
-  tag: latest
+  tag:
   imagePullPolicy: Always
