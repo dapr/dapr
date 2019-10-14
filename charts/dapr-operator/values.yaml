@@ -1,4 +1,0 @@
-global:
-  registry: actionscore.azurecr.io
-  tag: latest
-  imagePullPolicy: Always
