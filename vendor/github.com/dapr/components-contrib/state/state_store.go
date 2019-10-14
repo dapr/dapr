@@ -5,6 +5,7 @@
 
 package state
 
+// StateStore is an interface to perform operations on store
 type StateStore interface {
 	Init(metadata Metadata) error
 	Delete(req *DeleteRequest) error

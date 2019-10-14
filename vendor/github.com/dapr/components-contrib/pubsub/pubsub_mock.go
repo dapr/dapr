@@ -3,6 +3,8 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
+// +build test
+
 package pubsub
 
 import (

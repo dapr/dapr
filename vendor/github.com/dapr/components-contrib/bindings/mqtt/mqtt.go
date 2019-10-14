@@ -21,7 +21,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// MQTT allows sending and receving data to/from an MQTT broker
+// MQTT allows sending and receiving data to/from an MQTT broker
 type MQTT struct {
 	metadata *mqttMetadata
 	client   mqtt.Client

@@ -12,7 +12,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-// RabbitMQ allows sending/receving data to/from RabbitMQ
+// RabbitMQ allows sending/receiving data to/from RabbitMQ
 type RabbitMQ struct {
 	connection *amqp.Connection
 	channel    *amqp.Channel

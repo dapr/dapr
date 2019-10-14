@@ -5,7 +5,7 @@
 
 package state
 
-// GetResponse is the reqeust object for getting state
+// GetResponse is the request object for getting state
 type GetResponse struct {
 	Data     []byte            `json:"data"`
 	ETag     string            `json:"etag,omitempty"`
