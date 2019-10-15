@@ -19,7 +19,7 @@ Dapr is a programming model runtime for writing cloud-native and edge applicatio
 
 ## Goals
 
-- Enable developers using *any* language or framework write distributed applications
+- Enable developers using *any* language or framework to write distributed applications
 - Solve the hard problems developers are facing today
 - Be community driven, open and vendor neutral, seeking new contributors
 - Provide consistency and portability through standard open API
