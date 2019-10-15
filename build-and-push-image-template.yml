@@ -3,6 +3,7 @@
 parameters:
   targetArch: 'amd64'
   releaseVersion: ''
+  dockerHubRegistry: 'docker.io/daprio'
 
 steps:
   - script: |
@@ -10,6 +11,11 @@ steps:
         VERSION_TAG="edge"
       else
         VERSION_TAG=v${{ parameters.releaseVersion }}
+
+        # Set LATEST_RELEASE to add latest tag if SOURCEBRANCH doesn't have -rc tag
+        if [[ $SOURCEBRANCH != *-rc.* ]]; then
+          echo "##vso[task.setvariable variable=LATEST_RELEASE]true"
+        fi
       fi
       if [ "${{ parameters.targetArch }}" != "amd64" ]; then
         VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
@@ -19,35 +25,9 @@ steps:
       echo Target Architecture: ${{ parameters.targetArch }}
       echo Docker Version TAG: $VERSION_TAG
     displayName: 'Docker image tag name setting'
-  - task: DownloadPipelineArtifact@2
-    displayName: 'Download pipeline artifacts to workspace'
-    inputs:
-      buildType: 'current'
-      itemPattern: '**/*_linux_${{ parameters.targetArch }}.*'
-      targetPath: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
-  - task: CopyFiles@2
-    displayName: 'Copy Dockerfile to workspace'
-    inputs:
-      SourceFolder: '$(Build.SourcesDirectory)'
-      Contents: 'Dockerfile'
-      TargetFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
-      OverWrite: true
-      flattenFolders: true
-  # Extract all binaries from each zip files
-  - task: ExtractFiles@1
-    displayName: 'Extract linux ${{ parameters.targetArch }} binaries'
-    inputs:
-      archiveFilePatterns: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/drop/*_linux_${{ parameters.targetArch }}.*'
-      destinationFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/dist'
-      cleanDestinationFolder: false
-  - script: chmod a+x $(Pipeline.Workspace)/${{ parameters.targetArch }}/dist/*
-    displayName: 'Make all binaries executable'
-  - task: Docker@2
-    displayName: 'Build and push ${{ parameters.targetArch }} Docker image'
-    inputs:
-      containerRegistry: 'dapr-release-dockerhub'
-      repository: 'docker.io/daprio/dapr'
-      command: 'buildAndPush'
-      Dockerfile: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/Dockerfile'
-      tags: |
-        $(DockerVersionTag)
+  - script: |
+      docker login -u $DOCKERHUB_ID -p $DOCKERHUB_TOKEN
+    displayName: 'Login docker.io'
+  - script: |
+      make docker-push DAPR_REGISTRY=${{ parameters.dockerHubRegistry }} DAPR_TAG=$DockerVersionTag GOARCH=${{ parameters.targetArch }}
+    displayName: 'Build and push docker image'
