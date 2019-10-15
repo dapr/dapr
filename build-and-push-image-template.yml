@@ -3,74 +3,42 @@
 parameters:
   targetArch: 'amd64'
   releaseVersion: ''
-  isLatest: 'false'
+  dockerHubRegistry: 'docker.io/daprio'
 
 steps:
-  # integration build tag
   - script: |
-      VERSION_TAG="edge"
-      if [ "${{ parameters.targetArch }}" != "amd64" ]; then
-        VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
-      fi
-
-      echo "##vso[task.setvariable variable=DockerReleaseTag]"
-      echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
-      echo Target Architecture: ${{ parameters.targetArch }}
-      echo Integration Build - Docker Version TAG: $VERSION_TAG
-    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
-    displayName: 'Integration build - docker image tag name setting'
-  # release build tag
-  - script: |
-      RELEASE_TAG=latest
-      VERSION_TAG=v${{ parameters.releaseVersion }}
-
-      if [ "${{ parameters.targetArch }}" != "amd64" ]; then
-        RELEASE_TAG=$RELEASE_TAG-${{ parameters.targetArch }}
-        VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
-      fi
-
-      echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
-
-      # Release latest tag if LATEST_TAG is true
-      if [ "${{ parameters.isLatest }}" == "true" ]; then
-        echo "##vso[task.setvariable variable=DockerReleaseTag]$RELEASE_TAG"
-        echo Release Build - Docker Release TAG: $RELEASE_TAG
+      if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
+        VERSION_TAG="edge"
       else
-        echo "##vso[task.setvariable variable=DockerReleaseTag]"
+        VERSION_TAG=v${{ parameters.releaseVersion }}
+
+        # Set LATEST_RELEASE to add latest tag if SOURCEBRANCH doesn't have -rc tag
+        if [[ $SOURCEBRANCH != *-rc.* ]]; then
+          echo "##vso[task.setvariable variable=LATEST_RELEASE]true"
+        fi
+      fi
+      if [ "${{ parameters.targetArch }}" != "amd64" ]; then
+        VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
       fi
 
+      echo "##vso[task.setvariable variable=DOCKER_VERSION_TAG]$VERSION_TAG"
       echo Target Architecture: ${{ parameters.targetArch }}
-      echo Release Build - Docker Version TAG: $VERSION_TAG
-    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
-    displayName: 'Release build - docker image tag name setting'
+      echo Docker Version TAG: $VERSION_TAG
+    displayName: 'Docker image tag name setting'
   - task: DownloadPipelineArtifact@2
     displayName: 'Download pipeline artifacts to workspace'
     inputs:
       buildType: 'current'
       itemPattern: '**/*_linux_${{ parameters.targetArch }}.*'
       targetPath: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
-  - task: CopyFiles@2
-    displayName: 'Copy Dockerfile to workspace'
-    inputs:
-      SourceFolder: '$(Build.SourcesDirectory)'
-      Contents: 'Dockerfile'
-      TargetFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
-      OverWrite: true
-      flattenFolders: true
-  # Extract all binaries from each zip files
-  - task: ExtractFiles@1
-    displayName: 'Extract linux ${{ parameters.targetArch }} binaries'
-    inputs:
-      archiveFilePatterns: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/drop/*_linux_${{ parameters.targetArch }}.*'
-      destinationFolder: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/dist'
-      cleanDestinationFolder: false
-  - task: Docker@2
-    displayName: 'Build and push ${{ parameters.targetArch }} Docker image'
-    inputs:
-      containerRegistry: 'ACR Actions Core'
-      repository: 'dapr'
-      command: 'buildAndPush'
-      Dockerfile: '$(Pipeline.Workspace)/${{ parameters.targetArch }}/Dockerfile'
-      tags: |
-        $(DockerVersionTag)
-        $(DockerReleaseTag)
+  - script: |
+      export RELEASE_DIR=./dist/linux_${{ parameters.targetArch }}/release/
+      mkdir -p $RELEASE_DIR
+      for tgzfile in $(Pipeline.Workspace)/${{ parameters.targetArch }}/drop/*.tar.gz; do
+        echo "Extracting $tgzfile to $RELEASE_DIR ..."
+        tar xzvf $tgzfile -C $RELEASE_DIR
+      done
+
+      echo "Build docker image and push image ..."
+      make docker-push DAPR_REGISTRY=${{ parameters.dockerHubRegistry }} DAPR_TAG=$(DOCKER_VERSION_TAG) GOARCH=${{ parameters.targetArch }}
+    displayName: 'Build and push docker image'

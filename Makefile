@@ -13,6 +13,8 @@ export GOSUMDB ?= sum.golang.org
 
 GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
+# By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
+CGO         ?= 0
 BINARIES    ?= daprd placement operator injector
 
 # Add latest tag if LATEST_RELEASE is true
@@ -26,13 +28,17 @@ endif
 
 LOCAL_ARCH := $(shell uname -m)
 ifeq ($(LOCAL_ARCH),x86_64)
-	TARGET_ARCH_LOCAL = amd64
+	TARGET_ARCH_LOCAL=amd64
+	LATEST_TAG=latest
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
-	TARGET_ARCH_LOCAL = arm64
+	TARGET_ARCH_LOCAL=arm64
+	LATEST_TAG=latest-arm64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
-	TARGET_ARCH_LOCAL = arm
+	TARGET_ARCH_LOCAL=arm
+	LATEST_TAG=latest-arm
 else
-	TARGET_ARCH_LOCAL = amd64
+	TARGET_ARCH_LOCAL=amd64
+	LATEST_TAG=latest
 endif
 export GOARCH ?= $(TARGET_ARCH_LOCAL)
 
@@ -112,7 +118,7 @@ build: $(DAPR_BINS)
 define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
-	GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
+	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
 	-o $(5)/$(1) -mod=vendor \
 	$(2)/main.go;
 endef
@@ -163,7 +169,7 @@ LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)
 DOCKER_IMAGE_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):$(DAPR_TAG)
 
 ifeq ($(LATEST_RELEASE),true)
-DOCKER_IMAGE_LATEST_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):latest
+DOCKER_IMAGE_LATEST_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):$(LATEST_TAG)
 endif
 
 # check the required environment variables
@@ -176,7 +182,7 @@ ifeq ($(DAPR_TAG),)
 endif
 
 # build docker image for linux
-docker-build: check-docker-env build-linux
+docker-build: check-docker-env
 	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
 	$(DOCKER) build -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)
 ifeq ($(LATEST_RELEASE),true)
