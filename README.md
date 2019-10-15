@@ -41,14 +41,6 @@ Dapr uses pluggable state stores and message buses such as Redis as well as gRPC
 
 The Dapr runtime is designed for hyper-scale performance in the cloud and on the edge.
 
-###### Dapr Standalone Deployment
-
-![Dapr Standalone](/img/dapr_standalone.jpg)
-
-###### Dapr Kubernetes Deployment
-
-![Dapr on Kubernetes](/img/dapr_k8s.jpg)
-
 ## Why Dapr?
 
 Writing high performance, scalable and reliable distributed application is hard. Dapr brings proven patterns and practices to you. It unifies event-driven and actors semantics into a simple, consistent programming model. It supports all programming languages without framework lock-in. You are not exposed to low-level primitives such as threading, concurrency control, partitioning and scaling. Instead, you can write your code by implementing a simple web server using familiar web frameworks of your choice.
