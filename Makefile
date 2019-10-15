@@ -73,9 +73,10 @@ DOCKERFILE:=Dockerfile
 HELM:=helm
 RELEASE_NAME?=dapr
 HELM_NAMESPACE?=dapr-system
-HELM_CHART_DIR:=./charts/dapr
+HELM_CHART_ROOT:=./charts
+HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
-HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
+HELM_MANIFEST_FILE:=$(HELM_CHART_ROOT)/manifest/$(RELEASE_NAME).yaml
 
 ################################################################################
 # Go build details                                                             #
@@ -213,7 +214,6 @@ dapr.yaml: check-docker-env $(HOME)/.helm
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
-		--name=$(RELEASE_NAME) --namespace=$(HELM_NAMESPACE) \
 		--set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
