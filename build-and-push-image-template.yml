@@ -21,15 +21,13 @@ steps:
         VERSION_TAG=$VERSION_TAG-${{ parameters.targetArch }}
       fi
 
-      echo "##vso[task.setvariable variable=DockerVersionTag]$VERSION_TAG"
+      echo "##vso[task.setvariable variable=DOCKER_VERSION_TAG]$VERSION_TAG"
       echo Target Architecture: ${{ parameters.targetArch }}
       echo Docker Version TAG: $VERSION_TAG
     displayName: 'Docker image tag name setting'
-  - task: Docker@2
-    displayName: Login docker.io
-    inputs:
-      command: login
-      containerRegistry: 'dapr-release-dockerhub'
   - script: |
-      make docker-push DAPR_REGISTRY=${{ parameters.dockerHubRegistry }} DAPR_TAG=$DockerVersionTag GOARCH=${{ parameters.targetArch }}
+      docker login -u $(DOCKERHUB_ID) -p $(DOCKERHUB_TOKEN)
+    displayName: 'Login docker.io'
+  - script: |
+      make docker-push DAPR_REGISTRY=${{ parameters.dockerHubRegistry }} DAPR_TAG=$(DOCKER_VERSION_TAG) GOARCH=${{ parameters.targetArch }}
     displayName: 'Build and push docker image'
