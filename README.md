@@ -23,7 +23,7 @@ Dapr is a programming model runtime for writing cloud-native and edge applicatio
 - Solve the hard problems developers are facing today
 - Be community driven, open and vendor neutral, seeking new contributors
 - Provide consistency and portability through standard open API
-- Be platform agnostic across cloud and edge s
+- Be platform agnostic across cloud and edge
 - Embrace extensibility and provide pluggable components without vendor lock-in
 - Be incrementally adoptable from existing code, with no runtime dependency
 
