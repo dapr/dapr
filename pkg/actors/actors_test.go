@@ -367,7 +367,7 @@ func TestReminderPeriod(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 250)
 
-	track, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
+	track, _ := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.NotEmpty(t, track.LastFiredTime)
 
 	time.Sleep(time.Second * 3)
@@ -389,7 +389,7 @@ func TestReminderFiresOnceWitnEmptyPeriod(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 150)
 
-	track, err := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
+	track, _ := testActorsRuntime.getReminderTrack(actorKey, "reminder1")
 	assert.Empty(t, track.LastFiredTime)
 }
 

@@ -169,7 +169,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Infof("ready to write reponse ...")
+	log.Infof("ready to write response ...")
 	if _, err := w.Write(resp); err != nil {
 		log.Errorf("can't write response: %v", err)
 		http.Error(

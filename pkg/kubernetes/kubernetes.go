@@ -71,7 +71,7 @@ func ServiceExists(name, namespace string) bool {
 	return err == nil
 }
 
-// GetEndpoints retuns a list of service endpoints
+// GetEndpoints returns a list of service endpoints
 func GetEndpoints(name, namespace string) (*corev1.Endpoints, error) {
 	client := utils.GetKubeClient()
 

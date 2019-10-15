@@ -21,16 +21,19 @@ type TransactionalRequest struct {
 	ActorID    string
 }
 
+// TransactionalOperation is the request object for a state operation participating in a transaction
 type TransactionalOperation struct {
 	Operation OperationType `json:"operation"`
 	Request   interface{}   `json:"request"`
 }
 
+// TransactionalUpsert defines a key/value pair for an upsert operation
 type TransactionalUpsert struct {
 	Key   string      `json:"key"`
 	Value interface{} `json:"value"`
 }
 
+// TransactionalDelete defined a delete operation
 type TransactionalDelete struct {
 	Key string `json:"key"`
 }

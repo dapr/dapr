@@ -50,7 +50,7 @@ func TestCreatePubSub(t *testing.T) {
 		assert.Nil(t, e)
 	})
 
-	t.Run("pubsub messagebus is not registed", func(t *testing.T) {
+	t.Run("pubsub messagebus is not registered", func(t *testing.T) {
 		const PubSubName = "fakeBus"
 
 		// act

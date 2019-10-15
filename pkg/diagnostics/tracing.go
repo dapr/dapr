@@ -169,6 +169,7 @@ func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInte
 	}
 }
 
+// TracingSpanFromGRPCContext creates a span from an incoming gRPC method call
 func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) TracerSpan {
 	var ctx context.Context
 	var span *trace.Span
