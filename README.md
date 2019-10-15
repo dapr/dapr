@@ -2,6 +2,7 @@
 
 Dapr is a portable, event-driven, serverless runtime for building distributed applications across cloud and edge.
 
+[![GoDoc](https://godoc.org/github.com/dapr/dapr?status.svg)](https://godoc.org/github.com/dapr/dapr)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://dev.azure.com/azure-octo/Dapr/_apis/build/status/builds/dapr%20build?branchName=master)](https://dev.azure.com/azure-octo/Dapr/_build/latest?definitionId=5&branchName=master)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -22,10 +23,13 @@ Dapr is a programming model runtime for writing cloud-native and edge applicatio
 - Enable developers using *any* language or framework to write distributed applications
 - Solve the hard problems developers are facing today
 - Be community driven, open and vendor neutral, seeking new contributors
-- Provide consistency and portability through standard open API
+- Provide consistency and portability through open APIs
 - Be platform agnostic across cloud and edge
 - Embrace extensibility and provide pluggable components without vendor lock-in
+- Enable IoT and edge scenarios by being highly performant and lightweight
 - Be incrementally adoptable from existing code, with no runtime dependency
+
+## How it works
 
 Dapr injects a side-car container/process to each compute unit. The side-car interacts with event triggers and communicates with the compute unit via standard HTTP or gRPC protocols. This enables Dapr to support all existing and future programming languages without requiring you to import frameworks or libraries.
 
@@ -36,14 +40,6 @@ Dapr runs natively on Kubernetes, as a standalone binary on your machine, on an 
 Dapr uses pluggable state stores and message buses such as Redis as well as gRPC to offer a wide range of communication methods, including direct dapr-to-dapr using gRPC and async Pub-Sub with guaranteed delivery and at-least-once semantics.
 
 The Dapr runtime is designed for hyper-scale performance in the cloud and on the edge.
-
-###### Dapr Standalone Deployment
-
-![Dapr Standalone](/img/dapr_standalone.jpg)
-
-###### Dapr Kubernetes Deployment
-
-![Dapr on Kubernetes](/img/dapr_k8s.jpg)
 
 ## Why Dapr?
 
