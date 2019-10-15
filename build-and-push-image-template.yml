@@ -25,9 +25,20 @@ steps:
       echo Target Architecture: ${{ parameters.targetArch }}
       echo Docker Version TAG: $VERSION_TAG
     displayName: 'Docker image tag name setting'
+  - task: DownloadPipelineArtifact@2
+    displayName: 'Download pipeline artifacts to workspace'
+    inputs:
+      buildType: 'current'
+      itemPattern: '**/*_linux_${{ parameters.targetArch }}.*'
+      targetPath: '$(Pipeline.Workspace)/${{ parameters.targetArch }}'
   - script: |
-      docker login -u $(DOCKERHUB_ID) -p $(DOCKERHUB_TOKEN)
-    displayName: 'Login docker.io'
-  - script: |
+      export RELEASE_DIR=./dist/linux_${{ parameters.targetArch }}/release/
+      mkdir -p $RELEASE_DIR
+      for tgzfile in $(Pipeline.Workspace)/${{ parameters.targetArch }}/*.tar.gz; do
+        echo "Extracting $tgzfile to $RELEASE_DIR ..."
+        tar xzvf $tgzfile -C $RELEASE_DIR
+      done
+
+      echo "Build docker image and push image ..."
       make docker-push DAPR_REGISTRY=${{ parameters.dockerHubRegistry }} DAPR_TAG=$(DOCKER_VERSION_TAG) GOARCH=${{ parameters.targetArch }}
     displayName: 'Build and push docker image'

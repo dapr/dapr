@@ -147,6 +147,9 @@ jobs:
   variables:
     REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   steps:
+    - script: |
+        docker login -u $(DOCKERHUB_ID) -p $(DOCKERHUB_TOKEN)
+      displayName: 'Login docker.io'
     - template: 'build-and-push-image-template.yml'
       parameters:
         targetArch: amd64

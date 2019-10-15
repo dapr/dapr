@@ -180,7 +180,7 @@ ifeq ($(DAPR_TAG),)
 endif
 
 # build docker image for linux
-docker-build: check-docker-env build-linux
+docker-build: check-docker-env
 	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
 	$(DOCKER) build -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)
 ifeq ($(LATEST_RELEASE),true)
