@@ -26,7 +26,7 @@ steps:
       echo Docker Version TAG: $VERSION_TAG
     displayName: 'Docker image tag name setting'
   - script: |
-      docker login -u $DOCKERHUB_ID -p $DOCKERHUB_TOKEN
+      docker login -u $(DOCKERHUB_ID) -p $(DOCKERHUB_TOKEN)
     displayName: 'Login docker.io'
   - script: |
       make docker-push DAPR_REGISTRY=${{ parameters.dockerHubRegistry }} DAPR_TAG=$DockerVersionTag GOARCH=${{ parameters.targetArch }}
