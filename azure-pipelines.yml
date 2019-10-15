@@ -151,9 +151,7 @@ jobs:
       parameters:
         targetArch: amd64
         releaseVersion: $(REL_VERSION)
-        isLatest: $(LATEST_RELEASE)
     - template: 'build-and-push-image-template.yml'
       parameters:
         targetArch: arm
         releaseVersion: $(REL_VERSION)
-        isLatest: $(LATEST_RELEASE)
