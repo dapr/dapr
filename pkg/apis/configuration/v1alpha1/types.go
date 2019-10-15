@@ -28,6 +28,7 @@ type ConfigurationSpec struct {
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
 }
 
+// TracingSpec is the spec object in ConfigurationSpec
 type TracingSpec struct {
 	Enabled          bool   `json:"enabled"`
 	ExporterType     string `json:"exporterType"`

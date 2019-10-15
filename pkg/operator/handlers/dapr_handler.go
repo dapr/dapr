@@ -18,10 +18,10 @@ import (
 const (
 	daprEnabledAnnotationKey = "dapr.io/enabled"
 	daprIDAnnotationKey      = "dapr.io/id"
-	daprSidecarHTTPPortName   = "dapr-http"
-	daprSidecarGRPCPortName   = "dapr-grpc"
-	daprSidecarHTTPPort       = 3500
-	daprSidecarGRPCPort       = 50001
+	daprSidecarHTTPPortName  = "dapr-http"
+	daprSidecarGRPCPortName  = "dapr-grpc"
+	daprSidecarHTTPPort      = 3500
+	daprSidecarGRPCPort      = 50001
 )
 
 // DaprHandler handles the lifetime for Dapr CRDs
