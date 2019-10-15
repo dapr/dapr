@@ -108,11 +108,19 @@ Run the appropriate command below to build the container image.
 
 **Linux/macOS**
 ```
+# Build Linux binaries
+make build-linux
+
+# Build Docker image with Linux binaries
 make docker-build
 ```
 
 **Windows**
 ```
+# Build Linux binaries
+mingw32-make build-linux
+
+# Build Docker image with Linux binaries
 mingw32-make.exe docker-build
 ```
 
