@@ -23,9 +23,10 @@ Dapr is a programming model runtime for writing cloud-native and edge applicatio
 - Enable developers using *any* language or framework to write distributed applications
 - Solve the hard problems developers are facing today
 - Be community driven, open and vendor neutral, seeking new contributors
-- Provide consistency and portability through standard open API
+- Provide consistency and portability through open APIs
 - Be platform agnostic across cloud and edge
 - Embrace extensibility and provide pluggable components without vendor lock-in
+- Enable IoT and edge scenarios by being highly performant and lightweight
 - Be incrementally adoptable from existing code, with no runtime dependency
 
 Dapr injects a side-car container/process to each compute unit. The side-car interacts with event triggers and communicates with the compute unit via standard HTTP or gRPC protocols. This enables Dapr to support all existing and future programming languages without requiring you to import frameworks or libraries.
