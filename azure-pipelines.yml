@@ -94,7 +94,7 @@ jobs:
     - build_linux_arm
     - build_windows_amd64
     - release_environment
-  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
   variables:
     REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
   steps:
