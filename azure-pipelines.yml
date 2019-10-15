@@ -85,15 +85,36 @@ jobs:
     targetArch: amd64
     dependStep: release_environment
     relVersion: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
-- job: publish_binaries
-  pool:
+- job: 'build_and_push_docker_image'
+  pool: 
     vmImage: 'ubuntu-latest'
   dependsOn:
+    - release_environment
     - build_darwin_amd64
     - build_linux_amd64
     - build_linux_arm
     - build_windows_amd64
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+  variables:
+    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
+  steps:
+    - script: |
+        docker login -u $(DOCKERHUB_ID) -p $(DOCKERHUB_TOKEN)
+      displayName: 'Login docker.io'
+    - template: 'build-and-push-image-template.yml'
+      parameters:
+        targetArch: amd64
+        releaseVersion: $(REL_VERSION)
+    - template: 'build-and-push-image-template.yml'
+      parameters:
+        targetArch: arm
+        releaseVersion: $(REL_VERSION)
+- job: publish_binaries
+  pool:
+    vmImage: 'ubuntu-latest'
+  dependsOn:
     - release_environment
+    - build_and_push_docker_image
   condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
   variables:
     REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
@@ -137,24 +158,3 @@ jobs:
         releaseNotesFile: './docs/release_notes/v$(REL_VERSION).md'
         isPreRelease: false
         addChangeLog: false
-- job: 'build_and_push_docker_image'
-  pool: 
-    vmImage: 'ubuntu-latest'
-  dependsOn:
-    - publish_binaries
-    - release_environment
-  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
-  variables:
-    REL_VERSION: $[ dependencies.release_environment.outputs['env_var_step.REL_VERSION'] ]
-  steps:
-    - script: |
-        docker login -u $(DOCKERHUB_ID) -p $(DOCKERHUB_TOKEN)
-      displayName: 'Login docker.io'
-    - template: 'build-and-push-image-template.yml'
-      parameters:
-        targetArch: amd64
-        releaseVersion: $(REL_VERSION)
-    - template: 'build-and-push-image-template.yml'
-      parameters:
-        targetArch: arm
-        releaseVersion: $(REL_VERSION)
