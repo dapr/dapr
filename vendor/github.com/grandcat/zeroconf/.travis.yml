@@ -1,0 +1,11 @@
+os:
+  - linux
+  - osx
+  - windows
+
+language: go
+go:
+  - "1.11"
+
+script:
+  - go test

@@ -133,7 +133,9 @@ github.com/aws/aws-sdk-go/private/protocol/restxml
 github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil
 github.com/aws/aws-sdk-go/private/protocol/query/queryutil
 github.com/aws/aws-sdk-go/internal/sdkuri
-# github.com/dapr/components-contrib v0.0.0-20191014195239-4e436865fa7f
+# github.com/cenkalti/backoff v2.2.1+incompatible
+github.com/cenkalti/backoff
+# github.com/dapr/components-contrib v0.0.0-20191014200624-99461da9580e
 github.com/dapr/components-contrib/state
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage
@@ -239,6 +241,8 @@ github.com/googleapis/gnostic/compiler
 github.com/googleapis/gnostic/extensions
 # github.com/gorilla/mux v1.7.1
 github.com/gorilla/mux
+# github.com/grandcat/zeroconf v0.0.0-20190424104450-85eadb44205c
+github.com/grandcat/zeroconf
 # github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 github.com/grpc-ecosystem/go-grpc-middleware
 github.com/grpc-ecosystem/go-grpc-middleware/util/metautils
@@ -247,8 +251,6 @@ github.com/hashicorp/go-uuid
 # github.com/hashicorp/golang-lru v0.5.3
 github.com/hashicorp/golang-lru
 github.com/hashicorp/golang-lru/simplelru
-# github.com/hashicorp/mdns v1.0.1
-github.com/hashicorp/mdns
 # github.com/imdario/mergo v0.3.7
 github.com/imdario/mergo
 # github.com/jcmturner/gofork v1.0.0
