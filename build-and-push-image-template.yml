@@ -34,7 +34,7 @@ steps:
   - script: |
       export RELEASE_DIR=./dist/linux_${{ parameters.targetArch }}/release/
       mkdir -p $RELEASE_DIR
-      for tgzfile in $(Pipeline.Workspace)/${{ parameters.targetArch }}/*.tar.gz; do
+      for tgzfile in $(Pipeline.Workspace)/${{ parameters.targetArch }}/drop/*.tar.gz; do
         echo "Extracting $tgzfile to $RELEASE_DIR ..."
         tar xzvf $tgzfile -C $RELEASE_DIR
       done
