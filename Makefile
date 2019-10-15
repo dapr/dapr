@@ -26,13 +26,17 @@ endif
 
 LOCAL_ARCH := $(shell uname -m)
 ifeq ($(LOCAL_ARCH),x86_64)
-	TARGET_ARCH_LOCAL = amd64
+	TARGET_ARCH_LOCAL=amd64
+	LATEST_TAG=latest
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
-	TARGET_ARCH_LOCAL = arm64
+	TARGET_ARCH_LOCAL=arm64
+	LATEST_TAG=latest-arm64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
-	TARGET_ARCH_LOCAL = arm
+	TARGET_ARCH_LOCAL=arm
+	LATEST_TAG=latest-arm
 else
-	TARGET_ARCH_LOCAL = amd64
+	TARGET_ARCH_LOCAL=amd64
+	LATEST_TAG=latest
 endif
 export GOARCH ?= $(TARGET_ARCH_LOCAL)
 
@@ -163,7 +167,7 @@ LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)
 DOCKER_IMAGE_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):$(DAPR_TAG)
 
 ifeq ($(LATEST_RELEASE),true)
-DOCKER_IMAGE_LATEST_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):latest
+DOCKER_IMAGE_LATEST_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):$(LATEST_TAG)
 endif
 
 # check the required environment variables
