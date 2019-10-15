@@ -32,6 +32,7 @@ type TracingSpec struct {
 	IncludeBody     bool   `json:"includeBody" yaml:"includeBody"`
 }
 
+// LoadDefaultConfiguration returns the default config with tracing disabled
 func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
@@ -42,6 +43,7 @@ func LoadDefaultConfiguration() *Configuration {
 	}
 }
 
+// LoadStandaloneConfiguration gets the path to a config file and loads it into a configuration
 func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 	_, err := os.Stat(config)
 	if err != nil {
@@ -62,6 +64,7 @@ func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 	return &conf, nil
 }
 
+// LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
 func LoadKubernetesConfiguration(config, controlPlaneAddress string) (*Configuration, error) {
 	url := fmt.Sprintf("%s/configurations/%s", controlPlaneAddress, config)
 	req := fasthttp.AcquireRequest()

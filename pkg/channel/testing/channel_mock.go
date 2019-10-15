@@ -5,10 +5,12 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// MockAppChannel is a mock communication channel to the app
 type MockAppChannel struct {
 	mock.Mock
 }
 
+// InvokeMethod is a mock invocation method
 func (m *MockAppChannel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
 	args := m.Called(req)
 
