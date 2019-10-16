@@ -41,9 +41,8 @@ For more details on initializing helm, Go [here](https://docs.helm.sh/helm/#helm
 
 1. Add Azure Container Registry as an helm repo
     ```
-    helm repo add dapr https://actionscore.azurecr.io/helm/v1/repo \
-    --username 390401a7-d7a6-46da-b10f-3ceff7a1cdd5 \
-    --password 485b3522-59bb-4152-8938-ca8b90108af6
+    helm repo add dapr https://daprio.azurecr.io/helm/v1/repo
+    helm repo update
     ```
 
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
