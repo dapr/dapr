@@ -165,7 +165,7 @@ mingw32-make.exe docker-deploy-k8s
 Once Dapr is deployed, print the Dapr pods:
 
 ```
-kubectl.exe get pod -n dapr-system
+kubectl get pod -n dapr-system
 
 NAME                                    READY   STATUS    RESTARTS   AGE
 dapr-operator-86cddcfcb7-v2zjp          1/1     Running   0          4d3h
