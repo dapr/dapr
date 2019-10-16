@@ -135,7 +135,7 @@ jobs:
         target: '$(Build.SourceVersion)'
         tagSource: 'manual'
         tag: 'v$(REL_VERSION)'
-        title: 'Dapr Runtime $(REL_VERSION) Pre-Release'
+        title: 'Dapr Runtime $(REL_VERSION)'
         assets: |
           $(Pipeline.Workspace)/drop/*.zip
           $(Pipeline.Workspace)/drop/*.tar.gz
@@ -151,7 +151,7 @@ jobs:
         target: '$(Build.SourceVersion)'
         tagSource: 'manual'
         tag: 'v$(REL_VERSION)'
-        title: 'Dapr Runtime $(REL_VERSION) Release'
+        title: 'Dapr Runtime $(REL_VERSION)'
         assets: |
           $(Pipeline.Workspace)/drop/*.zip
           $(Pipeline.Workspace)/drop/*.tar.gz
