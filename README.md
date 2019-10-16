@@ -12,14 +12,16 @@ Dapr is a portable, event-driven, serverless runtime for building distributed ap
 
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
-Dapr is a programming model runtime for writing cloud-native and edge applications which are distributed, dynamically scaled, and loosely coupled in nature. Dapr offers an eventing system on which compute units communicate with each other by exchanging messages.
+Dapr is a portable, event-driven runtime that makes it easy for developers to build resilient, stateless and stateful microservices that run on the cloud and edge and embraces the diversity of languages and developer frameworks.
+
+Dapr codifies the *best practices* for building microservice applications into open, independent, building blocks that enable you to build portable applications with the language and framework of your choice. Each building block is independent and you can use one, some, or all of them in your application.
 
 ![Dapr Conceptual Model](/img/dapr_conceptual_model.jpg)
 
 ## Goals
 
 - Enable developers using *any* language or framework to write distributed applications
-- Solve the hard problems developers are facing today
+- Solve the hard problems developers face building microservice applications by providing best practice building blocks
 - Be community driven, open and vendor neutral, seeking new contributors
 - Provide consistency and portability through open APIs
 - Be platform agnostic across cloud and edge
@@ -37,7 +39,6 @@ Dapr runs natively on Kubernetes, as a standalone binary on your machine, on an 
 
 Dapr uses pluggable state stores and message buses such as Redis as well as gRPC to offer a wide range of communication methods, including direct dapr-to-dapr using gRPC and async Pub-Sub with guaranteed delivery and at-least-once semantics.
 
-The Dapr runtime is designed for hyper-scale performance in the cloud and on the edge.
 
 ## Why Dapr?
 
@@ -83,8 +84,13 @@ See [Samples](https://github.com/dapr/samples) for additional samples.
 | [CLI](https://github.com/dapr/cli) | The Dapr CLI allows you to setup Dapr on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Dapr instances.
 | [Docs](https://github.com/dapr/docs) | The documentation repository for Dapr.
 | [Samples](https://github.com/dapr/samples) | This repository contains a series of samples that highlight Dapr capabilities.
-| [Contributions](https://github.com/dapr/components-contrib) | The purpose of Components Contrib is to provide open, community driven reusable components for building distributed applications. 
-| [API](https://github.com/dapr/docs/tree/master/reference/api) | API reference for the Dapr runtime.
+| [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications. 
+| [Go-sdk](https://github.com/dapr/go-sdk) | Dapr SDK for Go
+| [Java-sdk](https://github.com/dapr/java-sdk) | Dapr SDK for Java
+| [JS-sdk](https://github.com/dapr/js-sdk) | Dapr SDK for JavaScript
+| [Python-sdk](https://github.com/dapr/python-sdk) | Dapr SDK for Python
+| [Dotnet-sdk](https://github.com/dapr/dotnet-sdk) | Dapr SDK for .NET Core
+
 
 ## Roadmap
 
