@@ -13,7 +13,7 @@ steps:
       if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
         VERSION_TAG="edge"
       else
-        VERSION_TAG=v${{ parameters.releaseVersion }}
+        VERSION_TAG=${{ parameters.releaseVersion }}
 
         # Set LATEST_RELEASE to add latest tag if SOURCEBRANCH doesn't have -rc tag
         if [[ $SOURCEBRANCH != *-rc.* ]]; then
