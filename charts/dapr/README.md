@@ -30,11 +30,6 @@ The chart deploys pods that consume minimum resources as specified in the resour
 
 ## Installing the Chart
 
-Dapr' Helm chart is hosted in an [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/),
-which does not yet support anonymous access to charts therein. Until this is
-resolved, adding the Helm repository from which Dapr can be installed requires
-use of a shared set of read-only credentials.
-
 Make sure helm is initialized in your running kubernetes cluster.
 
 For more details on initializing helm, Go [here](https://docs.helm.sh/helm/#helm)
