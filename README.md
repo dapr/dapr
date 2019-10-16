@@ -2,7 +2,6 @@
 
 Dapr is a portable, event-driven, serverless runtime for building distributed applications across cloud and edge.
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://dev.azure.com/azure-octo/Dapr/_apis/build/status/builds/dapr%20build?branchName=master)](https://dev.azure.com/azure-octo/Dapr/_build/latest?definitionId=5&branchName=master)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
