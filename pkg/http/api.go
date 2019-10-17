@@ -592,6 +592,10 @@ func (a *api) onGetActorReminder(c *routing.Context) error {
 		ActorID:   actorID,
 		Name:      name,
 	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_GET_REMINDER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+	}
 	b, err := a.json.Marshal(resp)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_GET_REMINDER", err.Error())
