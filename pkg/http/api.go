@@ -272,7 +272,7 @@ func (a *api) onGetState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
-	if err == nil && resp == nil {
+	if resp == nil {
 		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_STATE_NOT_FOUND", ""))
 		return nil
 	}
