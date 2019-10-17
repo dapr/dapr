@@ -239,10 +239,8 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		Payload:  data,
 		Metadata: map[string]string{http.HTTPVerb: http.Put},
 	}
-	if metadata != nil {
-		for k, v := range metadata {
-			req.Metadata[k] = v
-		}
+	for k, v := range metadata {
+		req.Metadata[k] = v
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
