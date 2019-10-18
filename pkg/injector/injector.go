@@ -33,6 +33,16 @@ type injector struct {
 	server       *http.Server
 }
 
+// toAdmissionResponse is a helper function to create an AdmissionResponse
+// with an embedded error
+func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
+	return &v1beta1.AdmissionResponse{
+		Result: &metav1.Status{
+			Message: err.Error(),
+		},
+	}
+}
+
 // NewInjector returns a new Injector instance with the given config
 func NewInjector(config Config) Injector {
 	mux := http.NewServeMux()
@@ -119,11 +129,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		admissionResponse = &v1beta1.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
+		admissionResponse = toAdmissionResponse(err)
 	} else if len(patchOps) == 0 {
 		admissionResponse = &v1beta1.AdmissionResponse{
 			Allowed: true,
@@ -132,11 +138,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		var patchBytes []byte
 		patchBytes, err = json.Marshal(patchOps)
 		if err != nil {
-			admissionResponse = &v1beta1.AdmissionResponse{
-				Result: &metav1.Status{
-					Message: err.Error(),
-				},
-			}
+			admissionResponse = toAdmissionResponse(err)
 		} else {
 			log.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
 			admissionResponse = &v1beta1.AdmissionResponse{
