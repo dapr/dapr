@@ -36,7 +36,7 @@ Dapr injects a side-car container/process to each compute unit. The side-car int
 
 Dapr offers built-in state management, reliable messaging (at least once delivery), triggers and bindings through standard HTTP verbs or gRPC interfaces. This allows you to write stateless, stateful and actor-like services following the same programming paradigm. You can freely choose consistency model, threading model and message delivery patterns.
 
-Dapr runs natively on Kubernetes, as a standalone binary on your machine, on an IoT device, or as a container than can be injected into any system, in the cloud or on-premises.
+Dapr runs natively on Kubernetes, as a standalone binary on your machine, on an IoT device, or as a container that can be injected into any system, in the cloud or on-premises.
 
 Dapr uses pluggable state stores and message buses such as Redis as well as gRPC to offer a wide range of communication methods, including direct dapr-to-dapr using gRPC and async Pub-Sub with guaranteed delivery and at-least-once semantics.
 
@@ -45,7 +45,7 @@ Dapr uses pluggable state stores and message buses such as Redis as well as gRPC
 
 Writing high performance, scalable and reliable distributed application is hard. Dapr brings proven patterns and practices to you. It unifies event-driven and actors semantics into a simple, consistent programming model. It supports all programming languages without framework lock-in. You are not exposed to low-level primitives such as threading, concurrency control, partitioning and scaling. Instead, you can write your code by implementing a simple web server using familiar web frameworks of your choice.
 
-Dapr is flexible in threading and state consistency models. You can leverage multi-threading if you choose to, and you can choose among different consistency models. This flexibility enables to implement advanced scenarios without artificial constraints. You might also choose to utilize single-threaded calls familiar in other Actor frameworks. Dapr is unique because you can transition seemlessly between these models without rewriting your code. 
+Dapr is flexible in threading and state consistency models. You can leverage multi-threading if you choose to, and you can choose among different consistency models. This flexibility enables to implement advanced scenarios without artificial constraints. You might also choose to utilize single-threaded calls familiar in other Actor frameworks. Dapr is unique because you can transition seamlessly between these models without rewriting your code. 
 
 ## Features
 
@@ -62,7 +62,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
 * Runs anywhere - as a process or containerized
 * Lightweight (58MB binary, 4MB physical memory)
-* Runs as a sidecar - removes need for special SDKs or libraries
+* Runs as a sidecar - removes the need for special SDKs or libraries
 * Dedicated CLI - developer friendly experience with easy debugging
 * Clients for Java, Dotnet, Go, Javascript and Python
 
