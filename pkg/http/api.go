@@ -272,7 +272,7 @@ func (a *api) onGetState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
-	if err == nil && resp == nil {
+	if resp == nil {
 		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_STATE_NOT_FOUND", ""))
 		return nil
 	}
@@ -592,6 +592,10 @@ func (a *api) onGetActorReminder(c *routing.Context) error {
 		ActorID:   actorID,
 		Name:      name,
 	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_GET_REMINDER", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+	}
 	b, err := a.json.Marshal(resp)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_GET_REMINDER", err.Error())

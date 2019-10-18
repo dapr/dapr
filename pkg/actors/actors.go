@@ -239,10 +239,8 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		Payload:  data,
 		Metadata: map[string]string{http.HTTPVerb: http.Put},
 	}
-	if metadata != nil {
-		for k, v := range metadata {
-			req.Metadata[k] = v
-		}
+	for k, v := range metadata {
+		req.Metadata[k] = v
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
@@ -526,8 +524,8 @@ func (a *actorsRuntime) drainRebalancedActors() {
 	var wg sync.WaitGroup
 
 	a.actorsTable.Range(func(key interface{}, value interface{}) bool {
+		wg.Add(1)
 		go func(key interface{}, value interface{}, wg *sync.WaitGroup) {
-			wg.Add(1)
 			defer wg.Done()
 			// for each actor, deactivate if no longer hosted locally
 			actorKey := key.(string)
@@ -598,8 +596,8 @@ func (a *actorsRuntime) evaluateReminders() {
 			a.reminders[t] = vals
 			a.remindersLock.Unlock()
 
+			wg.Add(1)
 			go func(wg *sync.WaitGroup, reminders []Reminder) {
-				wg.Add(1)
 				defer wg.Done()
 
 				for _, r := range reminders {
