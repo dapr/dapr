@@ -206,10 +206,15 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	return resp, nil
 }
 
+func (a *actorsRuntime) actorInstanceExists(key string) bool {
+	_, exists := a.actorsTable.Load(key)
+	return exists
+}
+
 func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	key := a.constructCombinedActorKey(actorType, actorID)
 
-	val, exists := a.actorsTable.LoadOrStore(key, &actor{
+	val, _ := a.actorsTable.LoadOrStore(key, &actor{
 		lock:         &sync.RWMutex{},
 		busy:         true,
 		lastUsedTime: time.Now(),
@@ -221,6 +226,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	lock.Lock()
 	defer lock.Unlock()
 
+	exists := a.actorInstanceExists(key)
 	if !exists {
 		err := a.tryActivateActor(actorType, actorID)
 		if err != nil {
