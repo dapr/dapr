@@ -898,8 +898,6 @@ func (a *DaprRuntime) announceSelf() error {
 			return err
 		}
 		log.Info("local service entry announced")
-	case modes.KubernetesMode:
-		return nil
 	}
 	return nil
 }
