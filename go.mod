@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.12
+go 1.13
 
 require (
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
