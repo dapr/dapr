@@ -239,3 +239,10 @@ release: build archive
 .PHONY: test
 test:
 	go test ./pkg/... -mod=vendor
+
+################################################################################
+# Target: test                                                                 #
+################################################################################
+.PHONY: lint
+lint:
+	golangci-lint run
