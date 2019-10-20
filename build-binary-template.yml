@@ -31,7 +31,7 @@ jobs:
           shopt -s extglob
           mv !(gopath) '$(modulePath)'
           echo '##vso[task.prependpath]$(GOBIN)'
-          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v1.21.0
+          wget -O - -q https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s v1.21.0
     - task: CmdLine@2
       displayName: 'Run make lint'
       condition: ne('${{ parameters.targetArch }}', 'arm')
