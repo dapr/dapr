@@ -142,7 +142,7 @@ func RespondWithError(w http.ResponseWriter, code int, message string) {
 	RespondWithJSON(w, code, map[string]string{"error": message})
 }
 
-// RespondWithJSON is a helper method for returning an HTTP message with a JSON paylad
+// RespondWithJSON is a helper method for returning an HTTP message with a JSON payload
 func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	buffer := &bytes.Buffer{}
 	encoder := json.NewEncoder(buffer)

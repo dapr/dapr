@@ -35,7 +35,7 @@ func (c *ComponentsHandler) Init() error {
 	return nil
 }
 
-// ObjectUpdated handles upated crd operations
+// ObjectUpdated handles updated crd operations
 func (c *ComponentsHandler) ObjectUpdated(old interface{}, new interface{}) {
 }
 
