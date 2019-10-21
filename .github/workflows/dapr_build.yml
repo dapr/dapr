@@ -42,7 +42,7 @@ jobs:
         uses: actions/upload-artifact@master
         with:
           name: release_setup
-          path: ${{ ARTIFACT }}
+          path: $ARTIFACT
   build:
     name: Build ${{ matrix.os }}
     needs: release_environment
