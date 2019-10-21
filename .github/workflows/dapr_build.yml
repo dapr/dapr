@@ -58,4 +58,4 @@ jobs:
       uses: actions/checkout@v1
     
     - name: Check the release version
-      run: echo ${{ jobs.release_environment.steps.env.REL_VERSION }}
+      run: echo $REL_VERSION
