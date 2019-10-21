@@ -40,7 +40,7 @@ jobs:
             [ ! -f "$RELNOTE_PATH" ] && echo "$RELNOTE_PATH not found" && exit 1
           fi
   build:
-    name: Test on node ${{ matrix.node_version }} and ${{ matrix.os }}
+    name: Test on node ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -58,4 +58,4 @@ jobs:
       uses: actions/checkout@v1
     
     - name: Check the release version
-      run: echo ${{ jobs.release_environment.env.REL_VERSION }}
+      run: echo ${{ jobs.release_environment.steps.env.REL_VERSION }}
