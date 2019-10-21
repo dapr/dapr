@@ -576,6 +576,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 						if err != nil {
 							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
 						}
+						break
 					}
 					time.Sleep(time.Millisecond * 500)
 				}
