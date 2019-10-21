@@ -30,7 +30,7 @@ All decisions are categorized in the following folders:
 * **Engineering** - Decisions on Engineering practices, including CI/CD, testings and releases.
 
   - [ENG-001: Image Tagging](./engineering/ENG-001-tagging.MD)
-  - [ENG-002: Dapr Release](./engineering/ENG-001-Dapr-Release.MD)
+  - [ENG-002: Dapr Release](./engineering/ENG-002-Dapr-Release.MD)
 
 ## Creating new decision records
 A new decision record should be a _.md_ file named as 

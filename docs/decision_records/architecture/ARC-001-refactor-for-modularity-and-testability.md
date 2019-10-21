@@ -9,7 +9,7 @@ As we keep building up Dapr features, it becomes apparent that we need to refact
 ## Decisions
 
 ### Dapr
-* Formally seprate hosting and API implementations. Hosting provides communication protocols (HTTP/gRPC) as different access heads to the same Dapr API implementation.
+* Formally separate hosting and API implementations. Hosting provides communication protocols (HTTP/gRPC) as different access heads to the same Dapr API implementation.
 * Ensure consistency between gRPC and HTTP interface.
 * Separate binding implementations to a separate repository. 
 * Use smart defaults for configurable parameters.
