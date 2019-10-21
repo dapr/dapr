@@ -3,10 +3,12 @@ name: Dapr
 on:
   push:
     branches:
-    - master
+      - master
+    tags:
+      - v*
   pull_request:
     branches:
-    - master
+      - master
 
 jobs:
   release_environment:
@@ -18,40 +20,41 @@ jobs:
         run: |
           SOURCEBRANCH=$GITHUB_REF
           echo Source branch name : $SOURCEBRANCH
-
-          if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
-            echo Clearing REL_VERSION value unless $SOURCEBRANCH is refs/tags/v.
-            RELVERSION=""
-            echo "##[set-env name=REL_VERSION]$RELVERSION"
-            exit 0
-          fi
-
-          RELVERSION=${SOURCEBRANCH#refs/tags/v}
-          echo Release version : $RELVERSION
-          echo "##[set-env name=REL_VERSION]$RELVERSION"
+          
           mkdir $ARTIFACT
-          echo $RELVERSION > $ARTIFACT/release_version.txt
           echo $GITHUB_SHA > $ARTIFACT/release_commit_id.txt
-
-          # Check if RELVERSION is not release candidates and then validate the release note file
-          if [[ "$RELVERSION" != *-rc.* ]]; then
-            echo Checking release note for $RELVERSION...
-            RELNOTE_PATH="docs/release_notes/v$RELVERSION.md"
-            [ ! -f "$RELNOTE_PATH" ] && echo "$RELNOTE_PATH not found" && exit 1
+          if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
+            echo Skip release version setting unless $SOURCEBRANCH is refs/tags/v...
+            echo ::set-output name=REL_VERSION::$RELVERSION
+          else
+            RELVERSION=${SOURCEBRANCH#refs/tags/v}
+            echo Release version : $RELVERSION
+            echo ::set-output name=REL_VERSION::$RELVERSION
+            echo $RELVERSION > $ARTIFACT/release_version.txt
+            # Check if RELVERSION is not release candidates and then validate the release note file
+            if [[ "$RELVERSION" != *-rc.* ]]; then
+              echo Checking release note for $RELVERSION...
+              RELNOTE_PATH="docs/release_notes/v$RELVERSION.md"
+              [ ! -f "$RELNOTE_PATH" ] && echo "$RELNOTE_PATH not found" && exit 1
+            fi
           fi
+      - name: upload release_version to artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: release_setup
+          path: ${{ ARTIFACT }}
   build:
-    name: Test on node ${{ matrix.os }}
+    name: Build ${{ matrix.os }}
+    needs: release_environment
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-
     steps:
-
-    - name: Set up Go 1.13
+    - name: Set up Go 1.13.3
       uses: actions/setup-go@v1
       with:
-        go-version: 1.13
+        go-version: 1.13.3
       id: go
 
     - name: Check out code into the Go module directory
