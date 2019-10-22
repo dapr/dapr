@@ -1,3 +1,8 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
 name: dpar
 
 on:
@@ -43,31 +48,8 @@ jobs:
         uses: actions/setup-go@v1
         with:
           go-version: 1.13.3
-      - name: Get Release Version
-        run: |
-          import os
-          import sys
-
-          gitRef = os.getenv("GITHUB_REF")
-          tagRefPrefix = "refs/tags/v"
-
-          if gitRef is None or not gitRef.startswith(tagRefPrefix):
-              print ("This is daily build from {}...".format(gitRef))
-              sys.exit(0)
-
-          releaseVersion = gitRef[len(tagRefPrefix):]
-          releaseNotePath="docs/release_notes/v{}.md".format(releaseVersion)
-
-          if gitRef.find("-rc.") > 0:
-              print ("Release Candidate build from {}...".format(gitRef))
-          else:
-              print ("Checking if {} exists".format(releaseNotePath))
-              if os.path.exists(releaseNotePath):
-                  print ("Found {}".format(releaseNotePath))
-              else:
-                  print ("{} is not found".format(releaseNotePath))
-                  sys.exit(1)
-              print ("Release build from {}...".format(gitRef))
+      - name: Parse release version and set REL_VERSION
+        run: ./.github/scripts/get_release_version.py
         shell: python
       - name: Run make test
         if: matrix.target_arch != 'arm'
