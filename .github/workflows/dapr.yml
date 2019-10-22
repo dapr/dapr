@@ -62,3 +62,19 @@ jobs:
         with:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARCHIVE_OUTDIR }}
+  push-docker:
+    name: Build and Push Docker image
+    env:
+      OUT_BIN_DIR: ./dist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+      - name: docker login
+        run: |
+          docker login -u ${{ sercrets.DOCKERHUB_ID }} -p ${{ sercrets.DOCKERHUB_TOKEN }}
+      - name: download artifacts
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_amd64
+          path: ./dist/linux_amd64
