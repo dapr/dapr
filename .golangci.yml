@@ -67,7 +67,7 @@ linters-settings:
 
     # path to a file containing a list of functions to exclude from checking
     # see https://github.com/kisielk/errcheck#excluding-functions for details
-    exclude: /path/to/file.txt
+    exclude:
 
   funlen:
     lines: 60
@@ -102,7 +102,7 @@ linters-settings:
   goimports:
     # put imports beginning with prefix after 3rd-party packages;
     # it's a comma-separated list of prefixes
-    local-prefixes: github.com/dapr/dapr/*
+    local-prefixes: github.com/dapr/dapr
   gocyclo:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     min-complexity: 10
