@@ -117,6 +117,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
+// nolint:gosec
 func CreateLocalChannel(port, maxConcurrency int) (channel.AppChannel, error) {
 	c := &Channel{
 		client:      &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}, ReadTimeout: time.Second * 60, MaxIdemponentCallAttempts: 0},

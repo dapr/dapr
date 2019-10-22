@@ -110,7 +110,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 
 func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
-		Endpoint{
+		{
 			Methods: []string{http.Post, http.Put},
 			Route:   "publish/<topic>",
 			Version: apiVersionV1,
@@ -121,7 +121,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 
 func (a *api) constructBindingsEndpoints() []Endpoint {
 	return []Endpoint{
-		Endpoint{
+		{
 			Methods: []string{http.Post, http.Put},
 			Route:   "bindings/<name>",
 			Version: apiVersionV1,
@@ -234,7 +234,6 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request data field: %s", err))
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
-
 	}
 	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
 		Metadata: req.Metadata,

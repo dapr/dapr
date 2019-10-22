@@ -96,7 +96,8 @@ func (p *PlacementService) RemoveHost(srv daprinternal_pb.PlacementService_Repor
 
 // PerformTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
 // it then proceeds to update and then unlock once all runtimes have been updated
-func (p *PlacementService) PerformTablesUpdate(hosts []daprinternal_pb.PlacementService_ReportDaprStatusServer, options placementOptions) {
+func (p *PlacementService) PerformTablesUpdate(hosts []daprinternal_pb.PlacementService_ReportDaprStatusServer,
+	options placementOptions) {
 	p.updateLock.Lock()
 	defer p.updateLock.Unlock()
 

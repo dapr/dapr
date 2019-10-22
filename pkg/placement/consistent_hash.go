@@ -111,10 +111,7 @@ func (c *Consistent) Add(host string, port int64) bool {
 	}
 	// sort hashes ascendingly
 	sort.Slice(c.sortedSet, func(i int, j int) bool {
-		if c.sortedSet[i] < c.sortedSet[j] {
-			return true
-		}
-		return false
+		return c.sortedSet[i] < c.sortedSet[j]
 	})
 
 	return false
