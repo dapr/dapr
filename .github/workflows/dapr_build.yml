@@ -54,16 +54,16 @@ jobs:
           tagRefPrefix = "refs/tags/v"
 
           if gitRef is None or not gitRef.startswith(tagRefPrefix):
-              print "This is daily build from {}...".format(gitRef)
+              print ("This is daily build from {}...".format(gitRef))
               sys.exit(0)
 
           releaseVersion = gitRef[len(tagRefPrefix):]
           releaseNotePath="docs/release_notes/v{}.md".format(releaseVersion)
 
           if gitRef.find("-rc.") >=0:
-              print "Checking if {} exists".format(releaseNotePath)
+              print ("Checking if {} exists".format(releaseNotePath))
               if not os.path.exists(releaseNotePath):
-                  print "{} is not found".format(releaseNotePath)
+                  print ("{} is not found".format(releaseNotePath))
                   sys.exit(1)
         shell: python
       - name: Run make test
