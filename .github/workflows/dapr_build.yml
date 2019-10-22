@@ -48,12 +48,6 @@ jobs:
         uses: actions/setup-go@v1
         with:
           go-version: 1.13.3
-      - name: Set up Go workspace
-        run: |
-          mkdir -p "$GOPATH/pkg"
-          mkdir -p "$GOPATH/bin"
-          shopt -s extglob
-          echo ::add-path::$GOBIN
       - name: Get Release Version
         run: |
           import os
@@ -63,7 +57,7 @@ jobs:
           tagRefPrefix = "refs/tags/v"
 
           if gitRef is None or not gitRef.startswith(tagRefPrefix):
-              print ("skipping ", flush=True)
+              print "skipping "
               sys.exit(0)
 
           releaseVersion = gitRef[len(tagRefPrefix):]
