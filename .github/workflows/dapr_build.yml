@@ -27,14 +27,14 @@ jobs:
           mkdir $REL_ARTIFACT
           
           # release commit_sha
-          echo $GITHUB_SHA > $ARTIFACT/release_commit_id.txt
+          echo $GITHUB_SHA > $REL_ARTIFACT/release_commit_id.txt
           if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
             echo Skip release version setting unless $SOURCEBRANCH is refs/tags/v...
-            echo $GITHUB_REPOSITORY > $ARTIFACT/release_version.txt
+            echo $GITHUB_REPOSITORY > $REL_ARTIFACT/release_version.txt
           else
             RELVERSION=${SOURCEBRANCH#refs/tags/v}
             echo Release version : $RELVERSION
-            echo $RELVERSION > $ARTIFACT/release_version.txt
+            echo $RELVERSION > $REL_ARTIFACT/release_version.txt
             # Check if RELVERSION is not release candidates and then validate the release note file
             if [[ "$RELVERSION" != *-rc.* ]]; then
               echo Checking release note for $RELVERSION...
