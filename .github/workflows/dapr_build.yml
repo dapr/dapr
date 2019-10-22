@@ -11,14 +11,13 @@ on:
       - master
 
 env: 
-  REL_ARTIFACT: artifact
+  REL_ARTIFACT: release_setup
 
 jobs:
   release_environment:
     runs-on: ubuntu-latest
     steps:
       - name: Get Release Version
-        id: rel_version
         run: |
           SOURCEBRANCH=$GITHUB_REF
           echo Source branch name : $SOURCEBRANCH
@@ -55,22 +54,36 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        arch: [arm, amd64]
+        exclude:
+          - os: windows-latest
+            arch: arm
+          - os: macOS-latest
+            arch: arm
+        include:
+          - os: ubuntu-latest
+            osname: linux
+          - os: windows-latest
+            osname: linux
+          - os: macOS-latest
+            osname: linux
     steps:
     - name: Set up Go 1.13.3
       uses: actions/setup-go@v1
       with:
         go-version: 1.13.3
-      id: go
     
     - name: Check out code into the Go module directory
       uses: actions/checkout@v1
+
     - name: Download release setup artifact
       uses: actions/download-artifact@master
       with:
         name: release_setup
         path: ${{ env.REL_ARTIFACT }}
-    - name: run test 
+
+    - name: Release setup
       run: |
-        ls $REL_ARTIFACT
+        echo ${{ matrix.os }}_${{ matrix.osname }}_${{ matrix.arch }}
     - name: Check the release version
       run: echo ${{ steps.rel_version.outputs.REL_VERSION }}
