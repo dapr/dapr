@@ -24,7 +24,7 @@ jobs:
           echo Source branch name : $SOURCEBRANCH
           
           # Create artifact directory
-          mkdir $ARTIFACT
+          mkdir $REL_ARTIFACT
           
           # release commit_sha
           echo $GITHUB_SHA > $ARTIFACT/release_commit_id.txt
@@ -47,7 +47,7 @@ jobs:
         uses: actions/upload-artifact@master
         with:
           name: release_setup
-          path: ${{ env.ARTIFACT }}
+          path: ${{ env.REL_ARTIFACT }}
   build:
     name: Build ${{ matrix.os }}
     needs: release_environment
@@ -68,7 +68,7 @@ jobs:
       uses: actions/download-artifact@master
       with:
         name: release_setup
-        path: ${{ env.ARTIFACT }}
+        path: ${{ env.REL_ARTIFACT }}
     - name: run test 
       run: |
         ls $ARTIFACT
