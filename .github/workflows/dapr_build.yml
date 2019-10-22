@@ -1,14 +1,16 @@
-name: dpar_ci
+name: dpar
 
 on:
   push:
     branches:
       - master
+      - release-*
     tags:
       - v*
   pull_request:
     branches:
       - master
+      - release-*
 jobs:
   build:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
