@@ -71,6 +71,6 @@ jobs:
         path: ${{ env.REL_ARTIFACT }}
     - name: run test 
       run: |
-        ls $ARTIFACT
+        ls $REL_ARTIFACT
     - name: Check the release version
       run: echo ${{ steps.rel_version.outputs.REL_VERSION }}
