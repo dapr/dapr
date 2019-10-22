@@ -10,11 +10,12 @@ on:
     branches:
       - master
 
+env: 
+  REL_ARTIFACT: artifact
+
 jobs:
   release_environment:
     runs-on: ubuntu-latest
-    env:
-      ARTIFACT: ../artifact
     steps:
       - name: Get Release Version
         id: rel_version
@@ -22,15 +23,17 @@ jobs:
           SOURCEBRANCH=$GITHUB_REF
           echo Source branch name : $SOURCEBRANCH
           
+          # Create artifact directory
           mkdir $ARTIFACT
+          
+          # release commit_sha
           echo $GITHUB_SHA > $ARTIFACT/release_commit_id.txt
           if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
             echo Skip release version setting unless $SOURCEBRANCH is refs/tags/v...
-            echo ##[set-output name=REL_VERSION;]1.0.0
+            echo $GITHUB_REPOSITORY > $ARTIFACT/release_version.txt
           else
             RELVERSION=${SOURCEBRANCH#refs/tags/v}
             echo Release version : $RELVERSION
-            echo ::set-output name=REL_VERSION::$RELVERSION
             echo $RELVERSION > $ARTIFACT/release_version.txt
             # Check if RELVERSION is not release candidates and then validate the release note file
             if [[ "$RELVERSION" != *-rc.* ]]; then
@@ -39,6 +42,7 @@ jobs:
               [ ! -f "$RELNOTE_PATH" ] && echo "$RELNOTE_PATH not found" && exit 1
             fi
           fi
+        
       - name: upload release_version to artifact
         uses: actions/upload-artifact@master
         with:
@@ -57,9 +61,16 @@ jobs:
       with:
         go-version: 1.13.3
       id: go
-
+    
     - name: Check out code into the Go module directory
       uses: actions/checkout@v1
-    
+    - name: Download release setup artifact
+      uses: actions/download-artifact@master
+      with:
+        name: release_setup
+        path: ${{ env.ARTIFACT }}
+    - name: run test 
+      run: |
+        ls $ARTIFACT
     - name: Check the release version
-      run: echo ${{ jobs.release_environment.steps.rel_version.outputs.REL_VERSION }}
+      run: echo ${{ steps.rel_version.outputs.REL_VERSION }}
