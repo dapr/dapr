@@ -24,7 +24,7 @@ func TestCreateFullName(t *testing.T) {
 	})
 }
 
-func TestNewPubSubRegsitry(t *testing.T) {
+func TestNewPubSubRegistry(t *testing.T) {
 	registry0 := NewRegistry()
 	registry1 := NewRegistry()
 

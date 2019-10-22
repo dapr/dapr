@@ -126,7 +126,7 @@ func TestLogLevel(t *testing.T) {
 }
 
 func TestMaxConcurrency(t *testing.T) {
-	t.Run("empty max concurrency - shuould be -1", func(t *testing.T) {
+	t.Run("empty max concurrency - should be -1", func(t *testing.T) {
 		m := map[string]string{}
 		maxConcurrency, err := getMaxConcurrency(m)
 		assert.Nil(t, err)

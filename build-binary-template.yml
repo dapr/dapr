@@ -19,7 +19,7 @@ jobs:
     - task: GoTool@0
       displayName: 'Install Go'
       inputs:
-        version: '1.12'
+        version: '1.13.3'
     - task: Bash@3
       displayName: 'Set up the Go workspace'
       inputs:
