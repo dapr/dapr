@@ -49,8 +49,7 @@ jobs:
         with:
           go-version: 1.13.3
       - name: Parse release version and set REL_VERSION
-        run: ./.github/scripts/get_release_version.py
-        shell: python
+        run: python ./.github/scripts/get_release_version.py
       - name: Run make test
         if: matrix.target_arch != 'arm'
         run: make test
