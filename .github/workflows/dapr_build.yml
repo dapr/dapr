@@ -1,4 +1,4 @@
-name: Dapr
+name: dpar_ci
 
 on:
   push:
@@ -9,10 +9,6 @@ on:
   pull_request:
     branches:
       - master
-
-env: 
-  REL_ARTIFACT: release_setup
-
 jobs:
   build:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
@@ -78,4 +74,8 @@ jobs:
         run: |
           mkdir -p $ARCHIEVE_OUTDIR
           make release GOOS=${{ matrix.target_os }} GOARCH=${{ matrix.target_arch }} ARCHIVE_OUT_DIR=$ARCHIEVE_OUTDIR
-          ls -l $ARCHIEVE_OUTDIR
+      - name: upload artifacts
+        uses: upload-artifact
+        with:
+          name: dapr
+          path: ${{ env.ARCHIVE_OUT_DIR }}
