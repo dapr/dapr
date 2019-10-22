@@ -159,7 +159,7 @@ func (h *DaprHandler) ObjectDeleted(obj interface{}) {
 	if annotated {
 		id := h.getDaprID(deployment)
 		if id == "" {
-			log.Errorf("skipping service deletion: id for deployment %s is empty", deployment.GetName())
+			log.Warnf("skipping service deletion: id for deployment %s is empty", deployment.GetName())
 			return
 		}
 
