@@ -72,7 +72,7 @@ jobs:
         uses: actions/checkout@v1
       - name: docker login
         run: |
-          docker login -u ${{ sercrets.DOCKERHUB_ID }} -p ${{ sercrets.DOCKERHUB_TOKEN }}
+          docker login -u ${{ secrets.DOCKERHUB_ID }} -p ${{ secrets.DOCKERHUB_TOKEN }}
       - name: download artifacts
         uses: actions/download-artifact@master
         with:
