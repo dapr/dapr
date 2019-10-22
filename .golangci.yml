@@ -202,6 +202,7 @@ linters-settings:
   whitespace:
     multi-if: false   # Enforces newlines (or comments) after every multi-line if statement
     multi-func: false # Enforces newlines (or comments) after every multi-line function signature
+
   wsl:
     # If true append is only allowed to be cuddled if appending value is
     # matching variables, fields or types on line above. Default is true.
@@ -219,6 +220,7 @@ linters-settings:
 linters:
   enable-all: true
   disable:
+    # TODO Enforce the below linters later
     - deadcode
     - dupl
     - errcheck
@@ -229,6 +231,8 @@ linters:
     - gocognit
     - godox
     - golint
+    # TODO enable this one again once github action is done. Now gofmt failed in windows only.
+    - gofmt
     - interfacer
     - lll
     - maligned
