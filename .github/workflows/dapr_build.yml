@@ -48,29 +48,30 @@ jobs:
           name: release_setup
           path: ${{ env.REL_ARTIFACT }}
   build:
-    name: Build ${{ matrix.osname }}_${{ matrix.arch }} binaries
+    name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     needs: release_setup
     runs-on: ${{ matrix.os }}
     env:
-      GOOS: ${{ matrix.osname }}
-      GOARCH: ${{ matrix.arch }}
+      GOOS: ${{ matrix.target_os }}
+      GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
+      ARCHIEVE_OUTDIR: ./dist/archives
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
         arch: [arm, amd64]
         include:
           - os: ubuntu-latest
-            osname: linux
+            target_os: linux
           - os: windows-latest
-            osname: windows
+            target_os: windows
           - os: macOS-latest
-            osname: darwin
+            target_os: darwin
         exclude:
           - os: windows-latest
-            arch: arm
+            target_arch: arm
           - os: macOS-latest
-            arch: arm
+            target_arch: arm
     steps:
       - name: Set up Go 1.13.3
         uses: actions/setup-go@v1
@@ -92,6 +93,6 @@ jobs:
         run: make test
       - name: Run make release to build and archive binaries
         run: |
-          mkdir -p dist/archives
-          make release GOOS=${{ matrix.osname }} GOARCH=${{ matrix.arch }} ARCHIVE_OUT_DIR=$(Build.ArtifactStagingDirectory)
-          ls -l dist/archives
+          mkdir -p $ARCHIEVE_OUTDIR
+          make release GOOS=${{ matrix.target_os }} GOARCH=${{ matrix.target_arch }} ARCHIVE_OUT_DIR=$ARCHIEVE_OUTDIR
+          ls -l $ARCHIEVE_OUTDIR
