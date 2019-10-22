@@ -232,8 +232,9 @@ linters:
     - gocognit
     - godox
     - golint
-    # TODO enable this one again once github action is done. Now gofmt failed in windows only.
+    # TODO enable gofmt and goimports again once github action is done. Now both failed in windows only.
     - gofmt
+    - goimports
     - interfacer
     - lll
     - maligned
