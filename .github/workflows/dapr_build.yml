@@ -60,13 +60,19 @@ jobs:
           releaseVersion = gitRef[len(tagRefPrefix):]
           releaseNotePath="docs/release_notes/v{}.md".format(releaseVersion)
 
-          if gitRef.find("-rc.") >=0:
+          if gitRef.find("-rc.") > 0:
+              print ("Release Candidate build from {}...".format(gitRef))
+          else:
               print ("Checking if {} exists".format(releaseNotePath))
-              if not os.path.exists(releaseNotePath):
+              if os.path.exists(releaseNotePath):
+                  print ("Found {}".format(releaseNotePath))
+              else:
                   print ("{} is not found".format(releaseNotePath))
                   sys.exit(1)
+              print ("Release build from {}...".format(gitRef))
         shell: python
       - name: Run make test
+        if: ${{ matrix.target_arch }} != 'arm'
         run: make test
       - name: Run make release to build and archive binaries
         run: |
