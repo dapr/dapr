@@ -17,7 +17,7 @@ jobs:
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
-      ARCHIVE_OUTDIR: ./dist/archives
+      ARCHIVE_OUTDIR: dist/archives
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
