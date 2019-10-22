@@ -72,7 +72,7 @@ jobs:
               print ("Release build from {}...".format(gitRef))
         shell: python
       - name: Run make test
-        if: ${{ matrix.target_arch }} != 'arm'
+        if: matrix.target_arch != 'arm'
         run: make test
       - name: Run make release to build and archive binaries
         run: |
