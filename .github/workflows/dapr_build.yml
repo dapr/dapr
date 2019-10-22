@@ -26,7 +26,7 @@ jobs:
           echo $GITHUB_SHA > $ARTIFACT/release_commit_id.txt
           if [[ $SOURCEBRANCH != refs/tags/v* ]]; then
             echo Skip release version setting unless $SOURCEBRANCH is refs/tags/v...
-            echo ::set-output name=REL_VERSION::$RELVERSION
+            echo ::set-output name=REL_VERSION::1.0.0
           else
             RELVERSION=${SOURCEBRANCH#refs/tags/v}
             echo Release version : $RELVERSION
