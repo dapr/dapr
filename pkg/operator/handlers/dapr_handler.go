@@ -92,9 +92,7 @@ func (h *DaprHandler) deleteDaprService(name string, deployment *appsv1.Deployme
 		return nil
 	}
 
-	err := kubernetes.DeleteService(serviceName, deployment.GetNamespace(), &meta_v1.DeleteOptions{
-		GracePeriodSeconds: nil,
-	})
+	err := kubernetes.DeleteService(serviceName, deployment.GetNamespace())
 	if err != nil {
 		return err
 	}

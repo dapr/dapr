@@ -64,10 +64,10 @@ func CreateService(service *corev1.Service, namespace string) error {
 }
 
 // Delete a service
-func DeleteService(serviceName string, namespace string, options *meta_v1.DeleteOptions) error {
+func DeleteService(serviceName string, namespace string) error {
 	client := utils.GetKubeClient()
 
-	err := client.CoreV1().Services(namespace).Delete(serviceName, options)
+	err := client.CoreV1().Services(namespace).Delete(serviceName, &meta_v1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
