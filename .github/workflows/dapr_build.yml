@@ -17,7 +17,7 @@ jobs:
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
-      ARCHIEVE_OUTDIR: ./dist/archives
+      ARCHIVE_OUTDIR: ./dist/archives
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
@@ -73,9 +73,9 @@ jobs:
       - name: Run make release to build and archive binaries
         run: |
           mkdir -p $ARCHIEVE_OUTDIR
-          make release GOOS=${{ matrix.target_os }} GOARCH=${{ matrix.target_arch }} ARCHIVE_OUT_DIR=$ARCHIEVE_OUTDIR
+          make release GOOS=${{ matrix.target_os }} GOARCH=${{ matrix.target_arch }} ARCHIVE_OUT_DIR=${{ env.ARCHIVE_OUTDIR }}
       - name: upload artifacts
         uses: upload-artifact
         with:
           name: dapr
-          path: ${{ env.ARCHIVE_OUT_DIR }}
+          path: ${{ env.ARCHIVE_OUTDIR }}
