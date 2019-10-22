@@ -64,6 +64,7 @@ jobs:
           path: ${{ env.ARCHIVE_OUTDIR }}
   push-docker:
     name: Build and Push Docker image
+    needs: build
     env:
       OUT_BIN_DIR: ./dist
     runs-on: ubuntu-latest
