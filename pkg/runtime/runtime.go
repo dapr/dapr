@@ -335,7 +335,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 		if resp != nil {
-			response := &bindings.AppResponse{}
+			response = &bindings.AppResponse{}
 			response.Concurrency = resp.Concurrency
 			response.To = resp.To
 
@@ -357,7 +357,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				})
 			}
 		}
-
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		req := channel.InvokeRequest{
 			Metadata: metadata,
@@ -839,7 +838,6 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		a.appConfig = *appConfig
 		log.Info("application configuration loaded")
 	}
-	return
 }
 
 func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
@@ -901,7 +899,6 @@ func (a *DaprRuntime) announceSelf() error {
 		}
 		log.Info("local service entry announced")
 	}
-
 	return nil
 }
 
@@ -923,7 +920,7 @@ func (a *DaprRuntime) initSecretStores() error {
 
 	// Initialize all secretstore components
 	for _, c := range a.components {
-		if strings.Index(c.Spec.Type, "secretstores") < 0 {
+		if !strings.Contains(c.Spec.Type, "secretstores") {
 			continue
 		}
 

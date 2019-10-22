@@ -49,8 +49,8 @@ func DeserializeSpanContext(ctx string) trace.SpanContext {
 	traceID, _ := hex.DecodeString(parts[1])
 	traceOptions, _ := strconv.ParseUint(parts[2], 10, 32)
 	ret := trace.SpanContext{}
-	copy(ret.SpanID[:], spanID[:])
-	copy(ret.TraceID[:], traceID[:])
+	copy(ret.SpanID[:], spanID)
+	copy(ret.TraceID[:], traceID)
 	ret.TraceOptions = trace.TraceOptions(traceOptions)
 	return ret
 }
@@ -199,13 +199,13 @@ func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bo
 	if expandParams {
 		for k, vv := range md {
 			for _, v := range vv {
-				span.AddAttributes(trace.StringAttribute(string(k), v))
+				span.AddAttributes(trace.StringAttribute(k, v))
 			}
 		}
 	}
-	if includeBody {
-		//TODO: get request body?
-	}
+	//TODO: get request body?
+	//if includeBody {
+	//}
 }
 
 func projectStatusCode(code int) int32 {
