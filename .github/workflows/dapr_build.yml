@@ -1,0 +1,83 @@
+name: dpar
+
+on:
+  push:
+    branches:
+      - master
+      - release-*
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - master
+      - release-*
+jobs:
+  build:
+    name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
+    runs-on: ${{ matrix.os }}
+    env:
+      GOOS: ${{ matrix.target_os }}
+      GOARCH: ${{ matrix.target_arch }}
+      GOPROXY: https://proxy.golang.org
+      ARCHIVE_OUTDIR: dist/archives
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        target_arch: [arm, amd64]
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+          - os: windows-latest
+            target_os: windows
+          - os: macOS-latest
+            target_os: darwin
+        exclude:
+          - os: windows-latest
+            target_arch: arm
+          - os: macOS-latest
+            target_arch: arm
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+      - name: Set up Go 1.13.3
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.3
+      - name: Get Release Version
+        run: |
+          import os
+          import sys
+
+          gitRef = os.getenv("GITHUB_REF")
+          tagRefPrefix = "refs/tags/v"
+
+          if gitRef is None or not gitRef.startswith(tagRefPrefix):
+              print ("This is daily build from {}...".format(gitRef))
+              sys.exit(0)
+
+          releaseVersion = gitRef[len(tagRefPrefix):]
+          releaseNotePath="docs/release_notes/v{}.md".format(releaseVersion)
+
+          if gitRef.find("-rc.") > 0:
+              print ("Release Candidate build from {}...".format(gitRef))
+          else:
+              print ("Checking if {} exists".format(releaseNotePath))
+              if os.path.exists(releaseNotePath):
+                  print ("Found {}".format(releaseNotePath))
+              else:
+                  print ("{} is not found".format(releaseNotePath))
+                  sys.exit(1)
+              print ("Release build from {}...".format(gitRef))
+        shell: python
+      - name: Run make test
+        if: matrix.target_arch != 'arm'
+        run: make test
+      - name: Run make release to build and archive binaries
+        run: |
+          mkdir -p $ARCHIVE_OUTDIR
+          make release GOOS=${{ matrix.target_os }} GOARCH=${{ matrix.target_arch }} ARCHIVE_OUT_DIR=${{ env.ARCHIVE_OUTDIR }}
+      - name: upload artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr
+          path: ${{ env.ARCHIVE_OUTDIR }}
