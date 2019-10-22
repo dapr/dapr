@@ -218,6 +218,7 @@ linters-settings:
     allow-cuddle-declarations: false
 
 linters:
+  fast: false
   enable-all: true
   disable:
     # TODO Enforce the below linters later
