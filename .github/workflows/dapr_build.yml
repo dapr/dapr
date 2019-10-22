@@ -14,7 +14,7 @@ env:
   REL_ARTIFACT: release_setup
 
 jobs:
-  release_environment:
+  release_setup:
     runs-on: ubuntu-latest
     steps:
       - name: Get Release Version
@@ -48,42 +48,50 @@ jobs:
           name: release_setup
           path: ${{ env.REL_ARTIFACT }}
   build:
-    name: Build ${{ matrix.os }}
-    needs: release_environment
+    name: Build ${{ matrix.osname }}_${{ matrix.arch }} binaries
+    needs: release_setup
     runs-on: ${{ matrix.os }}
+    env:
+      GOOS: ${{ matrix.osname }}
+      GOARCH: ${{ matrix.arch }}
+      GOPROXY: https://proxy.golang.org
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
         arch: [arm, amd64]
+        include:
+          - os: ubuntu-latest
+            osname: linux
+          - os: windows-latest
+            osname: windows
+          - os: macOS-latest
+            osname: darwin
         exclude:
           - os: windows-latest
             arch: arm
           - os: macOS-latest
             arch: arm
-        include:
-          - os: ubuntu-latest
-            osname: linux
-          - os: windows-latest
-            osname: linux
-          - os: macOS-latest
-            osname: linux
     steps:
-    - name: Set up Go 1.13.3
-      uses: actions/setup-go@v1
-      with:
-        go-version: 1.13.3
-    
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v1
-
-    - name: Download release setup artifact
-      uses: actions/download-artifact@master
-      with:
-        name: release_setup
-        path: ${{ env.REL_ARTIFACT }}
-
-    - name: Release setup
-      run: |
-        echo ${{ matrix.os }}_${{ matrix.osname }}_${{ matrix.arch }}
-    - name: Check the release version
-      run: echo ${{ steps.rel_version.outputs.REL_VERSION }}
+      - name: Set up Go 1.13.3
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.13.3
+      - name: Set up Go workspace
+        run: |
+          mkdir -p '$(GOPATH)/pkg'
+          mkdir -p '$(GOPATH)/bin'
+          shopt -s extglob
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+      - name: Download release setup artifact
+        uses: actions/download-artifact@master
+        with:
+          name: release_setup
+          path: ${{ env.REL_ARTIFACT }}
+      - name: Run make test
+        run: make test
+      - name: Run make release to build and archive binaries
+        run: |
+          mkdir -p dist/archives
+          make release GOOS=${{ matrix.osname }} GOARCH=${{ matrix.arch }} ARCHIVE_OUT_DIR=$(Build.ArtifactStagingDirectory)
+          ls -l dist/archives
