@@ -21,9 +21,6 @@ jobs:
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
-      GOPATH: ${{ github.workspace }}/gopath
-      GOBIN: $GOPATH/bin
-      MODULEPATH: $GOPATH/src/github.com/${{ github.repository }}
       ARCHIEVE_OUTDIR: ./dist/archives
     strategy:
       matrix:
