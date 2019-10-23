@@ -8,8 +8,8 @@ package state
 import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/cosmosdb"
-	"github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/etcd"
+	"github.com/dapr/components-contrib/state/redis"
 )
 
 // Load state stores
