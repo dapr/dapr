@@ -197,7 +197,7 @@ func (r *StateStore) setValue(req *state.SetRequest) error {
 		ver = 0
 	}
 
-	bt := []byte{}
+	var bt []byte
 	b, ok := req.Value.([]byte)
 	if ok {
 		bt = b

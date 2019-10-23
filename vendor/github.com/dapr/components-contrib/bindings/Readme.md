@@ -7,22 +7,22 @@ List of bindings and their status:
 
 | Name  | Input Binding | Output Binding | Status
 | ------------- | -------------- | -------------  | ------------- |
-| Kafka | V | V | Experimental |
-| RabbitMQ | V  | V | Experimental |
-| AWS SQS | V | V | Experimental |
-| AWS SNS |  | V | Experimental |
-| GCP Cloud Pub/Sub | V | V | Experimental |
-| Azure EventHubs | V | V | Experimental |
-| Azure CosmosDB | | V | Experimental |
-| GCP Storage Bucket  | | V | Experimental |
-| HTTP |  | V | Experimental |
-| MQTT | V | V | Experimental |
-| Redis |  | V | Experimental |
-| AWS DynamoDB | | V | Experimental |
-| AWS S3 | | V | Experimental |
-| Azure Blob Storage | | V | Experimental |
-| Azure Service Bus Queues | V | V | Experimental |
-| Kubernetes Events | V | | Experimental |
+| [Kafka](./kafka) | V | V | Experimental |
+| [RabbitMQ](./rabbitmq) | V  | V | Experimental |
+| [AWS SQS](./sqs) | V | V | Experimental |
+| [AWS SNS](./sns) |  | V | Experimental |
+| [GCP Cloud Pub/Sub](./pubsub) | V | V | Experimental |
+| [Azure EventHubs](./eventhubs) | V | V | Experimental |
+| [Azure CosmosDB](./cosmosdb) | | V | Experimental |
+| [GCP Storage Bucket](./gcpbucket)  | | V | Experimental |
+| [HTTP](./http) |  | V | Experimental |
+| [MQTT](./mqtt) | V | V | Experimental |
+| [Redis](./redis) |  | V | Experimental |
+| [AWS DynamoDB](./dynamodb) | | V | Experimental |
+| [AWS S3](./s3) | | V | Experimental |
+| [Azure Blob Storage](./blobstorage) | | V | Experimental |
+| [Azure Service Bus Queues](./servicebusqueues) | V | V | Experimental |
+| [Kubernetes Events](./kubernetes) | V | | Experimental |
 
 ## Implementing a new binding
 
