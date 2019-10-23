@@ -63,7 +63,7 @@ jobs:
         run: make test
       - name: Run make release to build and archive binaries
         run: |
-          mkdir -p $ARCHIVE_OUTDIR
+          mkdir -p ${{ env.ARCHIVE_OUTDIR }}
           make release GOOS=${{ matrix.target_os }} GOARCH=${{ matrix.target_arch }} ARCHIVE_OUT_DIR=${{ env.ARCHIVE_OUTDIR }}
       - name: upload artifacts
         uses: actions/upload-artifact@master
