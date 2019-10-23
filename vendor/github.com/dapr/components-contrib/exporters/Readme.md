@@ -14,11 +14,11 @@ Currently supported exporters are:
 
 ## Implementing a new Exporter wrapper
 
-A compliant exporter wrapper needs to implement one interfaces: `Exporter`, which has a single method:
+A compliant exporter wrapper needs to implement one interface: `Exporter`, which has a single method:
 
 ```go
 type Exporter interface {
-	Init(metadata Metadata) error
+	Init(daprID string, hostAddress string, metadata Metadata) error
 }
 ```
 
