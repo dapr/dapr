@@ -50,12 +50,13 @@ jobs:
         with:
           go-version: ${{ env.GOVER }}
       - name: Install golangci-lint
+        if: matrix.target_arch != 'arm'
         run: |
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b '$GOPATH/bin' v1.21.0
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
-        if: matrix.target_arch == 'arm'
+        if: matrix.target_arch != 'arm'
         run: make lint
       - name: Run make test
         if: matrix.target_arch != 'arm'
