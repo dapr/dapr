@@ -33,9 +33,6 @@ run:
   skip-files:
   #  - ".*\\.my\\.go$"
   #  - lib/bad.go
-    - pkg.*version.*version.go
-    - pkg.*models.*models.go
-    - pkg.*config.*modes.*kubernetes_config.go
 
 # output configuration options
 output:
