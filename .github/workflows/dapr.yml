@@ -52,7 +52,7 @@ jobs:
       - name: Install golangci-lint
         if: matrix.target_arch != 'arm'
         run: |
-          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b '$GOPATH/bin' v1.21.0
+          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b '$GOROOT/bin' v1.21.0
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
@@ -103,7 +103,8 @@ jobs:
           name: dapr_darwin_amd64
           path: ${{ env.ARTIFACT_DIR }}
       - name: docker login
-        run: docker login -u ${{ secrets.DOCKERHUB_ID }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          docker login -u ${{ secrets.DOCKERHUB_ID }} -p ${{ secrets.DOCKERHUB_TOKEN }}
       - name: build and publish docker image
         run: |
           IMAGE_ARCHS=(amd64 arm)
@@ -142,10 +143,14 @@ jobs:
           # Get the list of files
           RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
 
+          # Parse repository to get owner and repo names
+          OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+
           export GITHUB_TOKEN=${{ secrets.RELEASE_USER_TOKEN }}
           echo "Uploading Dapr Runtime Binaries to GitHub Release"
           github-release upload \
-            --owner youngbupark --repo dapr \
+            --owner $OWNER_NAME --repo $REPO_NAME \
             --tag "v${REL_VERSION}" \
             --name "Dapr Runtime v${REL_VERSION}" \
             --body "${RELEASE_BODY}" \
