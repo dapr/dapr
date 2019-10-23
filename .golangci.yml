@@ -222,7 +222,6 @@ linters:
   enable-all: true
   disable:
     # TODO Enforce the below linters later
-    - deadcode
     - dupl
     - errcheck
     - funlen
