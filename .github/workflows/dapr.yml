@@ -52,7 +52,7 @@ jobs:
       - name: Install golangci-lint
         if: matrix.target_arch != 'arm'
         run: |
-          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$GOROOT/bin" v1.21.0
+          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v1.21.0
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
