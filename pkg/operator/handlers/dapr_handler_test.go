@@ -11,7 +11,20 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestGetDaprID_WithValidId(t *testing.T) {
+func TestGetDaprID(t *testing.T) {
+
+	t.Run("WithValidId", getDaprID_WithValidId)
+	t.Run("WithEmptyId", getDaprID_WithEmptyId)
+}
+
+func TestIsAnnotatedForDapr(t *testing.T) {
+
+	t.Run("Enabled", isAnnotatedForDapr_WhenEnabled)
+	t.Run("Disabled", isAnnotatedForDapr_WhenDisabled)
+	t.Run("Invalid", isAnnotatedForDapr_WhenInvalidValue)
+}
+
+func getDaprID_WithValidId(t *testing.T) {
 
 	// Arrange
 	expected := "test_id"
@@ -25,7 +38,7 @@ func TestGetDaprID_WithValidId(t *testing.T) {
 	assert.Equal(t, expected, got)
 }
 
-func TestGetDaprID_WithEmptyId(t *testing.T) {
+func getDaprID_WithEmptyId(t *testing.T) {
 
 	// Arrange
 	expected := ""
@@ -39,7 +52,7 @@ func TestGetDaprID_WithEmptyId(t *testing.T) {
 	assert.Equal(t, expected, got)
 }
 
-func TestIsAnnotatedForDapr_WhenEnabled(t *testing.T) {
+func isAnnotatedForDapr_WhenEnabled(t *testing.T) {
 
 	// Arrange
 	expected := "true"
@@ -53,7 +66,7 @@ func TestIsAnnotatedForDapr_WhenEnabled(t *testing.T) {
 	assert.True(t, got)
 }
 
-func TestIsAnnotatedForDapr_WhenDisabled(t *testing.T) {
+func isAnnotatedForDapr_WhenDisabled(t *testing.T) {
 
 	// Arrange
 	expected := "false"
@@ -67,7 +80,7 @@ func TestIsAnnotatedForDapr_WhenDisabled(t *testing.T) {
 	assert.False(t, got)
 }
 
-func TestIsAnnotatedForDapr_WhenRandomString(t *testing.T) {
+func isAnnotatedForDapr_WhenInvalidValue(t *testing.T) {
 
 	// Arrange
 	expected := "0"
