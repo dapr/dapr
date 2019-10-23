@@ -73,6 +73,7 @@ jobs:
   publish:
     name: Publish docker image and binaries
     needs: build
+    if: github.event_name != "pull_request"
     env:
       ARTIFACT_DIR: ./release
       DOCKER_REGISTRY: docker.io/daprio
