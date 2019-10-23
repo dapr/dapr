@@ -74,7 +74,7 @@ jobs:
     name: Publish docker image and binaries
     needs: build
     env:
-      ARTIFACT_DIR: ./release/
+      ARTIFACT_DIR: ./release
       DOCKER_REGISTRY: docker.io/youngp
     runs-on: ubuntu-latest
     steps:
