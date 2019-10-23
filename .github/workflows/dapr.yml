@@ -127,14 +127,11 @@ jobs:
             export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
           fi
 
-          echo $RELEASE_BODY
-
           export GITHUB_TOKEN=${{ secrets.RELEASE_USER_TOKEN }}
           echo "Uploading Dapr Runtime Binaries to GitHub Release"
           github-release upload \
-            --owner dapr \
-            --repo dapr \
-            --tag "v${REL_VERSION}"
+            --owner youngbupark --repo dapr \
+            --tag "v${REL_VERSION}" \
             --name "Dapr Runtime v${REL_VERSION}" \
             --body "${RELEASE_BODY}" \
             --prerelease true \
