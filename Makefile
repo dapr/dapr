@@ -249,5 +249,5 @@ test:
 lint:
 	goimports -d pkg\apis\components\register.go
 	goimports -d pkg\apis\configuration\register.go
-    goimports -d pkg\modes\modes.go
+	goimports -d pkg\modes\modes.go
 	$(GOLANGCI_LINT) run
