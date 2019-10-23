@@ -62,9 +62,8 @@ func SetWithRetries(method func(req *SetRequest) error, req *SetRequest) error {
 				}
 			}
 			return fmt.Errorf("failed to set value after %d retries", req.Options.RetryPolicy.Threshold)
-		} else {
-			return method(req)
 		}
+		return method(req)
 	default:
 		return fmt.Errorf("unrecognized retry patter '%s'", req.Options.RetryPolicy.Pattern)
 	}
@@ -91,9 +90,8 @@ func DeleteWithRetries(method func(req *DeleteRequest) error, req *DeleteRequest
 				}
 			}
 			return fmt.Errorf("failed to set value after %d retries", req.Options.RetryPolicy.Threshold)
-		} else {
-			return method(req)
 		}
+		return method(req)
 	default:
 		return fmt.Errorf("unrecognized retry patter '%s'", req.Options.RetryPolicy.Pattern)
 	}
