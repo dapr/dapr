@@ -6,6 +6,7 @@ Currently supported state stores are:
 
 * Azure CosmosDB
 * Redis
+* Etcd
 
 ## Implementing a new State Store
 
