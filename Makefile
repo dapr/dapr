@@ -247,8 +247,5 @@ test:
 ################################################################################
 .PHONY: lint
 lint:
-	go install golang.org/x/tools/cmd/goimports
-	goimports -d pkg\apis\components\register.go
-	goimports -d pkg\apis\configuration\register.go
-	goimports -d pkg\modes\modes.go
-	$(GOLANGCI_LINT) run
+	$(GOLANGCI_LINT) run --fix
+	git diff
