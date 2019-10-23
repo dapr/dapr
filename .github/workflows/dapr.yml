@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-name: dpar
+name: dapr
 
 on:
   push:
