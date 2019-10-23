@@ -104,8 +104,8 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
-		Properties: map[string]interface{}{
-			"Enabled": true,
+		Properties: map[string]string{
+			"Enabled": "true",
 		},
 	}
 	createExporters(meta)
@@ -255,8 +255,8 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
-		Properties: map[string]interface{}{
-			"Enabled": true,
+		Properties: map[string]string{
+			"Enabled": "true",
 		},
 	}
 	createExporters(meta)
@@ -609,8 +609,8 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
-		Properties: map[string]interface{}{
-			"Enabled": true,
+		Properties: map[string]string{
+			"Enabled": "true",
 		},
 	}
 	createExporters(meta)

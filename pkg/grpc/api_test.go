@@ -80,8 +80,8 @@ func TestCallActorWithTracing(t *testing.T) {
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
-		Properties: map[string]interface{}{
-			"Enabled": true,
+		Properties: map[string]string{
+			"Enabled": "true",
 		},
 	}
 	createExporters(meta)
@@ -127,8 +127,8 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
-		Properties: map[string]interface{}{
-			"Enabled": true,
+		Properties: map[string]string{
+			"Enabled": "true",
 		},
 	}
 	createExporters(meta)

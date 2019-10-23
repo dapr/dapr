@@ -607,7 +607,7 @@ func (a *DaprRuntime) initExporters() error {
 				continue
 			}
 
-			properties := a.convertMetadataItemsToAnyProperties(c.Spec.Metadata)
+			properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
 
 			err = exporter.Init(a.runtimeConfig.ID, a.hostAddress, exporters.Metadata{
 				Properties: properties,
@@ -981,13 +981,6 @@ func (a *DaprRuntime) initSecretStores() error {
 
 func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
 	properties := map[string]string{}
-	for _, c := range items {
-		properties[c.Name] = c.Value
-	}
-	return properties
-}
-func (a *DaprRuntime) convertMetadataItemsToAnyProperties(items []components_v1alpha1.MetadataItem) map[string]interface{} {
-	properties := map[string]interface{}{}
 	for _, c := range items {
 		properties[c.Name] = c.Value
 	}

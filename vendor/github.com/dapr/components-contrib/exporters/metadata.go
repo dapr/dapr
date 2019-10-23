@@ -7,6 +7,6 @@ package exporters
 
 // Metadata represents a set of exporter specific properties
 type Metadata struct {
-	Properties map[string]interface{} `json:"properties"`
-	Buffer     *string                `json:"-"`
+	Properties map[string]string `json:"properties"`
+	Buffer     *string           `json:"-"`
 }
