@@ -599,10 +599,8 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 	return topics
 }
 func (a *DaprRuntime) initExporters() error {
-	fmt.Println("ABOUT TO INITIALIZE EXPORTERS")
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "exporter") == 0 {
-			fmt.Println("SETTING UP " + c.Spec.Type)
 			exporter, err := a.exporterRegistry.CreateExporter(c.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating exporter %s: %s", c.Spec.Type, err)
