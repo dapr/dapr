@@ -247,5 +247,5 @@ test:
 ################################################################################
 .PHONY: lint
 lint:
+	# Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
 	$(GOLANGCI_LINT) run --fix
-	git diff
