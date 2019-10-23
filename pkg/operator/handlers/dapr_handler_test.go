@@ -13,85 +13,74 @@ import (
 
 func TestGetDaprID(t *testing.T) {
 
-	t.Run("WithValidId", getDaprID_WithValidId)
-	t.Run("WithEmptyId", getDaprID_WithEmptyId)
+	t.Run("WithValidId", func(t *testing.T) {
+		// Arrange
+		expected := "test_id"
+		deployment := getDeployment(expected, "true")
+		testDaprHandler := NewDaprHandler(testclient.New(nil))
+
+		// Act
+		got := testDaprHandler.getDaprID(deployment)
+
+		// Assert
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("WithEmptyId", func(t *testing.T) {
+		// Arrange
+		expected := ""
+		deployment := getDeployment(expected, "true")
+		testDaprHandler := NewDaprHandler(testclient.New(nil))
+
+		// Act
+		got := testDaprHandler.getDaprID(deployment)
+
+		// Assert
+		assert.Equal(t, expected, got)
+	})
 }
 
 func TestIsAnnotatedForDapr(t *testing.T) {
 
-	t.Run("Enabled", isAnnotatedForDapr_WhenEnabled)
-	t.Run("Disabled", isAnnotatedForDapr_WhenDisabled)
-	t.Run("Invalid", isAnnotatedForDapr_WhenInvalidValue)
-}
+	t.Run("Enabled", func(t *testing.T) {
+		// Arrange
+		expected := "true"
+		deployment := getDeployment("test_id", expected)
+		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
-func getDaprID_WithValidId(t *testing.T) {
+		// Act
+		got := testDaprHandler.isAnnotatedForDapr(deployment)
 
-	// Arrange
-	expected := "test_id"
-	deployment := getDeployment(expected, "true")
-	testDaprHandler := NewDaprHandler(testclient.New(nil))
+		// Assert
+		assert.True(t, got)
+	})
 
-	// Act
-	got := testDaprHandler.getDaprID(deployment)
+	t.Run("Disabled", func(t *testing.T) {
+		// Arrange
+		expected := "false"
+		deployment := getDeployment("test_id", expected)
+		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
-	// Assert
-	assert.Equal(t, expected, got)
-}
+		// Act
+		got := testDaprHandler.isAnnotatedForDapr(deployment)
 
-func getDaprID_WithEmptyId(t *testing.T) {
+		// Assert
+		assert.False(t, got)
 
-	// Arrange
-	expected := ""
-	deployment := getDeployment(expected, "true")
-	testDaprHandler := NewDaprHandler(testclient.New(nil))
+	})
 
-	// Act
-	got := testDaprHandler.getDaprID(deployment)
+	t.Run("Invalid", func(t *testing.T) {
+		// Arrange
+		expected := "0"
+		deployment := getDeployment("test_id", expected)
+		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
-	// Assert
-	assert.Equal(t, expected, got)
-}
+		// Act
+		got := testDaprHandler.isAnnotatedForDapr(deployment)
 
-func isAnnotatedForDapr_WhenEnabled(t *testing.T) {
-
-	// Arrange
-	expected := "true"
-	deployment := getDeployment("test_id", expected)
-	testDaprHandler := NewDaprHandler(testclient.New(nil))
-
-	// Act
-	got := testDaprHandler.isAnnotatedForDapr(deployment)
-
-	// Assert
-	assert.True(t, got)
-}
-
-func isAnnotatedForDapr_WhenDisabled(t *testing.T) {
-
-	// Arrange
-	expected := "false"
-	deployment := getDeployment("test_id", expected)
-	testDaprHandler := NewDaprHandler(testclient.New(nil))
-
-	// Act
-	got := testDaprHandler.isAnnotatedForDapr(deployment)
-
-	// Assert
-	assert.False(t, got)
-}
-
-func isAnnotatedForDapr_WhenInvalidValue(t *testing.T) {
-
-	// Arrange
-	expected := "0"
-	deployment := getDeployment("test_id", expected)
-	testDaprHandler := NewDaprHandler(testclient.New(nil))
-
-	// Act
-	got := testDaprHandler.isAnnotatedForDapr(deployment)
-
-	// Assert
-	assert.False(t, got)
+		// Assert
+		assert.False(t, got)
+	})
 }
 
 func getDeployment(daprId string, daprEnabled string) *appsv1.Deployment {
