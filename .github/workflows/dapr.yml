@@ -76,7 +76,7 @@ jobs:
     if: github.event_name != 'pull_request'
     env:
       ARTIFACT_DIR: ./release
-      DOCKER_REGISTRY: docker.io/daprio
+      DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
