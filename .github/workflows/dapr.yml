@@ -63,10 +63,11 @@ jobs:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARCHIVE_OUTDIR }}
   publish:
-    name: Build and Push Docker image
+    name: Publish docker image and binaries
     needs: build
     env:
       ARTIFACT_DIR: ./release/
+      DOCKER_REGISTRY: docker.io/youngp
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
@@ -97,17 +98,22 @@ jobs:
         run: docker login -u ${{ secrets.DOCKERHUB_ID }} -p ${{ secrets.DOCKERHUB_TOKEN }}
       - name: build and publish docker image
         run: |
-          export RELEASE_DIR=dist/linux_amd64/release/
+          IMAGE_ARCHS=(amd64 arm)
 
-          mkdir -p $RELEASE_DIR
+          for img_arch in "${IMAGE_ARCHS[@]}"; do
+            echo "Preparing linux_${img_arch} image..."
 
-          for tgzfile in $ARTIFACT_DIR/*linux_amd64.tar.gz; do
-            echo "Extracting $tgzfile ..."
-            tar xzvf $tgzfile -C $RELEASE_DIR
+            RELEASE_DIR=dist/linux_${img_arch}/release/
+            mkdir -p $RELEASE_DIR
+
+            for tgzfile in $ARTIFACT_DIR/*linux_${img_arch}.tar.gz; do
+              echo "Extracting $tgzfile ..."
+              tar xzvf $tgzfile -C $RELEASE_DIR
+            done
+
+            echo "Build docker image and push image ..."
+            make docker-push DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION GOARCH=${img_arch}
           done
-
-          echo "Build docker image and push image ..."
-          make docker-push DAPR_REGISTRY=docker.io/youngp DAPR_TAG=test GOARCH=amd64
       - name: publish binaries to github
         if: startswith(github.ref, 'refs/tags/v')
         run: |

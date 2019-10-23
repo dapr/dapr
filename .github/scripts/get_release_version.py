@@ -14,6 +14,7 @@ gitRef = os.getenv("GITHUB_REF")
 tagRefPrefix = "refs/tags/v"
 
 if gitRef is None or not gitRef.startswith(tagRefPrefix):
+    print ("##[set-env name=REL_VERSION;]edge")
     print ("This is daily build from {}...".format(gitRef))
     sys.exit(0)
 
