@@ -71,11 +71,55 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
+      - name: Parse release version and set REL_VERSION
+        run: python ./.github/scripts/get_release_version.py
       - name: docker login
-        run: |
-          docker login -u ${{ secrets.DOCKERHUB_ID }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: download artifacts
+        run: docker login -u ${{ secrets.DOCKERHUB_ID }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: download artifacts - linux_amd64
         uses: actions/download-artifact@master
         with:
           name: dapr_linux_amd64
-          path: ./dist/linux_amd64
+          path: ${{ env.OUT_BIN_DIR }}/linux_amd64/release
+      - name: build and publish docker image
+        run: |
+          export RELEASE_DIR=${{ env.OUT_BIN_DIR }}/linux_amd64/release
+          for tgzfile in $RELEASE_DIR/*.tar.gz; do
+            echo "Extracting $tgzfile ..."
+            tar xzvf $tgzfile -C .
+          done
+          
+          rm -f $RELEASE_DIR/*.tar.gz
+
+          echo "Build docker image and push image ..."
+          make docker-push DAPR_REGISTRY=docker.io/youngp DAPR_TAG=test GOARCH=amd64
+  publish-github:
+    name: Publish Binaries to GitHub Release
+    needs: push-docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse release version and set REL_VERSION
+        run: python ./.github/scripts/get_release_version.py
+      - name: download artifacts - dapr_linux_amd64
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_amd64
+          path: ./release/
+      - name: download artifacts - dapr_linux_arm
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm
+          path: ./release/
+      - name: download artifacts - dapr_windows_amd64
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_windows_amd64
+          path: ./release/
+      - name: download artifacts - dapr_darwin_amd64
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_darwin_amd64
+          path: ./release/
+      - name: Publish binaries to GitHub Release
+        run: |
+          ls ./release/
+          
