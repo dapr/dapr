@@ -112,8 +112,13 @@ jobs:
               tar xzvf $tgzfile -C $RELEASE_DIR
             done
 
+            DOCKER_VERSION=$REL_VERSION
+            if [ "${img_arch}" == "arm" ]; then
+              DOCKER_VERSION=${REL_VERSION}-arm
+            fi
+
             echo "Build docker image and push image ..."
-            make docker-push DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION GOARCH=${img_arch}
+            make docker-push DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$DOCKER_VERSION GOARCH=${img_arch}
           done
       - name: publish binaries to github
         if: startswith(github.ref, 'refs/tags/v')
@@ -127,6 +132,9 @@ jobs:
             export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
           fi
 
+          # Get the list of files
+          RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
+
           export GITHUB_TOKEN=${{ secrets.RELEASE_USER_TOKEN }}
           echo "Uploading Dapr Runtime Binaries to GitHub Release"
           github-release upload \
@@ -135,5 +143,5 @@ jobs:
             --name "Dapr Runtime v${REL_VERSION}" \
             --body "${RELEASE_BODY}" \
             --prerelease true \
-            "$ARTIFACT_DIR/*"
+            ${RELEASE_ARTIFACT[*]}
 
