@@ -28,8 +28,8 @@ const replicationFactor = 10
 // ErrNoHosts is an error for no hosts
 var ErrNoHosts = errors.New("no hosts added")
 
-// PlacementTables is a table holding a map of consistent hashes with a given version
-type PlacementTables struct {
+// Tables is a table holding a map of consistent hashes with a given version
+type Tables struct {
 	Version string
 	Entries map[string]*Consistent
 }
@@ -52,8 +52,8 @@ type Consistent struct {
 }
 
 // NewPlacementTables returns new stateful placement tables with a given version
-func NewPlacementTables(version string, entries map[string]*Consistent) *PlacementTables {
-	return &PlacementTables{
+func NewPlacementTables(version string, entries map[string]*Consistent) *Tables {
+	return &Tables{
 		Version: version,
 		Entries: entries,
 	}

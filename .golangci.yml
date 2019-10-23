@@ -230,7 +230,6 @@ linters:
     - gocyclo
     - gocognit
     - godox
-    - golint
     - interfacer
     - lll
     - maligned
