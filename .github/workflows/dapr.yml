@@ -51,7 +51,7 @@ jobs:
           go-version: ${{ env.GOVER }}
       - name: Install golangci-lint
         run: |
-          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b '$(GOPATH)/bin' v1.21.0
+          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b '$GOPATH/bin' v1.21.0
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
