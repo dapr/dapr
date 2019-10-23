@@ -118,7 +118,7 @@ jobs:
         if: startswith(github.ref, 'refs/tags/v')
         run: |
           echo "installing github-release-cli..."
-          npm install --slient --no-progress -g github-release-cli
+          sudo npm install --slient --no-progress -g github-release-cli
 
           if [ "$LATEST_RELEASE" = "true" ]; then
             export RELEASE_BODY=`cat ./docs/release_notes/v${REL_VERSION}.md`
