@@ -237,5 +237,4 @@ linters:
     - maligned
     - scopelint
     - unparam
-    - unused
     - wsl

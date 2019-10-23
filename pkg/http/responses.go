@@ -6,7 +6,6 @@
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 
 	"github.com/valyala/fasthttp"
@@ -24,11 +23,12 @@ func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag
 	ctx.Response.SetStatusCode(code)
 	ctx.Response.SetBody(obj)
 }
-func respondWithString(ctx *fasthttp.RequestCtx, code int, obj string) {
-	ctx.Response.Header.SetContentType("application/json")
-	ctx.Response.SetStatusCode(code)
-	ctx.Response.SetBodyString(obj)
-}
+
+//func respondWithString(ctx *fasthttp.RequestCtx, code int, obj string) {
+//	ctx.Response.Header.SetContentType("application/json")
+//	ctx.Response.SetStatusCode(code)
+//	ctx.Response.SetBodyString(obj)
+//}
 
 func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {
 	b, _ := json.Marshal(&resp)
@@ -40,15 +40,15 @@ func respondEmpty(ctx *fasthttp.RequestCtx, code int) {
 	ctx.Response.SetStatusCode(code)
 }
 
-func serializeToJSON(obj interface{}) ([]byte, error) {
-	buffer := &bytes.Buffer{}
-	encoder := json.NewEncoder(buffer)
-	encoder.SetEscapeHTML(false)
-	err := encoder.Encode(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	bytes := buffer.Bytes()
-	return bytes, nil
-}
+//func serializeToJSON(obj interface{}) ([]byte, error) {
+//	buffer := &bytes.Buffer{}
+//	encoder := json.NewEncoder(buffer)
+//	encoder.SetEscapeHTML(false)
+//	err := encoder.Encode(obj)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	bytes := buffer.Bytes()
+//	return bytes, nil
+//}
