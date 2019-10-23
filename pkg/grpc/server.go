@@ -46,7 +46,6 @@ func (s *server) StartNonBlocking() error {
 
 	server := grpc_go.NewServer()
 	if s.tracingSpec.Enabled {
-		diag.CreateExporter(s.config.DaprID, s.config.HostAddress, s.tracingSpec, nil)
 		server = grpc_go.NewServer(
 			grpc_go.StreamInterceptor(diag.TracingGRPCMiddleware(s.tracingSpec)),
 			grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)),

@@ -21,6 +21,7 @@ import (
 	"github.com/golang/protobuf/ptypes/any"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/exporters"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
+	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
@@ -67,6 +69,7 @@ type DaprRuntime struct {
 	directMessaging      messaging.DirectMessaging
 	stateStoreRegistry   state_loader.Registry
 	secretStoresRegistry secretstores_loader.Registry
+	exporterRegistry     exporter_loader.Registry
 	stateStore           state.StateStore
 	actor                actors.Actors
 	bindingsRegistry     bindings_loader.Registry
@@ -93,6 +96,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		bindingsRegistry:     bindings_loader.NewRegistry(),
 		pubSubRegistry:       pubsub_loader.NewRegistry(),
 		secretStoresRegistry: secretstores_loader.NewRegistry(),
+		exporterRegistry:     exporter_loader.NewRegistry(),
 	}
 }
 
@@ -147,6 +151,12 @@ func (a *DaprRuntime) initRuntime() error {
 	err = a.initPubSub()
 	if err != nil {
 		log.Warnf("failed to init pubsub: %s", err)
+	}
+
+	exporter_loader.Load()
+	err = a.initExporters()
+	if err != nil {
+		log.Warnf("failed to init exporters: %s", err)
 	}
 
 	a.initBindings()
@@ -589,6 +599,30 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 	}
 	return topics
 }
+func (a *DaprRuntime) initExporters() error {
+	fmt.Println("ABOUT TO INITIALIZE EXPORTERS")
+	for _, c := range a.components {
+		if strings.Index(c.Spec.Type, "exporter") == 0 {
+			fmt.Println("SETTING UP " + c.Spec.Type)
+			exporter, err := a.exporterRegistry.CreateExporter(c.Spec.Type)
+			if err != nil {
+				log.Warnf("error creating exporter %s: %s", c.Spec.Type, err)
+				continue
+			}
+
+			properties := a.convertMetadataItemsToAnyProperties(c.Spec.Metadata)
+
+			err = exporter.Init(a.runtimeConfig.ID, a.hostAddress, exporters.Metadata{
+				Properties: properties,
+			})
+			if err != nil {
+				log.Warnf("error initializing exporter %s: %s", c.Spec.Type, err)
+				continue
+			}
+		}
+	}
+	return nil
+}
 
 func (a *DaprRuntime) initPubSub() error {
 	for _, c := range a.components {
@@ -952,6 +986,13 @@ func (a *DaprRuntime) initSecretStores() error {
 
 func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
 	properties := map[string]string{}
+	for _, c := range items {
+		properties[c.Name] = c.Value
+	}
+	return properties
+}
+func (a *DaprRuntime) convertMetadataItemsToAnyProperties(items []components_v1alpha1.MetadataItem) map[string]interface{} {
+	properties := map[string]interface{}{}
 	for _, c := range items {
 		properties[c.Name] = c.Value
 	}

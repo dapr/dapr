@@ -112,6 +112,8 @@ github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7Do
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/dapr/components-contrib v0.0.0-20191014200624-99461da9580e h1:IjFWdathj1+u5tbtU+GLvtqw2uDJNeIh7lRwWo4IKoc=
 github.com/dapr/components-contrib v0.0.0-20191014200624-99461da9580e/go.mod h1:7YLneZG5RQOCoagWAg6ZHEEQAl0njGOmlsFwt6PWLbg=
+github.com/dapr/components-contrib v0.0.0-20191018104017-c9c1a5486766 h1:v95qMqh8HzUuaoHovJ9Hl7PMcYx25RgwWeR2UDnWtmU=
+github.com/dapr/components-contrib v0.0.0-20191022213015-63af15926ba3 h1:vXzgqc2v0LJoLW+nkrxWdnyYk8jB1OggJL3WLPJbQGU=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

@@ -26,8 +26,8 @@ type ConfigurationSpec struct {
 
 type TracingSpec struct {
 	Enabled         bool   `json:"enabled" yaml:"enabled"`
-	ExporterType    string `json:"exporterType" yaml:"exporterType"`
-	ExporterAddress string `json:"exporterAddress" yaml:"exporterAddress"`
+	ExporterType    string `json:"exporterType" yaml:"exporterType,omitempty"`
+	ExporterAddress string `json:"exporterAddress" yaml:"exporterAddress,omitempty"`
 	ExpandParams    bool   `json:"expandParams" yaml:"expandParams"`
 	IncludeBody     bool   `json:"includeBody" yaml:"includeBody"`
 }
