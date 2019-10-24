@@ -19,6 +19,8 @@ import (
 	"testing"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/exporters"
+	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -99,7 +101,15 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	buffer := ""
 	spec := config.TracingSpec{ExporterType: "string"}
-	diag.CreateExporter("", "", spec, &buffer)
+
+	meta := exporters.Metadata{
+		Buffer: &buffer,
+		Properties: map[string]string{
+			"Enabled": "true",
+		},
+	}
+	createExporters(meta)
+
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
 		json:                  jsoniter.ConfigFastest,
@@ -242,7 +252,14 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{ExporterType: "string"}
-	diag.CreateExporter("", "", spec, &buffer)
+
+	meta := exporters.Metadata{
+		Buffer: &buffer,
+		Properties: map[string]string{
+			"Enabled": "true",
+		},
+	}
+	createExporters(meta)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -580,12 +597,23 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
+func createExporters(meta exporters.Metadata) {
+	exporter := stringexporter.NewStringExporter()
+	exporter.Init("fakeID", "fakeAddress", meta)
+}
 func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
 	spec := config.TracingSpec{ExporterType: "string"}
-	diag.CreateExporter("", "", spec, &buffer)
+
+	meta := exporters.Metadata{
+		Buffer: &buffer,
+		Properties: map[string]string{
+			"Enabled": "true",
+		},
+	}
+	createExporters(meta)
 
 	testAPI := &api{
 		actor: nil,

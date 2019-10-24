@@ -48,7 +48,6 @@ func (s *server) StartNonBlocking() {
 
 	go func() {
 		if s.tracingSpec.Enabled {
-			diag.CreateExporter(s.config.DaprID, s.config.HostAddress, s.tracingSpec, nil)
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
 				diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(router.HandleRequest))))
 		} else {

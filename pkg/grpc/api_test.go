@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/components-contrib/exporters"
+	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
@@ -63,6 +65,11 @@ func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEn
 	return &empty.Empty{}, nil
 }
 
+func createExporters(meta exporters.Metadata) {
+	exporter := stringexporter.NewStringExporter()
+	exporter.Init("fakeID", "fakeAddress", meta)
+}
+
 func TestCallActorWithTracing(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -70,7 +77,14 @@ func TestCallActorWithTracing(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{ExporterType: "string"}
-	diag.CreateExporter("", "", spec, &buffer)
+
+	meta := exporters.Metadata{
+		Buffer: &buffer,
+		Properties: map[string]string{
+			"Enabled": "true",
+		},
+	}
+	createExporters(meta)
 
 	server := grpc_go.NewServer(
 		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddleware(spec))),
@@ -110,7 +124,14 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{ExporterType: "string"}
-	diag.CreateExporter("", "", spec, &buffer)
+
+	meta := exporters.Metadata{
+		Buffer: &buffer,
+		Properties: map[string]string{
+			"Enabled": "true",
+		},
+	}
+	createExporters(meta)
 
 	server := grpc_go.NewServer(
 		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddleware(spec))),
