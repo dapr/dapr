@@ -598,6 +598,7 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 	}
 	return topics
 }
+
 func (a *DaprRuntime) initExporters() error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "exporter") == 0 {
