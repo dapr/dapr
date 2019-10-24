@@ -40,8 +40,8 @@ type ConfigurationSpec struct {
 
 type TracingSpec struct {
 	Enabled          bool   `json:"enabled"`
-	ExporterType     string `json:"exporterType"`
-	ExporterAddress  string `json:"exporterAddress"`
+	ExporterType     string `json:"exporterType,omitempty"`
+	ExporterAddress  string `json:"exporterAddress,omitempty"`
 	IncludeEvent     bool   `json:"includeEvent"`
 	IncludeEventBody bool   `json:"includeEventBody"`
 }
