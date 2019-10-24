@@ -50,7 +50,7 @@ type actorsRuntime struct {
 	appChannel          channel.AppChannel
 	store               state.StateStore
 	placementTableLock  *sync.RWMutex
-	placementTables     *placement.PlacementTables
+	placementTables     *placement.ConsistentHashTables
 	placementSignal     chan struct{}
 	placementBlock      bool
 	operationUpdateLock *sync.Mutex
@@ -80,7 +80,7 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		config:              config,
 		store:               stateStore,
 		placementTableLock:  &sync.RWMutex{},
-		placementTables:     &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
+		placementTables:     &placement.ConsistentHashTables{Entries: make(map[string]*placement.Consistent)},
 		operationUpdateLock: &sync.Mutex{},
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},

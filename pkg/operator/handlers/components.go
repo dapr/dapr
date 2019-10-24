@@ -41,6 +41,7 @@ func (c *ComponentsHandler) ObjectUpdated(old interface{}, new interface{}) {
 
 // ObjectDeleted handles deleted crd operations
 func (c *ComponentsHandler) ObjectDeleted(obj interface{}) {
+	log.Info("notified about a component delete")
 }
 
 // ObjectCreated handles created crd operations

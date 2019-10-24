@@ -33,9 +33,6 @@ run:
   skip-files:
   #  - ".*\\.my\\.go$"
   #  - lib/bad.go
-    - pkg.*version.*version.go
-    - pkg.*models.*models.go
-    - pkg.*config.*modes.*kubernetes_config.go
 
 # output configuration options
 output:
@@ -102,7 +99,7 @@ linters-settings:
   goimports:
     # put imports beginning with prefix after 3rd-party packages;
     # it's a comma-separated list of prefixes
-    local-prefixes: github.com/dapr/dapr
+    local-prefixes:
   gocyclo:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     min-complexity: 10
@@ -222,7 +219,6 @@ linters:
   enable-all: true
   disable:
     # TODO Enforce the below linters later
-    - deadcode
     - dupl
     - errcheck
     - funlen
@@ -231,14 +227,9 @@ linters:
     - gocyclo
     - gocognit
     - godox
-    - golint
-    # TODO enable gofmt and goimports again once github action is done. Now both failed in windows only.
-    - gofmt
-    - goimports
     - interfacer
     - lll
     - maligned
     - scopelint
     - unparam
-    - unused
     - wsl

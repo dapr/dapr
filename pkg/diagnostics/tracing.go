@@ -116,6 +116,7 @@ func TracingGRPCMiddleware(spec config.TracingSpec) grpc_go.StreamServerIntercep
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		span := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
+		//nolint
 		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationID, SerializeSpanContext(*span.SpanContext))
 		defer span.Span.End()
 		err := handler(srv, wrappedStream)
@@ -139,6 +140,7 @@ func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInte
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		span := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
 		defer span.Span.End()
+		//nolint
 		newCtx := context.WithValue(span.Context, correlationID, SerializeSpanContext(*span.SpanContext))
 		resp, err := handler(newCtx, req)
 		if err != nil {
