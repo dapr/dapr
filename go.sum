@@ -120,6 +120,7 @@ github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7Do
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/dapr/components-contrib v0.0.0-20191014200624-99461da9580e h1:IjFWdathj1+u5tbtU+GLvtqw2uDJNeIh7lRwWo4IKoc=
 github.com/dapr/components-contrib v0.0.0-20191014200624-99461da9580e/go.mod h1:7YLneZG5RQOCoagWAg6ZHEEQAl0njGOmlsFwt6PWLbg=
+github.com/dapr/components-contrib v0.0.0-20191022213015-63af15926ba3 h1:vXzgqc2v0LJoLW+nkrxWdnyYk8jB1OggJL3WLPJbQGU=
 github.com/dapr/components-contrib v0.0.0-20191022213015-63af15926ba3/go.mod h1:APCNBRpSaDDw/KNmwwadWdpQwlL2GYNH4T1TlYIyFcg=
 github.com/dapr/components-contrib v0.0.0-20191023150805-c57cb043af80 h1:1J9kGPVw6YmYHdC34rCUsveGZltrIeDlrhMLitxYUyM=
 github.com/dapr/components-contrib v0.0.0-20191023150805-c57cb043af80/go.mod h1:3ad1Z9F+U7TD50/joD6Jg409HG5ebKrR1YGvcUSwhiA=

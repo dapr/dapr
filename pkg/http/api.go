@@ -409,29 +409,6 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	return nil
 }
 
-// DEPRECATED
-func (a *api) onInvokeLocal(c *routing.Context) error {
-	method := string(c.Path())[len(string(c.Path()))-strings.Index(string(c.Path()), "invoke/"):]
-	body := c.PostBody()
-	verb := string(c.Method())
-
-	req := channel.InvokeRequest{
-		Metadata: map[string]string{http.HTTPVerb: verb},
-		Payload:  body,
-		Method:   method,
-	}
-	resp, err := a.appChannel.InvokeMethod(&req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_INVOKE", err.Error())
-		respondWithError(c.RequestCtx, 500, msg)
-	} else {
-		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
-		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
-	}
-
-	return nil
-}
-
 func (a *api) onCreateActorReminder(c *routing.Context) error {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")

@@ -21,8 +21,8 @@ import (
 
 var httpPort = 6500
 
-//APIServer runs the Dapr API server for components and configurations
-type APIServer interface {
+//Server runs the Dapr API server for components and configurations
+type Server interface {
 	Run(ctx context.Context)
 }
 
@@ -47,7 +47,7 @@ type TracingSpec struct {
 }
 
 // NewAPIServer returns a new API server
-func NewAPIServer(client scheme.Interface) APIServer {
+func NewAPIServer(client scheme.Interface) Server {
 	return &apiServer{
 		Client: client,
 	}
