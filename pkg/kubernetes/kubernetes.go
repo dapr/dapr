@@ -63,6 +63,13 @@ func CreateService(service *corev1.Service, namespace string) error {
 	return nil
 }
 
+// Delete a service
+func DeleteService(serviceName string, namespace string) error {
+	client := utils.GetKubeClient()
+
+	return client.CoreV1().Services(namespace).Delete(serviceName, &meta_v1.DeleteOptions{})
+}
+
 // ServiceExists checks if a service already exists
 func ServiceExists(name, namespace string) bool {
 	client := utils.GetKubeClient()
