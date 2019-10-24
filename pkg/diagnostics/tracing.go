@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/exporters"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
@@ -109,18 +108,6 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 			Code:    projectStatusCode(ctx.Response.StatusCode()),
 			Message: ctx.Response.String(),
 		})
-	}
-}
-
-// CreateExporter creates Opencensus exported as per specified in the tracing spec
-func CreateExporter(daprID string, hostAddress string, spec config.TracingSpec, buffer *string) {
-	switch spec.ExporterType {
-	case "zipkin":
-		ex := exporters.ZipkinExporter{}
-		ex.Init(daprID, hostAddress, spec.ExporterAddress)
-	case "string":
-		es := exporters.StringExporter{Buffer: buffer}
-		es.Init(daprID, hostAddress, spec.ExporterAddress)
 	}
 }
 
