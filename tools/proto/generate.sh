@@ -66,35 +66,49 @@ unzip ${root}/${file} -d ${root}
 
 # find grpc_tools_node_protoc_plugin location
 PROTOC_PLUGIN=$(which grpc_tools_node_protoc_plugin)
-
+ts_grpc_plugin_file=$(which protoc-gen-ts)
 dotnet_grpc_plugin_file="${HOME}/.nuget/packages/grpc.tools/2.24.0/tools/${full_os}_x64/grpc_csharp_plugin"
 
-# generate javascript
-generate js js src 'import_style=commonjs' \
-  --plugin=protoc-gen-grpc=${PROTOC_PLUGIN} \
-  --grpc_out=${top_root}/../js-sdk/src
+language=${1:-"all"}
 
-# generate java
-generate java java src/main/java '' \
-  --plugin=protoc-gen-grpc-java=${java_grpc_plugin_path} \
-  --grpc-java_out=${top_root}/../java-sdk/src/main/java
+if [[ "${language}" = "all" ]] || [[ "${language}" = "js" ]]; then
+  # generate javascript
+  generate js js src 'import_style=commonjs' \
+    --plugin=protoc-gen-grpc=${PROTOC_PLUGIN} \
+    --plugin=protoc-gen-ts=${ts_grpc_plugin_file} \
+    --ts_out=${top_root}/../js-sdk/src \
+    --grpc_out=${top_root}/../js-sdk/src
+fi
 
-# generate python
-mkdir -p ${top_root}/../python-sdk
-python3 -m grpc.tools.protoc -I${top_root}/pkg/proto \
+if [[ "$language" = "all" ]] || [[ "$language" = "java" ]]; then
+  # generate java
+  generate java java src/main/java '' \
+    --plugin=protoc-gen-grpc-java=${java_grpc_plugin_path} \
+    --grpc-java_out=${top_root}/../java-sdk/src/main/java
+fi
+
+if [[ "$language" = "all" ]] || [[ "$language" = "python" ]]; then
+  # generate python
+  mkdir -p ${top_root}/../python-sdk
+  python3 -m grpc.tools.protoc -I${top_root}/pkg/proto \
    --python_out=${top_root}/../python-sdk \
    --grpc_python_out=${top_root}/../python-sdk \
    dapr/dapr.proto \
    daprclient/daprclient.proto
+fi
 
-# generate golang
-generate go go . `` --plugin=grpc
+if [[ "$language" = "all" ]] || [[ "$language" = "go" ]]; then
+  # generate golang
+  generate go go . `` --plugin=grpc
+fi
 
-# generate dotnet
-# dotnet generates their own via dotnet build...
-generate dotnet csharp src/Dapr.Client.Grpc '' \
-  --plugin=protoc-gen-grpc=${dotnet_grpc_plugin_file} \
-  --grpc_out=${top_root}/../dotnet-sdk/src/Dapr.Client.Grpc
+if [[ "$language" = "all" ]] || [[ "$language" = "dotnet" ]]; then
+  # generate dotnet
+  # dotnet generates their own via dotnet build...
+  generate dotnet csharp src/Dapr.Client.Grpc '' \
+    --plugin=protoc-gen-grpc=${dotnet_grpc_plugin_file} \
+    --grpc_out=${top_root}/../dotnet-sdk/src/Dapr.Client.Grpc
+fi
 
 # cleanup
 rm -r ${root}/include ${root}/bin ${root}/${file} ${root}/readme.txt ${java_grpc_plugin_path}
