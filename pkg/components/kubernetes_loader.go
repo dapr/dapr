@@ -13,6 +13,7 @@ import (
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/valyala/fasthttp"
+	"github.com/cenkalti/backoff"
 )
 
 // KubernetesComponents loads components in a kubernetes environment
@@ -29,7 +30,29 @@ func NewKubernetesComponents(configuration config.KubernetesConfig) *KubernetesC
 
 // LoadComponents returns components from a given control plane address
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = 1 *time.Minute
+	
 	url := fmt.Sprintf("%s/components", k.config.ControlPlaneAddress)
+	var components []components_v1alpha1.Component
+	
+	err := backoff.Retry(func() error {
+		body, err := requestControlPlane(url)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(body, &components)
+		if err != nil {
+			return nil
+		}
+		return nil;
+	}, b)
+
+	return components, err
+}
+
+// Retry mechanism when requesting the Operator API
+func requestControlPlane(url string) ([]byte, error) {
 	req := fasthttp.AcquireRequest()
 	req.SetRequestURI(url)
 	req.Header.SetContentType("application/json")
@@ -40,16 +63,10 @@ func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component
 	}
 	err := client.Do(req, resp)
 	if err != nil {
+		// Request failed, retry again
 		return nil, err
 	}
 
 	body := resp.Body()
-
-	var components []components_v1alpha1.Component
-	err = json.Unmarshal(body, &components)
-	if err != nil {
-		return nil, err
-	}
-
-	return components, nil
+	return body, nil
 }
