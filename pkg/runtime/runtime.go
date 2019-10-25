@@ -679,7 +679,8 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 
 	resp, err := a.appChannel.InvokeMethod(&req)
 	if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
-		log.Debugf("error from app: %s", err)
+		err = fmt.Errorf("error from app consumer: %s", err)
+		log.Debug(err)
 		return err
 	}
 	return nil
@@ -711,7 +712,8 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
 	_, err = client.OnTopicEvent(context.Background(), envelope)
 	if err != nil {
-		log.Debugf("error from app: %s", err)
+		err = fmt.Errorf("error from consumer app: %s", err)
+		log.Debug(err)
 		return err
 	}
 	return nil
