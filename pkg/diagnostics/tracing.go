@@ -68,19 +68,23 @@ func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) TracerSpan {
 	var ctx context.Context
 	var span *trace.Span
+	var ctxc context.Context
+	var spanc *trace.Span
 
 	corID := string(c.Request.Header.Peek(correlationID))
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(c.Path()), spanContext)
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(c.Path()), spanContext, trace.WithSpanKind(trace.SpanKindServer))
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), string(c.Path()))
+		ctx, span = trace.StartSpan(context.Background(), string(c.Path()), trace.WithSpanKind(trace.SpanKindServer))
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
 	addAnnotations(c, span, spec.ExpandParams, spec.IncludeBody)
 
-	context := span.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}
+	context := spanc.SpanContext()
+	return TracerSpan{Context: ctxc, Span: spanc, SpanContext: &context}
 }
 
 func addAnnotations(ctx *fasthttp.RequestCtx, span *trace.Span, expandParams bool, includeBody bool) {
@@ -106,7 +110,7 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 		next(ctx)
 		span.Span.SetStatus(trace.Status{
 			Code:    projectStatusCode(ctx.Response.StatusCode()),
-			Message: ctx.Response.String(),
+			Message: strconv.Itoa(ctx.Response.StatusCode()),
 		})
 	}
 }
@@ -116,7 +120,6 @@ func TracingGRPCMiddleware(spec config.TracingSpec) grpc_go.StreamServerIntercep
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		span := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		//nolint
 		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationID, SerializeSpanContext(*span.SpanContext))
 		defer span.Span.End()
 		err := handler(srv, wrappedStream)
@@ -140,7 +143,6 @@ func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInte
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		span := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
 		defer span.Span.End()
-		//nolint
 		newCtx := context.WithValue(span.Context, correlationID, SerializeSpanContext(*span.SpanContext))
 		resp, err := handler(newCtx, req)
 		if err != nil {
@@ -162,6 +164,8 @@ func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInte
 func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) TracerSpan {
 	var ctx context.Context
 	var span *trace.Span
+	var ctxc context.Context
+	var spanc *trace.Span
 
 	md := metautils.ExtractIncoming(c)
 	headers := extractHeaders(req)
@@ -173,15 +177,17 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), method, spanContext)
+		ctx, span = trace.StartSpanWithRemoteParent(c, method, spanContext, trace.WithSpanKind(trace.SpanKindServer))
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(method), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	} else {
 		ctx, span = trace.StartSpan(context.Background(), method)
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(method), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
 	addAnnotationsFromMD(md, span, spec.ExpandParams, spec.IncludeBody)
 
-	context := span.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}
+	context := spanc.SpanContext()
+	return TracerSpan{Context: ctxc, Span: spanc, SpanContext: &context}
 }
 
 func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bool, includeBody bool) {
@@ -230,4 +236,15 @@ func extractHeaders(req interface{}) string {
 		return s.Metadata["headers"]
 	}
 	return ""
+}
+
+func createSpanName(name string) string {
+	i := strings.Index(name, "/invoke/")
+	if i > 0 {
+		j := strings.Index(name[i+8:], "/")
+		if j > 0 {
+			return name[i+8 : i+8+j]
+		}
+	}
+	return name
 }

@@ -6,7 +6,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
-	github.com/dapr/components-contrib v0.0.0-20191023194728-f2b0cede8a14
+	github.com/dapr/components-contrib v0.0.0-20191025231543-f157dab522ae
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0

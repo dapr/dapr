@@ -37,7 +37,9 @@ func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
-				Enabled: false,
+				Enabled:      false,
+				ExpandParams: false,
+				IncludeBody:  false,
 			},
 		},
 	}
