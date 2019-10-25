@@ -1,6 +1,6 @@
 # Dapr - Any language, any framework, anywhere
 
-Dapr is a portable, event-driven, serverless runtime for building distributed applications across cloud and edge.
+Dapr is a portable, event-driven, runtime for building distributed applications across cloud and edge.
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg)](https://github.com/dapr/dapr/actions?workflow=dapr)
@@ -50,17 +50,17 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 ## Features
 
 * Event-driven Pub-Sub system with pluggable providers and at-least-once semantics
-* Input and Output bindings with pluggable providers
+* Input and output bindings with pluggable providers
 * State management with pluggable data stores
 * Consistent service-to-service discovery and invocation
 * Opt-in stateful models: Strong/Eventual consistency, First-write/Last-write wins
-* Cross platform Virtual Actors
+* Cross platform virtual actors
 * Rate limiting
 * Built-in distributed tracing using Open Telemetry
 * Runs natively on Kubernetes using a dedicated Operator and CRDs
 * Supports all programming languages via HTTP and gRPC
 * Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
-* Runs anywhere - as a process or containerized
+* Runs anywhere, as a process or containerized
 * Lightweight (58MB binary, 4MB physical memory)
 * Runs as a sidecar - removes the need for special SDKs or libraries
 * Dedicated CLI - developer friendly experience with easy debugging
@@ -77,6 +77,28 @@ See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
 
 See [Samples](https://github.com/dapr/samples) for additional samples.
 
+## Community
+We want your contributions and suggestions. One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls. Here is how to get involved.
+
+| Engagement |  |
+|:-----|:------------|
+|IM chat  | https://gitter.im/Dapr/community 
+| Mailing list | https://groups.google.com/forum/#!forum/dapr-dev
+| Meeting dates |  [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
+| Meeting link | https://zoom.us/j/4012224986
+| Meeting notes | https://hackmd.io/xSrdvqY0TSyllYPEmOSEZQ?both
+| Twitter | [@daprdev](https://twitter.com/daprdev)
+
+### Contributing to Dapr
+
+See the [Wiki](https://github.com/dapr/dapr/wiki) for information on contributing to Dapr.
+
+See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development) to get started with building and developing.
+
+## Roadmap
+
+See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for the Dapr project.
+
 ## Repositories
 
 | Repo | Description |
@@ -92,16 +114,6 @@ See [Samples](https://github.com/dapr/samples) for additional samples.
 | [Python-sdk](https://github.com/dapr/python-sdk) | Dapr SDK for Python
 | [Dotnet-sdk](https://github.com/dapr/dotnet-sdk) | Dapr SDK for .NET Core
 
-
-## Roadmap
-
-See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for the Dapr project.
-
-## Contributing to Dapr
-
-See the [Wiki](https://github.com/dapr/dapr/wiki) for information on contributing to Dapr.
-
-See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development) to get started with building and developing.
 
 ## Code of Conduct
 
