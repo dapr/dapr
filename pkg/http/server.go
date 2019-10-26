@@ -12,7 +12,7 @@ import (
 	"github.com/valyala/fasthttp/pprofhandler"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	routing "github.com/qiangxue/fasthttp-routing"
