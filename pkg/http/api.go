@@ -110,7 +110,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 
 func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
-		Endpoint{
+		{
 			Methods: []string{http.Post, http.Put},
 			Route:   "publish/<topic>",
 			Version: apiVersionV1,
@@ -121,7 +121,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 
 func (a *api) constructBindingsEndpoints() []Endpoint {
 	return []Endpoint{
-		Endpoint{
+		{
 			Methods: []string{http.Post, http.Put},
 			Route:   "bindings/<name>",
 			Version: apiVersionV1,
@@ -234,7 +234,6 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request data field: %s", err))
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
-
 	}
 	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
 		Metadata: req.Metadata,
@@ -404,29 +403,6 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		a.setHeadersOnRequest(resp.Metadata, c)
-		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
-	}
-
-	return nil
-}
-
-// DEPRECATED
-func (a *api) onInvokeLocal(c *routing.Context) error {
-	method := string(c.Path())[len(string(c.Path()))-strings.Index(string(c.Path()), "invoke/"):]
-	body := c.PostBody()
-	verb := string(c.Method())
-
-	req := channel.InvokeRequest{
-		Metadata: map[string]string{http.HTTPVerb: verb},
-		Payload:  body,
-		Method:   method,
-	}
-	resp, err := a.appChannel.InvokeMethod(&req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_INVOKE", err.Error())
-		respondWithError(c.RequestCtx, 500, msg)
-	} else {
-		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
 	}
 

@@ -63,7 +63,7 @@ func LookupPortMDNS(id string) (int, error) {
 
 	err = resolver.Browse(ctx, id, "local.", entries)
 	if err != nil {
-		return -1, fmt.Errorf("Failed to browse: %s", err.Error())
+		return -1, fmt.Errorf("failed to browse: %s", err.Error())
 	}
 
 	<-ctx.Done()

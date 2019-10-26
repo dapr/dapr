@@ -30,11 +30,11 @@ type ConfigurationSpec struct {
 
 // TracingSpec is the spec object in ConfigurationSpec
 type TracingSpec struct {
-	Enabled          bool   `json:"enabled"`
-	ExporterType     string `json:"exporterType"`
-	ExporterAddress  string `json:"exporterAddress"`
-	IncludeEvent     bool   `json:"includeEvent"`
-	IncludeEventBody bool   `json:"includeEventBody"`
+	Enabled         bool   `json:"enabled"`
+	ExporterType    string `json:"exporterType,omitempty"`
+	ExporterAddress string `json:"exporterAddress,omitempty"`
+	IncludeBody     bool   `json:"includeBody"`
+	ExpandParams    bool   `json:"expandParams"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

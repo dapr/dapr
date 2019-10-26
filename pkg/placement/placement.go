@@ -17,8 +17,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// PlacementService updates the Dapr runtimes with distributed hash tables for stateful entities.
-type PlacementService struct {
+// Service updates the Dapr runtimes with distributed hash tables for stateful entities.
+type Service struct {
 	generation        int
 	entriesLock       *sync.RWMutex
 	entries           map[string]*Consistent
@@ -34,8 +34,8 @@ type placementOptions struct {
 }
 
 // NewPlacementService returns a new placement service
-func NewPlacementService() *PlacementService {
-	return &PlacementService{
+func NewPlacementService() *Service {
+	return &Service{
 		entriesLock:       &sync.RWMutex{},
 		entries:           make(map[string]*Consistent),
 		hostsEntitiesLock: &sync.RWMutex{},
@@ -46,7 +46,7 @@ func NewPlacementService() *PlacementService {
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts
-func (p *PlacementService) ReportDaprStatus(srv daprinternal_pb.PlacementService_ReportDaprStatusServer) error {
+func (p *Service) ReportDaprStatus(srv daprinternal_pb.PlacementService_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 	p.hostsLock.Lock()
 	md, _ := metadata.FromIncomingContext(srv.Context())
@@ -86,7 +86,7 @@ func (p *PlacementService) ReportDaprStatus(srv daprinternal_pb.PlacementService
 }
 
 // RemoveHost removes the host from the hosts list
-func (p *PlacementService) RemoveHost(srv daprinternal_pb.PlacementService_ReportDaprStatusServer) {
+func (p *Service) RemoveHost(srv daprinternal_pb.PlacementService_ReportDaprStatusServer) {
 	for i := len(p.hosts) - 1; i >= 0; i-- {
 		if p.hosts[i] == srv {
 			p.hosts = append(p.hosts[:i], p.hosts[i+1:]...)
@@ -96,7 +96,8 @@ func (p *PlacementService) RemoveHost(srv daprinternal_pb.PlacementService_Repor
 
 // PerformTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
 // it then proceeds to update and then unlock once all runtimes have been updated
-func (p *PlacementService) PerformTablesUpdate(hosts []daprinternal_pb.PlacementService_ReportDaprStatusServer, options placementOptions) {
+func (p *Service) PerformTablesUpdate(hosts []daprinternal_pb.PlacementService_ReportDaprStatusServer,
+	options placementOptions) {
 	p.updateLock.Lock()
 	defer p.updateLock.Unlock()
 
@@ -165,7 +166,7 @@ func (p *PlacementService) PerformTablesUpdate(hosts []daprinternal_pb.Placement
 }
 
 // ProcessRemovedHost removes a host from the hash table
-func (p *PlacementService) ProcessRemovedHost(id string) {
+func (p *Service) ProcessRemovedHost(id string) {
 	updateRequired := false
 
 	p.hostsEntitiesLock.RLock()
@@ -188,7 +189,7 @@ func (p *PlacementService) ProcessRemovedHost(id string) {
 }
 
 // ProcessHost updates the distributed has list based on a new host and its entities
-func (p *PlacementService) ProcessHost(host *daprinternal_pb.Host) {
+func (p *Service) ProcessHost(host *daprinternal_pb.Host) {
 	updateRequired := false
 
 	for _, e := range host.Entities {
@@ -214,7 +215,7 @@ func (p *PlacementService) ProcessHost(host *daprinternal_pb.Host) {
 }
 
 // Run starts the placement service gRPC server
-func (p *PlacementService) Run(port string) {
+func (p *Service) Run(port string) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)

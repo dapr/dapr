@@ -50,7 +50,7 @@ type actorsRuntime struct {
 	appChannel          channel.AppChannel
 	store               state.StateStore
 	placementTableLock  *sync.RWMutex
-	placementTables     *placement.PlacementTables
+	placementTables     *placement.ConsistentHashTables
 	placementSignal     chan struct{}
 	placementBlock      bool
 	operationUpdateLock *sync.Mutex
@@ -80,7 +80,7 @@ func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcC
 		config:              config,
 		store:               stateStore,
 		placementTableLock:  &sync.RWMutex{},
-		placementTables:     &placement.PlacementTables{Entries: make(map[string]*placement.Consistent)},
+		placementTables:     &placement.ConsistentHashTables{Entries: make(map[string]*placement.Consistent)},
 		operationUpdateLock: &sync.Mutex{},
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
@@ -206,10 +206,15 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	return resp, nil
 }
 
+func (a *actorsRuntime) actorInstanceExists(key string) bool {
+	_, exists := a.actorsTable.Load(key)
+	return exists
+}
+
 func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	key := a.constructCombinedActorKey(actorType, actorID)
 
-	val, exists := a.actorsTable.LoadOrStore(key, &actor{
+	val, _ := a.actorsTable.LoadOrStore(key, &actor{
 		lock:         &sync.RWMutex{},
 		busy:         true,
 		lastUsedTime: time.Now(),
@@ -221,6 +226,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	lock.Lock()
 	defer lock.Unlock()
 
+	exists := a.actorInstanceExists(key)
 	if !exists {
 		err := a.tryActivateActor(actorType, actorID)
 		if err != nil {
@@ -570,6 +576,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 						if err != nil {
 							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
 						}
+						break
 					}
 					time.Sleep(time.Millisecond * 500)
 				}

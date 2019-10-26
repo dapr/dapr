@@ -8,6 +8,7 @@ package state
 import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/cosmosdb"
+	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/redis"
 )
 
@@ -18,5 +19,8 @@ func Load() {
 	})
 	RegisterStateStore("azure.cosmosdb", func() state.StateStore {
 		return cosmosdb.NewCosmosDBStateStore()
+	})
+	RegisterStateStore("etcd", func() state.StateStore {
+		return etcd.NewETCD()
 	})
 }

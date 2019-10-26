@@ -93,7 +93,5 @@ func Load() {
 	RegisterOutputBinding("gcp.pubsub", func() bindings.OutputBinding {
 		return pubsub.NewGCPPubSub()
 	})
-	RegisterInputBinding("kubernetes", func() bindings.InputBinding {
-		return kubernetes.NewKubernetes()
-	})
+	RegisterInputBinding("kubernetes", kubernetes.NewKubernetes)
 }

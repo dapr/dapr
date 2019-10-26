@@ -21,6 +21,7 @@ import (
 	"github.com/golang/protobuf/ptypes/any"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/exporters"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
+	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
@@ -67,6 +69,7 @@ type DaprRuntime struct {
 	directMessaging      messaging.DirectMessaging
 	stateStoreRegistry   state_loader.Registry
 	secretStoresRegistry secretstores_loader.Registry
+	exporterRegistry     exporter_loader.Registry
 	stateStore           state.StateStore
 	actor                actors.Actors
 	bindingsRegistry     bindings_loader.Registry
@@ -93,6 +96,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		bindingsRegistry:     bindings_loader.NewRegistry(),
 		pubSubRegistry:       pubsub_loader.NewRegistry(),
 		secretStoresRegistry: secretstores_loader.NewRegistry(),
+		exporterRegistry:     exporter_loader.NewRegistry(),
 	}
 }
 
@@ -147,6 +151,12 @@ func (a *DaprRuntime) initRuntime() error {
 	err = a.initPubSub()
 	if err != nil {
 		log.Warnf("failed to init pubsub: %s", err)
+	}
+
+	exporter_loader.Load()
+	err = a.initExporters()
+	if err != nil {
+		log.Warnf("failed to init exporters: %s", err)
 	}
 
 	a.initBindings()
@@ -335,7 +345,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 		if resp != nil {
-			response := &bindings.AppResponse{}
+			response = &bindings.AppResponse{}
 			response.Concurrency = resp.Concurrency
 			response.To = resp.To
 
@@ -357,7 +367,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				})
 			}
 		}
-
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		req := channel.InvokeRequest{
 			Metadata: metadata,
@@ -590,6 +599,29 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 	return topics
 }
 
+func (a *DaprRuntime) initExporters() error {
+	for _, c := range a.components {
+		if strings.Index(c.Spec.Type, "exporter") == 0 {
+			exporter, err := a.exporterRegistry.CreateExporter(c.Spec.Type)
+			if err != nil {
+				log.Warnf("error creating exporter %s: %s", c.Spec.Type, err)
+				continue
+			}
+
+			properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+
+			err = exporter.Init(a.runtimeConfig.ID, a.hostAddress, exporters.Metadata{
+				Properties: properties,
+			})
+			if err != nil {
+				log.Warnf("error initializing exporter %s: %s", c.Spec.Type, err)
+				continue
+			}
+		}
+	}
+	return nil
+}
+
 func (a *DaprRuntime) initPubSub() error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
@@ -647,7 +679,8 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 
 	resp, err := a.appChannel.InvokeMethod(&req)
 	if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
-		log.Debugf("error from app: %s", err)
+		err = fmt.Errorf("error from app consumer: %s", err)
+		log.Debug(err)
 		return err
 	}
 	return nil
@@ -679,7 +712,8 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
 	_, err = client.OnTopicEvent(context.Background(), envelope)
 	if err != nil {
-		log.Debugf("error from app: %s", err)
+		err = fmt.Errorf("error from consumer app: %s", err)
+		log.Debug(err)
 		return err
 	}
 	return nil
@@ -839,7 +873,6 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		a.appConfig = *appConfig
 		log.Info("application configuration loaded")
 	}
-	return
 }
 
 func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
@@ -901,7 +934,6 @@ func (a *DaprRuntime) announceSelf() error {
 		}
 		log.Info("local service entry announced")
 	}
-
 	return nil
 }
 
@@ -923,7 +955,7 @@ func (a *DaprRuntime) initSecretStores() error {
 
 	// Initialize all secretstore components
 	for _, c := range a.components {
-		if strings.Index(c.Spec.Type, "secretstores") < 0 {
+		if !strings.Contains(c.Spec.Type, "secretstores") {
 			continue
 		}
 
