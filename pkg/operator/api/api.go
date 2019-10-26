@@ -21,8 +21,8 @@ import (
 
 var httpPort = 6500
 
-//APIServer runs the Dapr API server for components and configurations
-type APIServer interface {
+//Server runs the Dapr API server for components and configurations
+type Server interface {
 	Run(ctx context.Context)
 }
 
@@ -39,15 +39,15 @@ type ConfigurationSpec struct {
 }
 
 type TracingSpec struct {
-	Enabled          bool   `json:"enabled"`
-	ExporterType     string `json:"exporterType"`
-	ExporterAddress  string `json:"exporterAddress"`
-	IncludeEvent     bool   `json:"includeEvent"`
-	IncludeEventBody bool   `json:"includeEventBody"`
+	Enabled         bool   `json:"enabled"`
+	ExporterType    string `json:"exporterType,omitempty"`
+	ExporterAddress string `json:"exporterAddress,omitempty"`
+	ExpandParams    bool   `json:"expandParams"`
+	IncludeBody     bool   `json:"includeBody"`
 }
 
 // NewAPIServer returns a new API server
-func NewAPIServer(client scheme.Interface) APIServer {
+func NewAPIServer(client scheme.Interface) Server {
 	return &apiServer{
 		Client: client,
 	}
@@ -108,11 +108,11 @@ func (a *apiServer) GetConfiguration(w http.ResponseWriter, r *http.Request) {
 			ret := Configuration{
 				Spec: ConfigurationSpec{
 					TracingSpec: TracingSpec{
-						Enabled:          c.Spec.TracingSpec.Enabled,
-						ExporterType:     c.Spec.TracingSpec.ExporterType,
-						ExporterAddress:  c.Spec.TracingSpec.ExporterAddress,
-						IncludeEvent:     c.Spec.TracingSpec.IncludeEvent,
-						IncludeEventBody: c.Spec.TracingSpec.IncludeEventBody,
+						Enabled:         c.Spec.TracingSpec.Enabled,
+						ExporterType:    c.Spec.TracingSpec.ExporterType,
+						ExporterAddress: c.Spec.TracingSpec.ExporterAddress,
+						ExpandParams:    c.Spec.TracingSpec.ExpandParams,
+						IncludeBody:     c.Spec.TracingSpec.IncludeBody,
 					},
 				},
 			}
@@ -142,7 +142,7 @@ func RespondWithError(w http.ResponseWriter, code int, message string) {
 	RespondWithJSON(w, code, map[string]string{"error": message})
 }
 
-// RespondWithJSON is a helper method for returning an HTTP message with a JSON paylad
+// RespondWithJSON is a helper method for returning an HTTP message with a JSON payload
 func RespondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	buffer := &bytes.Buffer{}
 	encoder := json.NewEncoder(buffer)

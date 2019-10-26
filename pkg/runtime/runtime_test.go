@@ -6,6 +6,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -398,14 +399,16 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		clientError := errors.New("Internal Error")
+
 		fakeHttpResponse := &channel.InvokeResponse{
 			Metadata: map[string]string{http_channel.HTTPStatusCode: "500"},
-			Data:     []byte("Internal Error"),
+			Data:     []byte(clientError.Error()),
 		}
 
-		expectedClientError := fmt.Errorf("Internal Error")
+		expectedClientError := fmt.Errorf("error from app consumer: Internal Error")
 
-		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHttpResponse, expectedClientError)
+		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHttpResponse, clientError)
 
 		// act
 		err := rt.publishMessageHTTP(testPubSubMessage)

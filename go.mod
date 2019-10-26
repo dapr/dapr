@@ -3,11 +3,10 @@ module github.com/dapr/dapr
 go 1.13
 
 require (
-	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
-	github.com/dapr/components-contrib v0.0.0-20191014200624-99461da9580e
+	github.com/dapr/components-contrib v0.0.0-20191025231543-f157dab522ae
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
@@ -33,7 +32,6 @@ require (
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/onsi/ginkgo v1.10.1 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
-	github.com/openzipkin/zipkin-go v0.1.6
 	github.com/phayes/freeport v0.0.0-20171002181615-b8543db493a5
 	github.com/qiangxue/fasthttp-routing v0.0.0-20160225050629-6ccdc2a18d87
 	github.com/sirupsen/logrus v1.2.0 // indirect
@@ -42,7 +40,6 @@ require (
 	go.opencensus.io v0.22.1
 	gonum.org/v1/gonum v0.0.0-20190911200027-40d3308efe80 // indirect
 	google.golang.org/grpc v1.24.0
-	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 	k8s.io/api v0.0.0-20190819141258-3544db3b9e44
 	k8s.io/apimachinery v0.0.0-20190817020851-f2f3a405f61d

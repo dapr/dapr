@@ -38,7 +38,7 @@ As we continue to solidify our API spec, we need to explicitly define component 
 
 ### State store configuration probe
 
-* An Dapr-comptaible state store shall provide an endpoint that answers to configuration probe and returns (among others):
+* An Dapr-compatible state store shall provide an endpoint that answers to configuration probe and returns (among others):
   * Supported concurrency model
   * Supported consistency model
 * A state store instance shall return the specific configuration of the current instance.

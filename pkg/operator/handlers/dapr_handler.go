@@ -84,6 +84,23 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 	return nil
 }
 
+func (h *DaprHandler) deleteDaprService(name string, deployment *appsv1.Deployment) error {
+	serviceName := fmt.Sprintf("%s-dapr", name)
+	exists := kubernetes.ServiceExists(serviceName, deployment.GetNamespace())
+	if !exists {
+		log.Infof("service does not exist: %s", serviceName)
+		return nil
+	}
+
+	err := kubernetes.DeleteService(serviceName, deployment.GetNamespace())
+	if err != nil {
+		return err
+	}
+
+	log.Infof("deleted service %s in namespace %s", serviceName, deployment.GetNamespace())
+	return nil
+}
+
 func (h *DaprHandler) getDaprID(deployment *appsv1.Deployment) string {
 	annotations := deployment.Spec.Template.ObjectMeta.Annotations
 	if val, ok := annotations[daprIDAnnotationKey]; ok && val != "" {
@@ -134,4 +151,21 @@ func (h *DaprHandler) ObjectUpdated(old interface{}, new interface{}) {
 
 // ObjectDeleted handles Dapr crd deletion
 func (h *DaprHandler) ObjectDeleted(obj interface{}) {
+	h.deploymentsLock.Lock()
+	defer h.deploymentsLock.Unlock()
+
+	deployment := obj.(*appsv1.Deployment)
+	annotated := h.isAnnotatedForDapr(deployment)
+	if annotated {
+		id := h.getDaprID(deployment)
+		if id == "" {
+			log.Warnf("skipping service deletion: id for deployment %s is empty", deployment.GetName())
+			return
+		}
+
+		err := h.deleteDaprService(id, deployment)
+		if err != nil {
+			log.Errorf("failed deleting service for deployment %s: %s", deployment.GetName(), err)
+		}
+	}
 }
