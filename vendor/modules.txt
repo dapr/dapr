@@ -12,6 +12,8 @@ cloud.google.com/go/pubsub/apiv1
 cloud.google.com/go/pubsub/internal/distribution
 # cloud.google.com/go/storage v1.0.0
 cloud.google.com/go/storage
+# contrib.go.opencensus.io/exporter/ocagent v0.6.0
+contrib.go.opencensus.io/exporter/ocagent
 # contrib.go.opencensus.io/exporter/zipkin v0.1.1
 contrib.go.opencensus.io/exporter/zipkin
 # github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
@@ -135,6 +137,13 @@ github.com/aws/aws-sdk-go/service/sts
 github.com/aws/aws-sdk-go/service/sts/stsiface
 # github.com/cenkalti/backoff v2.2.1+incompatible
 github.com/cenkalti/backoff
+# github.com/census-instrumentation/opencensus-proto v0.2.1
+github.com/census-instrumentation/opencensus-proto/gen-go/agent/common/v1
+github.com/census-instrumentation/opencensus-proto/gen-go/agent/metrics/v1
+github.com/census-instrumentation/opencensus-proto/gen-go/agent/trace/v1
+github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1
+github.com/census-instrumentation/opencensus-proto/gen-go/resource/v1
+github.com/census-instrumentation/opencensus-proto/gen-go/trace/v1
 # github.com/coreos/etcd v3.3.17+incompatible
 github.com/coreos/etcd/auth/authpb
 github.com/coreos/etcd/clientv3/balancer
@@ -154,7 +163,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191023194728-f2b0cede8a14
+# github.com/dapr/components-contrib v0.0.0-20191025231543-f157dab522ae
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage
 github.com/dapr/components-contrib/bindings/cosmosdb
@@ -173,6 +182,7 @@ github.com/dapr/components-contrib/bindings/servicebusqueues
 github.com/dapr/components-contrib/bindings/sns
 github.com/dapr/components-contrib/bindings/sqs
 github.com/dapr/components-contrib/exporters
+github.com/dapr/components-contrib/exporters/native
 github.com/dapr/components-contrib/exporters/stringexporter
 github.com/dapr/components-contrib/exporters/zipkin
 github.com/dapr/components-contrib/pubsub
@@ -234,6 +244,7 @@ github.com/golang/glog
 # github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6
 github.com/golang/groupcache/lru
 # github.com/golang/protobuf v1.3.2
+github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/protoc-gen-go
 github.com/golang/protobuf/protoc-gen-go/descriptor
@@ -245,7 +256,9 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/empty
+github.com/golang/protobuf/ptypes/struct
 github.com/golang/protobuf/ptypes/timestamp
+github.com/golang/protobuf/ptypes/wrappers
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
 # github.com/google/go-cmp v0.3.1
@@ -271,6 +284,10 @@ github.com/grandcat/zeroconf
 # github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 github.com/grpc-ecosystem/go-grpc-middleware
 github.com/grpc-ecosystem/go-grpc-middleware/util/metautils
+# github.com/grpc-ecosystem/grpc-gateway v1.11.2
+github.com/grpc-ecosystem/grpc-gateway/internal
+github.com/grpc-ecosystem/grpc-gateway/runtime
+github.com/grpc-ecosystem/grpc-gateway/utilities
 # github.com/hashicorp/go-uuid v1.0.1
 github.com/hashicorp/go-uuid
 # github.com/hashicorp/golang-lru v0.5.3
@@ -522,6 +539,7 @@ google.golang.org/appengine/socket
 google.golang.org/appengine/urlfetch
 # google.golang.org/genproto v0.0.0-20190927181202-20e1ac93f88c
 google.golang.org/genproto/googleapis/api/annotations
+google.golang.org/genproto/googleapis/api/httpbody
 google.golang.org/genproto/googleapis/iam/v1
 google.golang.org/genproto/googleapis/pubsub/v1
 google.golang.org/genproto/googleapis/rpc/code

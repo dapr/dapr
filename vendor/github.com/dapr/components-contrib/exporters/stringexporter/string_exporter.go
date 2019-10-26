@@ -12,7 +12,7 @@ import (
 	"go.opencensus.io/trace"
 )
 
-// Metadata is the zipkin config
+// Metadata is the string exporter config
 type stringExporterMetadata struct {
 	Buffer *string
 }
@@ -32,7 +32,7 @@ func (se *Exporter) ExportSpan(sd *trace.SpanData) {
 	*se.Buffer = strconv.Itoa(int(sd.Status.Code))
 }
 
-// Init creates a new zipkin endpoint and reporter
+// Init creates a new string exporter endpoint and reporter
 func (se *Exporter) Init(daprID string, hostAddress string, metadata exporters.Metadata) error {
 	se.Buffer = metadata.Buffer
 	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
