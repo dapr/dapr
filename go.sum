@@ -131,8 +131,13 @@ github.com/dapr/components-contrib v0.0.0-20191023150805-c57cb043af80 h1:1J9kGPV
 github.com/dapr/components-contrib v0.0.0-20191023150805-c57cb043af80/go.mod h1:3ad1Z9F+U7TD50/joD6Jg409HG5ebKrR1YGvcUSwhiA=
 github.com/dapr/components-contrib v0.0.0-20191023194728-f2b0cede8a14 h1:8c/uu75BNhUwG0B3B1eFYS0KnvLxWESxWMVoJlLpTyM=
 github.com/dapr/components-contrib v0.0.0-20191023194728-f2b0cede8a14/go.mod h1:2EAxhyQzcu3YkMf/B7YnUL0ZRlyZ+uJDFC+KUMymhqA=
+<<<<<<< HEAD
 github.com/dapr/components-contrib v0.0.0-20191026043416-cc7578c02b9c h1:Qc8r8Xp47GpkFiNFlWTvElVM8bbceeRY1Pj5p2y2CSc=
 github.com/dapr/components-contrib v0.0.0-20191026043416-cc7578c02b9c/go.mod h1:e6qjiNC2K+43SnOzludEzE6KYk7nsQj7oaX3AiMeKEk=
+=======
+github.com/dapr/components-contrib v0.0.0-20191025231543-f157dab522ae h1:DDU5XlcPk/fIbEsJcCSpEds10rkqPdJeaIv1+qPKgOY=
+github.com/dapr/components-contrib v0.0.0-20191025231543-f157dab522ae/go.mod h1:FeOCWuEY28kFAzwrPKjj23k5KxbDaecUiZV5i9f+pIA=
+>>>>>>> 77d5be66b79ac567fc72303d1c0646942747714c
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -276,6 +281,7 @@ github.com/grpc-ecosystem/grpc-gateway v1.8.5/go.mod h1:vNeuVxBJEsws4ogUvrchl83t
 github.com/grpc-ecosystem/grpc-gateway v1.9.2/go.mod h1:vNeuVxBJEsws4ogUvrchl83t/GYV9WGTSLVdBhOQFDY=
 github.com/grpc-ecosystem/grpc-gateway v1.9.4 h1:5xLhQjsk4zqPf9EHCrja2qFZMx+yBqkO3XgJ14bNnU0=
 github.com/grpc-ecosystem/grpc-gateway v1.9.4/go.mod h1:vNeuVxBJEsws4ogUvrchl83t/GYV9WGTSLVdBhOQFDY=
+github.com/grpc-ecosystem/grpc-gateway v1.11.2 h1:bUDfHRK8aKGdya+msYJHffDwNxB8Eileyl7Jf2qqYjI=
 github.com/grpc-ecosystem/grpc-gateway v1.11.2/go.mod h1:vNeuVxBJEsws4ogUvrchl83t/GYV9WGTSLVdBhOQFDY=
 github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed/go.mod h1:tMWxXQ9wFIaZeTI9F+hmhFiGpFmhOHzyShyFUhRm0H4=
 github.com/hashicorp/consul/api v1.2.0 h1:oPsuzLp2uk7I7rojPKuncWbZ+m5TMoD4Ivs+2Rkeh4Y=
