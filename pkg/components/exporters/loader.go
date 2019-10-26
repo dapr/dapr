@@ -7,6 +7,7 @@ package exporters
 
 import (
 	"github.com/dapr/components-contrib/exporters"
+	"github.com/dapr/components-contrib/exporters/native"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/exporters/zipkin"
 )
@@ -18,5 +19,8 @@ func Load() {
 	})
 	RegisterExporter("string", func() exporters.Exporter {
 		return stringexporter.NewStringExporter()
+	})
+	RegisterExporter("native", func() exporters.Exporter {
+		return native.NewNativeExporter()
 	})
 }
