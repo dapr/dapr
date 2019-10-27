@@ -399,7 +399,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		clientError := errors.New("internal error")
+		clientError := errors.New("Internal Error")
 
 		fakeHTPResponse := &channel.InvokeResponse{
 			Metadata: map[string]string{http_channel.HTTPStatusCode: "500"},

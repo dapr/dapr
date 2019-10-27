@@ -427,12 +427,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Save object which has byte-array member - 200 OK", func(t *testing.T) {
 		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
 
-		fakeBodyObject = map[string]interface{}{
+		fakeBodyObj := map[string]interface{}{
 			"data":  "fakeData",
 			"data2": fakeBodyArray,
 		}
 
-		serializedByteArray, _ := json.Marshal(fakeBodyObject)
+		serializedByteArray, _ := json.Marshal(fakeBodyObj)
 
 		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
 		base64Encoded := make([]byte, encodedLen)
@@ -618,8 +618,8 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
 
-	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
-	fakeData, _ := json.Marshal(fakeBodyObject)
+	fakeBodyObj := map[string]interface{}{"data": "fakeData"}
+	fakeData, _ := json.Marshal(fakeBodyObj)
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		testAPI.actor = nil
@@ -644,7 +644,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-			Value:     fakeBodyObject,
+			Value:     fakeBodyObj,
 		}).Return(nil)
 
 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
@@ -712,12 +712,12 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	t.Run("Save object which has byte-array member - 200 OK", func(t *testing.T) {
 		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
 
-		fakeBodyObject = map[string]interface{}{
+		fakeBodyObj := map[string]interface{}{
 			"data":  "fakeData",
 			"data2": fakeBodyArray,
 		}
 
-		serializedByteArray, _ := json.Marshal(fakeBodyObject)
+		serializedByteArray, _ := json.Marshal(fakeBodyObj)
 
 		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
 		base64Encoded := make([]byte, encodedLen)
@@ -848,7 +848,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 				Operation: actors.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
-					"value": fakeBodyObject,
+					"value": fakeBodyObj,
 				},
 			},
 			{
