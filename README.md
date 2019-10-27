@@ -1,4 +1,4 @@
-# Dapr - any language, any framework, anywhere
+# Dapr - Any language, any framework, anywhere
 
 Dapr is a portable, event-driven, runtime for building distributed applications across cloud and edge.
 
