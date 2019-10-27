@@ -37,11 +37,17 @@ import (
 
 var retryCounter = 0
 
+const (
+	fakeKeyAPIPath       = "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+	fakeByteArrayAPIPath = "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
+	fakeGoodKeyAPIPath   = "v1.0/state/good-key"
+	fakeETag             = "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
+)
+
 func TestSetHeaders(t *testing.T) {
 	testAPI := &api{}
 	c := &routing.Context{}
-	request := fasthttp.Request{}
-	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+	c.RequestCtx = &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 	c.Request.Header.Set("H1", "v1")
 	c.Request.Header.Set("H2", "v2")
 	m := map[string]string{}
@@ -320,7 +326,6 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
-
 	})
 
 	fakeServer.Shutdown()
@@ -338,14 +343,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeData, _ := json.Marshal(fakeBodyObject)
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		testAPI.actor = nil
 
 		testMethods := []string{"POST", "PUT", "GET", "DELETE"}
 
 		for _, method := range testMethods {
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+			resp := fakeServer.DoRequest(method, fakeKeyAPIPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -354,7 +358,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("Save actor state - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
@@ -375,7 +378,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+			resp := fakeServer.DoRequest(method, fakeKeyAPIPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -384,8 +387,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("Save byte array state value - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
-
 		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
 
 		serializedByteArray, _ := json.Marshal(fakeBodyArray)
@@ -415,7 +416,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
+			resp := fakeServer.DoRequest(method, fakeByteArrayAPIPath, serializedByteArray, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -424,11 +425,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("Save object which has byte-array member - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
-
 		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
 
-		fakeBodyObject := map[string]interface{}{
+		fakeBodyObject = map[string]interface{}{
 			"data":  "fakeData",
 			"data2": fakeBodyArray,
 		}
@@ -464,7 +463,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
+			resp := fakeServer.DoRequest(method, fakeByteArrayAPIPath, serializedByteArray, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -473,7 +472,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("Save actor state - 400 deserialization error", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		nonJSONFakeData := []byte("{\"key\":}")
 
 		mockActors := new(daprt.MockActors)
@@ -496,7 +494,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData, nil)
+			resp := fakeServer.DoRequest(method, fakeKeyAPIPath, nonJSONFakeData, nil)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -505,7 +503,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(daprt.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
@@ -518,7 +515,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		resp := fakeServer.DoRequest("GET", fakeKeyAPIPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
@@ -527,7 +524,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(daprt.MockActors)
 		mockActors.On("DeleteState", &actors.DeleteStateRequest{
 			ActorID:   "fakeActorID",
@@ -543,7 +539,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+		resp := fakeServer.DoRequest("DELETE", fakeKeyAPIPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
@@ -554,14 +550,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
 		testTransactionalOperations := []actors.TransactionalOperation{
-			actors.TransactionalOperation{
+			{
 				Operation: actors.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
-			actors.TransactionalOperation{
+			{
 				Operation: actors.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
@@ -626,7 +622,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeData, _ := json.Marshal(fakeBodyObject)
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		testAPI.actor = nil
 
 		testMethods := []string{"POST", "PUT", "GET", "DELETE"}
@@ -634,7 +629,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		for _, method := range testMethods {
 			buffer = ""
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+			resp := fakeServer.DoRequest(method, fakeKeyAPIPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -644,7 +639,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Save actor state - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(daprt.MockActors)
 		mockActors.On("SaveState", &actors.SaveStateRequest{
 			ActorID:   "fakeActorID",
@@ -666,7 +660,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+			resp := fakeServer.DoRequest(method, fakeKeyAPIPath, fakeData, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -676,8 +670,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Save byte array state value - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
-
 		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
 
 		serializedByteArray, _ := json.Marshal(fakeBodyArray)
@@ -708,7 +700,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
+			resp := fakeServer.DoRequest(method, fakeByteArrayAPIPath, serializedByteArray, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -718,11 +710,9 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Save object which has byte-array member - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
-
 		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
 
-		fakeBodyObject := map[string]interface{}{
+		fakeBodyObject = map[string]interface{}{
 			"data":  "fakeData",
 			"data2": fakeBodyArray,
 		}
@@ -759,7 +749,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
+			resp := fakeServer.DoRequest(method, fakeByteArrayAPIPath, serializedByteArray, nil)
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
@@ -770,7 +760,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Save actor state - 400 deserialization error", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		nonJSONFakeData := []byte("{\"key\":}")
 
 		mockActors := new(daprt.MockActors)
@@ -793,7 +782,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			mockActors.Calls = nil
 
 			// act
-			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData, nil)
+			resp := fakeServer.DoRequest(method, fakeKeyAPIPath, nonJSONFakeData, nil)
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
@@ -804,7 +793,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(daprt.MockActors)
 		mockActors.On("GetState", &actors.GetStateRequest{
 			ActorID:   "fakeActorID",
@@ -817,7 +805,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		resp := fakeServer.DoRequest("GET", fakeKeyAPIPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
@@ -828,7 +816,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(daprt.MockActors)
 		mockActors.On("DeleteState", &actors.DeleteStateRequest{
 			ActorID:   "fakeActorID",
@@ -844,7 +831,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		testAPI.actor = mockActors
 
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+		resp := fakeServer.DoRequest("DELETE", fakeKeyAPIPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
@@ -857,14 +844,14 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
 		testTransactionalOperations := []actors.TransactionalOperation{
-			actors.TransactionalOperation{
+			{
 				Operation: actors.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
-			actors.TransactionalOperation{
+			{
 				Operation: actors.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
@@ -993,6 +980,7 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 	}
 
 	bodyBytes, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
 	response := fakeHTTPResponse{
 		StatusCode:  res.StatusCode,
 		ContentType: res.Header.Get("Content-Type"),
@@ -1012,7 +1000,6 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 }
 
 func TestV1StateEndpoints(t *testing.T) {
-	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
 	fakeStore := fakeStateStore{}
 	testAPI := &api{
@@ -1028,16 +1015,15 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
 	})
 	t.Run("Get state - Good Key", func(t *testing.T) {
-		apiPath := "v1.0/state/good-key"
 		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		resp := fakeServer.DoRequest("GET", fakeGoodKeyAPIPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
-		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
+		assert.Equal(t, fakeETag, resp.RawHeader.Get("ETag"), "failed to read etag")
 	})
 	t.Run("Update state - No ETag", func(t *testing.T) {
 		apiPath := "v1.0/state"
-		request := []state.SetRequest{state.SetRequest{
+		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: "",
 		}}
@@ -1049,9 +1035,9 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 	t.Run("Update state - Matching ETag", func(t *testing.T) {
 		apiPath := "v1.0/state"
-		request := []state.SetRequest{state.SetRequest{
+		request := []state.SetRequest{{
 			Key:  "good-key",
-			ETag: etag,
+			ETag: fakeETag,
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -1061,7 +1047,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
 		apiPath := "v1.0/state"
-		request := []state.SetRequest{state.SetRequest{
+		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: "BAD ETAG",
 		}}
@@ -1072,23 +1058,20 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
 	t.Run("Delete state - No ETag", func(t *testing.T) {
-		apiPath := "v1.0/state/good-key"
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+		resp := fakeServer.DoRequest("DELETE", fakeGoodKeyAPIPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "updating existing key without etag should succeed")
 	})
 	t.Run("Delete state - Matching ETag", func(t *testing.T) {
-		apiPath := "v1.0/state/good-key"
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, etag)
+		resp := fakeServer.DoRequest("DELETE", fakeGoodKeyAPIPath, nil, nil, fakeETag)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "updating existing key with matching etag should succeed")
 	})
 	t.Run("Delete state - Bad ETag", func(t *testing.T) {
-		apiPath := "v1.0/state/good-key"
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "BAD ETAG")
+		resp := fakeServer.DoRequest("DELETE", fakeGoodKeyAPIPath, nil, nil, "BAD ETAG")
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
@@ -1107,7 +1090,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Set state - With Retries", func(t *testing.T) {
 		apiPath := "v1.0/state"
 		retryCounter = 0
-		request := []state.SetRequest{state.SetRequest{
+		request := []state.SetRequest{{
 			Key:  "failed-key",
 			ETag: "BAD ETAG",
 			Options: state.SetStateOption{
