@@ -3,7 +3,7 @@
 Dapr is a portable, event-driven, runtime for building distributed applications across cloud and edge.
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
-[![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg)](https://github.com/dapr/dapr/actions?workflow=dapr)
+[![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
 [![Gitter](https://badges.gitter.im/Dapr/community.svg)](https://gitter.im/Dapr/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -88,6 +88,7 @@ We want your contributions and suggestions. One of the easiest ways to contribut
 | Meeting link | https://zoom.us/j/4012224986
 | Meeting notes | https://hackmd.io/xSrdvqY0TSyllYPEmOSEZQ?both
 | Twitter | [@daprdev](https://twitter.com/daprdev)
+| Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
 
 ### Contributing to Dapr
 
