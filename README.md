@@ -3,13 +3,9 @@
 Dapr is a portable, event-driven, runtime for building distributed applications across cloud and edge.
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
-[![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg)](https://github.com/dapr/dapr/actions?workflow=dapr)
+[![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
 [![Gitter](https://badges.gitter.im/Dapr/community.svg)](https://gitter.im/Dapr/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-- [dapr.io](https://dapr.io)
-- [@DaprDev](https://twitter.com/DaprDev)
-- [gitter.im/Dapr](https://gitter.im/Dapr/community)
 
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
@@ -82,12 +78,14 @@ We want your contributions and suggestions. One of the easiest ways to contribut
 
 | Engagement |  |
 |:-----|:------------|
-|IM chat  | https://gitter.im/Dapr/community 
+| Main page | https://dapr.io
+| IM chat | https://gitter.im/Dapr/community
 | Mailing list | https://groups.google.com/forum/#!forum/dapr-dev
-| Meeting dates |  [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
+| Meeting dates | [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
 | Meeting link | https://zoom.us/j/4012224986
 | Meeting notes | https://hackmd.io/xSrdvqY0TSyllYPEmOSEZQ?both
 | Twitter | [@daprdev](https://twitter.com/daprdev)
+| Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
 
 ### Contributing to Dapr
 
