@@ -7,10 +7,6 @@ Dapr is a portable, event-driven, runtime for building distributed applications 
 [![Gitter](https://badges.gitter.im/Dapr/community.svg)](https://gitter.im/Dapr/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-- [dapr.io](https://dapr.io)
-- [@DaprDev](https://twitter.com/DaprDev)
-- [gitter.im/Dapr](https://gitter.im/Dapr/community)
-
 __Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
 Dapr is a portable, event-driven runtime that makes it easy for developers to build resilient, stateless and stateful microservices that run on the cloud and edge and embraces the diversity of languages and developer frameworks.
@@ -82,9 +78,10 @@ We want your contributions and suggestions. One of the easiest ways to contribut
 
 | Engagement |  |
 |:-----|:------------|
-|IM chat  | https://gitter.im/Dapr/community 
+| Main page | https://dapr.io
+| IM chat | https://gitter.im/Dapr/community
 | Mailing list | https://groups.google.com/forum/#!forum/dapr-dev
-| Meeting dates |  [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
+| Meeting dates | [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
 | Meeting link | https://zoom.us/j/4012224986
 | Meeting notes | https://hackmd.io/xSrdvqY0TSyllYPEmOSEZQ?both
 | Twitter | [@daprdev](https://twitter.com/daprdev)
