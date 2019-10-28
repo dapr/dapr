@@ -12,7 +12,6 @@ import (
 )
 
 func TestGetDaprID(t *testing.T) {
-
 	t.Run("WithValidId", func(t *testing.T) {
 		// Arrange
 		expected := "test_id"
@@ -41,7 +40,6 @@ func TestGetDaprID(t *testing.T) {
 }
 
 func TestIsAnnotatedForDapr(t *testing.T) {
-
 	t.Run("Enabled", func(t *testing.T) {
 		// Arrange
 		expected := "true"
@@ -66,7 +64,6 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 
 		// Assert
 		assert.False(t, got)
-
 	})
 
 	t.Run("Invalid", func(t *testing.T) {
@@ -83,14 +80,13 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 	})
 }
 
-func getDeployment(daprId string, daprEnabled string) *appsv1.Deployment {
-
+func getDeployment(daprID string, daprEnabled string) *appsv1.Deployment {
 	// Arrange
 	metadata := meta_v1.ObjectMeta{
 		Name:   "app",
 		Labels: map[string]string{"app": "test_app"},
 		Annotations: map[string]string{
-			daprIDAnnotationKey:      daprId,
+			daprIDAnnotationKey:      daprID,
 			daprEnabledAnnotationKey: daprEnabled,
 		},
 	}
