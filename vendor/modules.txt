@@ -165,12 +165,8 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-<<<<<<< HEAD
 # github.com/dapr/components-contrib v0.0.0-20191026043416-cc7578c02b9c
 github.com/dapr/components-contrib/state
-=======
-# github.com/dapr/components-contrib v0.0.0-20191025231543-f157dab522ae
->>>>>>> 77d5be66b79ac567fc72303d1c0646942747714c
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage
 github.com/dapr/components-contrib/bindings/cosmosdb
@@ -251,32 +247,21 @@ github.com/golang/glog
 # github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6
 github.com/golang/groupcache/lru
 # github.com/golang/protobuf v1.3.2
-<<<<<<< HEAD
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/empty
-=======
-github.com/golang/protobuf/jsonpb
->>>>>>> 77d5be66b79ac567fc72303d1c0646942747714c
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/timestamp
 github.com/golang/protobuf/protoc-gen-go
+github.com/golang/protobuf/ptypes/wrappers
 github.com/golang/protobuf/protoc-gen-go/generator
 github.com/golang/protobuf/protoc-gen-go/grpc
 github.com/golang/protobuf/protoc-gen-go/descriptor
+github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/protoc-gen-go/generator/internal/remap
 github.com/golang/protobuf/protoc-gen-go/plugin
-<<<<<<< HEAD
-=======
-github.com/golang/protobuf/ptypes
-github.com/golang/protobuf/ptypes/any
-github.com/golang/protobuf/ptypes/duration
-github.com/golang/protobuf/ptypes/empty
 github.com/golang/protobuf/ptypes/struct
-github.com/golang/protobuf/ptypes/timestamp
-github.com/golang/protobuf/ptypes/wrappers
->>>>>>> 77d5be66b79ac567fc72303d1c0646942747714c
 # github.com/golang/snappy v0.0.1
 github.com/golang/snappy
 # github.com/google/go-cmp v0.3.1
@@ -302,7 +287,10 @@ github.com/grandcat/zeroconf
 # github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 github.com/grpc-ecosystem/go-grpc-middleware
 github.com/grpc-ecosystem/go-grpc-middleware/util/metautils
-<<<<<<< HEAD
+# github.com/grpc-ecosystem/grpc-gateway v1.11.2
+github.com/grpc-ecosystem/grpc-gateway/runtime
+github.com/grpc-ecosystem/grpc-gateway/utilities
+github.com/grpc-ecosystem/grpc-gateway/internal
 # github.com/hashicorp/consul/api v1.2.0
 github.com/hashicorp/consul/api
 # github.com/hashicorp/go-cleanhttp v0.5.1
@@ -311,12 +299,6 @@ github.com/hashicorp/go-cleanhttp
 github.com/hashicorp/go-immutable-radix
 # github.com/hashicorp/go-rootcerts v1.0.0
 github.com/hashicorp/go-rootcerts
-=======
-# github.com/grpc-ecosystem/grpc-gateway v1.11.2
-github.com/grpc-ecosystem/grpc-gateway/internal
-github.com/grpc-ecosystem/grpc-gateway/runtime
-github.com/grpc-ecosystem/grpc-gateway/utilities
->>>>>>> 77d5be66b79ac567fc72303d1c0646942747714c
 # github.com/hashicorp/go-uuid v1.0.1
 github.com/hashicorp/go-uuid
 # github.com/hashicorp/golang-lru v0.5.3
@@ -426,13 +408,13 @@ go.opencensus.io/stats
 go.opencensus.io/stats/view
 go.opencensus.io/tag
 go.opencensus.io
+go.opencensus.io/resource
 go.opencensus.io/plugin/ochttp
 go.opencensus.io/metric/metricdata
 go.opencensus.io/stats/internal
 go.opencensus.io/internal/tagencoding
 go.opencensus.io/metric/metricproducer
 go.opencensus.io/plugin/ochttp/propagation/b3
-go.opencensus.io/resource
 # go.uber.org/atomic v1.4.0
 go.uber.org/atomic
 # go.uber.org/multierr v1.2.0
@@ -569,18 +551,14 @@ google.golang.org/appengine/internal/remote_api
 google.golang.org/appengine/socket
 google.golang.org/appengine/internal/socket
 # google.golang.org/genproto v0.0.0-20190927181202-20e1ac93f88c
-<<<<<<< HEAD
 google.golang.org/genproto/googleapis/rpc/status
-=======
-google.golang.org/genproto/googleapis/api/annotations
-google.golang.org/genproto/googleapis/api/httpbody
->>>>>>> 77d5be66b79ac567fc72303d1c0646942747714c
 google.golang.org/genproto/googleapis/iam/v1
 google.golang.org/genproto/googleapis/pubsub/v1
 google.golang.org/genproto/protobuf/field_mask
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/api/annotations
 google.golang.org/genproto/googleapis/type/expr
+google.golang.org/genproto/googleapis/api/httpbody
 # google.golang.org/grpc v1.24.0
 google.golang.org/grpc
 google.golang.org/grpc/metadata
