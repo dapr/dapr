@@ -3,6 +3,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
+//nolint:goconst
 package http
 
 import (
@@ -40,8 +41,7 @@ var retryCounter = 0
 func TestSetHeaders(t *testing.T) {
 	testAPI := &api{}
 	c := &routing.Context{}
-	request := fasthttp.Request{}
-	c.RequestCtx = &fasthttp.RequestCtx{Request: request}
+	c.RequestCtx = &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 	c.Request.Header.Set("H1", "v1")
 	c.Request.Header.Set("H2", "v2")
 	m := map[string]string{}
@@ -320,7 +320,6 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
-
 	})
 
 	fakeServer.Shutdown()
@@ -428,12 +427,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
 
-		fakeBodyObject := map[string]interface{}{
+		fakeResp := map[string]interface{}{
 			"data":  "fakeData",
 			"data2": fakeBodyArray,
 		}
 
-		serializedByteArray, _ := json.Marshal(fakeBodyObject)
+		serializedByteArray, _ := json.Marshal(fakeResp)
 
 		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
 		base64Encoded := make([]byte, encodedLen)
@@ -554,14 +553,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
 		testTransactionalOperations := []actors.TransactionalOperation{
-			actors.TransactionalOperation{
+			{
 				Operation: actors.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
-			actors.TransactionalOperation{
+			{
 				Operation: actors.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
@@ -722,12 +721,12 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
 
-		fakeBodyObject := map[string]interface{}{
+		fakeObj := map[string]interface{}{
 			"data":  "fakeData",
 			"data2": fakeBodyArray,
 		}
 
-		serializedByteArray, _ := json.Marshal(fakeBodyObject)
+		serializedByteArray, _ := json.Marshal(fakeObj)
 
 		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
 		base64Encoded := make([]byte, encodedLen)
@@ -857,14 +856,14 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
 		testTransactionalOperations := []actors.TransactionalOperation{
-			actors.TransactionalOperation{
+			{
 				Operation: actors.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
-			actors.TransactionalOperation{
+			{
 				Operation: actors.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
@@ -993,6 +992,7 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 	}
 
 	bodyBytes, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
 	response := fakeHTTPResponse{
 		StatusCode:  res.StatusCode,
 		ContentType: res.Header.Get("Content-Type"),
@@ -1037,7 +1037,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 	t.Run("Update state - No ETag", func(t *testing.T) {
 		apiPath := "v1.0/state"
-		request := []state.SetRequest{state.SetRequest{
+		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: "",
 		}}
@@ -1049,7 +1049,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 	t.Run("Update state - Matching ETag", func(t *testing.T) {
 		apiPath := "v1.0/state"
-		request := []state.SetRequest{state.SetRequest{
+		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: etag,
 		}}
@@ -1061,7 +1061,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
 		apiPath := "v1.0/state"
-		request := []state.SetRequest{state.SetRequest{
+		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: "BAD ETAG",
 		}}
@@ -1107,7 +1107,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Set state - With Retries", func(t *testing.T) {
 		apiPath := "v1.0/state"
 		retryCounter = 0
-		request := []state.SetRequest{state.SetRequest{
+		request := []state.SetRequest{{
 			Key:  "failed-key",
 			ETag: "BAD ETAG",
 			Options: state.SetStateOption{
