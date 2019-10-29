@@ -76,7 +76,7 @@ if [[ "${language}" = "all" ]] || [[ "${language}" = "js" ]]; then
   generate js js src 'import_style=commonjs' \
     --plugin=protoc-gen-grpc=${PROTOC_PLUGIN} \
     --plugin=protoc-gen-ts=${ts_grpc_plugin_file} \
-    --ts_out=${top_root}/../js-sdk/src \
+    --ts_out="service=grpc-node:${top_root}/../js-sdk/src" \
     --grpc_out=${top_root}/../js-sdk/src
 fi
 
