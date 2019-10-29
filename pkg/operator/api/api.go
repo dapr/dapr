@@ -39,11 +39,11 @@ type ConfigurationSpec struct {
 }
 
 type TracingSpec struct {
-	Enabled          bool   `json:"enabled"`
-	ExporterType     string `json:"exporterType,omitempty"`
-	ExporterAddress  string `json:"exporterAddress,omitempty"`
-	IncludeEvent     bool   `json:"includeEvent"`
-	IncludeEventBody bool   `json:"includeEventBody"`
+	Enabled         bool   `json:"enabled"`
+	ExporterType    string `json:"exporterType,omitempty"`
+	ExporterAddress string `json:"exporterAddress,omitempty"`
+	ExpandParams    bool   `json:"expandParams"`
+	IncludeBody     bool   `json:"includeBody"`
 }
 
 // NewAPIServer returns a new API server
@@ -108,11 +108,11 @@ func (a *apiServer) GetConfiguration(w http.ResponseWriter, r *http.Request) {
 			ret := Configuration{
 				Spec: ConfigurationSpec{
 					TracingSpec: TracingSpec{
-						Enabled:          c.Spec.TracingSpec.Enabled,
-						ExporterType:     c.Spec.TracingSpec.ExporterType,
-						ExporterAddress:  c.Spec.TracingSpec.ExporterAddress,
-						IncludeEvent:     c.Spec.TracingSpec.IncludeEvent,
-						IncludeEventBody: c.Spec.TracingSpec.IncludeEventBody,
+						Enabled:         c.Spec.TracingSpec.Enabled,
+						ExporterType:    c.Spec.TracingSpec.ExporterType,
+						ExporterAddress: c.Spec.TracingSpec.ExporterAddress,
+						ExpandParams:    c.Spec.TracingSpec.ExpandParams,
+						IncludeBody:     c.Spec.TracingSpec.IncludeBody,
 					},
 				},
 			}
