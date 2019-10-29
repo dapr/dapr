@@ -10,7 +10,7 @@ run:
   issues-exit-code: 1
 
   # include test files or not, default is true
-  tests: false
+  tests: true
 
   # list of build tags, all linters use it. Default is empty list.
   #build-tags:
@@ -116,7 +116,7 @@ linters-settings:
     # minimal length of string constant, 3 by default
     min-len: 3
     # minimal occurrences count to trigger, 3 by default
-    min-occurrences: 3
+    min-occurrences: 5
   depguard:
     list-type: blacklist
     include-go-root: false
