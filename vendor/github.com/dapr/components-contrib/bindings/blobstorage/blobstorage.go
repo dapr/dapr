@@ -35,7 +35,7 @@ type blobStorageMetadata struct {
 	Container        string `json:"container"`
 }
 
-// NewAzureBlobStorage returns a new CosmosDB instance
+// NewAzureBlobStorage returns a new Azure Blob Storage instance
 func NewAzureBlobStorage() *AzureBlobStorage {
 	return &AzureBlobStorage{}
 }
@@ -49,7 +49,7 @@ func (a *AzureBlobStorage) Init(metadata bindings.Metadata) error {
 	a.metadata = m
 	credential, err := azblob.NewSharedKeyCredential(m.StorageAccount, m.StorageAccessKey)
 	if err != nil {
-		return fmt.Errorf("Invalid credentials with error: %s", err.Error())
+		return fmt.Errorf("invalid credentials with error: %s", err.Error())
 	}
 	p := azblob.NewPipeline(credential, azblob.PipelineOptions{})
 
