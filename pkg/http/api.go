@@ -305,7 +305,7 @@ func (a *api) onDeleteState(c *routing.Context) error {
 	}
 
 	req := state.DeleteRequest{
-		Key:  key,
+		Key:  a.getModifiedStateKey(key),
 		ETag: etag,
 		Options: state.DeleteStateOption{
 			Concurrency: concurrency,
