@@ -13,7 +13,7 @@ import (
 )
 
 // Metadata is the string exporter config
-type stringExporterMetadata struct {
+type Metadata struct {
 	Buffer *string
 }
 

@@ -33,7 +33,6 @@ type Exporter struct {
 
 // Init creates a new zipkin endpoint and reporter
 func (z *Exporter) Init(daprID string, hostAddress string, metadata exporters.Metadata) error {
-
 	meta, err := z.getZipkinMetadata(metadata)
 	if err != nil {
 		return err

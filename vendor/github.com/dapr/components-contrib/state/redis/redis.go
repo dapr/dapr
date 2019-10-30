@@ -24,7 +24,7 @@ import (
 
 const (
 	setQuery                 = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] or ARGV[1] == \"0\" then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
-	delQuery                 = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
+	delQuery                 = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] or var1 == \"\" or ARGV[1] == \"0\" then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
 	connectedSlavesReplicas  = "connected_slaves:"
 	infoReplicationDelimiter = "\r\n"
 )
@@ -97,13 +97,12 @@ func (r *StateStore) getConnectedSlaves() (int, error) {
 	}
 
 	return r.parseConnectedSlaves(s), nil
-
 }
 
 func (r *StateStore) parseConnectedSlaves(res string) int {
 	infos := strings.Split(res, infoReplicationDelimiter)
 	for _, info := range infos {
-		if strings.Index(info, connectedSlavesReplicas) >= 0 {
+		if strings.Contains(info, connectedSlavesReplicas) {
 			parsedReplicas, _ := strconv.ParseUint(info[len(connectedSlavesReplicas):], 10, 32)
 			return int(parsedReplicas)
 		}
@@ -113,6 +112,9 @@ func (r *StateStore) parseConnectedSlaves(res string) int {
 }
 
 func (r *StateStore) deleteValue(req *state.DeleteRequest) error {
+	if req.ETag == "" {
+		req.ETag = "0"
+	}
 	res := r.client.Do(context.Background(), "EVAL", delQuery, 1, req.Key, req.ETag)
 
 	if err := redis.AsError(res); err != nil {
