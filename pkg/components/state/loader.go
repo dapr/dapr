@@ -7,6 +7,7 @@ package state
 
 import (
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/state/cassandra"
 	"github.com/dapr/components-contrib/state/consul"
 	"github.com/dapr/components-contrib/state/cosmosdb"
 	"github.com/dapr/components-contrib/state/etcd"
@@ -26,5 +27,8 @@ func Load() {
 	})
 	RegisterStateStore("etcd", func() state.StateStore {
 		return etcd.NewETCD()
+	})
+	RegisterStateStore("cassandra", func() state.StateStore {
+		return cassandra.NewCassandraStateStore()
 	})
 }
