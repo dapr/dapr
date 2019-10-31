@@ -114,6 +114,8 @@ github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6r
 github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kBD4zp0CCIs=
 github.com/bitly/go-hostpool v0.0.0-20171023180738-a3a6125de932/go.mod h1:NOuUCSz6Q9T7+igc/hlvDOUdtWKryOrtFyIVABv/p7k=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869/go.mod h1:Ekp36dRnpXw/yCqJaO+ZrUyxD+3VXMFFr56k5XYrpB4=
+github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b h1:L/QXpzIa3pOvUGt1D1lA5KjYhPBAN/3iWdP7xeFS9F0=
+github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b/go.mod h1:H0wQNHz2YrLsuXOZozoeDmnHXkNCRmMW0gwFWDfEZDA=
 github.com/cenkalti/backoff v2.2.1+incompatible h1:tNowT99t7UNflLxfYYSlKYsBpXdEet03Pg2g16Swow4=
 github.com/cenkalti/backoff v2.2.1+incompatible/go.mod h1:90ReRw6GdpyfrHakVjL/QHaoyV4aDUVVkXQJJJ3NXXM=
 github.com/census-instrumentation/opencensus-proto v0.2.0 h1:LzQXZOgg4CQfE6bFvXGM30YZL1WW/M337pXml+GrcZ4=
@@ -144,6 +146,8 @@ github.com/dapr/components-contrib v0.0.0-20191026043416-cc7578c02b9c h1:Qc8r8Xp
 github.com/dapr/components-contrib v0.0.0-20191026043416-cc7578c02b9c/go.mod h1:e6qjiNC2K+43SnOzludEzE6KYk7nsQj7oaX3AiMeKEk=
 github.com/dapr/components-contrib v0.0.0-20191030184925-4200a3cc2dca h1:SI+cUCPlVxiRW1+G3P9JW4L06snATyfszOwHymfiz8s=
 github.com/dapr/components-contrib v0.0.0-20191030184925-4200a3cc2dca/go.mod h1:dskT0xM8WY4NUk9x4vUxyjIAhS+KIA+UXa88IFN0du0=
+github.com/dapr/components-contrib v0.0.0-20191031132104-0cae368496ad h1:a43OV1FI1L3XyatQyBYrndNMkUZ8WrZE/VFsuXqopUw=
+github.com/dapr/components-contrib v0.0.0-20191031132104-0cae368496ad/go.mod h1:lTU3nImo/tMUD+XNQEyQGDsdeJt2pQVI+mjQzDJMw8o=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

@@ -48,7 +48,7 @@ type Actors interface {
 
 type actorsRuntime struct {
 	appChannel          channel.AppChannel
-	store               state.StateStore
+	store               state.Store
 	placementTableLock  *sync.RWMutex
 	placementTables     *placement.ConsistentHashTables
 	placementSignal     chan struct{}
@@ -74,7 +74,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -244,8 +244,11 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-	act.busy = false
-	close(act.busyCh)
+
+	if act.busy {
+		act.busy = false
+		close(act.busyCh)
+	}
 
 	if err != nil {
 		return nil, err
