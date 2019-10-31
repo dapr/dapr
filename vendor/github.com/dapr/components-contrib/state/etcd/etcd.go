@@ -201,13 +201,13 @@ func (r *ETCD) BulkSet(req []state.SetRequest) error {
 
 // Watch watches on a key or prefix.
 // The watched events will be returned through the returned channel.
-func (r *ETCD) Watch(req *state.WatchStateRequest) (<-chan *state.StateEvent, error) {
+func (r *ETCD) Watch(req *state.WatchStateRequest) (<-chan *state.Event, context.CancelFunc, error) {
 	opts := []clientv3.OpOption{clientv3.WithProgressNotify()}
 
 	if req.ETag != "" {
 		rev, err := strconv.Atoi(req.ETag)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		opts = append(opts, clientv3.WithRev(int64(rev)))
 	}
@@ -233,10 +233,9 @@ func (r *ETCD) Watch(req *state.WatchStateRequest) (<-chan *state.StateEvent, er
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	c := r.client.Watch(ctx, req.Key, opts...)
-	e := make(chan *state.StateEvent)
+	e := make(chan *state.Event)
 
 	go func() {
-		defer cancelFn()
 		defer close(e)
 
 		for resp := range c {
@@ -253,7 +252,7 @@ func (r *ETCD) Watch(req *state.WatchStateRequest) (<-chan *state.StateEvent, er
 					ty = state.DELETED
 				}
 
-				s := &state.StateEvent{
+				s := &state.Event{
 					Event: ty,
 					Key:   string(evt.Kv.Key),
 					Value: evt.Kv.Value,
@@ -273,5 +272,5 @@ func (r *ETCD) Watch(req *state.WatchStateRequest) (<-chan *state.StateEvent, er
 		}
 	}()
 
-	return e, nil
+	return e, cancelFn, nil
 }

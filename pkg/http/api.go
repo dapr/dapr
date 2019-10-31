@@ -292,7 +292,7 @@ func (a *api) onWatchState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
-	store, ok := a.stateStore.(state.WatchStateStore)
+	watcher, ok := a.stateStore.(state.StoreWatcher)
 	if !ok {
 		msg := NewErrorResponse("ERR_WATCH_STATE_STORE_NOT_SUPPORTED", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -305,7 +305,7 @@ func (a *api) onWatchState(c *routing.Context) error {
 		ETag: etag,
 	}
 
-	events, err := store.Watch(req)
+	events, cancelFn, err := watcher.Watch(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_WATCH_STATE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -313,7 +313,7 @@ func (a *api) onWatchState(c *routing.Context) error {
 	}
 
 	callback := string(c.QueryArgs().Peek(callbackParam))
-	respondWithChunkedJSON(c.RequestCtx, 200, events, callback)
+	respondWithChunkedJSON(c.RequestCtx, 200, events, cancelFn, callback)
 	return nil
 }
 

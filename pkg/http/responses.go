@@ -7,6 +7,7 @@ package http
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 
 	"github.com/dapr/components-contrib/state"
@@ -55,7 +56,7 @@ func respondEmpty(ctx *fasthttp.RequestCtx, code int) {
 //	return bytes, nil
 //}
 
-func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, events <-chan *state.StateEvent, callback string) {
+func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, events <-chan *state.Event, cancelFn context.CancelFunc, callback string) {
 	jsonp := callback != ""
 
 	contentType := "application/json"
@@ -66,22 +67,21 @@ func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, events <-chan *s
 	ctx.Response.Header.Set("X-Content-Type-Options", "nosniff")
 	ctx.Response.SetStatusCode(code)
 	ctx.Response.SetBodyStreamWriter(func(w *bufio.Writer) {
-		for {
-			select {
-			case evt := <-events:
-				b, _ := json.Marshal(evt)
+		defer cancelFn()
 
-				if jsonp {
-					w.Write([]byte(callback))
-					w.WriteByte('(')
-				}
-				w.Write(b)
-				if jsonp {
-					w.WriteByte(')')
-				}
+		for evt := range events {
+			b, _ := json.Marshal(evt)
 
-				w.Flush()
+			if jsonp {
+				w.Write([]byte(callback))
+				w.WriteByte('(')
 			}
+			w.Write(b)
+			if jsonp {
+				w.WriteByte(')')
+			}
+
+			w.Flush()
 		}
 	})
 }

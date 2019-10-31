@@ -317,7 +317,7 @@ func (a *api) WatchState(in *dapr_pb.WatchStateEnvelope, stream dapr_pb.Dapr_Wat
 		return errors.New("ERR_STATE_STORE_NOT_FOUND")
 	}
 
-	s, ok := a.stateStore.(state.WatchStateStore)
+	watcher, ok := a.stateStore.(state.StoreWatcher)
 	if !ok {
 		return errors.New("ERR_WATCH_STATE: state store does not support watcher")
 	}
@@ -328,12 +328,14 @@ func (a *api) WatchState(in *dapr_pb.WatchStateEnvelope, stream dapr_pb.Dapr_Wat
 		Metadata: in.Metadata,
 	}
 
-	events, err := s.Watch(req)
+	events, cancelFn, err := watcher.Watch(req)
 	if err != nil {
 		return fmt.Errorf("ERR_WATCH_STATE: failed watch state with key %s: %w", in.Key, err)
 	}
 
 	go func() {
+		defer cancelFn()
+
 		for {
 			select {
 			case <-stream.Context().Done():

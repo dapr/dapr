@@ -140,7 +140,6 @@ func (k *Kafka) getKafkaMetadata(metadata bindings.Metadata) (*kafkaMetadata, er
 
 	//ignore SASL properties if authRequired is false
 	if meta.AuthRequired {
-
 		if val, ok := metadata.Properties["saslUsername"]; ok && val != "" {
 			meta.SaslUsername = val
 		} else {
