@@ -56,6 +56,7 @@ const (
 	retryPatternParam   = "retryPattern"
 	retryThresholdParam = "retryThreshold"
 	concurrencyParam    = "concurrency"
+	callbackParam       = "callback"
 )
 
 // NewAPI returns a new API
@@ -104,6 +105,12 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/<key>",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
+		},
+		{
+			Methods: []string{http.Get},
+			Route:   "watch/<key>",
+			Version: apiVersionV1,
+			Handler: a.onWatchState,
 		},
 	}
 }
@@ -276,6 +283,37 @@ func (a *api) onGetState(c *routing.Context) error {
 		return nil
 	}
 	respondWithETaggedJSON(c.RequestCtx, 200, resp.Data, resp.ETag)
+	return nil
+}
+
+func (a *api) onWatchState(c *routing.Context) error {
+	if a.stateStore == nil {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+	store, ok := a.stateStore.(state.WatchStateStore)
+	if !ok {
+		msg := NewErrorResponse("ERR_WATCH_STATE_STORE_NOT_SUPPORTED", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+	key := c.Param(stateKeyParam)
+	etag := string(c.Request.Header.Peek("If-Match"))
+	req := &state.WatchStateRequest{
+		Key:  key,
+		ETag: etag,
+	}
+
+	events, err := store.Watch(req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_WATCH_STATE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+		return nil
+	}
+
+	callback := string(c.QueryArgs().Peek(callbackParam))
+	respondWithChunkedJSON(c.RequestCtx, 200, events, callback)
 	return nil
 }
 
