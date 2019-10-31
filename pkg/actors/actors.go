@@ -244,8 +244,11 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-	act.busy = false
-	close(act.busyCh)
+
+	if act.busy {
+		act.busy = false
+		close(act.busyCh)
+	}
 
 	if err != nil {
 		return nil, err
