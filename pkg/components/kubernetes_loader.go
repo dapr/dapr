@@ -12,6 +12,7 @@ import (
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
+	log "github.com/Sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/cenkalti/backoff"
 )
@@ -66,7 +67,7 @@ func requestControlPlane(url string) ([]byte, error) {
 	err := client.Do(req, resp)
 	if err != nil {
 		// Request failed, try again
-		fmt.Println("trying again");
+		log.Info("Retrying getting components")
 		return nil, err
 	}
 
