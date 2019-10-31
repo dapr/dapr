@@ -137,6 +137,8 @@ github.com/aws/aws-sdk-go/service/sns
 github.com/aws/aws-sdk-go/service/sqs
 github.com/aws/aws-sdk-go/service/sts
 github.com/aws/aws-sdk-go/service/sts/stsiface
+# github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
+github.com/bradfitz/gomemcache/memcache
 # github.com/cenkalti/backoff v2.2.1+incompatible
 github.com/cenkalti/backoff
 # github.com/census-instrumentation/opencensus-proto v0.2.1
@@ -165,7 +167,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191030184925-4200a3cc2dca
+# github.com/dapr/components-contrib v0.0.0-20191031132104-0cae368496ad
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage
 github.com/dapr/components-contrib/bindings/cosmosdb
@@ -198,6 +200,7 @@ github.com/dapr/components-contrib/state/cassandra
 github.com/dapr/components-contrib/state/consul
 github.com/dapr/components-contrib/state/cosmosdb
 github.com/dapr/components-contrib/state/etcd
+github.com/dapr/components-contrib/state/memcached
 github.com/dapr/components-contrib/state/redis
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
