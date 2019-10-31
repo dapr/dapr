@@ -12,6 +12,7 @@ import (
 	"github.com/dapr/components-contrib/state/cosmosdb"
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/memcached"
+	"github.com/dapr/components-contrib/state/mongodb"
 	"github.com/dapr/components-contrib/state/redis"
 )
 
@@ -34,5 +35,8 @@ func Load() {
 	})
 	RegisterStateStore("memcached", func() state.Store {
 		return memcached.NewMemCacheStateStore()
+	})
+	RegisterStateStore("mongodb", func() state.Store {
+		return mongodb.NewMongoDB()
 	})
 }
