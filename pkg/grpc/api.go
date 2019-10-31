@@ -58,14 +58,14 @@ type api struct {
 	directMessaging       messaging.DirectMessaging
 	componentsHandler     components.ComponentHandler
 	appChannel            channel.AppChannel
-	stateStore            state.StateStore
+	stateStore            state.Store
 	pubSub                pubsub.PubSub
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.StateStore, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.Store, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
 	return &api{
 		directMessaging:       directMessaging,
 		componentsHandler:     componentHandler,

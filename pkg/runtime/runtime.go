@@ -70,7 +70,7 @@ type DaprRuntime struct {
 	stateStoreRegistry   state_loader.Registry
 	secretStoresRegistry secretstores_loader.Registry
 	exporterRegistry     exporter_loader.Registry
-	stateStore           state.StateStore
+	stateStore           state.Store
 	actor                actors.Actors
 	bindingsRegistry     bindings_loader.Registry
 	inputBindings        map[string]bindings.InputBinding
