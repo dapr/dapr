@@ -16,9 +16,11 @@ import (
 	"github.com/cenkalti/backoff"
 )
 
+const maxRetryTime  = time.Second * 30
+
 // KubernetesComponents loads components in a kubernetes environment
 type KubernetesComponents struct {
-	config config.KubernetesConfig
+	config config.KubernetesConfig 
 }
 
 // NewKubernetesComponents returns a new kubernetes loader
@@ -31,7 +33,7 @@ func NewKubernetesComponents(configuration config.KubernetesConfig) *KubernetesC
 // LoadComponents returns components from a given control plane address
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	b := backoff.NewExponentialBackOff()
-	b.MaxElapsedTime = 1 *time.Minute
+	b.MaxElapsedTime = maxRetryTime
 	
 	url := fmt.Sprintf("%s/components", k.config.ControlPlaneAddress)
 	var components []components_v1alpha1.Component
@@ -63,7 +65,8 @@ func requestControlPlane(url string) ([]byte, error) {
 	}
 	err := client.Do(req, resp)
 	if err != nil {
-		// Request failed, retry again
+		// Request failed, try again
+		fmt.Println("trying again");
 		return nil, err
 	}
 
