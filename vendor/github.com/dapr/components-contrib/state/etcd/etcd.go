@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,10 +20,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-const defaultOperationTimeout = time.Duration(10 * time.Second)
+const defaultOperationTimeout = 10 * time.Second
 const defaultSeparator = ","
 
-var errMissingEndpoints = errors.New("Endpoints are required")
+var errMissingEndpoints = errors.New("endpoints are required")
 var errInvalidDialTimeout = errors.New("DialTimeout is invalid")
 
 // ETCD is a state store
@@ -126,7 +127,8 @@ func validateRequired(configProps *configProperties) error {
 
 // Get retrieves state from ETCD with a key
 func (r *ETCD) Get(req *state.GetRequest) (*state.GetResponse, error) {
-	ctx, _ := context.WithTimeout(context.Background(), r.operationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), r.operationTimeout)
+	defer cancel()
 	resp, err := r.client.Get(ctx, req.Key, clientv3.WithSort(clientv3.SortByVersion, clientv3.SortDescend))
 	if err != nil {
 		return nil, err
@@ -144,7 +146,8 @@ func (r *ETCD) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 // Delete performs a delete operation
 func (r *ETCD) Delete(req *state.DeleteRequest) error {
-	ctx, _ := context.WithTimeout(context.Background(), r.operationTimeout)
+	ctx, cancelFn := context.WithTimeout(context.Background(), r.operationTimeout)
+	defer cancelFn()
 	_, err := r.client.Delete(ctx, req.Key)
 	if err != nil {
 		return err
@@ -167,8 +170,8 @@ func (r *ETCD) BulkDelete(req []state.DeleteRequest) error {
 
 // Set saves state into ETCD
 func (r *ETCD) Set(req *state.SetRequest) error {
-	ctx, _ := context.WithTimeout(context.Background(), r.operationTimeout)
-
+	ctx, cancelFn := context.WithTimeout(context.Background(), r.operationTimeout)
+	defer cancelFn()
 	var vStr string
 	b, ok := req.Value.([]byte)
 	if ok {
@@ -194,4 +197,81 @@ func (r *ETCD) BulkSet(req []state.SetRequest) error {
 	}
 
 	return nil
+}
+
+// Watch watches on a key or prefix.
+// The watched events will be returned through the returned channel.
+func (r *ETCD) Watch(req *state.WatchStateRequest) (<-chan *state.StateEvent, error) {
+	opts := []clientv3.OpOption{clientv3.WithProgressNotify()}
+
+	if req.ETag != "" {
+		rev, err := strconv.Atoi(req.ETag)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, clientv3.WithRev(int64(rev)))
+	}
+
+	if _, exists := req.Metadata[state.WatchDiscardCreate]; !exists {
+		opts = append(opts, clientv3.WithCreatedNotify())
+	}
+	if _, exists := req.Metadata[state.WatchDiscardModify]; exists {
+		opts = append(opts, clientv3.WithFilterPut())
+	}
+	if _, exists := req.Metadata[state.WatchDiscardDelete]; exists {
+		opts = append(opts, clientv3.WithFilterDelete())
+	}
+	if _, exists := req.Metadata[state.WatchFromKey]; exists {
+		opts = append(opts, clientv3.WithFromKey())
+	}
+	if _, exists := req.Metadata[state.WatchMatchingPrefix]; exists {
+		opts = append(opts, clientv3.WithPrefix())
+	}
+	if endKey, exists := req.Metadata[state.WatchInRange]; exists {
+		opts = append(opts, clientv3.WithRange(endKey))
+	}
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+	c := r.client.Watch(ctx, req.Key, opts...)
+	e := make(chan *state.StateEvent)
+
+	go func() {
+		defer cancelFn()
+		defer close(e)
+
+		for resp := range c {
+			if resp.IsProgressNotify() {
+				continue
+			}
+
+			for _, evt := range resp.Events {
+				ty := state.MODIFIED
+
+				if evt.IsCreate() {
+					ty = state.CREATED
+				} else if evt.Type == clientv3.EventTypeDelete {
+					ty = state.DELETED
+				}
+
+				s := &state.StateEvent{
+					Event: ty,
+					Key:   string(evt.Kv.Key),
+					Value: evt.Kv.Value,
+					ETag:  fmt.Sprintf("%d", evt.Kv.Version),
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				case e <- s:
+				}
+			}
+
+			if resp.Err() != nil {
+				break
+			}
+		}
+	}()
+
+	return e, nil
 }

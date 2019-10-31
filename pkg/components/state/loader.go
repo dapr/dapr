@@ -15,16 +15,16 @@ import (
 
 // Load state stores
 func Load() {
-	RegisterStateStore("redis", func() state.StateStore {
+	RegisterStateStore("redis", func() state.Store {
 		return redis.NewRedisStateStore()
 	})
-	RegisterStateStore("consul", func() state.StateStore {
+	RegisterStateStore("consul", func() state.Store {
 		return consul.NewConsulStateStore()
 	})
-	RegisterStateStore("azure.cosmosdb", func() state.StateStore {
+	RegisterStateStore("azure.cosmosdb", func() state.Store {
 		return cosmosdb.NewCosmosDBStateStore()
 	})
-	RegisterStateStore("etcd", func() state.StateStore {
+	RegisterStateStore("etcd", func() state.Store {
 		return etcd.NewETCD()
 	})
 }

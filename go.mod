@@ -20,7 +20,7 @@ require (
 	github.com/googleapis/gnostic v0.3.1 // indirect
 	github.com/gorilla/mux v1.7.1
 	github.com/grandcat/zeroconf v0.0.0-20190424104450-85eadb44205c
-	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
+	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/json-iterator/go v1.1.7
 	github.com/kelseyhightower/envconfig v1.4.0
@@ -33,7 +33,6 @@ require (
 	github.com/onsi/gomega v1.7.0 // indirect
 	github.com/phayes/freeport v0.0.0-20171002181615-b8543db493a5
 	github.com/qiangxue/fasthttp-routing v0.0.0-20160225050629-6ccdc2a18d87
-	github.com/sirupsen/logrus v1.2.0 // indirect
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasthttp v1.4.0
 	go.opencensus.io v0.22.1

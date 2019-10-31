@@ -165,7 +165,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191026043416-cc7578c02b9c
+# github.com/dapr/components-contrib v0.0.0-20191026043416-cc7578c02b9c => /Users/fl0120/go/src/github.com/dapr/components-contrib
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage
 github.com/dapr/components-contrib/bindings/cosmosdb
@@ -284,7 +284,7 @@ github.com/googleapis/gnostic/extensions
 github.com/gorilla/mux
 # github.com/grandcat/zeroconf v0.0.0-20190424104450-85eadb44205c
 github.com/grandcat/zeroconf
-# github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
+# github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 github.com/grpc-ecosystem/go-grpc-middleware
 github.com/grpc-ecosystem/go-grpc-middleware/util/metautils
 # github.com/grpc-ecosystem/grpc-gateway v1.11.2
@@ -467,7 +467,7 @@ golang.org/x/oauth2/jwt
 # golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20190927073244-c990c680b611
+# golang.org/x/sys v0.0.0-20191010194322-b09406accb47
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry

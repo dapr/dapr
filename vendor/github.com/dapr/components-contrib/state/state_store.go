@@ -5,8 +5,8 @@
 
 package state
 
-// StateStore is an interface to perform operations on store
-type StateStore interface {
+// Store is an interface to perform operations on store
+type Store interface {
 	Init(metadata Metadata) error
 	Delete(req *DeleteRequest) error
 	BulkDelete(req []DeleteRequest) error

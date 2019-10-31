@@ -35,3 +35,5 @@ type TransactionalStateStore interface {
 	Multi(reqs []TransactionalRequest) error
 }
 ```
+
+See the [documentation repo](https://github.com/dapr/docs/tree/master/howto) for examples.  

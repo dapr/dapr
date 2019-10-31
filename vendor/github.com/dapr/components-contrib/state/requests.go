@@ -70,3 +70,28 @@ type TransactionalRequest struct {
 	Operation OperationType `json:"operation"`
 	Request   interface{}   `json:"request"`
 }
+
+// WatchStateRequest describes a watch operation against a state store that monitor the change of states
+type WatchStateRequest struct {
+	Key      string            `json:"key"`
+	ETag     string            `json:"etag,omitempty"`
+	Metadata map[string]string `json:"metadata"`
+}
+
+type StateEventType int
+
+const (
+	CREATED StateEventType = iota
+	DELETED
+	MODIFIED
+	CHILDREN
+)
+
+// StateEvent is an event arriving from a state watcher
+type StateEvent struct {
+	Key      string            `json:"key"`
+	Value    []byte            `json:"value"`
+	ETag     string            `json:"etag,omitempty"`
+	Metadata map[string]string `json:"metadata"`
+	Event    StateEventType    `json:"event"`
+}

@@ -66,6 +66,10 @@ func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEn
 	return &empty.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) WatchState(in *dapr_pb.WatchStateEnvelope, stream dapr_pb.Dapr_WatchStateServer) error {
+	return nil
+}
+
 func createExporters(meta exporters.Metadata) {
 	exporter := stringexporter.NewStringExporter()
 	exporter.Init("fakeID", "fakeAddress", meta)

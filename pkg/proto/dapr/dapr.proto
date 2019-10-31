@@ -20,6 +20,7 @@ service Dapr {
   rpc GetState(GetStateEnvelope) returns (GetStateResponseEnvelope) {}
   rpc SaveState(SaveStateEnvelope) returns (google.protobuf.Empty) {}
   rpc DeleteState(DeleteStateEnvelope) returns (google.protobuf.Empty) {}
+  rpc WatchState(WatchStateEnvelope) returns (stream StateEvent) {}
 }
 
 message InvokeServiceResponseEnvelope {
@@ -39,7 +40,7 @@ message SaveStateEnvelope {
 
 message GetStateEnvelope {
     string key = 1;
-    string consistency = 2;   
+    string consistency = 2;
 }
 
 message GetStateResponseEnvelope {
@@ -103,4 +104,25 @@ message StateRetryPolicy {
   int32 threshold = 1;
   string pattern = 2;
   google.protobuf.Duration interval = 3;
+}
+
+message WatchStateEnvelope {
+  string key = 1;
+  string etag = 2;
+  map<string,string> metadata = 3;
+}
+
+message StateEvent {
+  string key = 1;
+  google.protobuf.Any value = 2;
+  string etag = 3;
+  map<string,string> metadata = 4;
+  StateEventType type = 5;
+}
+
+enum StateEventType {
+  CREATED = 0;
+  DELETED = 1;
+  CHANGED = 2;
+  CHILDREN = 3;
 }

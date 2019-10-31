@@ -51,6 +51,7 @@ type API interface {
 	GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error)
 	SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error)
+	WatchState(in *dapr_pb.WatchStateEnvelope, stream dapr_pb.Dapr_WatchStateServer) error
 }
 
 type api struct {
@@ -58,14 +59,14 @@ type api struct {
 	directMessaging       messaging.DirectMessaging
 	componentsHandler     components.ComponentHandler
 	appChannel            channel.AppChannel
-	stateStore            state.StateStore
+	stateStore            state.Store
 	pubSub                pubsub.PubSub
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.StateStore, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.Store, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
 	return &api{
 		directMessaging:       directMessaging,
 		componentsHandler:     componentHandler,
@@ -309,6 +310,50 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 		return &empty.Empty{}, fmt.Errorf("ERR_DELETE_STATE: failed deleting state with key %s: %s", in.Key, err)
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) WatchState(in *dapr_pb.WatchStateEnvelope, stream dapr_pb.Dapr_WatchStateServer) error {
+	if a.stateStore == nil {
+		return errors.New("ERR_STATE_STORE_NOT_FOUND")
+	}
+
+	s, ok := a.stateStore.(state.WatchStateStore)
+	if !ok {
+		return errors.New("ERR_WATCH_STATE: state store does not support watcher")
+	}
+
+	req := &state.WatchStateRequest{
+		Key:      in.Key,
+		ETag:     in.Etag,
+		Metadata: in.Metadata,
+	}
+
+	events, err := s.Watch(req)
+	if err != nil {
+		return fmt.Errorf("ERR_WATCH_STATE: failed watch state with key %s: %w", in.Key, err)
+	}
+
+	go func() {
+		for {
+			select {
+			case <-stream.Context().Done():
+				break
+			case evt := <-events:
+				err := stream.Send(&dapr_pb.StateEvent{
+					Key:      evt.Key,
+					Value:    &any.Any{Value: evt.Value},
+					Etag:     evt.ETag,
+					Metadata: evt.Metadata,
+				})
+
+				if err != nil {
+					break
+				}
+			}
+		}
+	}()
+
+	return nil
 }
 
 func (a *api) getModifiedStateKey(key string) string {
