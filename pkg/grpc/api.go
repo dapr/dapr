@@ -281,7 +281,7 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 	}
 
 	req := state.DeleteRequest{
-		Key:  in.Key,
+		Key:  a.getModifiedStateKey(in.Key),
 		ETag: in.Etag,
 	}
 	if in.Options != nil {

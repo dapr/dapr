@@ -165,7 +165,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191026043416-cc7578c02b9c => /Users/fl0120/go/src/github.com/dapr/components-contrib
+# github.com/dapr/components-contrib v0.0.0-20191030184925-4200a3cc2dca => /Users/fl0120/go/src/github.com/dapr/components-contrib
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage
 github.com/dapr/components-contrib/bindings/cosmosdb
@@ -188,11 +188,13 @@ github.com/dapr/components-contrib/exporters/native
 github.com/dapr/components-contrib/exporters/stringexporter
 github.com/dapr/components-contrib/exporters/zipkin
 github.com/dapr/components-contrib/pubsub
+github.com/dapr/components-contrib/pubsub/nats
 github.com/dapr/components-contrib/pubsub/redis
 github.com/dapr/components-contrib/secretstores
 github.com/dapr/components-contrib/secretstores/keyvault
 github.com/dapr/components-contrib/secretstores/kubernetes
 github.com/dapr/components-contrib/state
+github.com/dapr/components-contrib/state/cassandra
 github.com/dapr/components-contrib/state/consul
 github.com/dapr/components-contrib/state/cosmosdb
 github.com/dapr/components-contrib/state/etcd
@@ -237,6 +239,11 @@ github.com/go-redis/redis/internal/hashtag
 github.com/go-redis/redis/internal/pool
 github.com/go-redis/redis/internal/proto
 github.com/go-redis/redis/internal/util
+# github.com/gocql/gocql v0.0.0-20191018090344-07ace3bab0f8
+github.com/gocql/gocql
+github.com/gocql/gocql/internal/lru
+github.com/gocql/gocql/internal/murmur
+github.com/gocql/gocql/internal/streams
 # github.com/gogo/protobuf v1.3.0
 github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
@@ -291,6 +298,8 @@ github.com/grpc-ecosystem/go-grpc-middleware/util/metautils
 github.com/grpc-ecosystem/grpc-gateway/internal
 github.com/grpc-ecosystem/grpc-gateway/runtime
 github.com/grpc-ecosystem/grpc-gateway/utilities
+# github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed
+github.com/hailocab/go-hostpool
 # github.com/hashicorp/consul/api v1.2.0
 github.com/hashicorp/consul/api
 # github.com/hashicorp/go-cleanhttp v0.5.1
@@ -356,6 +365,14 @@ github.com/mitchellh/mapstructure
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
 github.com/modern-go/reflect2
+# github.com/nats-io/go-nats v1.7.2
+github.com/nats-io/go-nats
+github.com/nats-io/go-nats/encoders/builtin
+github.com/nats-io/go-nats/util
+# github.com/nats-io/nkeys v0.1.0
+github.com/nats-io/nkeys
+# github.com/nats-io/nuid v1.0.1
+github.com/nats-io/nuid
 # github.com/openzipkin/zipkin-go v0.1.6
 github.com/openzipkin/zipkin-go
 github.com/openzipkin/zipkin-go/idgenerator
