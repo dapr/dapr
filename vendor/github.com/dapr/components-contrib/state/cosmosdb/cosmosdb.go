@@ -63,22 +63,28 @@ func (c *StateStore) Init(metadata state.Metadata) error {
 	})
 
 	dbs, err := client.QueryDatabases(&documentdb.Query{
-		Query: fmt.Sprintf("SELECT * FROM ROOT r WHERE r.id='%s'", creds.Database),
+		Query: "SELECT * FROM ROOT r WHERE r.id=@id",
+		Parameters: []documentdb.Parameter{
+			{Name: "@id", Value: creds.Database},
+		},
 	})
 	if err != nil {
 		return err
 	} else if len(dbs) == 0 {
-		return fmt.Errorf("Database %s for CosmosDB state store not found", creds.Database)
+		return fmt.Errorf("database %s for CosmosDB state store not found", creds.Database)
 	}
 
 	c.db = &dbs[0]
 	colls, err := client.QueryCollections(c.db.Self, &documentdb.Query{
-		Query: fmt.Sprintf("SELECT * FROM ROOT r WHERE r.id='%s'", creds.Collection),
+		Query: "SELECT * FROM ROOT r WHERE r.id=@id",
+		Parameters: []documentdb.Parameter{
+			{Name: "@id", Value: creds.Collection},
+		},
 	})
 	if err != nil {
 		return err
 	} else if len(colls) == 0 {
-		return fmt.Errorf("Collection %s for CosmosDB state store not found", creds.Collection)
+		return fmt.Errorf("collection %s for CosmosDB state store not found", creds.Collection)
 	}
 
 	c.collection = &colls[0]
@@ -102,7 +108,7 @@ func (c *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 	_, err := c.client.QueryDocuments(
 		c.collection.Self,
-		documentdb.NewQuery("SELECT * FROM ROOT r WHERE r.id=@id", documentdb.P{"@id", key}),
+		documentdb.NewQuery("SELECT * FROM ROOT r WHERE r.id=@id", documentdb.P{Name: "@id", Value: key}),
 		&items,
 		options...,
 	)

@@ -57,10 +57,10 @@ func (l *Exporter) getNativeMetadata(metadata exporters.Metadata) (*nativeExport
 		return nil, err
 	}
 
-	var nativeExporterMetadata nativeExporterMetadata
-	err = json.Unmarshal(b, &nativeExporterMetadata)
+	var nExporterMetadata nativeExporterMetadata
+	err = json.Unmarshal(b, &nExporterMetadata)
 	if err != nil {
 		return nil, err
 	}
-	return &nativeExporterMetadata, nil
+	return &nExporterMetadata, nil
 }
