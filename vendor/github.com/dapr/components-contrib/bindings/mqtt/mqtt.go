@@ -72,12 +72,12 @@ func (m *MQTT) getMQTTMetadata(metadata bindings.Metadata) (*mqttMetadata, error
 		return nil, err
 	}
 
-	var mqttMetadata mqttMetadata
-	err = json.Unmarshal(b, &mqttMetadata)
+	var mMetadata mqttMetadata
+	err = json.Unmarshal(b, &mMetadata)
 	if err != nil {
 		return nil, err
 	}
-	return &mqttMetadata, nil
+	return &mMetadata, nil
 }
 
 func (m *MQTT) Write(req *bindings.WriteRequest) error {
