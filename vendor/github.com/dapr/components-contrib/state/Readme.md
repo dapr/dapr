@@ -9,6 +9,7 @@ Currently supported state stores are:
 * Etcd
 * Cassandra
 * Azure CosmosDB
+* Memcached
 
 ## Implementing a new State Store
 
