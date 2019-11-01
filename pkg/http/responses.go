@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/valyala/fasthttp"
@@ -71,16 +72,11 @@ func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, events <-chan *s
 
 		for evt := range events {
 			b, _ := json.Marshal(evt)
-
 			if jsonp {
-				w.Write([]byte(callback))
-				w.WriteByte('(')
+				b = []byte(fmt.Sprintf("%s(%s);", callback, string(b)))
 			}
+
 			w.Write(b)
-			if jsonp {
-				w.WriteByte(')')
-			}
-
 			w.Flush()
 		}
 	})
