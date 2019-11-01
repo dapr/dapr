@@ -14,6 +14,7 @@ import (
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	"github.com/dapr/components-contrib/state/redis"
+	"github.com/dapr/components-contrib/state/zookeeper"
 )
 
 // Load state stores
@@ -38,5 +39,8 @@ func Load() {
 	})
 	RegisterStateStore("mongodb", func() state.Store {
 		return mongodb.NewMongoDB()
+	})
+	RegisterStateStore("zookeeper", func() state.Store {
+		return zookeeper.NewZookeeperStateStore()
 	})
 }
