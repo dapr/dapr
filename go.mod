@@ -7,7 +7,7 @@ require (
 	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/creack/pty v1.1.9 // indirect
-	github.com/dapr/components-contrib v0.0.0-20191030184925-4200a3cc2dca
+	github.com/dapr/components-contrib v0.0.0-20191031210650-385951a2b41c
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
@@ -54,4 +54,4 @@ require (
 	k8s.io/utils v0.0.0-20190506122338-8fab8cb257d5 // indirect
 )
 
-replace github.com/dapr/components-contrib => github.com/flier/components-contrib v0.0.0-20191031110933-e64ed2adc6ae
+replace github.com/dapr/components-contrib => github.com/flier/components-contrib v0.0.0-20191101023634-18e63ec8ba8a

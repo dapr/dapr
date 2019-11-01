@@ -94,5 +94,5 @@ type Event struct {
 	Value    []byte            `json:"value"`
 	ETag     string            `json:"etag,omitempty"`
 	Metadata map[string]string `json:"metadata"`
-	Event    EventType         `json:"event"`
+	Type     EventType         `json:"type"`
 }

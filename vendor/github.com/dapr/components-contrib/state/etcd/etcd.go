@@ -253,7 +253,7 @@ func (r *ETCD) Watch(req *state.WatchStateRequest) (<-chan *state.Event, context
 				}
 
 				s := &state.Event{
-					Event: ty,
+					Type:  ty,
 					Key:   string(evt.Kv.Key),
 					Value: evt.Kv.Value,
 					ETag:  fmt.Sprintf("%d", evt.Kv.Version),

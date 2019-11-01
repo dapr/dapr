@@ -346,6 +346,7 @@ func (a *api) WatchState(in *dapr_pb.WatchStateEnvelope, stream dapr_pb.Dapr_Wat
 					Value:    &any.Any{Value: evt.Value},
 					Etag:     evt.ETag,
 					Metadata: evt.Metadata,
+					Type:     dapr_pb.StateEventType(evt.Type),
 				})
 
 				if err != nil {
