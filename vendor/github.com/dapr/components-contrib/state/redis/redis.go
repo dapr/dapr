@@ -17,20 +17,24 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 
+	redigo "github.com/gomodule/redigo/redis"
 	"github.com/joomcode/redispipe/redis"
 	"github.com/joomcode/redispipe/redisconn"
 	jsoniter "github.com/json-iterator/go"
 )
 
 const (
-	setQuery                 = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] or ARGV[1] == \"0\" then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
-	delQuery                 = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] or var1 == \"\" or ARGV[1] == \"0\" then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
+	setQuery          = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if type(var1) == \"table\" then redis.call(\"DEL\", KEYS[1]); end; if not var1 or type(var1)==\"table\" or var1 == \"\" or var1 == ARGV[1] or ARGV[1] == \"0\" then redis.call(\"HSET\", KEYS[1], \"data\", ARGV[2]) return redis.call(\"HINCRBY\", KEYS[1], \"version\", 1) else return error(\"failed to set key \" .. KEYS[1]) end"
+	delQuery          = "local var1 = redis.pcall(\"HGET\", KEYS[1], \"version\"); if not var1 or type(var1)==\"table\" or var1 == ARGV[1] or var1 == \"\" or ARGV[1] == \"0\" then return redis.call(\"DEL\", KEYS[1]) else return error(\"failed to delete \" .. KEYS[1]) end"
+	configNotifyQuery = `local events = redis.pcall("CONFIG", "GET", "notify-keyspace-events");
+redis.pcall("CONFIG", "SET", "notify-keyspace-events", events.."Kgh$");`
 	connectedSlavesReplicas  = "connected_slaves:"
 	infoReplicationDelimiter = "\r\n"
 )
 
 // StateStore is a Redis state store
 type StateStore struct {
+	creds    credentials
 	client   *redis.SyncCtx
 	json     jsoniter.API
 	replicas int
@@ -38,6 +42,7 @@ type StateStore struct {
 
 type credentials struct {
 	Host     string `json:"redisHost"`
+	DB       int    `json:"redisDB"`
 	Password string `json:"redisPassword"`
 }
 
@@ -58,18 +63,17 @@ func (r *StateStore) Init(metadata state.Metadata) error {
 		return err
 	}
 
-	var redisCreds credentials
-	err = json.Unmarshal(b, &redisCreds)
+	err = json.Unmarshal(b, &r.creds)
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
 	opts := redisconn.Opts{
-		DB:       0,
-		Password: redisCreds.Password,
+		DB:       r.creds.DB,
+		Password: r.creds.Password,
 	}
-	conn, err := redisconn.Connect(ctx, redisCreds.Host, opts)
+	conn, err := redisconn.Connect(ctx, r.creds.Host, opts)
 	if err != nil {
 		return err
 	}
@@ -255,6 +259,101 @@ func (r *StateStore) Multi(operations []state.TransactionalRequest) error {
 
 	_, err := r.client.SendTransaction(context.Background(), redisReqs)
 	return err
+}
+
+// Watch watches on a key or prefix.
+func (r *StateStore) Watch(req *state.WatchStateRequest) (<-chan *state.Event, context.CancelFunc, error) {
+	conn, err := redigo.Dial("tcp", r.creds.Host, redigo.DialDatabase(r.creds.DB), redigo.DialPassword(r.creds.Password))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	keyspacePrefix := fmt.Sprintf("__keyspace@%d__:", r.creds.DB)
+	keyPrefix := keyspacePrefix + req.Key
+
+	_, discardCreate := req.Metadata[state.WatchDiscardCreate]
+	_, discardModify := req.Metadata[state.WatchDiscardModify]
+	_, discardDelete := req.Metadata[state.WatchDiscardDelete]
+	_, matchingPrefix := req.Metadata[state.WatchMatchingPrefix]
+
+	conn.Send("EVAL", configNotifyQuery)
+	psc := redigo.PubSubConn{Conn: conn}
+
+	if matchingPrefix {
+		psc.PSubscribe(keyPrefix + "*")
+	} else {
+		psc.Subscribe(keyPrefix)
+	}
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+	go func() {
+		defer psc.Close()
+		<-ctx.Done()
+	}()
+	c := make(chan *state.Event)
+	go func() {
+		for {
+			switch m := psc.Receive().(type) {
+			case redigo.Message:
+				if !strings.HasPrefix(m.Channel, keyPrefix) {
+					continue
+				}
+
+				var value []byte
+				var etag string
+				var ty state.EventType
+
+				key := m.Channel[len(keyspacePrefix):]
+				switch string(m.Data) {
+				case "hset", "set":
+					res, err := r.Get(&state.GetRequest{
+						Key: key,
+					})
+					if res != nil && err == nil {
+						value = res.Data
+						etag = res.ETag
+
+						if etag == "1" {
+							if discardCreate {
+								continue
+							}
+
+							ty = state.CREATED
+						} else {
+							if discardModify {
+								continue
+							}
+
+							ty = state.MODIFIED
+						}
+					}
+				case "del":
+					if discardDelete {
+						continue
+					}
+
+					ty = state.DELETED
+				default:
+					continue
+				}
+
+				e := &state.Event{
+					Type:  ty,
+					Key:   key,
+					Value: value,
+					ETag:  etag,
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				case c <- e:
+				}
+			}
+		}
+	}()
+
+	return c, cancelFn, nil
 }
 
 func (r *StateStore) getKeyVersion(vals []interface{}) (data string, version string, err error) {
