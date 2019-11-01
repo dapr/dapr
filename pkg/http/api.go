@@ -301,9 +301,13 @@ func (a *api) onWatchState(c *routing.Context) error {
 	key := c.Param(stateKeyParam)
 	etag := string(c.Request.Header.Peek("If-Match"))
 	req := &state.WatchStateRequest{
-		Key:  key,
-		ETag: etag,
+		Key:      key,
+		ETag:     etag,
+		Metadata: make(map[string]string),
 	}
+	c.QueryArgs().VisitAll(func(key, value []byte) {
+		req.Metadata[string(key)] = string(value)
+	})
 
 	events, cancelFn, err := watcher.Watch(req)
 	if err != nil {
@@ -312,8 +316,7 @@ func (a *api) onWatchState(c *routing.Context) error {
 		return nil
 	}
 
-	callback := string(c.QueryArgs().Peek(callbackParam))
-	respondWithChunkedJSON(c.RequestCtx, 200, events, cancelFn, callback)
+	respondWithChunkedJSON(c.RequestCtx, 200, events, cancelFn)
 	return nil
 }
 

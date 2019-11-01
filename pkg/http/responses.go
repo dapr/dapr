@@ -57,7 +57,8 @@ func respondEmpty(ctx *fasthttp.RequestCtx, code int) {
 //	return bytes, nil
 //}
 
-func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, events <-chan *state.Event, cancelFn context.CancelFunc, callback string) {
+func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, events <-chan *state.Event, cancelFn context.CancelFunc) {
+	callback := string(ctx.QueryArgs().Peek(callbackParam))
 	jsonp := callback != ""
 
 	contentType := "application/json"
