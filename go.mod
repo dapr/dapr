@@ -7,7 +7,7 @@ require (
 	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/creack/pty v1.1.9 // indirect
-	github.com/dapr/components-contrib v0.0.0-20191101040651-75b1fc29b479
+	github.com/dapr/components-contrib v0.0.0-20191102032906-4bbfb82e98fc
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
