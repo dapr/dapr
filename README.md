@@ -50,7 +50,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Opt-in stateful models: Strong/Eventual consistency, First-write/Last-write wins
 * Cross platform virtual actors
 * Rate limiting
-* Built-in distributed tracing using Open Telemetry
+* Built-in distributed tracing using [OpenTelemetry](https://opentelemetry.io)
 * Runs natively on Kubernetes using a dedicated Operator and CRDs
 * Supports all programming languages via HTTP and gRPC
 * Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
