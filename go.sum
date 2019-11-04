@@ -143,6 +143,10 @@ github.com/dapr/components-contrib v0.0.0-20191031132104-0cae368496ad h1:a43OV1F
 github.com/dapr/components-contrib v0.0.0-20191031132104-0cae368496ad/go.mod h1:lTU3nImo/tMUD+XNQEyQGDsdeJt2pQVI+mjQzDJMw8o=
 github.com/dapr/components-contrib v0.0.0-20191031190304-3ae5547e419c h1:PGtFrqcNJpS8THA2OyFCqTyFxcjzbJaWfjjYJMNepoc=
 github.com/dapr/components-contrib v0.0.0-20191031190304-3ae5547e419c/go.mod h1:G6SKcv0263et/iGiimLSR97mWhN6HVnGOFAucEdPMVA=
+github.com/dapr/components-contrib v0.0.0-20191101040651-75b1fc29b479 h1:M6jpE94jQEASa21+5UHgHJY19rLrBm+JmywFwEQgOG4=
+github.com/dapr/components-contrib v0.0.0-20191101040651-75b1fc29b479/go.mod h1:3wAMncxmAgq47Rp2D/fH8GoHikKojKiYesf3Ta3kfcM=
+github.com/dapr/components-contrib v0.0.0-20191102032906-4bbfb82e98fc h1:S0cSk4PUvl0x3/9+grjb/VSRrToG7DDPLxqeAfWZ6hw=
+github.com/dapr/components-contrib v0.0.0-20191102032906-4bbfb82e98fc/go.mod h1:mhrbx5oJHFJCkxh63P/q9viKAyxc7wqGlyB8uDAtFKY=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -181,6 +185,8 @@ github.com/flier/components-contrib v0.0.0-20191101023634-18e63ec8ba8a h1:/To2E8
 github.com/flier/components-contrib v0.0.0-20191101023634-18e63ec8ba8a/go.mod h1:YhJCA6Kmcf6zc9qJnTIBEITCse6N29l4KdPz6CTU4I8=
 github.com/flier/components-contrib v0.0.0-20191101101917-8165dc69773d h1:ZqVMFY61FRCbSwyw04N5hGl66bEXqPL9xGVKBz50B7w=
 github.com/flier/components-contrib v0.0.0-20191101101917-8165dc69773d/go.mod h1:XHj5aiIewj2RlCeYEljx+S3BdSwbx8GcHAKeAR4fdEI=
+github.com/flier/components-contrib v0.0.0-20191104035949-d1f9fd22648c h1:/PQ5tzrJmPuAwqlVkPkIv4gZSx4E7+xX5egdZMwaqec=
+github.com/flier/components-contrib v0.0.0-20191104035949-d1f9fd22648c/go.mod h1:J3DMwMkpw2hxvq56mBJDrGwir1FdCHUXP+B4j8BoO1U=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fortytw2/leaktest v1.2.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=
@@ -241,6 +247,7 @@ github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 h1:ZgQEtGgCBiWRM
 github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6/go.mod h1:cIg4eruTrX1D+g88fzRXU5OdNfaM+9IcxsU14FzY7Hc=
 github.com/golang/mock v1.1.1/go.mod h1:oTYuIxOrZwtPieC+H1uAHpcLFnEyAGVDL/k47Jfbm0A=
 github.com/golang/mock v1.2.0/go.mod h1:oTYuIxOrZwtPieC+H1uAHpcLFnEyAGVDL/k47Jfbm0A=
+github.com/golang/mock v1.3.1 h1:qGJ6qTW+x6xX/my+8YUVl4WNpX9B7+/l2tRsHGZ7f2s=
 github.com/golang/mock v1.3.1/go.mod h1:sBzyDLLjw3U8JLTeZvSv8jJB+tU5PVekmnlKIyFUx0Y=
 github.com/golang/protobuf v0.0.0-20161109072736-4bd1920723d7/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
@@ -496,6 +503,8 @@ github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6L
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/rogpeppe/go-internal v1.4.0/go.mod h1:xXDCJY+GAPziupqXw64V24skbSoqbTEfhy4qGm1nDQc=
 github.com/ryanuber/columnize v0.0.0-20160712163229-9b3edd62028f/go.mod h1:sm1tb6uqfes/u+d4ooFouqFdy9/2g9QGwK3SQygK0Ts=
+github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da h1:p3Vo3i64TCLY7gIfzeQaUJ+kppEO5WQG3cL8iE8tGHU=
+github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da/go.mod h1:gi+0XIa01GRL2eRQVjQkKGqKF3SF9vZR/HnPullcV2E=
 github.com/satori/go.uuid v1.2.0 h1:0uYX9dsZ2yD7q2RtLRtPSdGDWzjeM3TbMJP9utgA0ww=
 github.com/satori/go.uuid v1.2.0/go.mod h1:dA0hQrYB0VpLJoorglMZABFdXlWrHn1NEOzdhQKdks0=
 github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 h1:nn5Wsu0esKSJiIVhscUtVbo7ada43DJhG55ua/hjS5I=
@@ -689,6 +698,8 @@ golang.org/x/tools v0.0.0-20190909214602-067311248421/go.mod h1:b+2E5dAYhXwXZwtn
 golang.org/x/tools v0.0.0-20190911174233-4f2ddba30aff/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/tools v0.0.0-20190927191325-030b2cf1153e h1:1xWUkZQQ9Z9UuZgNaIR6OQOE7rUFglXUUBZlO+dGg6I=
 golang.org/x/tools v0.0.0-20190927191325-030b2cf1153e/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
+golang.org/x/tools v0.0.0-20191028215554-80f3f9ca0853 h1:kdLYko0GdTJLuf26ViRXphasH+6AeD7qVWDbwbn/ZTU=
+golang.org/x/tools v0.0.0-20191028215554-80f3f9ca0853/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 gonum.org/v1/gonum v0.0.0-20180816165407-929014505bf4/go.mod h1:Y+Yx5eoAFn32cQvJDxZx5Dpnq+c3wtXuadVZAcxbbBo=
 gonum.org/v1/gonum v0.0.0-20190331200053-3d26580ed485/go.mod h1:2ltnJ7xHfj0zHS40VVPYEAAMTa3ZGguvHGBSJeRWqE0=
