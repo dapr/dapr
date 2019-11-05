@@ -38,9 +38,9 @@ func main() {
 		log.Fatalf("error building Kubernetes clients: %s", err)
 	}
 
-	client := k8s.NewClient(kubeClient, daprClient)
+	kubeAPI := k8s.NewAPI(kubeClient, daprClient)
 
-	operator.NewOperator(client).Run(ctx)
+	operator.NewOperator(kubeAPI).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)

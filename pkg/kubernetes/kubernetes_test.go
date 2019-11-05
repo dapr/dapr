@@ -27,21 +27,22 @@ const (
 	servicename = "testservice"
 )
 
-var fakeClient = fake.NewSimpleClientset()
-var client = NewTestClient()
-
-func NewTestClient() *Client {
-	return NewClient(fakeClient, versioned.New(nil))
+func TestNewAPI(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
+	assert.True(t, kubeAPI != nil)
 }
 
 func TestGetDeployment(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
 	d := getDeployment(name, namespace, label)
 
 	_, err := fakeClient.AppsV1().Deployments(d.ObjectMeta.Namespace).Create(d)
 	assert.Equal(t, nil, err)
 
 	// test
-	_, err = client.GetDeployment(name, namespace)
+	_, err = kubeAPI.GetDeployment(name, namespace)
 
 	assert.Equal(t, nil, err)
 
@@ -50,15 +51,19 @@ func TestGetDeployment(t *testing.T) {
 }
 
 func TestUpdateDeployment(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
 	d := getDeployment(name, namespace, label)
 	fakeClient.AppsV1().Deployments(d.ObjectMeta.Namespace).Create(d)
 
-	err := client.UpdateDeployment(d)
+	err := kubeAPI.UpdateDeployment(d)
 
 	assert.Equal(t, nil, err)
 }
 
 func TestCreateService(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
 	d := getDeployment(name, namespace, label)
 	fakeClient.AppsV1().Deployments(d.ObjectMeta.Namespace).Create(d)
 
@@ -85,11 +90,13 @@ func TestCreateService(t *testing.T) {
 		},
 	}
 
-	err := client.CreateService(service, namespace)
+	err := kubeAPI.CreateService(service, namespace)
 	assert.Equal(t, nil, err)
 }
 
 func TestDeleteService(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
 	d := getDeployment(name, namespace, label)
 
 	service := &corev1.Service{
@@ -115,14 +122,51 @@ func TestDeleteService(t *testing.T) {
 		},
 	}
 
-	err := client.CreateService(service, namespace)
+	err := kubeAPI.CreateService(service, namespace)
 	assert.Equal(t, nil, err)
 
-	err = client.DeleteService("ds", namespace)
+	err = kubeAPI.DeleteService("ds", namespace)
 	assert.Equal(t, nil, err)
 }
 
+func TestServiceExists(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
+	d := getDeployment(name, namespace, label)
+
+	service := &corev1.Service{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "se",
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: d.Spec.Selector.MatchLabels,
+			Ports: []corev1.ServicePort{
+				{
+					Protocol:   corev1.ProtocolTCP,
+					Port:       80,
+					TargetPort: intstr.FromInt(3500),
+					Name:       "http",
+				},
+				{
+					Protocol:   corev1.ProtocolTCP,
+					Port:       81,
+					TargetPort: intstr.FromInt(5001),
+					Name:       "grpc",
+				},
+			},
+		},
+	}
+
+	err := kubeAPI.CreateService(service, namespace)
+	assert.Equal(t, nil, err)
+
+	b := kubeAPI.ServiceExists("se", namespace)
+	assert.True(t, b)
+}
+
 func TestGetEndpoints(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
 	epname := "testep"
 	ep := &corev1.Endpoints{
 		ObjectMeta: meta_v1.ObjectMeta{
@@ -142,11 +186,13 @@ func TestGetEndpoints(t *testing.T) {
 	_, err := fakeClient.CoreV1().Endpoints(namespace).Create(ep)
 
 	assert.Equal(t, nil, err)
-	_, err = client.GetEndpoints(epname, namespace)
+	_, err = kubeAPI.GetEndpoints(epname, namespace)
 	assert.Equal(t, nil, err)
 }
 
 func TestGetDeploymentsBySelector(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
 	d := getDeployment(name, namespace, label)
 	fakeClient.AppsV1().Deployments(d.ObjectMeta.Namespace).Create(d)
 
@@ -154,7 +200,7 @@ func TestGetDeploymentsBySelector(t *testing.T) {
 		MatchLabels: map[string]string{label: label},
 	}
 
-	items, err := client.GetDeploymentsBySelector(selector)
+	items, err := kubeAPI.GetDeploymentsBySelector(selector)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 1, len(items))
 }

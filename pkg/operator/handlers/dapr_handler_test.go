@@ -13,15 +13,13 @@ import (
 	fake "k8s.io/client-go/kubernetes/fake"
 )
 
-var testDaprHandler = NewTestDaprHandler()
-
-func NewTestDaprHandler() *DaprHandler {
-	fakeClient := fake.NewSimpleClientset()
-	client := kubernetes.NewClient(fakeClient, versioned.New(nil))
-	return NewDaprHandler(client)
+func TestNewDaprHandler(t *testing.T) {
+	d := getTestDaprHandler()
+	assert.True(t, d != nil)
 }
 
 func TestGetDaprID(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
 	t.Run("WithValidId", func(t *testing.T) {
 		// Arrange
 		expected := "test_id"
@@ -48,6 +46,7 @@ func TestGetDaprID(t *testing.T) {
 }
 
 func TestIsAnnotatedForDapr(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
 	t.Run("Enabled", func(t *testing.T) {
 		// Arrange
 		expected := "true"
@@ -111,4 +110,10 @@ func getDeployment(daprID string, daprEnabled string) *appsv1.Deployment {
 	}
 
 	return deployment
+}
+
+func getTestDaprHandler() *DaprHandler {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := kubernetes.NewAPI(fakeClient, versioned.New(nil))
+	return NewDaprHandler(kubeAPI)
 }

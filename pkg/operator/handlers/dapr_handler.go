@@ -25,14 +25,14 @@ const (
 
 // DaprHandler handles the lifetime for Dapr CRDs
 type DaprHandler struct {
-	client          *kubernetes.Client
+	kubeAPI         *kubernetes.API
 	deploymentsLock *sync.Mutex
 }
 
 // NewDaprHandler returns a new Dapr handler
-func NewDaprHandler(client *kubernetes.Client) *DaprHandler {
+func NewDaprHandler(kubeAPI *kubernetes.API) *DaprHandler {
 	return &DaprHandler{
-		client:          client,
+		kubeAPI:         kubeAPI,
 		deploymentsLock: &sync.Mutex{},
 	}
 }
@@ -44,7 +44,7 @@ func (h *DaprHandler) Init() error {
 
 func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployment) error {
 	serviceName := fmt.Sprintf("%s-dapr", name)
-	exists := h.client.ServiceExists(serviceName, deployment.GetNamespace())
+	exists := h.kubeAPI.ServiceExists(serviceName, deployment.GetNamespace())
 	if exists {
 		log.Infof("service exists: %s", serviceName)
 		return nil
@@ -74,7 +74,7 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 		},
 	}
 
-	err := h.client.CreateService(service, deployment.GetNamespace())
+	err := h.kubeAPI.CreateService(service, deployment.GetNamespace())
 	if err != nil {
 		return err
 	}
@@ -85,13 +85,13 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 
 func (h *DaprHandler) deleteDaprService(name string, deployment *appsv1.Deployment) error {
 	serviceName := fmt.Sprintf("%s-dapr", name)
-	exists := h.client.ServiceExists(serviceName, deployment.GetNamespace())
+	exists := h.kubeAPI.ServiceExists(serviceName, deployment.GetNamespace())
 	if !exists {
 		log.Infof("service does not exist: %s", serviceName)
 		return nil
 	}
 
-	err := h.client.DeleteService(serviceName, deployment.GetNamespace())
+	err := h.kubeAPI.DeleteService(serviceName, deployment.GetNamespace())
 	if err != nil {
 		return err
 	}
