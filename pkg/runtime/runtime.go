@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"reflect"
@@ -27,6 +28,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 
+	"github.com/awnumar/memguard"
 	"github.com/dapr/dapr/pkg/actors"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
@@ -63,6 +65,7 @@ type DaprRuntime struct {
 	runtimeConfig        *Config
 	globalConfig         *config.Configuration
 	components           []components_v1alpha1.Component
+	secrets              Secrets
 	grpc                 *grpc.Manager
 	appChannel           channel.AppChannel
 	appConfig            config.ApplicationConfig
@@ -242,9 +245,10 @@ func (a *DaprRuntime) OnComponentUpdated(component components_v1alpha1.Component
 			return
 		}
 
-		err = store.Init(state.Metadata{
-			Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata),
-		})
+		properties, closer := a.convertMetadataItemsToProperties(component.Spec.Metadata)
+		defer closer.Close()
+
+		err = store.Init(state.Metadata{Properties: properties})
 		if err != nil {
 			log.Errorf("error on init state store: %s", err)
 		} else {
@@ -258,8 +262,11 @@ func (a *DaprRuntime) OnComponentUpdated(component components_v1alpha1.Component
 			return
 		}
 
+		properties, closer := a.convertMetadataItemsToProperties(component.Spec.Metadata)
+		defer closer.Close()
+
 		err = binding.Init(bindings.Metadata{
-			Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata),
+			Properties: properties,
 			Name:       component.ObjectMeta.Name,
 		})
 		if err == nil {
@@ -503,8 +510,11 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 				log.Debugf("failed to create input binding %s: %s", c.Spec.Type, err)
 				continue
 			}
+			properties, closer := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+			defer closer.Close()
+
 			err = binding.Init(bindings.Metadata{
-				Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+				Properties: properties,
 				Name:       c.ObjectMeta.Name,
 			})
 			if err != nil {
@@ -527,10 +537,11 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 				continue
 			}
 
+			properties, closer := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+			defer closer.Close()
+
 			if binding != nil {
-				err := binding.Init(bindings.Metadata{
-					Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-				})
+				err := binding.Init(bindings.Metadata{Properties: properties})
 				if err != nil {
 					log.Warnf("failed to init output binding %s: %s", c.Spec.Type, err)
 					continue
@@ -553,10 +564,10 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 				log.Warnf("error creating state store %s: %s", s.Spec.Type, err)
 				continue
 			}
+			properties, closer := a.convertMetadataItemsToProperties(s.Spec.Metadata)
+			defer closer.Close()
 			if store != nil {
-				err := store.Init(state.Metadata{
-					Properties: a.convertMetadataItemsToProperties(s.Spec.Metadata),
-				})
+				err := store.Init(state.Metadata{Properties: properties})
 				if err != nil {
 					log.Warnf("error initializing state store %s: %s", s.Spec.Type, err)
 					continue
@@ -608,7 +619,8 @@ func (a *DaprRuntime) initExporters() error {
 				continue
 			}
 
-			properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+			properties, closer := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+			defer closer.Close()
 
 			err = exporter.Init(a.runtimeConfig.ID, a.hostAddress, exporters.Metadata{
 				Properties: properties,
@@ -631,12 +643,12 @@ func (a *DaprRuntime) initPubSub() error {
 				continue
 			}
 
-			properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+			properties, closer := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+			defer closer.Close()
+
 			properties["consumerID"] = a.runtimeConfig.ID
 
-			err = pubSub.Init(pubsub.Metadata{
-				Properties: properties,
-			})
+			err = pubSub.Init(pubsub.Metadata{Properties: properties})
 			if err != nil {
 				log.Warnf("error initializing pub sub %s: %s", c.Spec.Type, err)
 				continue
@@ -772,10 +784,40 @@ func (a *DaprRuntime) Stop() {
 	log.Info("stop command issued. Shutting down all operations")
 }
 
-func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {
-	cache := map[string]secretstores.GetSecretResponse{}
+// Secrets hold a repository of secure software enclave for the storage of sensitive information in memory.
+type Secrets map[string]Secret
 
-	for i, m := range component.Spec.Metadata {
+func (secrets Secrets) Get(keyRef components_v1alpha1.SecretKeyRef) *memguard.Enclave {
+	if secrets == nil || keyRef.Name == "" {
+		return nil
+	}
+	secret, exists := secrets[keyRef.Name]
+	if !exists {
+		return nil
+	}
+	return secret.Get(keyRef.Key)
+}
+
+// Secret hold a map of secure software enclave for the storage of sensitive information in memory.
+type Secret map[string]*memguard.Enclave
+
+func (secret Secret) Get(key string) *memguard.Enclave {
+	if secret == nil {
+		return nil
+	}
+	// Use the default DefaultSecretRefKeyName key if SecretKeyRef.Key is not given
+	if key == "" {
+		key = secretstores.DefaultSecretRefKeyName
+	}
+	return secret[key]
+}
+
+func (a *DaprRuntime) getSecret(keyRef components_v1alpha1.SecretKeyRef) *memguard.Enclave {
+	return a.secrets.Get(keyRef)
+}
+
+func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {
+	for _, m := range component.Spec.Metadata {
 		if m.SecretKeyRef.Name == "" {
 			continue
 		}
@@ -785,7 +827,11 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 			continue
 		}
 
-		resp, ok := cache[m.SecretKeyRef.Name]
+		if a.secrets == nil {
+			a.secrets = make(Secrets)
+		}
+
+		_, ok := a.secrets[m.SecretKeyRef.Name]
 		if !ok {
 			r, err := secretStore.GetSecret(secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
@@ -797,21 +843,18 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 				log.Errorf("error getting secret: %s", err)
 				continue
 			}
-			resp = r
+			secret := make(Secret)
+			keys := make([]string, 0, len(r.Data))
+			for key, value := range r.Data {
+				secret[key] = memguard.NewEnclave([]byte(value))
+				keys = append(keys, key)
+			}
+			log.WithFields(log.Fields{
+				"name": m.SecretKeyRef.Name,
+				"keys": keys,
+			}).Debug("get secrets")
+			a.secrets[m.SecretKeyRef.Name] = secret
 		}
-
-		// Use the default DefaultSecretRefKeyName key if SecretKeyRef.Key is not given
-		secretKeyName := m.SecretKeyRef.Key
-		if secretKeyName == "" {
-			secretKeyName = secretstores.DefaultSecretRefKeyName
-		}
-
-		val, ok := resp.Data[secretKeyName]
-		if ok {
-			component.Spec.Metadata[i].Value = val
-		}
-
-		cache[m.SecretKeyRef.Name] = resp
 	}
 	return component
 }
@@ -968,9 +1011,10 @@ func (a *DaprRuntime) initSecretStores() error {
 			continue
 		}
 
-		err = secretStore.Init(secretstores.Metadata{
-			Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-		})
+		properties, closer := a.convertMetadataItemsToProperties(c.Spec.Metadata)
+		defer closer.Close()
+
+		err = secretStore.Init(secretstores.Metadata{Properties: properties})
 		if err != nil {
 			log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
 			continue
@@ -982,10 +1026,35 @@ func (a *DaprRuntime) initSecretStores() error {
 	return nil
 }
 
-func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
+func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) (map[string]string, io.Closer) {
+	var lockedBuffers LockedBuffer
 	properties := map[string]string{}
 	for _, c := range items {
-		properties[c.Name] = c.Value
+		if enclave := a.secrets.Get(c.SecretKeyRef); enclave != nil {
+			buf, err := enclave.Open()
+			if err != nil {
+				log.WithFields(log.Fields{
+					"name": c.SecretKeyRef.Name,
+					"key":  c.SecretKeyRef.Key,
+				}).Warnf("failed to open secret enclave")
+
+				continue
+			}
+			properties[c.Name] = buf.String()
+			lockedBuffers = append(lockedBuffers, buf)
+		} else {
+			properties[c.Name] = c.Value
+		}
 	}
-	return properties
+	return properties, lockedBuffers
+}
+
+type LockedBuffer []*memguard.LockedBuffer
+
+func (bufs LockedBuffer) Close() error {
+	for _, buf := range bufs {
+		buf.Destroy()
+	}
+
+	return nil
 }

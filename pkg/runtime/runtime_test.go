@@ -220,7 +220,7 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			Value: "b",
 		},
 	}
-	m := rt.convertMetadataItemsToProperties(items)
+	m, _ := rt.convertMetadataItemsToProperties(items)
 	assert.Equal(t, 1, len(m))
 	assert.Equal(t, "b", m["a"])
 }
@@ -277,7 +277,15 @@ func TestProcessComponentSecrets(t *testing.T) {
 		rt.initSecretStores()
 
 		mod := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+		enclave := rt.getSecret(mockBinding.Spec.Metadata[0].SecretKeyRef)
+		assert.NotNil(t, enclave)
+
+		buf, err := enclave.Open()
+		defer buf.Destroy()
+
+		assert.NoError(t, err)
+		assert.Equal(t, "value1", buf.String())
+		assert.Equal(t, "", mod.Spec.Metadata[0].Value)
 	})
 
 	t.Run("Kubernetes Mode", func(t *testing.T) {
@@ -298,7 +306,15 @@ func TestProcessComponentSecrets(t *testing.T) {
 		assert.NoError(t, err)
 
 		mod := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+		enclave := rt.getSecret(mockBinding.Spec.Metadata[0].SecretKeyRef)
+		assert.NotNil(t, enclave)
+
+		buf, err := enclave.Open()
+		defer buf.Destroy()
+
+		assert.NoError(t, err)
+		assert.Equal(t, "value1", buf.String())
+		assert.Equal(t, "", mod.Spec.Metadata[0].Value)
 	})
 
 	t.Run("Look up name only", func(t *testing.T) {
@@ -318,7 +334,15 @@ func TestProcessComponentSecrets(t *testing.T) {
 		assert.NoError(t, err)
 
 		mod := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "_value_data", mod.Spec.Metadata[0].Value)
+		enclave := rt.getSecret(mockBinding.Spec.Metadata[0].SecretKeyRef)
+		assert.NotNil(t, enclave)
+
+		buf, err := enclave.Open()
+		defer buf.Destroy()
+
+		assert.NoError(t, err)
+		assert.Equal(t, "_value_data", buf.String())
+		assert.Equal(t, "", mod.Spec.Metadata[0].Value)
 	})
 }
 
@@ -359,7 +383,17 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 
 	err := rt.initSecretStores()
 	assert.NoError(t, err)
-	assert.Equal(t, "value1", fakeSecretStoreWithAuth.Spec.Metadata[0].Value)
+
+	enclave := rt.getSecret(fakeSecretStoreWithAuth.Spec.Metadata[0].SecretKeyRef)
+	assert.NotNil(t, enclave)
+
+	buf, err := enclave.Open()
+	defer buf.Destroy()
+
+	assert.NoError(t, err)
+	assert.Equal(t, "value1", buf.String())
+
+	assert.Equal(t, "", fakeSecretStoreWithAuth.Spec.Metadata[0].Value)
 }
 
 func TestOnNewPublishedMessage(t *testing.T) {

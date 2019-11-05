@@ -9,12 +9,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/awnumar/memguard"
 	global_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	daprd "github.com/dapr/dapr/pkg/runtime"
@@ -105,7 +105,9 @@ func main() {
 	}
 
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
+
+	memguard.CatchSignal(func(sig os.Signal) { stop <- sig }, syscall.SIGTERM, os.Interrupt)
+	defer memguard.Purge()
 
 	rt := daprd.NewDaprRuntime(runtimeConfig, globalConfig)
 	err = rt.Run()

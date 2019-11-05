@@ -1,0 +1,63 @@
+linux_task:
+  container:
+    image: golang:latest
+  env:
+    GO111MODULE: on
+    GOPATH: /tmp/go
+    CIRRUS_WORKING_DIR: /tmp/go/src/github.com/${CIRRUS_REPO_FULL_NAME}
+  build_script:
+    - go version
+    - go get ./...
+    - go build -race -v ./...
+  test_script:
+    - go test -race -v ./...
+
+osx_task:
+  osx_instance:
+    image: mojave-base
+  env:
+    GO111MODULE: on
+    GOPATH: /tmp/go
+    PATH: ${GOPATH}/bin:${PATH}
+    CIRRUS_WORKING_DIR: /tmp/go/src/github.com/${CIRRUS_REPO_FULL_NAME}
+  install_script:
+    - brew install go
+  build_script:
+    - go version
+    - go get ./...
+    - go build -race -v ./...
+  test_script:
+    - go test -race -v ./...
+
+windows_task:
+  windows_container:
+    image: golang:windowsservercore-1803
+    os_version: 1803
+  env:
+    GO111MODULE: on
+    GOPATH: C:\golang
+    PATH: ${GOPATH}\bin:${PATH}
+    CIRRUS_WORKING_DIR: C:\golang\src\github.com\${CIRRUS_REPO_FULL_NAME}
+  build_script:
+    - go version
+    - go get ./...
+    - go build -race -v ./...
+  test_script:
+    - go test -race -v ./...
+
+freebsd_task:
+  freebsd_instance:
+    image: freebsd-12-0-release-amd64
+  env:
+    GO111MODULE: on
+    GOPATH: /tmp/go
+    PATH: ${GOPATH}/bin:${PATH}
+    CIRRUS_WORKING_DIR: /tmp/go/src/github.com/${CIRRUS_REPO_FULL_NAME}
+  install_script:
+    - pkg install -y go git
+  build_script:
+    - go version
+    - go get ./...
+    - go build -race -v ./...
+  test_script:
+    - go test -race -v ./...
