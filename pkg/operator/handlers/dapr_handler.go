@@ -25,12 +25,12 @@ const (
 
 // DaprHandler handles the lifetime for Dapr CRDs
 type DaprHandler struct {
-	client          *kubernetes.Clients
+	client          *kubernetes.Client
 	deploymentsLock *sync.Mutex
 }
 
 // NewDaprHandler returns a new Dapr handler
-func NewDaprHandler(client *kubernetes.Clients) *DaprHandler {
+func NewDaprHandler(client *kubernetes.Client) *DaprHandler {
 	return &DaprHandler{
 		client:          client,
 		deploymentsLock: &sync.Mutex{},

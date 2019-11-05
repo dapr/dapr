@@ -9,6 +9,7 @@ import (
 	"flag"
 	"time"
 
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"k8s.io/klog"
 
 	log "github.com/Sirupsen/logrus"
@@ -16,6 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/dapr/utils"
 )
 
 var (
@@ -26,12 +28,19 @@ func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
-	clients, err := k8s.NewClients(nil, nil)
+
+	kubeClient := utils.GetKubeClient()
+
+	config := utils.GetConfig()
+	daprClient, err := scheme.NewForConfig(config)
+
 	if err != nil {
 		log.Fatalf("error building Kubernetes clients: %s", err)
 	}
 
-	operator.NewOperator(clients).Run(ctx)
+	client := k8s.NewClient(kubeClient, daprClient)
+
+	operator.NewOperator(client).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)

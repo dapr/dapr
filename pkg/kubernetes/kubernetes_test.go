@@ -28,11 +28,10 @@ const (
 )
 
 var fakeClient = fake.NewSimpleClientset()
-var client = NewTestClients()
+var client = NewTestClient()
 
-func NewTestClients() *Clients {
-	clients, _ := NewClients(fakeClient, versioned.New(nil))
-	return clients
+func NewTestClient() *Client {
+	return NewClient(fakeClient, versioned.New(nil))
 }
 
 func TestGetDeployment(t *testing.T) {
