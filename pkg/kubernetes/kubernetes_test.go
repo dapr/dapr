@@ -31,7 +31,7 @@ var fakeClient = fake.NewSimpleClientset()
 var client = NewTestClients()
 
 func NewTestClients() *Clients {
-	var clients, _ = NewClients(fakeClient, versioned.New(nil))
+	clients, _ := NewClients(fakeClient, versioned.New(nil))
 	return clients
 }
 

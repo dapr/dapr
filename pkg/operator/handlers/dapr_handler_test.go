@@ -16,9 +16,9 @@ import (
 var testDaprHandler = NewTestDaprHandler()
 
 func NewTestDaprHandler() *DaprHandler {
-	var fakeClient = fake.NewSimpleClientset()
-	var clients, _ = kubernetes.NewClients(fakeClient, versioned.New(nil))
-	var testDaprHandler = NewDaprHandler(clients)
+	fakeClient := fake.NewSimpleClientset()
+	clients, _ := kubernetes.NewClients(fakeClient, versioned.New(nil))
+	testDaprHandler := NewDaprHandler(clients)
 	return testDaprHandler
 }
 
