@@ -18,8 +18,7 @@ var testDaprHandler = NewTestDaprHandler()
 func NewTestDaprHandler() *DaprHandler {
 	fakeClient := fake.NewSimpleClientset()
 	clients, _ := kubernetes.NewClients(fakeClient, versioned.New(nil))
-	testDaprHandler := NewDaprHandler(clients)
-	return testDaprHandler
+	return NewDaprHandler(clients)
 }
 
 func TestGetDaprID(t *testing.T) {
