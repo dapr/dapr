@@ -5,18 +5,28 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	testclient "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	versioned "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/kubernetes"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	fake "k8s.io/client-go/kubernetes/fake"
 )
+
+var testDaprHandler = NewTestDaprHandler()
+
+func NewTestDaprHandler() *DaprHandler {
+	var fakeClient = fake.NewSimpleClientset()
+	var clients, _ = kubernetes.NewClients(fakeClient, versioned.New(nil))
+	var testDaprHandler = NewDaprHandler(clients)
+	return testDaprHandler
+}
 
 func TestGetDaprID(t *testing.T) {
 	t.Run("WithValidId", func(t *testing.T) {
 		// Arrange
 		expected := "test_id"
 		deployment := getDeployment(expected, "true")
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.getDaprID(deployment)
@@ -29,7 +39,6 @@ func TestGetDaprID(t *testing.T) {
 		// Arrange
 		expected := ""
 		deployment := getDeployment(expected, "true")
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.getDaprID(deployment)
@@ -44,7 +53,6 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 		// Arrange
 		expected := "true"
 		deployment := getDeployment("test_id", expected)
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
@@ -57,7 +65,6 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 		// Arrange
 		expected := "false"
 		deployment := getDeployment("test_id", expected)
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
@@ -70,7 +77,6 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 		// Arrange
 		expected := "0"
 		deployment := getDeployment("test_id", expected)
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.isAnnotatedForDapr(deployment)

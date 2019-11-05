@@ -35,7 +35,10 @@ type operator struct {
 }
 
 // NewOperator returns a new Dapr Operator
-func NewOperator(kubeClient kubernetes.Interface, daprClient scheme.Interface) Operator {
+func NewOperator(clients *k8s.Clients) Operator {
+	kubeClient := clients.GetKubeClient()
+	daprClient := clients.GetDaprClient()
+
 	o := &operator{
 		kubeClient: kubeClient,
 		daprClient: daprClient,
@@ -51,7 +54,7 @@ func NewOperator(kubeClient kubernetes.Interface, daprClient scheme.Interface) O
 			nil,
 			nil,
 		),
-		daprHandler:       handlers.NewDaprHandler(daprClient),
+		daprHandler:       handlers.NewDaprHandler(clients),
 		componentsHandler: handlers.NewComponentsHandler(kubeClient),
 	}
 

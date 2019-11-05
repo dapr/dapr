@@ -26,11 +26,12 @@ func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
-	kubeClient, daprClient, err := k8s.Clients()
+	clients, err := k8s.NewClients(nil, nil)
 	if err != nil {
 		log.Fatalf("error building Kubernetes clients: %s", err)
 	}
-	operator.NewOperator(kubeClient, daprClient).Run(ctx)
+
+	operator.NewOperator(clients).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
