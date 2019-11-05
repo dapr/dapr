@@ -5,18 +5,25 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	testclient "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	versioned "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/kubernetes"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	fake "k8s.io/client-go/kubernetes/fake"
 )
 
+func TestNewDaprHandler(t *testing.T) {
+	d := getTestDaprHandler()
+	assert.True(t, d != nil)
+}
+
 func TestGetDaprID(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
 	t.Run("WithValidId", func(t *testing.T) {
 		// Arrange
 		expected := "test_id"
 		deployment := getDeployment(expected, "true")
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.getDaprID(deployment)
@@ -29,7 +36,6 @@ func TestGetDaprID(t *testing.T) {
 		// Arrange
 		expected := ""
 		deployment := getDeployment(expected, "true")
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.getDaprID(deployment)
@@ -40,11 +46,11 @@ func TestGetDaprID(t *testing.T) {
 }
 
 func TestIsAnnotatedForDapr(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
 	t.Run("Enabled", func(t *testing.T) {
 		// Arrange
 		expected := "true"
 		deployment := getDeployment("test_id", expected)
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
@@ -57,7 +63,6 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 		// Arrange
 		expected := "false"
 		deployment := getDeployment("test_id", expected)
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
@@ -70,7 +75,6 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 		// Arrange
 		expected := "0"
 		deployment := getDeployment("test_id", expected)
-		testDaprHandler := NewDaprHandler(testclient.New(nil))
 
 		// Act
 		got := testDaprHandler.isAnnotatedForDapr(deployment)
@@ -106,4 +110,10 @@ func getDeployment(daprID string, daprEnabled string) *appsv1.Deployment {
 	}
 
 	return deployment
+}
+
+func getTestDaprHandler() *DaprHandler {
+	fakeClient := fake.NewSimpleClientset()
+	kubeAPI := kubernetes.NewAPI(fakeClient, versioned.New(nil))
+	return NewDaprHandler(kubeAPI)
 }
