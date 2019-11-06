@@ -7,7 +7,7 @@ require (
 	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/creack/pty v1.1.9 // indirect
-	github.com/dapr/components-contrib v0.0.0-20191102032906-4bbfb82e98fc
+	github.com/dapr/components-contrib v0.0.0-20191106001926-c945e702125e
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
@@ -40,8 +40,6 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasthttp v1.4.0
 	go.opencensus.io v0.22.1
-	golang.org/x/image v0.0.0-20190910094157-69e4b8554b2a // indirect
-	golang.org/x/mobile v0.0.0-20190923204409-d3ece3b6da5f // indirect
 	gonum.org/v1/gonum v0.0.0-20190911200027-40d3308efe80 // indirect
 	google.golang.org/grpc v1.24.0
 	gopkg.in/yaml.v2 v2.2.2
