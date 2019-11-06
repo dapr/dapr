@@ -23,6 +23,7 @@ message CallActorEnvelope {
   string actorType = 2;
   string method = 3;
   google.protobuf.Any data = 4;
+  map<string,string> metadata = 5;
 }
 
 message InvokeResponse {
