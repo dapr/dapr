@@ -19,7 +19,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.Printf("Dapr helloworld e2e app started. Listening to localhost:%d", appPort)
+	log.Printf("Dapr helloworld test app - listening on http://localhost:%d", appPort)
 
 	http.HandleFunc("/", rootHandler)
 	http.ListenAndServe(fmt.Sprintf(":%d", appPort), nil)
