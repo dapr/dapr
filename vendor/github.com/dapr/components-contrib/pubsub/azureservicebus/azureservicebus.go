@@ -168,7 +168,7 @@ func (a *azureServiceBus) Subscribe(req pubsub.SubscribeRequest, handler func(ms
 	}
 	topic, err := a.namespace.NewTopic(req.Topic)
 	if err != nil {
-		return fmt.Errorf("service bus error: could not instantiate topic %s", req.Topic)
+		return fmt.Errorf("service bus error: could not instantiate topic %s, %s", req.Topic, err)
 	}
 
 	var sub subscription
@@ -309,7 +309,7 @@ func (a *azureServiceBus) createSubscriptionManagementOptions() ([]servicebus.Su
 	if a.metadata.DefaultMessageTimeToLiveInSec != nil {
 		opts = append(opts, subscriptionManagementOptionsWithDefaultMessageTimeToLive(a.metadata.DefaultMessageTimeToLiveInSec))
 	}
-	if a.metadata.DefaultMessageTimeToLiveInSec != nil {
+	if a.metadata.AutoDeleteOnIdleInSec != nil {
 		opts = append(opts, subscriptionManagementOptionsWithAutoDeleteOnIdle(a.metadata.AutoDeleteOnIdleInSec))
 	}
 	return opts, nil
