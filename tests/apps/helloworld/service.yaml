@@ -36,7 +36,7 @@ spec:
     spec:
       containers:
       - name: helloworld
-        image: youngp/e2e-helloworld
+        image: dapriotest/helloworld
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
