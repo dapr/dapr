@@ -314,9 +314,6 @@ func NewCallbackCDecl(fn interface{}) uintptr {
 //sys	rtlGetVersion(info *OsVersionInfoEx) (ret error) = ntdll.RtlGetVersion
 //sys	rtlGetNtVersionNumbers(majorVersion *uint32, minorVersion *uint32, buildNumber *uint32) = ntdll.RtlGetNtVersionNumbers
 
-// Process Status API (PSAPI)
-//sys	EnumProcesses(processIds []uint32, bytesReturned *uint32) (err error) = psapi.EnumProcesses
-
 // syscall interface implementation for other packages
 
 // GetCurrentProcess returns the handle for the current process.
@@ -413,11 +410,7 @@ func Open(path string, mode int, perm uint32) (fd Handle, err error) {
 	default:
 		createmode = OPEN_EXISTING
 	}
-	var attrs uint32 = FILE_ATTRIBUTE_NORMAL
-	if perm&S_IWRITE == 0 {
-		attrs = FILE_ATTRIBUTE_READONLY
-	}
-	h, e := CreateFile(pathp, access, sharemode, sa, createmode, attrs, 0)
+	h, e := CreateFile(pathp, access, sharemode, sa, createmode, FILE_ATTRIBUTE_NORMAL, 0)
 	return h, e
 }
 
@@ -864,7 +857,7 @@ func (rsa *RawSockaddrAny) Sockaddr() (Sockaddr, error) {
 		for n < len(pp.Path) && pp.Path[n] != 0 {
 			n++
 		}
-		bytes := (*[len(pp.Path)]byte)(unsafe.Pointer(&pp.Path[0]))[0:n]
+		bytes := (*[10000]byte)(unsafe.Pointer(&pp.Path[0]))[0:n]
 		sa.Name = string(bytes)
 		return sa, nil
 

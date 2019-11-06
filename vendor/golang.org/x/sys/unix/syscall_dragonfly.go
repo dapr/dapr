@@ -12,25 +12,9 @@
 
 package unix
 
-import (
-	"sync"
-	"unsafe"
-)
+import "unsafe"
 
-// See version list in https://github.com/DragonFlyBSD/DragonFlyBSD/blob/master/sys/sys/param.h
-var (
-	osreldateOnce sync.Once
-	osreldate     uint32
-)
-
-// First __DragonFly_version after September 2019 ABI changes
-// http://lists.dragonflybsd.org/pipermail/users/2019-September/358280.html
-const _dragonflyABIChangeVersion = 500705
-
-func supportsABI(ver uint32) bool {
-	osreldateOnce.Do(func() { osreldate, _ = SysctlUint32("kern.osreldate") })
-	return osreldate >= ver
-}
+//sys	sysctl(mib []_C_int, old *byte, oldlen *uintptr, new *byte, newlen uintptr) (err error) = SYS___SYSCTL
 
 // SockaddrDatalink implements the Sockaddr interface for AF_LINK type sockets.
 type SockaddrDatalink struct {
@@ -167,8 +151,6 @@ func setattrlistTimes(path string, times []Timespec, flags int) error {
 }
 
 //sys	ioctl(fd int, req uint, arg uintptr) (err error)
-
-//sys   sysctl(mib []_C_int, old *byte, oldlen *uintptr, new *byte, newlen uintptr) (err error) = SYS___SYSCTL
 
 func sysctlUname(mib []_C_int, old *byte, oldlen *uintptr) error {
 	err := sysctl(mib, old, oldlen, nil, 0)

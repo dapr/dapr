@@ -9,4 +9,5 @@ type metadata struct {
 	host       string
 	password   string
 	consumerID string
+	enableTLS  bool
 }
