@@ -1,0 +1,42 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: helloworld
+  labels:
+    testapp: helloworld
+spec:
+  selector:
+    testapp: helloworld
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helloworld
+  labels:
+    testapp: helloworld
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: helloworld
+  template:
+    metadata:
+      labels:
+        testapp: helloworld
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/id: "helloworld"
+        dapr.io/port: "3000"
+    spec:
+      containers:
+      - name: helloworld
+        image: youngp/e2e-helloworld
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always
