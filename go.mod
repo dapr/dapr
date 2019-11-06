@@ -7,16 +7,18 @@ require (
 	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/creack/pty v1.1.9 // indirect
-	github.com/dapr/components-contrib v0.0.0-20191102032906-4bbfb82e98fc
+	github.com/dapr/components-contrib v0.0.0-20191106001926-c945e702125e
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-openapi/jsonreference v0.19.3 // indirect
 	github.com/go-openapi/spec v0.19.3 // indirect
 	github.com/go-ozzo/ozzo-routing v2.1.4+incompatible // indirect
+	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/gddo v0.0.0-20190815223733-287de01127ef // indirect
 	github.com/golang/protobuf v1.3.2
+	github.com/google/btree v1.0.0 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/googleapis/gnostic v0.3.1 // indirect
 	github.com/gorilla/mux v1.7.1
@@ -38,8 +40,6 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasthttp v1.4.0
 	go.opencensus.io v0.22.1
-	golang.org/x/image v0.0.0-20190910094157-69e4b8554b2a // indirect
-	golang.org/x/mobile v0.0.0-20190923204409-d3ece3b6da5f // indirect
 	gonum.org/v1/gonum v0.0.0-20190911200027-40d3308efe80 // indirect
 	google.golang.org/grpc v1.24.0
 	gopkg.in/yaml.v2 v2.2.2
