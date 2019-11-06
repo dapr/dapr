@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	natsURL            = "natsURL"
-	natsQueueGroupName = "natsQueueGroupName"
+	natsURL    = "natsURL"
+	consumerID = "consumerID"
 )
 
 type natsPubSub struct {
@@ -37,7 +37,7 @@ func parseNATSMetadata(meta pubsub.Metadata) (metadata, error) {
 		return m, errors.New("nats error: missing nats URL")
 	}
 
-	if val, ok := meta.Properties[natsQueueGroupName]; ok && val != "" {
+	if val, ok := meta.Properties[consumerID]; ok && val != "" {
 		m.natsQueueGroupName = val
 	} else {
 		return m, errors.New("nats error: missing queue name")
