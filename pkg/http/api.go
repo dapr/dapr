@@ -307,7 +307,7 @@ func (a *api) onWatchState(c *routing.Context) error {
 	key := c.Param(stateKeyParam)
 	etag := string(c.Request.Header.Peek("If-Match"))
 	req := &state.WatchStateRequest{
-		Key:      key,
+		Key:      a.getModifiedStateKey(key),
 		ETag:     etag,
 		Metadata: make(map[string]string),
 	}
