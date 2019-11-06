@@ -167,7 +167,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191106001926-c945e702125e => github.com/flier/components-contrib v0.0.0-20191106034625-1b7679f19fed
+# github.com/dapr/components-contrib v0.0.0-20191106001926-c945e702125e => github.com/flier/components-contrib v0.0.0-20191106093457-c6c737173e91
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage
 github.com/dapr/components-contrib/bindings/cosmosdb

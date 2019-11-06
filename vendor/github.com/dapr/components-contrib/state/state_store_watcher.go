@@ -8,12 +8,13 @@ package state
 import "context"
 
 const (
-	WatchDiscardCreate  = "discard-create"
-	WatchDiscardModify  = "discard-modify"
-	WatchDiscardDelete  = "discard-delete"
-	WatchFromKey        = "from-key"
-	WatchMatchingPrefix = "matching-prefix"
-	WatchInRange        = "in-range"
+	WatchDiscardCreate   = "discard-create"
+	WatchDiscardModify   = "discard-modify"
+	WatchDiscardDelete   = "discard-delete"
+	WatchDiscardChildren = "discard-children"
+	WatchFromKey         = "from-key"
+	WatchMatchingPrefix  = "matching-prefix"
+	WatchInRange         = "in-range"
 )
 
 // StoreWatcher is an interface for initialization and support state watcher

@@ -6,12 +6,15 @@
 package zookeeper
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"path"
 	"strconv"
 	"strings"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/dapr/components-contrib/state"
 	"github.com/hashicorp/go-multierror"
 	jsoniter "github.com/json-iterator/go"
@@ -20,8 +23,11 @@ import (
 
 const defaultMaxBufferSize = 1024 * 1024
 const defaultMaxConnBufferSize = 1024 * 1024
+const defaultKeyPrefixPath = "/dapr"
 
 const anyVersion = -1
+
+var defaultAcl = zk.WorldACL(zk.PermAll)
 
 var errMissingServers = errors.New("servers are required")
 var errInvalidSessionTimeout = errors.New("sessionTimeout is invalid")
@@ -61,6 +67,7 @@ func (props *properties) parse() (*config, error) {
 	if len(props.Servers) == 0 {
 		return nil, errMissingServers
 	}
+	servers := strings.Split(props.Servers, ",")
 
 	sessionTimeout, err := time.ParseDuration(props.SessionTimeout)
 	if err != nil {
@@ -77,12 +84,17 @@ func (props *properties) parse() (*config, error) {
 		maxConnBufferSize = props.MaxConnBufferSize
 	}
 
+	keyPrefixPath := defaultKeyPrefixPath
+	if keyPrefixPath != "" {
+		keyPrefixPath = props.KeyPrefixPath
+	}
+
 	return &config{
-		servers:           strings.Split(props.Servers, ","),
-		sessionTimeout:    sessionTimeout,
-		maxBufferSize:     maxBufferSize,
-		maxConnBufferSize: maxConnBufferSize,
-		keyPrefixPath:     props.KeyPrefixPath,
+		servers,
+		sessionTimeout,
+		maxBufferSize,
+		maxConnBufferSize,
+		keyPrefixPath,
 	}, nil
 }
 
@@ -96,6 +108,8 @@ type Conn interface {
 	Delete(path string, version int32) error
 
 	Multi(ops ...interface{}) ([]zk.MultiResponse, error)
+
+	ExistsW(path string) (bool, *zk.Stat, <-chan zk.Event, error)
 }
 
 //--- StateStore ---
@@ -108,6 +122,7 @@ type StateStore struct {
 
 var _ Conn = (*zk.Conn)(nil)
 var _ state.Store = (*StateStore)(nil)
+var _ state.StoreWatcher = (*StateStore)(nil)
 
 // NewZookeeperStateStore returns a new Zookeeper state store
 func NewZookeeperStateStore() *StateStore {
@@ -120,6 +135,11 @@ func (s *StateStore) Init(metadata state.Metadata) (err error) {
 	if c, err = newConfig(metadata.Properties); err != nil {
 		return
 	}
+
+	log.WithFields(log.Fields{
+		"metadata": metadata,
+		"config":   c,
+	}).Debug("Connect")
 
 	conn, _, err := zk.Connect(c.servers, c.sessionTimeout,
 		zk.WithMaxBufferSize(c.maxBufferSize), zk.WithMaxConnBufferSize(c.maxConnBufferSize))
@@ -135,7 +155,15 @@ func (s *StateStore) Init(metadata state.Metadata) (err error) {
 
 // Get retrieves state from Zookeeper with a key
 func (s *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
-	value, stat, err := s.conn.Get(s.prefixedKey(req.Key))
+	path := s.prefixedKey(req.Key)
+
+	value, stat, err := s.conn.Get(path)
+
+	log.WithFields(log.Fields{
+		"path":  path,
+		"value": string(value),
+		"err":   err,
+	}).Debug("Get")
 
 	if err != nil {
 		return nil, err
@@ -156,6 +184,12 @@ func (s *StateStore) Delete(req *state.DeleteRequest) error {
 
 	return state.DeleteWithRetries(func(req *state.DeleteRequest) error {
 		err := s.conn.Delete(r.Path, r.Version)
+
+		log.WithFields(log.Fields{
+			"request": req,
+			"err":     err,
+		}).Debug("Delete")
+
 		if err == zk.ErrNoNode {
 			return nil
 		}
@@ -177,6 +211,13 @@ func (s *StateStore) BulkDelete(reqs []state.DeleteRequest) error {
 	}
 
 	res, err := s.conn.Multi(ops...)
+
+	log.WithFields(log.Fields{
+		"ops": multiOps(ops),
+		"res": multiRes(res),
+		"err": err,
+	}).Debug("BulkDelete")
+
 	if err != nil {
 		return err
 	}
@@ -197,11 +238,16 @@ func (s *StateStore) Set(req *state.SetRequest) error {
 		return err
 	}
 
+	log.WithFields(log.Fields{
+		"request": req,
+	}).Debug("Set")
+
 	return state.SetWithRetries(func(req *state.SetRequest) error {
 		_, err = s.conn.Set(r.Path, r.Data, r.Version)
 
 		if err == zk.ErrNoNode {
-			_, err = s.conn.Create(r.Path, r.Data, 0, nil)
+			c := s.newCreateRequest(r)
+			_, err = s.conn.Create(c.Path, c.Data, c.Flags, c.Acl)
 		}
 
 		return err
@@ -222,26 +268,37 @@ func (s *StateStore) BulkSet(reqs []state.SetRequest) error {
 
 	for {
 		res, err := s.conn.Multi(ops...)
-		if err != nil {
-			return err
-		}
+
+		log.WithFields(log.Fields{
+			"ops": multiOps(ops),
+			"res": multiRes(res),
+			"err": err,
+		}).Debug("BulkSet")
 
 		var retry []interface{}
 
-		for i, res := range res {
-			if res.Error != nil {
-				if res.Error == zk.ErrNoNode {
-					if req, ok := ops[i].(*zk.SetDataRequest); ok {
-						retry = append(retry, s.newCreateRequest(req))
-						continue
-					}
+		if err == zk.ErrNoNode {
+			for _, op := range ops {
+				if req, ok := op.(*zk.SetDataRequest); ok {
+					retry = append(retry, s.newCreateRequest(req))
 				}
+			}
+		} else {
+			for i, res := range res {
+				if res.Error != nil {
+					if res.Error == zk.ErrNoNode {
+						if req, ok := ops[i].(*zk.SetDataRequest); ok {
+							retry = append(retry, s.newCreateRequest(req))
+							continue
+						}
+					}
 
-				err = multierror.Append(err, res.Error)
+					err = multierror.Append(err, res.Error)
+				}
 			}
 		}
 
-		if err != nil || retry == nil {
+		if retry == nil {
 			return err
 		}
 
@@ -249,8 +306,107 @@ func (s *StateStore) BulkSet(reqs []state.SetRequest) error {
 	}
 }
 
+// Watch watches on a key or prefix.
+// The watched events will be returned through the returned channel.
+func (s *StateStore) Watch(req *state.WatchStateRequest) (<-chan *state.Event, context.CancelFunc, error) {
+	path := s.prefixedKey(req.Key)
+
+	_, discardCreate := req.Metadata[state.WatchDiscardCreate]
+	_, discardModify := req.Metadata[state.WatchDiscardModify]
+	_, discardDelete := req.Metadata[state.WatchDiscardDelete]
+	_, discardChildren := req.Metadata[state.WatchDiscardChildren]
+
+	log.WithFields(log.Fields{
+		"request":          req,
+		"discard-create":   discardCreate,
+		"discard-modify":   discardModify,
+		"discard-delete":   discardDelete,
+		"discard-children": discardChildren,
+	}).Debug("Watch")
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+	ch := make(chan *state.Event)
+
+	go func() {
+		defer close(ch)
+
+		for ctx.Err() == nil {
+			_, _, events, err := s.conn.ExistsW(path)
+
+			if err != nil {
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case evt := <-events:
+				go func() {
+					var ty state.EventType
+					var value []byte
+					var etag string
+
+					switch evt.Type {
+					case zk.EventNodeCreated:
+						if discardCreate {
+							return
+						}
+						ty = state.CREATED
+
+					case zk.EventNodeDataChanged:
+						if discardModify {
+							return
+						}
+						ty = state.MODIFIED
+
+					case zk.EventNodeDeleted:
+						if discardDelete {
+							return
+						}
+						ty = state.DELETED
+
+					case zk.EventNodeChildrenChanged:
+						if discardChildren {
+							return
+						}
+						ty = state.CHILDREN
+					default:
+						return
+					}
+
+					if evt.Type == zk.EventNodeCreated || evt.Type == zk.EventNodeDataChanged {
+						var stat *zk.Stat
+						var err error
+
+						value, stat, err = s.conn.Get(s.prefixedKey(req.Key))
+
+						if err == nil {
+							etag = strconv.Itoa(int(stat.Version))
+						}
+					}
+
+					e := &state.Event{
+						Type:  ty,
+						Key:   evt.Path,
+						Value: value,
+						ETag:  etag,
+					}
+
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- e:
+					}
+				}()
+			}
+		}
+	}()
+
+	return ch, cancelFn, nil
+}
+
 func (s *StateStore) newCreateRequest(req *zk.SetDataRequest) *zk.CreateRequest {
-	return &zk.CreateRequest{Path: req.Path, Data: req.Data}
+	return &zk.CreateRequest{Path: req.Path, Data: req.Data, Acl: defaultAcl}
 }
 
 func (s *StateStore) newDeleteRequest(req *state.DeleteRequest) (*zk.DeleteRequest, error) {
@@ -323,4 +479,33 @@ func (s *StateStore) marshalData(v interface{}) ([]byte, error) {
 	}
 
 	return jsoniter.ConfigFastest.Marshal(v)
+}
+
+type multiOps []interface{}
+
+func (ops multiOps) String() string {
+	var msgs []string
+	for _, op := range ops {
+		switch op := op.(type) {
+		case *zk.SetDataRequest:
+			msgs = append(msgs, fmt.Sprintf("Set(%s@%d = %v)", op.Path, op.Version, string(op.Data)))
+		case *zk.CreateRequest:
+			msgs = append(msgs, fmt.Sprintf("Create(%s = %v)", op.Path, string(op.Data)))
+		case *zk.DeleteRequest:
+			msgs = append(msgs, fmt.Sprintf("Delete(%s@%d)", op.Path, op.Version))
+		case *zk.CheckVersionRequest:
+			msgs = append(msgs, fmt.Sprintf("CheckVersion(%s@%d)", op.Path, op.Version))
+		}
+	}
+	return "[" + strings.Join(msgs, ", ") + "]"
+}
+
+type multiRes []zk.MultiResponse
+
+func (res multiRes) String() string {
+	var msgs []string
+	for _, r := range res {
+		msgs = append(msgs, r.String)
+	}
+	return "[" + strings.Join(msgs, ", ") + "]"
 }

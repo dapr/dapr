@@ -111,3 +111,20 @@ func (mr *MockConnMockRecorder) Multi(ops ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Multi", reflect.TypeOf((*MockConn)(nil).Multi), ops...)
 }
+
+// ExistsW mocks base method
+func (m *MockConn) ExistsW(path string) (bool, *zk.Stat, <-chan zk.Event, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExistsW", path)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(*zk.Stat)
+	ret2, _ := ret[2].(<-chan zk.Event)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
+}
+
+// ExistsW indicates an expected call of ExistsW
+func (mr *MockConnMockRecorder) ExistsW(path interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExistsW", reflect.TypeOf((*MockConn)(nil).ExistsW), path)
+}

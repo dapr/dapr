@@ -50,4 +50,4 @@ require (
 	k8s.io/utils v0.0.0-20190506122338-8fab8cb257d5 // indirect
 )
 
-replace github.com/dapr/components-contrib => github.com/flier/components-contrib v0.0.0-20191106034625-1b7679f19fed
+replace github.com/dapr/components-contrib => github.com/flier/components-contrib v0.0.0-20191106093457-c6c737173e91
