@@ -30,6 +30,8 @@ const (
 	Put = "PUT"
 	// Options is an HTTP OPTIONS method
 	Options = "OPTIONS"
+	// Watch is an HTTP WATCH method
+	Watch = "WATCH"
 	// QueryString is the query string passed by the request
 	QueryString = "http.query_string"
 	// ContentType is the header for Content-Type

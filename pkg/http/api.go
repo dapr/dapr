@@ -107,6 +107,12 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Handler: a.onDeleteState,
 		},
 		{
+			Methods: []string{http.Watch},
+			Route:   "state/<key>",
+			Version: apiVersionV1,
+			Handler: a.onWatchState,
+		},
+		{
 			Methods: []string{http.Get},
 			Route:   "watch/<key>",
 			Version: apiVersionV1,
