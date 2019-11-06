@@ -8,7 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	log "github.com/Sirupsen/logrus"
-	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/kubernetes"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,14 +25,14 @@ const (
 
 // DaprHandler handles the lifetime for Dapr CRDs
 type DaprHandler struct {
-	client          scheme.Interface
+	kubeAPI         *kubernetes.API
 	deploymentsLock *sync.Mutex
 }
 
 // NewDaprHandler returns a new Dapr handler
-func NewDaprHandler(client scheme.Interface) *DaprHandler {
+func NewDaprHandler(kubeAPI *kubernetes.API) *DaprHandler {
 	return &DaprHandler{
-		client:          client,
+		kubeAPI:         kubeAPI,
 		deploymentsLock: &sync.Mutex{},
 	}
 }
@@ -45,7 +44,7 @@ func (h *DaprHandler) Init() error {
 
 func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployment) error {
 	serviceName := fmt.Sprintf("%s-dapr", name)
-	exists := kubernetes.ServiceExists(serviceName, deployment.GetNamespace())
+	exists := h.kubeAPI.ServiceExists(serviceName, deployment.GetNamespace())
 	if exists {
 		log.Infof("service exists: %s", serviceName)
 		return nil
@@ -75,7 +74,7 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 		},
 	}
 
-	err := kubernetes.CreateService(service, deployment.GetNamespace())
+	err := h.kubeAPI.CreateService(service, deployment.GetNamespace())
 	if err != nil {
 		return err
 	}
@@ -86,13 +85,13 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 
 func (h *DaprHandler) deleteDaprService(name string, deployment *appsv1.Deployment) error {
 	serviceName := fmt.Sprintf("%s-dapr", name)
-	exists := kubernetes.ServiceExists(serviceName, deployment.GetNamespace())
+	exists := h.kubeAPI.ServiceExists(serviceName, deployment.GetNamespace())
 	if !exists {
 		log.Infof("service does not exist: %s", serviceName)
 		return nil
 	}
 
-	err := kubernetes.DeleteService(serviceName, deployment.GetNamespace())
+	err := h.kubeAPI.DeleteService(serviceName, deployment.GetNamespace())
 	if err != nil {
 		return err
 	}

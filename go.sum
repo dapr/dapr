@@ -51,9 +51,13 @@ github.com/Azure/go-autorest v13.0.1+incompatible/go.mod h1:r+4oMnoxhatjLLJ6zxSW
 github.com/Azure/go-autorest/autorest v0.9.0/go.mod h1:xyHB1BMZT0cuDHU7I0+g046+BFDTQ8rEZB0s4Yfa6bI=
 github.com/Azure/go-autorest/autorest v0.9.1 h1:JB7Mqhna/7J8gZfVHjxDSTLSD6ciz2YgSMb/4qLXTtY=
 github.com/Azure/go-autorest/autorest v0.9.1/go.mod h1:xyHB1BMZT0cuDHU7I0+g046+BFDTQ8rEZB0s4Yfa6bI=
+github.com/Azure/go-autorest/autorest v0.9.2 h1:6AWuh3uWrsZJcNoCHrCF/+g4aKPCU39kaMO6/qrnK/4=
+github.com/Azure/go-autorest/autorest v0.9.2/go.mod h1:xyHB1BMZT0cuDHU7I0+g046+BFDTQ8rEZB0s4Yfa6bI=
 github.com/Azure/go-autorest/autorest/adal v0.5.0/go.mod h1:8Z9fGy2MpX0PvDjB1pEgQTmVqjGhiHBW7RJJEciWzS0=
 github.com/Azure/go-autorest/autorest/adal v0.6.0 h1:UCTq22yE3RPgbU/8u4scfnnzuCW6pwQ9n+uBtV78ouo=
 github.com/Azure/go-autorest/autorest/adal v0.6.0/go.mod h1:Z6vX6WXXuyieHAXwMj0S6HY6e6wcHn37qQMBQlvY3lc=
+github.com/Azure/go-autorest/autorest/adal v0.8.0 h1:CxTzQrySOxDnKpLjFJeZAS5Qrv/qFPkgLjx5bOAi//I=
+github.com/Azure/go-autorest/autorest/adal v0.8.0/go.mod h1:Z6vX6WXXuyieHAXwMj0S6HY6e6wcHn37qQMBQlvY3lc=
 github.com/Azure/go-autorest/autorest/azure/auth v0.3.0 h1:JwftqZDtWkr3qt1kcEgPd7H57uCHsXKXf66agWUQcGw=
 github.com/Azure/go-autorest/autorest/azure/auth v0.3.0/go.mod h1:CI4BQYBct8NS7BXNBBX+RchsFsUu5+oz+OSyR/ZIi7U=
 github.com/Azure/go-autorest/autorest/azure/cli v0.3.0 h1:5PAqnv+CSTwW9mlZWZAizmzrazFWEgZykEZXpr2hDtY=
@@ -147,6 +151,10 @@ github.com/dapr/components-contrib v0.0.0-20191101040651-75b1fc29b479 h1:M6jpE94
 github.com/dapr/components-contrib v0.0.0-20191101040651-75b1fc29b479/go.mod h1:3wAMncxmAgq47Rp2D/fH8GoHikKojKiYesf3Ta3kfcM=
 github.com/dapr/components-contrib v0.0.0-20191102032906-4bbfb82e98fc h1:S0cSk4PUvl0x3/9+grjb/VSRrToG7DDPLxqeAfWZ6hw=
 github.com/dapr/components-contrib v0.0.0-20191102032906-4bbfb82e98fc/go.mod h1:mhrbx5oJHFJCkxh63P/q9viKAyxc7wqGlyB8uDAtFKY=
+github.com/dapr/components-contrib v0.0.0-20191105225048-ed3c82957812 h1:xxUUFsN2Eo9qk/GpvjJ25zkqDkZOU6uO2GF1fmuKfZk=
+github.com/dapr/components-contrib v0.0.0-20191105225048-ed3c82957812/go.mod h1:vS1Yk3eDfvZvv95H6piES4A+SVumUGlU35O6zDuVi7U=
+github.com/dapr/components-contrib v0.0.0-20191106001926-c945e702125e h1:i0g3BsMiHb+nHS+whaJATov4EcJJbINE1/bvM6+6UcQ=
+github.com/dapr/components-contrib v0.0.0-20191106001926-c945e702125e/go.mod h1:vS1Yk3eDfvZvv95H6piES4A+SVumUGlU35O6zDuVi7U=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -187,6 +195,8 @@ github.com/flier/components-contrib v0.0.0-20191101101917-8165dc69773d h1:ZqVMFY
 github.com/flier/components-contrib v0.0.0-20191101101917-8165dc69773d/go.mod h1:XHj5aiIewj2RlCeYEljx+S3BdSwbx8GcHAKeAR4fdEI=
 github.com/flier/components-contrib v0.0.0-20191104035949-d1f9fd22648c h1:/PQ5tzrJmPuAwqlVkPkIv4gZSx4E7+xX5egdZMwaqec=
 github.com/flier/components-contrib v0.0.0-20191104035949-d1f9fd22648c/go.mod h1:J3DMwMkpw2hxvq56mBJDrGwir1FdCHUXP+B4j8BoO1U=
+github.com/flier/components-contrib v0.0.0-20191106034625-1b7679f19fed h1:TYkd9rTIVrPcX2bhYGLClO1CkeHxl0G26k1XSNaJqNM=
+github.com/flier/components-contrib v0.0.0-20191106034625-1b7679f19fed/go.mod h1:iAQ6vWUkabnjSNYqvrG1Td3drU1nxCVZUFFGF+9VCb0=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fortytw2/leaktest v1.2.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=
