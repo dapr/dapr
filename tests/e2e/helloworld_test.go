@@ -16,10 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// NOTE!! WORKING IN PROGRESS.
+// !!NOTE!! WORKING IN PROGRESS. !!NOTE!!
+
 // This is the example to show how AppManager is used for the e2e tests.
 // The subsequent PRs will introduce test framework which encapsulates the
-// test app setup steps.
+// test app deployment and verification steps.
 
 func TestHelloWorld(t *testing.T) {
 	kubeClient, err := kubernetes.NewKubeClient("", "")
@@ -31,8 +32,8 @@ func TestHelloWorld(t *testing.T) {
 	testApp := utils.AppDescription{
 		AppName:        "helloword",
 		DaprEnabled:    true,
-		ImageName:      "e2e-helloworld",
-		RegistryName:   "youngp",
+		ImageName:      "helloworld",
+		RegistryName:   "dapriotest",
 		Replicas:       1,
 		IngressEnabled: true,
 	}
