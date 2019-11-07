@@ -10,7 +10,8 @@ package e2e
 import (
 	"testing"
 
-	"github.com/dapr/dapr/tests/utils/kubernetes"
+	"github.com/dapr/dapr/tests/platforms/kubernetes"
+	"github.com/dapr/dapr/tests/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,9 +19,9 @@ func TestHelloWorld(t *testing.T) {
 	// TODO: kubeconfig needs to be configurable
 	kubeClient, err := kubernetes.NewKubeClient("", "")
 	assert.NoError(t, err)
-	appUtils := kubernetes.NewAppUtils(kubeClient, kubernetes.DaprTestKubeNameSpace)
+	appManager := kubernetes.NewAppManager(kubeClient, kubernetes.DaprTestKubeNameSpace)
 
-	testApp := kubernetes.AppDescription{
+	testApp := utils.AppDescription{
 		AppName:        "helloword",
 		DaprEnabled:    true,
 		ImageName:      "e2e-helloworld",
@@ -29,12 +30,12 @@ func TestHelloWorld(t *testing.T) {
 		IngressEnabled: true,
 	}
 
-	defer appUtils.CleanupApp(testApp)
+	defer appManager.Cleanup(testApp)
 
-	err = appUtils.DeployApp(testApp)
+	_, err = appManager.Deploy(testApp)
 	assert.NoError(t, err)
 
-	_, err = appUtils.WaitUntilDeploymentReady(testApp)
+	_, err = appManager.WaitUntilDeploymentIsDone(testApp)
 	assert.NoError(t, err)
 
 	// TODO: run test
