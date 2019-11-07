@@ -1,4 +1,5 @@
 // +build e2e
+
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -15,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// NOTE NOTE!! WOKRING IN PROGRESS.
+// NOTE!! WORKING IN PROGRESS.
 // This is the example to show how AppManager is used for the e2e tests.
-// The subsequent PRs will introduce test framework which encapsulates deployment
-// and app varification steps.
+// The subsequent PRs will introduce test framework which encapsulates the
+// test app setup steps.
 
 func TestHelloWorld(t *testing.T) {
 	kubeClient, err := kubernetes.NewKubeClient("", "")
