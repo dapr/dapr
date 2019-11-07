@@ -108,6 +108,7 @@ func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelo
 		ActorID:   in.ActorID,
 		Data:      in.Data.Value,
 		Method:    in.Method,
+		Metadata:  in.Metadata,
 	}
 
 	resp, err := a.actor.Call(&req)
