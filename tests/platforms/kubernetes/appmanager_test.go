@@ -115,7 +115,7 @@ func TestWaitUntilDeploymentReady(t *testing.T) {
 	assert.Equal(t, 3, getVerbCalled)
 }
 
-func TestValdiateDaprSideCar(t *testing.T) {
+func TestValidiateDaprSideCar(t *testing.T) {
 	testApp := testAppDescription()
 
 	objMeta := metav1.ObjectMeta{
@@ -160,7 +160,7 @@ func TestValdiateDaprSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace)
-		found, err := appManager.ValdiateDaprSideCar(testApp)
+		found, err := appManager.ValidiateDaprSideCar(testApp)
 
 		assert.NoError(t, err)
 		assert.True(t, found)
@@ -196,7 +196,7 @@ func TestValdiateDaprSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace)
-		found, err := appManager.ValdiateDaprSideCar(testApp)
+		found, err := appManager.ValidiateDaprSideCar(testApp)
 		assert.False(t, found)
 		assert.Error(t, err)
 	})
@@ -219,7 +219,7 @@ func TestValdiateDaprSideCar(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace)
-		found, err := appManager.ValdiateDaprSideCar(testApp)
+		found, err := appManager.ValidiateDaprSideCar(testApp)
 		assert.False(t, found)
 		assert.Error(t, err)
 	})

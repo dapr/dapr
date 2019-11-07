@@ -83,8 +83,8 @@ func (m *AppManager) isDeploymentDone(deployment *appsv1.Deployment, replicas in
 	return deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == replicas
 }
 
-// ValdiateDaprSideCar validates that dapr side car is running in dapr enabled pods
-func (m *AppManager) ValdiateDaprSideCar(app utils.AppDescription) (bool, error) {
+// ValidiateDaprSideCar validates that dapr side car is running in dapr enabled pods
+func (m *AppManager) ValidiateDaprSideCar(app utils.AppDescription) (bool, error) {
 	if !app.DaprEnabled {
 		return false, fmt.Errorf("Dapr is not enabled for this app")
 	}
