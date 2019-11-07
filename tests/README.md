@@ -2,7 +2,7 @@
 
 > Working In Progress
 
-This contains the following tests and testin docs for Dapr:
+This contains the following tests and testing docs for Dapr:
 
 - [Test Apps](./apps)
 - [End to end tests](./e2e)
