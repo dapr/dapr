@@ -270,6 +270,7 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 		ActorID:   actorID,
 		Method:    actorMethod,
 		Data:      &any.Any{Value: data},
+		Metadata:  map[string]string{},
 	}
 
 	for k, v := range metadata {
