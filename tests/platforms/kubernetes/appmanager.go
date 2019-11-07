@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"istio.io/pkg/log"
+	log "github.com/Sirupsen/logrus"
 
 	"github.com/dapr/dapr/tests/utils"
 	appsv1 "k8s.io/api/apps/v1"
@@ -94,7 +94,7 @@ func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err erro
 // ValidiateSideCar validates that dapr side car is running in dapr enabled pods
 func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 	if !app.DaprEnabled {
-		return false, fmt.Errorf("Dapr is not enabled for this app")
+		return false, fmt.Errorf("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -108,7 +108,7 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 	}
 
 	if len(podList.Items) != int(app.Replicas) {
-		return false, fmt.Errorf("Number of Pods for %s must be %d Pods but %d Pods", app.AppName, app.Replicas, len(podList.Items))
+		return false, fmt.Errorf("number of Pods for %s must be %d Pods but %d Pods", app.AppName, app.Replicas, len(podList.Items))
 	}
 
 	// All testapp pods must have daprd sidecar
@@ -120,7 +120,7 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 			}
 		}
 		if !daprdFound {
-			return false, fmt.Errorf("Cannot find dapr sidecar in %s pod", pod.Name)
+			return false, fmt.Errorf("cannot find dapr sidecar in %s pod", pod.Name)
 		}
 	}
 

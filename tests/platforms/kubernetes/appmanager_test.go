@@ -93,15 +93,14 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 					// return the same deployment object
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
 					createdDeploymentObj.Status.ReadyReplicas = 0
-					break
+
 				case "get":
 					// set 1 to ReadyReplicas when WaitUntilDeploymentState called get deployments 2 times
 					if getVerbCalled == 2 {
 						createdDeploymentObj.Status.ReadyReplicas = testApp.Replicas
 					} else {
-						getVerbCalled = getVerbCalled + 1
+						getVerbCalled++
 					}
-					break
 				}
 				return true, createdDeploymentObj, nil
 			})
@@ -137,15 +136,13 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 					// return the same deployment object
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
 					createdDeploymentObj.Status.Replicas = testApp.Replicas
-					break
 				case "get":
 					// set 0 to ReadyReplicas when WaitUntilDeploymentState called get deployments 2 times
 					if getVerbCalled == 2 {
 						createdDeploymentObj.Status.Replicas = 0
 					} else {
-						getVerbCalled = getVerbCalled + 1
+						getVerbCalled++
 					}
-					break
 				}
 				return true, createdDeploymentObj, nil
 			})
@@ -181,7 +178,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 					// return the same deployment object
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
 					createdDeploymentObj.Status.ReadyReplicas = testApp.Replicas
-					break
+
 				case "get":
 					// return notfound error when WaitUntilDeploymentState called get deployments 2 times
 					if getVerbCalled == 2 {
@@ -195,9 +192,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 						return true, nil, err
 					}
 
-					getVerbCalled = getVerbCalled + 1
-
-					break
+					getVerbCalled++
 				}
 				return true, createdDeploymentObj, nil
 			})
@@ -415,7 +410,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 				if getVerbCalled == 2 {
 					obj.Spec.ExternalIPs = []string{fakeExternalIP}
 				} else {
-					getVerbCalled = getVerbCalled + 1
+					getVerbCalled++
 				}
 
 				return true, obj, nil
@@ -426,7 +421,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 		assert.NoError(t, err)
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
-		assert.Equal(t, externalURL, fmt.Sprintf("%s", fakeExternalIP))
+		assert.Equal(t, fakeExternalIP, externalURL)
 		assert.Equal(t, 2, getVerbCalled)
 	})
 

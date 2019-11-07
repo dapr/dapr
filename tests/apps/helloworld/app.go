@@ -14,7 +14,7 @@ import (
 const appPort = 3000
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("Recieved request.")
+	log.Println("Received request.")
 	fmt.Fprintf(w, "Hello, Dapr")
 }
 
