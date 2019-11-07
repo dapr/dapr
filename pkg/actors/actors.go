@@ -196,7 +196,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	} else {
-		resp, err = a.callRemoteActor(targetActorAddress, req.ActorType, req.ActorID, req.Method, req.Data)
+		resp, err = a.callRemoteActor(targetActorAddress, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	}
 
 	if err != nil {
@@ -264,12 +264,17 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}, nil
 }
 
-func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) (*CallResponse, error) {
+func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	req := daprinternal_pb.CallActorEnvelope{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Method:    actorMethod,
 		Data:      &any.Any{Value: data},
+		Metadata:  map[string]string{},
+	}
+
+	for k, v := range metadata {
+		req.Metadata[k] = v
 	}
 
 	conn, err := a.grpcConnectionFn(targetAddress)
