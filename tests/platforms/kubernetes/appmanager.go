@@ -90,6 +90,8 @@ func (m *AppManager) ValdiateDaprSideCar(app utils.AppDescription) (bool, error)
 	}
 
 	podClient := m.client.Pods(m.namespace)
+
+	// Filter only 'testapp=appName' labeled Pods
 	podList, err := podClient.List(metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, app.AppName),
 	})
