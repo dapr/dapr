@@ -17,6 +17,7 @@ import (
 )
 
 // KubeClient holds instances of Kubernetes clientset
+// TODO: Add cluster management methods to clean up the old test apps
 type KubeClient struct {
 	ClientSet kubernetes.Interface
 }

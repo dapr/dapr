@@ -15,13 +15,14 @@ import (
 	"github.com/dapr/dapr/tests/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 const (
 	// MiniKubeIPEnvVar is the environment variable name which will have Minikube node IP
-	MiniKubeIPEnvVar = "MINIKUBE_IP"
+	MiniKubeIPEnvVar = "DAPR_TEST_MINIKUBE_IP"
 
 	// PollInterval is how frequently e2e tests will poll for updates.
 	PollInterval = 1 * time.Second
@@ -57,8 +58,8 @@ func (m *AppManager) Deploy(app utils.AppDescription) (*appsv1.Deployment, error
 	return result, nil
 }
 
-// WaitUntilDeploymentIsDone waits until app deployment is done
-func (m *AppManager) WaitUntilDeploymentIsDone(app utils.AppDescription) (*appsv1.Deployment, error) {
+// WaitUntilDeploymentState waits until isState returns true
+func (m *AppManager) WaitUntilDeploymentState(app utils.AppDescription, isState func(*appsv1.Deployment, error, *utils.AppDescription) bool) (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
 	var lastDeployment *appsv1.Deployment
@@ -66,10 +67,11 @@ func (m *AppManager) WaitUntilDeploymentIsDone(app utils.AppDescription) (*appsv
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
 		lastDeployment, err = deploymentsClient.Get(app.AppName, metav1.GetOptions{})
-		if err != nil {
-			return false, err
+		done := isState(lastDeployment, err, &app)
+		if !done && err != nil {
+			return true, err
 		}
-		return m.isDeploymentDone(lastDeployment, app.Replicas), nil
+		return done, nil
 	})
 
 	if waitErr != nil {
@@ -79,8 +81,14 @@ func (m *AppManager) WaitUntilDeploymentIsDone(app utils.AppDescription) (*appsv
 	return lastDeployment, nil
 }
 
-func (m *AppManager) isDeploymentDone(deployment *appsv1.Deployment, replicas int32) bool {
-	return deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == replicas
+// IsDeploymentDone returns true if deployment object completes pod deployments
+func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error, app *utils.AppDescription) bool {
+	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == app.Replicas
+}
+
+// IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero
+func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err error, app *utils.AppDescription) bool {
+	return errors.IsNotFound(err) || deployment.Status.Replicas == 0
 }
 
 // ValidiateSideCar validates that dapr side car is running in dapr enabled pods
@@ -120,79 +128,111 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 }
 
 // CreateIngressService creates Ingress endpoint for test app
-func (m *AppManager) CreateIngressService(app utils.AppDescription) error {
+func (m *AppManager) CreateIngressService(app utils.AppDescription) (*apiv1.Service, error) {
 	if !app.IngressEnabled {
-		return fmt.Errorf("%s doesn't need ingress service endpoint", app.AppName)
+		return nil, fmt.Errorf("%s doesn't need ingress service endpoint", app.AppName)
 	}
 
 	serviceClient := m.client.Services(m.namespace)
 	obj := BuildServiceObject(m.namespace, app)
 	result, err := serviceClient.Create(obj)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Debugf("Created Service %q.\n", result.GetObjectMeta().GetName())
 
-	return nil
+	return result, nil
 }
 
-// WaitUntilIngressEndpointIsAvailable waits until ingress external ip is available
-func (m *AppManager) WaitUntilIngressEndpointIsAvailable(app utils.AppDescription) (string, error) {
-	if !app.IngressEnabled {
-		return "", fmt.Errorf("%s doesn't need ingress service endpoint", app.AppName)
-	}
-
-	// TODO: Support the other local k8s clusters
-	minikubeExternalIP := m.minikubeNodeIP()
-
+// WaitUntilServiceState waits until isState returns true
+func (m *AppManager) WaitUntilServiceState(app utils.AppDescription, isState func(*apiv1.Service, error, *utils.AppDescription) bool) (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
 	var lastService *apiv1.Service
-	var externalURL string
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
 		lastService, err = serviceClient.Get(app.AppName, metav1.GetOptions{})
-		if err != nil {
-			return false, err
+		done := isState(lastService, err, &app)
+		if !done && err != nil {
+			return true, err
 		}
 
-		svcSpec := lastService.Spec
-
-		if len(svcSpec.ExternalIPs) > 0 {
-			externalURL = svcSpec.ExternalIPs[0]
-			return true, nil
-		} else if minikubeExternalIP != "" {
-			// if test cluster is minikube, external ip address is minikube node address
-			if len(svcSpec.Ports) > 0 {
-				externalURL = fmt.Sprintf("%s:%d", minikubeExternalIP, svcSpec.Ports[0].NodePort)
-				return true, nil
-			}
-		}
-
-		return false, nil
+		return done, nil
 	})
 
 	if waitErr != nil {
-		return externalURL, fmt.Errorf("service %q is not in desired state, got: %+v: %w", app.AppName, lastService, waitErr)
+		return lastService, fmt.Errorf("service %q is not in desired state, got: %+v: %w", app.AppName, lastService, waitErr)
 	}
 
-	return externalURL, nil
+	return lastService, nil
+}
+
+// AcquireExternalURLFromService gets external url from Service Object.
+func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
+	if len(svc.Spec.ExternalIPs) > 0 {
+		return svc.Spec.ExternalIPs[0]
+	}
+
+	// TODO: Support the other local k8s clusters
+	if minikubeExternalIP := m.minikubeNodeIP(); minikubeExternalIP != "" {
+		// if test cluster is minikube, external ip address is minikube node address
+		if len(svc.Spec.Ports) > 0 {
+			return fmt.Sprintf("%s:%d", minikubeExternalIP, svc.Spec.Ports[0].NodePort)
+		}
+	}
+
+	return ""
+}
+
+// IsServiceIngressReady returns true if external ip is available
+func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error, app *utils.AppDescription) bool {
+	if err != nil || svc == nil {
+		return false
+	}
+
+	if len(svc.Spec.ExternalIPs) > 0 {
+		return true
+	}
+
+	// TODO: Support the other local k8s clusters
+	if m.minikubeNodeIP() != "" {
+		if len(svc.Spec.Ports) > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// IsServiceDeleted returns true if service does not exist
+func (m *AppManager) IsServiceDeleted(svc *apiv1.Service, err error, app *utils.AppDescription) bool {
+	return errors.IsNotFound(err)
 }
 
 func (m *AppManager) minikubeNodeIP() string {
-	// if you are running the test in minikube environment, MINIKUBE_IP environment variable must be
-	// minikube cluster IP address by running `minikube ip`
+	// if you are running the test in minikube environment, DAPR_TEST_MINIKUBE_IP environment variable must be
+	// minikube cluster IP address from the output of `minikube ip` command
+
+	// TODO: Use the better way to get the node ip of minikube
 	return os.Getenv(MiniKubeIPEnvVar)
 }
 
 // Cleanup deletes deployment and service
 func (m *AppManager) Cleanup(app utils.AppDescription) error {
-	if err := m.DeleteDeployment(app); err != nil {
+	if err := m.DeleteDeployment(app, true); err != nil {
 		return err
 	}
 
-	if err := m.DeleteService(app); err != nil {
+	if _, err := m.WaitUntilDeploymentState(app, m.IsDeploymentDeleted); err != nil {
+		return err
+	}
+
+	if err := m.DeleteService(app, true); err != nil {
+		return err
+	}
+
+	if _, err := m.WaitUntilServiceState(app, m.IsServiceDeleted); err != nil {
 		return err
 	}
 
@@ -200,13 +240,13 @@ func (m *AppManager) Cleanup(app utils.AppDescription) error {
 }
 
 // DeleteDeployment deletes deployment for the test app
-func (m *AppManager) DeleteDeployment(app utils.AppDescription) error {
+func (m *AppManager) DeleteDeployment(app utils.AppDescription, ignoreNotFound bool) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
 	if err := deploymentsClient.Delete(app.AppName, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
-	}); err != nil {
+	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
 		return err
 	}
 
@@ -214,13 +254,13 @@ func (m *AppManager) DeleteDeployment(app utils.AppDescription) error {
 }
 
 // DeleteService deletes deployment for the test app
-func (m *AppManager) DeleteService(app utils.AppDescription) error {
+func (m *AppManager) DeleteService(app utils.AppDescription, ignoreNotFound bool) error {
 	serviceClient := m.client.Services(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
 	if err := serviceClient.Delete(app.AppName, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
-	}); err != nil {
+	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
 		return err
 	}
 
