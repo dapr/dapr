@@ -199,6 +199,14 @@ github.com/flier/components-contrib v0.0.0-20191106034625-1b7679f19fed h1:TYkd9r
 github.com/flier/components-contrib v0.0.0-20191106034625-1b7679f19fed/go.mod h1:iAQ6vWUkabnjSNYqvrG1Td3drU1nxCVZUFFGF+9VCb0=
 github.com/flier/components-contrib v0.0.0-20191106093457-c6c737173e91 h1:IM7V0mJz+NUxWxp0xCILdTs4Nx4ZQlkWw5jUB0UmbHc=
 github.com/flier/components-contrib v0.0.0-20191106093457-c6c737173e91/go.mod h1:9aJ6sZ+sTWvzNsqz8lcKuETuVYRfMk40X0mya82cm+A=
+github.com/flier/components-contrib v0.0.0-20191107035734-95af0ca3daff h1:6xUZ2IFfvVMfrXME5zaPormiT3c/OTrimhCABi0zs70=
+github.com/flier/components-contrib v0.0.0-20191107035734-95af0ca3daff/go.mod h1:9aJ6sZ+sTWvzNsqz8lcKuETuVYRfMk40X0mya82cm+A=
+github.com/flier/components-contrib v0.0.0-20191107064944-f565dd356314 h1:eAr1mv010VvM1QRBp9Xn6WGOvVLmpEK2Tz3kA5SiaCQ=
+github.com/flier/components-contrib v0.0.0-20191107064944-f565dd356314/go.mod h1:9aJ6sZ+sTWvzNsqz8lcKuETuVYRfMk40X0mya82cm+A=
+github.com/flier/components-contrib v0.0.0-20191107065724-142c21d86d48 h1:26oSKLnJPgSp0OTJGR+O6xNveoXTtAwJRafRq2OowyA=
+github.com/flier/components-contrib v0.0.0-20191107065724-142c21d86d48/go.mod h1:9aJ6sZ+sTWvzNsqz8lcKuETuVYRfMk40X0mya82cm+A=
+github.com/flier/components-contrib v0.0.0-20191107072725-dbcd54f2be01 h1:eHNZd6eNzgIa6943UXqGrIMqnYLv2wSlJLp5ofAy3k8=
+github.com/flier/components-contrib v0.0.0-20191107072725-dbcd54f2be01/go.mod h1:9aJ6sZ+sTWvzNsqz8lcKuETuVYRfMk40X0mya82cm+A=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
 github.com/fortytw2/leaktest v1.2.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=

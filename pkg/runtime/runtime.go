@@ -54,6 +54,8 @@ import (
 
 const (
 	appConfigEndpoint   = "dapr/config"
+	appStateEndpoint    = "dapr/state"
+	stateEventEndpoint  = "state"
 	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
 )
@@ -76,6 +78,7 @@ type DaprRuntime struct {
 	inputBindings        map[string]bindings.InputBinding
 	outputBindings       map[string]bindings.OutputBinding
 	secretStores         map[string]secretstores.SecretStore
+	stateWatchers        map[string]context.CancelFunc
 	pubSubRegistry       pubsub_loader.Registry
 	pubSub               pubsub.PubSub
 	json                 jsoniter.API
@@ -92,6 +95,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		inputBindings:        map[string]bindings.InputBinding{},
 		outputBindings:       map[string]bindings.OutputBinding{},
 		secretStores:         map[string]secretstores.SecretStore{},
+		stateWatchers:        map[string]context.CancelFunc{},
 		stateStoreRegistry:   state_loader.NewStateStoreRegistry(),
 		bindingsRegistry:     bindings_loader.NewRegistry(),
 		pubSubRegistry:       pubsub_loader.NewRegistry(),
@@ -567,6 +571,133 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 			}
 		}
 	}
+
+	if a.stateStore != nil && a.appChannel != nil {
+		if storeWatcher, ok := a.stateStore.(state.StoreWatcher); ok {
+			var publishFunc func(evt *state.Event) error
+			switch a.runtimeConfig.ApplicationProtocol {
+			case HTTPProtocol:
+				publishFunc = a.publishStateEventHTTP
+			case GRPCProtocol:
+				publishFunc = a.publishStateEventGRPC
+			}
+
+			states := a.getSubscribedStatesFromApp()
+			for _, req := range states {
+				cancelFunc, err := state.Watch(storeWatcher, req, func(evt *state.Event) error {
+					evt.Key = a.trimModifiedStateKey(evt.Key)
+					return publishFunc(evt)
+				})
+				if err != nil {
+					log.WithFields(log.Fields{
+						"key": req.Key,
+						"err": err,
+					}).Warn("fail to watch state")
+				} else {
+					a.stateWatchers[req.Key] = cancelFunc
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *DaprRuntime) getSubscribedStatesFromApp() []*state.WatchStateRequest {
+	var states []*state.WatchStateRequest
+
+	if a.appChannel == nil {
+		return states
+	}
+
+	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+		req := &channel.InvokeRequest{
+			Method:   appStateEndpoint,
+			Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
+		}
+
+		resp, err := a.appChannel.InvokeMethod(req)
+		if err == nil && http.GetStatusCodeFromMetadata(resp.Metadata) == 200 {
+			var keys []string
+			err := json.Unmarshal(resp.Data, &keys)
+			if err != nil {
+				log.Errorf("error getting topics from app: %s", err)
+			}
+			for _, key := range keys {
+				states = append(states, &state.WatchStateRequest{
+					Key: a.getModifiedStateKey(key),
+				})
+			}
+		}
+	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+		client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
+		resp, err := client.GetStateSubscriptions(context.Background(), &empty.Empty{})
+		if err == nil && resp != nil {
+			for _, s := range resp.States {
+				states = append(states, &state.WatchStateRequest{
+					Key:      a.getModifiedStateKey(s.Key),
+					ETag:     s.Etag,
+					Metadata: s.Metadata,
+				})
+			}
+		}
+	}
+	return states
+}
+
+func (a *DaprRuntime) getModifiedStateKey(key string) string {
+	if a != nil && a.runtimeConfig != nil && a.runtimeConfig.ID != "" {
+		return fmt.Sprintf("%s-%s", a.runtimeConfig.ID, key)
+	}
+
+	return key
+}
+
+func (a *DaprRuntime) trimModifiedStateKey(key string) string {
+	if a != nil && a.runtimeConfig != nil && a.runtimeConfig.ID != "" {
+		return strings.TrimPrefix(key, a.runtimeConfig.ID+"-")
+	}
+	return key
+}
+
+func (a *DaprRuntime) publishStateEventHTTP(evt *state.Event) error {
+	buf, err := json.Marshal(evt)
+	if err != nil {
+		return fmt.Errorf("fail to marshal state event: %w", err)
+	}
+	req := channel.InvokeRequest{
+		Method:  stateEventEndpoint,
+		Payload: buf,
+		Metadata: map[string]string{
+			http_channel.HTTPVerb: http_channel.Put,
+		},
+	}
+
+	resp, err := a.appChannel.InvokeMethod(&req)
+	if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
+		err = fmt.Errorf("error from app consumer: %s", err)
+		log.Debug(err)
+		return err
+	}
+	return nil
+}
+
+func (a *DaprRuntime) publishStateEventGRPC(evt *state.Event) error {
+	envelope := &daprclient_pb.StateEventEnvelope{
+		Key:      evt.Key,
+		Value:    &any.Any{Value: evt.Value},
+		Etag:     evt.ETag,
+		Metadata: evt.Metadata,
+		Type:     daprclient_pb.StateEventType(evt.Type),
+	}
+
+	client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
+	_, err := client.OnStateEvent(context.Background(), envelope)
+	if err != nil {
+		err = fmt.Errorf("error from consumer app: %s", err)
+		log.Debug(err)
+		return err
+	}
 	return nil
 }
 
@@ -770,6 +901,10 @@ func (a *DaprRuntime) loadComponents() error {
 // Stop allows for a graceful shutdown of all runtime internal operations or components
 func (a *DaprRuntime) Stop() {
 	log.Info("stop command issued. Shutting down all operations")
+
+	for _, cancel := range a.stateWatchers {
+		cancel()
+	}
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) components_v1alpha1.Component {

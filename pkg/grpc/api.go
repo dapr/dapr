@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -342,7 +343,7 @@ func (a *api) WatchState(in *dapr_pb.WatchStateEnvelope, stream dapr_pb.Dapr_Wat
 				break
 			case evt := <-events:
 				err := stream.Send(&dapr_pb.StateEvent{
-					Key:      evt.Key,
+					Key:      a.trimModifiedStateKey(evt.Key),
 					Value:    &any.Any{Value: evt.Value},
 					Etag:     evt.ETag,
 					Metadata: evt.Metadata,
@@ -362,6 +363,13 @@ func (a *api) WatchState(in *dapr_pb.WatchStateEnvelope, stream dapr_pb.Dapr_Wat
 func (a *api) getModifiedStateKey(key string) string {
 	if a.id != "" {
 		return fmt.Sprintf("%s-%s", a.id, key)
+	}
+	return key
+}
+
+func (a *api) trimModifiedStateKey(key string) string {
+	if a.id != "" {
+		return strings.TrimPrefix(key, a.id+"-")
 	}
 	return key
 }

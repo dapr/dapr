@@ -6,12 +6,8 @@
 package http
 
 import (
-	"bufio"
-	"context"
 	"encoding/json"
-	"fmt"
 
-	"github.com/dapr/components-contrib/state"
 	"github.com/valyala/fasthttp"
 )
 
@@ -57,10 +53,7 @@ func respondEmpty(ctx *fasthttp.RequestCtx, code int) {
 //	return bytes, nil
 //}
 
-func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, events <-chan *state.Event, cancelFn context.CancelFunc) {
-	callback := string(ctx.QueryArgs().Peek(callbackParam))
-	jsonp := callback != ""
-
+func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, jsonp bool, sw fasthttp.StreamWriter) {
 	contentType := "application/json"
 	if jsonp {
 		contentType = "application/json-p"
@@ -68,17 +61,5 @@ func respondWithChunkedJSON(ctx *fasthttp.RequestCtx, code int, events <-chan *s
 	ctx.Response.Header.SetContentType(contentType)
 	ctx.Response.Header.Set("X-Content-Type-Options", "nosniff")
 	ctx.Response.SetStatusCode(code)
-	ctx.Response.SetBodyStreamWriter(func(w *bufio.Writer) {
-		defer cancelFn()
-
-		for evt := range events {
-			b, _ := json.Marshal(evt)
-			if jsonp {
-				b = []byte(fmt.Sprintf("%s(%s);", callback, string(b)))
-			}
-
-			w.Write(b)
-			w.Flush()
-		}
-	})
+	ctx.Response.SetBodyStreamWriter(sw)
 }

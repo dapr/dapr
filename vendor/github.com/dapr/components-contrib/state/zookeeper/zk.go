@@ -23,11 +23,12 @@ import (
 
 const defaultMaxBufferSize = 1024 * 1024
 const defaultMaxConnBufferSize = 1024 * 1024
-const defaultKeyPrefixPath = "/dapr"
+const defaultKeyPrefixPath = "/dapr/"
 
 const anyVersion = -1
 
-var defaultAcl = zk.WorldACL(zk.PermAll)
+// nolint:gochecknoglobals
+var defaultACL = zk.WorldACL(zk.PermAll)
 
 var errMissingServers = errors.New("servers are required")
 var errInvalidSessionTimeout = errors.New("sessionTimeout is invalid")
@@ -85,8 +86,11 @@ func (props *properties) parse() (*config, error) {
 	}
 
 	keyPrefixPath := defaultKeyPrefixPath
-	if keyPrefixPath != "" {
+	if props.KeyPrefixPath != "" {
 		keyPrefixPath = props.KeyPrefixPath
+		if !strings.HasSuffix(keyPrefixPath, "/") {
+			keyPrefixPath += "/"
+		}
 	}
 
 	return &config{
@@ -387,7 +391,7 @@ func (s *StateStore) Watch(req *state.WatchStateRequest) (<-chan *state.Event, c
 
 					e := &state.Event{
 						Type:  ty,
-						Key:   evt.Path,
+						Key:   s.trimPrefix(evt.Path),
 						Value: value,
 						ETag:  etag,
 					}
@@ -406,7 +410,7 @@ func (s *StateStore) Watch(req *state.WatchStateRequest) (<-chan *state.Event, c
 }
 
 func (s *StateStore) newCreateRequest(req *zk.SetDataRequest) *zk.CreateRequest {
-	return &zk.CreateRequest{Path: req.Path, Data: req.Data, Acl: defaultAcl}
+	return &zk.CreateRequest{Path: req.Path, Data: req.Data, Acl: defaultACL}
 }
 
 func (s *StateStore) newDeleteRequest(req *state.DeleteRequest) (*zk.DeleteRequest, error) {
@@ -456,11 +460,19 @@ func (s *StateStore) newSetDataRequest(req *state.SetRequest) (*zk.SetDataReques
 }
 
 func (s *StateStore) prefixedKey(key string) string {
-	if s.config == nil {
+	if s.config == nil || strings.HasPrefix(key, s.keyPrefixPath) {
 		return key
 	}
 
 	return path.Join(s.keyPrefixPath, key)
+}
+
+func (s *StateStore) trimPrefix(key string) string {
+	if s.config == nil {
+		return key
+	}
+
+	return strings.TrimPrefix(key, s.keyPrefixPath)
 }
 
 func (s *StateStore) parseETag(etag string) int32 {
@@ -503,7 +515,7 @@ func (ops multiOps) String() string {
 type multiRes []zk.MultiResponse
 
 func (res multiRes) String() string {
-	var msgs []string
+	msgs := make([]string, 0, len(res))
 	for _, r := range res {
 		msgs = append(msgs, r.String)
 	}

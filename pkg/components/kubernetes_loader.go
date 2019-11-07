@@ -10,18 +10,18 @@ import (
 	"fmt"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
+	"github.com/cenkalti/backoff"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
-	log "github.com/Sirupsen/logrus"
 	"github.com/valyala/fasthttp"
-	"github.com/cenkalti/backoff"
 )
 
-const maxRetryTime  = time.Second * 30
+const maxRetryTime = time.Second * 30
 
 // KubernetesComponents loads components in a kubernetes environment
 type KubernetesComponents struct {
-	config config.KubernetesConfig 
+	config config.KubernetesConfig
 }
 
 // NewKubernetesComponents returns a new kubernetes loader
@@ -35,10 +35,10 @@ func NewKubernetesComponents(configuration config.KubernetesConfig) *KubernetesC
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
 	b := backoff.NewExponentialBackOff()
 	b.MaxElapsedTime = maxRetryTime
-	
+
 	url := fmt.Sprintf("%s/components", k.config.ControlPlaneAddress)
 	var components []components_v1alpha1.Component
-	
+
 	err := backoff.Retry(func() error {
 		body, err := requestControlPlane(url)
 		if err != nil {
@@ -48,7 +48,7 @@ func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component
 		if err != nil {
 			return nil
 		}
-		return nil;
+		return nil
 	}, b)
 
 	return components, err

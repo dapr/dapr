@@ -36,10 +36,16 @@ func (m *mockServer) GetTopicSubscriptions(ctx context.Context, in *empty.Empty)
 func (m *mockServer) GetBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetBindingsSubscriptionsEnvelope, error) {
 	return &pb.GetBindingsSubscriptionsEnvelope{}, nil
 }
+func (m *mockServer) GetStateSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetStateSubscriptionsEnvelope, error) {
+	return &pb.GetStateSubscriptionsEnvelope{}, nil
+}
 func (m *mockServer) OnBindingEvent(ctx context.Context, in *pb.BindingEventEnvelope) (*pb.BindingResponseEnvelope, error) {
 	return &pb.BindingResponseEnvelope{}, nil
 }
 func (m *mockServer) OnTopicEvent(ctx context.Context, in *pb.CloudEventEnvelope) (*empty.Empty, error) {
+	return &empty.Empty{}, nil
+}
+func (m *mockServer) OnStateEvent(ctx context.Context, in *pb.StateEventEnvelope) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 

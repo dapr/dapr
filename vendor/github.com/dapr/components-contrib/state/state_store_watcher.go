@@ -22,3 +22,23 @@ type StoreWatcher interface {
 	Init(metadata Metadata) error
 	Watch(req *WatchStateRequest) (<-chan *Event, context.CancelFunc, error)
 }
+
+func Watch(watcher StoreWatcher, req *WatchStateRequest, handler func(*Event) error) (context.CancelFunc, error) {
+	events, cancel, err := watcher.Watch(req)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		defer cancel()
+
+		for event := range events {
+			err = handler(event)
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	return cancel, nil
+}

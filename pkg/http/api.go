@@ -6,6 +6,8 @@
 package http
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -306,6 +308,7 @@ func (a *api) onWatchState(c *routing.Context) error {
 	}
 	key := c.Param(stateKeyParam)
 	etag := string(c.Request.Header.Peek("If-Match"))
+	callback := string(c.QueryArgs().Peek(callbackParam))
 	req := &state.WatchStateRequest{
 		Key:      a.getModifiedStateKey(key),
 		ETag:     etag,
@@ -319,10 +322,23 @@ func (a *api) onWatchState(c *routing.Context) error {
 	if err != nil {
 		msg := NewErrorResponse("ERR_WATCH_STATE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
-		return nil
-	}
+	} else {
+		jsonp := callback != ""
+		respondWithChunkedJSON(c.RequestCtx, 200, jsonp, func(w *bufio.Writer) {
+			defer cancelFn()
 
-	respondWithChunkedJSON(c.RequestCtx, 200, events, cancelFn)
+			for evt := range events {
+				evt.Key = a.trimModifiedStateKey(evt.Key)
+				b, _ := json.Marshal(evt)
+				if jsonp {
+					b = []byte(fmt.Sprintf("%s(%s);", callback, string(b)))
+				}
+
+				w.Write(b)
+				w.Flush()
+			}
+		})
+	}
 	return nil
 }
 
@@ -411,6 +427,13 @@ func (a *api) getModifiedStateKey(key string) string {
 		return fmt.Sprintf("%s-%s", a.id, key)
 	}
 
+	return key
+}
+
+func (a *api) trimModifiedStateKey(key string) string {
+	if a.id != "" {
+		return strings.TrimPrefix(key, a.id+"-")
+	}
 	return key
 }
 

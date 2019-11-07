@@ -14,8 +14,25 @@ service DaprClient {
   rpc OnInvoke (InvokeEnvelope) returns (google.protobuf.Any) {}
   rpc GetTopicSubscriptions(google.protobuf.Empty) returns (GetTopicSubscriptionsEnvelope) {}
   rpc GetBindingsSubscriptions(google.protobuf.Empty) returns (GetBindingsSubscriptionsEnvelope) {}
+  rpc GetStateSubscriptions(google.protobuf.Empty) returns (GetStateSubscriptionsEnvelope) {}
   rpc OnBindingEvent(BindingEventEnvelope) returns (BindingResponseEnvelope) {}
   rpc OnTopicEvent(CloudEventEnvelope) returns (google.protobuf.Empty) {}
+  rpc OnStateEvent(StateEventEnvelope) returns (google.protobuf.Empty) {}
+}
+
+message StateEventEnvelope {
+  string key = 1;
+  google.protobuf.Any value = 2;
+  string etag = 3;
+  map<string,string> metadata = 4;
+  StateEventType type = 5;
+}
+
+enum StateEventType {
+  CREATED = 0;
+  DELETED = 1;
+  CHANGED = 2;
+  CHILDREN = 3;
 }
 
 message CloudEventEnvelope {
@@ -53,6 +70,16 @@ message GetTopicSubscriptionsEnvelope {
 
 message GetBindingsSubscriptionsEnvelope {
   repeated string bindings = 1;
+}
+
+message StateSubscription {
+  string key = 1;
+  string etag = 2;
+  map<string,string> metadata = 3;
+}
+
+message GetStateSubscriptionsEnvelope {
+  repeated StateSubscription states = 1;
 }
 
 message State {
