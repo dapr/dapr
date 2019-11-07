@@ -8,6 +8,7 @@ package kubernetes
 import (
 	"fmt"
 
+	"github.com/dapr/dapr/tests/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +18,7 @@ import (
 const (
 	// DaprTestKubeNameSpace is the default Kubernetes namespace for e2e test
 	DaprTestKubeNameSpace = "dapr-tests"
+
 	// TestAppLabelKey is the label key for Kubernetes label selector
 	TestAppLabelKey = "testapp"
 	// DaprSideCarName is the Pod name of Dapr side car
@@ -29,7 +31,7 @@ const (
 )
 
 // BuildDeploymentObject creates the Kubernetes Deployment object for dapr test app
-func BuildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
+func BuildDeploymentObject(namespace string, appDesc utils.AppDescription) *appsv1.Deployment {
 	annotationObject := map[string]string{}
 
 	if appDesc.DaprEnabled {
@@ -80,7 +82,7 @@ func BuildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 }
 
 // BuildServiceObject creates the Kubernetes Service Object for dapr test app
-func BuildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service {
+func BuildServiceObject(namespace string, appDesc utils.AppDescription) *apiv1.Service {
 	serviceType := apiv1.ServiceTypeClusterIP
 
 	if appDesc.IngressEnabled {

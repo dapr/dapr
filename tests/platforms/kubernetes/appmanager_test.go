@@ -10,6 +10,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/dapr/dapr/tests/utils"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -22,7 +23,7 @@ import (
 
 const testNamespace = "apputil-test"
 
-func newTestKubeClient() *KubeClient {
+func newDefaultFakeClient() *KubeClient {
 	fakeclient := fake.NewSimpleClientset()
 	return &KubeClient{
 		ClientSet: fakeclient,
@@ -35,8 +36,8 @@ func newFakeKubeClient() *KubeClient {
 	}
 }
 
-func testAppDescription() AppDescription {
-	return AppDescription{
+func testAppDescription() utils.AppDescription {
+	return utils.AppDescription{
 		AppName:        "testapp",
 		DaprEnabled:    true,
 		ImageName:      "helloworld",
@@ -47,26 +48,26 @@ func testAppDescription() AppDescription {
 }
 
 func TestDeployApp(t *testing.T) {
-	client := newTestKubeClient()
-	appUtil := NewAppUtils(client, testNamespace)
+	client := newDefaultFakeClient()
+	appManager := NewAppManager(client, testNamespace)
 
 	testApp := testAppDescription()
 
 	// act
-	err := appUtil.DeployApp(testApp)
+	_, err := appManager.Deploy(testApp)
 	assert.NoError(t, err)
 
 	// assert
 	deploymentClient := client.Deployments(testNamespace)
 	deployment, _ := deploymentClient.Get(testApp.AppName, metav1.GetOptions{})
 	assert.NotNil(t, deployment)
-	assert.Equal(t, deployment.ObjectMeta.Name, testApp.AppName)
-	assert.Equal(t, deployment.ObjectMeta.Namespace, testNamespace)
-	assert.Equal(t, *deployment.Spec.Replicas, int32(1))
-	assert.Equal(t, deployment.Spec.Selector.MatchLabels["testapp"], testApp.AppName)
-	assert.Equal(t, deployment.Spec.Template.ObjectMeta.Annotations["dapr.io/enabled"], "true")
-	assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Name, testApp.AppName)
-	assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Image, "dapriotest/helloworld")
+	assert.Equal(t, testApp.AppName, deployment.ObjectMeta.Name)
+	assert.Equal(t, testNamespace, deployment.ObjectMeta.Namespace)
+	assert.Equal(t, int32(1), *deployment.Spec.Replicas)
+	assert.Equal(t, testApp.AppName, deployment.Spec.Selector.MatchLabels["testapp"])
+	assert.Equal(t, "true", deployment.Spec.Template.ObjectMeta.Annotations["dapr.io/enabled"])
+	assert.Equal(t, testApp.AppName, deployment.Spec.Template.Spec.Containers[0].Name)
+	assert.Equal(t, "dapriotest/helloworld", deployment.Spec.Template.Spec.Containers[0].Image)
 }
 
 func TestWaitUntilDeploymentReady(t *testing.T) {
@@ -81,7 +82,7 @@ func TestWaitUntilDeploymentReady(t *testing.T) {
 		"deployments",
 		func(action core.Action) (bool, runtime.Object, error) {
 			ns := action.GetNamespace()
-			assert.Equal(t, ns, testNamespace)
+			assert.Equal(t, testNamespace, ns)
 
 			switch action.GetVerb() {
 			case "create":
@@ -100,14 +101,15 @@ func TestWaitUntilDeploymentReady(t *testing.T) {
 			return true, createdDeploymentObj, nil
 		})
 
-	appUtil := NewAppUtils(client, testNamespace)
+	appManager := NewAppManager(client, testNamespace)
 
 	// act
-	err := appUtil.DeployApp(testApp)
+	_, err := appManager.Deploy(testApp)
 	assert.NoError(t, err)
 
 	// assert
-	d, err := appUtil.WaitUntilDeploymentReady(testApp)
+	d, err := appManager.WaitUntilDeploymentIsDone(testApp)
+
 	assert.NoError(t, err)
 	assert.Equal(t, testApp.Replicas, d.Status.ReadyReplicas)
 	assert.Equal(t, 3, getVerbCalled)
@@ -132,7 +134,7 @@ func TestValdiateDaprSideCar(t *testing.T) {
 			"pods",
 			func(action core.Action) (bool, runtime.Object, error) {
 				ns := action.GetNamespace()
-				assert.Equal(t, ns, testNamespace)
+				assert.Equal(t, testNamespace, ns)
 
 				singlePod := apiv1.Pod{
 					ObjectMeta: objMeta,
@@ -157,8 +159,8 @@ func TestValdiateDaprSideCar(t *testing.T) {
 				return true, podList, nil
 			})
 
-		appUtil := NewAppUtils(client, testNamespace)
-		found, err := appUtil.ValdiateDaprSideCar(testApp)
+		appManager := NewAppManager(client, testNamespace)
+		found, err := appManager.ValdiateDaprSideCar(testApp)
 
 		assert.NoError(t, err)
 		assert.True(t, found)
@@ -172,7 +174,7 @@ func TestValdiateDaprSideCar(t *testing.T) {
 			"pods",
 			func(action core.Action) (bool, runtime.Object, error) {
 				ns := action.GetNamespace()
-				assert.Equal(t, ns, testNamespace)
+				assert.Equal(t, testNamespace, ns)
 
 				singlePod := apiv1.Pod{
 					ObjectMeta: objMeta,
@@ -193,8 +195,8 @@ func TestValdiateDaprSideCar(t *testing.T) {
 				return true, podList, nil
 			})
 
-		appUtil := NewAppUtils(client, testNamespace)
-		found, err := appUtil.ValdiateDaprSideCar(testApp)
+		appManager := NewAppManager(client, testNamespace)
+		found, err := appManager.ValdiateDaprSideCar(testApp)
 		assert.False(t, found)
 		assert.Error(t, err)
 	})
@@ -207,7 +209,7 @@ func TestValdiateDaprSideCar(t *testing.T) {
 			"pods",
 			func(action core.Action) (bool, runtime.Object, error) {
 				ns := action.GetNamespace()
-				assert.Equal(t, ns, testNamespace)
+				assert.Equal(t, testNamespace, ns)
 
 				podList := &apiv1.PodList{
 					Items: []apiv1.Pod{},
@@ -216,28 +218,28 @@ func TestValdiateDaprSideCar(t *testing.T) {
 				return true, podList, nil
 			})
 
-		appUtil := NewAppUtils(client, testNamespace)
-		found, err := appUtil.ValdiateDaprSideCar(testApp)
+		appManager := NewAppManager(client, testNamespace)
+		found, err := appManager.ValdiateDaprSideCar(testApp)
 		assert.False(t, found)
 		assert.Error(t, err)
 	})
 }
 
 func TestCreateIngressService(t *testing.T) {
-	client := newTestKubeClient()
+	client := newDefaultFakeClient()
 
-	appUtil := NewAppUtils(client, testNamespace)
+	appManager := NewAppManager(client, testNamespace)
 	testApp := testAppDescription()
 
 	t.Run("Ingress is disabled", func(t *testing.T) {
 		testApp.IngressEnabled = false
-		err := appUtil.CreateIngressService(testApp)
+		err := appManager.CreateIngressService(testApp)
 		assert.Error(t, err)
 	})
 
 	t.Run("Ingress is enabled", func(t *testing.T) {
 		testApp.IngressEnabled = true
-		err := appUtil.CreateIngressService(testApp)
+		err := appManager.CreateIngressService(testApp)
 		assert.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
@@ -256,10 +258,10 @@ func TestWaitUntilIngressEndpointIsAvailable(t *testing.T) {
 	testApp := testAppDescription()
 
 	// Set fake minikube node IP address
-	oldMinikubeIP := os.Getenv(MiniKubeIPEnv)
+	oldMinikubeIP := os.Getenv(MiniKubeIPEnvVar)
 
 	t.Run("Minikube environment", func(t *testing.T) {
-		os.Setenv(MiniKubeIPEnv, fakeMinikubeNodeIP)
+		os.Setenv(MiniKubeIPEnvVar, fakeMinikubeNodeIP)
 
 		client := newFakeKubeClient()
 		// Set up reactor to fake verb
@@ -268,7 +270,7 @@ func TestWaitUntilIngressEndpointIsAvailable(t *testing.T) {
 			"services",
 			func(action core.Action) (bool, runtime.Object, error) {
 				ns := action.GetNamespace()
-				assert.Equal(t, ns, testNamespace)
+				assert.Equal(t, testNamespace, ns)
 				obj := &apiv1.Service{
 					Spec: apiv1.ServiceSpec{
 						Ports: []apiv1.ServicePort{
@@ -281,8 +283,8 @@ func TestWaitUntilIngressEndpointIsAvailable(t *testing.T) {
 				return true, obj, nil
 			})
 
-		appUtil := NewAppUtils(client, testNamespace)
-		externalURL, err := appUtil.WaitUntilIngressEndpointIsAvailable(testApp)
+		appManager := NewAppManager(client, testNamespace)
+		externalURL, err := appManager.WaitUntilIngressEndpointIsAvailable(testApp)
 
 		assert.NoError(t, err)
 		assert.Equal(t, externalURL, fmt.Sprintf("%s:%d", fakeMinikubeNodeIP, fakeNodePort))
@@ -290,7 +292,7 @@ func TestWaitUntilIngressEndpointIsAvailable(t *testing.T) {
 
 	t.Run("Kubernetes environment", func(t *testing.T) {
 		getVerbCalled := 0
-		os.Setenv(MiniKubeIPEnv, "")
+		os.Setenv(MiniKubeIPEnvVar, "")
 
 		client := newFakeKubeClient()
 		// Set up reactor to fake verb
@@ -299,7 +301,8 @@ func TestWaitUntilIngressEndpointIsAvailable(t *testing.T) {
 			"services",
 			func(action core.Action) (bool, runtime.Object, error) {
 				ns := action.GetNamespace()
-				assert.Equal(t, ns, testNamespace)
+				assert.Equal(t, testNamespace, ns)
+
 				obj := &apiv1.Service{
 					Spec: apiv1.ServiceSpec{
 						ExternalIPs: []string{},
@@ -315,8 +318,8 @@ func TestWaitUntilIngressEndpointIsAvailable(t *testing.T) {
 				return true, obj, nil
 			})
 
-		appUtil := NewAppUtils(client, testNamespace)
-		externalURL, err := appUtil.WaitUntilIngressEndpointIsAvailable(testApp)
+		appManager := NewAppManager(client, testNamespace)
+		externalURL, err := appManager.WaitUntilIngressEndpointIsAvailable(testApp)
 
 		assert.NoError(t, err)
 		assert.Equal(t, externalURL, fmt.Sprintf("%s", fakeExternalIP))
@@ -324,7 +327,7 @@ func TestWaitUntilIngressEndpointIsAvailable(t *testing.T) {
 	})
 
 	// Recover minikube ip environment variable
-	os.Setenv(MiniKubeIPEnv, oldMinikubeIP)
+	os.Setenv(MiniKubeIPEnvVar, oldMinikubeIP)
 }
 
 func TestDeleteDeployment(t *testing.T) {
@@ -336,13 +339,13 @@ func TestDeleteDeployment(t *testing.T) {
 		"deployments",
 		func(action core.Action) (bool, runtime.Object, error) {
 			ns := action.GetNamespace()
-			assert.Equal(t, ns, testNamespace)
+			assert.Equal(t, testNamespace, ns)
 			obj := &appsv1.Deployment{}
 			return true, obj, nil
 		})
 
-	appUtil := NewAppUtils(client, testNamespace)
-	err := appUtil.DeleteDeployment(testApp)
+	appManager := NewAppManager(client, testNamespace)
+	err := appManager.DeleteDeployment(testApp)
 
 	assert.NoError(t, err)
 }
@@ -356,13 +359,13 @@ func TestDeleteService(t *testing.T) {
 		"services",
 		func(action core.Action) (bool, runtime.Object, error) {
 			ns := action.GetNamespace()
-			assert.Equal(t, ns, testNamespace)
+			assert.Equal(t, testNamespace, ns)
 			obj := &apiv1.Service{}
 			return true, obj, nil
 		})
 
-	appUtil := NewAppUtils(client, testNamespace)
-	err := appUtil.DeleteService(testApp)
+	appManager := NewAppManager(client, testNamespace)
+	err := appManager.DeleteService(testApp)
 
 	assert.NoError(t, err)
 }
