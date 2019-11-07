@@ -36,7 +36,7 @@ type AppManager struct {
 	namespace string
 }
 
-// NewAppManager creates AppUtil instance
+// NewAppManager creates AppManager instance
 func NewAppManager(kubeClients *KubeClient, namespace string) *AppManager {
 	return &AppManager{
 		client:    kubeClients,
@@ -44,7 +44,7 @@ func NewAppManager(kubeClients *KubeClient, namespace string) *AppManager {
 	}
 }
 
-// Deploy deploys test app based on app deployment information
+// Deploy deploys app based on app description
 func (m *AppManager) Deploy(app utils.AppDescription) (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	obj := BuildDeploymentObject(m.namespace, app)
@@ -57,7 +57,7 @@ func (m *AppManager) Deploy(app utils.AppDescription) (*appsv1.Deployment, error
 	return result, nil
 }
 
-// WaitUntilDeploymentIsDone waits until test app deployment is done
+// WaitUntilDeploymentIsDone waits until app deployment is done
 func (m *AppManager) WaitUntilDeploymentIsDone(app utils.AppDescription) (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
@@ -143,6 +143,7 @@ func (m *AppManager) WaitUntilIngressEndpointIsAvailable(app utils.AppDescriptio
 		return "", fmt.Errorf("%s doesn't need ingress service endpoint", app.AppName)
 	}
 
+	// TODO: Support the other local k8s clusters
 	minikubeExternalIP := m.minikubeNodeIP()
 
 	serviceClient := m.client.Services(m.namespace)
@@ -180,6 +181,8 @@ func (m *AppManager) WaitUntilIngressEndpointIsAvailable(app utils.AppDescriptio
 }
 
 func (m *AppManager) minikubeNodeIP() string {
+	// if you are running the test in minikube environment, MINIKUBE_IP environment variable must be
+	// minikube cluster IP address by running `minikube ip`
 	return os.Getenv(MiniKubeIPEnvVar)
 }
 
