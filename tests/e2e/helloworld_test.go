@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// !!NOTE!! WORKING IN PROGRESS. !!NOTE!!
+// !!NOTE!! WORK IN PROGRESS. !!NOTE!!
 
 // This is the example to show how AppManager is used for the e2e tests.
 // The subsequent PRs will introduce test framework which encapsulates the
