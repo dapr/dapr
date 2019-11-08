@@ -1,3 +1,3 @@
 # Dapr test
 
-> This is working in progress.
+> This is work in progress.
