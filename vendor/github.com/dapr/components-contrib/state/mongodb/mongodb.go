@@ -113,6 +113,19 @@ func (m *MongoDB) Init(metadata state.Metadata) error {
 
 // Set saves state into MongoDB
 func (m *MongoDB) Set(req *state.SetRequest) error {
+	ctx, cancel := context.WithTimeout(context.Background(), m.operationTimeout)
+	defer cancel()
+
+	err := m.setInternal(ctx, req)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *MongoDB) setInternal(ctx context.Context, req *state.SetRequest) error {
 	var vStr string
 	b, ok := req.Value.([]byte)
 	if ok {
@@ -120,9 +133,6 @@ func (m *MongoDB) Set(req *state.SetRequest) error {
 	} else {
 		vStr, _ = json.MarshalToString(req.Value)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), m.operationTimeout)
-	defer cancel()
 
 	// create a document based on request key and value
 	filter := bson.M{id: req.Key}
@@ -174,6 +184,16 @@ func (m *MongoDB) Delete(req *state.DeleteRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), m.operationTimeout)
 	defer cancel()
 
+	err := m.deleteInternal(ctx, req)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *MongoDB) deleteInternal(ctx context.Context, req *state.DeleteRequest) error {
 	filter := bson.M{id: req.Key}
 	_, err := m.collection.DeleteOne(ctx, filter)
 
@@ -190,6 +210,46 @@ func (m *MongoDB) BulkDelete(req []state.DeleteRequest) error {
 		err := m.Delete(&r)
 		if err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+// Multi performs a transactional operation. succeeds only if all operations succeed, and fails if one or more operations fail
+func (m *MongoDB) Multi(operations []state.TransactionalRequest) error {
+	sess, err := m.client.StartSession()
+	txnOpts := options.Transaction().SetReadConcern(readconcern.Snapshot()).
+		SetWriteConcern(writeconcern.New(writeconcern.WMajority()))
+
+	defer sess.EndSession(context.Background())
+
+	if err != nil {
+		return fmt.Errorf("error in starting the transaction: %s", err)
+	}
+
+	sess.WithTransaction(context.Background(), func(sessCtx mongo.SessionContext) (interface{}, error) {
+		err = m.doTransaction(sessCtx, operations)
+		return nil, err
+	}, txnOpts)
+
+	return err
+}
+
+func (m *MongoDB) doTransaction(sessCtx mongo.SessionContext, operations []state.TransactionalRequest) error {
+	for _, o := range operations {
+		var err error
+		if o.Operation == state.Upsert {
+			req := o.Request.(state.SetRequest)
+			err = m.setInternal(sessCtx, &req)
+		} else if o.Operation == state.Delete {
+			req := o.Request.(state.DeleteRequest)
+			err = m.deleteInternal(sessCtx, &req)
+		}
+
+		if err != nil {
+			sessCtx.AbortTransaction(sessCtx)
+			return fmt.Errorf("error during transaction, aborting the transaction: %s", err)
 		}
 	}
 
