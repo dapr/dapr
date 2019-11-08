@@ -323,18 +323,28 @@ func TestValidiateSideCar(t *testing.T) {
 }
 
 func TestCreateIngressService(t *testing.T) {
-	client := newDefaultFakeClient()
-
-	appManager := NewAppManager(client, testNamespace)
 	testApp := testAppDescription()
 
 	t.Run("Ingress is disabled", func(t *testing.T) {
+		client := newDefaultFakeClient()
+		appManager := NewAppManager(client, testNamespace)
+
 		testApp.IngressEnabled = false
 		_, err := appManager.CreateIngressService(testApp)
-		assert.Error(t, err)
+		assert.NoError(t, err)
+		// assert
+		serviceClient := client.Services(testNamespace)
+		obj, _ := serviceClient.Get(testApp.AppName, metav1.GetOptions{})
+		assert.NotNil(t, obj)
+		assert.Equal(t, testApp.AppName, obj.ObjectMeta.Name)
+		assert.Equal(t, testNamespace, obj.ObjectMeta.Namespace)
+		assert.Equal(t, apiv1.ServiceTypeClusterIP, obj.Spec.Type)
 	})
 
 	t.Run("Ingress is enabled", func(t *testing.T) {
+		client := newDefaultFakeClient()
+		appManager := NewAppManager(client, testNamespace)
+
 		testApp.IngressEnabled = true
 		_, err := appManager.CreateIngressService(testApp)
 		assert.NoError(t, err)
@@ -344,6 +354,7 @@ func TestCreateIngressService(t *testing.T) {
 		assert.NotNil(t, obj)
 		assert.Equal(t, testApp.AppName, obj.ObjectMeta.Name)
 		assert.Equal(t, testNamespace, obj.ObjectMeta.Namespace)
+		assert.Equal(t, apiv1.ServiceTypeLoadBalancer, obj.Spec.Type)
 	})
 }
 

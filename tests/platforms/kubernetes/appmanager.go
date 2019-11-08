@@ -10,8 +10,6 @@ import (
 	"os"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
-
 	"github.com/dapr/dapr/tests/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -120,7 +118,7 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 			}
 		}
 		if !daprdFound {
-			return false, fmt.Errorf("cannot find dapr sidecar in %s pod", pod.Name)
+			return false, fmt.Errorf("cannot find dapr sidecar in pod %s", pod.Name)
 		}
 	}
 
@@ -129,18 +127,12 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 
 // CreateIngressService creates Ingress endpoint for test app
 func (m *AppManager) CreateIngressService(app utils.AppDescription) (*apiv1.Service, error) {
-	if !app.IngressEnabled {
-		return nil, fmt.Errorf("%s doesn't need ingress service endpoint", app.AppName)
-	}
-
 	serviceClient := m.client.Services(m.namespace)
 	obj := buildServiceObject(m.namespace, app)
 	result, err := serviceClient.Create(obj)
 	if err != nil {
 		return nil, err
 	}
-
-	log.Debugf("Created Service %q.\n", result.GetObjectMeta().GetName())
 
 	return result, nil
 }
