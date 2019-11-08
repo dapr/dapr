@@ -368,7 +368,7 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 		}
 	}
 
-	transactionalStore, ok := a.store.(state.TransactionalStateStore)
+	transactionalStore, ok := a.store.(state.TransactionalStore)
 	if !ok {
 		return errors.New("state store does not support transaction")
 	}

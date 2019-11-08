@@ -10,11 +10,12 @@ Currently supported state stores are:
 * Cassandra
 * Azure CosmosDB
 * Memcached
+* MongoDB
 * Zookeeper
 
 ## Implementing a new State Store
 
-A compliant state store needs to implement one or more interfaces: `Store` and `TransactionalStateStore`.
+A compliant state store needs to implement one or more interfaces: `Store` and `TransactionalStore`.
 
 The interface for Store:
 
@@ -29,10 +30,10 @@ type Store interface {
 }
 ```
 
-The interface for TransactionalStateStore:
+The interface for TransactionalStore:
 
 ```
-type TransactionalStateStore interface {
+type TransactionalStore interface {
 	Init(metadata Metadata) error
 	Multi(reqs []TransactionalRequest) error
 }
