@@ -12,6 +12,7 @@ Currently supported state stores are:
 * Memcached
 * MongoDB
 * Zookeeper
+* Cloud Firestore (Datastore mode)
 
 ## Implementing a new State Store
 
