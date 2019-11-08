@@ -108,7 +108,7 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 	}
 
 	if len(podList.Items) != int(app.Replicas) {
-		return false, fmt.Errorf("number of Pods for %s must be %d Pods but %d Pods", app.AppName, app.Replicas, len(podList.Items))
+		return false, fmt.Errorf("expected number of pods for %s: %d, received %d", app.AppName, app.Replicas, len(podList.Items))
 	}
 
 	// All testapp pods must have daprd sidecar
