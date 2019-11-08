@@ -108,6 +108,8 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 | [JS-sdk](https://github.com/dapr/js-sdk) | Dapr SDK for JavaScript
 | [Python-sdk](https://github.com/dapr/python-sdk) | Dapr SDK for Python
 | [Dotnet-sdk](https://github.com/dapr/dotnet-sdk) | Dapr SDK for .NET Core
+| [Rust-sdk](https://github.com/dapr/rust-sdk) | Dapr SDK for Rust
+| [Cpp-sdk](https://github.com/dapr/cpp-sdk) | Dapr SDK for C++
 
 
 ## Code of Conduct
