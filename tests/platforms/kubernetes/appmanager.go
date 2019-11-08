@@ -48,7 +48,7 @@ func NewAppManager(kubeClients *KubeClient, namespace string) *AppManager {
 // Deploy deploys app based on app description
 func (m *AppManager) Deploy(app utils.AppDescription) (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
-	obj := BuildDeploymentObject(m.namespace, app)
+	obj := buildDeploymentObject(m.namespace, app)
 
 	result, err := deploymentsClient.Create(obj)
 	if err != nil {
@@ -75,7 +75,7 @@ func (m *AppManager) WaitUntilDeploymentState(app utils.AppDescription, isState 
 	})
 
 	if waitErr != nil {
-		return nil, fmt.Errorf("deployment %q is not in desired state, got: %+v: %w", app.AppName, lastDeployment, waitErr)
+		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %w", app.AppName, lastDeployment, waitErr)
 	}
 
 	return lastDeployment, nil
@@ -108,10 +108,10 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 	}
 
 	if len(podList.Items) != int(app.Replicas) {
-		return false, fmt.Errorf("expected number of pods for %s: %d, received %d", app.AppName, app.Replicas, len(podList.Items))
+		return false, fmt.Errorf("expected number of pods for %s: %d, received: %d", app.AppName, app.Replicas, len(podList.Items))
 	}
 
-	// All testapp pods must have daprd sidecar
+	// Each pod must have daprd sidecar
 	for _, pod := range podList.Items {
 		daprdFound := false
 		for _, container := range pod.Spec.Containers {
@@ -134,7 +134,7 @@ func (m *AppManager) CreateIngressService(app utils.AppDescription) (*apiv1.Serv
 	}
 
 	serviceClient := m.client.Services(m.namespace)
-	obj := BuildServiceObject(m.namespace, app)
+	obj := buildServiceObject(m.namespace, app)
 	result, err := serviceClient.Create(obj)
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func (m *AppManager) WaitUntilServiceState(app utils.AppDescription, isState fun
 	})
 
 	if waitErr != nil {
-		return lastService, fmt.Errorf("service %q is not in desired state, got: %+v: %w", app.AppName, lastService, waitErr)
+		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %w", app.AppName, lastService, waitErr)
 	}
 
 	return lastService, nil

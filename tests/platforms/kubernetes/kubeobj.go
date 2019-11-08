@@ -31,7 +31,7 @@ const (
 )
 
 // BuildDeploymentObject creates the Kubernetes Deployment object for dapr test app
-func BuildDeploymentObject(namespace string, appDesc utils.AppDescription) *appsv1.Deployment {
+func buildDeploymentObject(namespace string, appDesc utils.AppDescription) *appsv1.Deployment {
 	annotationObject := map[string]string{}
 
 	if appDesc.DaprEnabled {
@@ -82,7 +82,7 @@ func BuildDeploymentObject(namespace string, appDesc utils.AppDescription) *apps
 }
 
 // BuildServiceObject creates the Kubernetes Service Object for dapr test app
-func BuildServiceObject(namespace string, appDesc utils.AppDescription) *apiv1.Service {
+func buildServiceObject(namespace string, appDesc utils.AppDescription) *apiv1.Service {
 	serviceType := apiv1.ServiceTypeClusterIP
 
 	if appDesc.IngressEnabled {

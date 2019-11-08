@@ -27,7 +27,7 @@ func TestBuildDeploymentObject(t *testing.T) {
 		testApp.DaprEnabled = true
 
 		// act
-		obj := BuildDeploymentObject("testNamespace", testApp)
+		obj := buildDeploymentObject("testNamespace", testApp)
 
 		// assert
 		assert.NotNil(t, obj)
@@ -38,7 +38,7 @@ func TestBuildDeploymentObject(t *testing.T) {
 		testApp.DaprEnabled = false
 
 		// act
-		obj := BuildDeploymentObject("testNamespace", testApp)
+		obj := buildDeploymentObject("testNamespace", testApp)
 
 		// assert
 		assert.NotNil(t, obj)
@@ -60,7 +60,7 @@ func TestBuildServiceObject(t *testing.T) {
 		testApp.IngressEnabled = true
 
 		// act
-		obj := BuildServiceObject("testNamespace", testApp)
+		obj := buildServiceObject("testNamespace", testApp)
 
 		// assert
 		assert.NotNil(t, obj)
@@ -71,7 +71,7 @@ func TestBuildServiceObject(t *testing.T) {
 		testApp.IngressEnabled = false
 
 		// act
-		obj := BuildServiceObject("testNamespace", testApp)
+		obj := buildServiceObject("testNamespace", testApp)
 
 		// assert
 		assert.NotNil(t, obj)
