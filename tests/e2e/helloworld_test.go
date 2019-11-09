@@ -8,11 +8,14 @@
 package e2e
 
 import (
-	"log"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"testing"
 
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/utils"
+	"github.com/stretchr/testify/require"
 )
 
 var runner *utils.TestRunner
@@ -35,7 +38,16 @@ func TestMain(m *testing.M) {
 }
 
 func TestHelloWorld(t *testing.T) {
-	ingressURL := runner.AcquireAppExternalURL("helloworld")
+	// Get Ingress external url for "helloworld" test app
+	externalURL := runner.AcquireAppExternalURL("helloworld")
+	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-	log.Printf("service external url: %s", ingressURL)
+	// Call endpoint for "helloworld" test app
+	resp, err := http.Get(fmt.Sprintf("http://%s", externalURL))
+	require.NoError(t, err)
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	require.NoError(t, err)
+
+	require.Equal(t, body, []byte("Hello, Dapr"))
 }
