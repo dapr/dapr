@@ -10,7 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/dapr/dapr/tests/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -33,20 +32,57 @@ const (
 type AppManager struct {
 	client    *KubeClient
 	namespace string
+	app       AppDescription
 }
 
 // NewAppManager creates AppManager instance
-func NewAppManager(kubeClients *KubeClient, namespace string) *AppManager {
+func NewAppManager(kubeClients *KubeClient, namespace string, app AppDescription) *AppManager {
 	return &AppManager{
 		client:    kubeClients,
 		namespace: namespace,
+		app:       app,
 	}
 }
 
+// Name returns app name
+func (m *AppManager) Name() string {
+	return m.app.AppName
+}
+
+// Setup installs app by AppDescription
+func (m *AppManager) Setup() error {
+	// TODO: Tear down app if option is required
+	if err := m.TearDown(); err != nil {
+		return err
+	}
+
+	// Deploy app and wait until deployment is done
+	if _, err := m.Deploy(); err != nil {
+		return err
+	}
+
+	// Wait until app is deployed completely
+	if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
+		return err
+	}
+
+	// Validate daprd side car is injected
+	if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
+		return err
+	}
+
+	// Create Ingress endpoint
+	if _, err := m.CreateIngressService(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Deploy deploys app based on app description
-func (m *AppManager) Deploy(app utils.AppDescription) (*appsv1.Deployment, error) {
+func (m *AppManager) Deploy() (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
-	obj := buildDeploymentObject(m.namespace, app)
+	obj := buildDeploymentObject(m.namespace, m.app)
 
 	result, err := deploymentsClient.Create(obj)
 	if err != nil {
@@ -57,15 +93,15 @@ func (m *AppManager) Deploy(app utils.AppDescription) (*appsv1.Deployment, error
 }
 
 // WaitUntilDeploymentState waits until isState returns true
-func (m *AppManager) WaitUntilDeploymentState(app utils.AppDescription, isState func(*appsv1.Deployment, error, *utils.AppDescription) bool) (*appsv1.Deployment, error) {
+func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, error) bool) (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
 	var lastDeployment *appsv1.Deployment
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		lastDeployment, err = deploymentsClient.Get(app.AppName, metav1.GetOptions{})
-		done := isState(lastDeployment, err, &app)
+		lastDeployment, err = deploymentsClient.Get(m.app.AppName, metav1.GetOptions{})
+		done := isState(lastDeployment, err)
 		if !done && err != nil {
 			return true, err
 		}
@@ -73,25 +109,25 @@ func (m *AppManager) WaitUntilDeploymentState(app utils.AppDescription, isState 
 	})
 
 	if waitErr != nil {
-		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %w", app.AppName, lastDeployment, waitErr)
+		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %w", m.app.AppName, lastDeployment, waitErr)
 	}
 
 	return lastDeployment, nil
 }
 
 // IsDeploymentDone returns true if deployment object completes pod deployments
-func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error, app *utils.AppDescription) bool {
-	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == app.Replicas
+func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) bool {
+	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == m.app.Replicas
 }
 
 // IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero
-func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err error, app *utils.AppDescription) bool {
-	return errors.IsNotFound(err) || deployment.Status.Replicas == 0
+func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err error) bool {
+	return (err != nil && errors.IsNotFound(err)) || deployment.Status.Replicas == 0
 }
 
 // ValidiateSideCar validates that dapr side car is running in dapr enabled pods
-func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
-	if !app.DaprEnabled {
+func (m *AppManager) ValidiateSideCar() (bool, error) {
+	if !m.app.DaprEnabled {
 		return false, fmt.Errorf("dapr is not enabled for this app")
 	}
 
@@ -99,14 +135,14 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 
 	// Filter only 'testapp=appName' labeled Pods
 	podList, err := podClient.List(metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, app.AppName),
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
 	if err != nil {
 		return false, err
 	}
 
-	if len(podList.Items) != int(app.Replicas) {
-		return false, fmt.Errorf("expected number of pods for %s: %d, received: %d", app.AppName, app.Replicas, len(podList.Items))
+	if len(podList.Items) != int(m.app.Replicas) {
+		return false, fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
 	}
 
 	// Each pod must have daprd sidecar
@@ -126,9 +162,9 @@ func (m *AppManager) ValidiateSideCar(app utils.AppDescription) (bool, error) {
 }
 
 // CreateIngressService creates Ingress endpoint for test app
-func (m *AppManager) CreateIngressService(app utils.AppDescription) (*apiv1.Service, error) {
+func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
-	obj := buildServiceObject(m.namespace, app)
+	obj := buildServiceObject(m.namespace, m.app)
 	result, err := serviceClient.Create(obj)
 	if err != nil {
 		return nil, err
@@ -137,15 +173,23 @@ func (m *AppManager) CreateIngressService(app utils.AppDescription) (*apiv1.Serv
 	return result, nil
 }
 
+func (m *AppManager) AcquireExternalURL() string {
+	svc, err := m.WaitUntilServiceState(m.IsServiceIngressReady)
+	if err != nil {
+		return ""
+	}
+	return m.AcquireExternalURLFromService(svc)
+}
+
 // WaitUntilServiceState waits until isState returns true
-func (m *AppManager) WaitUntilServiceState(app utils.AppDescription, isState func(*apiv1.Service, error, *utils.AppDescription) bool) (*apiv1.Service, error) {
+func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) bool) (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
 	var lastService *apiv1.Service
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		lastService, err = serviceClient.Get(app.AppName, metav1.GetOptions{})
-		done := isState(lastService, err, &app)
+		lastService, err = serviceClient.Get(m.app.AppName, metav1.GetOptions{})
+		done := isState(lastService, err)
 		if !done && err != nil {
 			return true, err
 		}
@@ -154,7 +198,7 @@ func (m *AppManager) WaitUntilServiceState(app utils.AppDescription, isState fun
 	})
 
 	if waitErr != nil {
-		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %w", app.AppName, lastService, waitErr)
+		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %w", m.app.AppName, lastService, waitErr)
 	}
 
 	return lastService, nil
@@ -178,7 +222,7 @@ func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 }
 
 // IsServiceIngressReady returns true if external ip is available
-func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error, app *utils.AppDescription) bool {
+func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 	if err != nil || svc == nil {
 		return false
 	}
@@ -198,8 +242,8 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error, app *u
 }
 
 // IsServiceDeleted returns true if service does not exist
-func (m *AppManager) IsServiceDeleted(svc *apiv1.Service, err error, app *utils.AppDescription) bool {
-	return errors.IsNotFound(err)
+func (m *AppManager) IsServiceDeleted(svc *apiv1.Service, err error) bool {
+	return err != nil && errors.IsNotFound(err)
 }
 
 func (m *AppManager) minikubeNodeIP() string {
@@ -210,21 +254,21 @@ func (m *AppManager) minikubeNodeIP() string {
 	return os.Getenv(MiniKubeIPEnvVar)
 }
 
-// Cleanup deletes deployment and service
-func (m *AppManager) Cleanup(app utils.AppDescription) error {
-	if err := m.DeleteDeployment(app, true); err != nil {
+// TearDown deletes deployment and service
+func (m *AppManager) TearDown() error {
+	if err := m.DeleteDeployment(true); err != nil {
 		return err
 	}
 
-	if _, err := m.WaitUntilDeploymentState(app, m.IsDeploymentDeleted); err != nil {
+	if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDeleted); err != nil {
 		return err
 	}
 
-	if err := m.DeleteService(app, true); err != nil {
+	if err := m.DeleteService(true); err != nil {
 		return err
 	}
 
-	if _, err := m.WaitUntilServiceState(app, m.IsServiceDeleted); err != nil {
+	if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
 		return err
 	}
 
@@ -232,11 +276,11 @@ func (m *AppManager) Cleanup(app utils.AppDescription) error {
 }
 
 // DeleteDeployment deletes deployment for the test app
-func (m *AppManager) DeleteDeployment(app utils.AppDescription, ignoreNotFound bool) error {
+func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
-	if err := deploymentsClient.Delete(app.AppName, &metav1.DeleteOptions{
+	if err := deploymentsClient.Delete(m.app.AppName, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
 		return err
@@ -246,11 +290,11 @@ func (m *AppManager) DeleteDeployment(app utils.AppDescription, ignoreNotFound b
 }
 
 // DeleteService deletes deployment for the test app
-func (m *AppManager) DeleteService(app utils.AppDescription, ignoreNotFound bool) error {
+func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	serviceClient := m.client.Services(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
-	if err := serviceClient.Delete(app.AppName, &metav1.DeleteOptions{
+	if err := serviceClient.Delete(m.app.AppName, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
 		return err

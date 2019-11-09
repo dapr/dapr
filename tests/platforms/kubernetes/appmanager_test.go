@@ -10,7 +10,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/dapr/dapr/tests/utils"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,8 +37,8 @@ func newFakeKubeClient() *KubeClient {
 	}
 }
 
-func testAppDescription() utils.AppDescription {
-	return utils.AppDescription{
+func testAppDescription() AppDescription {
+	return AppDescription{
 		AppName:        "testapp",
 		DaprEnabled:    true,
 		ImageName:      "helloworld",
@@ -51,12 +50,11 @@ func testAppDescription() utils.AppDescription {
 
 func TestDeployApp(t *testing.T) {
 	client := newDefaultFakeClient()
-	appManager := NewAppManager(client, testNamespace)
-
 	testApp := testAppDescription()
+	appManager := NewAppManager(client, testNamespace, testApp)
 
 	// act
-	_, err := appManager.Deploy(testApp)
+	_, err := appManager.Deploy()
 	assert.NoError(t, err)
 
 	// assert
@@ -105,14 +103,14 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 				return true, createdDeploymentObj, nil
 			})
 
-		appManager := NewAppManager(client, testNamespace)
+		appManager := NewAppManager(client, testNamespace, testApp)
 
 		// act
-		_, err := appManager.Deploy(testApp)
+		_, err := appManager.Deploy()
 		assert.NoError(t, err)
 
 		// assert
-		d, err := appManager.WaitUntilDeploymentState(testApp, appManager.IsDeploymentDone)
+		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
 
 		assert.NoError(t, err)
 		assert.Equal(t, testApp.Replicas, d.Status.ReadyReplicas)
@@ -147,14 +145,14 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 				return true, createdDeploymentObj, nil
 			})
 
-		appManager := NewAppManager(client, testNamespace)
+		appManager := NewAppManager(client, testNamespace, testApp)
 
 		// act
-		_, err := appManager.Deploy(testApp)
+		_, err := appManager.Deploy()
 		assert.NoError(t, err)
 
 		// assert
-		d, err := appManager.WaitUntilDeploymentState(testApp, appManager.IsDeploymentDeleted)
+		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDeleted)
 
 		assert.NoError(t, err)
 		assert.Equal(t, int32(0), d.Status.ReadyReplicas)
@@ -177,7 +175,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 				case "create":
 					// return the same deployment object
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
-					createdDeploymentObj.Status.ReadyReplicas = testApp.Replicas
+					createdDeploymentObj.Status.Replicas = testApp.Replicas
 
 				case "get":
 					// return notfound error when WaitUntilDeploymentState called get deployments 2 times
@@ -194,17 +192,18 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 					getVerbCalled++
 				}
+
 				return true, createdDeploymentObj, nil
 			})
 
-		appManager := NewAppManager(client, testNamespace)
+		appManager := NewAppManager(client, testNamespace, testApp)
 
 		// act
-		_, err := appManager.Deploy(testApp)
+		_, err := appManager.Deploy()
 		assert.NoError(t, err)
 
 		// assert
-		d, err := appManager.WaitUntilDeploymentState(testApp, appManager.IsDeploymentDeleted)
+		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDeleted)
 
 		assert.NoError(t, err)
 		assert.Nil(t, d)
@@ -256,8 +255,8 @@ func TestValidiateSideCar(t *testing.T) {
 				return true, podList, nil
 			})
 
-		appManager := NewAppManager(client, testNamespace)
-		found, err := appManager.ValidiateSideCar(testApp)
+		appManager := NewAppManager(client, testNamespace, testApp)
+		found, err := appManager.ValidiateSideCar()
 
 		assert.NoError(t, err)
 		assert.True(t, found)
@@ -292,8 +291,8 @@ func TestValidiateSideCar(t *testing.T) {
 				return true, podList, nil
 			})
 
-		appManager := NewAppManager(client, testNamespace)
-		found, err := appManager.ValidiateSideCar(testApp)
+		appManager := NewAppManager(client, testNamespace, testApp)
+		found, err := appManager.ValidiateSideCar()
 		assert.False(t, found)
 		assert.Error(t, err)
 	})
@@ -315,8 +314,8 @@ func TestValidiateSideCar(t *testing.T) {
 				return true, podList, nil
 			})
 
-		appManager := NewAppManager(client, testNamespace)
-		found, err := appManager.ValidiateSideCar(testApp)
+		appManager := NewAppManager(client, testNamespace, testApp)
+		found, err := appManager.ValidiateSideCar()
 		assert.False(t, found)
 		assert.Error(t, err)
 	})
@@ -327,10 +326,10 @@ func TestCreateIngressService(t *testing.T) {
 
 	t.Run("Ingress is disabled", func(t *testing.T) {
 		client := newDefaultFakeClient()
-		appManager := NewAppManager(client, testNamespace)
-
 		testApp.IngressEnabled = false
-		_, err := appManager.CreateIngressService(testApp)
+		appManager := NewAppManager(client, testNamespace, testApp)
+
+		_, err := appManager.CreateIngressService()
 		assert.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
@@ -343,10 +342,10 @@ func TestCreateIngressService(t *testing.T) {
 
 	t.Run("Ingress is enabled", func(t *testing.T) {
 		client := newDefaultFakeClient()
-		appManager := NewAppManager(client, testNamespace)
-
 		testApp.IngressEnabled = true
-		_, err := appManager.CreateIngressService(testApp)
+		appManager := NewAppManager(client, testNamespace, testApp)
+
+		_, err := appManager.CreateIngressService()
 		assert.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
@@ -391,8 +390,8 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 				return true, obj, nil
 			})
 
-		appManager := NewAppManager(client, testNamespace)
-		svcObj, err := appManager.WaitUntilServiceState(testApp, appManager.IsServiceIngressReady)
+		appManager := NewAppManager(client, testNamespace, testApp)
+		svcObj, err := appManager.WaitUntilServiceState(appManager.IsServiceIngressReady)
 		assert.NoError(t, err)
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
@@ -427,8 +426,8 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 				return true, obj, nil
 			})
 
-		appManager := NewAppManager(client, testNamespace)
-		svcObj, err := appManager.WaitUntilServiceState(testApp, appManager.IsServiceIngressReady)
+		appManager := NewAppManager(client, testNamespace, testApp)
+		svcObj, err := appManager.WaitUntilServiceState(appManager.IsServiceIngressReady)
 		assert.NoError(t, err)
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
@@ -461,8 +460,8 @@ func TestWaitUntilServiceStateDeleted(t *testing.T) {
 			return true, nil, err
 		})
 
-	appManager := NewAppManager(client, testNamespace)
-	svcObj, err := appManager.WaitUntilServiceState(testApp, appManager.IsServiceDeleted)
+	appManager := NewAppManager(client, testNamespace, testApp)
+	svcObj, err := appManager.WaitUntilServiceState(appManager.IsServiceDeleted)
 	assert.NoError(t, err)
 	assert.Nil(t, svcObj)
 }
@@ -503,8 +502,8 @@ func TestDeleteDeployment(t *testing.T) {
 			client := newFakeKubeClient()
 			// Set up reactor to fake verb
 			client.ClientSet.(*fake.Clientset).AddReactor("delete", "deployments", tt.actionFunc)
-			appManager := NewAppManager(client, testNamespace)
-			err := appManager.DeleteDeployment(testApp, false)
+			appManager := NewAppManager(client, testNamespace, testApp)
+			err := appManager.DeleteDeployment(false)
 			assert.NoError(t, err)
 		})
 	}
@@ -546,8 +545,8 @@ func TestDeleteService(t *testing.T) {
 			client := newFakeKubeClient()
 			// Set up reactor to fake verb
 			client.ClientSet.(*fake.Clientset).AddReactor("delete", "services", tt.actionFunc)
-			appManager := NewAppManager(client, testNamespace)
-			err := appManager.DeleteService(testApp, false)
+			appManager := NewAppManager(client, testNamespace, testApp)
+			err := appManager.DeleteService(false)
 
 			assert.NoError(t, err)
 		})
