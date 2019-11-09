@@ -20,7 +20,7 @@ var runner *utils.TestRunner
 func TestMain(m *testing.M) {
 	runner = utils.NewTestRunner("helloworld")
 
-	runner.AddTestApps([]kube.AppDescription{
+	runner.RegisterTestApps([]kube.AppDescription{
 		{
 			AppName:        "helloworld",
 			DaprEnabled:    true,
@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestHelloWorld(t *testing.T) {
-	ingressURL := runner.AcquireExternalURL("helloworld")
+	ingressURL := runner.AcquireAppExternalURL("helloworld")
 
 	log.Printf("service external url: %s", ingressURL)
 }

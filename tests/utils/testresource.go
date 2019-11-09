@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package utils
 
 import (
@@ -9,8 +14,8 @@ import (
 // Disposable is an interface representing the disposable test resources
 type Disposable interface {
 	Name() string
-	Setup() error
-	TearDown() error
+	Init() error
+	Dispose() error
 }
 
 // TestResources holds initial resources and active resources
@@ -21,13 +26,14 @@ type TestResources struct {
 	activeResourcesLock sync.Mutex
 }
 
-// Add addes disposable implemenation
+// Add adds Disposable resource to resources queue
 func (r *TestResources) Add(dr Disposable) {
 	r.resourcesLock.Lock()
 	defer r.resourcesLock.Unlock()
 	r.resources = append(r.resources, dr)
 }
 
+// dequeueResource dequeus Disposable resource from resources queue
 func (r *TestResources) dequeueResource() Disposable {
 	r.resourcesLock.Lock()
 	defer r.resourcesLock.Unlock()
@@ -39,12 +45,14 @@ func (r *TestResources) dequeueResource() Disposable {
 	return dr
 }
 
+// pushActiveResource pushes Disposable resource to ActiveResource stack
 func (r *TestResources) pushActiveResource(dr Disposable) {
 	r.activeResourcesLock.Lock()
 	defer r.activeResourcesLock.Unlock()
 	r.activeResources = append(r.activeResources, dr)
 }
 
+// popActiveResource pops Disposable resource from ActiveResource stack
 func (r *TestResources) popActiveResource() Disposable {
 	r.activeResourcesLock.Lock()
 	defer r.activeResourcesLock.Unlock()
@@ -56,10 +64,21 @@ func (r *TestResources) popActiveResource() Disposable {
 	return dr
 }
 
-// Init initializes the resources by calling Setup
-func (r *TestResources) Init() error {
+// FindActiveResource finds active resource by resource name
+func (r *TestResources) FindActiveResource(name string) Disposable {
+	for _, res := range r.activeResources {
+		if res.Name() == name {
+			return res
+		}
+	}
+
+	return nil
+}
+
+// Setup initializes the resources by calling Setup
+func (r *TestResources) Setup() error {
 	for dr := r.dequeueResource(); dr != nil; dr = r.dequeueResource() {
-		err := dr.Setup()
+		err := dr.Init()
 		r.pushActiveResource(dr)
 		if err != nil {
 			return err
@@ -68,24 +87,13 @@ func (r *TestResources) Init() error {
 	return nil
 }
 
-// Cleanup initializes the resources by calling TearDown
-func (r *TestResources) Cleanup() error {
+// TearDown initializes the resources by calling Dispose
+func (r *TestResources) TearDown() error {
 	for dr := r.popActiveResource(); dr != nil; dr = r.popActiveResource() {
-		err := dr.TearDown()
+		err := dr.Dispose()
 		if err != nil {
 			log.Errorf("Failed to cleanup. Error %s", err)
 		}
 	}
-	return nil
-}
-
-// FindActiveResource find active resource by resource name
-func (r *TestResources) FindActiveResource(name string) Disposable {
-	for _, res := range r.activeResources {
-		if res.Name() == name {
-			return res
-		}
-	}
-
 	return nil
 }

@@ -49,10 +49,10 @@ func (m *AppManager) Name() string {
 	return m.app.AppName
 }
 
-// Setup installs app by AppDescription
-func (m *AppManager) Setup() error {
-	// TODO: Tear down app if option is required
-	if err := m.TearDown(); err != nil {
+// Init installs app by AppDescription
+func (m *AppManager) Init() error {
+	// TODO: Dispose app if option is required
+	if err := m.Dispose(); err != nil {
 		return err
 	}
 
@@ -73,6 +73,27 @@ func (m *AppManager) Setup() error {
 
 	// Create Ingress endpoint
 	if _, err := m.CreateIngressService(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Dispose deletes deployment and service
+func (m *AppManager) Dispose() error {
+	if err := m.DeleteDeployment(true); err != nil {
+		return err
+	}
+
+	if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDeleted); err != nil {
+		return err
+	}
+
+	if err := m.DeleteService(true); err != nil {
+		return err
+	}
+
+	if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
 		return err
 	}
 
@@ -252,27 +273,6 @@ func (m *AppManager) minikubeNodeIP() string {
 
 	// TODO: Use the better way to get the node ip of minikube
 	return os.Getenv(MiniKubeIPEnvVar)
-}
-
-// TearDown deletes deployment and service
-func (m *AppManager) TearDown() error {
-	if err := m.DeleteDeployment(true); err != nil {
-		return err
-	}
-
-	if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDeleted); err != nil {
-		return err
-	}
-
-	if err := m.DeleteService(true); err != nil {
-		return err
-	}
-
-	if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // DeleteDeployment deletes deployment for the test app

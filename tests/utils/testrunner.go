@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package utils
 
 import (
@@ -24,32 +29,38 @@ func NewTestRunner(runnerID string) *TestRunner {
 	}
 }
 
-// Start is entry point
+// Start is the entry point of Dapr test runner
 func (tr *TestRunner) Start(m testingMInterface) {
+	// TODO: KubeClient will be properly configured by go test arguments
 	kubeClient, _ := kube.NewKubeClient("", "")
 
-	// Build app resources
-	tr.buildKubeAppResources(kubeClient)
+	// Build app resources and setup test apps
+	tr.buildAppResources(kubeClient)
+	tr.AppResources.Setup()
 
-	tr.AppResources.Init()
+	// Executes Test* methods in *_test.go
 	ret := m.Run()
-	tr.AppResources.Cleanup()
+
+	// Tearing down app resources
+	tr.AppResources.TearDown()
 
 	os.Exit(ret)
 }
 
-// AddTestApps adds the test apps which will be deployed before running the test
-func (tr *TestRunner) AddTestApps(apps []kube.AppDescription) {
+// RegisterTestApps adds the test apps which will be deployed before running the test
+func (tr *TestRunner) RegisterTestApps(apps []kube.AppDescription) {
 	tr.testApps = append(tr.testApps, apps...)
 }
 
-func (tr *TestRunner) AcquireExternalURL(name string) string {
-	app := tr.AppResources.FindActiveResource(name)
-	return app.(*kube.AppManager).AcquireExternalURL()
-}
-
-func (tr *TestRunner) buildKubeAppResources(kubeClient *kube.KubeClient) {
+// buildAppResources builds TestResources for the registered test apps for k8s cluster
+func (tr *TestRunner) buildAppResources(kubeClient *kube.KubeClient) {
 	for _, app := range tr.testApps {
 		tr.AppResources.Add(kube.NewAppManager(kubeClient, kube.DaprTestKubeNameSpace, app))
 	}
+}
+
+// AcquireAppExternalURL acquires external url from k8s
+func (tr *TestRunner) AcquireAppExternalURL(name string) string {
+	app := tr.AppResources.FindActiveResource(name)
+	return app.(*kube.AppManager).AcquireExternalURL()
 }
