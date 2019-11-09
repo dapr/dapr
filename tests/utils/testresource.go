@@ -92,7 +92,7 @@ func (r *TestResources) TearDown() error {
 	for dr := r.popActiveResource(); dr != nil; dr = r.popActiveResource() {
 		err := dr.Dispose()
 		if err != nil {
-			log.Errorf("Failed to cleanup. Error %s", err)
+			log.Errorf("Failed to tear down %s. got: %w", dr.Name(), err)
 		}
 	}
 	return nil
