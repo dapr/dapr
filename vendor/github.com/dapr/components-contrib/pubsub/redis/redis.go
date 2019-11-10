@@ -6,8 +6,10 @@
 package redis
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -20,6 +22,7 @@ const (
 	host       = "redisHost"
 	password   = "redisPassword"
 	consumerID = "consumerID"
+	enableTLS  = "enableTLS"
 )
 
 type redisStreams struct {
@@ -44,6 +47,14 @@ func parseRedisMetadata(meta pubsub.Metadata) (metadata, error) {
 		m.password = val
 	}
 
+	if val, ok := meta.Properties[enableTLS]; ok && val != "" {
+		tls, err := strconv.ParseBool(val)
+		if err != nil {
+			return m, fmt.Errorf("redis streams error: can't parse enableTLS field: %s", err)
+		}
+		m.enableTLS = tls
+	}
+
 	if val, ok := meta.Properties[consumerID]; ok && val != "" {
 		m.consumerID = val
 	} else {
@@ -58,16 +69,24 @@ func (r *redisStreams) Init(metadata pubsub.Metadata) error {
 	if err != nil {
 		return err
 	}
-
 	r.metadata = m
 
-	client := redis.NewClient(&redis.Options{
+	options := &redis.Options{
 		Addr:            m.host,
 		Password:        m.password,
 		DB:              0,
 		MaxRetries:      3,
 		MaxRetryBackoff: time.Second * 2,
-	})
+	}
+
+	/* #nosec */
+	if r.metadata.enableTLS {
+		options.TLSConfig = &tls.Config{
+			InsecureSkipVerify: r.metadata.enableTLS,
+		}
+	}
+
+	client := redis.NewClient(options)
 
 	_, err = client.Ping().Result()
 	if err != nil {

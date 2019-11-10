@@ -14,11 +14,11 @@ import (
 
 // Registry is an interface for a component that returns registered state store implementations
 type Registry interface {
-	CreateStateStore(name string) (state.StateStore, error)
+	CreateStateStore(name string) (state.Store, error)
 }
 
 type stateStoreRegistry struct {
-	stateStores map[string]func() state.StateStore
+	stateStores map[string]func() state.Store
 }
 
 var instance *stateStoreRegistry
@@ -28,7 +28,7 @@ var once sync.Once
 func NewStateStoreRegistry() Registry {
 	once.Do(func() {
 		instance = &stateStoreRegistry{
-			stateStores: map[string]func() state.StateStore{},
+			stateStores: map[string]func() state.Store{},
 		}
 	})
 	return instance
@@ -36,11 +36,11 @@ func NewStateStoreRegistry() Registry {
 
 // RegisterStateStore registers a new factory method that creates an instance of a StateStore.
 // The key is the name of the state store, eg. redis
-func RegisterStateStore(name string, factoryMethod func() state.StateStore) {
+func RegisterStateStore(name string, factoryMethod func() state.Store) {
 	instance.stateStores[fmt.Sprintf("state.%s", name)] = factoryMethod
 }
 
-func (s *stateStoreRegistry) CreateStateStore(name string) (state.StateStore, error) {
+func (s *stateStoreRegistry) CreateStateStore(name string) (state.Store, error) {
 	for key, method := range s.stateStores {
 		if key == name {
 			return method(), nil

@@ -5,6 +5,8 @@ Pub Subs provide a common way to interact with different message bus implementat
 Currently supported pub-subs are:
 
 * Redis Streams
+* NATS
+* Azure Service Bus
 
 ## Implementing a new Pub Sub
 

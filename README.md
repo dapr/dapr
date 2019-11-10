@@ -1,21 +1,15 @@
 # Dapr - Any language, any framework, anywhere
 
-Dapr is a portable, event-driven, runtime for building distributed applications across cloud and edge.
-
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
 [![Gitter](https://badges.gitter.im/Dapr/community.svg)](https://gitter.im/Dapr/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-- [dapr.io](https://dapr.io)
-- [@DaprDev](https://twitter.com/DaprDev)
-- [gitter.im/Dapr](https://gitter.im/Dapr/community)
-
-__Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
-
-Dapr is a portable, event-driven runtime that makes it easy for developers to build resilient, stateless and stateful microservices that run on the cloud and edge and embraces the diversity of languages and developer frameworks.
+Dapr is a portable, serverless, event-driven runtime that makes it easy for developers to build resilient, stateless and stateful microservices that run on the cloud and edge and embraces the diversity of languages and developer frameworks.
 
 Dapr codifies the *best practices* for building microservice applications into open, independent, building blocks that enable you to build portable applications with the language and framework of your choice. Each building block is independent and you can use one, some, or all of them in your application.
+
+__Note: Dapr is currently under community development in alpha phase. Dapr is not expected to be used for production workloads until its 1.0 stable release.__
 
 ![Dapr Conceptual Model](/img/dapr_conceptual_model.jpg)
 
@@ -56,7 +50,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Opt-in stateful models: Strong/Eventual consistency, First-write/Last-write wins
 * Cross platform virtual actors
 * Rate limiting
-* Built-in distributed tracing using Open Telemetry
+* Built-in distributed tracing using [OpenTelemetry](https://opentelemetry.io)
 * Runs natively on Kubernetes using a dedicated Operator and CRDs
 * Supports all programming languages via HTTP and gRPC
 * Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
@@ -82,13 +76,14 @@ We want your contributions and suggestions. One of the easiest ways to contribut
 
 | Engagement |  |
 |:-----|:------------|
-|IM chat  | https://gitter.im/Dapr/community 
+| IM chat  | https://gitter.im/Dapr/community 
 | Mailing list | https://groups.google.com/forum/#!forum/dapr-dev
 | Meeting dates |  [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
-| Meeting link | https://zoom.us/j/4012224986
-| Meeting notes | https://hackmd.io/xSrdvqY0TSyllYPEmOSEZQ?both
+| Meeting link | https://aka.ms/dapr-community-call
+| Meeting notes | https://aka.ms/dapr-meeting-notes
 | Twitter | [@daprdev](https://twitter.com/daprdev)
 | Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
+| MS Ignite 2019 | [Mark Russinovich presents The Future of Cloud Native Applications with OAM and Dapr](https://myignite.techcommunity.microsoft.com/sessions/82059?source=sessions)
 
 ### Contributing to Dapr
 
@@ -114,6 +109,8 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 | [JS-sdk](https://github.com/dapr/js-sdk) | Dapr SDK for JavaScript
 | [Python-sdk](https://github.com/dapr/python-sdk) | Dapr SDK for Python
 | [Dotnet-sdk](https://github.com/dapr/dotnet-sdk) | Dapr SDK for .NET Core
+| [Rust-sdk](https://github.com/dapr/rust-sdk) | Dapr SDK for Rust
+| [Cpp-sdk](https://github.com/dapr/cpp-sdk) | Dapr SDK for C++
 
 
 ## Code of Conduct

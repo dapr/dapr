@@ -34,7 +34,7 @@ type api struct {
 	endpoints             []Endpoint
 	directMessaging       messaging.DirectMessaging
 	appChannel            channel.AppChannel
-	stateStore            state.StateStore
+	stateStore            state.Store
 	json                  jsoniter.API
 	actor                 actors.Actors
 	pubSub                pubsub.PubSub
@@ -59,7 +59,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.StateStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.Store, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -305,7 +305,7 @@ func (a *api) onDeleteState(c *routing.Context) error {
 	}
 
 	req := state.DeleteRequest{
-		Key:  key,
+		Key:  a.getModifiedStateKey(key),
 		ETag: etag,
 		Options: state.DeleteStateOption{
 			Concurrency: concurrency,

@@ -26,5 +26,4 @@ func TestLoad(t *testing.T) {
 		assert.NotNil(t, p)
 		assert.Nil(t, e)
 	})
-
 }
