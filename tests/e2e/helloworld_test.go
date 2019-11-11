@@ -8,9 +8,6 @@
 package e2e
 
 import (
-	"fmt"
-	"io/ioutil"
-	"net/http"
 	"testing"
 
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -21,9 +18,19 @@ import (
 var runner *utils.TestRunner
 
 func TestMain(m *testing.M) {
+	// These apps will be deployed for helloworld test before starting actual test
+	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
 			AppName:        "helloworld",
+			DaprEnabled:    true,
+			ImageName:      "e2e-helloworld",
+			RegistryName:   "youngp",
+			Replicas:       1,
+			IngressEnabled: true,
+		},
+		{
+			AppName:        "helloworld-1",
 			DaprEnabled:    true,
 			ImageName:      "e2e-helloworld",
 			RegistryName:   "youngp",
@@ -43,11 +50,6 @@ func TestHelloWorld(t *testing.T) {
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Call endpoint for "helloworld" test app
-	resp, err := http.Get(fmt.Sprintf("http://%s", externalURL))
-	require.NoError(t, err)
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	require.NoError(t, err)
-
-	require.Equal(t, body, []byte("Hello, Dapr"))
+	resp, _ := httpGet(externalURL)
+	require.Equal(t, resp, []byte("Hello, Dapr"))
 }
