@@ -88,12 +88,14 @@ func (r *TestResources) setup() error {
 }
 
 // TearDown initializes the resources by calling Dispose
-func (r *TestResources) tearDown() error {
+func (r *TestResources) tearDown() (retErr error) {
+	retErr = nil
 	for dr := r.popActiveResource(); dr != nil; dr = r.popActiveResource() {
 		err := dr.Dispose()
 		if err != nil {
+			retErr = err
 			log.Errorf("Failed to tear down %s. got: %w", dr.Name(), err)
 		}
 	}
-	return nil
+	return retErr
 }

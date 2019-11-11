@@ -6,10 +6,11 @@
 package utils
 
 import (
-	"os"
-
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
+
+// runnerFailExitCode is the exit code when test runner setup is failed
+const runnerFailExitCode = 1
 
 // testingMInterface interface is used for testing TestRunner
 type testingMInterface interface {
@@ -44,21 +45,29 @@ func NewTestRunner(id string, apps []kube.AppDescription) *TestRunner {
 }
 
 // Start is the entry point of Dapr test runner
-func (tr *TestRunner) Start(m testingMInterface) {
+func (tr *TestRunner) Start(m testingMInterface) int {
 	// TODO: Add logging and reporting initialization
 
 	// Setup testing platform
-	tr.Platform.setup()
+	err := tr.Platform.setup()
+	defer tr.tearDown()
+	if err != nil {
+		return runnerFailExitCode
+	}
 
 	// Install apps
-	tr.Platform.AddTestApps(tr.initialApps)
-	tr.Platform.InstallApps()
+	if err := tr.Platform.AddTestApps(tr.initialApps); err != nil {
+		return runnerFailExitCode
+	}
+	if err := tr.Platform.InstallApps(); err != nil {
+		return runnerFailExitCode
+	}
 
 	// Executes Test* methods in *_test.go
-	ret := m.Run()
+	return m.Run()
+}
 
+func (tr *TestRunner) tearDown() {
 	// Tearing down platform
 	tr.Platform.tearDown()
-
-	os.Exit(ret)
 }

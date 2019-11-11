@@ -8,6 +8,7 @@
 package e2e
 
 import (
+	"os"
 	"testing"
 
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -40,8 +41,7 @@ func TestMain(m *testing.M) {
 	}
 
 	runner = utils.NewTestRunner("helloworld", testApps)
-
-	runner.Start(m)
+	os.Exit(runner.Start(m))
 }
 
 func TestHelloDaprApp(t *testing.T) {
