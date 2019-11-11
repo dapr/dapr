@@ -45,12 +45,6 @@ func (m *MockPlatform) InstallApps() error {
 	return args.Error(0)
 }
 
-func newFakeRunner() *TestRunner {
-	return &TestRunner{
-		id: "fakeRunner",
-	}
-}
-
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{
