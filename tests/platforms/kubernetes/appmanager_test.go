@@ -117,49 +117,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 		assert.Equal(t, 2, getVerbCalled)
 	})
 
-	t.Run("deployment is in deleted state - replica 0", func(t *testing.T) {
-		client := newFakeKubeClient()
-		getVerbCalled := 0
-
-		// Set up reactor to fake verb
-		client.ClientSet.(*fake.Clientset).AddReactor(
-			"*",
-			"deployments",
-			func(action core.Action) (bool, runtime.Object, error) {
-				ns := action.GetNamespace()
-				assert.Equal(t, testNamespace, ns)
-
-				switch action.GetVerb() {
-				case "create":
-					// return the same deployment object
-					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
-					createdDeploymentObj.Status.Replicas = testApp.Replicas
-				case "get":
-					// set 0 to ReadyReplicas when WaitUntilDeploymentState called get deployments 2 times
-					if getVerbCalled == 2 {
-						createdDeploymentObj.Status.Replicas = 0
-					} else {
-						getVerbCalled++
-					}
-				}
-				return true, createdDeploymentObj, nil
-			})
-
-		appManager := NewAppManager(client, testNamespace, testApp)
-
-		// act
-		_, err := appManager.Deploy()
-		assert.NoError(t, err)
-
-		// assert
-		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDeleted)
-
-		assert.NoError(t, err)
-		assert.Equal(t, int32(0), d.Status.ReadyReplicas)
-		assert.Equal(t, 2, getVerbCalled)
-	})
-
-	t.Run("deployment is in deleted state - NotFound", func(t *testing.T) {
+	t.Run("deployment is in deleted state", func(t *testing.T) {
 		client := newFakeKubeClient()
 		getVerbCalled := 0
 

@@ -143,7 +143,7 @@ func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) 
 
 // IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero
 func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err error) bool {
-	return (err != nil && errors.IsNotFound(err)) || deployment.Status.Replicas == 0
+	return err != nil && errors.IsNotFound(err)
 }
 
 // ValidiateSideCar validates that dapr side car is running in dapr enabled pods
