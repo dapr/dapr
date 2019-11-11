@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "helloworld",
+			AppName:        "hellodapr",
 			DaprEnabled:    true,
 			ImageName:      "e2e-helloworld",
 			RegistryName:   "youngp",
@@ -30,7 +30,7 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 		},
 		{
-			AppName:        "helloworld-1",
+			AppName:        "hellodapr1",
 			DaprEnabled:    true,
 			ImageName:      "e2e-helloworld",
 			RegistryName:   "youngp",
@@ -44,12 +44,22 @@ func TestMain(m *testing.M) {
 	runner.Start(m)
 }
 
-func TestHelloWorld(t *testing.T) {
-	// Get Ingress external url for "helloworld" test app
-	externalURL := runner.Platform.AcquireAppExternalURL("helloworld")
+func TestHelloDaprApp(t *testing.T) {
+	// Get Ingress external url for "hellodapr" test app
+	externalURL := runner.Platform.AcquireAppExternalURL("hellodapr")
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-	// Call endpoint for "helloworld" test app
+	// Call endpoint for "hellodapr" test app
+	resp, _ := httpGet(externalURL)
+	require.Equal(t, resp, []byte("Hello, Dapr"))
+}
+
+func TestHelloDapr1App(t *testing.T) {
+	// Get Ingress external url for "hellodapr1" test app
+	externalURL := runner.Platform.AcquireAppExternalURL("hellodapr1")
+	require.NotEmpty(t, externalURL, "external URL must not be empty")
+
+	// Call endpoint for "hellodapr1" test app
 	resp, _ := httpGet(externalURL)
 	require.Equal(t, resp, []byte("Hello, Dapr"))
 }
