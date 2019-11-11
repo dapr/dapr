@@ -76,7 +76,7 @@ func (r *TestResources) FindActiveResource(name string) Disposable {
 }
 
 // Setup initializes the resources by calling Setup
-func (r *TestResources) Setup() error {
+func (r *TestResources) setup() error {
 	for dr := r.dequeueResource(); dr != nil; dr = r.dequeueResource() {
 		err := dr.Init()
 		r.pushActiveResource(dr)
@@ -88,7 +88,7 @@ func (r *TestResources) Setup() error {
 }
 
 // TearDown initializes the resources by calling Dispose
-func (r *TestResources) TearDown() error {
+func (r *TestResources) tearDown() error {
 	for dr := r.popActiveResource(); dr != nil; dr = r.popActiveResource() {
 		err := dr.Dispose()
 		if err != nil {

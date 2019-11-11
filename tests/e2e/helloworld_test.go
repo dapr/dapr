@@ -21,9 +21,7 @@ import (
 var runner *utils.TestRunner
 
 func TestMain(m *testing.M) {
-	runner = utils.NewTestRunner("helloworld")
-
-	runner.RegisterTestApps([]kube.AppDescription{
+	testApps := []kube.AppDescription{
 		{
 			AppName:        "helloworld",
 			DaprEnabled:    true,
@@ -32,14 +30,16 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 		},
-	})
+	}
+
+	runner = utils.NewTestRunner("helloworld", testApps)
 
 	runner.Start(m)
 }
 
 func TestHelloWorld(t *testing.T) {
 	// Get Ingress external url for "helloworld" test app
-	externalURL := runner.AcquireAppExternalURL("helloworld")
+	externalURL := runner.Platform.AcquireAppExternalURL("helloworld")
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Call endpoint for "helloworld" test app

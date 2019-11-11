@@ -11,56 +11,52 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
-// testMInterfaces interface is used for testing TestRunner
+// testingMInterface interface is used for testing TestRunner
 type testingMInterface interface {
 	Run() int
 }
 
+// testingPlatform defines the testing platform for test runner
+type testingPlatform interface {
+	setup() error
+	tearDown() error
+
+	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
+	AddTestApps(apps []kube.AppDescription) error
+	InstallApps() error
+	AcquireAppExternalURL(name string) string
+}
+
 // TestRunner holds appmanager
 type TestRunner struct {
-	AppResources *TestResources
-	testApps     []kube.AppDescription
+	id          string
+	initialApps []kube.AppDescription
+	Platform    testingPlatform
 }
 
 // NewTestRunner returns TestRunner instance for e2e test
-func NewTestRunner(runnerID string) *TestRunner {
+func NewTestRunner(id string, apps []kube.AppDescription) *TestRunner {
 	return &TestRunner{
-		AppResources: new(TestResources),
+		id:          id,
+		initialApps: apps,
+		Platform:    NewKubeTestPlatform(),
 	}
 }
 
 // Start is the entry point of Dapr test runner
 func (tr *TestRunner) Start(m testingMInterface) {
-	// TODO: KubeClient will be properly configured by go test arguments
-	kubeClient, _ := kube.NewKubeClient("", "")
-
 	// Build app resources and setup test apps
-	tr.buildAppResources(kubeClient)
-	tr.AppResources.Setup()
+	tr.Platform.setup()
+
+	// Install apps
+	tr.Platform.AddTestApps(tr.initialApps)
+	tr.Platform.InstallApps()
 
 	// Executes Test* methods in *_test.go
 	ret := m.Run()
 
 	// Tearing down app resources
-	tr.AppResources.TearDown()
+	tr.Platform.tearDown()
 
 	os.Exit(ret)
-}
-
-// RegisterTestApps adds the test apps which will be deployed before running the test
-func (tr *TestRunner) RegisterTestApps(apps []kube.AppDescription) {
-	tr.testApps = append(tr.testApps, apps...)
-}
-
-// buildAppResources builds TestResources for the registered test apps for k8s cluster
-func (tr *TestRunner) buildAppResources(kubeClient *kube.KubeClient) {
-	for _, app := range tr.testApps {
-		tr.AppResources.Add(kube.NewAppManager(kubeClient, kube.DaprTestKubeNameSpace, app))
-	}
-}
-
-// AcquireAppExternalURL acquires external url from k8s
-func (tr *TestRunner) AcquireAppExternalURL(name string) string {
-	app := tr.AppResources.FindActiveResource(name)
-	return app.(*kube.AppManager).AcquireExternalURL()
 }
