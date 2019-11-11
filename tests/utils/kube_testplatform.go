@@ -39,7 +39,7 @@ func (c *KubeTestPlatform) tearDown() error {
 
 // AddTestApps adds test apps to disposable App Resource queues
 func (c *KubeTestPlatform) AddTestApps(apps []kube.AppDescription) error {
-	if c.AppResources != nil {
+	if c.kubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}
 
@@ -58,7 +58,7 @@ func (c *KubeTestPlatform) InstallApps() error {
 	return nil
 }
 
-// AcquireAppExternalURL returns the external url for name app
+// AcquireAppExternalURL returns the external url for 'name'
 func (c *KubeTestPlatform) AcquireAppExternalURL(name string) string {
 	app := c.AppResources.FindActiveResource(name)
 	return app.(*kube.AppManager).AcquireExternalURL()

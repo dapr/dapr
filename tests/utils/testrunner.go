@@ -21,15 +21,15 @@ type testingPlatform interface {
 	setup() error
 	tearDown() error
 
-	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
+	AcquireAppExternalURL(name string) string
 	AddTestApps(apps []kube.AppDescription) error
 	InstallApps() error
-	AcquireAppExternalURL(name string) string
 }
 
 // TestRunner holds appmanager
 type TestRunner struct {
-	id          string
+	id string
+	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
 	initialApps []kube.AppDescription
 	Platform    testingPlatform
 }
@@ -45,7 +45,9 @@ func NewTestRunner(id string, apps []kube.AppDescription) *TestRunner {
 
 // Start is the entry point of Dapr test runner
 func (tr *TestRunner) Start(m testingMInterface) {
-	// Build app resources and setup test apps
+	// TODO: Add logging and reporting initialization
+
+	// Setup testing platform
 	tr.Platform.setup()
 
 	// Install apps
@@ -55,7 +57,7 @@ func (tr *TestRunner) Start(m testingMInterface) {
 	// Executes Test* methods in *_test.go
 	ret := m.Run()
 
-	// Tearing down app resources
+	// Tearing down platform
 	tr.Platform.tearDown()
 
 	os.Exit(ret)
