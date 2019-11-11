@@ -11,6 +11,7 @@ import (
 	"github.com/dapr/components-contrib/state/consul"
 	"github.com/dapr/components-contrib/state/cosmosdb"
 	"github.com/dapr/components-contrib/state/etcd"
+	"github.com/dapr/components-contrib/state/firestore"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	"github.com/dapr/components-contrib/state/redis"
@@ -42,5 +43,8 @@ func Load() {
 	})
 	RegisterStateStore("zookeeper", func() state.Store {
 		return zookeeper.NewZookeeperStateStore()
+	})
+	RegisterStateStore("gcp.firestore", func() state.Store {
+		return firestore.NewFirestoreStateStore()
 	})
 }
