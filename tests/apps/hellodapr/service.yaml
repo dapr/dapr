@@ -5,12 +5,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: helloworld
+  name: hellodapr
   labels:
-    testapp: helloworld
+    testapp: hellodapr
 spec:
   selector:
-    testapp: helloworld
+    testapp: hellodapr
   ports:
   - protocol: TCP
     port: 80
@@ -21,26 +21,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: helloworld
+  name: hellodapr
   labels:
-    testapp: helloworld
+    testapp: hellodapr
 spec:
   replicas: 1
   selector:
     matchLabels:
-      testapp: helloworld
+      testapp: hellodapr
   template:
     metadata:
       labels:
-        testapp: helloworld
+        testapp: hellodapr
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "helloworld"
+        dapr.io/id: "hellodapr"
         dapr.io/port: "3000"
     spec:
       containers:
-      - name: helloworld
-        image: dapriotest/helloworld
+      - name: hellodapr
+        image: dapriotest/hellodapr
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
