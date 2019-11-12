@@ -84,8 +84,7 @@ We want your contributions and suggestions. One of the easiest ways to contribut
 | Meeting notes | https://aka.ms/dapr-meeting-notes
 | Twitter | [@daprdev](https://twitter.com/daprdev)
 | Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
-| MS Ignite 2019 | [THR2267 - Mark Russinovich presents next generation app development and deployment](https://myignite.techcommunity.microsoft.com/sessions/84599)  
-[Mark Russinovich presents The Future of Cloud Native Applications with OAM and Dapr](https://myignite.techcommunity.microsoft.com/sessions/82059)
+| MS Ignite 2019 | [THR2267 - Mark Russinovich presents next generation app development and deployment](https://myignite.techcommunity.microsoft.com/sessions/84599)  [Mark Russinovich presents The Future of Cloud Native Applications with OAM and Dapr](https://myignite.techcommunity.microsoft.com/sessions/82059)
 
 ### Contributing to Dapr
 
