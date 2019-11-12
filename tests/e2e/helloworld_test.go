@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var runner *utils.TestRunner
+var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
 	// These apps will be deployed for helloworld test before starting actual test
@@ -40,13 +40,13 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	runner = runner.NewTestRunner("helloworld", testApps)
-	os.Exit(runner.Start(m))
+	tr = runner.NewTestRunner("helloworld", testApps)
+	os.Exit(tr.Start(m))
 }
 
 func TestHelloDaprApp(t *testing.T) {
 	// Get Ingress external url for "hellodapr" test app
-	externalURL := runner.Platform.AcquireAppExternalURL("hellodapr")
+	externalURL := tr.Platform.AcquireAppExternalURL("hellodapr")
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Call endpoint for "hellodapr" test app
@@ -56,7 +56,7 @@ func TestHelloDaprApp(t *testing.T) {
 
 func TestHelloDapr1App(t *testing.T) {
 	// Get Ingress external url for "hellodapr1" test app
-	externalURL := runner.Platform.AcquireAppExternalURL("hellodapr1")
+	externalURL := tr.Platform.AcquireAppExternalURL("hellodapr1")
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Call endpoint for "hellodapr1" test app
