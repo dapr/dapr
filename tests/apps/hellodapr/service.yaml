@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
       - name: hellodapr
-        image: dapriotest/hellodapr
+        image: dapriotest/e2e-hellodapr
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
