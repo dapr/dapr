@@ -3,7 +3,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package utils
+package runner
 
 import (
 	"sync"

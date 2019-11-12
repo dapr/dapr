@@ -3,7 +3,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package utils
+package runner
 
 import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"

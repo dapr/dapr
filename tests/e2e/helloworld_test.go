@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
-	"github.com/dapr/dapr/tests/utils"
+	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +40,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	runner = utils.NewTestRunner("helloworld", testApps)
+	runner = runner.NewTestRunner("helloworld", testApps)
 	os.Exit(runner.Start(m))
 }
 
