@@ -58,7 +58,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Lightweight (58MB binary, 4MB physical memory)
 * Runs as a sidecar - removes the need for special SDKs or libraries
 * Dedicated CLI - developer friendly experience with easy debugging
-* Clients for Java, Dotnet, Go, Javascript and Python
+* Clients for Java, .NET Core, Go, Javascript, Python, Rust and C++
 
 ## Get Started using Dapr
 
