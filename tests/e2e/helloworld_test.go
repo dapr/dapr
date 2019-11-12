@@ -8,66 +8,58 @@
 package e2e
 
 import (
-	"log"
+	"os"
 	"testing"
 
-	"github.com/dapr/dapr/tests/platforms/kubernetes"
-	"github.com/dapr/dapr/tests/utils"
+	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
+	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
 )
 
-// WORK IN PROGRESS
+var tr *runner.TestRunner
 
-// This is the example to show how AppManager is used for the e2e tests.
-// The subsequent PRs will introduce test framework which encapsulates the
-// test app deployment and verification steps.
-
-func TestHelloWorld(t *testing.T) {
-	kubeClient, err := kubernetes.NewKubeClient("", "")
-	require.NoError(t, err)
-
-	appManager := kubernetes.NewAppManager(kubeClient, kubernetes.DaprTestKubeNameSpace)
-
-	// Test App description
-	testApp := utils.AppDescription{
-		AppName:        "helloword",
-		DaprEnabled:    true,
-		ImageName:      "helloworld",
-		RegistryName:   "dapriotest",
-		Replicas:       1,
-		IngressEnabled: true,
+func TestMain(m *testing.M) {
+	// These apps will be deployed for helloworld test before starting actual test
+	// and will be cleaned up after all tests are finished automatically
+	testApps := []kube.AppDescription{
+		{
+			AppName:        "hellodapr",
+			DaprEnabled:    true,
+			ImageName:      "e2e-helloworld",
+			RegistryName:   "youngp",
+			Replicas:       1,
+			IngressEnabled: true,
+		},
+		{
+			AppName:        "hellodapr1",
+			DaprEnabled:    true,
+			ImageName:      "e2e-helloworld",
+			RegistryName:   "youngp",
+			Replicas:       1,
+			IngressEnabled: true,
+		},
 	}
 
-	// Clean up app and services before starting test
-	appManager.Cleanup(testApp)
+	tr = runner.NewTestRunner("helloworld", testApps)
+	os.Exit(tr.Start(m))
+}
 
-	// Tear down when the test is completed
-	defer appManager.Cleanup(testApp)
+func TestHelloDaprApp(t *testing.T) {
+	// Get Ingress external url for "hellodapr" test app
+	externalURL := tr.Platform.AcquireAppExternalURL("hellodapr")
+	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-	// Deploy app and wait until deployment is done
-	_, err = appManager.Deploy(testApp)
-	require.NoError(t, err)
-	_, err = appManager.WaitUntilDeploymentState(testApp, appManager.IsDeploymentDone)
-	require.NoError(t, err)
+	// Call endpoint for "hellodapr" test app
+	resp, _ := httpGet(externalURL)
+	require.Equal(t, resp, []byte("Hello, Dapr"))
+}
 
-	// Validate daprd side car is injected
-	ok, err := appManager.ValidiateSideCar(testApp)
-	require.NoError(t, err)
-	require.True(t, ok)
+func TestHelloDapr1App(t *testing.T) {
+	// Get Ingress external url for "hellodapr1" test app
+	externalURL := tr.Platform.AcquireAppExternalURL("hellodapr1")
+	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-	// Create Ingress endpoint
-	_, err = appManager.CreateIngressService(testApp)
-	require.NoError(t, err)
-
-	// Wait until external ip is assigned
-	svc, err := appManager.WaitUntilServiceState(testApp, appManager.IsServiceIngressReady)
-	require.NoError(t, err)
-
-	// Get external url
-	externalURL := appManager.AcquireExternalURLFromService(svc)
-
-	// Begin tests
-	log.Printf("%s service external url: %s", testApp.AppName, externalURL)
-
-	// TODO: run test
+	// Call endpoint for "hellodapr1" test app
+	resp, _ := httpGet(externalURL)
+	require.Equal(t, resp, []byte("Hello, Dapr"))
 }
