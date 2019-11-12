@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package utils
 
 import (
@@ -37,8 +42,8 @@ func (c *KubeTestPlatform) tearDown() error {
 	return nil
 }
 
-// AddTestApps adds test apps to disposable App Resource queues
-func (c *KubeTestPlatform) AddTestApps(apps []kube.AppDescription) error {
+// AddApps adds test apps to disposable App Resource queues
+func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
 	if c.kubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}

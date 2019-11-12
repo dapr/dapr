@@ -12,27 +12,31 @@ import (
 // runnerFailExitCode is the exit code when test runner setup is failed
 const runnerFailExitCode = 1
 
-// testingMInterface interface is used for testing TestRunner
-type testingMInterface interface {
+// runnable is an interface to implement testing.M
+type runnable interface {
 	Run() int
 }
 
-// testingPlatform defines the testing platform for test runner
-type testingPlatform interface {
+// PlatformInterface defines the testing platform for test runner
+type PlatformInterface interface {
 	setup() error
 	tearDown() error
 
 	AcquireAppExternalURL(name string) string
-	AddTestApps(apps []kube.AppDescription) error
+	AddApps(apps []kube.AppDescription) error
 	InstallApps() error
 }
 
-// TestRunner holds appmanager
+// TestRunner holds initial test apps and testing platform instance
+// maintains apps and platform for e2e test
 type TestRunner struct {
+	// id is test runner id which will be used for logging
 	id string
 	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
 	initialApps []kube.AppDescription
-	Platform    testingPlatform
+
+	// Platform is the testing platform instances
+	Platform PlatformInterface
 }
 
 // NewTestRunner returns TestRunner instance for e2e test
@@ -45,7 +49,7 @@ func NewTestRunner(id string, apps []kube.AppDescription) *TestRunner {
 }
 
 // Start is the entry point of Dapr test runner
-func (tr *TestRunner) Start(m testingMInterface) int {
+func (tr *TestRunner) Start(m runnable) int {
 	// TODO: Add logging and reporting initialization
 
 	// Setup testing platform
@@ -56,7 +60,7 @@ func (tr *TestRunner) Start(m testingMInterface) int {
 	}
 
 	// Install apps
-	if err := tr.Platform.AddTestApps(tr.initialApps); err != nil {
+	if err := tr.Platform.AddApps(tr.initialApps); err != nil {
 		return runnerFailExitCode
 	}
 	if err := tr.Platform.InstallApps(); err != nil {
@@ -70,4 +74,6 @@ func (tr *TestRunner) Start(m testingMInterface) int {
 func (tr *TestRunner) tearDown() {
 	// Tearing down platform
 	tr.Platform.tearDown()
+
+	// TODO: Add the resources which will be tearing down
 }
