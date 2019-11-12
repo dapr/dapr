@@ -17,7 +17,8 @@ __Note: Dapr is currently under community development in alpha phase. Dapr is no
 
 - Enable developers using *any* language or framework to write distributed applications
 - Solve the hard problems developers face building microservice applications by providing best practice building blocks
-- Be community driven, open and vendor neutral, seeking new contributors
+- Be community driven, open and vendor neutral
+- Gain new contributors
 - Provide consistency and portability through open APIs
 - Be platform agnostic across cloud and edge
 - Embrace extensibility and provide pluggable components without vendor lock-in
