@@ -40,12 +40,12 @@ func (m *MockPlatform) AcquireAppExternalURL(name string) string {
 	return args.String(0)
 }
 
-func (m *MockPlatform) AddApps(apps []kube.AppDescription) error {
+func (m *MockPlatform) addApps(apps []kube.AppDescription) error {
 	args := m.Called(apps)
 	return args.Error(0)
 }
 
-func (m *MockPlatform) InstallApps() error {
+func (m *MockPlatform) installApps() error {
 	args := m.Called()
 	return args.Error(0)
 }
@@ -74,8 +74,8 @@ func TestStartRunner(t *testing.T) {
 		mockPlatform := new(MockPlatform)
 		mockPlatform.On("tearDown").Return(nil)
 		mockPlatform.On("setup").Return(nil)
-		mockPlatform.On("AddApps", fakeTestApps).Return(nil)
-		mockPlatform.On("InstallApps").Return(nil)
+		mockPlatform.On("addApps", fakeTestApps).Return(nil)
+		mockPlatform.On("installApps").Return(nil)
 
 		fakeRunner := &TestRunner{
 			id:          "fakeRunner",
@@ -88,16 +88,16 @@ func TestStartRunner(t *testing.T) {
 
 		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
 		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
-		mockPlatform.AssertNumberOfCalls(t, "AddApps", 1)
-		mockPlatform.AssertNumberOfCalls(t, "InstallApps", 1)
+		mockPlatform.AssertNumberOfCalls(t, "addApps", 1)
+		mockPlatform.AssertNumberOfCalls(t, "installApps", 1)
 	})
 
 	t.Run("setup is failed, but teardown is called", func(t *testing.T) {
 		mockPlatform := new(MockPlatform)
 		mockPlatform.On("setup").Return(fmt.Errorf("setup is failed"))
 		mockPlatform.On("tearDown").Return(nil)
-		mockPlatform.On("AddApps", fakeTestApps).Return(nil)
-		mockPlatform.On("InstallApps").Return(nil)
+		mockPlatform.On("addApps", fakeTestApps).Return(nil)
+		mockPlatform.On("installApps").Return(nil)
 
 		fakeRunner := &TestRunner{
 			id:          "fakeRunner",
@@ -110,7 +110,7 @@ func TestStartRunner(t *testing.T) {
 
 		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
 		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
-		mockPlatform.AssertNumberOfCalls(t, "AddApps", 0)
-		mockPlatform.AssertNumberOfCalls(t, "InstallApps", 0)
+		mockPlatform.AssertNumberOfCalls(t, "addApps", 0)
+		mockPlatform.AssertNumberOfCalls(t, "installApps", 0)
 	})
 }

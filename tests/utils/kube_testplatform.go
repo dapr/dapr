@@ -42,8 +42,8 @@ func (c *KubeTestPlatform) tearDown() error {
 	return nil
 }
 
-// AddApps adds test apps to disposable App Resource queues
-func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
+// addApps adds test apps to disposable App Resource queues
+func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	if c.kubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}
@@ -55,8 +55,8 @@ func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
 	return nil
 }
 
-// InstallApps installs the apps in AppResource queue sequentially
-func (c *KubeTestPlatform) InstallApps() error {
+// installApps installs the apps in AppResource queue sequentially
+func (c *KubeTestPlatform) installApps() error {
 	if err := c.AppResources.setup(); err != nil {
 		return err
 	}

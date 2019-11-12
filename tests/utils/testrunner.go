@@ -21,10 +21,10 @@ type runnable interface {
 type PlatformInterface interface {
 	setup() error
 	tearDown() error
+	addApps(apps []kube.AppDescription) error
+	installApps() error
 
 	AcquireAppExternalURL(name string) string
-	AddApps(apps []kube.AppDescription) error
-	InstallApps() error
 }
 
 // TestRunner holds initial test apps and testing platform instance
@@ -60,10 +60,10 @@ func (tr *TestRunner) Start(m runnable) int {
 	}
 
 	// Install apps
-	if err := tr.Platform.AddApps(tr.initialApps); err != nil {
+	if err := tr.Platform.addApps(tr.initialApps); err != nil {
 		return runnerFailExitCode
 	}
-	if err := tr.Platform.InstallApps(); err != nil {
+	if err := tr.Platform.installApps(); err != nil {
 		return runnerFailExitCode
 	}
 
