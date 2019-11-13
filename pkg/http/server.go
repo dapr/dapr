@@ -28,12 +28,12 @@ type Server interface {
 type server struct {
 	config      ServerConfig
 	tracingSpec config.TracingSpec
-	pipeline    http_middleware.HTTPPipeline
+	pipeline    http_middleware.Pipeline
 	api         API
 }
 
 // NewServer returns a new HTTP server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pipeline http_middleware.HTTPPipeline) Server {
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pipeline http_middleware.Pipeline) Server {
 	return &server{
 		api:         api,
 		config:      config,

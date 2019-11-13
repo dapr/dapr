@@ -918,7 +918,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{ExporterType: "string"}
-	pipe := http_middleware.HTTPPipeline{}
+	pipe := http_middleware.Pipeline{}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -962,18 +962,18 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	})
 }
 
-func buildHTTPPineline(spec config.PipelineSpec) http_middleware.HTTPPipeline {
+func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 	registry := http_middleware_loader.NewRegistry()
 	http_middleware_loader.Load()
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
 		handler, err := registry.CreateMiddleware(spec.Handlers[i].Name)
 		if err != nil {
-			return http_middleware.HTTPPipeline{}
+			return http_middleware.Pipeline{}
 		}
 		handlers = append(handlers, handler)
 	}
-	return http_middleware.HTTPPipeline{Handlers: handlers}
+	return http_middleware.Pipeline{Handlers: handlers}
 }
 
 func TestSinglePipelineWithTracer(t *testing.T) {
@@ -1098,7 +1098,7 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 	}
 }
 
-func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline http_middleware.HTTPPipeline, endpoints []Endpoint) {
+func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline http_middleware.Pipeline, endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {

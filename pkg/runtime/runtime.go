@@ -193,17 +193,17 @@ func (a *DaprRuntime) initRuntime() error {
 	return nil
 }
 
-func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.HTTPPipeline, error) {
+func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 	http_middleware_loader.Load()
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
 		handler, err := a.httpMiddlewareRegistry.CreateMiddleware(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
 		if err != nil {
-			return http_middleware.HTTPPipeline{}, err
+			return http_middleware.Pipeline{}, err
 		}
 		handlers = append(handlers, handler)
 	}
-	return http_middleware.HTTPPipeline{Handlers: handlers}, nil
+	return http_middleware.Pipeline{Handlers: handlers}, nil
 }
 
 func (a *DaprRuntime) initBindings() {
@@ -434,7 +434,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 	return err
 }
 
-func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.HTTPPipeline) {
+func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
