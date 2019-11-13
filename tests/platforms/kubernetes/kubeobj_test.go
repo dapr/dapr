@@ -8,13 +8,12 @@ package kubernetes
 import (
 	"testing"
 
-	"github.com/dapr/dapr/tests/utils"
 	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 )
 
 func TestBuildDeploymentObject(t *testing.T) {
-	testApp := utils.AppDescription{
+	testApp := AppDescription{
 		AppName:        "testapp",
 		DaprEnabled:    true,
 		ImageName:      "helloworld",
@@ -47,7 +46,7 @@ func TestBuildDeploymentObject(t *testing.T) {
 }
 
 func TestBuildServiceObject(t *testing.T) {
-	testApp := utils.AppDescription{
+	testApp := AppDescription{
 		AppName:        "testapp",
 		DaprEnabled:    true,
 		ImageName:      "helloworld",

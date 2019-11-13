@@ -8,7 +8,6 @@ package kubernetes
 import (
 	"fmt"
 
-	"github.com/dapr/dapr/tests/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,8 +29,8 @@ const (
 	DefaultExternalPort = 3000
 )
 
-// BuildDeploymentObject creates the Kubernetes Deployment object for dapr test app
-func buildDeploymentObject(namespace string, appDesc utils.AppDescription) *appsv1.Deployment {
+// buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
+func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
 	annotationObject := map[string]string{}
 
 	if appDesc.DaprEnabled {
@@ -81,8 +80,8 @@ func buildDeploymentObject(namespace string, appDesc utils.AppDescription) *apps
 	}
 }
 
-// BuildServiceObject creates the Kubernetes Service Object for dapr test app
-func buildServiceObject(namespace string, appDesc utils.AppDescription) *apiv1.Service {
+// buildServiceObject creates the Kubernetes Service Object for dapr test app
+func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service {
 	serviceType := apiv1.ServiceTypeClusterIP
 
 	if appDesc.IngressEnabled {
