@@ -30,12 +30,14 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
+	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/dapr/dapr/pkg/channel"
@@ -60,43 +62,45 @@ const (
 
 // DaprRuntime holds all the core components of the runtime
 type DaprRuntime struct {
-	runtimeConfig        *Config
-	globalConfig         *config.Configuration
-	components           []components_v1alpha1.Component
-	grpc                 *grpc.Manager
-	appChannel           channel.AppChannel
-	appConfig            config.ApplicationConfig
-	directMessaging      messaging.DirectMessaging
-	stateStoreRegistry   state_loader.Registry
-	secretStoresRegistry secretstores_loader.Registry
-	exporterRegistry     exporter_loader.Registry
-	stateStore           state.Store
-	actor                actors.Actors
-	bindingsRegistry     bindings_loader.Registry
-	inputBindings        map[string]bindings.InputBinding
-	outputBindings       map[string]bindings.OutputBinding
-	secretStores         map[string]secretstores.SecretStore
-	pubSubRegistry       pubsub_loader.Registry
-	pubSub               pubsub.PubSub
-	json                 jsoniter.API
-	hostAddress          string
+	runtimeConfig          *Config
+	globalConfig           *config.Configuration
+	components             []components_v1alpha1.Component
+	grpc                   *grpc.Manager
+	appChannel             channel.AppChannel
+	appConfig              config.ApplicationConfig
+	directMessaging        messaging.DirectMessaging
+	stateStoreRegistry     state_loader.Registry
+	httpMiddlewareRegistry http_middleware_loader.Registry
+	secretStoresRegistry   secretstores_loader.Registry
+	exporterRegistry       exporter_loader.Registry
+	stateStore             state.Store
+	actor                  actors.Actors
+	bindingsRegistry       bindings_loader.Registry
+	inputBindings          map[string]bindings.InputBinding
+	outputBindings         map[string]bindings.OutputBinding
+	secretStores           map[string]secretstores.SecretStore
+	pubSubRegistry         pubsub_loader.Registry
+	pubSub                 pubsub.PubSub
+	json                   jsoniter.API
+	hostAddress            string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *DaprRuntime {
 	return &DaprRuntime{
-		runtimeConfig:        runtimeConfig,
-		globalConfig:         globalConfig,
-		grpc:                 grpc.NewGRPCManager(),
-		json:                 jsoniter.ConfigFastest,
-		inputBindings:        map[string]bindings.InputBinding{},
-		outputBindings:       map[string]bindings.OutputBinding{},
-		secretStores:         map[string]secretstores.SecretStore{},
-		stateStoreRegistry:   state_loader.NewStateStoreRegistry(),
-		bindingsRegistry:     bindings_loader.NewRegistry(),
-		pubSubRegistry:       pubsub_loader.NewRegistry(),
-		secretStoresRegistry: secretstores_loader.NewRegistry(),
-		exporterRegistry:     exporter_loader.NewRegistry(),
+		runtimeConfig:          runtimeConfig,
+		globalConfig:           globalConfig,
+		grpc:                   grpc.NewGRPCManager(),
+		json:                   jsoniter.ConfigFastest,
+		inputBindings:          map[string]bindings.InputBinding{},
+		outputBindings:         map[string]bindings.OutputBinding{},
+		secretStores:           map[string]secretstores.SecretStore{},
+		stateStoreRegistry:     state_loader.NewStateStoreRegistry(),
+		bindingsRegistry:       bindings_loader.NewRegistry(),
+		pubSubRegistry:         pubsub_loader.NewRegistry(),
+		secretStoresRegistry:   secretstores_loader.NewRegistry(),
+		exporterRegistry:       exporter_loader.NewRegistry(),
+		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
 	}
 }
 
@@ -159,6 +163,11 @@ func (a *DaprRuntime) initRuntime() error {
 		log.Warnf("failed to init exporters: %s", err)
 	}
 
+	pipeline, err := a.buildHTTPPipeline()
+	if err != nil {
+		log.Warnf("failed to build HTTP pipeline: %s", err)
+	}
+
 	a.initBindings()
 	a.initDirectMessaging()
 
@@ -167,7 +176,7 @@ func (a *DaprRuntime) initRuntime() error {
 		log.Warnf("failed to init actors: %s", err)
 	}
 
-	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins)
+	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	err = a.startGRPCServer(a.runtimeConfig.GRPCPort)
@@ -182,6 +191,19 @@ func (a *DaprRuntime) initRuntime() error {
 	}
 
 	return nil
+}
+
+func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.HTTPPipeline, error) {
+	http_middleware_loader.Load()
+	var handlers []http_middleware.Middleware
+	for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
+		handler, err := a.httpMiddlewareRegistry.CreateMiddleware(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
+		if err != nil {
+			return http_middleware.HTTPPipeline{}, err
+		}
+		handlers = append(handlers, handler)
+	}
+	return http_middleware.HTTPPipeline{Handlers: handlers}, nil
 }
 
 func (a *DaprRuntime) initBindings() {
@@ -412,10 +434,10 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 	return err
 }
 
-func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string) {
+func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.HTTPPipeline) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
-	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
+	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
 }
 

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/valyala/fasthttp"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type Configuration struct {
@@ -21,7 +21,26 @@ type Configuration struct {
 }
 
 type ConfigurationSpec struct {
-	TracingSpec TracingSpec `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
+	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+}
+
+type PipelineSpec struct {
+	Handlers []HandlerSpec `json:"handlers"`
+}
+
+type HandlerSpec struct {
+	Name         string       `json:"name"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty"`
+}
+
+type SelectorSpec struct {
+	Fields []SelectorField `json:"fields"`
+}
+
+type SelectorField struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
 }
 
 type TracingSpec struct {
