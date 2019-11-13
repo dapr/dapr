@@ -12,7 +12,7 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 )
 
-// Registry is the interface for callers to get registered exporter components
+// Registry is the interface for callers to get registered HTTP middleware
 type Registry interface {
 	CreateMiddleware(name string) (http_middleware.Middleware, error)
 }
@@ -24,7 +24,7 @@ type httpMiddlewareRegistry struct {
 var instance *httpMiddlewareRegistry
 var once sync.Once
 
-// NewRegistry returns a new exporter registry
+// NewRegistry returns a new HTTP middleware registry
 func NewRegistry() Registry {
 	once.Do(func() {
 		instance = &httpMiddlewareRegistry{
@@ -34,7 +34,7 @@ func NewRegistry() Registry {
 	return instance
 }
 
-// RegisterExporter registers a new exporter
+// RegisterMiddleware registers a new HTTP middleware
 func RegisterMiddleware(name string, factoryMethod func() http_middleware.Middleware) {
 	instance.middleware[createFullName(name)] = factoryMethod
 }
