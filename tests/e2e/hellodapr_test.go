@@ -19,18 +19,21 @@ import (
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
+	// This test shows how to deploy the multiple test apps, validate the side-car injection
+	// and validate the response by using test app's service endpoint
+
 	// These apps will be deployed for hellodapr test before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "hellodapr",
+			AppName:        "hellobluedapr",
 			DaprEnabled:    true,
 			ImageName:      "e2e-hellodapr",
 			Replicas:       1,
 			IngressEnabled: true,
 		},
 		{
-			AppName:        "hellobluedapr",
+			AppName:        "hellogreendapr",
 			DaprEnabled:    true,
 			ImageName:      "e2e-hellodapr",
 			Replicas:       1,
@@ -42,9 +45,9 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestHelloDapr(t *testing.T) {
+func TestHelloGreenDapr(t *testing.T) {
 	// Get Ingress external url for "hellodapr" test app
-	externalURL := tr.Platform.AcquireAppExternalURL("hellodapr")
+	externalURL := tr.Platform.AcquireAppExternalURL("hellogreendapr")
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Call endpoint for "hellodapr" test app
