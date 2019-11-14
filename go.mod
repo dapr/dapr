@@ -49,3 +49,5 @@ require (
 	k8s.io/klog v0.4.0
 	k8s.io/utils v0.0.0-20190506122338-8fab8cb257d5 // indirect
 )
+
+replace k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
