@@ -233,8 +233,8 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 
 // AcquireExternalURLFromService gets external url from Service Object.
 func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
-	if len(svc.Spec.ExternalIPs) > 0 {
-		return svc.Spec.ExternalIPs[0]
+	if len(svc.Status.LoadBalancer.Ingress) > 0 && len(svc.Spec.Ports) > 0 {
+		return fmt.Sprintf("%s:%d", svc.Status.LoadBalancer.Ingress[0].IP, svc.Spec.Ports[0].Port)
 	}
 
 	// TODO: Support the other local k8s clusters
@@ -254,7 +254,7 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 		return false
 	}
 
-	if len(svc.Spec.ExternalIPs) > 0 {
+	if len(svc.Status.LoadBalancer.Ingress) > 0 {
 		return true
 	}
 
