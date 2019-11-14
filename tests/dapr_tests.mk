@@ -4,6 +4,7 @@
 # ------------------------------------------------------------
 
 # E2E test app list
+# e.g. E2E_TEST_APPS=hellodapr state serviceinvocation
 E2E_TEST_APPS=hellodapr
 
 # E2E test app root directory
@@ -16,6 +17,9 @@ endif
 
 ifeq ($(TEST_ENV),minikube)
 MINIKUBE_NODE_IP=$(shell minikube ip)
+ifeq ($(MINIKUBE_NODE_IP),)
+$(error cannot find get minikube node ip address. Ensure that you have minikube environment.)
+endif
 endif
 
 # check the required environment variables
