@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestHelloDapr(t *testing.T) {
+func TestHelloGreenDapr(t *testing.T) {
 	// Get Ingress external url for "hellodapr" test app
 	externalURL := tr.Platform.AcquireAppExternalURL("hellogreendapr")
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
