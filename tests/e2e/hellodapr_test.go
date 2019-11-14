@@ -19,34 +19,37 @@ import (
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
-	// These apps will be deployed for helloworld test before starting actual test
+	// This test shows how to deploy the multiple test apps, validate the side-car injection
+	// and validate the response by using test app's service endpoint
+
+	// These apps will be deployed for hellodapr test before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "hellodapr",
+			AppName:        "hellobluedapr",
 			DaprEnabled:    true,
-			ImageName:      "e2e-helloworld",
-			RegistryName:   "youngp",
+			ImageName:      "e2e-hellodapr",
+			RegistryName:   "dapriotest",
 			Replicas:       1,
 			IngressEnabled: true,
 		},
 		{
-			AppName:        "hellodapr1",
+			AppName:        "hellogreendapr",
 			DaprEnabled:    true,
-			ImageName:      "e2e-helloworld",
-			RegistryName:   "youngp",
+			ImageName:      "e2e-hellodapr",
+			RegistryName:   "dapriotest",
 			Replicas:       1,
 			IngressEnabled: true,
 		},
 	}
 
-	tr = runner.NewTestRunner("helloworld", testApps)
+	tr = runner.NewTestRunner("hellodapr", testApps)
 	os.Exit(tr.Start(m))
 }
 
-func TestHelloDaprApp(t *testing.T) {
+func TestHelloGreenDapr(t *testing.T) {
 	// Get Ingress external url for "hellodapr" test app
-	externalURL := tr.Platform.AcquireAppExternalURL("hellodapr")
+	externalURL := tr.Platform.AcquireAppExternalURL("hellogreendapr")
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Call endpoint for "hellodapr" test app
@@ -54,12 +57,12 @@ func TestHelloDaprApp(t *testing.T) {
 	require.Equal(t, resp, []byte("Hello, Dapr"))
 }
 
-func TestHelloDapr1App(t *testing.T) {
-	// Get Ingress external url for "hellodapr1" test app
-	externalURL := tr.Platform.AcquireAppExternalURL("hellodapr1")
+func TestHelloBlueDapr(t *testing.T) {
+	// Get Ingress external url for "hellobluedapr" test app
+	externalURL := tr.Platform.AcquireAppExternalURL("hellobluedapr")
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-	// Call endpoint for "hellodapr1" test app
+	// Call endpoint for "hellobluedapr" test app
 	resp, _ := httpGet(externalURL)
 	require.Equal(t, resp, []byte("Hello, Dapr"))
 }
