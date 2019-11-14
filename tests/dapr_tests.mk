@@ -11,7 +11,7 @@ E2E_TEST_APPS=hellodapr
 E2E_TESTAPP_DIR=./tests/apps
 
 ifeq ($(TEST_ENV),minikube)
-MINIKUBE_NODE_IP=$(shell miniube ip)
+MINIKUBE_NODE_IP=$(shell minikube ip)
 ifeq ($(MINIKUBE_NODE_IP),)
 $(error cannot find get minikube node ip address. ensure that you have minikube environment.)
 endif
