@@ -1,4 +1,6 @@
-# Dapr - Any language, any framework, anywhere
+<div style="text-align: center"><img src="/img/dapr_logo.svg" height="120px">
+<h2>Any language, any framework, anywhere</h2>
+</div>
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
