@@ -7,21 +7,24 @@ This contains end-to-end tests, related test framework, and docs for Dapr:
 * **apps/** includes test apps used for end-to-end tests
 * **e2e/** includes e2e test drivers written using go testing
 
-## End-To-End Test
+## End-To-End Tests
 
-> Note: you can run end-to-end test only in minikube environment now. We're actively working on supporting diverse platforms and adding pre/post-submit tests integrated with CI.
+> Note: We're actively working on supporting diverse platforms and adding pre/post-submit tests integrated with CI.
 
 ### Setup Test environment
 
-* Set up minikube environment and install helm by following [this setup doc](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-minikube.md).
+* Set up your kubernetes environment and install helm by following [this setup doc](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#installing-dapr-on-a-kubernetes-cluster).
 * Create your DockerHub ID
-* Set the environment variable
+* Set the environment variables
 
 ```bash
 export DAPR_REGISTRY=docker.io/your_dockerhub_id
 export DAPR_TAG=dev
 export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
 export DARP_TEST_TAG=dev
+
+# set TEST_ENV if you use minikube
+# export TEST_ENV=minikube
 ```
 
 ### Deploy dapr runtime from your local disk
