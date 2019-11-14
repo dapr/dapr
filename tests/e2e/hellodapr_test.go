@@ -29,7 +29,6 @@ func TestMain(m *testing.M) {
 			AppName:        "hellobluedapr",
 			DaprEnabled:    true,
 			ImageName:      "e2e-hellodapr",
-			RegistryName:   "dapriotest",
 			Replicas:       1,
 			IngressEnabled: true,
 		},
@@ -37,7 +36,6 @@ func TestMain(m *testing.M) {
 			AppName:        "hellogreendapr",
 			DaprEnabled:    true,
 			ImageName:      "e2e-hellodapr",
-			RegistryName:   "dapriotest",
 			Replicas:       1,
 			IngressEnabled: true,
 		},
@@ -53,7 +51,8 @@ func TestHelloGreenDapr(t *testing.T) {
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Call endpoint for "hellodapr" test app
-	resp, _ := httpGet(externalURL)
+	resp, err := httpGet(externalURL)
+	require.NoError(t, err)
 	require.Equal(t, resp, []byte("Hello, Dapr"))
 }
 
@@ -63,6 +62,7 @@ func TestHelloBlueDapr(t *testing.T) {
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Call endpoint for "hellobluedapr" test app
-	resp, _ := httpGet(externalURL)
+	resp, err := httpGet(externalURL)
+	require.NoError(t, err)
 	require.Equal(t, resp, []byte("Hello, Dapr"))
 }
