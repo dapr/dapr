@@ -3,10 +3,11 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-# set TEST_PLATFORM to minikube by default unless TEST_PLATFORM is set
-ifneq ($(TEST_PLATFORM),)
-	TEST_PLATFORM=minikube
-endif
+# E2E test app list
+E2E_TEST_APPS=hellodapr
+
+# E2E test app root directory
+E2E_TESTAPP_DIR=./tests/apps
 
 # check the required environment variables
 check-e2e-env:
@@ -17,15 +18,34 @@ ifeq ($(DAPR_TEST_TAG),)
 	$(error DAPR_TEST_TAG environment variable must be set)
 endif
 
+define genTestAppImageBuild
+.PHONY: build-e2e-app-$(1)
+build-e2e-app-$(1): check-e2e-env
+	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+endef
+
+# Generate test app image build targets
+$(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageBuild,$(ITEM))))
+
+define genTestAppImagePush
+.PHONY: push-e2e-app-$(1)
+push-e2e-app-$(1): check-e2e-env
+	$(DOCKER) push $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+endef
+
+
+# Generate test app image push targets
+$(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImagePush,$(ITEM))))
+
+BUILD_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),build-e2e-app-$(ITEM))
+PUSH_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),push-e2e-app-$(ITEM))
+
 # build test app image
-build-e2e-apps: check-docker-env
-	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) build -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)
+build-e2e-app-all: $(BUILD_E2E_APPS_TARGETS)
 
 # push test app image to the registry
-push-e2e-apps: build-e2e-apps
-	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) push $(DOCKER_IMAGE_TAG)
+push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 
+# start all e2e tests
 test-e2e-all:
 	go test -v -tags=e2e ./tests/e2e/...
