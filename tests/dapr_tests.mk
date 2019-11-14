@@ -15,13 +15,6 @@ ifeq ($(TEST_ENV),)
 TEST_ENV=minikube
 endif
 
-ifeq ($(TEST_ENV),minikube)
-MINIKUBE_NODE_IP=$(shell minikube ip)
-ifeq ($(MINIKUBE_NODE_IP),)
-$(error cannot find get minikube node ip address. Ensure that you have minikube environment.)
-endif
-endif
-
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
@@ -29,6 +22,12 @@ ifeq ($(DAPR_TEST_REGISTRY),)
 endif
 ifeq ($(DAPR_TEST_TAG),)
 	$(error DAPR_TEST_TAG environment variable must be set)
+endif
+ifeq ($(TEST_ENV),minikube)
+MINIKUBE_NODE_IP=$(shell minikube ip)
+ifeq ($(MINIKUBE_NODE_IP),)
+$(error cannot find get minikube node ip address. Ensure that you have minikube environment.)
+endif
 endif
 
 define genTestAppImageBuild
