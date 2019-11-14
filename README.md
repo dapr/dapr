@@ -1,4 +1,6 @@
-# Dapr - Any language, any framework, anywhere
+<div style="text-align: center"><img src="/img/dapr_logo.svg" height="120px">
+<h2>Any language, any framework, anywhere</h2>
+</div>
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
@@ -83,6 +85,7 @@ We want your contributions and suggestions. One of the easiest ways to contribut
 | Meeting dates |  [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
 | Meeting link | https://aka.ms/dapr-community-call
 | Meeting notes | https://aka.ms/dapr-meeting-notes
+| Meeting recordings | http://aka.ms/dapr-recordings
 | Twitter | [@daprdev](https://twitter.com/daprdev)
 | Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
 | MS Ignite 2019 | [Mark Russinovich presents The Future of Cloud Native Applications with OAM and Dapr](https://myignite.techcommunity.microsoft.com/sessions/82059?source=sessions)

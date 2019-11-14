@@ -69,3 +69,8 @@ func (c *KubeClient) Services(namespace string) apiv1.ServiceInterface {
 func (c *KubeClient) Pods(namespace string) apiv1.PodInterface {
 	return c.ClientSet.CoreV1().Pods(namespace)
 }
+
+// Namespaces gets Namespace client
+func (c *KubeClient) Namespaces() apiv1.NamespaceInterface {
+	return c.ClientSet.CoreV1().Namespaces()
+}

@@ -51,6 +51,11 @@ func (m *AppManager) Name() string {
 
 // Init installs app by AppDescription
 func (m *AppManager) Init() error {
+	// Get or create test namespaces
+	if _, err := m.GetOrCreateNamespace(); err != nil {
+		return err
+	}
+
 	// TODO: Dispose app if option is required
 	if err := m.Dispose(); err != nil {
 		return err
@@ -302,4 +307,18 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	}
 
 	return nil
+}
+
+// GetOrCreateNamespace gets or creates namespace unless namespace exists
+func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
+	namespaceClient := m.client.Namespaces()
+	ns, err := namespaceClient.Get(m.namespace, metav1.GetOptions{})
+
+	if err != nil && errors.IsNotFound(err) {
+		obj := buildNamespaceObject(m.namespace)
+		ns, err = namespaceClient.Create(obj)
+		return ns, err
+	}
+
+	return ns, err
 }
