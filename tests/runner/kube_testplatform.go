@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultImageRegistry = "docker.io/dapriotest"
-	defaultImageTag      = "dev"
+	defaultImageTag      = "latest"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps
