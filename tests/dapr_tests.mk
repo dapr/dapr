@@ -9,6 +9,15 @@ E2E_TEST_APPS=hellodapr
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
 
+# default test environment
+ifeq ($(TEST_ENV),)
+TEST_ENV=minikube
+endif
+
+ifeq ($(TEST_ENV),minikube)
+MINIKUBE_NODE_IP=$(shell minikube ip)
+endif
+
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
@@ -48,4 +57,4 @@ push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 
 # start all e2e tests
 test-e2e-all:
-	go test -v -tags=e2e ./tests/e2e/...
+	DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -v -tags=e2e ./tests/e2e/...

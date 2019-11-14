@@ -7,9 +7,15 @@ package runner
 
 import (
 	"fmt"
+	"os"
 
 	log "github.com/Sirupsen/logrus"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
+)
+
+const (
+	defaultImageRegistry = "docker.io/dapriotest"
+	defaultImageTag      = "dev"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps
@@ -49,10 +55,34 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	}
 
 	for _, app := range apps {
+		if app.RegistryName == "" {
+			app.RegistryName = c.imageRegistry()
+		}
+		if app.ImageName == "" {
+			return fmt.Errorf("%s app doesn't have imagename property", app.AppName)
+		}
+		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
+
 		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestKubeNameSpace, app))
 	}
 
 	return nil
+}
+
+func (c *KubeTestPlatform) imageRegistry() string {
+	reg := os.Getenv("DAPR_TEST_REGISTRY")
+	if reg == "" {
+		return defaultImageRegistry
+	}
+	return reg
+}
+
+func (c *KubeTestPlatform) imageTag() string {
+	tag := os.Getenv("DAPR_TEST_TAG")
+	if tag == "" {
+		return defaultImageTag
+	}
+	return tag
 }
 
 // installApps installs the apps in AppResource queue sequentially
