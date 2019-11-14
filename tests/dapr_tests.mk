@@ -20,10 +20,10 @@ endif
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
-  $(error DAPR_TEST_REGISTRY environment variable must be set)
+	$(error DAPR_TEST_REGISTRY environment variable must be set)
 endif
 ifeq ($(DAPR_TEST_TAG),)
-  $(error DAPR_TEST_TAG environment variable must be set)
+	$(error DAPR_TEST_TAG environment variable must be set)
 endif
 
 define genTestAppImageBuild
