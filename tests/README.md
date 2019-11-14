@@ -23,8 +23,8 @@ export DAPR_TAG=dev
 export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
 export DARP_TEST_TAG=dev
 
-# set TEST_ENV if you use minikube
-# export TEST_ENV=minikube
+# set DAPR_TEST_ENV if you use minikube
+# export DAPR_TEST_ENV=minikube
 ```
 
 ### Deploy dapr runtime from your local disk
