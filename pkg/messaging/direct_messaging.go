@@ -12,13 +12,11 @@ import (
 
 	"github.com/golang/protobuf/ptypes/any"
 
-	"github.com/dapr/dapr/pkg/modes"
-
-	"github.com/dapr/dapr/pkg/channel"
-	"google.golang.org/grpc"
-
 	"github.com/dapr/components-contrib/servicediscovery"
+	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/modes"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"google.golang.org/grpc"
 )
 
 // DirectMessaging is the API interface for invoking a remote app
@@ -85,8 +83,8 @@ func (d *directMessaging) invokeLocal(req *DirectMessageRequest) (*DirectMessage
 }
 
 func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessageResponse, error) {
-	request := servicediscovery.ResolveRequest{ID: req.Target, Port: d.grpcPort}
-	address, err := d.resolver.ResolveID(&request)
+	request := servicediscovery.ResolveRequest{ID: req.Target, Namespace: d.namespace, Port: d.grpcPort}
+	address, err := d.resolver.ResolveID(request)
 	if err != nil {
 		return nil, err
 	}

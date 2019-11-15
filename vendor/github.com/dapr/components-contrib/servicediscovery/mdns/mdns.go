@@ -21,7 +21,7 @@ func NewMDNSResolver() servicediscovery.Resolver {
 type resolver struct {
 }
 
-func (z *resolver) ResolveID(req *servicediscovery.ResolveRequest) (string, error) {
+func (z *resolver) ResolveID(req servicediscovery.ResolveRequest) (string, error) {
 	port, err := LookupPortMDNS(req.ID)
 	if err != nil {
 		return "", err
@@ -30,12 +30,12 @@ func (z *resolver) ResolveID(req *servicediscovery.ResolveRequest) (string, erro
 }
 
 // LookupPortMDNS uses mdns to find the port of a given service entry on a local network
-func LookupPortMDNS(id string) (int, error) {	
+func LookupPortMDNS(id string) (int, error) {
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
 		return -1, fmt.Errorf("failed to initialize resolver: %e", err)
 	}
-	
+
 	port := -1
 	entries := make(chan *zeroconf.ServiceEntry)
 
