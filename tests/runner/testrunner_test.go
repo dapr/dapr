@@ -40,13 +40,13 @@ func (m *MockPlatform) AcquireAppExternalURL(name string) string {
 	return args.String(0)
 }
 
-func (m *MockPlatform) addApps(apps []kube.AppDescription) error {
-	args := m.Called(apps)
+func (m *MockPlatform) addComponents(comps []kube.ComponentDescription) error {
+	args := m.Called(comps)
 	return args.Error(0)
 }
 
-func (m *MockPlatform) installApps() error {
-	args := m.Called()
+func (m *MockPlatform) addApps(apps []kube.AppDescription) error {
+	args := m.Called(apps)
 	return args.Error(0)
 }
 
@@ -70,15 +70,27 @@ func TestStartRunner(t *testing.T) {
 		},
 	}
 
+	fakeComps := []kube.ComponentDescription{
+		{
+			Name:     "statestore",
+			TypeName: "state.fake",
+			MetaData: map[string]string{
+				"address":  "localhost",
+				"password": "fakepassword",
+			},
+		},
+	}
+
 	t.Run("Run Runner successfully", func(t *testing.T) {
 		mockPlatform := new(MockPlatform)
 		mockPlatform.On("tearDown").Return(nil)
 		mockPlatform.On("setup").Return(nil)
 		mockPlatform.On("addApps", fakeTestApps).Return(nil)
-		mockPlatform.On("installApps").Return(nil)
+		mockPlatform.On("addComponents", fakeComps).Return(nil)
 
 		fakeRunner := &TestRunner{
 			id:          "fakeRunner",
+			components:  fakeComps,
 			initialApps: fakeTestApps,
 			Platform:    mockPlatform,
 		}
@@ -89,7 +101,7 @@ func TestStartRunner(t *testing.T) {
 		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
 		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
 		mockPlatform.AssertNumberOfCalls(t, "addApps", 1)
-		mockPlatform.AssertNumberOfCalls(t, "installApps", 1)
+		mockPlatform.AssertNumberOfCalls(t, "addComponents", 1)
 	})
 
 	t.Run("setup is failed, but teardown is called", func(t *testing.T) {
@@ -97,10 +109,11 @@ func TestStartRunner(t *testing.T) {
 		mockPlatform.On("setup").Return(fmt.Errorf("setup is failed"))
 		mockPlatform.On("tearDown").Return(nil)
 		mockPlatform.On("addApps", fakeTestApps).Return(nil)
-		mockPlatform.On("installApps").Return(nil)
+		mockPlatform.On("addComponents", fakeComps).Return(nil)
 
 		fakeRunner := &TestRunner{
 			id:          "fakeRunner",
+			components:  fakeComps,
 			initialApps: fakeTestApps,
 			Platform:    mockPlatform,
 		}
@@ -111,6 +124,6 @@ func TestStartRunner(t *testing.T) {
 		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
 		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
 		mockPlatform.AssertNumberOfCalls(t, "addApps", 0)
-		mockPlatform.AssertNumberOfCalls(t, "installApps", 0)
+		mockPlatform.AssertNumberOfCalls(t, "addComponents", 0)
 	})
 }
