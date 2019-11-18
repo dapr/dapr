@@ -11,6 +11,6 @@ type ComponentDescription struct {
 	Name string
 	// Type contains component types (<type>.<component_name>)
 	TypeName string
-	// MetaData contains the meta data for dapr component
+	// MetaData contains the metadata for dapr component
 	MetaData map[string]string
 }
