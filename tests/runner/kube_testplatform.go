@@ -20,14 +20,16 @@ const (
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps
 type KubeTestPlatform struct {
-	AppResources *TestResources
-	kubeClient   *kube.KubeClient
+	AppResources       *TestResources
+	ComponentResources *TestResources
+	kubeClient         *kube.KubeClient
 }
 
 // NewKubeTestPlatform creates KubeTestPlatform instance
 func NewKubeTestPlatform() *KubeTestPlatform {
 	return &KubeTestPlatform{
-		AppResources: new(TestResources),
+		AppResources:       new(TestResources),
+		ComponentResources: new(TestResources),
 	}
 }
 
@@ -40,10 +42,32 @@ func (c *KubeTestPlatform) setup() (err error) {
 
 func (c *KubeTestPlatform) tearDown() error {
 	if err := c.AppResources.tearDown(); err != nil {
-		log.Errorf("Failed to tearDown AppResources. got: %q", err)
+		log.Errorf("failed to tear down AppResources. got: %q", err)
+	}
+
+	if err := c.ComponentResources.tearDown(); err != nil {
+		log.Errorf("failed to tear down ComponentResources. got: %q", err)
 	}
 
 	// TODO: clean up kube cluster
+
+	return nil
+}
+
+// addComponents adds component to disposable Resource queues
+func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) error {
+	if c.kubeClient == nil {
+		return fmt.Errorf("kubernetes cluster needs to be setup")
+	}
+
+	for _, comp := range comps {
+		c.ComponentResources.Add(kube.NewDaprComponent(c.kubeClient, kube.DaprTestKubeNameSpace, comp))
+	}
+
+	// setup component resources
+	if err := c.ComponentResources.setup(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -66,6 +90,11 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestKubeNameSpace, app))
 	}
 
+	// installApps installs the apps in AppResource queue sequentially
+	if err := c.AppResources.setup(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -83,14 +112,6 @@ func (c *KubeTestPlatform) imageTag() string {
 		return defaultImageTag
 	}
 	return tag
-}
-
-// installApps installs the apps in AppResource queue sequentially
-func (c *KubeTestPlatform) installApps() error {
-	if err := c.AppResources.setup(); err != nil {
-		return err
-	}
-	return nil
 }
 
 // AcquireAppExternalURL returns the external url for 'name'
