@@ -4,7 +4,7 @@
 Accepted
 
 ## Context
-Dapr exposes apis for building blocks which can be invoked over http/gRPC by the user code. Making raw http/gRPC calls from user code works but it doesn't provide a good strongly typed exeprience for developers.
+Dapr exposes apis for building blocks which can be invoked over http/gRPC by the user code. Making raw http/gRPC calls from user code works but it doesn't provide a good strongly typed experience for developers.
 
 ## Decisions
 
