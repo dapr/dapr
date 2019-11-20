@@ -7,7 +7,6 @@ package azureservicebus
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -27,6 +26,7 @@ const (
 	defaultMessageTimeToLiveInSec = "defaultMessageTimeToLiveInSec"
 	autoDeleteOnIdleInSec         = "autoDeleteOnIdleInSec"
 	disableEntityManagement       = "disableEntityManagement"
+	errorMessagePrefix            = "azure service bus error:"
 
 	// Defaults
 	defaultTimeoutInSec            = 60
@@ -56,13 +56,13 @@ func parseAzureServiceBusMetadata(meta pubsub.Metadata) (metadata, error) {
 	if val, ok := meta.Properties[connectionString]; ok && val != "" {
 		m.ConnectionString = val
 	} else {
-		return m, errors.New("azure serivce bus error: missing connection string")
+		return m, fmt.Errorf("%s missing connection string", errorMessagePrefix)
 	}
 
 	if val, ok := meta.Properties[consumerID]; ok && val != "" {
 		m.ConsumerID = val
 	} else {
-		return m, errors.New("azure service bus error: missing consumerID")
+		return m, fmt.Errorf("%s missing consumerID", errorMessagePrefix)
 	}
 
 	/* Optional configuration settings - defaults will be set by the client */
@@ -71,7 +71,7 @@ func parseAzureServiceBusMetadata(meta pubsub.Metadata) (metadata, error) {
 		var err error
 		m.TimeoutInSec, err = strconv.Atoi(val)
 		if err != nil {
-			return m, fmt.Errorf("azure service bus error: invalid timeoutInSec %s, %s", val, err)
+			return m, fmt.Errorf("%s invalid timeoutInSec %s, %s", errorMessagePrefix, val, err)
 		}
 	}
 
@@ -80,7 +80,7 @@ func parseAzureServiceBusMetadata(meta pubsub.Metadata) (metadata, error) {
 		var err error
 		m.DisableEntityManagement, err = strconv.ParseBool(val)
 		if err != nil {
-			return m, fmt.Errorf("azure service bus error: invalid disableEntityManagement %s, %s", val, err)
+			return m, fmt.Errorf("%s invalid disableEntityManagement %s, %s", errorMessagePrefix, val, err)
 		}
 	}
 
@@ -88,7 +88,7 @@ func parseAzureServiceBusMetadata(meta pubsub.Metadata) (metadata, error) {
 	if val, ok := meta.Properties[maxDeliveryCount]; ok && val != "" {
 		valAsInt, err := strconv.Atoi(val)
 		if err != nil {
-			return m, fmt.Errorf("azure service bus error: invalid maxDeliveryCount %s, %s", val, err)
+			return m, fmt.Errorf("%s invalid maxDeliveryCount %s, %s", errorMessagePrefix, val, err)
 		}
 		m.MaxDeliveryCount = &valAsInt
 	}
@@ -96,7 +96,7 @@ func parseAzureServiceBusMetadata(meta pubsub.Metadata) (metadata, error) {
 	if val, ok := meta.Properties[lockDurationInSec]; ok && val != "" {
 		valAsInt, err := strconv.Atoi(val)
 		if err != nil {
-			return m, fmt.Errorf("azure service bus error: invalid lockDurationInSec %s, %s", val, err)
+			return m, fmt.Errorf("%s invalid lockDurationInSec %s, %s", errorMessagePrefix, val, err)
 		}
 		m.LockDurationInSec = &valAsInt
 	}
@@ -104,7 +104,7 @@ func parseAzureServiceBusMetadata(meta pubsub.Metadata) (metadata, error) {
 	if val, ok := meta.Properties[defaultMessageTimeToLiveInSec]; ok && val != "" {
 		valAsInt, err := strconv.Atoi(val)
 		if err != nil {
-			return m, fmt.Errorf("azure service bus error: invalid defaultMessageTimeToLiveInSec %s, %s", val, err)
+			return m, fmt.Errorf("%s invalid defaultMessageTimeToLiveInSec %s, %s", errorMessagePrefix, val, err)
 		}
 		m.DefaultMessageTimeToLiveInSec = &valAsInt
 	}
@@ -112,7 +112,7 @@ func parseAzureServiceBusMetadata(meta pubsub.Metadata) (metadata, error) {
 	if val, ok := meta.Properties[autoDeleteOnIdleInSec]; ok && val != "" {
 		valAsInt, err := strconv.Atoi(val)
 		if err != nil {
-			return m, fmt.Errorf("azure service bus error: invalid autoDeleteOnIdleInSecKey %s, %s", val, err)
+			return m, fmt.Errorf("%s invalid autoDeleteOnIdleInSecKey %s, %s", errorMessagePrefix, val, err)
 		}
 		m.AutoDeleteOnIdleInSec = &valAsInt
 	}
@@ -168,13 +168,13 @@ func (a *azureServiceBus) Subscribe(req pubsub.SubscribeRequest, handler func(ms
 	}
 	topic, err := a.namespace.NewTopic(req.Topic)
 	if err != nil {
-		return fmt.Errorf("service bus error: could not instantiate topic %s, %s", req.Topic, err)
+		return fmt.Errorf("%s could not instantiate topic %s, %s", errorMessagePrefix, req.Topic, err)
 	}
 
 	var sub subscription
 	sub, err = topic.NewSubscription(subID)
 	if err != nil {
-		return fmt.Errorf("service bus error: could not instantiate subscription %s for topic %s", subID, req.Topic)
+		return fmt.Errorf("%s could not instantiate subscription %s for topic %s", errorMessagePrefix, subID, req.Topic)
 	}
 
 	sbHandlerFunc := servicebus.HandlerFunc(a.getHandlerFunc(req.Topic, handler))
@@ -202,7 +202,7 @@ func (a *azureServiceBus) getHandlerFunc(topic string, handler func(msg *pubsub.
 func (a *azureServiceBus) handleSubscriptionMessages(ctx context.Context, topic string, sub subscription, handlerFunc servicebus.HandlerFunc) {
 	for {
 		if err := sub.Receive(ctx, handlerFunc); err != nil {
-			log.Errorf("service bus error: error receiving from topic %s, %s", topic, err)
+			log.Errorf("%s error receiving from topic %s, %s", errorMessagePrefix, topic, err)
 			return
 		}
 	}
@@ -253,11 +253,11 @@ func (a *azureServiceBus) getTopicEntity(topic string) (*servicebus.TopicEntity,
 	defer cancel()
 
 	if a.topicManager == nil {
-		return nil, fmt.Errorf("service bus error: init() has not been called")
+		return nil, fmt.Errorf("%s init() has not been called", errorMessagePrefix)
 	}
 	topicEntity, err := a.topicManager.Get(ctx, topic)
 	if err != nil && !servicebus.IsErrNotFound(err) {
-		return nil, fmt.Errorf("service bus error: could not get topic %s, %s", topic, err)
+		return nil, fmt.Errorf("%s could not get topic %s, %s", errorMessagePrefix, topic, err)
 	}
 	return topicEntity, nil
 }
@@ -267,7 +267,7 @@ func (a *azureServiceBus) createTopicEntity(topic string) error {
 	defer cancel()
 	_, err := a.topicManager.Put(ctx, topic)
 	if err != nil {
-		return fmt.Errorf("service bus error: could not put topic %s, %s", topic, err)
+		return fmt.Errorf("%s could not put topic %s, %s", errorMessagePrefix, topic, err)
 	}
 	return nil
 }
@@ -277,7 +277,7 @@ func (a *azureServiceBus) getSubscriptionEntity(mgr *servicebus.SubscriptionMana
 	defer cancel()
 	entity, err := mgr.Get(ctx, subscription)
 	if err != nil && !servicebus.IsErrNotFound(err) {
-		return nil, fmt.Errorf("service bus error: could not get subscription %s, %s", subscription, err)
+		return nil, fmt.Errorf("%s could not get subscription %s, %s", errorMessagePrefix, subscription, err)
 	}
 	return entity, nil
 }
@@ -293,7 +293,7 @@ func (a *azureServiceBus) createSubscriptionEntity(mgr *servicebus.SubscriptionM
 
 	_, err = mgr.Put(ctx, subscription, opts...)
 	if err != nil {
-		return fmt.Errorf("service bus error: could not put subscription %s, %s", subscription, err)
+		return fmt.Errorf("%s could not put subscription %s, %s", errorMessagePrefix, subscription, err)
 	}
 	return nil
 }

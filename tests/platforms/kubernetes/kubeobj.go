@@ -8,6 +8,7 @@ package kubernetes
 import (
 	"fmt"
 
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +28,9 @@ const (
 	DefaultContainerPort = 3000
 	// DefaultExternalPort is the default external port exposed by load balancer ingress
 	DefaultExternalPort = 3000
+
+	// DaprComponentsKind is component kind
+	DaprComponentsKind = "components.dapr.io"
 )
 
 // buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
@@ -108,6 +112,22 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 				},
 			},
 			Type: serviceType,
+		},
+	}
+}
+
+// buildDaprComponentObject creates dapr component object
+func buildDaprComponentObject(componentName string, typeName string, metaData []v1alpha1.MetadataItem) *v1alpha1.Component {
+	return &v1alpha1.Component{
+		TypeMeta: metav1.TypeMeta{
+			Kind: DaprComponentsKind,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: componentName,
+		},
+		Spec: v1alpha1.ComponentSpec{
+			Type:     typeName,
+			Metadata: metaData,
 		},
 	}
 }

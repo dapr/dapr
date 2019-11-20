@@ -171,7 +171,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191108224343-bd36a6759fe4
+# github.com/dapr/components-contrib v0.0.0-20191115232656-5a27c138e761
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/blobstorage
 github.com/dapr/components-contrib/bindings/cosmosdb
@@ -201,6 +201,9 @@ github.com/dapr/components-contrib/secretstores
 github.com/dapr/components-contrib/secretstores/keyvault
 github.com/dapr/components-contrib/secretstores/kubernetes
 github.com/dapr/components-contrib/secretstores/vault
+github.com/dapr/components-contrib/servicediscovery
+github.com/dapr/components-contrib/servicediscovery/kubernetes
+github.com/dapr/components-contrib/servicediscovery/mdns
 github.com/dapr/components-contrib/state
 github.com/dapr/components-contrib/state/cassandra
 github.com/dapr/components-contrib/state/consul
