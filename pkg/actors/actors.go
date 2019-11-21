@@ -67,10 +67,11 @@ type actorsRuntime struct {
 }
 
 const (
-	idHeader        = "id"
-	lockOperation   = "lock"
-	unlockOperation = "unlock"
-	updateOperation = "update"
+	idHeader               = "id"
+	lockOperation          = "lock"
+	unlockOperation        = "unlock"
+	updateOperation        = "update"
+	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://github.com/dapr/docs/blob/master/concepts/actor/actors_features.md#actor-state-management"
 )
 
 // NewActors create a new actors runtime with given config
@@ -100,6 +101,11 @@ func (a *actorsRuntime) Init() error {
 	}
 	if a.store == nil {
 		return errors.New("actors: state store must be present to initialize the actor runtime")
+	}
+
+	_, ok := a.store.(state.TransactionalStore)
+	if !ok {
+		log.Warnf(incompatibleStateStore)
 	}
 
 	go a.connectToPlacementService(a.config.PlacementServiceAddress, a.config.HostAddress, a.config.HeartbeatInterval)
@@ -370,8 +376,9 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 
 	transactionalStore, ok := a.store.(state.TransactionalStore)
 	if !ok {
-		return errors.New("state store does not support transaction")
+		return errors.New(incompatibleStateStore)
 	}
+
 	err := transactionalStore.Multi(requests)
 	return err
 }
