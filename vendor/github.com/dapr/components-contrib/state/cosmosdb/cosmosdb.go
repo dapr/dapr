@@ -115,7 +115,7 @@ func (c *StateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if err != nil {
 		return nil, err
 	} else if len(items) == 0 {
-		return nil, nil
+		return &state.GetResponse{}, nil
 	}
 
 	b, err := jsoniter.ConfigFastest.Marshal(&items[0].Value)
