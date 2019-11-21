@@ -11,7 +11,7 @@ Dapr exposes APIs for building blocks which can be invoked over http/gRPC by the
 * Dapr provides language specific SDKs for developers for C#, Java, Javascript, Python, Go, Rust, C++. There may be others in the future
   - For the current release, the SDKs are auto-generated from the Dapr proto specifications using gRPC tools.
   - In future releases, we will work on creating and releasing strongly typed SDKs for the languages, which are wrappers on top of the auto-generated gRPC SDKs (e.g. C# SDK shipped for state management APIs with the 0.1.0 release.) This is the preferred approach. Creating purely handcrafted SDKs is discouraged.
-* For Actors, language specific SDKs writtern as Actor specific handcrafted code is preferred since this greatly simplifies the user experience. e.g. The C# Actor SDK shipped with the 0.1.0 release.
+* For Actors, language specific SDKs are written as Actor specific handcrafted code is preferred since this greatly simplifies the user experience. e.g. The C# Actor SDK shipped with the 0.1.0 release.
   
 ## Consequences
 
