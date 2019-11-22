@@ -105,7 +105,7 @@ func (a *actorsRuntime) Init() error {
 
 	_, ok := a.store.(state.TransactionalStore)
 	if !ok {
-		log.Warnf(incompatibleStateStore)
+		return errors.New(incompatibleStateStore)
 	}
 
 	go a.connectToPlacementService(a.config.PlacementServiceAddress, a.config.HostAddress, a.config.HeartbeatInterval)
