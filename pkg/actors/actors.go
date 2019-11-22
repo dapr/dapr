@@ -71,7 +71,7 @@ const (
 	lockOperation          = "lock"
 	unlockOperation        = "unlock"
 	updateOperation        = "update"
-	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://github.com/dapr/docs/blob/master/concepts/actor/actors_features.md#actor-state-management"
+	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://github.com/dapr/docs"
 )
 
 // NewActors create a new actors runtime with given config
