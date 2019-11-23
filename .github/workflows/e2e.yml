@@ -89,13 +89,13 @@ jobs:
           make setup-test-env
       - name: Deploy Dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
-        run: |
-          make docker-deploy-k8s
-          make setup-test-components
+        run: make docker-deploy-k8s
+      - name: Deploy test components
+        if: env.TEST_CLUSTER != ''
+        run: make setup-test-components
       - name: Start E2E tests
         if: env.TEST_CLUSTER != ''
-        run: |
-          make test-e2e-all
+        run: make test-e2e-all
       - name: Clean up ${{ env.TEST_CLUSTER }} cluster
         if: always()
         run: make clean-test-env
