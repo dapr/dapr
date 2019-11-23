@@ -16,8 +16,8 @@ testclusterpool=(
     "dapr-aks-e2e-04"
 )
 
-# Define max e2e test timeout
-MAX_TEST_TIMEOUT=200
+# Define max e2e test timeout, 1.5 hours
+MAX_TEST_TIMEOUT=5400
 
 if [ -z "$DAPR_TEST_RESOURCE_GROUP" ]; then
     DAPR_TEST_RESOURCE_GROUP="dapre2e"
@@ -73,7 +73,7 @@ for clustername in ${testclusterpool[@]}; do
 
     echo "Namespace is being used for $running_time seconds"
 
-    # If running time is greater than $MAX_TEST_TIMEOUT, it might be because of test failure.
+    # If running time is greater than $MAX_TEST_TIMEOUT seconds, it might be because of test failure.
     # In this case, we can use this cluster.
     if [ $running_time -gt $MAX_TEST_TIMEOUT ]; then
         echo "The previous test running in this cluster might be cancelled or failed accidently so use $clustername cluster for e2e test."
