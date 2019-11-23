@@ -10,6 +10,9 @@ E2E_TEST_APPS=hellodapr
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
 
+KUBECTL=kubectl
+DAPR_TEST_NAMESPACE?=dapr-test
+
 ifeq ($(DAPR_TEST_ENV),minikube)
 MINIKUBE_NODE_IP=$(shell minikube ip)
 ifeq ($(MINIKUBE_NODE_IP),)
@@ -58,3 +61,31 @@ push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 # start all e2e tests
 test-e2e-all: check-e2e-env
 	DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -v -tags=e2e ./tests/e2e/...
+
+setup-helm-init:
+	$(HELM) repo add stable https://kubernetes-charts.storage.googleapis.com/
+	$(HELM) repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
+	$(HELM) repo update
+
+setup-test-env-redis:
+	# install redis to the cluster without password
+	$(HELM) install --wait --name dapr-redis --set usePassword=false stable/redis --namespace $(DAPR_TEST_NAMESPACE)
+
+setup-test-env-kafka:
+	# install kafka to the cluster
+	$(HELM) install -f ./config/kafka_override.yaml --wait --name dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) incubator/kafka
+
+setup-test-env: setup-test-env-redis setup-test-env-kafka
+	# Apply component yaml for state, pubsub, and bindings
+	$(KUBECTL) apply -f ./config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./config/dapr_redis_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
+
+	# Show the installed components
+	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
+
+clean-test-env:
+	$(HELM) delete --purge dapr-redis
+	$(HELM) delete --purge dapr-kafka
+	$(HELM) delete --purge dapr
+	$(KUBECTL) -n $(DAPR_TEST_NAMESPACE) delete pod,deployment,svc --all
