@@ -27,7 +27,7 @@ jobs:
             console.log(JSON.stringify(context.issue))
             const pull = github.pulls.get({
               owner: context.issue.owner,
-              repo: context.issue.repo
+              repo: context.issue.repo,
               pull_number: context.issue.number
             })
             console.log(JSON.stringify(pull))
