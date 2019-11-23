@@ -6,8 +6,6 @@
 name: e2e
 
 on:
-  pull_request:
-    types: [edited]
   issue_comment:
     types: [created]
 jobs:
