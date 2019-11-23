@@ -30,11 +30,17 @@ jobs:
               repo: context.issue.repo,
               pull_number: context.issue.number
             });
-            console.log(pull)
+            const ref = pull.data.head.sha
+            const repo = pull.data.repo.full_name
+            console.log(`##[set-env name=CHECKOUT_REPO;]${repo}`);
+            console.log(`##[set-env name=CHECKOUT_REF;]${ref}`);
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v1
         with:
           go-version: ${{ env.GOVER }}
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
       
