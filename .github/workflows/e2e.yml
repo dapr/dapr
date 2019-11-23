@@ -31,7 +31,7 @@ jobs:
               pull_number: context.issue.number
             });
             const ref = pull.data.head.sha
-            const repo = pull.data.repo.full_name
+            const repo = pull.data.head.repo.full_name
             console.log(`##[set-env name=CHECKOUT_REPO;]${repo}`);
             console.log(`##[set-env name=CHECKOUT_REF;]${ref}`);
       - name: Set up Go ${{ env.GOVER }}
