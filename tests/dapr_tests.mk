@@ -11,7 +11,10 @@ E2E_TEST_APPS=hellodapr
 E2E_TESTAPP_DIR=./tests/apps
 
 KUBECTL=kubectl
-DAPR_TEST_NAMESPACE?=dapr-tests
+
+ifeq ($(DAPR_TEST_NAMESPACE),)
+DAPR_TEST_NAMESPACE=$(HELM_NAMESPACE)
+endif
 
 ifeq ($(DAPR_TEST_ENV),minikube)
 MINIKUBE_NODE_IP=$(shell minikube ip)
@@ -62,21 +65,22 @@ push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 test-e2e-all: check-e2e-env
 	DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -v -tags=e2e ./tests/e2e/...
 
+# add required helm repo
 setup-helm-init:
 	$(HELM) repo add stable https://kubernetes-charts.storage.googleapis.com/
 	$(HELM) repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
 	$(HELM) repo update
 
+# install redis to the cluster without password
 setup-test-env-redis:
-	# install redis to the cluster without password
 	$(HELM) install --wait --name dapr-redis --set usePassword=false stable/redis --namespace $(DAPR_TEST_NAMESPACE)
 
+# install kafka to the cluster
 setup-test-env-kafka:
-	# install kafka to the cluster
-	$(HELM) install -f ./config/kafka_override.yaml --wait --name dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) incubator/kafka
+	$(HELM) install -f ./config/kafka_override.yaml --wait --timeout 1000 --name dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) incubator/kafka
 
+# Apply component yaml for state, pubsub, and bindings
 setup-test-env: setup-test-env-redis setup-test-env-kafka
-	# Apply component yaml for state, pubsub, and bindings
 	$(KUBECTL) apply -f ./config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./config/dapr_redis_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -84,12 +88,6 @@ setup-test-env: setup-test-env-redis setup-test-env-kafka
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
 
+# Clean up test environment
 clean-test-env:
-	# Delete dapr-redis release
-	-$(HELM) delete --purge dapr-redis
-	# Delete dapr-kafka
-	-$(HELM) delete --purge dapr-kafka
-	# Delete dapr
-	-$(HELM) delete --purge dapr
-	# Clean up namespace to remove all resources
-	-$(KUBECTL) delete namespace $(DAPR_TEST_NAMESPACE)
+	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)

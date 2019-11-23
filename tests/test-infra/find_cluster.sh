@@ -74,8 +74,8 @@ for clustername in ${testclusterpool[@]}; do
     # In this case, we can use this cluster.
     if [ $running_time -gt $MAX_TEST_TIMEOUT ]; then
         echo "The previous test running in this cluster might be cancelled or failed accidently so use $clustername cluster for e2e test."
-        echo "Trying to delete ${KUBE_TEST_NAMESPACE} namespace and all resources..."
-        kubectl delete namespace ${KUBE_TEST_NAMESPACE}
+        current_dir=$(dirname "$0")
+        $current_dir/clean_up.sh ${KUBE_TEST_NAMESPACE}
     fi
 
     echo "-------------------------------------------------------"
