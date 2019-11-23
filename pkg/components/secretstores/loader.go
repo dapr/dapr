@@ -6,9 +6,9 @@
 package secretstores
 
 import (
-	"github.com/dapr/components-contrib/secretstores/keyvault"
+	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
+	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
 	"github.com/dapr/components-contrib/secretstores/kubernetes"
-	"github.com/dapr/components-contrib/secretstores/vault"
 )
 
 // Load secret stores

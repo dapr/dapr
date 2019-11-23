@@ -172,8 +172,8 @@ github.com/dapr/components-contrib v0.0.0-20191115044052-cf2f5287fe7e h1:eeiNzKl
 github.com/dapr/components-contrib v0.0.0-20191115044052-cf2f5287fe7e/go.mod h1:hMtuJ1q/l7anEHgttGmic+jUVSFLc59sJroqT9YJjio=
 github.com/dapr/components-contrib v0.0.0-20191115232656-5a27c138e761 h1:XkgS+HougkJYtZjvoj57kYauhgdSnTMdRRQDcey6/u4=
 github.com/dapr/components-contrib v0.0.0-20191115232656-5a27c138e761/go.mod h1:hMtuJ1q/l7anEHgttGmic+jUVSFLc59sJroqT9YJjio=
-github.com/dapr/components-contrib v0.0.0-20191120232121-48d385b82b8b h1:JQyu3ljrys4cZseqyKjNY3/QUc3WMI8kqc0pJIYGqiI=
-github.com/dapr/components-contrib v0.0.0-20191120232121-48d385b82b8b/go.mod h1:MqWEi89XbIh6m5cQUlV3c8vhCj945pI7nGoAXNLRHnk=
+github.com/dapr/components-contrib v0.0.0-20191122214110-fac9d4a41bb1 h1:uUub57clKkwsrCbL0Q/IpEDXLO78ZjNfSn1ed4YLewc=
+github.com/dapr/components-contrib v0.0.0-20191122214110-fac9d4a41bb1/go.mod h1:MqWEi89XbIh6m5cQUlV3c8vhCj945pI7nGoAXNLRHnk=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

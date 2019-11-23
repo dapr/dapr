@@ -3,7 +3,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package azureservicebus
+package servicebus
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	servicebus "github.com/Azure/azure-service-bus-go"
+	azservicebus "github.com/Azure/azure-service-bus-go"
 	log "github.com/Sirupsen/logrus"
 	"github.com/dapr/components-contrib/pubsub"
 )
@@ -35,13 +35,13 @@ const (
 
 type azureServiceBus struct {
 	metadata     metadata
-	namespace    *servicebus.Namespace
-	topicManager *servicebus.TopicManager
+	namespace    *azservicebus.Namespace
+	topicManager *azservicebus.TopicManager
 }
 
 type subscription interface {
 	Close(ctx context.Context) error
-	Receive(ctx context.Context, handler servicebus.Handler) error
+	Receive(ctx context.Context, handler azservicebus.Handler) error
 }
 
 // NewAzureServiceBus returns a new Azure ServiceBus pub-sub implementation
@@ -127,7 +127,7 @@ func (a *azureServiceBus) Init(metadata pubsub.Metadata) error {
 	}
 
 	a.metadata = m
-	a.namespace, err = servicebus.NewNamespace(servicebus.NamespaceWithConnectionString(a.metadata.ConnectionString))
+	a.namespace, err = azservicebus.NewNamespace(azservicebus.NamespaceWithConnectionString(a.metadata.ConnectionString))
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (a *azureServiceBus) Publish(req *pubsub.PublishRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(a.metadata.TimeoutInSec))
 	defer cancel()
 
-	err = sender.Send(ctx, servicebus.NewMessage(req.Data))
+	err = sender.Send(ctx, azservicebus.NewMessage(req.Data))
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (a *azureServiceBus) Subscribe(req pubsub.SubscribeRequest, handler func(ms
 		return fmt.Errorf("%s could not instantiate subscription %s for topic %s", errorMessagePrefix, subID, req.Topic)
 	}
 
-	sbHandlerFunc := servicebus.HandlerFunc(a.getHandlerFunc(req.Topic, handler))
+	sbHandlerFunc := azservicebus.HandlerFunc(a.getHandlerFunc(req.Topic, handler))
 
 	ctx := context.Background()
 	go a.handleSubscriptionMessages(ctx, req.Topic, sub, sbHandlerFunc)
@@ -185,8 +185,8 @@ func (a *azureServiceBus) Subscribe(req pubsub.SubscribeRequest, handler func(ms
 	return nil
 }
 
-func (a *azureServiceBus) getHandlerFunc(topic string, handler func(msg *pubsub.NewMessage) error) func(ctx context.Context, message *servicebus.Message) error {
-	return func(ctx context.Context, message *servicebus.Message) error {
+func (a *azureServiceBus) getHandlerFunc(topic string, handler func(msg *pubsub.NewMessage) error) func(ctx context.Context, message *azservicebus.Message) error {
+	return func(ctx context.Context, message *azservicebus.Message) error {
 		msg := &pubsub.NewMessage{
 			Data:  message.Data,
 			Topic: topic,
@@ -199,7 +199,7 @@ func (a *azureServiceBus) getHandlerFunc(topic string, handler func(msg *pubsub.
 	}
 }
 
-func (a *azureServiceBus) handleSubscriptionMessages(ctx context.Context, topic string, sub subscription, handlerFunc servicebus.HandlerFunc) {
+func (a *azureServiceBus) handleSubscriptionMessages(ctx context.Context, topic string, sub subscription, handlerFunc azservicebus.HandlerFunc) {
 	for {
 		if err := sub.Receive(ctx, handlerFunc); err != nil {
 			log.Errorf("%s error receiving from topic %s, %s", errorMessagePrefix, topic, err)
@@ -248,7 +248,7 @@ func (a *azureServiceBus) ensureSubscription(name string, topic string) error {
 	return nil
 }
 
-func (a *azureServiceBus) getTopicEntity(topic string) (*servicebus.TopicEntity, error) {
+func (a *azureServiceBus) getTopicEntity(topic string) (*azservicebus.TopicEntity, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(a.metadata.TimeoutInSec))
 	defer cancel()
 
@@ -256,7 +256,7 @@ func (a *azureServiceBus) getTopicEntity(topic string) (*servicebus.TopicEntity,
 		return nil, fmt.Errorf("%s init() has not been called", errorMessagePrefix)
 	}
 	topicEntity, err := a.topicManager.Get(ctx, topic)
-	if err != nil && !servicebus.IsErrNotFound(err) {
+	if err != nil && !azservicebus.IsErrNotFound(err) {
 		return nil, fmt.Errorf("%s could not get topic %s, %s", errorMessagePrefix, topic, err)
 	}
 	return topicEntity, nil
@@ -272,17 +272,17 @@ func (a *azureServiceBus) createTopicEntity(topic string) error {
 	return nil
 }
 
-func (a *azureServiceBus) getSubscriptionEntity(mgr *servicebus.SubscriptionManager, topic, subscription string) (*servicebus.SubscriptionEntity, error) {
+func (a *azureServiceBus) getSubscriptionEntity(mgr *azservicebus.SubscriptionManager, topic, subscription string) (*azservicebus.SubscriptionEntity, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(a.metadata.TimeoutInSec))
 	defer cancel()
 	entity, err := mgr.Get(ctx, subscription)
-	if err != nil && !servicebus.IsErrNotFound(err) {
+	if err != nil && !azservicebus.IsErrNotFound(err) {
 		return nil, fmt.Errorf("%s could not get subscription %s, %s", errorMessagePrefix, subscription, err)
 	}
 	return entity, nil
 }
 
-func (a *azureServiceBus) createSubscriptionEntity(mgr *servicebus.SubscriptionManager, topic, subscription string) error {
+func (a *azureServiceBus) createSubscriptionEntity(mgr *azservicebus.SubscriptionManager, topic, subscription string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(a.metadata.TimeoutInSec))
 	defer cancel()
 
@@ -298,8 +298,8 @@ func (a *azureServiceBus) createSubscriptionEntity(mgr *servicebus.SubscriptionM
 	return nil
 }
 
-func (a *azureServiceBus) createSubscriptionManagementOptions() ([]servicebus.SubscriptionManagementOption, error) {
-	var opts []servicebus.SubscriptionManagementOption
+func (a *azureServiceBus) createSubscriptionManagementOptions() ([]azservicebus.SubscriptionManagementOption, error) {
+	var opts []azservicebus.SubscriptionManagementOption
 	if a.metadata.MaxDeliveryCount != nil {
 		opts = append(opts, subscriptionManagementOptionsWithMaxDeliveryCount(a.metadata.MaxDeliveryCount))
 	}
@@ -315,32 +315,32 @@ func (a *azureServiceBus) createSubscriptionManagementOptions() ([]servicebus.Su
 	return opts, nil
 }
 
-func subscriptionManagementOptionsWithMaxDeliveryCount(maxDeliveryCount *int) servicebus.SubscriptionManagementOption {
-	return func(d *servicebus.SubscriptionDescription) error {
+func subscriptionManagementOptionsWithMaxDeliveryCount(maxDeliveryCount *int) azservicebus.SubscriptionManagementOption {
+	return func(d *azservicebus.SubscriptionDescription) error {
 		mdc := int32(*maxDeliveryCount)
 		d.MaxDeliveryCount = &mdc
 		return nil
 	}
 }
 
-func subscriptionManagementOptionsWithAutoDeleteOnIdle(durationInSec *int) servicebus.SubscriptionManagementOption {
-	return func(d *servicebus.SubscriptionDescription) error {
+func subscriptionManagementOptionsWithAutoDeleteOnIdle(durationInSec *int) azservicebus.SubscriptionManagementOption {
+	return func(d *azservicebus.SubscriptionDescription) error {
 		duration := fmt.Sprintf("PT%dS", *durationInSec)
 		d.AutoDeleteOnIdle = &duration
 		return nil
 	}
 }
 
-func subscriptionManagementOptionsWithDefaultMessageTimeToLive(durationInSec *int) servicebus.SubscriptionManagementOption {
-	return func(d *servicebus.SubscriptionDescription) error {
+func subscriptionManagementOptionsWithDefaultMessageTimeToLive(durationInSec *int) azservicebus.SubscriptionManagementOption {
+	return func(d *azservicebus.SubscriptionDescription) error {
 		duration := fmt.Sprintf("PT%dS", *durationInSec)
 		d.DefaultMessageTimeToLive = &duration
 		return nil
 	}
 }
 
-func subscriptionManagementOptionsWithLockDuration(durationInSec *int) servicebus.SubscriptionManagementOption {
-	return func(d *servicebus.SubscriptionDescription) error {
+func subscriptionManagementOptionsWithLockDuration(durationInSec *int) azservicebus.SubscriptionManagementOption {
+	return func(d *azservicebus.SubscriptionDescription) error {
 		duration := fmt.Sprintf("PT%dS", *durationInSec)
 		d.LockDuration = &duration
 		return nil
