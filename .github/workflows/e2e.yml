@@ -17,7 +17,9 @@ jobs:
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org
-      ARCHIVE_OUTDIR: dist/archives
+      DAPR_REGISTRY: docker.io/youngp
+      DAPR_TEST_REGISTRY: docker.io/youngp
+      HELM_NAMESPACE: dapr-tests
     steps:
       - name: Check issue comment
         uses: actions/github-script@0.3.0
@@ -63,7 +65,16 @@ jobs:
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
+      - name: Build Dapr
+        if: env.TEST_CLUSTER != ''
+        run: make build-linux
+      - name: Build docker image
+        if: env.TEST_CLUSTER != ''
+        run: make docker-build
+      - name: Build e2e test apps
+        if: env.TEST_CLUSTER != ''
+        run: make build-e2e-app-all
       - name: Clean up cluster
-        if: env.CHECKOUT_REPO != ''
+        if: env.TEST_CLUSTER != ''
         run: make clean-test-env
       
