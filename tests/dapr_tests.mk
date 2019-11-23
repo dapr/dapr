@@ -66,7 +66,7 @@ test-e2e-all: check-e2e-env
 	DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -v -tags=e2e ./tests/e2e/...
 
 # add required helm repo
-setup-helm-init:
+setup-helm-init: $(HOME)/.helm
 	$(HELM) repo add stable https://kubernetes-charts.storage.googleapis.com/
 	$(HELM) repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
 	$(HELM) repo update

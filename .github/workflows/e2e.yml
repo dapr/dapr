@@ -59,21 +59,38 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: docker login
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: Login Azure
         if: env.CHECKOUT_REPO != ''
         run: az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }}
       - name: Find the test cluster
-        id: test_cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
       - name: Build Dapr
-        run: make build-linux
-      - name: Build docker image
         if: env.TEST_CLUSTER != ''
-        run: make docker-build
+        run: |
+          make build-linux
+          make docker-build
       - name: Build e2e test apps
         if: env.TEST_CLUSTER != ''
         run: make build-e2e-app-all
+      - name: Push docker images to test dockerhub
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make docker-push
+          make push-e2e-app-all
+      - name: Preparing cluster
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make setup-helm-init
+          make setup-test-env
+      - name: Deploy Dapr to Test Cluster
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make docker-deploy-k8s
       - name: Clean up cluster
         if: env.TEST_CLUSTER != ''
         run: make clean-test-env
