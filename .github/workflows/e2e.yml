@@ -26,6 +26,9 @@ jobs:
           script: |
             const payload = context.payload;
             const issue = context.issue;
+
+            console.log(JSON.stringify(payload.pullrequest))
+            console.log(JSON.stringify(payload.body))
             if (payload.pull_request && payload.comment.body && payload.comment.body.indexOf("/ok-to-test") >= 0) {
               // Get pull request
               const pull = await github.pulls.get({
