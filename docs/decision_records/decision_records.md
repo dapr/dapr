@@ -26,11 +26,14 @@ All decisions are categorized in the following folders:
   - [CLI-001: CLI and runtim versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
   
 * **SDKs** - Decisions on Dapr SDKs.
+  - [SDK-001: SDK releases.](./sdk/SDK-001-releases.MD)
 
-* **Engineering** - Decisions on Engineering practices, including CI/CD, testings and releases.
+* **Engineering** - Decisions on Engineering practices, including CI/CD, testing and releases.
 
   - [ENG-001: Image Tagging](./engineering/ENG-001-tagging.MD)
   - [ENG-002: Dapr Release](./engineering/ENG-002-Dapr-Release.MD)
+  - [ENG-003: Test Infrastructure](./engineering/ENG-003-test-infrastructure.MD)
+  - [ENG-004: Signing](./engineering/ENG-004-signing.MD)
 
 ## Creating new decision records
 A new decision record should be a _.md_ file named as 
