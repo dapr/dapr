@@ -3,7 +3,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package gcpbucket
+package bucket
 
 import (
 	"context"

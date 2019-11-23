@@ -7,22 +7,22 @@ package bindings
 
 import (
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/bindings/blobstorage"
-	"github.com/dapr/components-contrib/bindings/cosmosdb"
-	"github.com/dapr/components-contrib/bindings/dynamodb"
-	"github.com/dapr/components-contrib/bindings/eventhubs"
-	"github.com/dapr/components-contrib/bindings/gcpbucket"
+	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
+	"github.com/dapr/components-contrib/bindings/aws/s3"
+	"github.com/dapr/components-contrib/bindings/aws/sns"
+	"github.com/dapr/components-contrib/bindings/aws/sqs"
+	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
+	"github.com/dapr/components-contrib/bindings/azure/cosmosdb"
+	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
+	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
+	"github.com/dapr/components-contrib/bindings/gcp/bucket"
+	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/http"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/mqtt"
-	"github.com/dapr/components-contrib/bindings/pubsub"
 	"github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
-	"github.com/dapr/components-contrib/bindings/s3"
-	"github.com/dapr/components-contrib/bindings/servicebusqueues"
-	"github.com/dapr/components-contrib/bindings/sns"
-	"github.com/dapr/components-contrib/bindings/sqs"
 )
 
 // Load input/output bindings
@@ -49,7 +49,7 @@ func Load() {
 		return cosmosdb.NewCosmosDB()
 	})
 	RegisterOutputBinding("gcp.bucket", func() bindings.OutputBinding {
-		return gcpbucket.NewGCPStorage()
+		return bucket.NewGCPStorage()
 	})
 	RegisterOutputBinding("http", func() bindings.OutputBinding {
 		return http.NewHTTP()
