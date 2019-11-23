@@ -65,7 +65,8 @@ jobs:
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: Login Azure
         if: env.CHECKOUT_REPO != ''
-        run: az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }}
+        run: |
+          az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }} --output none
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
