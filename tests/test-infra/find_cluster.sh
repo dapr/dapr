@@ -88,4 +88,4 @@ done
 
 echo "All test clusters are fully occupied."
 
-exit 0
+exit 1
