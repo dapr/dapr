@@ -24,7 +24,8 @@ import (
 )
 
 const (
-	TestDaprID = "fakeDaprID"
+	TestDaprID  = "fakeDaprID"
+	TestKeyName = "key0"
 )
 
 type fakeStateStore struct {
@@ -90,7 +91,7 @@ func getTestActorTypeAndID() (string, string) {
 	return "cat", "hobbit"
 }
 
-func fakeStore() state.StateStore {
+func fakeStore() state.Store {
 	return &fakeStateStore{
 		items: map[string][]byte{},
 		lock:  &sync.RWMutex{},
@@ -396,11 +397,10 @@ func TestReminderFiresOnceWitnEmptyPeriod(t *testing.T) {
 func TestConstructActorStateKey(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	keyName := "key0"
-	expected := fmt.Sprintf("%s-%s-%s-%s", TestDaprID, actorType, actorID, keyName)
+	expected := fmt.Sprintf("%s-%s-%s-%s", TestDaprID, actorType, actorID, TestKeyName)
 
 	// act
-	stateKey := testActorsRuntime.constructActorStateKey(actorType, actorID, keyName)
+	stateKey := testActorsRuntime.constructActorStateKey(actorType, actorID, TestKeyName)
 
 	// assert
 	assert.Equal(t, expected, stateKey)
@@ -409,7 +409,6 @@ func TestConstructActorStateKey(t *testing.T) {
 func TestSaveState(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	keyName := "key0"
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
@@ -422,7 +421,7 @@ func TestSaveState(t *testing.T) {
 	err := testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Key:       keyName,
+		Key:       TestKeyName,
 		Value:     val,
 	})
 	assert.NoError(t, err)
@@ -431,7 +430,7 @@ func TestSaveState(t *testing.T) {
 	response, err := testActorRuntime.GetState(&GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Key:       keyName,
+		Key:       TestKeyName,
 	})
 
 	assert.NoError(t, err)
@@ -441,7 +440,6 @@ func TestSaveState(t *testing.T) {
 func TestGetState(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	keyName := "key0"
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
@@ -453,7 +451,7 @@ func TestGetState(t *testing.T) {
 	testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Key:       keyName,
+		Key:       TestKeyName,
 		Value:     val,
 	})
 
@@ -461,7 +459,7 @@ func TestGetState(t *testing.T) {
 	response, err := testActorRuntime.GetState(&GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Key:       keyName,
+		Key:       TestKeyName,
 	})
 
 	// assert
@@ -472,7 +470,6 @@ func TestGetState(t *testing.T) {
 func TestDeleteState(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	keyName := "key0"
 	fakeData := strconv.Quote("fakeData")
 
 	var val interface{}
@@ -485,7 +482,7 @@ func TestDeleteState(t *testing.T) {
 	testActorRuntime.SaveState(&SaveStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Key:       keyName,
+		Key:       TestKeyName,
 		Value:     val,
 	})
 
@@ -493,7 +490,7 @@ func TestDeleteState(t *testing.T) {
 	response, err := testActorRuntime.GetState(&GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Key:       keyName,
+		Key:       TestKeyName,
 	})
 
 	assert.NoError(t, err)
@@ -503,7 +500,7 @@ func TestDeleteState(t *testing.T) {
 	err = testActorRuntime.DeleteState(&DeleteStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Key:       keyName,
+		Key:       TestKeyName,
 	})
 	assert.NoError(t, err)
 
@@ -511,7 +508,7 @@ func TestDeleteState(t *testing.T) {
 	response, err = testActorRuntime.GetState(&GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
-		Key:       keyName,
+		Key:       TestKeyName,
 	})
 
 	assert.NoError(t, err)
@@ -530,7 +527,7 @@ func TestTransactionalState(t *testing.T) {
 			ActorType: actorType,
 			ActorID:   actorID,
 			Operations: []TransactionalOperation{
-				TransactionalOperation{
+				{
 					Operation: Upsert,
 					Request: TransactionalUpsert{
 						Key:   "key1",
@@ -553,14 +550,14 @@ func TestTransactionalState(t *testing.T) {
 			ActorType: actorType,
 			ActorID:   actorID,
 			Operations: []TransactionalOperation{
-				TransactionalOperation{
+				{
 					Operation: Upsert,
 					Request: TransactionalUpsert{
 						Key:   "key1",
 						Value: "fakeData",
 					},
 				},
-				TransactionalOperation{
+				{
 					Operation: Delete,
 					Request: TransactionalDelete{
 						Key: "key1",
@@ -582,7 +579,7 @@ func TestTransactionalState(t *testing.T) {
 			ActorType: actorType,
 			ActorID:   actorID,
 			Operations: []TransactionalOperation{
-				TransactionalOperation{
+				{
 					Operation: Upsert,
 					Request:   "wrongBody",
 				},
@@ -602,7 +599,7 @@ func TestTransactionalState(t *testing.T) {
 			ActorType: actorType,
 			ActorID:   actorID,
 			Operations: []TransactionalOperation{
-				TransactionalOperation{
+				{
 					Operation: "Wrong",
 					Request:   "wrongBody",
 				},

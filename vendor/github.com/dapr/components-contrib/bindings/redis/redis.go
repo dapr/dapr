@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/dapr/components-contrib/bindings"
 
@@ -70,7 +69,7 @@ func (r *Redis) parseMetadata(metadata bindings.Metadata) (*redisMetadata, error
 
 func (r *Redis) Write(req *bindings.WriteRequest) error {
 	if val, ok := req.Metadata["key"]; ok && val != "" {
-		key := fmt.Sprintf(val)
+		key := val
 		res := r.client.Do(context.Background(), "SET", key, req.Data)
 		if err := redis.AsError(res); err != nil {
 			return err

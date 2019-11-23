@@ -58,14 +58,14 @@ type api struct {
 	directMessaging       messaging.DirectMessaging
 	componentsHandler     components.ComponentHandler
 	appChannel            channel.AppChannel
-	stateStore            state.StateStore
+	stateStore            state.Store
 	pubSub                pubsub.PubSub
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.StateStore, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.Store, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
 	return &api{
 		directMessaging:       directMessaging,
 		componentsHandler:     componentHandler,
@@ -108,6 +108,7 @@ func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelo
 		ActorID:   in.ActorID,
 		Data:      in.Data.Value,
 		Method:    in.Method,
+		Metadata:  in.Metadata,
 	}
 
 	resp, err := a.actor.Call(&req)
@@ -280,7 +281,7 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 	}
 
 	req := state.DeleteRequest{
-		Key:  in.Key,
+		Key:  a.getModifiedStateKey(in.Key),
 		ETag: in.Etag,
 	}
 	if in.Options != nil {

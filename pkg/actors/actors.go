@@ -48,7 +48,7 @@ type Actors interface {
 
 type actorsRuntime struct {
 	appChannel          channel.AppChannel
-	store               state.StateStore
+	store               state.Store
 	placementTableLock  *sync.RWMutex
 	placementTables     *placement.ConsistentHashTables
 	placementSignal     chan struct{}
@@ -74,7 +74,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.StateStore, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -196,7 +196,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	} else {
-		resp, err = a.callRemoteActor(targetActorAddress, req.ActorType, req.ActorID, req.Method, req.Data)
+		resp, err = a.callRemoteActor(targetActorAddress, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	}
 
 	if err != nil {
@@ -206,15 +206,10 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	return resp, nil
 }
 
-func (a *actorsRuntime) actorInstanceExists(key string) bool {
-	_, exists := a.actorsTable.Load(key)
-	return exists
-}
-
 func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	key := a.constructCombinedActorKey(actorType, actorID)
 
-	val, _ := a.actorsTable.LoadOrStore(key, &actor{
+	val, exists := a.actorsTable.LoadOrStore(key, &actor{
 		lock:         &sync.RWMutex{},
 		busy:         true,
 		lastUsedTime: time.Now(),
@@ -226,7 +221,6 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	lock.Lock()
 	defer lock.Unlock()
 
-	exists := a.actorInstanceExists(key)
 	if !exists {
 		err := a.tryActivateActor(actorType, actorID)
 		if err != nil {
@@ -250,8 +244,11 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-	act.busy = false
-	close(act.busyCh)
+
+	if act.busy {
+		act.busy = false
+		close(act.busyCh)
+	}
 
 	if err != nil {
 		return nil, err
@@ -267,12 +264,17 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}, nil
 }
 
-func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte) (*CallResponse, error) {
+func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	req := daprinternal_pb.CallActorEnvelope{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Method:    actorMethod,
 		Data:      &any.Any{Value: data},
+		Metadata:  map[string]string{},
+	}
+
+	for k, v := range metadata {
+		req.Metadata[k] = v
 	}
 
 	conn, err := a.grpcConnectionFn(targetAddress)
@@ -366,7 +368,7 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 		}
 	}
 
-	transactionalStore, ok := a.store.(state.TransactionalStateStore)
+	transactionalStore, ok := a.store.(state.TransactionalStore)
 	if !ok {
 		return errors.New("state store does not support transaction")
 	}
