@@ -11,7 +11,7 @@ E2E_TEST_APPS=hellodapr
 E2E_TESTAPP_DIR=./tests/apps
 
 KUBECTL=kubectl
-DAPR_TEST_NAMESPACE?=dapr-test
+DAPR_TEST_NAMESPACE?=dapr-tests
 
 ifeq ($(DAPR_TEST_ENV),minikube)
 MINIKUBE_NODE_IP=$(shell minikube ip)
@@ -85,7 +85,11 @@ setup-test-env: setup-test-env-redis setup-test-env-kafka
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
 
 clean-test-env:
-	$(HELM) delete --purge dapr-redis
-	$(HELM) delete --purge dapr-kafka
-	$(HELM) delete --purge dapr
-	$(KUBECTL) -n $(DAPR_TEST_NAMESPACE) delete pod,deployment,svc --all
+	# Delete dapr-redis release
+	-$(HELM) delete --purge dapr-redis
+	# Delete dapr-kafka
+	-$(HELM) delete --purge dapr-kafka
+	# Delete dapr
+	-$(HELM) delete --purge dapr
+	# Clean up namespace to remove all resources
+	-$(KUBECTL) delete namespace $(DAPR_TEST_NAMESPACE)
