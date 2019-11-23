@@ -7,11 +7,11 @@ package state
 
 import (
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/state/azure/cosmosdb"
 	"github.com/dapr/components-contrib/state/cassandra"
-	"github.com/dapr/components-contrib/state/consul"
-	"github.com/dapr/components-contrib/state/cosmosdb"
 	"github.com/dapr/components-contrib/state/etcd"
-	"github.com/dapr/components-contrib/state/firestore"
+	"github.com/dapr/components-contrib/state/gcp/firestore"
+	"github.com/dapr/components-contrib/state/hashicorp/consul"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	"github.com/dapr/components-contrib/state/redis"

@@ -3,7 +3,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package azureservicebus
+package servicebus
 
 // Reference for settings:
 // https://github.com/Azure/azure-service-bus-go/blob/54b2faa53e5216616e59725281be692acc120c34/subscription_manager.go#L101
