@@ -1,0 +1,27 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: e2e
+
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  build:
+    name: E2E test
+    runs-on: ubuntu-latest
+    env:
+      GOVER: 1.13.4
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: https://proxy.golang.org
+      ARCHIVE_OUTDIR: dist/archives
+    steps:
+      - name: Set up Go ${{ env.GOVER }}
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
