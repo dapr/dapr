@@ -69,7 +69,33 @@ jobs:
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
-      - name: Build Dapr
+      - name: Add test result comment to PR
+        if: always()
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const jobContext = JSON.parse(process.env.JOB_CONTEXT);
+            const jobStatus = jobContext.status;
+            const testCluster = process.env.TEST_CLUSTER;
+
+            var message = "";
+            if (!testCluster) {
+              message = "All test clusters are occupied by the other tests. Please try to run the test later.";
+            } else if (jobStatus == "success") {
+              message = "Congrats! All end-to-end tests are passed. Thanks for your contribution!";
+            } else if (jobStatus == "failure") {
+              message = "end-to-end tests has been failed.";
+            } else if (jobStatus == "cancelled") {
+              message = "end-to-end tests has been cancelled.";
+            }
+            
+            if (message) {
+              await github.issues.createComment({ ...context.issue, body: message});
+            }
+      - name: Build dapr and its docker image
         if: env.TEST_CLUSTER != ''
         run: |
           make build-linux
@@ -82,18 +108,18 @@ jobs:
         run: |
           make docker-push
           make push-e2e-app-all
-      - name: Preparing ${{ env.TEST_CLUSTER }} cluster
+      - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
         if: env.TEST_CLUSTER != ''
         run: |
           make setup-helm-init
           make setup-test-env
-      - name: Deploy Dapr to ${{ env.TEST_CLUSTER }} cluster
+      - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make docker-deploy-k8s
       - name: Deploy test components
         if: env.TEST_CLUSTER != ''
         run: make setup-test-components
-      - name: Start E2E tests
+      - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
       - name: Clean up ${{ env.TEST_CLUSTER }} cluster
