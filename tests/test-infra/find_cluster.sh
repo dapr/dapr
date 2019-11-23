@@ -48,6 +48,10 @@ for clustername in ${testclusterpool[@]}; do
     # that this cluster is being used by the other tests.
     echo "Trying to create ${KUBE_TEST_NAMESPACE} namespace..."
     kubectl create namespace ${KUBE_TEST_NAMESPACE}
+    if [ $? -eq 0 ]; then
+        echo "Created ${KUBE_TEST_NAMESPACE} successfully and use $clustername cluster"
+        exit 0
+    fi
 
     # Get the running time of dapr-tests namespace
     start_datetime=$(kubectl get namespace ${KUBE_TEST_NAMESPACE} -o=jsonpath='{.metadata.creationTimestamp}')
@@ -58,10 +62,10 @@ for clustername in ${testclusterpool[@]}; do
         continue
     fi
 
-    # NOTE: 'date' is GNU version date. Please use gdate on mac os
+    # NOTE: 'date' must be GNU date. Please use gdate on mac os
     # after installing coreutils (brew install coreutils)
-    start_sec=$(gdate -d "$start_datetime" +%s)
-    now_sec=$(gdate +%s)
+    start_sec=$(date -d "$start_datetime" +%s)
+    now_sec=$(date +%s)
     running_time=$((now_sec-start_sec))
 
     echo "Namespace is being used for $running_time seconds"
@@ -70,7 +74,8 @@ for clustername in ${testclusterpool[@]}; do
     # In this case, we can use this cluster.
     if [ $running_time -gt $MAX_TEST_TIMEOUT ]; then
         echo "The previous test running in this cluster might be cancelled or failed accidently so use $clustername cluster for e2e test."
-        exit 0
+        echo "Trying to delete ${KUBE_TEST_NAMESPACE} namespace and all resources..."
+        kubectl delete namespace ${KUBE_TEST_NAMESPACE}
     fi
 
     echo "-------------------------------------------------------"
