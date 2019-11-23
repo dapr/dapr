@@ -91,6 +91,11 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           make docker-deploy-k8s
-      - name: Clean up ${{ env.TEST_CLUSTER }} cluster
+          make setup-test-components
+      - name: Start E2E tests
         if: env.TEST_CLUSTER != ''
+        run: |
+          make test-e2e-all
+      - name: Clean up ${{ env.TEST_CLUSTER }} cluster
+        if: always()
         run: make clean-test-env

@@ -79,8 +79,11 @@ setup-test-env-redis:
 setup-test-env-kafka:
 	$(HELM) install -f ./tests/config/kafka_override.yaml --wait --timeout 1000 --name dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) incubator/kafka
 
-# Apply component yaml for state, pubsub, and bindings
+# Install redis and kafka to test cluster
 setup-test-env: setup-test-env-redis setup-test-env-kafka
+
+# Apply component yaml for state, pubsub, and bindings
+setup-test-components:
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -89,5 +92,5 @@ setup-test-env: setup-test-env-redis setup-test-env-kafka
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
 
 # Clean up test environment
-clean-test-env:
+clean-test-env: $(HOME)/.helm
 	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
