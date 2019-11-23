@@ -19,7 +19,7 @@ jobs:
       GOPROXY: https://proxy.golang.org
       ARCHIVE_OUTDIR: dist/archives
     steps:
-      - name: Get Comments
+      - name: Check issue comment
         uses: actions/github-script@0.3.0
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
@@ -57,4 +57,13 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Login Azure
+        if: env.CHECKOUT_REPO != ''
+        run: az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }}
+      - name: Find the test cluster
+        if: env.CHECKOUT_REPO != ''
+        run: ./tests/test-infra/find_cluster.sh
+      - name: Clean up cluster
+        if: env.CHECKOUT_REPO != ''
+        run: make clean-test-env
       
