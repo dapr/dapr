@@ -24,21 +24,34 @@ jobs:
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            console.log(JSON.stringify(context.issue))
-            const pull = await github.pulls.get({
-              owner: context.issue.owner,
-              repo: context.issue.repo,
-              pull_number: context.issue.number
-            });
-            const ref = pull.data.head.sha
-            const repo = pull.data.head.repo.full_name
-            console.log(`##[set-env name=CHECKOUT_REPO;]${repo}`);
-            console.log(`##[set-env name=CHECKOUT_REF;]${ref}`);
+            const payload = context.payload;
+            const issue = context.issue;
+            if (payload.pull_request && payload.comment.body && payload.comment.body.indexOf("/ok-to-test") >= 0) {
+              // Get pull request
+              const pull = await github.pulls.get({
+                owner: issue.owner,
+                repo: issue.repo,
+                pull_number: issue.number
+              });
+
+              if (pull && pull.data) {
+                // Get commit id and repo to checkout code from head repo
+                const ref = pull.data.head.sha
+                const repo = pull.data.head.repo.full_name
+
+                // Set environment variables
+                console.log(`##[set-env name=CHECKOUT_REPO;]${repo}`);
+                console.log(`##[set-env name=CHECKOUT_REF;]${ref}`);
+              }
+            }
+
       - name: Set up Go ${{ env.GOVER }}
+        if: ${{ env.CHECKOUT_REPO }} != ''
         uses: actions/setup-go@v1
         with:
           go-version: ${{ env.GOVER }}
       - name: Check out code into the Go module directory
+        if: ${{ env.CHECKOUT_REPO }} != ''
         uses: actions/checkout@v1
         with:
           repository: ${{ env.CHECKOUT_REPO }}
