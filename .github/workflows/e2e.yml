@@ -5,9 +5,7 @@
 
 name: e2e
 
-on:
-  issue_comment:
-    types: [created]
+on: pull_request
 jobs:
   build:
     name: E2E test
@@ -19,9 +17,16 @@ jobs:
       GOPROXY: https://proxy.golang.org
       ARCHIVE_OUTDIR: dist/archives
     steps:
+      - name: Get Comments
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            console.log(JSON.stringify(context))
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v1
         with:
           go-version: ${{ env.GOVER }}
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
+      
