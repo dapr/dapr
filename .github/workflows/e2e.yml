@@ -96,7 +96,12 @@ jobs:
             }
             
             if (message) {
-              await github.issues.createComment({ ...context.issue, body: message});
+              await github.issues.createComment({
+                owner: context.issue.owner,
+                repo: context.issue.repo,
+                issue_number: context.issue.number,
+                body: message
+              });
             }
       - name: Build dapr and its docker image
         if: env.TEST_CLUSTER != ''
