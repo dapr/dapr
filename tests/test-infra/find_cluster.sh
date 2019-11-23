@@ -17,7 +17,7 @@ testclusterpool=(
 )
 
 # Define max e2e test timeout
-MAX_TEST_TIMEOUT=3600
+MAX_TEST_TIMEOUT=100
 
 if [ -z "$DAPR_TEST_RESOURCE_GROUP" ]; then
     DAPR_TEST_RESOURCE_GROUP="dapre2e"
@@ -50,9 +50,9 @@ for clustername in ${testclusterpool[@]}; do
     kubectl create namespace ${DAPR_TEST_NAMESPACE}
     if [ $? -eq 0 ]; then
         echo "Created ${DAPR_TEST_NAMESPACE} successfully and use $clustername cluster"
-        echo "::set-env name=TEST_CLUSTER::$clustername"
-        echo "::set-env name=DAPR_TAG::$clustername"
-        echo "::set-env name=DAPR_TEST_TAG::$clustername"
+        echo "::set-output name=TEST_CLUSTER::$clustername"
+        echo "::set-output name=DAPR_TAG::$clustername"
+        echo "::set-output name=DAPR_TEST_TAG::$clustername"
         exit 0
     fi
 
@@ -88,4 +88,4 @@ done
 
 echo "All test clusters are fully occupied."
 
-exit 1
+exit 0

@@ -63,9 +63,13 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }}
       - name: Find the test cluster
+        id: test_cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
       - name: Build Dapr
+        if: steps.step_one.outputs.TEST_CLUSTER != ''
+        env:
+          CHECKOUT_REPO: ${{ steps.step_one.outputs.TEST_CLUSTER }}
         run: |
           echo $CHECKOUT_REPO cluster
           echo $TEST_CLUSTER cluster
