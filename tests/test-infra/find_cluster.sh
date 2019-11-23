@@ -50,9 +50,9 @@ for clustername in ${testclusterpool[@]}; do
     kubectl create namespace ${DAPR_TEST_NAMESPACE}
     if [ $? -eq 0 ]; then
         echo "Created ${DAPR_TEST_NAMESPACE} successfully and use $clustername cluster"
-        echo "##[set-env name=TEST_CLUSTER;]$clustername"
-        echo "##[set-env name=DAPR_TAG;]$clustername"
-        echo "##[set-env name=DAPR_TEST_TAG;]$clustername"
+        echo "::set-env name=TEST_CLUSTER::$clustername"
+        echo "::set-env name=DAPR_TAG::$clustername"
+        echo "::set-env name=DAPR_TEST_TAG::$clustername"
         exit 0
     fi
 
