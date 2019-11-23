@@ -82,15 +82,15 @@ jobs:
         run: |
           make docker-push
           make push-e2e-app-all
-      - name: Preparing cluster
+      - name: Preparing ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: |
           make setup-helm-init
           make setup-test-env
-      - name: Deploy Dapr to Test Cluster
+      - name: Deploy Dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: |
           make docker-deploy-k8s
-      - name: Clean up cluster
+      - name: Clean up ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make clean-test-env

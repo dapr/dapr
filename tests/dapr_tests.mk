@@ -73,17 +73,17 @@ setup-helm-init: $(HOME)/.helm
 
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) install --wait --name dapr-redis --set usePassword=false stable/redis --namespace $(DAPR_TEST_NAMESPACE)
+	$(HELM) install --wait --timeout 1000 --name dapr-redis --set usePassword=false stable/redis --namespace $(DAPR_TEST_NAMESPACE)
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) install -f ./config/kafka_override.yaml --wait --timeout 1000 --name dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) incubator/kafka
+	$(HELM) install -f ./tests/config/kafka_override.yaml --wait --timeout 1000 --name dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) incubator/kafka
 
 # Apply component yaml for state, pubsub, and bindings
 setup-test-env: setup-test-env-redis setup-test-env-kafka
-	$(KUBECTL) apply -f ./config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./config/dapr_redis_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_redis_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
