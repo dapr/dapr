@@ -27,9 +27,7 @@ jobs:
             const payload = context.payload;
             const issue = context.issue;
 
-            console.log(JSON.stringify(payload))
-            console.log(JSON.stringify(payload.comment))
-            if (payload.comment.body && payload.comment.body.indexOf("/ok-to-test") >= 0) {
+            if (payload.issue.pull_request && payload.comment.body && payload.comment.body.indexOf("/ok-to-test") >= 0) {
               // Get pull request
               const pull = await github.pulls.get({
                 owner: issue.owner,
