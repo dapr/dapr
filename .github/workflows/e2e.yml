@@ -6,12 +6,7 @@
 name: e2e
 
 on:
-  pull_request:
-    types:
-      - created
-      - edited
-    branches: 
-      - master
+  issue_comment: {types:created}
 
 jobs:
   build:
