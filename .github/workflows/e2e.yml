@@ -69,7 +69,7 @@ jobs:
       - name: Build Dapr
         if: steps.step_one.outputs.TEST_CLUSTER != ''
         env:
-          CHECKOUT_REPO: ${{ steps.step_one.outputs.TEST_CLUSTER }}
+          TEST_CLUSTER: ${{ steps.step_one.outputs.TEST_CLUSTER }}
         run: |
           echo $CHECKOUT_REPO cluster
           echo $TEST_CLUSTER cluster
