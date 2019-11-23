@@ -59,10 +59,6 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
-      - name: docker login
-        if: env.CHECKOUT_REPO != ''
-        run: |
-          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: Login Azure
         if: env.CHECKOUT_REPO != ''
         run: |
@@ -70,6 +66,10 @@ jobs:
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
+      - name: docker login
+        if: env.TEST_CLUSTER != ''
+        run: |
+          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: Build dapr and its docker image
         if: env.TEST_CLUSTER != ''
         run: |
@@ -98,7 +98,7 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
       - name: Add test result comment to PR
-        if: env.CHECKOUT_REPO != ''
+        if: always() && env.CHECKOUT_REPO != ''
         env:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
@@ -133,5 +133,5 @@ jobs:
               });
             }
       - name: Clean up ${{ env.TEST_CLUSTER }} cluster
-        if: env.CHECKOUT_REPO != ''
+        if: always() && env.TEST_CLUSTER != ''
         run: make clean-test-env
