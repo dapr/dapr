@@ -67,12 +67,7 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
       - name: Build Dapr
-        if: steps.test_cluster.outputs.TEST_CLUSTER != ''
-        env:
-          TEST_CLUSTER: ${{ steps.test_cluster.outputs.TEST_CLUSTER }}
-        run: |
-          echo $CHECKOUT_REPO cluster
-          echo $TEST_CLUSTER cluster
+        run: make build-linux
       - name: Build docker image
         if: env.TEST_CLUSTER != ''
         run: make docker-build
