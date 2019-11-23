@@ -25,12 +25,12 @@ jobs:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
             console.log(JSON.stringify(context.issue))
-            const pull = github.pulls.get({
+            const pull = await github.pulls.get({
               owner: context.issue.owner,
               repo: context.issue.repo,
               pull_number: context.issue.number
-            })
-            console.log(JSON.stringify(pull))
+            });
+            console.log(pull)
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v1
         with:
