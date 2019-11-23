@@ -43,7 +43,7 @@ for clustername in ${testclusterpool[@]}; do
         continue
     fi
 
-    # To resolve the racing condition when multiple tests are running,
+    # To resolve the race condition when multiple tests are running,
     # this script tries to create the namespace. If it is failed, we can assume 
     # that this cluster is being used by the other tests.
     echo "Trying to create ${KUBE_TEST_NAMESPACE} namespace..."
