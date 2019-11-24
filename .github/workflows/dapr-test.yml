@@ -3,10 +3,9 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-name: e2e
+name: dapr test
 
-on:
-  issue_comment: {types: created}
+on: repository_dispatch
 
 jobs:
   test-e2e:
@@ -21,31 +20,17 @@ jobs:
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       HELM_NAMESPACE: dapr-tests
     steps:
-      - name: Check issue comment
+      - name: Parse test payload
         uses: actions/github-script@0.3.0
         with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
+          github-token: ${{secrets.RELEASE_USER_TOKEN}}
           script: |
             const payload = context.payload;
-            const issue = context.issue;
-
-            if (payload.issue.pull_request && payload.comment.body && payload.comment.body.indexOf("/ok-to-test") >= 0) {
-              // Get pull request
-              const pull = await github.pulls.get({
-                owner: issue.owner,
-                repo: issue.repo,
-                pull_number: issue.number
-              });
-
-              if (pull && pull.data) {
-                // Get commit id and repo to checkout code from head repo
-                const ref = pull.data.head.sha
-                const repo = pull.data.head.repo.full_name
-
-                // Set environment variables
-                console.log(`##[set-env name=CHECKOUT_REPO;]${repo}`);
-                console.log(`##[set-env name=CHECKOUT_REF;]${ref}`);
-              }
+            const testPayload = payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-test") {
+              // Set environment variables
+              console.log(`##[set-env name=CHECKOUT_REPO;]${testPayload.pull_head_repo}`);
+              console.log(`##[set-env name=CHECKOUT_REF;]${testPayload.pull_head_ref}`);
             }
 
       - name: Set up Go ${{ env.GOVER }}
@@ -66,6 +51,30 @@ jobs:
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
+      - name: Add the test status comment to PR
+        if: env.CHECKOUT_REPO != ''
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.RELEASE_BOT_TOKEN}}
+          script: |
+            const payload = context.payload;
+            const testPayload = payload.client_payload;
+            const testCluster = process.env.TEST_CLUSTER;
+
+            if (!testCluster) {
+              message = "All test clusters are occupied by the other tests. Please try to test later.";
+            } else {
+              message = `Found the available test cluster (${testCluster}). Please wait until test is done.`;
+            }
+            
+            await github.issues.createComment({
+              owner: testPayload.issue.owner,
+              repo: testPayload.issue.repo,
+              issue_number: testPayload.issue.number,
+              body: message
+            });
       - name: docker login
         if: env.TEST_CLUSTER != ''
         run: |
@@ -98,26 +107,24 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
       - name: Add test result comment to PR
-        if: always() && env.CHECKOUT_REPO != ''
+        if: always() && env.TEST_CLUSTER != ''
         env:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
         with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
+          github-token: ${{secrets.RELEASE_USER_TOKEN}}
           script: |
+            const payload = context.payload;
+            const testPayload = payload.client_payload;
             const jobContext = JSON.parse(process.env.JOB_CONTEXT);
             const jobStatus = jobContext.status.toLowerCase();
-            const testCluster = process.env.TEST_CLUSTER;
 
-            console.log(`Test Cluster: ${testCluster}`);
             console.log(`Current Job Status: ${jobStatus}`);
 
             var message = "";
             
             if (jobStatus == "cancelled") {
               message = "End-to-end tests has been cancelled.";
-            } else if (!testCluster) {
-              message = "All test clusters are occupied by the other tests. Please try to test later.";
             } else if (jobStatus == "success") {
               message = "Congrats! All end-to-end tests are passed. Thanks for your contribution!";
             } else if (jobStatus == "failure") {
@@ -126,9 +133,9 @@ jobs:
             
             if (message) {
               await github.issues.createComment({
-                owner: context.issue.owner,
-                repo: context.issue.repo,
-                issue_number: context.issue.number,
+                owner: testPayload.issue.owner,
+                repo: testPayload.issue.repo,
+                issue_number: testPayload.issue.number,
                 body: message
               });
             }
