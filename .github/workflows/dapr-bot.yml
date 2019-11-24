@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Comment analyzer
-        uses: actions/github-script@master
+        uses: actions/github-script@0.3.0
         with:
           github-token: ${{secrets.RELEASE_USER_TOKEN}}
           script: |
