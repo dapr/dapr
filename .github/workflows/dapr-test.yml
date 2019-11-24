@@ -57,7 +57,7 @@ jobs:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
         with:
-          github-token: ${{secrets.RELEASE_BOT_TOKEN}}
+          github-token: ${{secrets.RELEASE_USER_TOKEN}}
           script: |
             const payload = context.payload;
             const testPayload = payload.client_payload;
