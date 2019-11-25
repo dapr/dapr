@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-name: dapr test
+name: dapr-test
 
 on: repository_dispatch
 
@@ -18,19 +18,20 @@ jobs:
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      HELMVER: 2.16.1
       HELM_NAMESPACE: dapr-tests
+      MAX_TEST_TIMEOUT: 5400
     steps:
       - name: Parse test payload
         uses: actions/github-script@0.3.0
         with:
           github-token: ${{secrets.RELEASE_USER_TOKEN}}
           script: |
-            const payload = context.payload;
-            const testPayload = payload.client_payload;
+            const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-test") {
               // Set environment variables
-              console.log(`##[set-env name=CHECKOUT_REPO;]${testPayload.pull_head_repo}`);
-              console.log(`##[set-env name=CHECKOUT_REF;]${testPayload.pull_head_ref}`);
+              console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
+              console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
             }
 
       - name: Set up Go ${{ env.GOVER }}
@@ -44,6 +45,10 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Helm ${{ env.HELMVER }}
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELMVER }}
       - name: Login Azure
         if: env.CHECKOUT_REPO != ''
         run: |
@@ -66,7 +71,7 @@ jobs:
             if (!testCluster) {
               message = "All test clusters are occupied by the other tests. Please try to test later.";
             } else {
-              message = `Found the available test cluster (${testCluster}). Please wait until test is done.`;
+              message = `Found the available test cluster - ${testCluster}. Please wait until test is done.`;
             }
             
             await github.issues.createComment({
@@ -114,8 +119,7 @@ jobs:
         with:
           github-token: ${{secrets.RELEASE_USER_TOKEN}}
           script: |
-            const payload = context.payload;
-            const testPayload = payload.client_payload;
+            const testPayload = context.payload.client_payload;
             const jobContext = JSON.parse(process.env.JOB_CONTEXT);
             const jobStatus = jobContext.status.toLowerCase();
 

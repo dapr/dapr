@@ -27,22 +27,28 @@ jobs:
               "artursouza"
             ];
 
-            // Ignore the command unless the actor is in owner list
-            if (owners.indexOf(context.actor) < 0) {
-              return;
-            }
-
             const payload = context.payload;
             const issue = context.issue;
-            if (payload.issue.pull_request && payload.comment.body && payload.comment.body.indexOf("/ok-to-test") >= 0) {
+            const isFromPulls = !!payload.issue.pull_request;
+            const commentBody = payload.comment.body;
+
+            if (isFromPulls && commentBody && commentBody.indexOf("/ok-to-test") >= 0) {
+              // Ignore the command unless the actor is in owner list
+              if (owners.indexOf(context.actor) < 0) {
+                console.log(`${context.actor} doesn't have the permission to execute the comment`);
+                return;
+              }
+
               // Get pull request
               const pull = await github.pulls.get({
                 owner: issue.owner,
                 repo: issue.repo,
                 pull_number: issue.number
               });
+
               if (pull && pull.data) {
-                // Pollyfill: Register createDispatchEvent
+                // Pollyfill: register createDispatchEvent because actions/github-script@0.3.0 
+                // does not have createDispatchEvent.
                 github.registerEndpoints({
                   repos: {
                     createDispatchEvent: {

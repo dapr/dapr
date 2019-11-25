@@ -17,14 +17,16 @@ testclusterpool=(
 )
 
 # Define max e2e test timeout, 1.5 hours
-MAX_TEST_TIMEOUT=5400
+[ -z "$MAX_TEST_TIMEOUT" ] && MAX_TEST_TIMEOUT=5400
 
-if [ -z "$DAPR_TEST_RESOURCE_GROUP" ]; then
-    DAPR_TEST_RESOURCE_GROUP="dapre2e"
-fi
+[ -z "$DAPR_TEST_RESOURCE_GROUP" ] && DAPR_TEST_RESOURCE_GROUP="dapre2e"
 
-if [ -z "$KUBE_TEST_NAMESPACE" ]; then
-    DAPR_TEST_NAMESPACE="dapr-tests"
+if [ -z "$DAPR_TEST_NAMESPACE" ]; then
+    if [ ! -z "$HELM_NAMESPACE" ]; then
+        DAPR_TEST_NAMESPACE=$HELM_NAMESPACE
+    else
+        DAPR_TEST_NAMESPACE="dapr-tests"
+    fi
 fi
 
 echo "Selected Dapr Test Resource group: $DAPR_TEST_RESOURCE_GROUP"
