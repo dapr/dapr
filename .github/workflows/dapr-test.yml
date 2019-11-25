@@ -1,0 +1,148 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-test
+
+on: repository_dispatch
+
+jobs:
+  test-e2e:
+    name: end-to-end tests
+    runs-on: ubuntu-latest
+    env:
+      GOVER: 1.13.4
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: https://proxy.golang.org
+      DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      HELMVER: v2.16.1
+      HELM_NAMESPACE: dapr-tests
+      MAX_TEST_TIMEOUT: 5400
+    steps:
+      - name: Parse test payload
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.RELEASE_USER_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-test") {
+              // Set environment variables
+              console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
+              console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
+            }
+
+      - name: Set up Go ${{ env.GOVER }}
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Check out code into the Go module directory
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v1
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Helm ${{ env.HELMVER }}
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELMVER }}
+      - name: Login Azure
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }} --output none
+      - name: Find the test cluster
+        if: env.CHECKOUT_REPO != ''
+        run: ./tests/test-infra/find_cluster.sh
+      - name: Add the test status comment to PR
+        if: env.CHECKOUT_REPO != ''
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.RELEASE_USER_TOKEN}}
+          script: |
+            const payload = context.payload;
+            const testPayload = payload.client_payload;
+            const testCluster = process.env.TEST_CLUSTER;
+
+            if (!testCluster) {
+              message = "All test clusters are occupied by the other tests. Please try to test later.";
+            } else {
+              message = `Found the available test cluster - ${testCluster}. Please wait until test is done.`;
+            }
+            
+            await github.issues.createComment({
+              owner: testPayload.issue.owner,
+              repo: testPayload.issue.repo,
+              issue_number: testPayload.issue.number,
+              body: message
+            });
+      - name: docker login
+        if: env.TEST_CLUSTER != ''
+        run: |
+          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Build dapr and its docker image
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make build-linux
+          make docker-build
+      - name: Build e2e test apps
+        if: env.TEST_CLUSTER != ''
+        run: make build-e2e-app-all
+      - name: Push docker images to test dockerhub
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make docker-push
+          make push-e2e-app-all
+      - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make setup-helm-init
+          make setup-test-env
+      - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
+        if: env.TEST_CLUSTER != ''
+        run: make docker-deploy-k8s
+      - name: Deploy test components
+        if: env.TEST_CLUSTER != ''
+        run: make setup-test-components
+      - name: Run E2E tests
+        if: env.TEST_CLUSTER != ''
+        run: make test-e2e-all
+      - name: Add test result comment to PR
+        if: always() && env.TEST_CLUSTER != ''
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.RELEASE_USER_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            const jobContext = JSON.parse(process.env.JOB_CONTEXT);
+            const jobStatus = jobContext.status.toLowerCase();
+
+            console.log(`Current Job Status: ${jobStatus}`);
+
+            var message = "";
+            
+            if (jobStatus == "cancelled") {
+              message = "End-to-end tests has been cancelled.";
+            } else if (jobStatus == "success") {
+              message = "Congrats! All end-to-end tests are passed. Thanks for your contribution!";
+            } else if (jobStatus == "failure") {
+              message = "End-to-end tests has been failed.";
+            }
+            
+            if (message) {
+              await github.issues.createComment({
+                owner: testPayload.issue.owner,
+                repo: testPayload.issue.repo,
+                issue_number: testPayload.issue.number,
+                body: message
+              });
+            }
+      - name: Clean up ${{ env.TEST_CLUSTER }} cluster
+        if: always() && env.TEST_CLUSTER != ''
+        run: make clean-test-env
