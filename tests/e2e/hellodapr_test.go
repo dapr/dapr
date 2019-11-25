@@ -8,6 +8,8 @@
 package e2e
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
@@ -15,6 +17,16 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
 )
+
+type testCommandRequest struct {
+	Message string `json:"message,omitempty"`
+}
+
+type appResponse struct {
+	Message   string `json:"message,omitempty"`
+	StartTime int    `json:"start_time,omitempty"`
+	EndTime   int    `json:"end_time,omitempty"`
+}
 
 var tr *runner.TestRunner
 
@@ -45,24 +57,49 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestHelloGreenDapr(t *testing.T) {
-	// Get Ingress external url for "hellodapr" test app
-	externalURL := tr.Platform.AcquireAppExternalURL("hellogreendapr")
-	require.NotEmpty(t, externalURL, "external URL must not be empty")
-
-	// Call endpoint for "hellodapr" test app
-	resp, err := httpGet(externalURL)
-	require.NoError(t, err)
-	require.Equal(t, resp, []byte("Hello, Dapr"))
+var helloAppTests = []struct {
+	in               string
+	app              string
+	testCommand      string
+	expectedResponse string
+}{
+	{
+		"green dapr",
+		"hellogreendapr",
+		"green",
+		"Hello green dapr!",
+	},
+	{
+		"blue dapr",
+		"hellobluedapr",
+		"blue",
+		"Hello blue dapr!",
+	},
 }
 
-func TestHelloBlueDapr(t *testing.T) {
-	// Get Ingress external url for "hellobluedapr" test app
-	externalURL := tr.Platform.AcquireAppExternalURL("hellobluedapr")
-	require.NotEmpty(t, externalURL, "external URL must not be empty")
+func TestHelloDapr(t *testing.T) {
+	for _, tt := range helloAppTests {
+		t.Run(tt.in, func(t *testing.T) {
+			// Get Ingress external url for "hellodapr" test app
+			externalURL := tr.Platform.AcquireAppExternalURL(tt.app)
+			require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-	// Call endpoint for "hellobluedapr" test app
-	resp, err := httpGet(externalURL)
-	require.NoError(t, err)
-	require.Equal(t, resp, []byte("Hello, Dapr"))
+			// Call endpoint for "hellodapr" test app
+			resp, err := httpGet(externalURL)
+			require.NoError(t, err)
+
+			cmd := testCommandRequest{
+				Message: "Hello Dapr.",
+			}
+
+			// trigger test
+			resp, err = httpPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), json.Marshal(cmd))
+			require.NoError(t, err)
+
+			var appResp appResponse
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
 }
