@@ -88,12 +88,12 @@ func TestHelloDapr(t *testing.T) {
 			resp, err := httpGet(externalURL)
 			require.NoError(t, err)
 
-			cmd := testCommandRequest{
-				Message: "Hello Dapr.",
-			}
-
 			// trigger test
-			body, _ := json.Marshal(cmd)
+			body, err := json.Marshal(testCommandRequest{
+				Message: "Hello Dapr.",
+			})
+			require.NoError(t, err)
+
 			resp, err = httpPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
 			require.NoError(t, err)
 
