@@ -1,0 +1,13 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+# Install 1 replica for e2e test
+replicas: 1
+
+# Topic creation and configuration for dapr test
+topics:
+  - name: dapr-test
+    partitions: 1
+    replicationFactor: 1
