@@ -93,7 +93,8 @@ func TestHelloDapr(t *testing.T) {
 			}
 
 			// trigger test
-			resp, err = httpPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), json.Marshal(cmd))
+			body, _ := json.Marshal(cmd)
+			resp, err = httpPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
 			require.NoError(t, err)
 
 			var appResp appResponse
