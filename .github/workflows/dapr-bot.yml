@@ -11,7 +11,7 @@ jobs:
       - name: Comment analyzer
         uses: actions/github-script@0.3.0
         with:
-          github-token: ${{secrets.RELEASE_USER_TOKEN}}
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             // list of owner who can control dapr-bot workflow
             // TODO: Read owners from OWNERS file.
