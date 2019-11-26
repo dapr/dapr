@@ -31,7 +31,7 @@ func newHttpClient() http.Client {
 
 func httpGet(url string) ([]byte, error) {
 	client := newHttpClient()
-	resp, err := client.Get(validUrl(url))
+	resp, err := client.Get(sanitizeHttpUrl(url))
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func httpGet(url string) ([]byte, error) {
 
 func httpPost(url string, data []byte) ([]byte, error) {
 	client := newHttpClient()
-	resp, err := client.Post(validUrl(url), "application/json", bytes.NewBuffer(data))
+	resp, err := client.Post(sanitizeHttpUrl(url), "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func httpPost(url string, data []byte) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
-func validUrl(url string) string {
+func sanitizeHttpUrl(url string) string {
 	if !strings.Contains(url, "http") {
 		url = fmt.Sprintf("http://%s", url)
 	}
