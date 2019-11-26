@@ -152,13 +152,13 @@ func TestHelloDapr(t *testing.T) {
 ### Debug and validation
 
 1. If you use minikube for your dev environment, set `DAPR_TEST_MINIKUBE_IP` environment variable to IP address from `minikube ip`
-2. We provides two ways for debuggin go test:
-  * Use [dlv test](https://github.com/go-delve/delve/blob/master/Documentation/usage/dlv_test.md). For example, if you want to debug `TestHelloDapr` test,
+2. Debug Go test
+  * Using [dlv test](https://github.com/go-delve/delve/blob/master/Documentation/usage/dlv_test.md). For example, if you want to debug `TestHelloDapr` test,
     ```bash
     dlv test --build-flags='-tags=e2e' ./tests/e2e/... -- -test.run ^TestHelloDapr$
     ```
-  * Using VSCode + Go plugin
-  [VSCode + go plugin](https://github.com/Microsoft/vscode-go/wiki/Debugging-Go-code-using-VS-Code) provides the good debugging experience. However, it does not provide a way to add build tag to build option so you need to remove `// +build e2e` build constraints during debugging.
+  * Using VSCode + Go plugin (recommended)
+  [VSCode + Go plugin](https://github.com/Microsoft/vscode-go/wiki/Debugging-Go-code-using-VS-Code) provides the good debugging experience. However, it does not provide a way to add build tag to build option so you need to remove `// +build e2e` build constraints in your go test and [helpers.go](https://github.com/dapr/dapr/blob/53bf10569fe9a9a5f484c5c9cf5760881db9a3e4/tests/e2e/helpers.go#L1) temporarily during debugging.
 
 3. Run all e2e tests
 ```bash
