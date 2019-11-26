@@ -15,4 +15,3 @@ This contains end-to-end tests, related test framework, and docs for Dapr:
 
 * [Running E2E tests](./docs/running-e2e-test.md)
 * [Writing E2E tests](./docs/writing-e2e-test.md)
-

@@ -32,11 +32,6 @@ E2E tests are designed for verifying the functional correctness by replicating e
     make setup-test-env-kafka
     ```
 
-* Register the default component configurations for testing
-    ```bash
-    make setup-test-components
-    ```
-
 ### Deploy your dapr runtime change
 
 Run the below commands to build and deploy dapr from your local disk
@@ -65,6 +60,12 @@ make build-e2e-app-all
 
 # push e2e apps docker image to docker hub
 make push-e2e-app-all
+```
+
+### Register the default component configurations for testing
+
+```bash
+make setup-test-components
 ```
 
 ### Run end-to-end test
