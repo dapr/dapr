@@ -20,14 +20,27 @@ This contains end-to-end tests, related test framework, and docs for Dapr:
 ```bash
 export DAPR_REGISTRY=docker.io/your_dockerhub_id
 export DAPR_TAG=dev
-export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
-export DARP_TEST_TAG=dev
 
-# set DAPR_TEST_ENV if you use minikube
-# export DAPR_TEST_ENV=minikube
+# Do not set DAPR_TEST_ENV if you do not use minikube
+export DAPR_TEST_ENV=minikube
+
+# Set the below environment variables if you want to use the different registry and tag for test apps
+# export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
+# export DARP_TEST_TAG=dev
 ```
 
-### Deploy dapr runtime from your local disk
+* Install redis and kafka for state, pubsub, and binding building block
+```bash
+make setup-helm-init
+make setup-test-env
+```
+
+* Register the default component configurations for testing
+```bash
+make setup-test-components
+```
+
+### Deploy your dapr runtime change
 
 Run the below commands to build and deploy dapr from your local disk
 
