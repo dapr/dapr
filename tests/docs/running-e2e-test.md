@@ -9,7 +9,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
 
 ### Prerequisites
 
-* Set up your kubernetes environment and install helm by following [this setup doc](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#installing-dapr-on-a-kubernetes-cluster).
+* Set up your kubernetes environment and install the latest helm v2 by following [this setup doc](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#installing-dapr-on-a-kubernetes-cluster).
 * Create your DockerHub ID
 * Set the environment variables
     ```bash
