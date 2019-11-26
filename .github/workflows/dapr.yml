@@ -148,7 +148,7 @@ jobs:
           OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
 
-          export GITHUB_TOKEN=${{ secrets.RELEASE_USER_TOKEN }}
+          export GITHUB_TOKEN=${{ secrets.DAPR_BOT_TOKEN }}
           echo "Uploading Dapr Runtime Binaries to GitHub Release"
           github-release upload \
             --owner $OWNER_NAME --repo $REPO_NAME \

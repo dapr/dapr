@@ -25,7 +25,7 @@ jobs:
       - name: Parse test payload
         uses: actions/github-script@0.3.0
         with:
-          github-token: ${{secrets.RELEASE_USER_TOKEN}}
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-test") {
@@ -62,7 +62,7 @@ jobs:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
         with:
-          github-token: ${{secrets.RELEASE_USER_TOKEN}}
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const payload = context.payload;
             const testPayload = payload.client_payload;
@@ -117,7 +117,7 @@ jobs:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
         with:
-          github-token: ${{secrets.RELEASE_USER_TOKEN}}
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
             const jobContext = JSON.parse(process.env.JOB_CONTEXT);
