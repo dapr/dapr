@@ -16,6 +16,14 @@ ifeq ($(DAPR_TEST_NAMESPACE),)
 DAPR_TEST_NAMESPACE=$(HELM_NAMESPACE)
 endif
 
+ifeq ($(DAPR_TEST_REGISTRY),)
+DAPR_TEST_REGISTRY=$(DAPR_REGISTRY)
+endif
+
+ifeq ($(DAPR_TEST_TAG),)
+DAPR_TEST_TAG=$(DAPR_TAG)
+endif
+
 ifeq ($(DAPR_TEST_ENV),minikube)
 MINIKUBE_NODE_IP=$(shell minikube ip)
 ifeq ($(MINIKUBE_NODE_IP),)
