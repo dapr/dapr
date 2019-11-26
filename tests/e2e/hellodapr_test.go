@@ -80,15 +80,15 @@ var helloAppTests = []struct {
 func TestHelloDapr(t *testing.T) {
 	for _, tt := range helloAppTests {
 		t.Run(tt.in, func(t *testing.T) {
-			// Get Ingress external url for "hellodapr" test app
+			// Get the ingress external url of test app
 			externalURL := tr.Platform.AcquireAppExternalURL(tt.app)
 			require.NotEmpty(t, externalURL, "external URL must not be empty")
 
-			// Call endpoint for "hellodapr" test app
+			// Check if test app endpoint is available
 			resp, err := httpGet(externalURL)
 			require.NoError(t, err)
 
-			// trigger test
+			// Trigger test
 			body, err := json.Marshal(testCommandRequest{
 				Message: "Hello Dapr.",
 			})
