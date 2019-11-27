@@ -91,11 +91,13 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 					// return the same deployment object
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
 					createdDeploymentObj.Status.ReadyReplicas = 0
+					createdDeploymentObj.Status.AvailableReplicas = 0
 
 				case "get":
 					// set 1 to ReadyReplicas when WaitUntilDeploymentState called get deployments 2 times
 					if getVerbCalled == 2 {
 						createdDeploymentObj.Status.ReadyReplicas = testApp.Replicas
+						createdDeploymentObj.Status.AvailableReplicas = testApp.Replicas
 					} else {
 						getVerbCalled++
 					}
@@ -318,7 +320,7 @@ func TestCreateIngressService(t *testing.T) {
 func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 	// fake test values
 	fakeMinikubeNodeIP := "192.168.0.12"
-	fakeNodePort := int32(4000)
+	fakeNodePort := int32(3000)
 	fakeExternalIP := "10.10.10.100"
 	testApp := testAppDescription()
 
@@ -371,12 +373,26 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 
 				obj := &apiv1.Service{
 					Spec: apiv1.ServiceSpec{
-						ExternalIPs: []string{},
+						Ports: []apiv1.ServicePort{},
+					},
+					Status: apiv1.ServiceStatus{
+						LoadBalancer: apiv1.LoadBalancerStatus{
+							Ingress: []apiv1.LoadBalancerIngress{},
+						},
 					},
 				}
 
 				if getVerbCalled == 2 {
-					obj.Spec.ExternalIPs = []string{fakeExternalIP}
+					obj.Status.LoadBalancer.Ingress = []apiv1.LoadBalancerIngress{
+						{
+							IP: fakeExternalIP,
+						},
+					}
+					obj.Spec.Ports = []apiv1.ServicePort{
+						{
+							Port: fakeNodePort,
+						},
+					}
 				} else {
 					getVerbCalled++
 				}
@@ -389,7 +405,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 		assert.NoError(t, err)
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
-		assert.Equal(t, fakeExternalIP, externalURL)
+		assert.Equal(t, fmt.Sprintf("%s:%d", fakeExternalIP, fakeNodePort), externalURL)
 		assert.Equal(t, 2, getVerbCalled)
 	})
 
