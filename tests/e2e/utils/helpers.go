@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package e2e
+package utils
 
 import (
 	"bytes"
