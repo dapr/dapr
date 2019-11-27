@@ -49,6 +49,11 @@ func (m *AppManager) Name() string {
 	return m.app.AppName
 }
 
+// App returns app description
+func (m *AppManager) App() AppDescription {
+	return m.app
+}
+
 // Init installs app by AppDescription
 func (m *AppManager) Init() error {
 	// Get or create test namespaces
@@ -143,7 +148,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 // IsDeploymentDone returns true if deployment object completes pod deployments
 func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) bool {
-	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == m.app.Replicas
+	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == m.app.Replicas && deployment.Status.AvailableReplicas == m.app.Replicas
 }
 
 // IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero
@@ -185,6 +190,27 @@ func (m *AppManager) ValidiateSideCar() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// ScaleDeploymentReplica scales the deployment
+func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
+	if replicas < 0 {
+		return fmt.Errorf("%d is out of range", replicas)
+	}
+
+	deploymentsClient := m.client.Deployments(m.namespace)
+
+	scale, err := deploymentsClient.GetScale(m.app.AppName, metav1.GetOptions{})
+	if scale.Spec.Replicas == replicas {
+		return nil
+	}
+
+	scale.Spec.Replicas = replicas
+	m.app.Replicas = replicas
+
+	_, err = deploymentsClient.UpdateScale(m.app.AppName, scale)
+
+	return err
 }
 
 // CreateIngressService creates Ingress endpoint for test app

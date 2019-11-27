@@ -104,3 +104,16 @@ func TestHelloDapr(t *testing.T) {
 		})
 	}
 }
+
+func TestScaleReplicas(t *testing.T) {
+	err := tr.Platform.Scale("hellobluedapr", 3)
+	require.NoError(t, err, "fails to scale hellobluedapr app to 3 replicas")
+}
+
+func TestScaleAndRestartInstances(t *testing.T) {
+	err := tr.Platform.Scale("hellobluedapr", 3)
+	require.NoError(t, err, "fails to scale hellobluedapr app to 3 replicas")
+
+	err = tr.Platform.Restart("hellobluedapr")
+	require.NoError(t, err, "fails to restart hellobluedapr pods")
+}

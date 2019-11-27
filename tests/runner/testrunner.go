@@ -25,6 +25,8 @@ type PlatformInterface interface {
 	addApps(apps []kube.AppDescription) error
 
 	AcquireAppExternalURL(name string) string
+	Restart(name string) error
+	Scale(name string, replicas int32) error
 }
 
 // TestRunner holds initial test apps and testing platform instance
