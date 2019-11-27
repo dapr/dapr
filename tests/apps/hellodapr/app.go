@@ -40,7 +40,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	testCommand := mux.Vars(r)["test"]
 
-	// Retrive request body contents
+	// Retrieve request body contents
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {

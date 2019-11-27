@@ -201,6 +201,10 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
 	scale, err := deploymentsClient.GetScale(m.app.AppName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
 	if scale.Spec.Replicas == replicas {
 		return nil
 	}

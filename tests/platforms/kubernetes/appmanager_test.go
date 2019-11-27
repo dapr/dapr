@@ -23,7 +23,12 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
-const testNamespace = "apputil-test"
+const (
+	testNamespace = "apputil-test"
+	getVerb       = "get"
+	createVerb    = "create"
+	updateVerb    = "update"
+)
 
 func newDefaultFakeClient() *KubeClient {
 	fakeclient := fake.NewSimpleClientset()
@@ -88,13 +93,13 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 				assert.Equal(t, testNamespace, ns)
 
 				switch action.GetVerb() {
-				case "create":
+				case createVerb:
 					// return the same deployment object
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
 					createdDeploymentObj.Status.ReadyReplicas = 0
 					createdDeploymentObj.Status.AvailableReplicas = 0
 
-				case "get":
+				case getVerb:
 					// set 1 to ReadyReplicas when WaitUntilDeploymentState called get deployments 2 times
 					if getVerbCalled == 2 {
 						createdDeploymentObj.Status.ReadyReplicas = testApp.Replicas
@@ -133,12 +138,12 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 				assert.Equal(t, testNamespace, ns)
 
 				switch action.GetVerb() {
-				case "create":
+				case createVerb:
 					// return the same deployment object
 					createdDeploymentObj = action.(core.CreateAction).GetObject().(*appsv1.Deployment)
 					createdDeploymentObj.Status.Replicas = testApp.Replicas
 
-				case "get":
+				case getVerb:
 					// return notfound error when WaitUntilDeploymentState called get deployments 2 times
 					if getVerbCalled == 2 {
 						err := errors.NewNotFound(
@@ -188,14 +193,14 @@ func TestScaleDeploymentReplica(t *testing.T) {
 			var scaleObj *autoscalingv1.Scale
 
 			switch action.GetVerb() {
-			case "get":
+			case getVerb:
 				scaleObj = &autoscalingv1.Scale{
 					Status: autoscalingv1.ScaleStatus{
 						Replicas: 1,
 					},
 				}
 
-			case "update":
+			case updateVerb:
 				scaleObj = &autoscalingv1.Scale{
 					Status: autoscalingv1.ScaleStatus{
 						Replicas: 3,
@@ -386,7 +391,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 		client := newFakeKubeClient()
 		// Set up reactor to fake verb
 		client.ClientSet.(*fake.Clientset).AddReactor(
-			"get",
+			getVerb,
 			"services",
 			func(action core.Action) (bool, runtime.Object, error) {
 				ns := action.GetNamespace()
@@ -418,7 +423,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 		client := newFakeKubeClient()
 		// Set up reactor to fake verb
 		client.ClientSet.(*fake.Clientset).AddReactor(
-			"get",
+			getVerb,
 			"services",
 			func(action core.Action) (bool, runtime.Object, error) {
 				ns := action.GetNamespace()
@@ -472,7 +477,7 @@ func TestWaitUntilServiceStateDeleted(t *testing.T) {
 	client := newFakeKubeClient()
 	// Set up reactor to fake verb
 	client.ClientSet.(*fake.Clientset).AddReactor(
-		"get",
+		getVerb,
 		"services",
 		func(action core.Action) (bool, runtime.Object, error) {
 			ns := action.GetNamespace()
@@ -506,11 +511,11 @@ func TestGetOrCreateNamespace(t *testing.T) {
 			"namespaces",
 			func(action core.Action) (bool, runtime.Object, error) {
 				switch action.GetVerb() {
-				case "create":
+				case createVerb:
 					// return the same namespace object
 					fakeNsObj = action.(core.CreateAction).GetObject().(*apiv1.Namespace)
 
-				case "get":
+				case getVerb:
 					err := errors.NewNotFound(
 						schema.GroupResource{
 							Group:    "fakeGroup",
@@ -539,11 +544,11 @@ func TestGetOrCreateNamespace(t *testing.T) {
 			"namespaces",
 			func(action core.Action) (bool, runtime.Object, error) {
 				switch action.GetVerb() {
-				case "create":
+				case createVerb:
 					err := errors.NewBadRequest("bad error")
 					return true, nil, err
 
-				case "get":
+				case getVerb:
 					fakeNsObj = buildNamespaceObject(testNamespace)
 				}
 				return true, fakeNsObj, nil
