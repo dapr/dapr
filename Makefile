@@ -241,6 +241,7 @@ release: build archive
 .PHONY: test
 test:
 	go test ./pkg/... -mod=vendor
+	go test ./tests/... -mod=vendor
 
 ################################################################################
 # Target: lint                                                                 #
