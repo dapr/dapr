@@ -119,3 +119,30 @@ func (c *KubeTestPlatform) AcquireAppExternalURL(name string) string {
 	app := c.AppResources.FindActiveResource(name)
 	return app.(*kube.AppManager).AcquireExternalURL()
 }
+
+// Scale changes the number of replicas of the app
+func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
+	app := c.AppResources.FindActiveResource(name)
+	appManager := app.(*kube.AppManager)
+
+	if err := appManager.ScaleDeploymentReplica(replicas); err != nil {
+		return err
+	}
+
+	_, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
+
+	return err
+}
+
+// Restart restarts all instances for the app
+func (c *KubeTestPlatform) Restart(name string) error {
+	// To minic the restart behavior, scale to 0 and then scale to the original replicas.
+	app := c.AppResources.FindActiveResource(name)
+	originalReplicas := app.(*kube.AppManager).App().Replicas
+
+	if err := c.Scale(name, 0); err != nil {
+		return err
+	}
+
+	return c.Scale(name, originalReplicas)
+}

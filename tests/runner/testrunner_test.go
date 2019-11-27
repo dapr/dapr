@@ -50,6 +50,16 @@ func (m *MockPlatform) addApps(apps []kube.AppDescription) error {
 	return args.Error(0)
 }
 
+func (m *MockPlatform) Scale(name string, replicas int32) error {
+	args := m.Called(replicas)
+	return args.Error(0)
+}
+
+func (m *MockPlatform) Restart(name string) error {
+	args := m.Called(name)
+	return args.Error(0)
+}
+
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{
