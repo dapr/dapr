@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -168,6 +169,58 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Nil(t, d)
 		assert.Equal(t, 2, getVerbCalled)
+	})
+}
+
+func TestScaleDeploymentReplica(t *testing.T) {
+	testApp := testAppDescription()
+	client := newFakeKubeClient()
+	// Set up reactor to fake verb
+	client.ClientSet.(*fake.Clientset).AddReactor(
+		"*",
+		"deployments",
+		func(action core.Action) (bool, runtime.Object, error) {
+			ns := action.GetNamespace()
+			assert.Equal(t, testNamespace, ns)
+			subRs := action.GetSubresource()
+			assert.Equal(t, "scale", subRs)
+
+			var scaleObj *autoscalingv1.Scale
+
+			switch action.GetVerb() {
+			case "get":
+				scaleObj = &autoscalingv1.Scale{
+					Status: autoscalingv1.ScaleStatus{
+						Replicas: 1,
+					},
+				}
+
+			case "update":
+				scaleObj = &autoscalingv1.Scale{
+					Status: autoscalingv1.ScaleStatus{
+						Replicas: 3,
+					},
+				}
+			}
+
+			return true, scaleObj, nil
+		})
+
+	appManager := NewAppManager(client, testNamespace, testApp)
+
+	t.Run("out-of-range", func(t *testing.T) {
+		err := appManager.ScaleDeploymentReplica(-1)
+		assert.Error(t, err)
+	})
+
+	t.Run("same replicas", func(t *testing.T) {
+		err := appManager.ScaleDeploymentReplica(1)
+		assert.NoError(t, err)
+	})
+
+	t.Run("new replicas", func(t *testing.T) {
+		err := appManager.ScaleDeploymentReplica(3)
+		assert.NoError(t, err)
 	})
 }
 
