@@ -25,6 +25,9 @@ const (
 	PollInterval = 1 * time.Second
 	// PollTimeout is how long e2e tests will wait for resource updates when polling.
 	PollTimeout = 10 * time.Minute
+
+	// maxReplicas is the maximum replicas of replica sets
+	maxReplicas = 10
 )
 
 // AppManager holds Kubernetes clients and namespace used for test apps
@@ -194,7 +197,7 @@ func (m *AppManager) ValidiateSideCar() (bool, error) {
 
 // ScaleDeploymentReplica scales the deployment
 func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
-	if replicas < 0 {
+	if replicas < 0 || replicas > maxReplicas {
 		return fmt.Errorf("%d is out of range", replicas)
 	}
 
