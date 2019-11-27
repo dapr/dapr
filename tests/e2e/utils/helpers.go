@@ -30,7 +30,7 @@ func newHTTPClient() http.Client {
 // HTTPGet is a helper to make GET request call to url
 func HTTPGet(url string) ([]byte, error) {
 	client := newHTTPClient()
-	resp, err := client.Get(sanitizeHTTPURL(url))
+	resp, err := client.Get(sanitizeHTTPURL(url)) //nolint
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func HTTPGet(url string) ([]byte, error) {
 // HTTPPost is a helper to make POST request call to url
 func HTTPPost(url string, data []byte) ([]byte, error) {
 	client := newHTTPClient()
-	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data))
+	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
 	if err != nil {
 		return nil, err
 	}
