@@ -83,6 +83,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 	t.Run("deployment is in done state", func(t *testing.T) {
 		client := newFakeKubeClient()
 		getVerbCalled := 0
+		const expectedGetVerbCalled = 2
 
 		// Set up reactor to fake verb
 		client.ClientSet.(*fake.Clientset).AddReactor(
@@ -100,8 +101,9 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 					createdDeploymentObj.Status.AvailableReplicas = 0
 
 				case getVerb:
-					// set 1 to ReadyReplicas when WaitUntilDeploymentState called get deployments 2 times
-					if getVerbCalled == 2 {
+					// set Replicas to the target replicas when WaitUntilDeploymentState called
+					// get verb 'expectedGetVerbCalled' times
+					if getVerbCalled == expectedGetVerbCalled {
 						createdDeploymentObj.Status.ReadyReplicas = testApp.Replicas
 						createdDeploymentObj.Status.AvailableReplicas = testApp.Replicas
 					} else {
@@ -122,12 +124,13 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Equal(t, testApp.Replicas, d.Status.ReadyReplicas)
-		assert.Equal(t, 2, getVerbCalled)
+		assert.Equal(t, expectedGetVerbCalled, getVerbCalled)
 	})
 
 	t.Run("deployment is in deleted state", func(t *testing.T) {
 		client := newFakeKubeClient()
 		getVerbCalled := 0
+		const expectedGetVerbCalled = 2
 
 		// Set up reactor to fake verb
 		client.ClientSet.(*fake.Clientset).AddReactor(
@@ -144,8 +147,9 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 					createdDeploymentObj.Status.Replicas = testApp.Replicas
 
 				case getVerb:
-					// return notfound error when WaitUntilDeploymentState called get deployments 2 times
-					if getVerbCalled == 2 {
+					// return notfound error when WaitUntilDeploymentState called
+					// get verb 'expectedGetVerbCalled' times
+					if getVerbCalled == expectedGetVerbCalled {
 						err := errors.NewNotFound(
 							schema.GroupResource{
 								Group:    "fakeGroup",
@@ -173,7 +177,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Nil(t, d)
-		assert.Equal(t, 2, getVerbCalled)
+		assert.Equal(t, expectedGetVerbCalled, getVerbCalled)
 	})
 }
 
@@ -213,8 +217,13 @@ func TestScaleDeploymentReplica(t *testing.T) {
 
 	appManager := NewAppManager(client, testNamespace, testApp)
 
-	t.Run("out-of-range", func(t *testing.T) {
+	t.Run("lower bound check", func(t *testing.T) {
 		err := appManager.ScaleDeploymentReplica(-1)
+		assert.Error(t, err)
+	})
+
+	t.Run("upper bound check", func(t *testing.T) {
+		err := appManager.ScaleDeploymentReplica(maxReplicas + 1)
 		assert.Error(t, err)
 	})
 
@@ -418,6 +427,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 
 	t.Run("Kubernetes environment", func(t *testing.T) {
 		getVerbCalled := 0
+		const expectedGetVerbCalled = 2
 		os.Setenv(MiniKubeIPEnvVar, "")
 
 		client := newFakeKubeClient()
@@ -440,7 +450,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 					},
 				}
 
-				if getVerbCalled == 2 {
+				if getVerbCalled == expectedGetVerbCalled {
 					obj.Status.LoadBalancer.Ingress = []apiv1.LoadBalancerIngress{
 						{
 							IP: fakeExternalIP,
@@ -464,7 +474,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
 		assert.Equal(t, fmt.Sprintf("%s:%d", fakeExternalIP, fakeNodePort), externalURL)
-		assert.Equal(t, 2, getVerbCalled)
+		assert.Equal(t, expectedGetVerbCalled, getVerbCalled)
 	})
 
 	// Recover minikube ip environment variable
