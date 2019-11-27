@@ -217,8 +217,13 @@ func TestScaleDeploymentReplica(t *testing.T) {
 
 	appManager := NewAppManager(client, testNamespace, testApp)
 
-	t.Run("out-of-range", func(t *testing.T) {
+	t.Run("lower bound check", func(t *testing.T) {
 		err := appManager.ScaleDeploymentReplica(-1)
+		assert.Error(t, err)
+	})
+
+	t.Run("upper bound check", func(t *testing.T) {
+		err := appManager.ScaleDeploymentReplica(maxReplicas + 1)
 		assert.Error(t, err)
 	})
 
