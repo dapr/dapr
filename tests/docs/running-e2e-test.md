@@ -9,7 +9,8 @@ E2E tests are designed for verifying the functional correctness by replicating e
 
 ### Prerequisites
 
-* Set up your kubernetes environment and install the latest helm v2 by following [this setup doc](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#installing-dapr-on-a-kubernetes-cluster).
+* Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
+  - [Install the latest helm v2](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#installing-dapr-on-a-kubernetes-cluster).
 * Create your DockerHub ID
 * Set the environment variables
     ```bash
@@ -24,7 +25,6 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
     # export DARP_TEST_TAG=dev
     ```
-
 * Install redis and kafka for state, pubsub, and binding building block
     ```bash
     make setup-helm-init
@@ -51,6 +51,12 @@ make docker-push
 make docker-deploy-k8s
 ```
 
+### Register the default component configurations for testing
+
+```bash
+make setup-test-components
+```
+
 ### Build and push test apps to docker hub
 
 Build docker images from apps and push the images to test docker hub
@@ -61,12 +67,6 @@ make build-e2e-app-all
 
 # push e2e apps docker image to docker hub
 make push-e2e-app-all
-```
-
-### Register the default component configurations for testing
-
-```bash
-make setup-test-components
 ```
 
 ### Run end-to-end test
