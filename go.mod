@@ -9,12 +9,11 @@ require (
 	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/creack/pty v1.1.9 // indirect
-	github.com/dapr/components-contrib v0.0.0-20191122214110-fac9d4a41bb1
+	github.com/dapr/components-contrib v0.0.0-20191128051247-c4bd2a47eae0
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
 	github.com/frankban/quicktest v1.5.0 // indirect
-	github.com/garyburd/redigo v1.6.0 // indirect
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-openapi/jsonreference v0.19.3 // indirect
 	github.com/go-openapi/spec v0.19.3 // indirect
@@ -22,6 +21,7 @@ require (
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/gddo v0.0.0-20190815223733-287de01127ef // indirect
 	github.com/golang/protobuf v1.3.2
+	github.com/google/pprof v0.0.0-20190908185732-236ed259b199 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/googleapis/gnostic v0.3.1 // indirect
 	github.com/gorilla/mux v1.7.1
@@ -38,7 +38,6 @@ require (
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/mailru/easyjson v0.7.0 // indirect
-	github.com/mediocregopher/radix.v2 v0.0.0-20181115013041-b67df6e626f9 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/onsi/ginkgo v1.10.1 // indirect

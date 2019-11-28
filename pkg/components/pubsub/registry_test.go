@@ -22,6 +22,14 @@ func TestCreateFullName(t *testing.T) {
 	t.Run("create kafka pubsub key name", func(t *testing.T) {
 		assert.Equal(t, "pubsub.kafka", createFullName("kafka"))
 	})
+
+	t.Run("create azure service bus pubsub key name", func(t *testing.T) {
+		assert.Equal(t, "pubsub.azure.servicebus", createFullName("azure.servicebus"))
+	})
+
+	t.Run("create rabbitmq pubsub key name", func(t *testing.T) {
+		assert.Equal(t, "pubsub.rabbitmq", createFullName("rabbitmq"))
+	})
 }
 
 func TestNewPubSubRegistry(t *testing.T) {
