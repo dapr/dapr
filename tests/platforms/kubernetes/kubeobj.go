@@ -67,8 +67,9 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
 						{
-							Name:  appDesc.AppName,
-							Image: fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
+							Name:            appDesc.AppName,
+							Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
+							ImagePullPolicy: "Always",
 							Ports: []apiv1.ContainerPort{
 								{
 									Name:          "http",
