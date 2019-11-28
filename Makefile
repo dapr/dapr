@@ -241,6 +241,7 @@ release: build archive
 .PHONY: test
 test:
 	go test ./pkg/... -mod=vendor
+	go test ./tests/... -mod=vendor
 
 ################################################################################
 # Target: lint                                                                 #
@@ -249,3 +250,9 @@ test:
 lint:
 	# Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
 	$(GOLANGCI_LINT) run --fix
+
+
+################################################################################
+# Target: tests                                                                #
+################################################################################
+include tests/dapr_tests.mk

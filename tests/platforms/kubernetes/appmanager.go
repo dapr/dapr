@@ -25,6 +25,9 @@ const (
 	PollInterval = 1 * time.Second
 	// PollTimeout is how long e2e tests will wait for resource updates when polling.
 	PollTimeout = 10 * time.Minute
+
+	// maxReplicas is the maximum replicas of replica sets
+	maxReplicas = 10
 )
 
 // AppManager holds Kubernetes clients and namespace used for test apps
@@ -49,8 +52,18 @@ func (m *AppManager) Name() string {
 	return m.app.AppName
 }
 
+// App returns app description
+func (m *AppManager) App() AppDescription {
+	return m.app
+}
+
 // Init installs app by AppDescription
 func (m *AppManager) Init() error {
+	// Get or create test namespaces
+	if _, err := m.GetOrCreateNamespace(); err != nil {
+		return err
+	}
+
 	// TODO: Dispose app if option is required
 	if err := m.Dispose(); err != nil {
 		return err
@@ -138,7 +151,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 // IsDeploymentDone returns true if deployment object completes pod deployments
 func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) bool {
-	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == m.app.Replicas
+	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == m.app.Replicas && deployment.Status.AvailableReplicas == m.app.Replicas
 }
 
 // IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero
@@ -180,6 +193,31 @@ func (m *AppManager) ValidiateSideCar() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// ScaleDeploymentReplica scales the deployment
+func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
+	if replicas < 0 || replicas > maxReplicas {
+		return fmt.Errorf("%d is out of range", replicas)
+	}
+
+	deploymentsClient := m.client.Deployments(m.namespace)
+
+	scale, err := deploymentsClient.GetScale(m.app.AppName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	if scale.Spec.Replicas == replicas {
+		return nil
+	}
+
+	scale.Spec.Replicas = replicas
+	m.app.Replicas = replicas
+
+	_, err = deploymentsClient.UpdateScale(m.app.AppName, scale)
+
+	return err
 }
 
 // CreateIngressService creates Ingress endpoint for test app
@@ -228,8 +266,8 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 
 // AcquireExternalURLFromService gets external url from Service Object.
 func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
-	if len(svc.Spec.ExternalIPs) > 0 {
-		return svc.Spec.ExternalIPs[0]
+	if svc.Status.LoadBalancer.Ingress != nil && len(svc.Status.LoadBalancer.Ingress) > 0 && len(svc.Spec.Ports) > 0 {
+		return fmt.Sprintf("%s:%d", svc.Status.LoadBalancer.Ingress[0].IP, svc.Spec.Ports[0].Port)
 	}
 
 	// TODO: Support the other local k8s clusters
@@ -249,7 +287,7 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 		return false
 	}
 
-	if len(svc.Spec.ExternalIPs) > 0 {
+	if svc.Status.LoadBalancer.Ingress != nil && len(svc.Status.LoadBalancer.Ingress) > 0 {
 		return true
 	}
 
@@ -302,4 +340,18 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	}
 
 	return nil
+}
+
+// GetOrCreateNamespace gets or creates namespace unless namespace exists
+func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
+	namespaceClient := m.client.Namespaces()
+	ns, err := namespaceClient.Get(m.namespace, metav1.GetOptions{})
+
+	if err != nil && errors.IsNotFound(err) {
+		obj := buildNamespaceObject(m.namespace)
+		ns, err = namespaceClient.Create(obj)
+		return ns, err
+	}
+
+	return ns, err
 }

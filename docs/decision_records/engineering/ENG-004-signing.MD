@@ -1,4 +1,4 @@
-# ENG-001: Binary Signing
+# ENG-004: Binary Signing
 
 ## Status
 Accepted
@@ -12,4 +12,4 @@ Authenticode signing of binaries.
   
 ## Consequences
 
-This will allow the DApr releases to be built outside of Microsoft build and release pipelines.
+This will allow the Dapr releases to be built outside of Microsoft build and release pipelines.

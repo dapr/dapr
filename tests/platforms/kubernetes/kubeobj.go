@@ -8,6 +8,7 @@ package kubernetes
 import (
 	"fmt"
 
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +28,9 @@ const (
 	DefaultContainerPort = 3000
 	// DefaultExternalPort is the default external port exposed by load balancer ingress
 	DefaultExternalPort = 3000
+
+	// DaprComponentsKind is component kind
+	DaprComponentsKind = "components.dapr.io"
 )
 
 // buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
@@ -63,8 +67,9 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
 						{
-							Name:  appDesc.AppName,
-							Image: fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
+							Name:            appDesc.AppName,
+							Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
+							ImagePullPolicy: "Always",
 							Ports: []apiv1.ContainerPort{
 								{
 									Name:          "http",
@@ -110,6 +115,27 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 			Type: serviceType,
 		},
 	}
+}
+
+// buildDaprComponentObject creates dapr component object
+func buildDaprComponentObject(componentName string, typeName string, metaData []v1alpha1.MetadataItem) *v1alpha1.Component {
+	return &v1alpha1.Component{
+		TypeMeta: metav1.TypeMeta{
+			Kind: DaprComponentsKind,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: componentName,
+		},
+		Spec: v1alpha1.ComponentSpec{
+			Type:     typeName,
+			Metadata: metaData,
+		},
+	}
+}
+
+// buildNamespaceObject creates the Kubernetes Namespace object
+func buildNamespaceObject(namespace string) *apiv1.Namespace {
+	return &apiv1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 }
 
 func int32Ptr(i int32) *int32 {

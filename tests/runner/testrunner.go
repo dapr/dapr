@@ -21,10 +21,12 @@ type runnable interface {
 type PlatformInterface interface {
 	setup() error
 	tearDown() error
+	addComponents(comps []kube.ComponentDescription) error
 	addApps(apps []kube.AppDescription) error
-	installApps() error
 
 	AcquireAppExternalURL(name string) string
+	Restart(name string) error
+	Scale(name string, replicas int32) error
 }
 
 // TestRunner holds initial test apps and testing platform instance
@@ -32,6 +34,8 @@ type PlatformInterface interface {
 type TestRunner struct {
 	// id is test runner id which will be used for logging
 	id string
+
+	components []kube.ComponentDescription
 	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
 	initialApps []kube.AppDescription
 
@@ -40,9 +44,10 @@ type TestRunner struct {
 }
 
 // NewTestRunner returns TestRunner instance for e2e test
-func NewTestRunner(id string, apps []kube.AppDescription) *TestRunner {
+func NewTestRunner(id string, apps []kube.AppDescription, comps []kube.ComponentDescription) *TestRunner {
 	return &TestRunner{
 		id:          id,
+		components:  comps,
 		initialApps: apps,
 		Platform:    NewKubeTestPlatform(),
 	}
@@ -59,11 +64,13 @@ func (tr *TestRunner) Start(m runnable) int {
 		return runnerFailExitCode
 	}
 
-	// Install apps
-	if err := tr.Platform.addApps(tr.initialApps); err != nil {
+	// install components
+	if err := tr.Platform.addComponents(tr.components); err != nil {
 		return runnerFailExitCode
 	}
-	if err := tr.Platform.installApps(); err != nil {
+
+	// Install apps
+	if err := tr.Platform.addApps(tr.initialApps); err != nil {
 		return runnerFailExitCode
 	}
 

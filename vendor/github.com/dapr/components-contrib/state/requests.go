@@ -10,6 +10,7 @@ import "time"
 // GetRequest is the object describing a state fetch request
 type GetRequest struct {
 	Key     string         `json:"key"`
+	Metadata map[string]string `json:"metadata"`
 	Options GetStateOption `json:"options,omitempty"`
 }
 
@@ -22,6 +23,7 @@ type GetStateOption struct {
 type DeleteRequest struct {
 	Key     string            `json:"key"`
 	ETag    string            `json:"etag,omitempty"`
+	Metadata map[string]string `json:"metadata"`
 	Options DeleteStateOption `json:"options,omitempty"`
 }
 
