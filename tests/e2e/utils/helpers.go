@@ -1,11 +1,9 @@
-// +build e2e
-
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package e2e
+package utils
 
 import (
 	"bytes"
@@ -18,7 +16,7 @@ import (
 	"time"
 )
 
-func newHttpClient() http.Client {
+func newHTTPClient() http.Client {
 	return http.Client{
 		Transport: &http.Transport{
 			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
@@ -29,9 +27,10 @@ func newHttpClient() http.Client {
 	}
 }
 
-func httpGet(url string) ([]byte, error) {
-	client := newHttpClient()
-	resp, err := client.Get(sanitizeHttpUrl(url))
+// HTTPGet is a helper to make GET request call to url
+func HTTPGet(url string) ([]byte, error) {
+	client := newHTTPClient()
+	resp, err := client.Get(sanitizeHTTPURL(url)) //nolint
 	if err != nil {
 		return nil, err
 	}
@@ -39,9 +38,10 @@ func httpGet(url string) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
-func httpPost(url string, data []byte) ([]byte, error) {
-	client := newHttpClient()
-	resp, err := client.Post(sanitizeHttpUrl(url), "application/json", bytes.NewBuffer(data))
+// HTTPPost is a helper to make POST request call to url
+func HTTPPost(url string, data []byte) ([]byte, error) {
+	client := newHTTPClient()
+	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func httpPost(url string, data []byte) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
-func sanitizeHttpUrl(url string) string {
+func sanitizeHTTPURL(url string) string {
 	if !strings.Contains(url, "http") {
 		url = fmt.Sprintf("http://%s", url)
 	}

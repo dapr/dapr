@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package e2e
+package hellodapr_e2e
 
 import (
 	"encoding/json"
@@ -16,6 +16,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
+	"github.com/dapr/dapr/tests/e2e/utils"
 )
 
 type testCommandRequest struct {
@@ -85,7 +86,7 @@ func TestHelloDapr(t *testing.T) {
 			require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 			// Check if test app endpoint is available
-			resp, err := httpGet(externalURL)
+			resp, err := utils.HTTPGet(externalURL)
 			require.NoError(t, err)
 
 			// Trigger test
@@ -94,7 +95,7 @@ func TestHelloDapr(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			resp, err = httpPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
+			resp, err = utils.HTTPPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
 			require.NoError(t, err)
 
 			var appResp appResponse
