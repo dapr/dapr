@@ -7,6 +7,7 @@ Currently supported pub-subs are:
 * Redis Streams
 * NATS
 * Azure Service Bus
+* RabbitMQ
 
 ## Implementing a new Pub Sub
 
