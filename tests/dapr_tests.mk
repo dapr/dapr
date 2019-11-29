@@ -4,8 +4,8 @@
 # ------------------------------------------------------------
 
 # E2E test app list
-# e.g. E2E_TEST_APPS=hellodapr stateapp serviceinvocation
-E2E_TEST_APPS=hellodapr stateapp
+# e.g. E2E_TEST_APPS=hellodapr state service_invocation
+E2E_TEST_APPS=hellodapr stateapp service_invocation
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps

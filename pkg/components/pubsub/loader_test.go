@@ -22,4 +22,16 @@ func TestLoad(t *testing.T) {
 	})
 
 	// TODO : add kafka registry test
+
+	t.Run("azure servicebus is registered", func(t *testing.T) {
+		p, e := testRegistry.CreatePubSub("pubsub.azure.servicebus")
+		assert.NotNil(t, p)
+		assert.Nil(t, e)
+	})
+
+	t.Run("rabbitmq is registered", func(t *testing.T) {
+		p, e := testRegistry.CreatePubSub("pubsub.rabbitmq")
+		assert.NotNil(t, p)
+		assert.Nil(t, e)
+	})
 }
