@@ -1,0 +1,48 @@
+# In e2e test, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing e2e test.
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: bindinginput
+  labels:
+    testapp: bindinginput
+  namespace: dapr-system
+spec:
+  selector:
+    testapp: bindinginput
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bindinginput
+  labels:
+    testapp: bindinginput
+  namespace: dapr-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: bindinginput
+  template:
+    metadata:
+      labels:
+        testapp: bindinginput
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/id: "bindinginput"
+        dapr.io/port: "3000"
+    spec:
+      containers:
+        - name: bindinginput
+          image: YOUR_REGISTRY/e2e-binding_input:dev
+          ports:
+            - containerPort: 3000
+          imagePullPolicy: Always
