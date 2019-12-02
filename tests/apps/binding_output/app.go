@@ -52,13 +52,17 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	for _, message := range requestBody.Messages {
 		body, err := json.Marshal(&message)
 		if err != nil {
-			log.Printf("error enconding message: %s", err)
+			log.Printf("error encoding message: %s", err)
 
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("error: " + err.Error()))
 			return
 		}
-		_, err = http.Post(url, "application/json", bytes.NewBuffer(body))
+
+		/* #nosec */
+		resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+		resp.Body.Close()
+
 		if err != nil {
 			log.Printf("error sending request to output binding: %s", err)
 

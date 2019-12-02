@@ -76,7 +76,7 @@ func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(testHandlerResponse{ReceivedMessages: messages.getAll()}); err != nil {
-		log.Printf("error enconding saved messages: %s", err)
+		log.Printf("error encoding saved messages: %s", err)
 
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("error: " + err.Error()))
