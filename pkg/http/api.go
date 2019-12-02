@@ -569,12 +569,12 @@ func (a *api) onGetActorReminder(c *routing.Context) error {
 		Name:      name,
 	})
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR__REMINDER_GET", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	}
 	b, err := a.json.Marshal(resp)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR__REMINDER_GET", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondWithJSON(c.RequestCtx, 200, b)
