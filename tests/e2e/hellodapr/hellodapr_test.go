@@ -13,10 +13,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
-	"github.com/dapr/dapr/tests/e2e/utils"
 )
 
 type testCommandRequest struct {
@@ -28,6 +28,8 @@ type appResponse struct {
 	StartTime int    `json:"start_time,omitempty"`
 	EndTime   int    `json:"end_time,omitempty"`
 }
+
+const numHealthChecks = 3 // Number of times to check for endpoint health per app.
 
 var tr *runner.TestRunner
 
@@ -86,7 +88,7 @@ func TestHelloDapr(t *testing.T) {
 			require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 			// Check if test app endpoint is available
-			resp, err := utils.HTTPGet(externalURL)
+			resp, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 			require.NoError(t, err)
 
 			// Trigger test

@@ -28,6 +28,8 @@ type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+const numHealthChecks = 3 // Number of times to call the endpoint to check for health.
+
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
@@ -90,6 +92,11 @@ var serviceinvocationTests = []struct {
 func TestServiceInvocation(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
 
 	for _, tt := range serviceinvocationTests {
 		t.Run(tt.in, func(t *testing.T) {
