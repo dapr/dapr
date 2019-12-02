@@ -14,7 +14,49 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	guuid "github.com/google/uuid"
 )
+
+
+// SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
+type SimpleKeyValue struct {
+	Key interface{}
+	Value interface {}
+}
+
+// GenerateRandomStringKeys generates random string keys (values are nil).
+func GenerateRandomStringKeys(num int) []SimpleKeyValue {
+	if num < 0 {
+		return make([]SimpleKeyValue, 0)
+	}
+
+	output := make([]SimpleKeyValue, 0, num)
+	for i := 1; i <= num; i++ {
+		key := guuid.New().String()
+		output = append(output, SimpleKeyValue{key, nil})
+	}
+
+	return output
+}
+
+// GenerateRandomStringValues sets random string values for the keys passed in.
+func GenerateRandomStringValues(keyValues []SimpleKeyValue) []SimpleKeyValue {
+	output := make([]SimpleKeyValue, 0, len(keyValues))
+	for i, keyValue := range keyValues {
+		key := keyValue.Key
+		value := fmt.Sprintf("Value for entry #%d with key %v.", i + 1, key)
+		output = append(output, SimpleKeyValue{key, value})
+	}
+
+	return output
+}
+
+// GenerateRandomStringKeyValues generates random string key-values pairs.
+func GenerateRandomStringKeyValues(num int) []SimpleKeyValue {
+	keys := GenerateRandomStringKeys(num)
+	return GenerateRandomStringValues(keys)
+}
 
 func newHTTPClient() http.Client {
 	return http.Client{
@@ -25,6 +67,26 @@ func newHTTPClient() http.Client {
 			}).Dial,
 		},
 	}
+}
+
+// HTTPGetNTimes calls the url n times and returns the first success or last error.
+func HTTPGetNTimes(url string, n int) ([]byte, error) {
+	var res []byte
+	var err error
+	for i := n - 1; i >= 0; i-- {
+		res, err = HTTPGet(url)
+		if i == 0 {
+			break
+		}
+
+		if err != nil {
+			time.Sleep(time.Second)
+		} else {
+			return res, nil
+		}
+	}
+
+	return res, err
 }
 
 // HTTPGet is a helper to make GET request call to url
