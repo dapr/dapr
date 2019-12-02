@@ -267,12 +267,12 @@ func (a *api) onGetState(c *routing.Context) error {
 
 	resp, err := a.stateStore.Get(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_GET_STATE", err.Error())
+		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
 	if resp == nil {
-		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_STATE_NOT_FOUND", ""))
+		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_STATE_KEY_NOT_FOUND", ""))
 		return nil
 	}
 	respondWithETaggedJSON(c.RequestCtx, 200, resp.Data, resp.ETag)
@@ -320,7 +320,7 @@ func (a *api) onDeleteState(c *routing.Context) error {
 
 	err := a.stateStore.Delete(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_DELETE_STATE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
+		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
@@ -349,7 +349,7 @@ func (a *api) onPostState(c *routing.Context) error {
 
 	err = a.stateStore.BulkSet(reqs)
 	if err != nil {
-		msg := NewErrorResponse("ERR_SAVE_REQUEST", err.Error())
+		msg := NewErrorResponse("ERR_STATE_SAVE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
@@ -434,7 +434,7 @@ func (a *api) onCreateActorReminder(c *routing.Context) error {
 
 	err = a.actor.CreateReminder(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_CREATE_REMINDER", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
@@ -468,7 +468,7 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 
 	err = a.actor.CreateTimer(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_CREATE_TIMER", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
@@ -496,7 +496,7 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 
 	err := a.actor.DeleteReminder(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_DELETE_REMINDER", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
@@ -543,7 +543,7 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 
 	err = a.actor.TransactionalStateOperation(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 201)
@@ -569,12 +569,12 @@ func (a *api) onGetActorReminder(c *routing.Context) error {
 		Name:      name,
 	})
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_GET_REMINDER", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR__REMINDER_GET", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	}
 	b, err := a.json.Marshal(resp)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_GET_REMINDER", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR__REMINDER_GET", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondWithJSON(c.RequestCtx, 200, b)
@@ -601,7 +601,7 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 
 	err := a.actor.DeleteTimer(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_DELETE_TIMER", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
@@ -633,7 +633,7 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 
 	resp, err := a.actor.Call(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_INVOKE_ACTOR", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
@@ -700,7 +700,7 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 
 	err = a.actor.SaveState(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_SAVE_STATE", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_STATE_SAVE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 201)
@@ -728,7 +728,7 @@ func (a *api) onGetActorState(c *routing.Context) error {
 
 	resp, err := a.actor.GetState(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_GET_STATE", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_STATE_GET", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondWithJSON(c.RequestCtx, 200, resp.Data)
@@ -767,7 +767,7 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 
 	err := a.actor.DeleteState(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_DELETE_STATE", err.Error())
+		msg := NewErrorResponse("ERR_ACTOR_STATE_DELETE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
@@ -783,7 +783,7 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 
 func (a *api) onPublish(c *routing.Context) error {
 	if a.pubSub == nil {
-		msg := NewErrorResponse("ERR_PUB_SUB_NOT_FOUND", "")
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
@@ -794,7 +794,7 @@ func (a *api) onPublish(c *routing.Context) error {
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
-		msg := NewErrorResponse("ERR_CLOUD_EVENTS_SER", err.Error())
+		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
@@ -805,7 +805,7 @@ func (a *api) onPublish(c *routing.Context) error {
 	}
 	err = a.pubSub.Publish(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_PUBLISH_MESSAGE", err.Error())
+		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
