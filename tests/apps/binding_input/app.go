@@ -45,6 +45,7 @@ type indexHandlerResponse struct {
 
 type testHandlerResponse struct {
 	ReceivedMessages []string `json:"received_messages,omitempty"`
+	Message          string   `json:"message,omitempty"`
 }
 
 // indexHandler is the handler for root path
@@ -58,6 +59,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		log.Println("test-topic binding input has been accepted")
+		// Sending StatusOK back to the topic, so it will not attempt to redeliver.
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -79,7 +81,10 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error encoding saved messages: %s", err)
 
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("error: " + err.Error()))
+		json.NewEncoder(w).Encode(testHandlerResponse{
+			Message: err.Error(),
+		})
+		return
 	}
 }
 

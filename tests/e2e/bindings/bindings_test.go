@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -43,6 +44,9 @@ var testMessages = []string{
 	"9",
 	"10",
 }
+
+const numHealthChecks = 3 // Number of times to call the endpoint to check for health.
+const bindingPropagationDelay = 1 // Number of seconds to wait for binding travelling throughout the cluster.
 
 var tr *runner.TestRunner
 
@@ -76,6 +80,11 @@ func TestBindings(t *testing.T) {
 	inputExternalURL := tr.Platform.AcquireAppExternalURL("bindinginput")
 	require.NotEmpty(t, inputExternalURL, "bindinginput external URL must not be empty!")
 
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(outputExternalURL, numHealthChecks)
+	require.NoError(t, err)
+
 	var req testSendRequest
 	for _, mes := range testMessages {
 		req.Messages = append(req.Messages, messageData{Data: mes})
@@ -86,6 +95,9 @@ func TestBindings(t *testing.T) {
 
 	_, err = utils.HTTPPost(fmt.Sprintf("%s/tests/send", outputExternalURL), body)
 	require.NoError(t, err)
+
+	// This delay allows all the messages to reach corresponding input bindings
+	time.Sleep(bindingPropagationDelay * time.Second)
 
 	resp, err := utils.HTTPPost(fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil)
 	require.NoError(t, err)
