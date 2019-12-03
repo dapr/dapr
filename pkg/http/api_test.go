@@ -102,7 +102,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -253,7 +253,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -606,7 +606,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -917,7 +917,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 	pipe := http_middleware.Pipeline{}
 
 	meta := exporters.Metadata{
@@ -991,7 +991,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	pipeline := buildHTTPPineline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{

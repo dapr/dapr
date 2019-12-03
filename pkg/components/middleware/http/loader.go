@@ -12,7 +12,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// Load message buses
+// Load HTTP middleware
 func Load() {
 	RegisterMiddleware("uppercase", func() http_middleware.Middleware {
 		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {

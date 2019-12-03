@@ -44,11 +44,9 @@ type SelectorField struct {
 }
 
 type TracingSpec struct {
-	Enabled         bool   `json:"enabled" yaml:"enabled"`
-	ExporterType    string `json:"exporterType" yaml:"exporterType,omitempty"`
-	ExporterAddress string `json:"exporterAddress" yaml:"exporterAddress,omitempty"`
-	ExpandParams    bool   `json:"expandParams" yaml:"expandParams"`
-	IncludeBody     bool   `json:"includeBody" yaml:"includeBody"`
+	Enabled      bool `json:"enabled" yaml:"enabled"`
+	ExpandParams bool `json:"expandParams" yaml:"expandParams"`
+	IncludeBody  bool `json:"includeBody" yaml:"includeBody"`
 }
 
 // LoadDefaultConfiguration returns the default config with tracing disabled

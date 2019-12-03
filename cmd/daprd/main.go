@@ -99,7 +99,6 @@ func main() {
 	} else {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
-
 	if err != nil {
 		log.Warnf("error loading config: %s. loading default config", err)
 	}

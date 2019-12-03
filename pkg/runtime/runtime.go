@@ -85,7 +85,7 @@ type DaprRuntime struct {
 	pubSub                   pubsub.PubSub
 	servicediscoveryResolver servicediscovery.Resolver
 	json                     jsoniter.API
-  httpMiddlewareRegistry http_middleware_loader.Registry
+	httpMiddlewareRegistry   http_middleware_loader.Registry
 	hostAddress              string
 }
 
@@ -105,7 +105,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		secretStoresRegistry:     secretstores_loader.NewRegistry(),
 		exporterRegistry:         exporter_loader.NewRegistry(),
 		serviceDiscoveryRegistry: servicediscovery_loader.NewRegistry(),
-    httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
+		httpMiddlewareRegistry:   http_middleware_loader.NewRegistry(),
 	}
 }
 
@@ -167,7 +167,7 @@ func (a *DaprRuntime) initRuntime() error {
 	if err != nil {
 		log.Warnf("failed to init exporters: %s", err)
 	}
-  
+
 	servicediscovery_loader.Load()
 	err = a.initServiceDiscovery()
 	if err != nil {
@@ -181,12 +181,12 @@ func (a *DaprRuntime) initRuntime() error {
 	if err != nil {
 		log.Warnf("failed to init actors: %s", err)
 	}
-  
-  pipeline, err := a.buildHTTPPipeline()
+
+	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
-  }
-  
+	}
+
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
