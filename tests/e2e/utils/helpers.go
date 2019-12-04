@@ -18,11 +18,10 @@ import (
 	guuid "github.com/google/uuid"
 )
 
-
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
 type SimpleKeyValue struct {
-	Key interface{}
-	Value interface {}
+	Key   interface{}
+	Value interface{}
 }
 
 // GenerateRandomStringKeys generates random string keys (values are nil).
@@ -45,7 +44,7 @@ func GenerateRandomStringValues(keyValues []SimpleKeyValue) []SimpleKeyValue {
 	output := make([]SimpleKeyValue, 0, len(keyValues))
 	for i, keyValue := range keyValues {
 		key := keyValue.Key
-		value := fmt.Sprintf("Value for entry #%d with key %v.", i + 1, key)
+		value := fmt.Sprintf("Value for entry #%d with key %v.", i+1, key)
 		output = append(output, SimpleKeyValue{key, value})
 	}
 

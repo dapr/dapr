@@ -5,17 +5,14 @@ import (
 	"fmt"
 	"time"
 
-	"google.golang.org/grpc"
-
-	"k8s.io/apimachinery/pkg/labels"
-
 	log "github.com/Sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"google.golang.org/grpc"
+	corev1 "k8s.io/api/core/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/kubernetes"
 )
 
 // ComponentsHandler handles the lifetime management of Component CRDs

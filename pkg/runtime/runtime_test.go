@@ -10,21 +10,19 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
-
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	http_channel "github.com/dapr/dapr/pkg/channel/http"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	daprt "github.com/dapr/dapr/pkg/testing"
-
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

@@ -16,42 +16,34 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
-
-	"github.com/golang/protobuf/ptypes/any"
-
+	log "github.com/Sirupsen/logrus"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
-
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/components-contrib/state"
-
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/channel"
+	http_channel "github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/components"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/discovery"
+	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
-	jsoniter "github.com/json-iterator/go"
-
-	"github.com/dapr/dapr/pkg/channel"
-	http_channel "github.com/dapr/dapr/pkg/channel/http"
-
-	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/grpc"
-
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
-
-	log "github.com/Sirupsen/logrus"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
+	"github.com/golang/protobuf/ptypes/any"
+	"github.com/golang/protobuf/ptypes/empty"
+	jsoniter "github.com/json-iterator/go"
 )
 
 const (
