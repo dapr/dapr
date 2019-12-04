@@ -8,8 +8,8 @@ package pubsub
 import (
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	"github.com/dapr/components-contrib/pubsub/nats"
-	"github.com/dapr/components-contrib/pubsub/redis"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
+	"github.com/dapr/components-contrib/pubsub/redis"
 )
 
 // Load message buses
