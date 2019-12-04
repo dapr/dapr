@@ -12,7 +12,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"k8s.io/klog"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/signals"

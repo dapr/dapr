@@ -89,8 +89,8 @@ github.com/PuerkitoBio/purell
 github.com/PuerkitoBio/urlesc
 # github.com/Shopify/sarama v1.23.1
 github.com/Shopify/sarama
-# github.com/Sirupsen/logrus v1.0.6
-github.com/Sirupsen/logrus
+# github.com/sirupsen/logrus v1.4.2
+github.com/sirupsen/logrus
 # github.com/a8m/documentdb v1.2.0
 github.com/a8m/documentdb
 # github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da

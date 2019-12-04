@@ -15,7 +15,7 @@ import (
 
 	"github.com/grandcat/zeroconf"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // RegisterMDNS uses mdns to publish an entry of the service to a local network

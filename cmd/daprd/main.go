@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	global_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	daprd "github.com/dapr/dapr/pkg/runtime"

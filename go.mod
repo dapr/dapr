@@ -4,11 +4,8 @@ go 1.13
 
 require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
-	github.com/Azure/go-autorest v13.0.1+incompatible // indirect
 	github.com/DataDog/zstd v1.4.1 // indirect
-	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/creack/pty v1.1.9 // indirect
 	github.com/dapr/components-contrib v0.0.0-20191128051247-c4bd2a47eae0
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
@@ -18,11 +15,9 @@ require (
 	github.com/go-openapi/jsonreference v0.19.3 // indirect
 	github.com/go-openapi/spec v0.19.3 // indirect
 	github.com/go-ozzo/ozzo-routing v2.1.4+incompatible // indirect
-	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/gddo v0.0.0-20190815223733-287de01127ef // indirect
 	github.com/golang/protobuf v1.3.2
-	github.com/google/pprof v0.0.0-20190908185732-236ed259b199 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/googleapis/gnostic v0.3.1 // indirect
 	github.com/gorilla/mux v1.7.1
@@ -37,7 +32,6 @@ require (
 	github.com/klauspost/compress v1.5.0 // indirect
 	github.com/klauspost/cpuid v1.2.1 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
-	github.com/kr/pty v1.1.8 // indirect
 	github.com/mailru/easyjson v0.7.0 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.1.2
@@ -47,14 +41,11 @@ require (
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
 	github.com/qiangxue/fasthttp-routing v0.0.0-20160225050629-6ccdc2a18d87
 	github.com/rcrowley/go-metrics v0.0.0-20190826022208-cac0b30c2563 // indirect
-	github.com/rogpeppe/fastuuid v1.2.0 // indirect
-	github.com/rogpeppe/go-internal v1.4.0 // indirect
+	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasthttp v1.4.0
 	go.opencensus.io v0.22.1
 	golang.org/x/exp v0.0.0-20190927203820-447a159532ef // indirect
-	golang.org/x/image v0.0.0-20190910094157-69e4b8554b2a // indirect
-	golang.org/x/mobile v0.0.0-20190923204409-d3ece3b6da5f // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect
 	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
 	gonum.org/v1/gonum v0.0.0-20190911200027-40d3308efe80 // indirect
