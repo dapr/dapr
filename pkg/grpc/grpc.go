@@ -9,10 +9,9 @@ import (
 	"fmt"
 	"sync"
 
-	"google.golang.org/grpc"
-
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
+	"google.golang.org/grpc"
 )
 
 // Manager is a wrapper around gRPC connection pooling

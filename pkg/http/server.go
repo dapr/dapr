@@ -9,14 +9,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/valyala/fasthttp/pprofhandler"
-
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	log "github.com/Sirupsen/logrus"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/pprofhandler"
 )
 
 // Server is an interface for the Dapr HTTP server
