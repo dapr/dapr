@@ -5,13 +5,12 @@ import (
 	"strings"
 	"sync"
 
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/dapr/dapr/pkg/kubernetes"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (

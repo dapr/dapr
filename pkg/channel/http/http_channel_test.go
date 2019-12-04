@@ -14,10 +14,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valyala/fasthttp"
-
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/stretchr/testify/assert"
+	"github.com/valyala/fasthttp"
 )
 
 type testConcurrencyHandler struct {
