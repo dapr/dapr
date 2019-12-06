@@ -12,11 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/any"
-	"google.golang.org/grpc"
-
 	"github.com/dapr/dapr/pkg/channel"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
+	"github.com/golang/protobuf/ptypes/any"
+	"google.golang.org/grpc"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code

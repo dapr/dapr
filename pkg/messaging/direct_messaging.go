@@ -10,12 +10,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/any"
-
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/modes"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
 )
 
