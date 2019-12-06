@@ -39,7 +39,6 @@ import (
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
