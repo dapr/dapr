@@ -130,7 +130,7 @@ jobs:
             if (jobStatus == "cancelled") {
               message = "End-to-end tests cancelled.";
             } else if (jobStatus == "success") {
-              message = "Congrats! All end-to-end tests are passed. Thanks for your contribution!";
+              message = "Congrats! All end-to-end tests have passed. Thanks for your contribution!";
             } else if (jobStatus == "failure") {
               message = "End-to-end tests failed.";
             }
