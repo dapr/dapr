@@ -25,16 +25,38 @@ type Configuration struct {
 // ConfigurationSpec is the spec for an configuration
 type ConfigurationSpec struct {
 	// +optional
+	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
+	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
+}
+
+// PipelineSpec defines the middleware pipeline
+type PipelineSpec struct {
+	Handlers []HandlerSpec `json:"handlers"`
+}
+
+// HandlerSpec defines a request handlers
+type HandlerSpec struct {
+	Name         string       `json:"name"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty"`
+}
+
+// SelectorSpec selects target services to which the handler is to be applied
+type SelectorSpec struct {
+	Fields []SelectorField `json:"fields"`
+}
+
+// SelectorField defines a selector fields
+type SelectorField struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
 }
 
 // TracingSpec is the spec object in ConfigurationSpec
 type TracingSpec struct {
-	Enabled         bool   `json:"enabled"`
-	ExporterType    string `json:"exporterType,omitempty"`
-	ExporterAddress string `json:"exporterAddress,omitempty"`
-	IncludeBody     bool   `json:"includeBody"`
-	ExpandParams    bool   `json:"expandParams"`
+	Enabled      bool `json:"enabled"`
+	IncludeBody  bool `json:"includeBody"`
+	ExpandParams bool `json:"expandParams"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

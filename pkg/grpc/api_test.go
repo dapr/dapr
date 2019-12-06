@@ -77,7 +77,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	assert.NoError(t, err)
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -124,7 +124,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	assert.NoError(t, err)
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
