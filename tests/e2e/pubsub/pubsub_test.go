@@ -17,7 +17,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
-
+	"time"
 	
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -26,7 +26,11 @@ import (
 )
 
 const numHealthChecks = 3      // Number of get calls before starting tests.
-const testManyEntriesCount = 5 // Anything between 1 and the number above (inclusive).
+
+// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
+// This is random so the first message name is not the same every time.
+const randomOffsetMax = 99     
+const numberOfMessagesToPublish = 100
 
 var tr *runner.TestRunner
 
@@ -71,8 +75,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([]string, error) {
 	var sentMessages []string
 	commandBody := publishCommand{Topic: topic}
-	offset := rand.Intn(100)
-	for i := offset; i < offset+100; i++ {
+	offset := rand.Intn(randomOffsetMax)
+	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
 		commandBody.Data = fmt.Sprintf("message-%d", i)
 
 		sentMessages = append(sentMessages, commandBody.Data)
@@ -103,7 +107,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 	return sentMessages, nil
 }
 
-func doIt(t *testing.T, publisherExternalURL string) receivedMessagesResponse {
+func sendToPublishApp(t *testing.T, publisherExternalURL string) receivedMessagesResponse {
 	var err error
 	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic")
 	require.NoError(t, err)
@@ -116,7 +120,7 @@ func doIt(t *testing.T, publisherExternalURL string) receivedMessagesResponse {
 		ReceivedByTopicB: sentTopicBMessages}
 }
 
-func getReceivedMessages(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {	
+func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {	
 	// this is the publish app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/get", subscriberExternalURL)
 	log.Printf("Publishing using url %s", url)
@@ -183,7 +187,9 @@ func TestPubSub(t *testing.T) {
 	require.NoError(t, err)
 	
 	t.Run("pubsubtest1", func(t *testing.T) {
-		sentMessages := doIt(t, publisherExternalURL)
-		getReceivedMessages(t, subscriberExternalURL, sentMessages)
+		sentMessages := sendToPublishApp(t, publisherExternalURL)
+
+		time.Sleep(5 * time.Second)
+		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
 	})
 }

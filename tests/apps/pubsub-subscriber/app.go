@@ -109,9 +109,11 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	} else if strings.HasSuffix(r.URL.String(), pubsubB) {
 		receivedMessagesB = append(receivedMessagesB, msg)
 	} else {
+		errorMessage := fmt.Sprintf("Unexpected message from %s", r.URL.String())
+		log.Printf(errorMessage)
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(appResponse{
-			Message: err.Error(),
+			Message: errorMessage,
 		})
 		return
 	}

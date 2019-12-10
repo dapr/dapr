@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
       - name: pubsub-publisher
-        image: docker.io/lemai/e2e-pubsub-publisher:dev
+        image: docker.io/YOUR ID/e2e-pubsub-publisher:dev
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
