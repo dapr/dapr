@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -234,6 +235,7 @@ func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 
 // AcquireExternalURL gets external ingress endpoint from service when it is ready
 func (m *AppManager) AcquireExternalURL() string {
+	log.Printf("Waiting until service has reached target state...\n")
 	svc, err := m.WaitUntilServiceState(m.IsServiceIngressReady)
 	if err != nil {
 		return ""

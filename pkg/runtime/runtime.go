@@ -25,7 +25,9 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/channel"
 	http_channel "github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/components"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -39,8 +41,6 @@ import (
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
-	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"github.com/golang/protobuf/ptypes/any"
@@ -628,6 +628,8 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 			topics = resp.Topics
 		}
 	}
+
+	log.Printf("App is subscribed to the following topics: %v", topics)
 	return topics
 }
 
@@ -758,6 +760,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		SpecVersion:     cloudEvent.SpecVersion,
 		Topic:           msg.Topic,
 	}
+
 	if cloudEvent.Data != nil {
 		b, _ := a.json.Marshal(cloudEvent.Data)
 		envelope.Data = &any.Any{
