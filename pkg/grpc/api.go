@@ -12,23 +12,19 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
-
-	"github.com/google/uuid"
-
-	"github.com/dapr/dapr/pkg/actors"
-
-	"github.com/golang/protobuf/ptypes/any"
-	"github.com/golang/protobuf/ptypes/empty"
-
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/messaging"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"github.com/golang/protobuf/ptypes/any"
 	durpb "github.com/golang/protobuf/ptypes/duration"
+	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

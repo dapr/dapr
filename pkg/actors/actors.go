@@ -15,17 +15,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mitchellh/mapstructure"
-
-	"github.com/dapr/dapr/pkg/channel/http"
-
-	"github.com/golang/protobuf/ptypes/any"
-
 	log "github.com/Sirupsen/logrus"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/placement"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"github.com/golang/protobuf/ptypes/any"
+	"github.com/mitchellh/mapstructure"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
