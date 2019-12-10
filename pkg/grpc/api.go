@@ -146,7 +146,7 @@ func (a *api) UpdateComponent(ctx context.Context, in *daprinternal_pb.Component
 
 func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
 	if a.pubSub == nil {
-		return &empty.Empty{}, errors.New("ERR_PUB_SUB_NOT_FOUND")
+		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
 
 	topic := in.Topic
@@ -159,7 +159,7 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_CLOUD_EVENTS_SER: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
 	}
 
 	req := pubsub.PublishRequest{
@@ -168,7 +168,7 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 	}
 	err = a.pubSub.Publish(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_PUBLISH_MESSAGE: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
 	}
 	return &empty.Empty{}, nil
 }
@@ -220,7 +220,7 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 
 	getResponse, err := a.stateStore.Get(&req)
 	if err != nil {
-		return nil, fmt.Errorf("ERR_GET_STATE: %s", err)
+		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
 
 	response := &dapr_pb.GetStateResponseEnvelope{}
@@ -266,7 +266,7 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 
 	err := a.stateStore.BulkSet(reqs)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_SAVE_REQUEST: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
 	}
 	return &empty.Empty{}, nil
 }
@@ -303,7 +303,7 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 
 	err := a.stateStore.Delete(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_DELETE_STATE: failed deleting state with key %s: %s", in.Key, err)
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
 	}
 	return &empty.Empty{}, nil
 }
