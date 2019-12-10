@@ -110,7 +110,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesB = append(receivedMessagesB, msg)
 	} else {
 		errorMessage := fmt.Sprintf("Unexpected message from %s", r.URL.String())
-		log.Printf(errorMessage)
+		log.Print(errorMessage)
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: errorMessage,
