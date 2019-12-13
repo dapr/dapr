@@ -20,12 +20,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const appName = "actorapp"                                             // App name in Dapr.
-const numHealthChecks = 3                                              // Number of get calls before starting tests.
-const secondsToCheckActorRemainsActive = 1                             // How much time to wait to make sure actor is deactivated
-const secondsToCheckActorDeactivation = 15                             // How much time to wait to make sure actor is deactivated
-const actorInvokeURLFormat = "%s/test/testactor/%s/method/actormethod" // URL to invoke a Dapr's actor method in test app.
-const actorlogsURLFormat = "%s/test/logs"                              // URL to fetch logs from test app.
+const (
+	appName                          = "actorapp"                                // App name in Dapr.
+	numHealthChecks                  = 3                                         // Number of get calls before starting tests.
+	secondsToCheckActorRemainsActive = 1                                         // How much time to wait to make sure actor is deactivated
+	secondsToCheckActorDeactivation  = 15                                        // How much time to wait to make sure actor is deactivated
+	actorInvokeURLFormat             = "%s/test/testactor/%s/method/actormethod" // URL to invoke a Dapr's actor method in test app.
+	actorlogsURLFormat               = "%s/test/logs"                            // URL to fetch logs from test app.
+)
 
 // represents a response for the APIs in this app.
 type actorLogEntry struct {
@@ -87,7 +89,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestServiceInvocation(t *testing.T) {
+func TestActorActivation(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
