@@ -5,7 +5,7 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr stateapp service_invocation binding_input binding_output pubsub-publisher pubsub-subscriber
+E2E_TEST_APPS=hellodapr stateapp service_invocation binding_input binding_output pubsub-publisher pubsub-subscriber actorapp
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
