@@ -32,8 +32,9 @@ import (
 const (
 	// Range of a durpb.Duration in seconds, as specified in
 	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
-	maxSeconds = int64(10000 * 365.25 * 24 * 60 * 60)
-	minSeconds = -maxSeconds
+	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
+	minSeconds    = -maxSeconds
+	daprSeparator = "__delim__"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -310,7 +311,7 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 
 func (a *api) getModifiedStateKey(key string) string {
 	if a.id != "" {
-		return fmt.Sprintf("%s-%s", a.id, key)
+		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
 	}
 	return key
 }
