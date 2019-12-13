@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
+	"github.com/dapr/components-contrib/middleware"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -39,7 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"	
 	jsoniter "github.com/json-iterator/go"
 
 	"github.com/dapr/dapr/pkg/channel"
@@ -208,7 +209,14 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 	http_middleware_loader.Load()
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-		handler, err := a.httpMiddlewareRegistry.CreateMiddleware(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
+		component := a.getComponent(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type, a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
+		if component != nil {
+			return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware %s of type %s",
+				a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
+				a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type)
+		}
+		handler, err := a.httpMiddlewareRegistry.CreateMiddleware(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
+			middleware.Metadata{Properties:a.convertMetadataItemsToProperties(component.Spec.Metadata)})
 		if err != nil {
 			return http_middleware.Pipeline{}, err
 		}
@@ -1052,4 +1060,13 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 		properties[c.Name] = c.Value
 	}
 	return properties
+}
+
+func (a *DaprRuntime) getComponent(componentType string, name string) *components_v1alpha1.Component {
+	for _, c := range a.components {
+		if c.Spec.Type == componentType && c.ObjectMeta.Name == name {
+			return &c
+		}
+	}
+	return nil
 }

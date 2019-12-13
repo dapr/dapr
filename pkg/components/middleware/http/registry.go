@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 
+	middleware "github.com/dapr/components-contrib/middleware"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 )
 
@@ -35,7 +36,7 @@ func NewRegistry() Registry {
 }
 
 // RegisterMiddleware registers a new HTTP middleware
-func RegisterMiddleware(name string, factoryMethod func() http_middleware.Middleware) {
+func RegisterMiddleware(name string, factoryMethod func(metadata middleware.Metadata) http_middleware.Middleware) {
 	instance.middleware[createFullName(name)] = factoryMethod
 }
 
@@ -43,9 +44,9 @@ func createFullName(name string) string {
 	return fmt.Sprintf("middleware.http.%s", name)
 }
 
-func (p *httpMiddlewareRegistry) CreateMiddleware(name string) (http_middleware.Middleware, error) {
+func (p *httpMiddlewareRegistry) CreateMiddleware(name string, metadata middleware.Metadata) (http_middleware.Middleware, error) {
 	if method, ok := p.middleware[name]; ok {
-		return method(), nil
+		return method(metadata), nil
 	}
 	return nil, fmt.Errorf("couldn't find HTTP middleware %s", name)
 }

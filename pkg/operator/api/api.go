@@ -45,6 +45,7 @@ type PipelineSpec struct {
 
 type HandlerSpec struct {
 	Name         string       `json:"name"`
+	Type         string       `json:"type"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty"`
 }
 
