@@ -87,6 +87,7 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		}
 		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
 
+		log.Printf("Adding app %v", app)
 		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestKubeNameSpace, app))
 	}
 

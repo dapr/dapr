@@ -82,7 +82,7 @@ We want your contributions and suggestions. One of the easiest ways to contribut
 |:-----|:------------|
 | IM chat  | https://gitter.im/Dapr/community 
 | Mailing list | https://groups.google.com/forum/#!forum/dapr-dev
-| Meeting dates |  [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
+| Meeting dates |  [Bi-weekly Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates for 2020 - 7th Jan, 21st Jan, 4th Feb, 18th Feb, 3rd March, 17th March, 31st March
 | Meeting link | https://aka.ms/dapr-community-call
 | Meeting notes | https://aka.ms/dapr-meeting-notes
 | Meeting recordings | http://aka.ms/dapr-recordings

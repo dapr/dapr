@@ -7,7 +7,7 @@ require (
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/Sirupsen/logrus v1.0.6
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/dapr/components-contrib v0.0.0-20191212173439-a2f4b4c5109b
+	github.com/dapr/components-contrib v0.0.0-20191128051247-c4bd2a47eae0
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible // indirect
@@ -59,6 +59,8 @@ require (
 	pack.ag/amqp v0.12.3 // indirect
 )
 
-replace k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
-
 replace github.com/dapr/components-contrib v0.0.0-20191212173439-a2f4b4c5109b => ../components-contrib
+replace (
+	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
+	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
+)
