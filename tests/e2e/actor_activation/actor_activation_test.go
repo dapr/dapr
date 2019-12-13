@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package stateapp_e2e
+package actor_activation_e2e
 
 import (
 	"encoding/json"
