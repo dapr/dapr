@@ -37,12 +37,19 @@ const (
 func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
 	annotationObject := map[string]string{}
 
+	if appDesc.AppPort <= 0 {
+		appDesc.AppPort = DefaultContainerPort
+	}
+
 	if appDesc.DaprEnabled {
 		annotationObject = map[string]string{
 			"dapr.io/enabled": "true",
 			"dapr.io/id":      appDesc.AppName,
-			"dapr.io/port":    fmt.Sprintf("%d", DefaultContainerPort),
+			"dapr.io/port":    fmt.Sprintf("%d", appDesc.AppPort),
 		}
+	}
+	if appDesc.AppProtocol != "" {
+		annotationObject["dapr.io/protocol"] = appDesc.AppProtocol
 	}
 
 	return &appsv1.Deployment{

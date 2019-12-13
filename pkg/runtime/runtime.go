@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
+	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
@@ -39,6 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/messaging"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"github.com/golang/protobuf/ptypes/any"
@@ -75,6 +77,7 @@ type DaprRuntime struct {
 	pubSub                   pubsub.PubSub
 	servicediscoveryResolver servicediscovery.Resolver
 	json                     jsoniter.API
+	httpMiddlewareRegistry   http_middleware_loader.Registry
 	hostAddress              string
 }
 
@@ -94,6 +97,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		secretStoresRegistry:     secretstores_loader.NewRegistry(),
 		exporterRegistry:         exporter_loader.NewRegistry(),
 		serviceDiscoveryRegistry: servicediscovery_loader.NewRegistry(),
+		httpMiddlewareRegistry:   http_middleware_loader.NewRegistry(),
 	}
 }
 
@@ -170,7 +174,12 @@ func (a *DaprRuntime) initRuntime() error {
 		log.Warnf("failed to init actors: %s", err)
 	}
 
-	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins)
+	pipeline, err := a.buildHTTPPipeline()
+	if err != nil {
+		log.Warnf("failed to build HTTP pipeline: %s", err)
+	}
+
+	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	err = a.startGRPCServer(a.runtimeConfig.GRPCPort)
@@ -185,6 +194,19 @@ func (a *DaprRuntime) initRuntime() error {
 	}
 
 	return nil
+}
+
+func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
+	http_middleware_loader.Load()
+	var handlers []http_middleware.Middleware
+	for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
+		handler, err := a.httpMiddlewareRegistry.CreateMiddleware(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
+		if err != nil {
+			return http_middleware.Pipeline{}, err
+		}
+		handlers = append(handlers, handler)
+	}
+	return http_middleware.Pipeline{Handlers: handlers}, nil
 }
 
 func (a *DaprRuntime) initBindings() {
@@ -422,10 +444,10 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 	return err
 }
 
-func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string) {
+func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
-	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
+	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
 }
 
@@ -606,6 +628,8 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 			topics = resp.Topics
 		}
 	}
+
+	log.Printf("App is subscribed to the following topics: %v", topics)
 	return topics
 }
 
@@ -736,6 +760,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		SpecVersion:     cloudEvent.SpecVersion,
 		Topic:           msg.Topic,
 	}
+
 	if cloudEvent.Data != nil {
 		b, _ := a.json.Marshal(cloudEvent.Data)
 		envelope.Data = &any.Any{

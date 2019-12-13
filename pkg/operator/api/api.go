@@ -35,15 +35,32 @@ type Configuration struct {
 }
 
 type ConfigurationSpec struct {
-	TracingSpec TracingSpec `json:"tracing,omitempty"`
+	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
+	TracingSpec      TracingSpec  `json:"tracing,omitempty"`
+}
+
+type PipelineSpec struct {
+	Handlers []HandlerSpec `json:"handlers"`
+}
+
+type HandlerSpec struct {
+	Name         string       `json:"name"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty"`
+}
+
+type SelectorSpec struct {
+	Fields []SelectorField `json:"fields"`
+}
+
+type SelectorField struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
 }
 
 type TracingSpec struct {
-	Enabled         bool   `json:"enabled"`
-	ExporterType    string `json:"exporterType,omitempty"`
-	ExporterAddress string `json:"exporterAddress,omitempty"`
-	ExpandParams    bool   `json:"expandParams"`
-	IncludeBody     bool   `json:"includeBody"`
+	Enabled      bool `json:"enabled"`
+	ExpandParams bool `json:"expandParams"`
+	IncludeBody  bool `json:"includeBody"`
 }
 
 // NewAPIServer returns a new API server
@@ -105,16 +122,11 @@ func (a *apiServer) GetConfiguration(w http.ResponseWriter, r *http.Request) {
 
 	for _, c := range configs.Items {
 		if c.ObjectMeta.Name == name {
+			specData, _ := json.Marshal(c.Spec)
+			var spec ConfigurationSpec
+			json.Unmarshal(specData, &spec)
 			ret := Configuration{
-				Spec: ConfigurationSpec{
-					TracingSpec: TracingSpec{
-						Enabled:         c.Spec.TracingSpec.Enabled,
-						ExporterType:    c.Spec.TracingSpec.ExporterType,
-						ExporterAddress: c.Spec.TracingSpec.ExporterAddress,
-						ExpandParams:    c.Spec.TracingSpec.ExpandParams,
-						IncludeBody:     c.Spec.TracingSpec.IncludeBody,
-					},
-				},
+				Spec: spec,
 			}
 			RespondWithJSON(w, 200, ret)
 			return

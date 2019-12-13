@@ -6,6 +6,7 @@
 package runner
 
 import (
+	log "github.com/Sirupsen/logrus"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
@@ -61,16 +62,19 @@ func (tr *TestRunner) Start(m runnable) int {
 	err := tr.Platform.setup()
 	defer tr.tearDown()
 	if err != nil {
+		log.Errorf("Failed Platform.setup(), %s", err.Error())
 		return runnerFailExitCode
 	}
 
 	// install components
 	if err := tr.Platform.addComponents(tr.components); err != nil {
+		log.Errorf("Failed Platform.addComponents(), %s", err.Error())
 		return runnerFailExitCode
 	}
 
 	// Install apps
 	if err := tr.Platform.addApps(tr.initialApps); err != nil {
+		log.Errorf("Failed Platform.addApps(), %s", err.Error())
 		return runnerFailExitCode
 	}
 

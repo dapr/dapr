@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -234,6 +235,7 @@ func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 
 // AcquireExternalURL gets external ingress endpoint from service when it is ready
 func (m *AppManager) AcquireExternalURL() string {
+	log.Printf("Waiting until service has reached target state...\n")
 	svc, err := m.WaitUntilServiceState(m.IsServiceIngressReady)
 	if err != nil {
 		return ""
@@ -267,7 +269,13 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 // AcquireExternalURLFromService gets external url from Service Object.
 func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 	if svc.Status.LoadBalancer.Ingress != nil && len(svc.Status.LoadBalancer.Ingress) > 0 && len(svc.Spec.Ports) > 0 {
-		return fmt.Sprintf("%s:%d", svc.Status.LoadBalancer.Ingress[0].IP, svc.Spec.Ports[0].Port)
+		address := ""
+		if svc.Status.LoadBalancer.Ingress[0].Hostname != "" {
+			address = svc.Status.LoadBalancer.Ingress[0].Hostname
+		} else {
+			address = svc.Status.LoadBalancer.Ingress[0].IP
+		}
+		return fmt.Sprintf("%s:%d", address, svc.Spec.Ports[0].Port)
 	}
 
 	// TODO: Support the other local k8s clusters

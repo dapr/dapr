@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
@@ -26,15 +27,17 @@ type Server interface {
 type server struct {
 	config      ServerConfig
 	tracingSpec config.TracingSpec
+	pipeline    http_middleware.Pipeline
 	api         API
 }
 
 // NewServer returns a new HTTP server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pipeline http_middleware.Pipeline) Server {
 	return &server{
 		api:         api,
 		config:      config,
 		tracingSpec: tracingSpec,
+		pipeline:    pipeline,
 	}
 }
 
@@ -44,13 +47,14 @@ func (s *server) StartNonBlocking() {
 	router := s.getRouter(endpoints)
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)
-
+	handler := s.pipeline.Apply(router.HandleRequest)
 	go func() {
 		if s.tracingSpec.Enabled {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-				diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(router.HandleRequest))))
+				s.pipeline.Apply(diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(handler)))))
 		} else {
-			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), corsHandler.CorsMiddleware(router.HandleRequest)))
+			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
+				s.pipeline.Apply(corsHandler.CorsMiddleware(handler))))
 		}
 	}()
 

@@ -8,6 +8,8 @@ package kubernetes
 // AppDescription holds the deployment information of test app
 type AppDescription struct {
 	AppName        string
+	AppPort        int
+	AppProtocol    string
 	DaprEnabled    bool
 	ImageName      string
 	RegistryName   string
