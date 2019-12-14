@@ -23,6 +23,7 @@ import (
 type KubeClient struct {
 	ClientSet     kubernetes.Interface
 	DaprClientSet daprclient.Interface
+	clientConfig        *rest.Config
 }
 
 // NewKubeClient creates KubeClient instance
@@ -42,7 +43,7 @@ func NewKubeClient(configPath string, clusterName string) (*KubeClient, error) {
 		return nil, err
 	}
 
-	return &KubeClient{ClientSet: kubecs, DaprClientSet: daprcs}, nil
+	return &KubeClient{ClientSet: kubecs, DaprClientSet: daprcs, clientConfig: config}, nil
 }
 
 func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, error) {
@@ -61,6 +62,11 @@ func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, erro
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath},
 		&overrides).ClientConfig()
+}
+
+// GetClientConfig returns client configuration
+func (c *KubeClient) GetClientConfig() *rest.Config {
+	return c.clientConfig
 }
 
 // Deployments gets Deployment client for namespace

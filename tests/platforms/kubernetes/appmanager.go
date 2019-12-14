@@ -6,9 +6,13 @@
 package kubernetes
 
 import (
+	"bytes"
+	"strings"
 	"fmt"
 	"os"
 	"time"
+	"net/http"
+	"net/url"
 
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/tools/portforward"
+	"k8s.io/client-go/transport/spdy"
 )
 
 const (
@@ -194,6 +200,53 @@ func (m *AppManager) ValidiateSideCar() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// DoPortForwarding performs port forwarding to access test apps in the cluster
+func (m *AppManager) DoPortForwarding() error {
+	podClient := m.client.Pods(m.namespace)
+	// Filter only 'testapp=appName' labeled Pods
+	podList, err := podClient.List(metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	var podName string
+
+	for _, pod := range podList.Items {
+		podName = pod.Name
+		break
+	}
+
+	config:= m.client.GetClientConfig()
+
+	// create spdy roundtripper
+	roundTripper, upgrader, err := spdy.RoundTripperFor(config)
+	if err != nil {
+		return err
+	}
+
+	// create stop and ready channels
+	stopChan, readyChan := make(chan struct{}, 1), make(chan struct{}, 1)
+	out, errOut := new(bytes.Buffer), new(bytes.Buffer)
+
+	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", m.namespace, podName)
+	hostIP := strings.TrimLeft(config.Host, "https:/")
+	serverURL := url.URL{Scheme: "https", Path: path, Host: hostIP}
+
+	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)
+
+	// TODO keeping local port as 8080, not sure, so waiting for review
+	ports := []string{fmt.Sprintf("%d:%d", "8080", m.app.AppPort)}
+	fw, err := portforward.New(dialer, ports, stopChan, readyChan, out, errOut)
+	if err != nil {
+		return err
+	}
+
+	return fw.ForwardPorts()
 }
 
 // ScaleDeploymentReplica scales the deployment
