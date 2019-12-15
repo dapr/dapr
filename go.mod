@@ -5,7 +5,6 @@ go 1.13
 require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/DataDog/zstd v1.4.1 // indirect
-	github.com/Sirupsen/logrus v1.0.6 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/dapr/components-contrib v0.0.0-20191212173439-a2f4b4c5109b
 	github.com/eapache/go-resiliency v1.2.0 // indirect
@@ -53,8 +52,6 @@ require (
 	google.golang.org/appengine v1.6.4 // indirect
 	google.golang.org/genproto v0.0.0-20190927181202-20e1ac93f88c // indirect
 	google.golang.org/grpc v1.24.0
-	gopkg.in/airbrake/gobrake.v2 v2.0.9 // indirect
-	gopkg.in/gemnasium/logrus-airbrake-hook.v2 v2.1.2 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 	k8s.io/api v0.0.0-20190819141258-3544db3b9e44
 	k8s.io/apimachinery v0.0.0-20190817020851-f2f3a405f61d

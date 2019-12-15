@@ -89,8 +89,6 @@ github.com/PuerkitoBio/purell
 github.com/PuerkitoBio/urlesc
 # github.com/Shopify/sarama v1.23.1
 github.com/Shopify/sarama
-# github.com/sirupsen/logrus v1.4.2
-github.com/sirupsen/logrus
 # github.com/a8m/documentdb v1.2.0
 github.com/a8m/documentdb
 # github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da
@@ -171,7 +169,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191128051247-c4bd2a47eae0
+# github.com/dapr/components-contrib v0.0.0-20191212173439-a2f4b4c5109b
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/aws/dynamodb
 github.com/dapr/components-contrib/bindings/aws/s3
@@ -367,6 +365,8 @@ github.com/klauspost/compress/gzip
 github.com/klauspost/compress/zlib
 # github.com/klauspost/cpuid v1.2.1
 github.com/klauspost/cpuid
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
+github.com/konsorten/go-windows-terminal-sequences
 # github.com/kubernetes-client/go v0.0.0-20190625181339-cd8e39e789c7
 github.com/kubernetes-client/go/kubernetes/client
 github.com/kubernetes-client/go/kubernetes/config
@@ -421,6 +421,8 @@ github.com/rcrowley/go-metrics
 github.com/samuel/go-zookeeper/zk
 # github.com/satori/go.uuid v1.2.0
 github.com/satori/go.uuid
+# github.com/sirupsen/logrus v1.4.2
+github.com/sirupsen/logrus
 # github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
 # github.com/streadway/amqp v0.0.0-20190827072141-edfb9018d271

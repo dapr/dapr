@@ -12,7 +12,7 @@ import (
 	"time"
 
 	azservicebus "github.com/Azure/azure-service-bus-go"
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/pubsub"
 )
 
