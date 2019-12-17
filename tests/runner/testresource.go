@@ -8,7 +8,7 @@ package runner
 import (
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // Disposable is an interface representing the disposable test resources

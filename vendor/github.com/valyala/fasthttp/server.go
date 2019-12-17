@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-var errNoCertOrKeyProvided = errors.New("Cert or key has not provided")
+var errNoCertOrKeyProvided = errors.New("cert or key has not provided")
 
 var (
 	// ErrAlreadyServing is returned when calling Serve on a Server
@@ -166,6 +166,11 @@ type Server struct {
 	//   * ErrBodyTooLarge
 	//   * ErrBrokenChunks
 	ErrorHandler func(ctx *RequestCtx, err error)
+
+	// HeaderReceived is called after receiving the header
+	//
+	// non zero RequestConfig field values will overwrite the default configs
+	HeaderReceived func(header *RequestHeader) RequestConfig
 
 	// Server name for sending in response headers.
 	//
@@ -371,10 +376,10 @@ type Server struct {
 // msg to the client if there are more than Server.Concurrency concurrent
 // handlers h are running at the moment.
 func TimeoutHandler(h RequestHandler, timeout time.Duration, msg string) RequestHandler {
-	return TimeoutWithCodeHandler(h,timeout,msg, StatusRequestTimeout)
+	return TimeoutWithCodeHandler(h, timeout, msg, StatusRequestTimeout)
 }
 
-// TimeoutWithCodeHandler creates RequestHandler, which returns an error with 
+// TimeoutWithCodeHandler creates RequestHandler, which returns an error with
 // the given msg and status code to the client  if h didn't return during
 // the given duration.
 //
@@ -413,6 +418,21 @@ func TimeoutWithCodeHandler(h RequestHandler, timeout time.Duration, msg string,
 		}
 		stopTimer(ctx.timeoutTimer)
 	}
+}
+
+//RequestConfig configure the per request deadline and body limits
+type RequestConfig struct {
+	// ReadTimeout is the maximum duration for reading the entire
+	// request body.
+	// a zero value means that default values will be honored
+	ReadTimeout time.Duration
+	// WriteTimeout is the maximum duration before timing out
+	// writes of the response.
+	// a zero value means that default values will be honored
+	WriteTimeout time.Duration
+	// Maximum request body size.
+	// a zero value means that default values will be honored
+	MaxRequestBodySize int
 }
 
 // CompressHandler returns RequestHandler that transparently compresses
@@ -1834,6 +1854,7 @@ func (s *Server) serveConn(c net.Conn) error {
 	if maxRequestBodySize <= 0 {
 		maxRequestBodySize = DefaultMaxRequestBodySize
 	}
+	writeTimeout := s.WriteTimeout
 
 	ctx := s.acquireCtx(c)
 	ctx.connTime = connTime
@@ -1876,7 +1897,9 @@ func (s *Server) serveConn(c net.Conn) error {
 				if len(b) == 0 {
 					// If reading from a keep-alive connection returns nothing it means
 					// the connection was closed (either timeout or from the other side).
-					err = errNothingRead
+					if err != io.EOF {
+						err = errNothingRead{err}
+					}
 				}
 			}
 		} else {
@@ -1894,17 +1917,35 @@ func (s *Server) serveConn(c net.Conn) error {
 					panic(fmt.Sprintf("BUG: error in SetReadDeadline(%s): %s", s.ReadTimeout, err))
 				}
 			}
-
 			if s.DisableHeaderNamesNormalizing {
 				ctx.Request.Header.DisableNormalizing()
 				ctx.Response.Header.DisableNormalizing()
 			}
-			// reading Headers and Body
-			err = ctx.Request.readLimitBody(br, maxRequestBodySize, s.GetOnly)
+			// reading Headers
+			if err = ctx.Request.Header.Read(br); err == nil {
+				if onHdrRecv := s.HeaderReceived; onHdrRecv != nil {
+					reqConf := onHdrRecv(&ctx.Request.Header)
+					if reqConf.ReadTimeout > 0 {
+						deadline := time.Now().Add(reqConf.ReadTimeout)
+						if err := c.SetReadDeadline(deadline); err != nil {
+							panic(fmt.Sprintf("BUG: error in SetReadDeadline(%s): %s", deadline, err))
+						}
+					}
+					if reqConf.MaxRequestBodySize > 0 {
+						maxRequestBodySize = reqConf.MaxRequestBodySize
+					}
+					if reqConf.WriteTimeout > 0 {
+						writeTimeout = reqConf.WriteTimeout
+					}
+				}
+				//read body
+				err = ctx.Request.readLimitBody(br, maxRequestBodySize, s.GetOnly)
+			}
 			if err == nil {
 				// If we read any bytes off the wire, we're active.
 				s.setState(c, StateActive)
 			}
+
 			if (s.ReduceMemoryUsage && br.Buffered() == 0) || err != nil {
 				releaseReader(s, br)
 				br = nil
@@ -1914,14 +1955,20 @@ func (s *Server) serveConn(c net.Conn) error {
 		if err != nil {
 			if err == io.EOF {
 				err = nil
-			} else if connRequestNum > 1 && err == errNothingRead {
-				// This is not the first request and we haven't read a single byte
-				// of a new request yet. This means it's just a keep-alive connection
-				// closing down either because the remote closed it or because
-				// or a read timeout on our side. Either way just close the connection
-				// and don't return any error response.
-				err = nil
-			} else {
+			} else if nr, ok := err.(errNothingRead); ok {
+				if connRequestNum > 1 {
+					// This is not the first request and we haven't read a single byte
+					// of a new request yet. This means it's just a keep-alive connection
+					// closing down either because the remote closed it or because
+					// or a read timeout on our side. Either way just close the connection
+					// and don't return any error response.
+					err = nil
+				} else {
+					err = nr.error
+				}
+			}
+
+			if err != nil {
 				bw = s.writeErrorResponse(bw, ctx, serverName, err)
 			}
 			break
@@ -1995,8 +2042,8 @@ func (s *Server) serveConn(c net.Conn) error {
 			ctx.SetConnectionClose()
 		}
 
-		if s.WriteTimeout > 0 {
-			if err := c.SetWriteDeadline(time.Now().Add(s.WriteTimeout)); err != nil {
+		if writeTimeout > 0 {
+			if err := c.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
 				panic(fmt.Sprintf("BUG: error in SetWriteDeadline(%s): %s", s.WriteTimeout, err))
 			}
 		}
