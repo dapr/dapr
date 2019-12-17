@@ -7,6 +7,7 @@ Currently supported secret stores are:
 * Kubernetes
 * Azure KeyVault
 * AWS Secret manager
+* GCP Cloud KMS
 
 ## Implementing a new Secret Store
 

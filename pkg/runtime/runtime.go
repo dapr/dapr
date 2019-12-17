@@ -203,13 +203,13 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
 		component := a.getComponent(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type, a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
-		if component != nil {
+		if component == nil {
 			return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware %s of type %s",
 				a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
 				a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type)
 		}
-		handler, err := a.httpMiddlewareRegistry.CreateMiddleware(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
-			middleware.Metadata{Properties:a.convertMetadataItemsToProperties(component.Spec.Metadata)})
+		handler, err := a.httpMiddlewareRegistry.CreateMiddleware(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type,
+			middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
 		if err != nil {
 			return http_middleware.Pipeline{}, err
 		}
@@ -1060,6 +1060,7 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 
 func (a *DaprRuntime) getComponent(componentType string, name string) *components_v1alpha1.Component {
 	for _, c := range a.components {
+		fmt.Printf("COMPONENT TYPE: %s, NAME: %s\n", c.Spec.Type, c.ObjectMeta.Name)
 		if c.Spec.Type == componentType && c.ObjectMeta.Name == name {
 			return &c
 		}

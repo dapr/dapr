@@ -8,9 +8,9 @@ package http
 import (
 	"strings"
 
+	middleware "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
-	middleware "github.com/dapr/components-contrib/middleware"
 	"github.com/valyala/fasthttp"
 )
 
@@ -26,6 +26,7 @@ func Load() {
 		}
 	})
 	RegisterMiddleware("oauth2", func(metadata middleware.Metadata) http_middleware.Middleware {
-		return oauth2.NewOAuth2Middleware().GetHandler(metadata)
+		handler, _ := oauth2.NewOAuth2Middleware().GetHandler(metadata)
+		return handler
 	})
 }

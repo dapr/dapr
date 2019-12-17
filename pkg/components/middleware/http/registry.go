@@ -15,11 +15,11 @@ import (
 
 // Registry is the interface for callers to get registered HTTP middleware
 type Registry interface {
-	CreateMiddleware(name string) (http_middleware.Middleware, error)
+	CreateMiddleware(name string, metadata middleware.Metadata) (http_middleware.Middleware, error)
 }
 
 type httpMiddlewareRegistry struct {
-	middleware map[string]func() http_middleware.Middleware
+	middleware map[string]func(middleware.Metadata) http_middleware.Middleware
 }
 
 var instance *httpMiddlewareRegistry
@@ -29,7 +29,7 @@ var once sync.Once
 func NewRegistry() Registry {
 	once.Do(func() {
 		instance = &httpMiddlewareRegistry{
-			middleware: map[string]func() http_middleware.Middleware{},
+			middleware: map[string]func(middleware.Metadata) http_middleware.Middleware{},
 		}
 	})
 	return instance

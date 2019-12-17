@@ -171,7 +171,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191128051247-c4bd2a47eae0
+# github.com/dapr/components-contrib v0.0.0-20191128051247-c4bd2a47eae0 => ../components-contrib
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/aws/dynamodb
 github.com/dapr/components-contrib/bindings/aws/s3
@@ -193,6 +193,8 @@ github.com/dapr/components-contrib/exporters
 github.com/dapr/components-contrib/exporters/native
 github.com/dapr/components-contrib/exporters/stringexporter
 github.com/dapr/components-contrib/exporters/zipkin
+github.com/dapr/components-contrib/middleware
+github.com/dapr/components-contrib/middleware/http/oauth2
 github.com/dapr/components-contrib/pubsub
 github.com/dapr/components-contrib/pubsub/azure/servicebus
 github.com/dapr/components-contrib/pubsub/nats
@@ -237,6 +239,8 @@ github.com/emicklei/go-restful
 github.com/emicklei/go-restful/log
 # github.com/evanphx/json-patch v4.2.0+incompatible
 github.com/evanphx/json-patch
+# github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5
+github.com/fasthttp-contrib/sessions
 # github.com/ghodss/yaml v1.0.0
 github.com/ghodss/yaml
 # github.com/go-openapi/jsonpointer v0.19.3
@@ -361,7 +365,7 @@ github.com/jstemmer/go-junit-report/formatter
 github.com/jstemmer/go-junit-report/parser
 # github.com/kelseyhightower/envconfig v1.4.0
 github.com/kelseyhightower/envconfig
-# github.com/klauspost/compress v1.5.0
+# github.com/klauspost/compress v1.8.2
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/gzip
 github.com/klauspost/compress/zlib
@@ -433,7 +437,7 @@ github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
 # github.com/valyala/bytebufferpool v1.0.0
 github.com/valyala/bytebufferpool
-# github.com/valyala/fasthttp v1.4.0
+# github.com/valyala/fasthttp v1.6.0
 github.com/valyala/fasthttp
 github.com/valyala/fasthttp/fasthttpadaptor
 github.com/valyala/fasthttp/fasthttputil
