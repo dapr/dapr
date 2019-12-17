@@ -1,4 +1,4 @@
-// +build appengine
+// +build js nacl plan9
 
 package logrus
 
@@ -7,5 +7,5 @@ import (
 )
 
 func checkIfTerminal(w io.Writer) bool {
-	return true
+	return false
 }
