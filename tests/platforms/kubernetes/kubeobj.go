@@ -7,6 +7,7 @@ package kubernetes
 
 import (
 	"fmt"
+	"os"
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,9 +17,6 @@ import (
 )
 
 const (
-	// DaprTestKubeNameSpace is the default Kubernetes namespace for e2e test
-	DaprTestKubeNameSpace = "dapr-tests"
-
 	// TestAppLabelKey is the label key for Kubernetes label selector
 	TestAppLabelKey = "testapp"
 	// DaprSideCarName is the Pod name of Dapr side car
@@ -31,7 +29,13 @@ const (
 
 	// DaprComponentsKind is component kind
 	DaprComponentsKind = "components.dapr.io"
+
+	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests
+	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
 )
+
+// DaprTestNamespace is the default Kubernetes namespace for e2e tests
+var DaprTestNamespace = "dapr-tests"
 
 // buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
 func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
@@ -147,4 +151,10 @@ func buildNamespaceObject(namespace string) *apiv1.Namespace {
 
 func int32Ptr(i int32) *int32 {
 	return &i
+}
+
+func init() {
+	if ns, ok := os.LookupEnv(DaprTestNamespaceEnvVar); ok {
+		DaprTestNamespace = ns
+	}
 }
