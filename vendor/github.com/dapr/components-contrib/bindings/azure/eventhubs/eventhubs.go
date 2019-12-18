@@ -14,7 +14,7 @@ import (
 	"time"
 
 	eventhub "github.com/Azure/azure-event-hubs-go"
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/bindings"
 )
 

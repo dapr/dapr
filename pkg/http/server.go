@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"

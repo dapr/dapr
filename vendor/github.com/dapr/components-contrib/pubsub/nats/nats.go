@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/pubsub"
 	nats "github.com/nats-io/go-nats"
 )
