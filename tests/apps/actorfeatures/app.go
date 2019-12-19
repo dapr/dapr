@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -21,27 +22,29 @@ import (
 const (
 	appPort = 3000
 
-	actorMethodURLFormat = "http://localhost:3500/v1.0/actors/%s/%s/method/%s"
+	actorMethodURLFormat = "http://localhost:3500/v1.0/actors/%s/%s/%s/%s"
 
-	registedActorType       = "testactor" // Actor type must be unique per test app.
-	actorIdleTimeout        = "5s"        // Short idle timeout.
-	actorScanInterval       = "1s"        // Smaller then actorIdleTimeout and short for speedy test.
-	drainOngoingCallTimeout = "1s"
+	registedActorType       = "testactorfeatures" // Actor type must be unique per test app.
+	actorIdleTimeout        = "1h"
+	actorScanInterval       = "30s"
+	drainOngoingCallTimeout = "30s"
 	drainBalancedActors     = true
+	secondsToWaitInMethod   = 5
 )
 
 type daprActor struct {
 	actorType string
 	id        string
-	value     interface{}
+	value     int
 }
 
 // represents a response for the APIs in this app.
 type actorLogEntry struct {
-	Action    string `json:"action,omitempty"`
-	ActorType string `json:"actorType,omitempty"`
-	ActorID   string `json:"actorId,omitempty"`
-	Timestamp int    `json:"timestamp,omitempty"`
+	Action         string `json:"action,omitempty"`
+	ActorType      string `json:"actorType,omitempty"`
+	ActorID        string `json:"actorId,omitempty"`
+	StartTimestamp int    `json:"startTimestamp,omitempty"`
+	EndTimestamp   int    `json:"endTimestamp,omitempty"`
 }
 
 type daprConfig struct {
@@ -60,18 +63,56 @@ var daprConfigResponse = daprConfig{
 	drainBalancedActors,
 }
 
+type daprActorResponse struct {
+	Data     []byte            `json:"data"`
+	Metadata map[string]string `json:"metadata"`
+}
+
+// request for timer or reminder.
+type timerReminderRequest struct {
+	Data     string `json:"data,omitempty"`
+	DueTime  string `json:"dueTime,omitempty"`
+	Period   string `json:"period,omitempty"`
+	Callback string `json:"callback,omitempty"`
+}
+
+// requestResponse represents a request or response for the APIs in this app.
+type response struct {
+	ActorType string `json:"actorType,omitempty"`
+	ActorID   string `json:"actorId,omitempty"`
+	Method    string `json:"method,omitempty"`
+	StartTime int    `json:"start_time,omitempty"`
+	EndTime   int    `json:"end_time,omitempty"`
+	Message   string `json:"message,omitempty"`
+}
+
 var actorLogs = []actorLogEntry{}
 var actorLogsMutex = &sync.Mutex{}
 
 var actors sync.Map
 
-func appendActorLog(logEntry actorLogEntry) {
+func resetLogs() {
+	actorLogsMutex.Lock()
+	defer actorLogsMutex.Unlock()
+
+	actorLogs = []actorLogEntry{}
+}
+
+func appendLog(actorType string, actorID string, action string, start int) {
+	logEntry := actorLogEntry{
+		Action:         action,
+		ActorType:      actorType,
+		ActorID:        actorID,
+		StartTimestamp: start,
+		EndTimestamp:   epoch(),
+	}
+
 	actorLogsMutex.Lock()
 	defer actorLogsMutex.Unlock()
 	actorLogs = append(actorLogs, logEntry)
 }
 
-func getActorLogs() []actorLogEntry {
+func getLogs() []actorLogEntry {
 	return actorLogs
 }
 
@@ -87,11 +128,14 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
+	log.Printf("Processing dapr %s request for %s", r.Method, r.URL.RequestURI())
+	if r.Method == "DELETE" {
+		resetLogs()
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(getActorLogs())
+	json.NewEncoder(w).Encode(getLogs())
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
@@ -105,22 +149,52 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing actor method request for %s", r.URL.RequestURI())
 
+	start := epoch()
+
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
 	method := mux.Vars(r)["method"]
+	reminderOrTimer := mux.Vars(r)["reminderOrTimer"] != ""
 
-	appendActorLog(actorLogEntry{
-		Action:    method,
-		ActorType: actorType,
-		ActorID:   id,
-		Timestamp: epoch(),
-	})
+	hostname, err := os.Hostname()
+	var data []byte
+	if method == "hostname" {
+		data = []byte(hostname)
+	} else {
+		// Sleep for all calls, except timer and reminder.
+		if !reminderOrTimer {
+			time.Sleep(secondsToWaitInMethod * time.Second)
+		}
+		data, err = json.Marshal(response{
+			actorType,
+			id,
+			method,
+			start,
+			epoch(),
+			"",
+		})
+	}
+
+	if err != nil {
+		fmt.Printf("Error: %v", err.Error())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	appendLog(actorType, id, method, start)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(daprActorResponse{
+		Data: data,
+	})
 }
 
 func activateDeactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
+
+	start := epoch()
 
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
@@ -140,7 +214,7 @@ func activateDeactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 		actors.Store(actorID, daprActor{
 			actorType: actorType,
 			id:        actorID,
-			value:     nil,
+			value:     epoch(),
 		})
 	}
 
@@ -149,44 +223,94 @@ func activateDeactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 		actors.Delete(actorID)
 	}
 
-	appendActorLog(actorLogEntry{
-		Action:    action,
-		ActorType: actorType,
-		ActorID:   id,
-		Timestamp: epoch(),
-	})
+	appendLog(actorType, id, action, start)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 }
 
-// calls Dapr's Actor method: simulating actor client call.
+// calls Dapr's Actor method/timer/reminder: simulating actor client call.
 // nolint:gosec
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
 	actorType := mux.Vars(r)["actorType"]
 	id := mux.Vars(r)["id"]
+	callType := mux.Vars(r)["callType"]
 	method := mux.Vars(r)["method"]
 
-	invokeURL := fmt.Sprintf(actorMethodURLFormat, actorType, id, method)
-	log.Printf("Invoking %s", invokeURL)
+	url := fmt.Sprintf(actorMethodURLFormat, actorType, id, callType, method)
 
-	res, err := http.Post(invokeURL, "application/json", bytes.NewBuffer([]byte{}))
-	if err != nil {
-		log.Printf("Could not test actor: %s", err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	var req interface{}
+	switch callType {
+	case "method":
+		// NO OP
+	case "timers":
+		req = timerReminderRequest{
+			Data:    "timerdata",
+			DueTime: "1s",
+			Period:  "1s",
+		}
+	case "reminders":
+		req = timerReminderRequest{
+			Data:    "reminderdata",
+			DueTime: "1s",
+			Period:  "1s",
+		}
 	}
 
-	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := httpCall(r.Method, url, req)
 	if err != nil {
 		log.Printf("Could not read actor's test response: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	w.Write(body)
+	if len(body) == 0 {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	var response daprActorResponse
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("Could parse actor's test response: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(response.Data)
+}
+
+func httpCall(method string, url string, requestBody interface{}) ([]byte, error) {
+	var body []byte
+	var err error
+
+	if requestBody != nil {
+		body, err = json.Marshal(requestBody)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	req, err := http.NewRequest(method, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	client := http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	resBody, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return resBody, nil
 }
 
 // epoch returns the current unix epoch timestamp
@@ -201,9 +325,11 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
+	router.HandleFunc("/actors/{actorType}/{id}/method/{reminderOrTimer}/{method}", actorMethodHandler).Methods("PUT")
 	router.HandleFunc("/actors/{actorType}/{id}", activateDeactivateActorHandler).Methods("POST", "DELETE")
-	router.HandleFunc("/test/{actorType}/{id}/method/{method}", testCallActorHandler).Methods("POST")
+	router.HandleFunc("/test/{actorType}/{id}/{callType}/{method}", testCallActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
+	router.HandleFunc("/test/logs", logsHandler).Methods("DELETE")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
