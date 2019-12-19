@@ -184,7 +184,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 	})
 
 	if waitErr != nil {
-		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %w", m.app.AppName, lastDeployment, waitErr)
+		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %s", m.app.AppName, lastDeployment, waitErr)
 	}
 
 	return lastDeployment, nil
@@ -384,7 +384,7 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 	})
 
 	if waitErr != nil {
-		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %w", m.app.AppName, lastService, waitErr)
+		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %s", m.app.AppName, lastService, waitErr)
 	}
 
 	return lastService, nil
