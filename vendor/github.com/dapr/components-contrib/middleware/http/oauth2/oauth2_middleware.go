@@ -66,6 +66,7 @@ func (m *Middleware) GetHandler(metadata middleware.Metadata) (func(h fasthttp.R
 			}
 			session := sessions.StartFasthttp(ctx)
 			if session.GetString(meta.AuthHeaderName) != "" {
+				ctx.Request.Header.Add(meta.AuthHeaderName, session.GetString(meta.AuthHeaderName))
 				h(ctx)
 				return
 			}
