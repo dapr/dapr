@@ -18,15 +18,17 @@ import (
 	"github.com/gorilla/mux"
 )
 
-const appPort = 3000
+const (
+	appPort = 3000
 
-const actorMethodURLFormat = "http://localhost:3500/v1.0/actors/%s/%s/method/%s"
+	actorMethodURLFormat = "http://localhost:3500/v1.0/actors/%s/%s/method/%s"
 
-const registedActorType = "testactor" // Actor type.
-const actorIdleTimeout = "5s"         // Short idle timeout.
-const actorScanInterval = "1s"        // Smaller then actorIdleTimeout and short for speedy test.
-const drainOngoingCallTimeout = "1s"
-const drainBalancedActors = true
+	registedActorType       = "testactor" // Actor type must be unique per test app.
+	actorIdleTimeout        = "5s"        // Short idle timeout.
+	actorScanInterval       = "1s"        // Smaller then actorIdleTimeout and short for speedy test.
+	drainOngoingCallTimeout = "1s"
+	drainBalancedActors     = true
+)
 
 type daprActor struct {
 	actorType string
@@ -58,20 +60,19 @@ var daprConfigResponse = daprConfig{
 	drainBalancedActors,
 }
 
-var logs = []actorLogEntry{}
-var logsMutex = &sync.Mutex{}
+var actorLogs = []actorLogEntry{}
+var actorLogsMutex = &sync.Mutex{}
 
-var actors = map[string]daprActor{}
-var actorsMutex = &sync.Mutex{}
+var actors sync.Map
 
-func appendLog(logEntry actorLogEntry) {
-	logsMutex.Lock()
-	defer logsMutex.Unlock()
-	logs = append(logs, logEntry)
+func appendActorLog(logEntry actorLogEntry) {
+	actorLogsMutex.Lock()
+	defer actorLogsMutex.Unlock()
+	actorLogs = append(actorLogs, logEntry)
 }
 
-func getLogs() []actorLogEntry {
-	return logs
+func getActorLogs() []actorLogEntry {
+	return actorLogs
 }
 
 func createActorID(actorType string, id string) string {
@@ -90,7 +91,7 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(getLogs())
+	json.NewEncoder(w).Encode(getActorLogs())
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +109,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 	method := mux.Vars(r)["method"]
 
-	appendLog(actorLogEntry{
+	appendActorLog(actorLogEntry{
 		Action:    method,
 		ActorType: actorType,
 		ActorID:   id,
@@ -132,26 +133,23 @@ func activateDeactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 
 	actorID := createActorID(actorType, id)
 
-	actorsMutex.Lock()
-	defer actorsMutex.Unlock()
-
 	action := ""
-	_, ok := actors[actorID]
+	_, ok := actors.Load(actorID)
 	if !ok && r.Method == "POST" {
 		action = "activation"
-		actors[actorID] = daprActor{
+		actors.Store(actorID, daprActor{
 			actorType: actorType,
 			id:        actorID,
 			value:     nil,
-		}
+		})
 	}
 
 	if ok && r.Method == "DELETE" {
 		action = "deactivation"
-		delete(actors, actorID)
+		actors.Delete(actorID)
 	}
 
-	appendLog(actorLogEntry{
+	appendActorLog(actorLogEntry{
 		Action:    action,
 		ActorType: actorType,
 		ActorID:   id,

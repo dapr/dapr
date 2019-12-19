@@ -16,9 +16,11 @@ var (
 	strHTTP             = []byte("http")
 	strHTTPS            = []byte("https")
 	strHTTP11           = []byte("HTTP/1.1")
+	strColon            = []byte(":")
 	strColonSlashSlash  = []byte("://")
 	strColonSpace       = []byte(": ")
 	strGMT              = []byte("GMT")
+	strAt               = []byte("@")
 
 	strResponseContinue = []byte("HTTP/1.1 100 Continue\r\n\r\n")
 
@@ -52,6 +54,7 @@ var (
 	strAcceptRanges     = []byte(HeaderAcceptRanges)
 	strRange            = []byte(HeaderRange)
 	strContentRange     = []byte(HeaderContentRange)
+	strAuthorization    = []byte(HeaderAuthorization)
 
 	strCookieExpires        = []byte("expires")
 	strCookieDomain         = []byte("domain")
@@ -78,4 +81,5 @@ var (
 	strBytes               = []byte("bytes")
 	strTextSlash           = []byte("text/")
 	strApplicationSlash    = []byte("application/")
+	strBasicSpace          = []byte("Basic ")
 )

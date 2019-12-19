@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -967,7 +968,7 @@ func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 	http_middleware_loader.Load()
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
-		handler, err := registry.CreateMiddleware(spec.Handlers[i].Name)
+		handler, err := registry.CreateMiddleware(spec.Handlers[i].Type, middleware.Metadata{})
 		if err != nil {
 			return http_middleware.Pipeline{}
 		}
@@ -996,6 +997,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	pipeline := buildHTTPPineline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
 			config.HandlerSpec{
+				Type: "middleware.http.uppercase",
 				Name: "middleware.http.uppercase",
 			},
 		},

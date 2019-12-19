@@ -89,8 +89,6 @@ github.com/PuerkitoBio/purell
 github.com/PuerkitoBio/urlesc
 # github.com/Shopify/sarama v1.23.1
 github.com/Shopify/sarama
-# github.com/Sirupsen/logrus v1.0.6
-github.com/Sirupsen/logrus
 # github.com/a8m/documentdb v1.2.0
 github.com/a8m/documentdb
 # github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da
@@ -171,7 +169,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20191128051247-c4bd2a47eae0
+# github.com/dapr/components-contrib v0.0.0-20191217174314-701f12e52994
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/aws/dynamodb
 github.com/dapr/components-contrib/bindings/aws/s3
@@ -193,6 +191,8 @@ github.com/dapr/components-contrib/exporters
 github.com/dapr/components-contrib/exporters/native
 github.com/dapr/components-contrib/exporters/stringexporter
 github.com/dapr/components-contrib/exporters/zipkin
+github.com/dapr/components-contrib/middleware
+github.com/dapr/components-contrib/middleware/http/oauth2
 github.com/dapr/components-contrib/pubsub
 github.com/dapr/components-contrib/pubsub/azure/servicebus
 github.com/dapr/components-contrib/pubsub/nats
@@ -237,6 +237,8 @@ github.com/emicklei/go-restful
 github.com/emicklei/go-restful/log
 # github.com/evanphx/json-patch v4.2.0+incompatible
 github.com/evanphx/json-patch
+# github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5
+github.com/fasthttp-contrib/sessions
 # github.com/ghodss/yaml v1.0.0
 github.com/ghodss/yaml
 # github.com/go-openapi/jsonpointer v0.19.3
@@ -361,12 +363,14 @@ github.com/jstemmer/go-junit-report/formatter
 github.com/jstemmer/go-junit-report/parser
 # github.com/kelseyhightower/envconfig v1.4.0
 github.com/kelseyhightower/envconfig
-# github.com/klauspost/compress v1.5.0
+# github.com/klauspost/compress v1.8.2
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/gzip
 github.com/klauspost/compress/zlib
 # github.com/klauspost/cpuid v1.2.1
 github.com/klauspost/cpuid
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
+github.com/konsorten/go-windows-terminal-sequences
 # github.com/kubernetes-client/go v0.0.0-20190625181339-cd8e39e789c7
 github.com/kubernetes-client/go/kubernetes/client
 github.com/kubernetes-client/go/kubernetes/config
@@ -421,6 +425,8 @@ github.com/rcrowley/go-metrics
 github.com/samuel/go-zookeeper/zk
 # github.com/satori/go.uuid v1.2.0
 github.com/satori/go.uuid
+# github.com/sirupsen/logrus v1.4.2
+github.com/sirupsen/logrus
 # github.com/spf13/pflag v1.0.3
 github.com/spf13/pflag
 # github.com/streadway/amqp v0.0.0-20190827072141-edfb9018d271
@@ -433,7 +439,7 @@ github.com/stretchr/testify/mock
 github.com/stretchr/testify/require
 # github.com/valyala/bytebufferpool v1.0.0
 github.com/valyala/bytebufferpool
-# github.com/valyala/fasthttp v1.4.0
+# github.com/valyala/fasthttp v1.6.0
 github.com/valyala/fasthttp
 github.com/valyala/fasthttp/fasthttpadaptor
 github.com/valyala/fasthttp/fasthttputil

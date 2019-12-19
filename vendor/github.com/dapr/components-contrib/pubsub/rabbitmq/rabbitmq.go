@@ -3,7 +3,7 @@ package rabbitmq
 import (
 	"fmt"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/streadway/amqp"
 )
@@ -85,7 +85,6 @@ func (r *rabbitMQ) Publish(req *pubsub.PublishRequest) error {
 }
 
 func (r *rabbitMQ) Subscribe(req pubsub.SubscribeRequest, handler func(msg *pubsub.NewMessage) error) error {
-
 	err := r.ensureExchangeDeclared(req.Topic)
 	if err != nil {
 		return err
@@ -160,7 +159,6 @@ func (r *rabbitMQ) handleMessage(d amqp.Delivery, topic string, handler func(msg
 }
 
 func (r *rabbitMQ) ensureExchangeDeclared(exchange string) error {
-
 	if _, exists := r.declaredExchanges[exchange]; !exists {
 		log.Debugf("%s declaring exchange '%s' of kind '%s'", logMessagePrefix, exchange, fanoutExchangeKind)
 		err := r.channel.ExchangeDeclare(exchange, fanoutExchangeKind, true, false, false, false, nil)

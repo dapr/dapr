@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/gorilla/mux"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,6 +45,7 @@ type PipelineSpec struct {
 
 type HandlerSpec struct {
 	Name         string       `json:"name"`
+	Type         string       `json:"type"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty"`
 }
 
