@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -1060,7 +1060,6 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 
 func (a *DaprRuntime) getComponent(componentType string, name string) *components_v1alpha1.Component {
 	for _, c := range a.components {
-		fmt.Printf("COMPONENT TYPE: %s, NAME: %s\n", c.Spec.Type, c.ObjectMeta.Name)
 		if c.Spec.Type == componentType && c.ObjectMeta.Name == name {
 			return &c
 		}
