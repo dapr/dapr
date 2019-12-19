@@ -23,7 +23,7 @@ import (
 type KubeClient struct {
 	ClientSet     kubernetes.Interface
 	DaprClientSet daprclient.Interface
-	clientConfig        *rest.Config
+	clientConfig  *rest.Config
 }
 
 // NewKubeClient creates KubeClient instance
