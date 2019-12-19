@@ -112,6 +112,28 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
+// HTTPDelete calls a given URL with the HTTP DELETE method.
+func HTTPDelete(url string) ([]byte, error) {
+	client := newHTTPClient()
+
+	req, err := http.NewRequest("DELETE", sanitizeHTTPURL(url), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := extractBody(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
 func sanitizeHTTPURL(url string) string {
 	if !strings.Contains(url, "http") {
 		url = fmt.Sprintf("http://%s", url)
@@ -121,12 +143,14 @@ func sanitizeHTTPURL(url string) string {
 }
 
 func extractBody(r io.ReadCloser) ([]byte, error) {
+	if r != nil {
+		defer r.Close()
+	}
+
 	body, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-
-	r.Close()
 
 	return body, nil
 }
