@@ -290,10 +290,7 @@ func (m *AppManager) DoPortForwarding(podName string) error {
 		return err
 	}
 
-	select {
-	case <-m.readyChannel:
-		break
-	}
+	<-m.readyChannel
 
 	return nil
 }
@@ -306,7 +303,7 @@ func startPortForwarding(req PortForwardRequest) error {
 	}
 
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", req.pod.Namespace, req.pod.Name)
-	hostIP := strings.TrimLeft(req.restConfig.Host, "https:/")
+	hostIP := strings.TrimLeft(req.restConfig.Host, "htps:/")
 	serverURL := url.URL{Scheme: "https", Path: path, Host: hostIP}
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)
