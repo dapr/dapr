@@ -54,6 +54,7 @@ const (
 	retryPatternParam   = "retryPattern"
 	retryThresholdParam = "retryThreshold"
 	concurrencyParam    = "concurrency"
+	daprSeparator       = "__delim__"
 )
 
 // NewAPI returns a new API
@@ -359,7 +360,7 @@ func (a *api) onPostState(c *routing.Context) error {
 
 func (a *api) getModifiedStateKey(key string) string {
 	if a.id != "" {
-		return fmt.Sprintf("%s-%s", a.id, key)
+		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
 	}
 
 	return key
