@@ -275,7 +275,7 @@ func (m *AppManager) DoPortForwarding(podName string) error {
 		restConfig: config,
 		pod: apiv1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      podName,
+				Name:      name,
 				Namespace: m.namespace,
 			},
 		},
