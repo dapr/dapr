@@ -31,15 +31,18 @@ message DeleteStateEnvelope {
   string key = 1;
   string etag = 2;
   StateOptions options = 3;
+  string storeName = 4;
 }
 
 message SaveStateEnvelope {
   repeated StateRequest requests = 1;
+  string storeName = 2;
 }
 
 message GetStateEnvelope {
     string key = 1;
-    string consistency = 2;   
+    string consistency = 2;
+    string storeName = 3;   
 }
 
 message GetStateResponseEnvelope {
