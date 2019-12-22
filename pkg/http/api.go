@@ -252,7 +252,7 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 
 func (a *api) onGetState(c *routing.Context) error {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
