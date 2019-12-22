@@ -54,6 +54,7 @@ const (
 	appConfigEndpoint   = "dapr/config"
 	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
+	defaultStore        = "defaultStore"
 )
 
 // DaprRuntime holds all the core components of the runtime
@@ -69,7 +70,7 @@ type DaprRuntime struct {
 	secretStoresRegistry     secretstores_loader.Registry
 	exporterRegistry         exporter_loader.Registry
 	serviceDiscoveryRegistry servicediscovery_loader.Registry
-	stateStore               state.Store
+	stateStores              map[string]state.Store
 	actor                    actors.Actors
 	bindingsRegistry         bindings_loader.Registry
 	inputBindings            map[string]bindings.InputBinding
@@ -81,6 +82,7 @@ type DaprRuntime struct {
 	json                     jsoniter.API
 	httpMiddlewareRegistry   http_middleware_loader.Registry
 	hostAddress              string
+	defaultStoreName         string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -93,6 +95,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		inputBindings:            map[string]bindings.InputBinding{},
 		outputBindings:           map[string]bindings.OutputBinding{},
 		secretStores:             map[string]secretstores.SecretStore{},
+		stateStores:              map[string]state.Store{},
 		stateStoreRegistry:       state_loader.NewStateStoreRegistry(),
 		bindingsRegistry:         bindings_loader.NewRegistry(),
 		pubSubRegistry:           pubsub_loader.NewRegistry(),
@@ -289,7 +292,7 @@ func (a *DaprRuntime) OnComponentUpdated(component components_v1alpha1.Component
 		if err != nil {
 			log.Errorf("error on init state store: %s", err)
 		} else {
-			a.stateStore = store
+			a.stateStores[component.ObjectMeta.Name] = store
 		}
 	} else if strings.Index(component.Spec.Type, "bindings") == 0 {
 		//TODO: implement update for input bindings too
@@ -345,8 +348,9 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.WriteReques
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
-			if a.stateStore != nil {
-				err := a.stateStore.BulkSet(reqs)
+			if a.stateStores != nil {
+				// TODO: provide a way to specify the output binding state store, currently picking the first configured store
+				err := a.stateStores[a.defaultStoreName].BulkSet(reqs)
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
 				}
@@ -454,14 +458,14 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.pubSub, a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
 }
 
 func (a *DaprRuntime) startGRPCServer(port int) error {
-	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStore, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
+	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	err := server.StartNonBlocking()
@@ -586,7 +590,6 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 
 func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 	state_loader.Load()
-
 	for _, s := range a.components {
 		if strings.Index(s.Spec.Type, "state") == 0 {
 			store, err := registry.CreateStateStore(s.Spec.Type)
@@ -595,16 +598,26 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 				continue
 			}
 			if store != nil {
+				props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
 				err := store.Init(state.Metadata{
-					Properties: a.convertMetadataItemsToProperties(s.Spec.Metadata),
+					Properties: props,
 				})
 				if err != nil {
 					log.Warnf("error initializing state store %s: %s", s.Spec.Type, err)
 					continue
 				}
 
-				a.stateStore = store
-				break
+				a.stateStores[s.ObjectMeta.Name] = store
+
+				if a.defaultStoreName == "" {
+					a.defaultStoreName = s.ObjectMeta.Name
+				}
+
+				// set default store if any - if multiple stores are set as default then last one wins
+				if d := props[defaultStore]; d == "true" {
+					a.defaultStoreName = s.ObjectMeta.Name
+				}
+
 			}
 		}
 	}
@@ -790,7 +803,8 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.GRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
-	act := actors.NewActors(a.stateStore, a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
+	// TODO: provide a way to specify the actor state store, currently picking the first configured/default store
+	act := actors.NewActors(a.stateStores[a.defaultStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
 	err := act.Init()
 	a.actor = act
 	return err
