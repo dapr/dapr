@@ -54,7 +54,7 @@ const (
 	appConfigEndpoint   = "dapr/config"
 	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
-	defaultStore        = "defaultStore"
+	defaultStateStore   = "defaultStateStore"
 )
 
 // DaprRuntime holds all the core components of the runtime
@@ -82,7 +82,7 @@ type DaprRuntime struct {
 	json                     jsoniter.API
 	httpMiddlewareRegistry   http_middleware_loader.Registry
 	hostAddress              string
-	defaultStoreName         string
+	defaultStateStoreName    string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -350,7 +350,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
 				// TODO: provide a way to specify the output binding state store, currently picking the first configured store
-				err := a.stateStores[a.defaultStoreName].BulkSet(reqs)
+				err := a.stateStores[a.defaultStateStoreName].BulkSet(reqs)
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
 				}
@@ -609,13 +609,13 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 
 				a.stateStores[s.ObjectMeta.Name] = store
 
-				if a.defaultStoreName == "" {
-					a.defaultStoreName = s.ObjectMeta.Name
+				if a.defaultStateStoreName == "" {
+					a.defaultStateStoreName = s.ObjectMeta.Name
 				}
 
 				// set default store if any - if multiple stores are set as default then last one wins
-				if d := props[defaultStore]; d == "true" {
-					a.defaultStoreName = s.ObjectMeta.Name
+				if d := props[defaultStateStore]; d == "true" {
+					a.defaultStateStoreName = s.ObjectMeta.Name
 				}
 
 			}
@@ -804,7 +804,7 @@ func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.GRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
 	// TODO: provide a way to specify the actor state store, currently picking the first configured/default store
-	act := actors.NewActors(a.stateStores[a.defaultStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
+	act := actors.NewActors(a.stateStores[a.defaultStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
 	err := act.Init()
 	a.actor = act
 	return err
