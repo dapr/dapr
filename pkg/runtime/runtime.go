@@ -55,6 +55,7 @@ const (
 	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
 	defaultStateStore   = "defaultStateStore"
+	actorStateStore     = "actorStateStore"
 )
 
 // DaprRuntime holds all the core components of the runtime
@@ -83,6 +84,7 @@ type DaprRuntime struct {
 	httpMiddlewareRegistry   http_middleware_loader.Registry
 	hostAddress              string
 	defaultStateStoreName    string
+	actorStateStoreName      string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -349,7 +351,6 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				// TODO: provide a way to specify the output binding state store, currently picking the first configured store
 				err := a.stateStores[a.defaultStateStoreName].BulkSet(reqs)
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
@@ -590,6 +591,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 
 func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 	state_loader.Load()
+	var firstStateStoreName string
 	for _, s := range a.components {
 		if strings.Index(s.Spec.Type, "state") == 0 {
 			store, err := registry.CreateStateStore(s.Spec.Type)
@@ -609,18 +611,32 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 
 				a.stateStores[s.ObjectMeta.Name] = store
 
-				if a.defaultStateStoreName == "" {
+				if firstStateStoreName == "" {
+					firstStateStoreName = s.ObjectMeta.Name
+				}
+
+				// set specified default store if "defaultStateStore" is specifed in the spec.
+				if d := props[defaultStateStore]; d == "true" && a.defaultStateStoreName == "" {
 					a.defaultStateStoreName = s.ObjectMeta.Name
 				}
 
-				// set default store if any - if multiple stores are set as default then last one wins
-				if d := props[defaultStateStore]; d == "true" {
-					a.defaultStateStoreName = s.ObjectMeta.Name
+				// set specifed actor store if "actorStateStore" is specified in the spec.
+				if d := props[actorStateStore]; d == "true" && a.actorStateStoreName == "" {
+					a.actorStateStoreName = s.ObjectMeta.Name
 				}
 
 			}
 		}
 	}
+
+	// handle the case when no actorStateStore or defaultStateStore is specified, in this case, just set to the first store from the list
+	if a.defaultStateStoreName == "" {
+		a.defaultStateStoreName = firstStateStoreName
+	}
+	if a.actorStateStoreName == "" {
+		a.actorStateStoreName = firstStateStoreName
+	}
+
 	return nil
 }
 
@@ -803,8 +819,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.GRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
-	// TODO: provide a way to specify the actor state store, currently picking the first configured/default store
-	act := actors.NewActors(a.stateStores[a.defaultStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
 	err := act.Init()
 	a.actor = act
 	return err
