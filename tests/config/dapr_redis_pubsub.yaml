@@ -1,0 +1,16 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: messagebus
+spec:
+  type: pubsub.redis
+  metadata:
+  - name: redisHost
+    value: dapr-redis-master:6379
+  - name: redisPassword
+    value: ""

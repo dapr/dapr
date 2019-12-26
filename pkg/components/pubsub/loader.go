@@ -6,8 +6,9 @@
 package pubsub
 
 import (
-	"github.com/dapr/components-contrib/pubsub/azureservicebus"
+	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	"github.com/dapr/components-contrib/pubsub/nats"
+	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	"github.com/dapr/components-contrib/pubsub/redis"
 )
 
@@ -15,5 +16,6 @@ import (
 func Load() {
 	RegisterMessageBus("redis", redis.NewRedisStreams)
 	RegisterMessageBus("nats", nats.NewNATSPubSub)
-	RegisterMessageBus("azure.servicebus", azureservicebus.NewAzureServiceBus)
+	RegisterMessageBus("azure.servicebus", servicebus.NewAzureServiceBus)
+	RegisterMessageBus("rabbitmq", rabbitmq.NewRabbitMQ)
 }

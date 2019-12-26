@@ -13,6 +13,7 @@ Currently supported state stores are:
 * MongoDB
 * Zookeeper
 * Cloud Firestore (Datastore mode)
+* Couchbase
 
 ## Implementing a new State Store
 

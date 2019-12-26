@@ -17,7 +17,7 @@ import (
 	"syscall"
 
 	"github.com/Shopify/sarama"
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/bindings"
 )
 

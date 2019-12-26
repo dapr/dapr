@@ -12,23 +12,19 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
-
-	"github.com/google/uuid"
-
-	"github.com/dapr/dapr/pkg/actors"
-
-	"github.com/golang/protobuf/ptypes/any"
-	"github.com/golang/protobuf/ptypes/empty"
-
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/messaging"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"github.com/golang/protobuf/ptypes/any"
 	durpb "github.com/golang/protobuf/ptypes/duration"
+	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,8 +32,9 @@ import (
 const (
 	// Range of a durpb.Duration in seconds, as specified in
 	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
-	maxSeconds = int64(10000 * 365.25 * 24 * 60 * 60)
-	minSeconds = -maxSeconds
+	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
+	minSeconds    = -maxSeconds
+	daprSeparator = "__delim__"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -150,7 +147,7 @@ func (a *api) UpdateComponent(ctx context.Context, in *daprinternal_pb.Component
 
 func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
 	if a.pubSub == nil {
-		return &empty.Empty{}, errors.New("ERR_PUB_SUB_NOT_FOUND")
+		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
 
 	topic := in.Topic
@@ -163,7 +160,7 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_CLOUD_EVENTS_SER: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
 	}
 
 	req := pubsub.PublishRequest{
@@ -172,7 +169,7 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 	}
 	err = a.pubSub.Publish(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_PUBLISH_MESSAGE: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
 	}
 	return &empty.Empty{}, nil
 }
@@ -224,7 +221,7 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 
 	getResponse, err := a.stateStore.Get(&req)
 	if err != nil {
-		return nil, fmt.Errorf("ERR_GET_STATE: %s", err)
+		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
 
 	response := &dapr_pb.GetStateResponseEnvelope{}
@@ -270,7 +267,7 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 
 	err := a.stateStore.BulkSet(reqs)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_SAVE_REQUEST: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
 	}
 	return &empty.Empty{}, nil
 }
@@ -307,14 +304,14 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 
 	err := a.stateStore.Delete(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_DELETE_STATE: failed deleting state with key %s: %s", in.Key, err)
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
 	}
 	return &empty.Empty{}, nil
 }
 
 func (a *api) getModifiedStateKey(key string) string {
 	if a.id != "" {
-		return fmt.Sprintf("%s-%s", a.id, key)
+		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
 	}
 	return key
 }

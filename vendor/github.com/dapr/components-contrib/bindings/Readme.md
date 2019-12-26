@@ -9,19 +9,19 @@ List of bindings and their status:
 | ------------- | -------------- | -------------  | ------------- |
 | [Kafka](./kafka) | V | V | Experimental |
 | [RabbitMQ](./rabbitmq) | V  | V | Experimental |
-| [AWS SQS](./sqs) | V | V | Experimental |
-| [AWS SNS](./sns) |  | V | Experimental |
-| [GCP Cloud Pub/Sub](./pubsub) | V | V | Experimental |
-| [Azure EventHubs](./eventhubs) | V | V | Experimental |
-| [Azure CosmosDB](./cosmosdb) | | V | Experimental |
-| [GCP Storage Bucket](./gcpbucket)  | | V | Experimental |
+| [AWS SQS](./aws/sqs) | V | V | Experimental |
+| [AWS SNS](./aws/sns) |  | V | Experimental |
+| [GCP Cloud Pub/Sub](./gcp/pubsub) | V | V | Experimental |
+| [Azure EventHubs](./azure/eventhubs) | V | V | Experimental |
+| [Azure CosmosDB](./azure/cosmosdb) | | V | Experimental |
+| [GCP Storage Bucket](./gcp/bucket)  | | V | Experimental |
 | [HTTP](./http) |  | V | Experimental |
 | [MQTT](./mqtt) | V | V | Experimental |
 | [Redis](./redis) |  | V | Experimental |
-| [AWS DynamoDB](./dynamodb) | | V | Experimental |
-| [AWS S3](./s3) | | V | Experimental |
-| [Azure Blob Storage](./blobstorage) | | V | Experimental |
-| [Azure Service Bus Queues](./servicebusqueues) | V | V | Experimental |
+| [AWS DynamoDB](./aws/dynamodb) | | V | Experimental |
+| [AWS S3](./aws/s3) | | V | Experimental |
+| [Azure Blob Storage](./azure/blobstorage) | | V | Experimental |
+| [Azure Service Bus Queues](./azure/servicebusqueues) | V | V | Experimental |
 | [Kubernetes Events](./kubernetes) | V | | Experimental |
 
 ## Implementing a new binding

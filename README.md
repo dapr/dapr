@@ -1,9 +1,12 @@
-# Dapr - Any language, any framework, anywhere
+<div style="text-align: center"><img src="/img/dapr_logo.svg" height="120px">
+<h2>Any language, any framework, anywhere</h2>
+</div>
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
 [![Gitter](https://badges.gitter.im/Dapr/community.svg)](https://gitter.im/Dapr/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Follow on Twitter](https://img.shields.io/twitter/follow/daprdev.svg?style=social&logo=twitter)](https://twitter.com/intent/follow?screen_name=daprdev)
 
 Dapr is a portable, serverless, event-driven runtime that makes it easy for developers to build resilient, stateless and stateful microservices that run on the cloud and edge and embraces the diversity of languages and developer frameworks.
 
@@ -17,7 +20,8 @@ __Note: Dapr is currently under community development in alpha phase. Dapr is no
 
 - Enable developers using *any* language or framework to write distributed applications
 - Solve the hard problems developers face building microservice applications by providing best practice building blocks
-- Be community driven, open and vendor neutral, seeking new contributors
+- Be community driven, open and vendor neutral
+- Gain new contributors
 - Provide consistency and portability through open APIs
 - Be platform agnostic across cloud and edge
 - Embrace extensibility and provide pluggable components without vendor lock-in
@@ -58,7 +62,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Lightweight (58MB binary, 4MB physical memory)
 * Runs as a sidecar - removes the need for special SDKs or libraries
 * Dedicated CLI - developer friendly experience with easy debugging
-* Clients for Java, Dotnet, Go, Javascript and Python
+* Clients for Java, .NET Core, Go, Javascript, Python, Rust and C++
 
 ## Get Started using Dapr
 
@@ -78,12 +82,13 @@ We want your contributions and suggestions. One of the easiest ways to contribut
 |:-----|:------------|
 | IM chat  | https://gitter.im/Dapr/community 
 | Mailing list | https://groups.google.com/forum/#!forum/dapr-dev
-| Meeting dates |  [Bi-weekly (Starting Oct 29, 2019), Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates this year 29th Oct, 12th Nov, 26th Nov and 10th Dec 2019
+| Meeting dates |  [Bi-weekly Tuesdays 10:00AM PST](https://calendar.google.com/calendar?cid=OGQ0ZWNva2xrbHE1YXQ4ZGNsMjg1M2pzbzRAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ). Dates for 2020 - 7th Jan, 21st Jan, 4th Feb, 18th Feb, 3rd March, 17th March, 31st March
 | Meeting link | https://aka.ms/dapr-community-call
 | Meeting notes | https://aka.ms/dapr-meeting-notes
+| Meeting recordings | http://aka.ms/dapr-recordings
 | Twitter | [@daprdev](https://twitter.com/daprdev)
 | Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
-| MS Ignite 2019 | [Mark Russinovich presents The Future of Cloud Native Applications with OAM and Dapr](https://myignite.techcommunity.microsoft.com/sessions/82059?source=sessions)
+| MS Ignite 2019 | [THR2267 - Mark Russinovich presents next generation app development and deployment](https://myignite.techcommunity.microsoft.com/sessions/84599) and [Mark Russinovich presents The Future of Cloud Native Applications with OAM and Dapr](https://myignite.techcommunity.microsoft.com/sessions/82059)
 
 ### Contributing to Dapr
 
