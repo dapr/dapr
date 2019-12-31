@@ -771,7 +771,12 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	}
 
 	if cloudEvent.Data != nil {
-		b, _ := a.json.Marshal(cloudEvent.Data)
+		var b []byte
+		if cloudEvent.DataContentType == "text/plain" {
+			b = []byte(cloudEvent.Data.(string))
+		} else if cloudEvent.DataContentType == "application/json" {
+			b, _ = a.json.Marshal(cloudEvent.Data)
+		}
 		envelope.Data = &any.Any{
 			Value: b,
 		}
