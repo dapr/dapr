@@ -6,7 +6,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/dapr/components-contrib v0.0.0-20191217174314-701f12e52994
+	github.com/dapr/components-contrib v0.0.0-20191219182252-98999a6044c1
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/frankban/quicktest v1.5.0 // indirect

@@ -144,6 +144,8 @@ github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f/go.mod h1:E3G3o1h8I7cfc
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=
 github.com/dapr/components-contrib v0.0.0-20191217174314-701f12e52994 h1:d2fRwR67v8d8/y89d73+GnHS5iicRRro20oJCjvW/Ys=
 github.com/dapr/components-contrib v0.0.0-20191217174314-701f12e52994/go.mod h1:2h+01vONvUWWUKDD7z+Gzu5oBDizoh+Mw+lqo+8otII=
+github.com/dapr/components-contrib v0.0.0-20191219182252-98999a6044c1 h1:jH1b0mDwEYywx+RUmFcGSo36Sk4t2SeezRwgHwI89Zw=
+github.com/dapr/components-contrib v0.0.0-20191219182252-98999a6044c1/go.mod h1:2h+01vONvUWWUKDD7z+Gzu5oBDizoh+Mw+lqo+8otII=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
