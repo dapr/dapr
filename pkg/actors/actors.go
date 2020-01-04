@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -23,6 +22,7 @@ import (
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -37,6 +37,7 @@ type Actors interface {
 	SaveState(req *SaveStateRequest) error
 	DeleteState(req *DeleteStateRequest) error
 	TransactionalStateOperation(req *TransactionalRequest) error
+	PerformTransaction(req *[]state.TransactionalRequest) error
 	GetReminder(req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(req *CreateReminderRequest) error
 	DeleteReminder(req *DeleteReminderRequest) error
@@ -377,12 +378,17 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 		}
 	}
 
+	return a.PerformTransaction(&requests)
+}
+
+func (a *actorsRuntime) PerformTransaction(requests *[]state.TransactionalRequest) error {
+
 	transactionalStore, ok := a.store.(state.TransactionalStore)
 	if !ok {
 		return errors.New(incompatibleStateStore)
 	}
 
-	err := transactionalStore.Multi(requests)
+	err := transactionalStore.Multi(*requests)
 	return err
 }
 

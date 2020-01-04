@@ -6,7 +6,10 @@
 package http
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -205,6 +208,17 @@ func (a *api) constructActorEndpoints() []Endpoint {
 	}
 }
 
+func (a *api) constructTransactionEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{http.Post},
+			Route:   "transaction",
+			Version: apiVersionV1,
+			Handler: a.onPerformTransaction,
+		},
+	}
+}
+
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
 		{
@@ -384,6 +398,13 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	path := string(c.Path())
 	method := path[strings.Index(path, "method/")+7:]
 	body := c.PostBody()
+	f, _ := c.FormFile("filename")
+	o, _ := f.Open()
+	buf := bytes.NewBuffer(nil)
+
+	io.Copy(buf, o)
+	s := string(buf.Bytes())
+	log.Println(s)
 	verb := string(c.Method())
 	queryString := string(c.QueryArgs().QueryString())
 
@@ -808,6 +829,28 @@ func (a *api) onPublish(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
+	}
+
+	return nil
+}
+
+func (a *api) onPerformTransaction(c *routing.Context) error {
+	body := c.PostBody()
+
+	var requests = []state.TransactionalRequest{}
+	err := a.json.Unmarshal(body, &requests)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
+	err = a.actor.PerformTransaction(&requests)
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+	} else {
+		respondEmpty(c.RequestCtx, 201)
 	}
 
 	return nil
