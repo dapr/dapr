@@ -6,10 +6,7 @@
 package http
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -398,13 +395,6 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	path := string(c.Path())
 	method := path[strings.Index(path, "method/")+7:]
 	body := c.PostBody()
-	f, _ := c.FormFile("filename")
-	o, _ := f.Open()
-	buf := bytes.NewBuffer(nil)
-
-	io.Copy(buf, o)
-	s := string(buf.Bytes())
-	log.Println(s)
 	verb := string(c.Method())
 	queryString := string(c.QueryArgs().QueryString())
 
