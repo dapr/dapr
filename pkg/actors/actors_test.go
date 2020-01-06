@@ -617,3 +617,50 @@ func TestTransactionalState(t *testing.T) {
 		assert.Equal(t, "operation type Wrong not supported", err.Error())
 	})
 }
+
+func TestDirectTransactionalState(t *testing.T) {
+	t.Run("Single set request succeeds", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		actorType, actorID := getTestActorTypeAndID()
+
+		actorKey := testActorRuntime.constructCompositeKey(actorType, actorID)
+		fakeCallAndActivateActor(testActorRuntime, actorKey)
+
+		err := testActorRuntime.PerformTransaction(&[]state.TransactionalRequest{
+			{
+				Operation: state.Upsert,
+				Request: TransactionalUpsert{
+					Key:   "key1",
+					Value: "fakeData",
+				},
+			},
+		})
+		assert.Nil(t, err)
+	})
+
+	t.Run("Multiple requests succeeds", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		actorType, actorID := getTestActorTypeAndID()
+
+		actorKey := testActorRuntime.constructCompositeKey(actorType, actorID)
+		fakeCallAndActivateActor(testActorRuntime, actorKey)
+
+		err := testActorRuntime.PerformTransaction(&[]state.TransactionalRequest{
+
+			{
+				Operation: state.Upsert,
+				Request: TransactionalUpsert{
+					Key:   "key1",
+					Value: "fakeData",
+				},
+			},
+			{
+				Operation: state.Delete,
+				Request: TransactionalDelete{
+					Key: "key1",
+				},
+			},
+		})
+		assert.Nil(t, err)
+	})
+}

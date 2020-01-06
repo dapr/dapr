@@ -190,8 +190,8 @@ func (_m *MockActors) TransactionalStateOperation(req *actors.TransactionalReque
 	return r0
 }
 
-// PeformTransaction provides a mock function with given fields: requests
-func (_m *MockActors) PeformTransaction(requests *[]state.TransactionalRequest) error {
+// PerformTransaction provides a mock function with given fields: requests
+func (_m *MockActors) PerformTransaction(requests *[]state.TransactionalRequest) error {
 	ret := _m.Called(requests)
 
 	var r0 error
