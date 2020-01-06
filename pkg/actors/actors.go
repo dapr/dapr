@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -23,6 +22,7 @@ import (
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -43,6 +43,7 @@ type Actors interface {
 	CreateTimer(req *CreateTimerRequest) error
 	DeleteTimer(req *DeleteTimerRequest) error
 	IsActorHosted(req *ActorHostedRequest) bool
+	GetActorsCount() []ActorCount
 }
 
 type actorsRuntime struct {
@@ -63,6 +64,12 @@ type actorsRuntime struct {
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
 	evaluationChan      chan bool
+}
+
+// ActorCount contain actorType and count of actors each type has
+type ActorCount struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
 }
 
 const (
@@ -1071,4 +1078,22 @@ func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
 	}
 
 	return nil
+}
+
+func (a *actorsRuntime) GetActorsCount() []ActorCount {
+
+	var actorCountMap = map[string]int{}
+	a.actorsTable.Range(func(key, value interface{}) bool {
+		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))
+		actorCountMap[actorType]++
+
+		return true
+	})
+
+	var actorsCount = []ActorCount{}
+	for actorType, count := range actorCountMap {
+		actorsCount = append(actorsCount, ActorCount{Type: actorType, Count: count})
+	}
+
+	return actorsCount
 }

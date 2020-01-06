@@ -202,3 +202,12 @@ func (_m *MockActors) GetReminder(req *actors.GetReminderRequest) (*actors.Remin
 
 	return nil, r0
 }
+
+// GetActorsCount provides a mock function
+func (_m *MockActors) GetActorsCount() []actors.ActorCount {
+	ret := _m.Called()
+
+	rf, _ := ret.Get(0).(func() []actors.ActorCount)
+
+	return rf()
+}

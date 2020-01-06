@@ -599,6 +599,51 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
+func TestV1MetadataEndpoint(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		actor: nil,
+		json:  jsoniter.ConfigFastest,
+	}
+
+	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
+
+	expectedBody := map[string]interface{}{
+		"id":     "xyz",
+		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
+	}
+	expectedBodyBytes, _ := json.Marshal(expectedBody)
+
+	t.Run("Metadata - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/metadata"
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("GetActorsCount").Return([]actors.ActorCount{
+			{
+				Type:  "abcd",
+				Count: 10,
+			},
+			{
+				Type:  "xyz",
+				Count: 5,
+			},
+		})
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, expectedBodyBytes, resp.RawBody)
+		fmt.Println(resp.RawBody)
+		mockActors.AssertNumberOfCalls(t, "GetActorsCount", 1)
+	})
+
+	fakeServer.Shutdown()
+}
+
 func createExporters(meta exporters.Metadata) {
 	exporter := stringexporter.NewStringExporter()
 	exporter.Init("fakeID", "fakeAddress", meta)

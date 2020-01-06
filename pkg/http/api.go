@@ -40,6 +40,11 @@ type api struct {
 	id                    string
 }
 
+type metadata struct {
+	ID          string              `json:"id"`
+	ActorsCount []actors.ActorCount `json:"actors"`
+}
+
 const (
 	apiVersionV1        = "v1.0"
 	idParam             = "id"
@@ -776,7 +781,19 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 }
 
 func (a *api) onGetMetadata(c *routing.Context) error {
-	//TODO: implement
+	mtd := metadata{
+		ID:          a.id,
+		ActorsCount: a.actor.GetActorsCount(),
+	}
+
+	mtdBytes, err := a.json.Marshal(mtd)
+	if err != nil {
+		msg := NewErrorResponse("ERR_METADATA_GET", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+	} else {
+		respondWithJSON(c.RequestCtx, 200, mtdBytes)
+	}
+
 	return nil
 }
 

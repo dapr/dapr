@@ -617,3 +617,30 @@ func TestTransactionalState(t *testing.T) {
 		assert.Equal(t, "operation type Wrong not supported", err.Error())
 	})
 }
+
+func TestActorsCount(t *testing.T) {
+	t.Run("Actors Count", func(t *testing.T) {
+		expectedCounts := []ActorCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
+
+		testActorRuntime := newTestActorsRuntime()
+
+		actorKey1 := testActorRuntime.constructCompositeKey("cat", "abcd")
+		fakeCallAndActivateActor(testActorRuntime, actorKey1)
+		actorKey2 := testActorRuntime.constructCompositeKey("cat", "xyz")
+		fakeCallAndActivateActor(testActorRuntime, actorKey2)
+		actorKey3 := testActorRuntime.constructCompositeKey("dog", "xyz")
+		fakeCallAndActivateActor(testActorRuntime, actorKey3)
+
+		actualCounts := testActorRuntime.GetActorsCount()
+		assert.ElementsMatch(t, expectedCounts, actualCounts)
+	})
+
+	t.Run("Actors Count empty", func(t *testing.T) {
+		expectedCounts := []ActorCount{}
+
+		testActorRuntime := newTestActorsRuntime()
+
+		actualCounts := testActorRuntime.GetActorsCount()
+		assert.Equal(t, expectedCounts, actualCounts)
+	})
+}
