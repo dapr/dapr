@@ -7,6 +7,7 @@
 # Variables                                                                    #
 ################################################################################
 
+
 export GO111MODULE ?= on
 export GOPROXY ?= https://proxy.golang.org
 export GOSUMDB ?= sum.golang.org
