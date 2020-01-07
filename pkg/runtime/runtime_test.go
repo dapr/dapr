@@ -10,21 +10,19 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
-
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	http_channel "github.com/dapr/dapr/pkg/channel/http"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	daprt "github.com/dapr/dapr/pkg/testing"
-
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -92,7 +90,7 @@ func TestInitPubSub(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 2 topics via http app channel
-		fakeHttpResponse := &channel.InvokeResponse{
+		fakeHTTPResponse := &channel.InvokeResponse{
 			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
 			Data:     []byte("[ \"topic0\", \"topic1\" ]"),
 		}
@@ -102,7 +100,7 @@ func TestInitPubSub(t *testing.T) {
 			&channel.InvokeRequest{
 				Method:   "dapr/subscribe",
 				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
-			}).Return(fakeHttpResponse, nil)
+			}).Return(fakeHTTPResponse, nil)
 
 		// act
 		err := rt.initPubSub()
@@ -120,7 +118,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeHttpResponse := &channel.InvokeResponse{
+		fakeHTTPResponse := &channel.InvokeResponse{
 			Metadata: map[string]string{http_channel.HTTPStatusCode: "404"},
 			Data:     nil,
 		}
@@ -130,7 +128,7 @@ func TestInitPubSub(t *testing.T) {
 			&channel.InvokeRequest{
 				Method:   "dapr/subscribe",
 				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
-			}).Return(fakeHttpResponse, nil)
+			}).Return(fakeHTTPResponse, nil)
 
 		// act
 		err := rt.initPubSub()
@@ -215,7 +213,7 @@ func TestInitSecretStores(t *testing.T) {
 func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	items := []components_v1alpha1.MetadataItem{
-		components_v1alpha1.MetadataItem{
+		{
 			Name:  "a",
 			Value: "b",
 		},
@@ -233,14 +231,14 @@ func TestProcessComponentSecrets(t *testing.T) {
 		Spec: components_v1alpha1.ComponentSpec{
 			Type: "bindings.mock",
 			Metadata: []components_v1alpha1.MetadataItem{
-				components_v1alpha1.MetadataItem{
+				{
 					Name: "a",
 					SecretKeyRef: components_v1alpha1.SecretKeyRef{
 						Key:  "key1",
 						Name: "name1",
 					},
 				},
-				components_v1alpha1.MetadataItem{
+				{
 					Name:  "b",
 					Value: "value2",
 				},
@@ -331,14 +329,14 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		Spec: components_v1alpha1.ComponentSpec{
 			Type: "secretstores.fake.secretstore",
 			Metadata: []components_v1alpha1.MetadataItem{
-				components_v1alpha1.MetadataItem{
+				{
 					Name: "a",
 					SecretKeyRef: components_v1alpha1.SecretKeyRef{
 						Key:  "key1",
 						Name: "name1",
 					},
 				},
-				components_v1alpha1.MetadataItem{
+				{
 					Name:  "b",
 					Value: "value2",
 				},
@@ -380,12 +378,12 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeHttpResponse := &channel.InvokeResponse{
+		fakeHTTPResponse := &channel.InvokeResponse{
 			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
 			Data:     []byte("OK"),
 		}
 
-		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHttpResponse, nil)
+		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHTTPResponse, nil)
 
 		// act
 		err := rt.publishMessageHTTP(testPubSubMessage)
@@ -401,14 +399,14 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		clientError := errors.New("Internal Error")
 
-		fakeHttpResponse := &channel.InvokeResponse{
+		fakeHTPResponse := &channel.InvokeResponse{
 			Metadata: map[string]string{http_channel.HTTPStatusCode: "500"},
 			Data:     []byte(clientError.Error()),
 		}
 
 		expectedClientError := fmt.Errorf("error from app consumer: Internal Error")
 
-		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHttpResponse, clientError)
+		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHTPResponse, clientError)
 
 		// act
 		err := rt.publishMessageHTTP(testPubSubMessage)
@@ -429,15 +427,15 @@ func getFakeProperties() map[string]string {
 
 func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 	return []components_v1alpha1.MetadataItem{
-		components_v1alpha1.MetadataItem{
+		{
 			Name:  "host",
 			Value: "localhost",
 		},
-		components_v1alpha1.MetadataItem{
+		{
 			Name:  "password",
 			Value: "fakePassword",
 		},
-		components_v1alpha1.MetadataItem{
+		{
 			Name:  "consumerID",
 			Value: TestRuntimeConfigID,
 		},

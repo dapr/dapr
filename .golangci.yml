@@ -10,7 +10,7 @@ run:
   issues-exit-code: 1
 
   # include test files or not, default is true
-  tests: false
+  tests: true
 
   # list of build tags, all linters use it. Default is empty list.
   #build-tags:
@@ -116,15 +116,15 @@ linters-settings:
     # minimal length of string constant, 3 by default
     min-len: 3
     # minimal occurrences count to trigger, 3 by default
-    min-occurrences: 3
+    min-occurrences: 5
   depguard:
     list-type: blacklist
     include-go-root: false
     packages:
-      - github.com/sirupsen/logrus
+      - github.com/Sirupsen/logrus
     packages-with-error-messages:
       # specify an error message to output when a blacklisted package is used
-      github.com/sirupsen/logrus: "logging is allowed only by logutils.Log"
+      github.com/Sirupsen/logrus: "must use github.com/sirupsen/logrus"
   misspell:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.

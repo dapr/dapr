@@ -16,6 +16,7 @@ import (
 )
 
 // HTTPSource is a binding for an http url endpoint invocation
+// nolint:golint
 type HTTPSource struct {
 	metadata httpMetadata
 }

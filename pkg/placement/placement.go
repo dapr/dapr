@@ -11,7 +11,7 @@ import (
 	"net"
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

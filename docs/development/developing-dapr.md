@@ -1,4 +1,30 @@
-## Developing Dapr
+# Developing Dapr
+
+This section will walk you through on how to clone and build the Dapr runtime.
+First, make sure you have [Go 1.13](https://golang.org/dl/) installed.
+
+
+## Install Make
+
+Dapr uses `make` to build and test its binaries.
+
+### Windows
+
+Download [MingGW](https://sourceforge.net/projects/mingw/files/MinGW/Extension/make/mingw32-make-3.80-3/) and use `ming32-make.exe` instead of `make`.
+
+Make sure `ming32-make.exe` is in your path.
+
+### Linux
+
+```sudo apt-get install build-essential```
+
+### Mac
+
+In Xcode preferences go to the "Downloads" tab and under "Components" push the "Install" button next to "Command Line Tools". After you have successfully downloaded and installed the command line tools you should also type the following command in the Terminal to make sure all your Xcode command line tools are switched to use the new versions:
+
+```sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer```
+
+Once everything is successfully installed you should see make and other command line developer tools in /usr/bin.
 
 ## Clone the repo
 
@@ -8,11 +34,14 @@ mkdir -p github.com/dapr/dapr
 git clone https://github.com/dapr/dapr.git github.com/dapr/dapr
 ```
 
-## Build the Dapr
+## Build the Dapr binaries
 
-You can build dapr binaries via `make` tool and find the binaries in `./dist/{os}_{arch}/release/`.
+You can build dapr binaries with the `make` tool.
+Once built, the release binaries will be found in `./dist/{os}_{arch}/release/`, where `{os}_{arch}` is your current OS and architecture.
 
-> Note : for windows environment with MinGW, use `mingw32-make.exe` instead of `make`.
+For example, running `make build` on MacOS will generate the directory `./dist/darwin_amd64/release.
+
+> Note : for a Windows environment with MinGW, use `mingw32-make.exe` instead of `make`.
 
 * Build for your current local environment
 
@@ -27,19 +56,19 @@ make build
 make build GOOS=linux GOARCH=amd64
 ```
 
-## Run unit-test
+## Run unit tests
 
 ```bash
 make test
 ```
 
-## Debug dapr
+## Debug Dapr
 
 We highly recommend to use [VSCode with Go plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode.Go) for your productivity. If you want to use the different editors, you can find the [list of editor plugins](https://github.com/go-delve/delve/blob/master/Documentation/EditorIntegration.md) for Delve.
 
 This section introduces how to start debugging with Delve CLI. Please see [Delve documentation](https://github.com/go-delve/delve/tree/master/Documentation) for the detail usage.
 
-### Start with debugger
+### Start the dapr runtime with a debugger
 
 ```bash
 $ cd $GOPATH/src/github.com/dapr/dapr/cmd/daprd
@@ -49,7 +78,7 @@ Type 'help' for list of commands.
 (dlv) continue
 ```
 
-### Attach Debugger to running process
+### Attach a Debugger to running process
 
 This is useful to debug dapr when the process is running.
 

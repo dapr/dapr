@@ -19,10 +19,10 @@ import (
 	"google.golang.org/grpc"
 )
 
-const defaultOperationTimeout = time.Duration(10 * time.Second)
+const defaultOperationTimeout = 10 * time.Second
 const defaultSeparator = ","
 
-var errMissingEndpoints = errors.New("Endpoints are required")
+var errMissingEndpoints = errors.New("endpoints are required")
 var errInvalidDialTimeout = errors.New("DialTimeout is invalid")
 
 // ETCD is a state store
@@ -126,7 +126,8 @@ func validateRequired(configProps *configProperties) error {
 
 // Get retrieves state from ETCD with a key
 func (r *ETCD) Get(req *state.GetRequest) (*state.GetResponse, error) {
-	ctx, _ := context.WithTimeout(context.Background(), r.operationTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), r.operationTimeout)
+	defer cancel()
 	resp, err := r.client.Get(ctx, req.Key, clientv3.WithSort(clientv3.SortByVersion, clientv3.SortDescend))
 	if err != nil {
 		return nil, err
@@ -144,7 +145,8 @@ func (r *ETCD) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 // Delete performs a delete operation
 func (r *ETCD) Delete(req *state.DeleteRequest) error {
-	ctx, _ := context.WithTimeout(context.Background(), r.operationTimeout)
+	ctx, cancelFn := context.WithTimeout(context.Background(), r.operationTimeout)
+	defer cancelFn()
 	_, err := r.client.Delete(ctx, req.Key)
 	if err != nil {
 		return err
@@ -167,8 +169,8 @@ func (r *ETCD) BulkDelete(req []state.DeleteRequest) error {
 
 // Set saves state into ETCD
 func (r *ETCD) Set(req *state.SetRequest) error {
-	ctx, _ := context.WithTimeout(context.Background(), r.operationTimeout)
-
+	ctx, cancelFn := context.WithTimeout(context.Background(), r.operationTimeout)
+	defer cancelFn()
 	var vStr string
 	b, ok := req.Value.([]byte)
 	if ok {

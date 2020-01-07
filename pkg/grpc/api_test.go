@@ -8,6 +8,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -76,7 +77,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	assert.NoError(t, err)
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -101,7 +102,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer conn.Close()
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	client := daprinternal_pb.NewDaprInternalClient(conn)
@@ -123,7 +124,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	assert.NoError(t, err)
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -148,7 +149,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer conn.Close()
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	client := daprinternal_pb.NewDaprInternalClient(conn)
@@ -178,13 +179,13 @@ func TestSaveState(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer conn.Close()
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
 	request := &dapr_pb.SaveStateEnvelope{
 		Requests: []*dapr_pb.StateRequest{
-			&dapr_pb.StateRequest{
+			{
 				Key:   "1",
 				Value: &any.Any{Value: []byte("2")},
 			},
@@ -212,7 +213,7 @@ func TestGetState(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer conn.Close()
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
@@ -237,7 +238,7 @@ func TestDeleteState(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer conn.Close()
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
@@ -262,7 +263,7 @@ func TestPublishTopic(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer conn.Close()
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
@@ -287,11 +288,18 @@ func TestInvokeBinding(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer conn.Close()
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
 	_, err = client.InvokeBinding(context.Background(), &dapr_pb.InvokeBindingEnvelope{})
 	server.Stop()
 	assert.Nil(t, err)
+}
+
+func close(t *testing.T, c io.Closer) {
+	err := c.Close()
+	if err != nil {
+		assert.Fail(t, fmt.Sprintf("unable to close %s", err))
+	}
 }

@@ -7,6 +7,8 @@ package grpc
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net"
 	"testing"
 
@@ -42,7 +44,7 @@ func (m *mockServer) OnTopicEvent(ctx context.Context, in *pb.CloudEventEnvelope
 }
 
 func TestInvokeMethod(t *testing.T) {
-	lis, err := net.Listen("tcp", ":9998")
+	lis, err := net.Listen("tcp", "127.0.0.1:9998")
 	assert.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
@@ -54,7 +56,7 @@ func TestInvokeMethod(t *testing.T) {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
 	conn, err := grpc.Dial("localhost:9998", opts...)
-	defer conn.Close()
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	c := Channel{baseAddress: "localhost:9998", client: conn}
@@ -65,6 +67,13 @@ func TestInvokeMethod(t *testing.T) {
 	grpcServer.Stop()
 
 	assert.NoError(t, err)
-	assert.True(t, "param1=val1&param2=val2&" == string(response.Data) ||
-		"param2=val2&param1=val1&" == string(response.Data))
+	assert.True(t, string(response.Data) == "param1=val1&param2=val2&" ||
+		string(response.Data) == "param2=val2&param1=val1&")
+}
+
+func close(t *testing.T, c io.Closer) {
+	err := c.Close()
+	if err != nil {
+		assert.Fail(t, fmt.Sprintf("unable to close %s", err))
+	}
 }

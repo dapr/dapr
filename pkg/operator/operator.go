@@ -8,7 +8,7 @@ package operator
 import (
 	"context"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/operator/api"
@@ -35,7 +35,10 @@ type operator struct {
 }
 
 // NewOperator returns a new Dapr Operator
-func NewOperator(kubeClient kubernetes.Interface, daprClient scheme.Interface) Operator {
+func NewOperator(kubeAPI *k8s.API) Operator {
+	kubeClient := kubeAPI.GetKubeClient()
+	daprClient := kubeAPI.GetDaprClient()
+
 	o := &operator{
 		kubeClient: kubeClient,
 		daprClient: daprClient,
@@ -51,7 +54,7 @@ func NewOperator(kubeClient kubernetes.Interface, daprClient scheme.Interface) O
 			nil,
 			nil,
 		),
-		daprHandler:       handlers.NewDaprHandler(daprClient),
+		daprHandler:       handlers.NewDaprHandler(kubeAPI),
 		componentsHandler: handlers.NewComponentsHandler(kubeClient),
 	}
 

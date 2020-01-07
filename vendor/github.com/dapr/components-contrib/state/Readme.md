@@ -5,18 +5,24 @@ State Stores provide a common way to interact with different data store implemen
 Currently supported state stores are:
 
 * Redis
+* HashiCorp Consul
 * Etcd
 * Cassandra
 * Azure CosmosDB
+* Memcached
+* MongoDB
+* Zookeeper
+* Cloud Firestore (Datastore mode)
+* Couchbase
 
 ## Implementing a new State Store
 
-A compliant state store needs to implement one or more interfaces: `StateStore` and `TransactionalStateStore`.
+A compliant state store needs to implement one or more interfaces: `Store` and `TransactionalStore`.
 
-The interface for StateStore:
+The interface for Store:
 
 ```
-type StateStore interface {
+type Store interface {
 	Init(metadata Metadata) error
 	Delete(req *DeleteRequest) error
 	BulkDelete(req []DeleteRequest) error
@@ -26,11 +32,13 @@ type StateStore interface {
 }
 ```
 
-The interface for TransactionalStateStore:
+The interface for TransactionalStore:
 
 ```
-type TransactionalStateStore interface {
+type TransactionalStore interface {
 	Init(metadata Metadata) error
 	Multi(reqs []TransactionalRequest) error
 }
 ```
+
+See the [documentation repo](https://github.com/dapr/docs/tree/master/howto) for examples.  

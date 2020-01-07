@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/valyala/fasthttp"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type Configuration struct {
@@ -21,15 +21,33 @@ type Configuration struct {
 }
 
 type ConfigurationSpec struct {
-	TracingSpec TracingSpec `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+}
+
+type PipelineSpec struct {
+	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
+}
+
+type HandlerSpec struct {
+	Name         string       `json:"name" yaml:"name"`
+	Type         string       `json:"type" yaml:"type"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+}
+
+type SelectorSpec struct {
+	Fields []SelectorField `json:"fields" yaml:"fields"`
+}
+
+type SelectorField struct {
+	Field string `json:"field" yaml:"field"`
+	Value string `json:"value" yaml:"value"`
 }
 
 type TracingSpec struct {
-	Enabled         bool   `json:"enabled" yaml:"enabled"`
-	ExporterType    string `json:"exporterType" yaml:"exporterType,omitempty"`
-	ExporterAddress string `json:"exporterAddress" yaml:"exporterAddress,omitempty"`
-	ExpandParams    bool   `json:"expandParams" yaml:"expandParams"`
-	IncludeBody     bool   `json:"includeBody" yaml:"includeBody"`
+	Enabled      bool `json:"enabled" yaml:"enabled"`
+	ExpandParams bool `json:"expandParams" yaml:"expandParams"`
+	IncludeBody  bool `json:"includeBody" yaml:"includeBody"`
 }
 
 // LoadDefaultConfiguration returns the default config with tracing disabled
