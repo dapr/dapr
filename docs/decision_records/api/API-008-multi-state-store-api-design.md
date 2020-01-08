@@ -23,6 +23,7 @@ We have reviewed multi storage API design for completeness and consistency.
 *  User has to provide actorStateStore: true to specify the actor state store in the configuration yaml. If the attribute is not specified, Dapr runtime will throw warning.
    Also if multiple actor state stores are configured, Dapr runtime will throw warning.
 *  It is noted that after this breaking change, actor state store has to be specifed unlike earlier where first state store is picked up by default.
+* It is noted that this breaking change will also require a CLI change to generate the state store YAML for redis with actorStateStore.
 
 ## Consequences
 
