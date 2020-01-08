@@ -596,41 +596,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 	})
 
-	t.Run("Transaction (non-actor) - 201 Accepted", func(t *testing.T) {
-		apiPath := "v1.0/transaction"
-
-		testTransactionalOperations := []state.TransactionalRequest{
-			{
-				Operation: state.Upsert,
-				Request: map[string]interface{}{
-					"key":   "fakeKey1",
-					"value": fakeBodyObject,
-				},
-			},
-			{
-				Operation: state.Delete,
-				Request: map[string]interface{}{
-					"key": "fakeKey1",
-				},
-			},
-		}
-
-		mockActors := new(daprt.MockActors)
-		mockActors.On("PerformTransaction", &testTransactionalOperations).Return(nil)
-
-		testAPI.actor = mockActors
-
-		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
-
-		assert.NoError(t, err)
-		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
-
-		// assert
-		assert.Equal(t, 201, resp.StatusCode)
-		mockActors.AssertNumberOfCalls(t, "PerformTransaction", 1)
-	})
-
 	fakeServer.Shutdown()
 }
 

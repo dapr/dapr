@@ -646,7 +646,6 @@ func TestDirectTransactionalState(t *testing.T) {
 		fakeCallAndActivateActor(testActorRuntime, actorKey)
 
 		err := testActorRuntime.PerformTransaction(&[]state.TransactionalRequest{
-
 			{
 				Operation: state.Upsert,
 				Request: TransactionalUpsert{
