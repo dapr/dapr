@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 )
 
@@ -61,7 +61,7 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 	}
 
 	for _, comp := range comps {
-		c.ComponentResources.Add(kube.NewDaprComponent(c.kubeClient, kube.DaprTestKubeNameSpace, comp))
+		c.ComponentResources.Add(kube.NewDaprComponent(c.kubeClient, kube.DaprTestNamespace, comp))
 	}
 
 	// setup component resources
@@ -87,7 +87,8 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		}
 		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
 
-		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestKubeNameSpace, app))
+		log.Printf("Adding app %v", app)
+		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestNamespace, app))
 	}
 
 	// installApps installs the apps in AppResource queue sequentially

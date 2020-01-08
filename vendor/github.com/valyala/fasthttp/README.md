@@ -1,15 +1,14 @@
-[![Build Status](https://travis-ci.org/valyala/fasthttp.svg)](https://travis-ci.org/valyala/fasthttp)
-[![GoDoc](https://godoc.org/github.com/valyala/fasthttp?status.svg)](http://godoc.org/github.com/valyala/fasthttp)
-[![Go Report](https://goreportcard.com/badge/github.com/valyala/fasthttp)](https://goreportcard.com/report/github.com/valyala/fasthttp)
+# fasthttp [![Build Status](https://travis-ci.org/valyala/fasthttp.svg)](https://travis-ci.org/valyala/fasthttp) [![GoDoc](https://godoc.org/github.com/valyala/fasthttp?status.svg)](http://godoc.org/github.com/valyala/fasthttp) [![fuzzit](https://app.fuzzit.dev/badge?org_id=fasthttp&branch=master)](https://fuzzit.dev) [![Go Report](https://goreportcard.com/badge/github.com/valyala/fasthttp)](https://goreportcard.com/report/github.com/valyala/fasthttp)
 
-# fasthttp
+![FastHTTP – Fastest and reliable HTTP implementation in Go](https://github.com/fasthttp/docs-assets/raw/master/banner@0.5.png)
+
 Fast HTTP implementation for Go.
 
 Currently fasthttp is successfully used by [VertaMedia](https://vertamedia.com/)
 in a production serving up to 200K rps from more than 1.5M concurrent keep-alive
 connections per physical server.
 
-[TechEmpower Benchmark round 12 results](https://www.techempower.com/benchmarks/#section=data-r12&hw=peak&test=plaintext)
+[TechEmpower Benchmark round 18 results](https://www.techempower.com/benchmarks/#section=data-r18&hw=ph&test=plaintext)
 
 [Server Benchmarks](#http-server-performance-comparison-with-nethttp)
 
@@ -399,7 +398,7 @@ instead of [html/template](https://golang.org/pkg/html/template/).
 * Pin each server instance to a separate CPU core using [taskset](http://linux.die.net/man/1/taskset).
 * Ensure the interrupts of multiqueue network card are evenly distributed between CPU cores.
   See [this article](https://blog.cloudflare.com/how-to-achieve-low-latency/) for details.
-* Use Go 1.6 as it provides some considerable performance improvements.
+* Use Go 1.13 as it provides some considerable performance improvements.
 
 
 # Fasthttp best practices
@@ -492,8 +491,9 @@ uintBuf := fasthttp.AppendUint(nil, 1234)
   * [websocket](https://github.com/fasthttp/websocket) - Gorilla-based
     websocket implementation for fasthttp.
   * [fasthttpsession](https://github.com/phachon/fasthttpsession) - a fast and powerful session package for fasthttp servers.
-  * [atreugo](https://github.com/savsgio/atreugo) - Micro-framework to make simple the use of routing and middlewares.
+  * [atreugo](https://github.com/savsgio/atreugo) - High performance and extensible micro web framework with zero memory allocations in hot paths.
   * [kratgo](https://github.com/savsgio/kratgo) - Simple, lightweight and ultra-fast HTTP Cache to speed up your websites.
+  * [kit-plugins](https://github.com/wencan/kit-plugins/tree/master/transport/fasthttp) - go-kit transport implementation for fasthttp.
 
 
 # FAQ

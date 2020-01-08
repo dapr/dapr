@@ -22,12 +22,15 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel/http"
+	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	jsoniter "github.com/json-iterator/go"
 	routing "github.com/qiangxue/fasthttp-routing"
@@ -100,7 +103,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -251,7 +254,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -604,7 +607,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{Enabled: true}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -900,6 +903,148 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
+func TestEmptyPipelineWithTracer(t *testing.T) {
+	fakeHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&Content-Type&__header_equals__&application/json&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
+	fakeDirectMessageResponse := &messaging.DirectMessageResponse{
+		Data: []byte("fakeDirectMessageResponse"),
+		Metadata: map[string]string{
+			"http.status_code": "200",
+			"headers":          fakeHeader,
+		},
+	}
+
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
+
+	fakeServer := newFakeHTTPServer()
+
+	buffer := ""
+	spec := config.TracingSpec{Enabled: true}
+	pipe := http_middleware.Pipeline{}
+
+	meta := exporters.Metadata{
+		Buffer: &buffer,
+		Properties: map[string]string{
+			"Enabled": "true",
+		},
+	}
+	createExporters(meta)
+
+	testAPI := &api{
+		directMessaging: mockDirectMessaging,
+	}
+	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
+
+	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
+		buffer = ""
+		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging.On(
+			"Invoke",
+			&messaging.DirectMessageRequest{
+				Data:   fakeData,
+				Method: "fakeMethod",
+				Metadata: map[string]string{
+					"headers":        fakeHeader,
+					http.HTTPVerb:    "POST",
+					http.QueryString: "", // without query string
+				},
+				Target: "fakeDaprID",
+			}).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+}
+
+func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
+	registry := http_middleware_loader.NewRegistry()
+	http_middleware_loader.Load()
+	var handlers []http_middleware.Middleware
+	for i := 0; i < len(spec.Handlers); i++ {
+		handler, err := registry.CreateMiddleware(spec.Handlers[i].Type, middleware.Metadata{})
+		if err != nil {
+			return http_middleware.Pipeline{}
+		}
+		handlers = append(handlers, handler)
+	}
+	return http_middleware.Pipeline{Handlers: handlers}
+}
+
+func TestSinglePipelineWithTracer(t *testing.T) {
+	fakeHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&Content-Type&__header_equals__&application/json&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
+	fakeDirectMessageResponse := &messaging.DirectMessageResponse{
+		Data: []byte("fakeDirectMessageResponse"),
+		Metadata: map[string]string{
+			"http.status_code": "200",
+			"headers":          fakeHeader,
+		},
+	}
+
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
+
+	fakeServer := newFakeHTTPServer()
+
+	buffer := ""
+	spec := config.TracingSpec{Enabled: true}
+
+	pipeline := buildHTTPPineline(config.PipelineSpec{
+		Handlers: []config.HandlerSpec{
+			config.HandlerSpec{
+				Type: "middleware.http.uppercase",
+				Name: "middleware.http.uppercase",
+			},
+		},
+	})
+
+	meta := exporters.Metadata{
+		Buffer: &buffer,
+		Properties: map[string]string{
+			"Enabled": "true",
+		},
+	}
+	createExporters(meta)
+
+	testAPI := &api{
+		directMessaging: mockDirectMessaging,
+	}
+	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
+
+	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
+		buffer = ""
+		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging.On(
+			"Invoke",
+			&messaging.DirectMessageRequest{
+				Data:   []byte("FAKEDATA"),
+				Method: "fakeMethod",
+				Metadata: map[string]string{
+					"headers":        fakeHeader,
+					http.HTTPVerb:    "POST",
+					http.QueryString: "", // without query string
+				},
+				Target: "fakeDaprID",
+			}).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+}
+
 // Fake http server and client helpers to simplify endpoints test
 func newFakeHTTPServer() *fakeHTTPServer {
 	return &fakeHTTPServer{}
@@ -942,6 +1087,25 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
 		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, router.HandleRequest)); err != nil {
+			panic(fmt.Errorf("failed to serve: %v", err))
+		}
+	}()
+
+	f.client = gohttp.Client{
+		Transport: &gohttp.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return f.ln.Dial()
+			},
+		},
+	}
+}
+
+func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSpec, pipeline http_middleware.Pipeline, endpoints []Endpoint) {
+	router := f.getRouter(endpoints)
+	f.ln = fasthttputil.NewInmemoryListener()
+	go func() {
+		handler := pipeline.Apply(router.HandleRequest)
+		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, handler)); err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
 	}()

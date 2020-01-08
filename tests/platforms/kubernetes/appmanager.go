@@ -7,14 +7,23 @@ package kubernetes
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/phayes/freeport"
+	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/portforward"
+	"k8s.io/client-go/transport/spdy"
 )
 
 const (
@@ -36,6 +45,28 @@ type AppManager struct {
 	client    *KubeClient
 	namespace string
 	app       AppDescription
+
+	// stopChannel is the channel used to manage the port forward lifecycle
+	stopChannel chan struct{}
+	// readyChannel communicates when the tunnel is ready to receive traffic
+	readyChannel chan struct{}
+}
+
+type PortForwardRequest struct {
+	// restConfig is the kubernetes config
+	restConfig *rest.Config
+	// pod is the selected pod for this port forwarding
+	pod apiv1.Pod
+	// localPort is the local port that will be selected to forward the PodPort
+	localPort int
+	// podPort is the target port for the pod
+	podPort int
+	// streams configures where to write or read input from
+	streams genericclioptions.IOStreams
+	// stopChannel is the channel used to manage the port forward lifecycle
+	stopChannel chan struct{}
+	// stopChannel communicates when the tunnel is ready to receive traffic
+	readyChannel chan struct{}
 }
 
 // NewAppManager creates AppManager instance
@@ -89,6 +120,11 @@ func (m *AppManager) Init() error {
 		return err
 	}
 
+	// stopChannel control the port forwarding lifecycle. When it gets closed the port forward will terminate
+	m.stopChannel = make(chan struct{}, 1)
+	// readyChannel communicate when the port forward is ready to get traffic
+	m.readyChannel = make(chan struct{})
+
 	return nil
 }
 
@@ -108,6 +144,11 @@ func (m *AppManager) Dispose() error {
 
 	if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
 		return err
+	}
+
+	// stop the port forwrding channel
+	if m.stopChannel != nil {
+		close(m.stopChannel)
 	}
 
 	return nil
@@ -143,7 +184,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 	})
 
 	if waitErr != nil {
-		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %w", m.app.AppName, lastDeployment, waitErr)
+		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v: %s", m.app.AppName, lastDeployment, waitErr)
 	}
 
 	return lastDeployment, nil
@@ -195,6 +236,87 @@ func (m *AppManager) ValidiateSideCar() (bool, error) {
 	return true, nil
 }
 
+// DoPortForwarding performs port forwarding for given podname to access test apps in the cluster
+func (m *AppManager) DoPortForwarding(podName string) error {
+	podClient := m.client.Pods(m.namespace)
+	// Filter only 'testapp=appName' labeled Pods
+	podList, err := podClient.List(metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	name := podName
+
+	// if given pod name is empty , pick the first matching pod name
+	if name == "" {
+		for _, pod := range podList.Items {
+			name = pod.Name
+			break
+		}
+	}
+
+	config := m.client.GetClientConfig()
+
+	port, err := freeport.GetFreePort()
+	if err != nil {
+		return err
+	}
+
+	streams := genericclioptions.IOStreams{
+		In:     os.Stdin,
+		Out:    os.Stdout,
+		ErrOut: os.Stderr,
+	}
+
+	err = startPortForwarding(PortForwardRequest{
+		restConfig: config,
+		pod: apiv1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: m.namespace,
+			},
+		},
+		localPort:    port,
+		podPort:      m.app.AppPort,
+		streams:      streams,
+		stopChannel:  m.stopChannel,
+		readyChannel: m.readyChannel,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	<-m.readyChannel
+
+	return nil
+}
+
+func startPortForwarding(req PortForwardRequest) error {
+	// create spdy roundtripper
+	roundTripper, upgrader, err := spdy.RoundTripperFor(req.restConfig)
+	if err != nil {
+		return err
+	}
+
+	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", req.pod.Namespace, req.pod.Name)
+	hostIP := strings.TrimLeft(req.restConfig.Host, "htps:/")
+	serverURL := url.URL{Scheme: "https", Path: path, Host: hostIP}
+
+	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)
+
+	ports := []string{fmt.Sprintf("%d:%d", req.localPort, req.podPort)}
+	fw, err := portforward.New(dialer, ports, req.stopChannel, req.readyChannel, req.streams.Out, req.streams.ErrOut)
+	if err != nil {
+		return err
+	}
+
+	return fw.ForwardPorts()
+}
+
 // ScaleDeploymentReplica scales the deployment
 func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	if replicas < 0 || replicas > maxReplicas {
@@ -234,6 +356,7 @@ func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 
 // AcquireExternalURL gets external ingress endpoint from service when it is ready
 func (m *AppManager) AcquireExternalURL() string {
+	log.Printf("Waiting until service has reached target state...\n")
 	svc, err := m.WaitUntilServiceState(m.IsServiceIngressReady)
 	if err != nil {
 		return ""
@@ -258,7 +381,7 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 	})
 
 	if waitErr != nil {
-		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %w", m.app.AppName, lastService, waitErr)
+		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %s", m.app.AppName, lastService, waitErr)
 	}
 
 	return lastService, nil
@@ -267,7 +390,13 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 // AcquireExternalURLFromService gets external url from Service Object.
 func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 	if svc.Status.LoadBalancer.Ingress != nil && len(svc.Status.LoadBalancer.Ingress) > 0 && len(svc.Spec.Ports) > 0 {
-		return fmt.Sprintf("%s:%d", svc.Status.LoadBalancer.Ingress[0].IP, svc.Spec.Ports[0].Port)
+		address := ""
+		if svc.Status.LoadBalancer.Ingress[0].Hostname != "" {
+			address = svc.Status.LoadBalancer.Ingress[0].Hostname
+		} else {
+			address = svc.Status.LoadBalancer.Ingress[0].IP
+		}
+		return fmt.Sprintf("%s:%d", address, svc.Spec.Ports[0].Port)
 	}
 
 	// TODO: Support the other local k8s clusters

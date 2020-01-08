@@ -27,7 +27,7 @@ func NewDaprComponent(client *KubeClient, ns string, comp ComponentDescription) 
 }
 
 func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
-	client := do.kubeClient.DaprComponents(DaprTestKubeNameSpace)
+	client := do.kubeClient.DaprComponents(DaprTestNamespace)
 
 	metadata := []v1alpha1.MetadataItem{}
 
@@ -43,7 +43,7 @@ func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
 }
 
 func (do *DaprComponent) deleteComponent() error {
-	client := do.kubeClient.DaprComponents(DaprTestKubeNameSpace)
+	client := do.kubeClient.DaprComponents(DaprTestNamespace)
 	return client.Delete(do.component.Name, &metav1.DeleteOptions{})
 }
 

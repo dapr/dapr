@@ -27,6 +27,7 @@ All decisions are categorized in the following folders:
   
 * **SDKs** - Decisions on Dapr SDKs.
   - [SDK-001: SDK releases.](./sdk/SDK-001-releases.MD)
+  - [SDK-002: Java JDK versions.](./sdk/SDK-002-java-jdk-versions.MD)
 
 * **Engineering** - Decisions on Engineering practices, including CI/CD, testing and releases.
 
