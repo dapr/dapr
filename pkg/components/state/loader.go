@@ -8,7 +8,7 @@ package state
 import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/azure/cosmosdb"
-	"github.com/dapr/components-contrib/state/azure/sqlserver"
+	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/cassandra"
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
@@ -48,7 +48,7 @@ func Load() {
 	RegisterStateStore("gcp.firestore", func() state.Store {
 		return firestore.NewFirestoreStateStore()
 	})
-	RegisterStateStore("azure.sqlserver", func() state.Store {
+	RegisterStateStore("sqlserver", func() state.Store {
 		return sqlserver.NewSQLServerStateStore()
 	})
 }

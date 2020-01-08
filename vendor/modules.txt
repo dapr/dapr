@@ -169,7 +169,7 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/dapr/components-contrib v0.0.0-20200107141713-db8b6135d6f0
+# github.com/dapr/components-contrib v0.0.0-20200108073844-1a37f892aa9d
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/aws/dynamodb
 github.com/dapr/components-contrib/bindings/aws/s3
@@ -207,7 +207,6 @@ github.com/dapr/components-contrib/servicediscovery/kubernetes
 github.com/dapr/components-contrib/servicediscovery/mdns
 github.com/dapr/components-contrib/state
 github.com/dapr/components-contrib/state/azure/cosmosdb
-github.com/dapr/components-contrib/state/azure/sqlserver
 github.com/dapr/components-contrib/state/cassandra
 github.com/dapr/components-contrib/state/etcd
 github.com/dapr/components-contrib/state/gcp/firestore
@@ -215,6 +214,7 @@ github.com/dapr/components-contrib/state/hashicorp/consul
 github.com/dapr/components-contrib/state/memcached
 github.com/dapr/components-contrib/state/mongodb
 github.com/dapr/components-contrib/state/redis
+github.com/dapr/components-contrib/state/sqlserver
 github.com/dapr/components-contrib/state/zookeeper
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
