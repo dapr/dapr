@@ -15,6 +15,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/cosmosdb"
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
+	"github.com/dapr/components-contrib/bindings/azure/signalr"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/http"
@@ -94,4 +95,7 @@ func Load() {
 		return pubsub.NewGCPPubSub()
 	})
 	RegisterInputBinding("kubernetes", kubernetes.NewKubernetes)
+	RegisterOutputBinding("azure.signalr", func() bindings.OutputBinding {
+		return signalr.NewSignalR()
+	})
 }
