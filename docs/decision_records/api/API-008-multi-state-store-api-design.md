@@ -20,31 +20,50 @@ We have reviewed multi storage API design for completeness and consistency.
 ## Decisions
 
 *  New state store API is v1.0/state/`<store-name>`/
-*  User has to provide actorStateStore: true to specify the actor state store in the configuration yaml. If the attribute is not specified, Dapr runtime will log warning.
-   Also if multiple actor state stores are configured, Dapr runtime will log warning.
+*  If user is using actors and like to persist the state then user must provide actorStateStore: true in the configuration yaml.
+   If the attribute is not specified or multiple actor state stores are configured, Dapr runtime will log warning.
+   The actor API to save the state will fail in both these scenarios where actorStore is not specified or multiple actor stores
+are specified.
 *  It is noted that after this breaking change, actor state store has to be specifed unlike earlier where first state store is picked up by default.
 * It is noted that this breaking change will also require a CLI change to generate the state store YAML for redis with actorStateStore.
 
 * To provide multiple stores, user has to provide separate YAML for each store and giving unique name for the store.
 
-  A state store in Dapr is described using a `Component` file and **statestorename** is the name of the store.
+  For example, below are the 2 sample yaml files in which redis store is used as actor state store while mongodb store is not used as actor state store.
 
 ```
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestorename
+  name: myStore1  # Required. This is the unique name of the store.
 spec:
-  type: state.<DATABASE>
+  type: state.redis
   metadata:
   - name: <KEY>
     value: <VALUE>
   - name: <KEY>
     value: <VALUE>
-...
+  - name: actorStateStore  # Optional. default: false
+    value : true
 ```
 
-So with the above example, the state API will be : v1.0/state/statestorename/`<key>`
+```
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: myStore2 # Required. This is the unique name of the store.
+spec:
+  type: state.mongodb
+  metadata:
+  - name: <KEY>
+    value: <VALUE>
+  - name: <KEY>
+    value: <VALUE>
+
+```
+
+So with the above example, the state APIs will be : v1.0/state/myStore1/`<key>`
+and v1.0/state/myStore2/`<key>`
 ## Consequences
 
 With these changes we should meet multiple state stores requirements.
