@@ -18,6 +18,7 @@ import (
 
 const (
 	hosts                    = "hosts"
+	port                     = "port"
 	username                 = "username"
 	password                 = "password"
 	protoVersion             = "protoVersion"
@@ -30,6 +31,7 @@ const (
 	defaultConsistency       = gocql.All
 	defaultTable             = "items"
 	defaultKeyspace          = "dapr"
+	defaultPort              = 9042
 )
 
 // Cassandra is a state store implementation for Apache Cassandra
@@ -41,6 +43,7 @@ type Cassandra struct {
 
 type cassandraMetadata struct {
 	hosts             []string
+	port              int
 	protoVersion      int
 	replicationFactor int
 	username          string
@@ -97,19 +100,19 @@ func (c *Cassandra) tryCreateTable(table, keyspace string) error {
 }
 
 func (c *Cassandra) createClusterConfig(metadata *cassandraMetadata) (*gocql.ClusterConfig, error) {
-	cluster := gocql.NewCluster(metadata.hosts...)
+	clusterConfig := gocql.NewCluster(metadata.hosts...)
 	if metadata.username != "" && metadata.password != "" {
-		cluster.Authenticator = gocql.PasswordAuthenticator{Username: metadata.username, Password: metadata.password}
+		clusterConfig.Authenticator = gocql.PasswordAuthenticator{Username: metadata.username, Password: metadata.password}
 	}
-
-	cluster.ProtoVersion = metadata.protoVersion
+	clusterConfig.Port = metadata.port
+	clusterConfig.ProtoVersion = metadata.protoVersion
 	cons, err := c.getConsistency(metadata.consistency)
 	if err != nil {
 		return nil, err
 	}
 
-	cluster.Consistency = cons
-	return cluster, nil
+	clusterConfig.Consistency = cons
+	return clusterConfig, nil
 }
 
 func (c *Cassandra) getConsistency(consistency string) (gocql.Consistency, error) {
@@ -145,12 +148,21 @@ func getCassandraMetadata(metadata state.Metadata) (*cassandraMetadata, error) {
 		keyspace:          defaultKeyspace,
 		replicationFactor: defaultReplicationFactor,
 		consistency:       "All",
+		port:              defaultPort,
 	}
 
 	if val, ok := metadata.Properties[hosts]; ok && val != "" {
 		meta.hosts = strings.Split(val, ",")
 	} else {
 		return nil, errors.New("missing or empty hosts field from metadata")
+	}
+
+	if val, ok := metadata.Properties[port]; ok && val != "" {
+		p, err := strconv.ParseInt(val, 0, 32)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing port field: %s", err)
+		}
+		meta.port = int(p)
 	}
 
 	if val, ok := metadata.Properties[consistency]; ok && val != "" {

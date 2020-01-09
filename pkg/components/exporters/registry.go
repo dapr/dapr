@@ -7,45 +7,58 @@ package exporters
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/dapr/components-contrib/exporters"
 )
 
-// Registry is the interface for callers to get registered exporter components
-type Registry interface {
-	CreateExporter(name string) (exporters.Exporter, error)
+type (
+	// Exporter is an exporter component definition.
+	Exporter struct {
+		Name          string
+		FactoryMethod func() exporters.Exporter
+	}
+
+	// Registry is the interface for callers to get registered exporter components
+	Registry interface {
+		Register(components ...Exporter)
+		Create(name string) (exporters.Exporter, error)
+	}
+
+	exporterRegistry struct {
+		exporters map[string]func() exporters.Exporter
+	}
+)
+
+// New creates an Exporter.
+func New(name string, factoryMethod func() exporters.Exporter) Exporter {
+	return Exporter{
+		Name:          name,
+		FactoryMethod: factoryMethod,
+	}
 }
 
-type exporterRegistry struct {
-	exporters map[string]func() exporters.Exporter
-}
-
-var instance *exporterRegistry
-var once sync.Once
-
-// NewRegistry returns a new exporter registry
+// NewRegistry returns a new exporter registry.
 func NewRegistry() Registry {
-	once.Do(func() {
-		instance = &exporterRegistry{
-			exporters: map[string]func() exporters.Exporter{},
-		}
-	})
-	return instance
+	return &exporterRegistry{
+		exporters: map[string]func() exporters.Exporter{},
+	}
 }
 
-// RegisterExporter registers a new exporter
-func RegisterExporter(name string, factoryMethod func() exporters.Exporter) {
-	instance.exporters[createFullName(name)] = factoryMethod
+// Register registers one or more new exporters.
+func (p *exporterRegistry) Register(components ...Exporter) {
+	for _, component := range components {
+		p.exporters[createFullName(component.Name)] = component.FactoryMethod
+	}
 }
 
-func createFullName(name string) string {
-	return fmt.Sprintf("exporters.%s", name)
-}
-
-func (p *exporterRegistry) CreateExporter(name string) (exporters.Exporter, error) {
+// Create instantiates an exporter based on `name`.
+func (p *exporterRegistry) Create(name string) (exporters.Exporter, error) {
 	if method, ok := p.exporters[name]; ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find exporter %s", name)
+}
+
+func createFullName(name string) string {
+	return fmt.Sprintf("exporters.%s", name)
 }
