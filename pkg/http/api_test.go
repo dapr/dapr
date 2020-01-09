@@ -965,10 +965,18 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 	registry := http_middleware_loader.NewRegistry()
-	http_middleware_loader.Load()
+	registry.Register(http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
+		return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+			return func(ctx *fasthttp.RequestCtx) {
+				body := string(ctx.PostBody())
+				ctx.Request.SetBody([]byte(strings.ToUpper(body)))
+				h(ctx)
+			}
+		}
+	}))
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
-		handler, err := registry.CreateMiddleware(spec.Handlers[i].Type, middleware.Metadata{})
+		handler, err := registry.Create(spec.Handlers[i].Type, middleware.Metadata{})
 		if err != nil {
 			return http_middleware.Pipeline{}
 		}
