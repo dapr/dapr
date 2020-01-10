@@ -134,18 +134,20 @@ func (r *redisStreams) readFromStream(stream, consumerID, start string) ([]redis
 func (r *redisStreams) processStreams(consumerID string, streams []redis.XStream, handler func(msg *pubsub.NewMessage) error) {
 	for _, s := range streams {
 		for _, m := range s.Messages {
-			msg := pubsub.NewMessage{
-				Topic: s.Stream,
-			}
-			data, exists := m.Values["data"]
-			if exists && data != nil {
-				msg.Data = []byte(data.(string))
-			}
+			go func(stream string, message redis.XMessage) {
+				msg := pubsub.NewMessage{
+					Topic: stream,
+				}
+				data, exists := message.Values["data"]
+				if exists && data != nil {
+					msg.Data = []byte(data.(string))
+				}
 
-			err := handler(&msg)
-			if err == nil {
-				r.client.XAck(s.Stream, consumerID, m.ID).Result()
-			}
+				err := handler(&msg)
+				if err == nil {
+					r.client.XAck(stream, consumerID, message.ID).Result()
+				}
+			}(s.Stream, m)
 		}
 	}
 }

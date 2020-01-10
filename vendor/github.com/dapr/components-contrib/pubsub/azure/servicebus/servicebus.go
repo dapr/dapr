@@ -12,8 +12,8 @@ import (
 	"time"
 
 	azservicebus "github.com/Azure/azure-service-bus-go"
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/pubsub"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
