@@ -54,7 +54,6 @@ const (
 	appConfigEndpoint   = "dapr/config"
 	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
-	defaultStateStore   = "defaultStateStore"
 	actorStateStore     = "actorStateStore"
 )
 
@@ -83,8 +82,8 @@ type DaprRuntime struct {
 	json                     jsoniter.API
 	httpMiddlewareRegistry   http_middleware_loader.Registry
 	hostAddress              string
-	defaultStateStoreName    string
 	actorStateStoreName      string
+	actorStateStoreCount     int
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -351,7 +350,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
 			if a.stateStores != nil {
-				err := a.stateStores[a.defaultStateStoreName].BulkSet(reqs)
+				err := a.stateStores[response.StoreName].BulkSet(reqs)
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
 				}
@@ -589,9 +588,9 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 	return nil
 }
 
+// Refer for state store api decision  https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
 func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 	state_loader.Load()
-	var firstStateStoreName string
 	for _, s := range a.components {
 		if strings.Index(s.Spec.Type, "state") == 0 {
 			store, err := registry.CreateStateStore(s.Spec.Type)
@@ -611,30 +610,20 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 
 				a.stateStores[s.ObjectMeta.Name] = store
 
-				if firstStateStoreName == "" {
-					firstStateStoreName = s.ObjectMeta.Name
-				}
+				// set specifed actor store if "actorStateStore" is true in the spec.
+				actorStoreSpecified := props[actorStateStore]
+				if actorStoreSpecified == "true" {
+					if a.actorStateStoreCount++; a.actorStateStoreCount == 1 {
+						a.actorStateStoreName = s.ObjectMeta.Name
+					}
 
-				// set specified default store if "defaultStateStore" is specifed in the spec.
-				if d := props[defaultStateStore]; d == "true" && a.defaultStateStoreName == "" {
-					a.defaultStateStoreName = s.ObjectMeta.Name
 				}
-
-				// set specifed actor store if "actorStateStore" is specified in the spec.
-				if d := props[actorStateStore]; d == "true" && a.actorStateStoreName == "" {
-					a.actorStateStoreName = s.ObjectMeta.Name
-				}
-
 			}
 		}
 	}
 
-	// handle the case when no actorStateStore or defaultStateStore is specified, in this case, just set to the first store from the list
-	if a.defaultStateStoreName == "" {
-		a.defaultStateStoreName = firstStateStoreName
-	}
-	if a.actorStateStoreName == "" {
-		a.actorStateStoreName = firstStateStoreName
+	if a.actorStateStoreName == "" || a.actorStateStoreCount != 1 {
+		log.Warnf("either no actor state store or multiple actor state stores are specified in the configuration, actor stores specified: %d", a.actorStateStoreCount)
 	}
 
 	return nil
