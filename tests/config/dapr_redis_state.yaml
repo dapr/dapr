@@ -15,4 +15,4 @@ spec:
   - name: redisPassword
     value: ""
   - name: actorStateStore
-    value: true
+    value: "true"
