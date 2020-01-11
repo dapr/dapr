@@ -17,8 +17,8 @@ import (
 	"syscall"
 
 	"github.com/Shopify/sarama"
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/bindings"
+	log "github.com/sirupsen/logrus"
 )
 
 // Kafka allows reading/writing to a Kafka consumer group

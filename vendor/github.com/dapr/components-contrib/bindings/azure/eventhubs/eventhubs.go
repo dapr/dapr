@@ -14,8 +14,8 @@ import (
 	"time"
 
 	eventhub "github.com/Azure/azure-event-hubs-go"
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/bindings"
+	log "github.com/sirupsen/logrus"
 )
 
 // AzureEventHubs allows sending/receiving Azure Event Hubs events

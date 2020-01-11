@@ -1187,20 +1187,31 @@ func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
 	fakeStore := fakeStateStore{}
+	fakeStores := map[string]state.Store{
+		"store1": fakeStore,
+	}
 	testAPI := &api{
-		stateStore: fakeStore,
-		json:       jsoniter.ConfigFastest,
+		stateStores: fakeStores,
+		json:        jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
+	storeName := "store1"
+	t.Run("Get state - 401 ERR_STATE_STORE_NOT_FOUND", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/bad-key", "notexistStore")
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 401, resp.StatusCode, "reading non-existing store should return 401")
+	})
 	t.Run("Get state - 204 No Content Found", func(t *testing.T) {
-		apiPath := "v1.0/state/bad-key"
+		apiPath := fmt.Sprintf("v1.0/state/%s/bad-key", storeName)
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
 	})
 	t.Run("Get state - Good Key", func(t *testing.T) {
-		apiPath := "v1.0/state/good-key"
+		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
@@ -1208,7 +1219,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
 	})
 	t.Run("Update state - No ETag", func(t *testing.T) {
-		apiPath := "v1.0/state"
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: "",
@@ -1220,7 +1231,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 201, resp.StatusCode, "updating existing key without etag should succeed")
 	})
 	t.Run("Update state - Matching ETag", func(t *testing.T) {
-		apiPath := "v1.0/state"
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: etag,
@@ -1232,7 +1243,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 201, resp.StatusCode, "updating existing key with matching etag should succeed")
 	})
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
-		apiPath := "v1.0/state"
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: "BAD ETAG",
@@ -1244,28 +1255,28 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
 	t.Run("Delete state - No ETag", func(t *testing.T) {
-		apiPath := "v1.0/state/good-key"
+		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "updating existing key without etag should succeed")
 	})
 	t.Run("Delete state - Matching ETag", func(t *testing.T) {
-		apiPath := "v1.0/state/good-key"
+		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, etag)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "updating existing key with matching etag should succeed")
 	})
 	t.Run("Delete state - Bad ETag", func(t *testing.T) {
-		apiPath := "v1.0/state/good-key"
+		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "BAD ETAG")
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
 	t.Run("Delete state - With Retries", func(t *testing.T) {
-		apiPath := "v1.0/state/failed-key"
+		apiPath := fmt.Sprintf("v1.0/state/%s/failed-key", storeName)
 		retryCounter = 0
 		// act
 		_ = fakeServer.DoRequest("DELETE", apiPath, nil, map[string]string{
@@ -1277,7 +1288,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 3, retryCounter, "should have tried 3 times")
 	})
 	t.Run("Set state - With Retries", func(t *testing.T) {
-		apiPath := "v1.0/state"
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		retryCounter = 0
 		request := []state.SetRequest{{
 			Key:  "failed-key",
