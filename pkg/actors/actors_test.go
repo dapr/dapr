@@ -618,9 +618,9 @@ func TestTransactionalState(t *testing.T) {
 	})
 }
 
-func TestActorsCount(t *testing.T) {
+func TestActiveActorsCount(t *testing.T) {
 	t.Run("Actors Count", func(t *testing.T) {
-		expectedCounts := []ActorCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
+		expectedCounts := []ActiveActorCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
 
 		testActorRuntime := newTestActorsRuntime()
 
@@ -631,16 +631,16 @@ func TestActorsCount(t *testing.T) {
 		actorKey3 := testActorRuntime.constructCompositeKey("dog", "xyz")
 		fakeCallAndActivateActor(testActorRuntime, actorKey3)
 
-		actualCounts := testActorRuntime.GetActorsCount()
+		actualCounts := testActorRuntime.GetActiveActorsCount()
 		assert.ElementsMatch(t, expectedCounts, actualCounts)
 	})
 
 	t.Run("Actors Count empty", func(t *testing.T) {
-		expectedCounts := []ActorCount{}
+		expectedCounts := []ActiveActorCount{}
 
 		testActorRuntime := newTestActorsRuntime()
 
-		actualCounts := testActorRuntime.GetActorsCount()
+		actualCounts := testActorRuntime.GetActiveActorsCount()
 		assert.Equal(t, expectedCounts, actualCounts)
 	})
 }

@@ -601,6 +601,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
+
 	testAPI := &api{
 		actor: nil,
 		json:  jsoniter.ConfigFastest,
@@ -618,27 +619,16 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		apiPath := "v1.0/metadata"
 		mockActors := new(daprt.MockActors)
 
-		mockActors.On("GetActorsCount").Return([]actors.ActorCount{
-			{
-				Type:  "abcd",
-				Count: 10,
-			},
-			{
-				Type:  "xyz",
-				Count: 5,
-			},
-		})
+		mockActors.On("GetActiveActorsCount")
 
+		testAPI.id = "xyz"
 		testAPI.actor = mockActors
 
-		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
-		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, expectedBodyBytes, resp.RawBody)
-		fmt.Println(resp.RawBody)
-		mockActors.AssertNumberOfCalls(t, "GetActorsCount", 1)
+		assert.ElementsMatch(t, expectedBodyBytes, resp.RawBody)
+		mockActors.AssertNumberOfCalls(t, "GetActiveActorsCount", 1)
 	})
 
 	fakeServer.Shutdown()

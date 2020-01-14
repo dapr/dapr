@@ -41,8 +41,8 @@ type api struct {
 }
 
 type metadata struct {
-	ID          string              `json:"id"`
-	ActorsCount []actors.ActorCount `json:"actors"`
+	ID                string                    `json:"id"`
+	ActiveActorsCount []actors.ActiveActorCount `json:"actors"`
 }
 
 const (
@@ -782,8 +782,8 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 
 func (a *api) onGetMetadata(c *routing.Context) error {
 	mtd := metadata{
-		ID:          a.id,
-		ActorsCount: a.actor.GetActorsCount(),
+		ID:                a.id,
+		ActiveActorsCount: a.actor.GetActiveActorsCount(),
 	}
 
 	mtdBytes, err := a.json.Marshal(mtd)
