@@ -6,6 +6,7 @@
 package http
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -41,20 +42,21 @@ type api struct {
 }
 
 const (
-	apiVersionV1        = "v1.0"
-	idParam             = "id"
-	methodParam         = "method"
-	actorTypeParam      = "actorType"
-	actorIDParam        = "actorId"
-	stateKeyParam       = "key"
-	topicParam          = "topic"
-	nameParam           = "name"
-	consistencyParam    = "consistency"
-	retryIntervalParam  = "retryInterval"
-	retryPatternParam   = "retryPattern"
-	retryThresholdParam = "retryThreshold"
-	concurrencyParam    = "concurrency"
-	daprSeparator       = "__delim__"
+	apiVersionV1           = "v1.0"
+	idParam                = "id"
+	methodParam            = "method"
+	actorTypeParam         = "actorType"
+	actorIDParam           = "actorId"
+	stateKeyParam          = "key"
+	topicParam             = "topic"
+	nameParam              = "name"
+	consistencyParam       = "consistency"
+	retryIntervalParam     = "retryInterval"
+	retryPatternParam      = "retryPattern"
+	retryThresholdParam    = "retryThreshold"
+	concurrencyParam       = "concurrency"
+	daprSeparator          = "__delim__"
+	incompatibleStateStore = "state store does not support transactions - please see https://github.com/dapr/docs"
 )
 
 // NewAPI returns a new API
@@ -209,7 +211,7 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{http.Post},
-			Route:   "transaction",
+			Route:   "state/transaction",
 			Version: apiVersionV1,
 			Handler: a.onPerformTransaction,
 		},
@@ -835,7 +837,12 @@ func (a *api) onPerformTransaction(c *routing.Context) error {
 		return nil
 	}
 
-	err = a.actor.PerformTransaction(&requests)
+	transactionalStore, ok := a.stateStore.(state.TransactionalStore)
+	if !ok {
+		return errors.New(incompatibleStateStore)
+	}
+
+	err = transactionalStore.Multi(requests)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)

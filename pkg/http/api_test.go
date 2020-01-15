@@ -611,7 +611,7 @@ func TestDirectTransactionEndpoints(t *testing.T) {
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
 
 	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
-		apiPath := "v1.0/transaction"
+		apiPath := "v1.0/state/transaction"
 
 		testTransactionalOperations := []state.TransactionalRequest{
 			{
@@ -630,19 +630,15 @@ func TestDirectTransactionEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(daprt.MockActors)
-		mockActors.On("PerformTransaction", &testTransactionalOperations).Return(nil)
 
 		testAPI.actor = mockActors
 
-		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
-		// assert
 		assert.Equal(t, 201, resp.StatusCode)
-		mockActors.AssertNumberOfCalls(t, "PerformTransaction", 1)
 	})
 
 	fakeServer.Shutdown()

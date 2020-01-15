@@ -8,7 +8,6 @@
 package testing
 
 import (
-	state "github.com/dapr/components-contrib/state"
 	actors "github.com/dapr/dapr/pkg/actors"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -183,20 +182,6 @@ func (_m *MockActors) TransactionalStateOperation(req *actors.TransactionalReque
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*actors.TransactionalRequest) error); ok {
 		r0 = rf(req)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// PerformTransaction provides a mock function with given fields: requests
-func (_m *MockActors) PerformTransaction(requests *[]state.TransactionalRequest) error {
-	ret := _m.Called(requests)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*[]state.TransactionalRequest) error); ok {
-		r0 = rf(requests)
 	} else {
 		r0 = ret.Error(0)
 	}

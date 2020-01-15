@@ -37,7 +37,6 @@ type Actors interface {
 	SaveState(req *SaveStateRequest) error
 	DeleteState(req *DeleteStateRequest) error
 	TransactionalStateOperation(req *TransactionalRequest) error
-	PerformTransaction(req *[]state.TransactionalRequest) error
 	GetReminder(req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(req *CreateReminderRequest) error
 	DeleteReminder(req *DeleteReminderRequest) error
@@ -378,17 +377,12 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 		}
 	}
 
-	return a.PerformTransaction(&requests)
-}
-
-func (a *actorsRuntime) PerformTransaction(requests *[]state.TransactionalRequest) error {
-
 	transactionalStore, ok := a.store.(state.TransactionalStore)
 	if !ok {
 		return errors.New(incompatibleStateStore)
 	}
 
-	err := transactionalStore.Multi(*requests)
+	err := transactionalStore.Multi(requests)
 	return err
 }
 
