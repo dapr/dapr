@@ -6,112 +6,243 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/dapr/dapr/pkg/runtime"
 	log "github.com/sirupsen/logrus"
-	global_config "github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/modes"
-	daprd "github.com/dapr/dapr/pkg/runtime"
-	"github.com/dapr/dapr/pkg/version"
+
+	// Included components in compiled daprd
+
+	// Secret stores
+	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
+	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
+	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
+	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
+
+	// State Stores
+	"github.com/dapr/components-contrib/state"
+	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
+	"github.com/dapr/components-contrib/state/cassandra"
+	"github.com/dapr/components-contrib/state/etcd"
+	"github.com/dapr/components-contrib/state/gcp/firestore"
+	"github.com/dapr/components-contrib/state/hashicorp/consul"
+	"github.com/dapr/components-contrib/state/memcached"
+	"github.com/dapr/components-contrib/state/mongodb"
+	state_redis "github.com/dapr/components-contrib/state/redis"
+	"github.com/dapr/components-contrib/state/sqlserver"
+	"github.com/dapr/components-contrib/state/zookeeper"
+	state_loader "github.com/dapr/dapr/pkg/components/state"
+
+	// Pub/Sub
+	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
+	"github.com/dapr/components-contrib/pubsub/nats"
+	"github.com/dapr/components-contrib/pubsub/rabbitmq"
+	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
+	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
+
+	// Exporters
+	"github.com/dapr/components-contrib/exporters"
+	"github.com/dapr/components-contrib/exporters/native"
+	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/exporters/zipkin"
+	exporters_loader "github.com/dapr/dapr/pkg/components/exporters"
+
+	// Service Discovery
+	servicediscovery_kubernetes "github.com/dapr/components-contrib/servicediscovery/kubernetes"
+	"github.com/dapr/components-contrib/servicediscovery/mdns"
+	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
+
+	// Bindings
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
+	"github.com/dapr/components-contrib/bindings/aws/s3"
+	"github.com/dapr/components-contrib/bindings/aws/sns"
+	"github.com/dapr/components-contrib/bindings/aws/sqs"
+	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
+	bindings_cosmosdb "github.com/dapr/components-contrib/bindings/azure/cosmosdb"
+	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
+	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
+	"github.com/dapr/components-contrib/bindings/azure/signalr"
+	"github.com/dapr/components-contrib/bindings/gcp/bucket"
+	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
+	"github.com/dapr/components-contrib/bindings/http"
+	"github.com/dapr/components-contrib/bindings/kafka"
+	"github.com/dapr/components-contrib/bindings/kubernetes"
+	"github.com/dapr/components-contrib/bindings/mqtt"
+	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
+	"github.com/dapr/components-contrib/bindings/redis"
+	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
+
+	// HTTP Middleware
+	middleware "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/middleware/http/oauth2"
+	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/valyala/fasthttp"
 )
 
 func main() {
-	logLevel := flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
-	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
-	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", daprd.DefaultDaprHTTPPort), "HTTP port for Dapr to listen on")
-	daprGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", daprd.DefaultDaprGRPCPort), "gRPC port for Dapr to listen on")
-	appPort := flag.String("app-port", "", "The port the application is listening on")
-	profilePort := flag.String("profile-port", fmt.Sprintf("%v", daprd.DefaultProfilePort), "The port for the profile server")
-	appProtocol := flag.String("protocol", string(daprd.HTTPProtocol), "Protocol for the application: gRPC or http")
-	componentsPath := flag.String("components-path", daprd.DefaultComponentsPath, "Path for components directory. Standalone mode only")
-	config := flag.String("config", "", "Path to config file, or name of a configuration object")
-	daprID := flag.String("dapr-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
-	controlPlaneAddress := flag.String("control-plane-address", "", "Address for an Dapr control plane")
-	placementServiceAddress := flag.String("placement-address", "", "Address for the Dapr placement service")
-	allowedOrigins := flag.String("allowed-origins", daprd.DefaultAllowedOrigins, "Allowed HTTP origins")
-	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default port is %v", daprd.DefaultComponentsPath))
-	runtimeVersion := flag.Bool("version", false, "prints the runtime version")
-	maxConcurrency := flag.Int("max-concurrency", -1, "controls the concurrency level when forwarding requests to user code")
-
-	flag.Parse()
-
-	if *runtimeVersion {
-		fmt.Println(version.Version())
-		os.Exit(0)
-	}
-
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
-
-	parsedLogLevel, err := log.ParseLevel(*logLevel)
-	if err == nil {
-		log.SetLevel(parsedLogLevel)
-		log.Infof("log level set to: %s", parsedLogLevel)
-	} else {
-		log.Fatalf("invalid value for --log-level: %s", *logLevel)
-	}
-
-	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
+	rt, err := runtime.FromFlags()
 	if err != nil {
-		log.Fatalf("error parsing dapr-http-port flag: %s", err)
+		log.Fatal(err)
 	}
 
-	daprGRPC, err := strconv.Atoi(*daprGRPCPort)
-	if err != nil {
-		log.Fatalf("error parsing dapr-grpc-port flag: %s", err)
-	}
-
-	profPort, err := strconv.Atoi(*profilePort)
-	if err != nil {
-		log.Fatalf("error parsing profile-port flag: %s", err)
-	}
-
-	applicationPort := 0
-	if *appPort != "" {
-		applicationPort, err = strconv.Atoi(*appPort)
-		if err != nil {
-			log.Fatalf("error parsing app-port: %s", err)
-		}
-	}
-
-	enableProf, err := strconv.ParseBool(*enableProfiling)
-	if err != nil {
-		log.Fatalf("error parsing enable-profiling: %s", err)
-	}
-
-	runtimeConfig := daprd.NewRuntimeConfig(*daprID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency)
-
-	var globalConfig *global_config.Configuration
-
-	if *config != "" {
-		switch modes.DaprMode(*mode) {
-		case modes.KubernetesMode:
-			globalConfig, err = global_config.LoadKubernetesConfiguration(*config, *controlPlaneAddress)
-		case modes.StandaloneMode:
-			globalConfig, err = global_config.LoadStandaloneConfiguration(*config)
-		}
-	} else {
-		globalConfig = global_config.LoadDefaultConfiguration()
-	}
-	if err != nil {
-		log.Warnf("error loading config: %s. loading default config", err)
-	}
+	rt.Run(
+		runtime.WithSecretStores(
+			secretstores_loader.New("kubernetes", sercetstores_kubernetes.NewKubernetesSecretStore),
+			secretstores_loader.New("azure.keyvault", keyvault.NewAzureKeyvaultSecretStore),
+			secretstores_loader.New("hashicorp.vault", vault.NewHashiCorpVaultSecretStore),
+		),
+		runtime.WithStates(
+			state_loader.New("redis", func() state.Store {
+				return state_redis.NewRedisStateStore()
+			}),
+			state_loader.New("consul", func() state.Store {
+				return consul.NewConsulStateStore()
+			}),
+			state_loader.New("azure.cosmosdb", func() state.Store {
+				return state_cosmosdb.NewCosmosDBStateStore()
+			}),
+			state_loader.New("etcd", func() state.Store {
+				return etcd.NewETCD()
+			}),
+			state_loader.New("cassandra", func() state.Store {
+				return cassandra.NewCassandraStateStore()
+			}),
+			state_loader.New("memcached", func() state.Store {
+				return memcached.NewMemCacheStateStore()
+			}),
+			state_loader.New("mongodb", func() state.Store {
+				return mongodb.NewMongoDB()
+			}),
+			state_loader.New("zookeeper", func() state.Store {
+				return zookeeper.NewZookeeperStateStore()
+			}),
+			state_loader.New("gcp.firestore", func() state.Store {
+				return firestore.NewFirestoreStateStore()
+			}),
+			state_loader.New("sqlserver", func() state.Store {
+				return sqlserver.NewSQLServerStateStore()
+			}),
+		),
+		runtime.WithPubSubs(
+			pubsub_loader.New("redis", pubsub_redis.NewRedisStreams),
+			pubsub_loader.New("nats", nats.NewNATSPubSub),
+			pubsub_loader.New("azure.servicebus", servicebus.NewAzureServiceBus),
+			pubsub_loader.New("rabbitmq", rabbitmq.NewRabbitMQ),
+		),
+		runtime.WithExporters(
+			exporters_loader.New("zipkin", func() exporters.Exporter {
+				return zipkin.NewZipkinExporter()
+			}),
+			exporters_loader.New("string", func() exporters.Exporter {
+				return stringexporter.NewStringExporter()
+			}),
+			exporters_loader.New("native", func() exporters.Exporter {
+				return native.NewNativeExporter()
+			}),
+		),
+		runtime.WithServiceDiscovery(
+			servicediscovery_loader.New("mdns", mdns.NewMDNSResolver),
+			servicediscovery_loader.New("kubernetes", servicediscovery_kubernetes.NewKubernetesResolver),
+		),
+		runtime.WithInputBindings(
+			bindings_loader.NewInput("aws.sqs", func() bindings.InputBinding {
+				return sqs.NewAWSSQS()
+			}),
+			bindings_loader.NewInput("azure.eventhubs", func() bindings.InputBinding {
+				return eventhubs.NewAzureEventHubs()
+			}),
+			bindings_loader.NewInput("kafka", func() bindings.InputBinding {
+				return kafka.NewKafka()
+			}),
+			bindings_loader.NewInput("mqtt", func() bindings.InputBinding {
+				return mqtt.NewMQTT()
+			}),
+			bindings_loader.NewInput("rabbitmq", func() bindings.InputBinding {
+				return bindings_rabbitmq.NewRabbitMQ()
+			}),
+			bindings_loader.NewInput("azure.servicebusqueues", func() bindings.InputBinding {
+				return servicebusqueues.NewAzureServiceBusQueues()
+			}),
+			bindings_loader.NewInput("gcp.pubsub", func() bindings.InputBinding {
+				return pubsub.NewGCPPubSub()
+			}),
+			bindings_loader.NewInput("kubernetes", kubernetes.NewKubernetes),
+		),
+		runtime.WithOutputBindings(
+			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
+				return sqs.NewAWSSQS()
+			}),
+			bindings_loader.NewOutput("aws.sns", func() bindings.OutputBinding {
+				return sns.NewAWSSNS()
+			}),
+			bindings_loader.NewOutput("azure.eventhubs", func() bindings.OutputBinding {
+				return eventhubs.NewAzureEventHubs()
+			}),
+			bindings_loader.NewOutput("aws.dynamodb", func() bindings.OutputBinding {
+				return dynamodb.NewDynamoDB()
+			}),
+			bindings_loader.NewOutput("azure.cosmosdb", func() bindings.OutputBinding {
+				return bindings_cosmosdb.NewCosmosDB()
+			}),
+			bindings_loader.NewOutput("gcp.bucket", func() bindings.OutputBinding {
+				return bucket.NewGCPStorage()
+			}),
+			bindings_loader.NewOutput("http", func() bindings.OutputBinding {
+				return http.NewHTTP()
+			}),
+			bindings_loader.NewOutput("kafka", func() bindings.OutputBinding {
+				return kafka.NewKafka()
+			}),
+			bindings_loader.NewOutput("mqtt", func() bindings.OutputBinding {
+				return mqtt.NewMQTT()
+			}),
+			bindings_loader.NewOutput("rabbitmq", func() bindings.OutputBinding {
+				return bindings_rabbitmq.NewRabbitMQ()
+			}),
+			bindings_loader.NewOutput("redis", func() bindings.OutputBinding {
+				return redis.NewRedis()
+			}),
+			bindings_loader.NewOutput("aws.s3", func() bindings.OutputBinding {
+				return s3.NewAWSS3()
+			}),
+			bindings_loader.NewOutput("azure.blobstorage", func() bindings.OutputBinding {
+				return blobstorage.NewAzureBlobStorage()
+			}),
+			bindings_loader.NewOutput("azure.servicebusqueues", func() bindings.OutputBinding {
+				return servicebusqueues.NewAzureServiceBusQueues()
+			}),
+			bindings_loader.NewOutput("gcp.pubsub", func() bindings.OutputBinding {
+				return pubsub.NewGCPPubSub()
+			}),
+			bindings_loader.NewOutput("azure.signalr", func() bindings.OutputBinding {
+				return signalr.NewSignalR()
+			}),
+		),
+		runtime.WithHTTPMiddleware(
+			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
+				return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+					return func(ctx *fasthttp.RequestCtx) {
+						body := string(ctx.PostBody())
+						ctx.Request.SetBody([]byte(strings.ToUpper(body)))
+						h(ctx)
+					}
+				}
+			}),
+			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := oauth2.NewOAuth2Middleware().GetHandler(metadata)
+				return handler
+			}),
+		),
+	)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
-
-	rt := daprd.NewDaprRuntime(runtimeConfig, globalConfig)
-	err = rt.Run()
-	if err != nil {
-		log.Fatalf("error initializing Dapr Runtime: %s", err)
-	}
-
 	<-stop
 	gracefulShutdownDuration := 5 * time.Second
 	log.Info("dapr shutting down. Waiting 5 seconds to finish outstanding operations")
