@@ -10,11 +10,11 @@ import (
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	routing "github.com/qiangxue/fasthttp-routing"
+	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 )
@@ -44,9 +44,9 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pip
 // StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
 	handler :=
-			s.useCors(
-				s.useComponents(
-					s.useRouter()))
+		s.useCors(
+			s.useComponents(
+				s.useRouter()))
 
 	if s.tracingSpec.Enabled {
 		handler = s.useTracing(handler)
