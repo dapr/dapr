@@ -43,19 +43,17 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pip
 
 // StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
-	endpoints := s.api.APIEndpoints()
-	router := s.getRouter(endpoints)
-	origins := strings.Split(s.config.AllowedOrigins, ",")
-	corsHandler := s.getCorsHandler(origins)
-	handler := s.pipeline.Apply(router.HandleRequest)
+	handler :=
+			s.useCors(
+				s.useComponents(
+					s.useRouter()))
+
+	if s.tracingSpec.Enabled {
+		handler = s.useTracing(handler)
+	}
+
 	go func() {
-		if s.tracingSpec.Enabled {
-			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-				diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(handler))))
-		} else {
-			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-				corsHandler.CorsMiddleware(handler)))
-		}
+		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), handler))
 	}()
 
 	if s.config.EnableProfiling {
@@ -64,6 +62,26 @@ func (s *server) StartNonBlocking() {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.ProfilePort), pprofhandler.PprofHandler))
 		}()
 	}
+}
+
+func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return diag.TracingHTTPMiddleware(s.tracingSpec, next)
+}
+
+func (s *server) useRouter() fasthttp.RequestHandler {
+	endpoints := s.api.APIEndpoints()
+	router := s.getRouter(endpoints)
+	return router.HandleRequest
+}
+
+func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return s.pipeline.Apply(next)
+}
+
+func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	origins := strings.Split(s.config.AllowedOrigins, ",")
+	corsHandler := s.getCorsHandler(origins)
+	return corsHandler.CorsMiddleware(next)
 }
 
 func (s *server) getCorsHandler(allowedOrigins []string) *cors.CorsHandler {
