@@ -51,10 +51,12 @@ func (s *server) StartNonBlocking() {
 	go func() {
 		if s.tracingSpec.Enabled {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-				s.pipeline.Apply(diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(handler)))))
+					diag.TracingHTTPMiddleware(s.tracingSpec,
+						 s.getProxyHandler(corsHandler.CorsMiddleware(handler)))))
 		} else {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-				s.pipeline.Apply(corsHandler.CorsMiddleware(handler))))
+					s.getProxyHandler(
+						corsHandler.CorsMiddleware(handler))))
 		}
 	}()
 
@@ -84,4 +86,22 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 	}
 
 	return router
+}
+
+func (s *server) getProxyHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		var proto string
+		if ctx.IsTLS() {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+		ctx.Request.Header.Add("Forwarded",
+			fmt.Sprintf("by=%s;for=%s;host=%s;proto=%s",
+			ctx.LocalAddr(),
+			ctx.RemoteAddr(),
+			ctx.Host(),
+			proto))
+		next(ctx)
+	}
 }
