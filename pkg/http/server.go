@@ -51,10 +51,10 @@ func (s *server) StartNonBlocking() {
 	go func() {
 		if s.tracingSpec.Enabled {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-				s.pipeline.Apply(diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(handler)))))
+				diag.TracingHTTPMiddleware(s.tracingSpec, corsHandler.CorsMiddleware(handler))))
 		} else {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-				s.pipeline.Apply(corsHandler.CorsMiddleware(handler))))
+				corsHandler.CorsMiddleware(handler)))
 		}
 	}()
 
