@@ -10,11 +10,11 @@ import (
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	routing "github.com/qiangxue/fasthttp-routing"
+	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 )
@@ -51,12 +51,12 @@ func (s *server) StartNonBlocking() {
 	go func() {
 		if s.tracingSpec.Enabled {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-					diag.TracingHTTPMiddleware(s.tracingSpec,
-						 s.getProxyHandler(corsHandler.CorsMiddleware(handler)))))
+				diag.TracingHTTPMiddleware(s.tracingSpec,
+					s.getProxyHandler(corsHandler.CorsMiddleware(handler)))))
 		} else {
 			log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port),
-					s.getProxyHandler(
-						corsHandler.CorsMiddleware(handler))))
+				s.getProxyHandler(
+					corsHandler.CorsMiddleware(handler))))
 		}
 	}()
 
@@ -98,10 +98,10 @@ func (s *server) getProxyHandler(next fasthttp.RequestHandler) fasthttp.RequestH
 		}
 		ctx.Request.Header.Add("Forwarded",
 			fmt.Sprintf("by=%s;for=%s;host=%s;proto=%s",
-			ctx.LocalAddr(),
-			ctx.RemoteAddr(),
-			ctx.Host(),
-			proto))
+				ctx.LocalAddr(),
+				ctx.RemoteAddr(),
+				ctx.Host(),
+				proto))
 		next(ctx)
 	}
 }
