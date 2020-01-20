@@ -101,11 +101,11 @@ func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 				ctx.Host(),
 				proto))
 		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-		ctx.Request.Header.Add("X-Forwarded-For", fmt.Sprintf("%s", ctx.RemoteAddr()))
+		ctx.Request.Header.Add("X-Forwarded-For", ctx.RemoteAddr().String())
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
 		ctx.Request.Header.Add("X-Forwarded-Host", fmt.Sprintf("%s", ctx.Host()))
 		// Add X-Forwarded-Proto: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
-		ctx.Request.Header.Add("X-Forwarded-Proto", fmt.Sprintf("%s", proto))
+		ctx.Request.Header.Add("X-Forwarded-", proto)
 		next(ctx)
 	}
 }
