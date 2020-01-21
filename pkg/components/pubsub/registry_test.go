@@ -48,10 +48,10 @@ func TestCreatePubSub(t *testing.T) {
 		mockPubSub := new(daprt.MockPubSub)
 
 		// act
-		RegisterMessageBus(PubSubName, func() pubsub.PubSub {
+		testRegistry.Register(New(PubSubName, func() pubsub.PubSub {
 			return mockPubSub
-		})
-		p, e := testRegistry.CreatePubSub(createFullName(PubSubName))
+		}))
+		p, e := testRegistry.Create(createFullName(PubSubName))
 
 		// assert
 		assert.Equal(t, mockPubSub, p)
@@ -62,7 +62,7 @@ func TestCreatePubSub(t *testing.T) {
 		const PubSubName = "fakeBus"
 
 		// act
-		p, e := testRegistry.CreatePubSub(createFullName(PubSubName))
+		p, e := testRegistry.Create(createFullName(PubSubName))
 
 		// assert
 		assert.Nil(t, p)

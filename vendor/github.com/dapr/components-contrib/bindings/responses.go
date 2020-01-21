@@ -19,6 +19,7 @@ type ReadResponse struct {
 type AppResponse struct {
 	Data        interface{}        `json:"data"`
 	To          []string           `json:"to"`
+	StoreName   string             `json:"storeName"`
 	State       []state.SetRequest `json:"state"`
 	Concurrency string             `json:"concurrency"`
 }

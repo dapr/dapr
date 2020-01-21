@@ -40,10 +40,10 @@ func TestCreateExporter(t *testing.T) {
 		mockExporter := new(daprt.MockExporter)
 
 		// act
-		RegisterExporter(ExporterName, func() exporters.Exporter {
+		testRegistry.Register(New(ExporterName, func() exporters.Exporter {
 			return mockExporter
-		})
-		p, e := testRegistry.CreateExporter(createFullName(ExporterName))
+		}))
+		p, e := testRegistry.Create(createFullName(ExporterName))
 
 		// assert
 		assert.Equal(t, mockExporter, p)
@@ -54,7 +54,7 @@ func TestCreateExporter(t *testing.T) {
 		const ExporterName = "fakeExporter"
 
 		// act
-		p, e := testRegistry.CreateExporter(createFullName(ExporterName))
+		p, e := testRegistry.Create(createFullName(ExporterName))
 
 		// assert
 		assert.Nil(t, p)

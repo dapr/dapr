@@ -71,7 +71,7 @@ push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 
 # start all e2e tests
 test-e2e-all: check-e2e-env
-	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -v -tags=e2e ./tests/e2e/...
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -count=1 -v -tags=e2e ./tests/e2e/...
 
 # add required helm repo
 setup-helm-init: $(HOME)/.helm

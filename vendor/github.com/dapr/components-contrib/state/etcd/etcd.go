@@ -145,9 +145,23 @@ func (r *ETCD) Get(req *state.GetRequest) (*state.GetResponse, error) {
 
 // Delete performs a delete operation
 func (r *ETCD) Delete(req *state.DeleteRequest) error {
+	err := state.CheckDeleteRequestOptions(req)
+	if err != nil {
+		return err
+	}
+
 	ctx, cancelFn := context.WithTimeout(context.Background(), r.operationTimeout)
 	defer cancelFn()
-	_, err := r.client.Delete(ctx, req.Key)
+
+	version := req.ETag
+	//honor client etag
+	if version != "" {
+		txn := r.client.KV.Txn(ctx)
+		_, err = txn.If(clientv3.Compare(clientv3.Version(req.Key), "=", version)).Then(clientv3.OpDelete(req.Key)).Commit()
+	} else {
+		_, err = r.client.Delete(ctx, req.Key)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -169,6 +183,10 @@ func (r *ETCD) BulkDelete(req []state.DeleteRequest) error {
 
 // Set saves state into ETCD
 func (r *ETCD) Set(req *state.SetRequest) error {
+	err := state.CheckSetRequestOptions(req)
+	if err != nil {
+		return err
+	}
 	ctx, cancelFn := context.WithTimeout(context.Background(), r.operationTimeout)
 	defer cancelFn()
 	var vStr string
@@ -179,7 +197,15 @@ func (r *ETCD) Set(req *state.SetRequest) error {
 		vStr, _ = r.json.MarshalToString(req.Value)
 	}
 
-	_, err := r.client.Put(ctx, req.Key, vStr)
+	version := req.ETag
+	//honor client etag
+	if version != "" {
+		txn := r.client.KV.Txn(ctx)
+		_, err = txn.If(clientv3.Compare(clientv3.Version(req.Key), "=", version)).Then(clientv3.OpPut(req.Key, vStr)).Commit()
+	} else {
+		_, err = r.client.Put(ctx, req.Key, vStr)
+	}
+
 	if err != nil {
 		return err
 	}
