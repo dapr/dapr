@@ -20,7 +20,9 @@ import (
 )
 
 const appPort = 3000
-const stateURL = "http://localhost:3500/v1.0/state"
+
+// statestore is the name of the store
+const stateURL = "http://localhost:3500/v1.0/state/statestore"
 
 // appState represents a state in this app.
 type appState struct {
