@@ -39,15 +39,15 @@ func main() {
 	issuerKeyPath := filepath.Join(*credsPath, config.IssuerKeyFilename)
 	rootCertPath := filepath.Join(*credsPath, config.RootCertFilename)
 
-	if _, err := os.Stat(issuerCertPath); err != nil {
+	if _, err = os.Stat(issuerCertPath); err != nil {
 		log.Fatalf("can't find issuer cert at %s", issuerCertPath)
 	}
 
-	if _, err := os.Stat(issuerKeyPath); err != nil {
+	if _, err = os.Stat(issuerKeyPath); err != nil {
 		log.Fatalf("can't find issuer key at %s", issuerKeyPath)
 	}
 
-	if _, err := os.Stat(rootCertPath); err != nil {
+	if _, err = os.Stat(rootCertPath); err != nil {
 		log.Fatalf("can't find trust anchors at %s", rootCertPath)
 	}
 
