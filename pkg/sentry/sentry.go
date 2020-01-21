@@ -36,7 +36,7 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig) {
 	if err != nil {
 		log.Fatalf("error loading trust root bundle: %s", err)
 	}
-	log.Info("trust root bundle loaded. issuer cert expiry: %s", certAuth.GetCACertBundle().GetIssuerCertExpiry().String())
+	log.Infof("trust root bundle loaded. issuer cert expiry: %s", certAuth.GetCACertBundle().GetIssuerCertExpiry().String())
 
 	// Run the CA server
 	doneCh := make(chan struct{})
@@ -54,7 +54,7 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig) {
 	log.Infof("Sentry Certificate Authority is running, protecting ya'll")
 	err = s.server.Run(conf.Port, certAuth.GetCACertBundle())
 	if err != nil {
-		log.Fatal("error starting gRPC server: %s", err)
+		log.Fatalf("error starting gRPC server: %s", err)
 	}
 
 	close(doneCh)
