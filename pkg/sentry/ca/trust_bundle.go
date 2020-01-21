@@ -15,7 +15,6 @@ type TrustRootBundle interface {
 }
 
 type trustRootBundle struct {
-	rootCertExpiry   time.Time
 	issuerCertExpiry time.Time
 	issuerCreds      *certs.Credentials
 	trustAnchors     *x509.CertPool

@@ -17,13 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	rootCertSecretName   = "daprRootCert"
-	issuerCertSecretName = "daprIssuerCert"
-	certSecretKey        = "cert"
-	pkSecretKey          = "privateKey"
-)
-
 // CertificateAuthority represents an interface for a compliant Certificate Authority.
 // Responsibilities include loading trust anchors and issuer certs, providing safe access to the trust bundle,
 // Validating and signing CSRs
@@ -100,7 +93,7 @@ func (c *defaultCA) SignCSR(req *x509.CertificateRequest, ttl time.Duration, isC
 	signingCert := c.bundle.issuerCreds.Certificate
 	signingKey := c.bundle.issuerCreds.PrivateKey
 
-	crtb, err := csr.GenerateCSRCertificate(req, signingCert, req.PublicKey, signingKey.Key, ttl, isCA)
+	crtb, err := csr.GenerateCSRCertificate(req, signingCert, req.PublicKey, signingKey.Key, certLifetime, isCA)
 	if err != nil {
 		return nil, fmt.Errorf("error signing csr: %s", err)
 	}
