@@ -34,7 +34,7 @@ const (
 	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
 	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
 	minSeconds    = -maxSeconds
-	daprSeparator = "__delim__"
+	daprSeparator = "||"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
