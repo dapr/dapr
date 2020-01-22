@@ -472,7 +472,8 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		1024,
 		DefaultProfilePort,
 		false,
-		-1)
+		-1,
+		false)
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
 	rt.components = []components_v1alpha1.Component{
