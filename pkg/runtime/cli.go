@@ -24,7 +24,6 @@ func FromFlags() (*DaprRuntime, error) {
 	daprGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprGRPCPort), "gRPC port for Dapr to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
-	metricsPort := flag.String("metrics-port", fmt.Sprintf("%v", DefaultMetricsPort), "The port for the metrics server")
 	appProtocol := flag.String("protocol", string(HTTPProtocol), "Protocol for the application: gRPC or http")
 	componentsPath := flag.String("components-path", DefaultComponentsPath, "Path for components directory. Standalone mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
@@ -69,11 +68,6 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, fmt.Errorf("error parsing profile-port flag: %s", err)
 	}
 
-	metrPort, err := strconv.Atoi(*metricsPort)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing metrics-port flag: %s", err)
-	}
-
 	applicationPort := 0
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
@@ -93,7 +87,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*daprID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, metrPort, enableMetr)
+		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, enableMetr)
 
 	var globalConfig *global_config.Configuration
 
