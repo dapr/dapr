@@ -55,7 +55,7 @@ const (
 	retryPatternParam   = "retryPattern"
 	retryThresholdParam = "retryThreshold"
 	concurrencyParam    = "concurrency"
-	daprSeparator       = "__delim__"
+	daprSeparator       = "||"
 )
 
 // NewAPI returns a new API
