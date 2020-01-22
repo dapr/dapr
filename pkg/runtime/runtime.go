@@ -472,7 +472,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.pubSub, a.actor, a.sendToOutputBinding)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MetricsPort, a.runtimeConfig.EnableMetrics)
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
 }
@@ -622,13 +622,12 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 
 				a.stateStores[s.ObjectMeta.Name] = store
 
-				// set specifed actor store if "actorStateStore" is true in the spec.
+				// set specified actor store if "actorStateStore" is true in the spec.
 				actorStoreSpecified := props[actorStateStore]
 				if actorStoreSpecified == "true" {
 					if a.actorStateStoreCount++; a.actorStateStoreCount == 1 {
 						a.actorStateStoreName = s.ObjectMeta.Name
 					}
-
 				}
 			}
 		}

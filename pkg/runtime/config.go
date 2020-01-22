@@ -24,6 +24,8 @@ const (
 	DefaultDaprGRPCPort = 50001
 	// DefaultProfilePort is the default port for profiling endpoints
 	DefaultProfilePort = 7777
+	// DefaultMetricsPort is the default port for metrics endpoints
+	DefaultMetricsPort = 8888
 	// DefaultComponentsPath is the default dir for Dapr components (standalone mode)
 	DefaultComponentsPath = "./components"
 	// DefaultAllowedOrigins is the default origins allowed for the Dapr HTTP servers
@@ -46,10 +48,12 @@ type Config struct {
 	Standalone              config.StandaloneConfig
 	Kubernetes              config.KubernetesConfig
 	MaxConcurrency          int
+	EnableMetrics           bool
+	MetricsPort             int
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, metricsPort int, enableMetrics bool) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
@@ -69,5 +73,7 @@ func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedO
 		},
 		EnableProfiling: enableProfiling,
 		MaxConcurrency:  maxConcurrency,
+		EnableMetrics: enableMetrics,
+		MetricsPort: metricsPort,
 	}
 }

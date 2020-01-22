@@ -8,6 +8,8 @@ package http
 import (
 	"fmt"
 	"strings"
+	"net/http"
+	"io/ioutil"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	"github.com/dapr/dapr/pkg/config"
@@ -16,7 +18,11 @@ import (
 	routing "github.com/qiangxue/fasthttp-routing"
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/pprofhandler"
+	"contrib.go.opencensus.io/exporter/prometheus"
+	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/stats/view"
 )
 
 // Server is an interface for the Dapr HTTP server
@@ -72,7 +78,29 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 func (s *server) useRouter() fasthttp.RequestHandler {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)
-	return router.HandleRequest
+	handler := router.HandleRequest
+	if s.config.EnableMetrics {
+		pe, err := prometheus.NewExporter(prometheus.Options{
+			Namespace: s.config.DaprID,
+		})
+		if err != nil {
+			log.Fatalf("failed to create Prometheus exporter: %v", err)
+		}
+		view.RegisterExporter(pe)
+
+		router.Get("/metrics", func(c *routing.Context) error {
+			h := fasthttpadaptor.NewFastHTTPHandlerFunc(pe.ServeHTTP)
+			h(c.RequestCtx)
+			return nil
+		})
+		
+		och := &ochttp.Handler{Handler: newHTTPHandlerFunc(handler)}
+		if err := view.Register(ochttp.DefaultServerViews...); err != nil {
+			log.Fatalf("failed to register server views for HTTP metrics: %v", err)
+		}
+		handler = fasthttpadaptor.NewFastHTTPHandler(och)
+	}
+	return handler
 }
 
 func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -128,4 +156,33 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 	}
 
 	return router
+}
+
+func newHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+			Response: fasthttp.Response{},
+		}
+
+		reqBody, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Errorf("error reading request body, %+v", err)
+			return
+		}
+		c.Request.SetBody(reqBody)
+		c.Request.SetRequestURI(r.URL.RequestURI())
+		c.Request.SetHost(r.Host)
+
+		for k, v := range r.Header {
+			c.Request.Header.Set(k, v[0])
+		}
+
+		h(&c)
+
+		c.Response.Header.VisitAll(func(k []byte, v []byte) {
+			w.Header().Add(string(k), string(v))
+		})
+		c.Response.BodyWriteTo(w)
+	})
 }
