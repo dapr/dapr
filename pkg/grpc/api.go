@@ -34,7 +34,7 @@ const (
 	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
 	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
 	minSeconds    = -maxSeconds
-	daprSeparator = "__delim__"
+	daprSeparator = "||"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -55,14 +55,14 @@ type api struct {
 	directMessaging       messaging.DirectMessaging
 	componentsHandler     components.ComponentHandler
 	appChannel            channel.AppChannel
-	stateStore            state.Store
+	stateStores           map[string]state.Store
 	pubSub                pubsub.PubSub
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.Store, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, stateStores map[string]state.Store, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
 	return &api{
 		directMessaging:       directMessaging,
 		componentsHandler:     componentHandler,
@@ -70,7 +70,7 @@ func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.Store
 		id:                    daprID,
 		appChannel:            appChannel,
 		pubSub:                pubSub,
-		stateStore:            stateStore,
+		stateStores:           stateStores,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 	}
 }
@@ -208,7 +208,13 @@ func (a *api) InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelo
 }
 
 func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error) {
-	if a.stateStore == nil {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+	}
+
+	storeName := in.StoreName
+
+	if a.stateStores[storeName] == nil {
 		return nil, errors.New("ERR_STATE_STORE_NOT_FOUND")
 	}
 
@@ -219,7 +225,7 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 		},
 	}
 
-	getResponse, err := a.stateStore.Get(&req)
+	getResponse, err := a.stateStores[storeName].Get(&req)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
@@ -233,7 +239,13 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 }
 
 func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error) {
-	if a.stateStore == nil {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+	}
+
+	storeName := in.StoreName
+
+	if a.stateStores[storeName] == nil {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
 	}
 
@@ -265,7 +277,7 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 		reqs = append(reqs, req)
 	}
 
-	err := a.stateStore.BulkSet(reqs)
+	err := a.stateStores[storeName].BulkSet(reqs)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
 	}
@@ -273,7 +285,13 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 }
 
 func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error) {
-	if a.stateStore == nil {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+	}
+
+	storeName := in.StoreName
+
+	if a.stateStores[storeName] == nil {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
 	}
 
@@ -302,7 +320,7 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 		}
 	}
 
-	err := a.stateStore.Delete(&req)
+	err := a.stateStores[storeName].Delete(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
 	}

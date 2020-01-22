@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const daprSeparator = "__delim__"
+const daprSeparator = "||"
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
@@ -99,7 +99,7 @@ func (a *actorsRuntime) Init() error {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 	if a.store == nil {
-		return errors.New("actors: state store must be present to initialize the actor runtime")
+		log.Warn("actors: state store must be present to initialize the actor runtime")
 	}
 
 	_, ok := a.store.(state.TransactionalStore)
@@ -327,6 +327,9 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 }
 
 func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
+	if a.store == nil {
+		return nil, errors.New("actors: state store does not exist or incorrectly configured")
+	}
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
@@ -341,6 +344,9 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 }
 
 func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) error {
+	if a.store == nil {
+		return errors.New("actors: state store does not exist or incorrectly configured")
+	}
 	requests := []state.TransactionalRequest{}
 	for _, o := range req.Operations {
 		switch o.Operation {
@@ -393,6 +399,9 @@ func (a *actorsRuntime) IsActorHosted(req *ActorHostedRequest) bool {
 }
 
 func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
+	if a.store == nil {
+		return errors.New("actors: state store does not exist or incorrectly configured")
+	}
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Set(&state.SetRequest{
 		Value: req.Value,
@@ -402,6 +411,9 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 }
 
 func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
+	if a.store == nil {
+		return errors.New("actors: state store does not exist or incorrectly configured")
+	}
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	err := a.store.Delete(&state.DeleteRequest{
 		Key: key,

@@ -3,8 +3,8 @@ package rabbitmq
 import (
 	"fmt"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/dapr/components-contrib/pubsub"
+	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 

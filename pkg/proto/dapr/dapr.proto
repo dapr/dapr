@@ -28,18 +28,21 @@ message InvokeServiceResponseEnvelope {
 }
 
 message DeleteStateEnvelope {
-  string key = 1;
-  string etag = 2;
-  StateOptions options = 3;
+  string storeName = 1;
+  string key = 2;
+  string etag = 3;
+  StateOptions options = 4;
 }
 
 message SaveStateEnvelope {
-  repeated StateRequest requests = 1;
+  string storeName = 1;
+  repeated StateRequest requests = 2;
 }
 
 message GetStateEnvelope {
-    string key = 1;
-    string consistency = 2;   
+    string storeName = 1;
+    string key = 2;
+    string consistency = 3;
 }
 
 message GetStateResponseEnvelope {

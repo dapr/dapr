@@ -33,7 +33,7 @@ type api struct {
 	endpoints             []Endpoint
 	directMessaging       messaging.DirectMessaging
 	appChannel            channel.AppChannel
-	stateStore            state.Store
+	stateStores           map[string]state.Store
 	json                  jsoniter.API
 	actor                 actors.Actors
 	pubSub                pubsub.PubSub
@@ -47,6 +47,7 @@ const (
 	methodParam            = "method"
 	actorTypeParam         = "actorType"
 	actorIDParam           = "actorId"
+	storeNameParam         = "storeName"
 	stateKeyParam          = "key"
 	topicParam             = "topic"
 	nameParam              = "name"
@@ -55,16 +56,16 @@ const (
 	retryPatternParam      = "retryPattern"
 	retryThresholdParam    = "retryThreshold"
 	concurrencyParam       = "concurrency"
-	daprSeparator          = "__delim__"
+	daprSeparator          = "||"
 	incompatibleStateStore = "state store does not support transactions - please see https://github.com/dapr/docs"
 )
 
 // NewAPI returns a new API
-func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStore state.Store, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
-		stateStore:            stateStore,
+		stateStores:           stateStores,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
 		pubSub:                pubSub,
@@ -77,6 +78,7 @@ func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messag
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructTransactionEndpoints()...)
 
 	return api
 }
@@ -90,21 +92,32 @@ func (a *api) constructStateEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{http.Get},
-			Route:   "state/<key>",
+			Route:   "state/<storeName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetState,
 		},
 		{
 			Methods: []string{http.Post},
-			Route:   "state",
+			Route:   "state/<storeName>",
 			Version: apiVersionV1,
 			Handler: a.onPostState,
 		},
 		{
 			Methods: []string{http.Delete},
-			Route:   "state/<key>",
+			Route:   "state/<storeName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
+		},
+	}
+}
+
+func (a *api) constructTransactionEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{http.Post},
+			Route:   "state/<storeName>/transaction",
+			Version: apiVersionV1,
+			Handler: a.onPerformTransaction,
 		},
 	}
 }
@@ -207,17 +220,6 @@ func (a *api) constructActorEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) constructTransactionEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods: []string{http.Post},
-			Route:   "state/transaction",
-			Version: apiVersionV1,
-			Handler: a.onPerformTransaction,
-		},
-	}
-}
-
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
 		{
@@ -263,11 +265,20 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 }
 
 func (a *api) onGetState(c *routing.Context) error {
-	if a.stateStore == nil {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", "")
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
+
+	storeName := c.Param(storeNameParam)
+
+	if a.stateStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(c.RequestCtx, 401, msg)
+		return nil
+	}
+
 	key := c.Param(stateKeyParam)
 	consistency := string(c.QueryArgs().Peek(consistencyParam))
 	req := state.GetRequest{
@@ -277,7 +288,7 @@ func (a *api) onGetState(c *routing.Context) error {
 		},
 	}
 
-	resp, err := a.stateStore.Get(&req)
+	resp, err := a.stateStores[storeName].Get(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -292,9 +303,17 @@ func (a *api) onGetState(c *routing.Context) error {
 }
 
 func (a *api) onDeleteState(c *routing.Context) error {
-	if a.stateStore == nil {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", "")
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
 		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
+	storeName := c.Param(storeNameParam)
+
+	if a.stateStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(c.RequestCtx, 401, msg)
 		return nil
 	}
 
@@ -330,7 +349,7 @@ func (a *api) onDeleteState(c *routing.Context) error {
 		},
 	}
 
-	err := a.stateStore.Delete(&req)
+	err := a.stateStores[storeName].Delete(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
 		respondWithError(c.RequestCtx, 500, msg)
@@ -341,9 +360,17 @@ func (a *api) onDeleteState(c *routing.Context) error {
 }
 
 func (a *api) onPostState(c *routing.Context) error {
-	if a.stateStore == nil {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", "")
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
 		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
+	storeName := c.Param(storeNameParam)
+
+	if a.stateStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(c.RequestCtx, 401, msg)
 		return nil
 	}
 
@@ -351,7 +378,7 @@ func (a *api) onPostState(c *routing.Context) error {
 	err := a.json.Unmarshal(c.PostBody(), &reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(c.RequestCtx, 400, msg)
+		respondWithError(c.RequestCtx, 402, msg)
 		return nil
 	}
 
@@ -359,7 +386,7 @@ func (a *api) onPostState(c *routing.Context) error {
 		reqs[i].Key = a.getModifiedStateKey(r.Key)
 	}
 
-	err = a.stateStore.BulkSet(reqs)
+	err = a.stateStores[storeName].BulkSet(reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_SAVE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -367,6 +394,48 @@ func (a *api) onPostState(c *routing.Context) error {
 	}
 
 	respondEmpty(c.RequestCtx, 201)
+
+	return nil
+}
+
+func (a *api) onPerformTransaction(c *routing.Context) error {
+
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
+	storeName := c.Param(storeNameParam)
+
+	if a.stateStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(c.RequestCtx, 401, msg)
+		return nil
+	}
+
+	body := c.PostBody()
+
+	var requests = []state.TransactionalRequest{}
+	err := a.json.Unmarshal(body, &requests)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
+	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
+	if !ok {
+		return errors.New(incompatibleStateStore)
+	}
+
+	err = transactionalStore.Multi(requests)
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+	} else {
+		respondEmpty(c.RequestCtx, 201)
+	}
 
 	return nil
 }
@@ -821,33 +890,6 @@ func (a *api) onPublish(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
 		respondEmpty(c.RequestCtx, 200)
-	}
-
-	return nil
-}
-
-func (a *api) onPerformTransaction(c *routing.Context) error {
-	body := c.PostBody()
-
-	var requests = []state.TransactionalRequest{}
-	err := a.json.Unmarshal(body, &requests)
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(c.RequestCtx, 400, msg)
-		return nil
-	}
-
-	transactionalStore, ok := a.stateStore.(state.TransactionalStore)
-	if !ok {
-		return errors.New(incompatibleStateStore)
-	}
-
-	err = transactionalStore.Multi(requests)
-	if err != nil {
-		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
-		respondWithError(c.RequestCtx, 500, msg)
-	} else {
-		respondEmpty(c.RequestCtx, 201)
 	}
 
 	return nil
