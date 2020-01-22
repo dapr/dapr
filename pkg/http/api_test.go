@@ -609,9 +609,9 @@ func TestDirectTransactionEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructTransactionEndpoints())
 
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
-
+	storeName := "store1"
 	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
-		apiPath := "v1.0/state/transaction"
+		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 
 		testTransactionalOperations := []state.TransactionalRequest{
 			{
