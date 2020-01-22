@@ -601,9 +601,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 func TestDirectTransactionEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
+
+	fakeStore := fakeStateStore{}
+	fakeStores := map[string]state.Store{
+		"store1": fakeStore,
+	}
 	testAPI := &api{
-		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		stateStores: fakeStores,
+		json:        jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructTransactionEndpoints())
@@ -639,6 +644,7 @@ func TestDirectTransactionEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		assert.Equal(t, 201, resp.StatusCode)
+		fmt.Printf(string(resp.RawBody))
 	})
 
 	fakeServer.Shutdown()
@@ -1358,6 +1364,8 @@ func TestV1StateEndpoints(t *testing.T) {
 type fakeStateStore struct {
 	counter int
 }
+
+func (c fakeStateStore) Multi(reqs []state.TransactionalRequest) error { return nil }
 
 func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
 	for _, r := range req {
