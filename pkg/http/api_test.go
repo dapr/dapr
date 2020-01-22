@@ -644,7 +644,6 @@ func TestDirectTransactionEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		assert.Equal(t, 201, resp.StatusCode)
-		fmt.Printf(string(resp.RawBody))
 	})
 
 	fakeServer.Shutdown()
