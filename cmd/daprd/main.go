@@ -67,6 +67,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
+	"github.com/dapr/components-contrib/bindings/azure/storagequeues"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/http"
@@ -169,6 +170,9 @@ func main() {
 			bindings_loader.NewInput("azure.servicebusqueues", func() bindings.InputBinding {
 				return servicebusqueues.NewAzureServiceBusQueues()
 			}),
+			bindings_loader.NewInput("azure.storagequeues", func() bindings.InputBinding {
+				return storagequeues.NewAzureStorageQueues()
+			}),
 			bindings_loader.NewInput("gcp.pubsub", func() bindings.InputBinding {
 				return pubsub.NewGCPPubSub()
 			}),
@@ -216,6 +220,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("azure.servicebusqueues", func() bindings.OutputBinding {
 				return servicebusqueues.NewAzureServiceBusQueues()
+			}),
+			bindings_loader.NewOutput("azure.storagequeues", func() bindings.OutputBinding {
+				return storagequeues.NewAzureStorageQueues()
 			}),
 			bindings_loader.NewOutput("gcp.pubsub", func() bindings.OutputBinding {
 				return pubsub.NewGCPPubSub()
