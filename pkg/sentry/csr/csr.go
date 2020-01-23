@@ -22,13 +22,13 @@ const (
 )
 
 // GenerateCSR creates a X.509 certificate sign request and private key.
-func GenerateCSR(id string, pkcs8 bool) ([]byte, []byte, error) {
+func GenerateCSR(org string, pkcs8 bool) ([]byte, []byte, error) {
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to generate private keys: %s", err)
 	}
 
-	templ, err := genCSRTemplate(id)
+	templ, err := genCSRTemplate(org)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error generating csr template: %s", err)
 	}
@@ -88,6 +88,9 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, signin
 	}
 	cert.Issuer = signingCert.Issuer
 	cert.IsCA = isCA
+	cert.DNSNames = csr.DNSNames
+	cert.IPAddresses = csr.IPAddresses
+	cert.Extensions = csr.Extensions
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = csr.SignatureAlgorithm
 	return x509.CreateCertificate(rand.Reader, cert, signingCert, publicKey, signingKey)
