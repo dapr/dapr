@@ -8,11 +8,14 @@ package main
 import (
 	"flag"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/dapr/dapr/pkg/sentry"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/watcher"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	log "github.com/sirupsen/logrus"
@@ -52,6 +55,9 @@ func main() {
 		log.Fatalf("can't find trust anchors at %s", rootCertPath)
 	}
 
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
 	ctx := signals.Context()
 	config, err := config.FromConfigName(*configName)
 	if err != nil {
@@ -62,8 +68,19 @@ func main() {
 	config.RootCertPath = rootCertPath
 	config.TrustDomain = *trustDomain
 
-	sentry.NewSentryCA().Run(ctx, config)
+	watchDir := filepath.Dir(config.IssuerCertPath)
 
+	ca := sentry.NewSentryCA()
+
+	log.Infof("starting watch on FS directory: %s", watchDir)
+	go watcher.StartIssuerWatcher(ctx, watchDir, func() {
+		log.Warning("issuer credentials changed. reloading")
+		ca.Restart(ctx, config)
+	})
+
+	go ca.Run(ctx, config)
+
+	<-stop
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
 	<-time.After(shutdownDuration)

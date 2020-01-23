@@ -60,7 +60,6 @@ func (c *defaultCA) LoadOrStoreTrustBundle() error {
 	}
 
 	c.bundle = bundle
-	go c.startIssuerWatcher()
 	return nil
 }
 
@@ -147,11 +146,6 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		rootCertPem:   rootCertBytes,
 		issuerCertPem: issuerCertBytes,
 	}, nil
-}
-
-func (c *defaultCA) startIssuerWatcher() {
-	log.Infof("starting watch on FS: issuer cert %s, issuer key: %s", c.config.IssuerCertPath, c.config.IssuerKeyPath)
-	//TODO: implement issuer credentials watcher
 }
 
 // GenerateSidecarCertificate generates a keypair and returns a new certificate
