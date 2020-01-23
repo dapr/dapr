@@ -31,7 +31,7 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig) {
 	}
 	log.Info("certificate authority loaded")
 
-	// Load the trust
+	// Load the trust bundle
 	err = certAuth.LoadOrStoreTrustBundle()
 	if err != nil {
 		log.Fatalf("error loading trust root bundle: %s", err)
@@ -45,7 +45,7 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig) {
 	go func() {
 		select {
 		case <-ctx.Done():
-			log.Info("sentry Certificate Authority is shutting down")
+			log.Info("sentry certificate authority is shutting down")
 			s.server.Shutdown() // nolint: errcheck
 		case <-doneCh:
 		}
