@@ -170,7 +170,6 @@ github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
 # github.com/dapr/components-contrib v0.0.0-20200109235245-e7639f90c9d0
-github.com/dapr/components-contrib/state
 github.com/dapr/components-contrib/bindings
 github.com/dapr/components-contrib/bindings/aws/dynamodb
 github.com/dapr/components-contrib/bindings/aws/s3
@@ -250,6 +249,8 @@ github.com/emicklei/go-restful/log
 github.com/evanphx/json-patch
 # github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5
 github.com/fasthttp-contrib/sessions
+# github.com/fsnotify/fsnotify v1.4.7
+github.com/fsnotify/fsnotify
 # github.com/ghodss/yaml v1.0.0
 github.com/ghodss/yaml
 # github.com/go-openapi/jsonpointer v0.19.3
