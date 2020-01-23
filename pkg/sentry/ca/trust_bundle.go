@@ -16,10 +16,9 @@ type TrustRootBundler interface {
 }
 
 type trustRootBundle struct {
-	issuerCertExpiry time.Time
-	issuerCreds      *certs.Credentials
-	trustAnchors     *x509.CertPool
-	trustDomain      string
+	issuerCreds  *certs.Credentials
+	trustAnchors *x509.CertPool
+	trustDomain  string
 }
 
 func (t *trustRootBundle) GetIssuerCertPem() []byte {
