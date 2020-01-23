@@ -21,27 +21,27 @@ type Configuration struct {
 }
 
 type ConfigurationSpec struct {
-	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
+	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 }
 
 type PipelineSpec struct {
-	Handlers []HandlerSpec `json:"handlers"`
+	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
 }
 
 type HandlerSpec struct {
-	Name         string       `json:"name"`
-	Type         string       `json:"type"`
-	SelectorSpec SelectorSpec `json:"selector,omitempty"`
+	Name         string       `json:"name" yaml:"name"`
+	Type         string       `json:"type" yaml:"type"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
 type SelectorSpec struct {
-	Fields []SelectorField `json:"fields"`
+	Fields []SelectorField `json:"fields" yaml:"fields"`
 }
 
 type SelectorField struct {
-	Field string `json:"field"`
-	Value string `json:"value"`
+	Field string `json:"field" yaml:"field"`
+	Value string `json:"value" yaml:"value"`
 }
 
 type TracingSpec struct {

@@ -54,6 +54,7 @@ const (
 	appConfigEndpoint   = "dapr/config"
 	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
+	actorStateStore     = "actorStateStore"
 )
 
 // DaprRuntime holds all the core components of the runtime
@@ -69,7 +70,7 @@ type DaprRuntime struct {
 	secretStoresRegistry     secretstores_loader.Registry
 	exporterRegistry         exporter_loader.Registry
 	serviceDiscoveryRegistry servicediscovery_loader.Registry
-	stateStore               state.Store
+	stateStores              map[string]state.Store
 	actor                    actors.Actors
 	bindingsRegistry         bindings_loader.Registry
 	inputBindings            map[string]bindings.InputBinding
@@ -81,6 +82,8 @@ type DaprRuntime struct {
 	json                     jsoniter.API
 	httpMiddlewareRegistry   http_middleware_loader.Registry
 	hostAddress              string
+	actorStateStoreName      string
+	actorStateStoreCount     int
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -93,7 +96,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		inputBindings:            map[string]bindings.InputBinding{},
 		outputBindings:           map[string]bindings.OutputBinding{},
 		secretStores:             map[string]secretstores.SecretStore{},
-		stateStoreRegistry:       state_loader.NewStateStoreRegistry(),
+		stateStores:              map[string]state.Store{},
+		stateStoreRegistry:       state_loader.NewRegistry(),
 		bindingsRegistry:         bindings_loader.NewRegistry(),
 		pubSubRegistry:           pubsub_loader.NewRegistry(),
 		secretStoresRegistry:     secretstores_loader.NewRegistry(),
@@ -104,12 +108,17 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations
-func (a *DaprRuntime) Run() error {
+func (a *DaprRuntime) Run(opts ...Option) error {
 	start := time.Now()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
 	log.Infof("dapr id: %s", a.runtimeConfig.ID)
 
-	err := a.initRuntime()
+	var o runtimeOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	err := a.initRuntime(&o)
 	if err != nil {
 		return err
 	}
@@ -125,8 +134,8 @@ func (a *DaprRuntime) Run() error {
 	return nil
 }
 
-func (a *DaprRuntime) initRuntime() error {
-	err := a.loadComponents()
+func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
+	err := a.loadComponents(opts)
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
 	}
@@ -145,29 +154,37 @@ func (a *DaprRuntime) initRuntime() error {
 
 	a.loadAppConfiguration()
 
+	// Register and initialize state stores
+	a.stateStoreRegistry.Register(opts.states...)
 	err = a.initState(a.stateStoreRegistry)
 	if err != nil {
 		log.Warnf("failed to init state: %s", err)
 	}
 
-	pubsub_loader.Load()
+	// Register and initialize pub/sub
+	a.pubSubRegistry.Register(opts.pubsubs...)
 	err = a.initPubSub()
 	if err != nil {
 		log.Warnf("failed to init pubsub: %s", err)
 	}
 
-	exporter_loader.Load()
+	// Register and initialize exporters
+	a.exporterRegistry.Register(opts.exporters...)
 	err = a.initExporters()
 	if err != nil {
 		log.Warnf("failed to init exporters: %s", err)
 	}
 
-	servicediscovery_loader.Load()
+	// Register and initialize service discovery
+	a.serviceDiscoveryRegistry.Register(opts.serviceDiscovery...)
 	err = a.initServiceDiscovery()
 	if err != nil {
 		log.Warnf("failed to init service discovery: %s", err)
 	}
 
+	// Register and initialize bindings
+	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
+	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.initBindings()
 	a.initDirectMessaging(a.servicediscoveryResolver)
 
@@ -176,6 +193,8 @@ func (a *DaprRuntime) initRuntime() error {
 		log.Warnf("failed to init actors: %s", err)
 	}
 
+	// Register and initialize HTTP middleware
+	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -199,7 +218,6 @@ func (a *DaprRuntime) initRuntime() error {
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
-	http_middleware_loader.Load()
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
 		component := a.getComponent(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type, a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
@@ -208,7 +226,7 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 				a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
 				a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type)
 		}
-		handler, err := a.httpMiddlewareRegistry.CreateMiddleware(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type,
+		handler, err := a.httpMiddlewareRegistry.Create(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type,
 			middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
 		if err != nil {
 			return http_middleware.Pipeline{}, err
@@ -219,7 +237,6 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 }
 
 func (a *DaprRuntime) initBindings() {
-	bindings_loader.Load()
 	err := a.initOutputBindings(a.bindingsRegistry)
 	if err != nil {
 		log.Warnf("failed to init output bindings: %s", err)
@@ -289,7 +306,7 @@ func (a *DaprRuntime) OnComponentUpdated(component components_v1alpha1.Component
 		if err != nil {
 			log.Errorf("error on init state store: %s", err)
 		} else {
-			a.stateStore = store
+			a.stateStores[component.ObjectMeta.Name] = store
 		}
 	} else if strings.Index(component.Spec.Type, "bindings") == 0 {
 		//TODO: implement update for input bindings too
@@ -345,8 +362,8 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.WriteReques
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
 		go func(reqs []state.SetRequest) {
-			if a.stateStore != nil {
-				err := a.stateStore.BulkSet(reqs)
+			if a.stateStores != nil {
+				err := a.stateStores[response.StoreName].BulkSet(reqs)
 				if err != nil {
 					log.Errorf("error saving state from app response: %s", err)
 				}
@@ -454,14 +471,14 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStore, a.pubSub, a.actor, a.sendToOutputBinding)
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.pubSub, a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
 }
 
 func (a *DaprRuntime) startGRPCServer(port int) error {
-	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStore, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
+	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	err := server.StartNonBlocking()
@@ -584,9 +601,8 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 	return nil
 }
 
+// Refer for state store api decision  https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
 func (a *DaprRuntime) initState(registry state_loader.Registry) error {
-	state_loader.Load()
-
 	for _, s := range a.components {
 		if strings.Index(s.Spec.Type, "state") == 0 {
 			store, err := registry.CreateStateStore(s.Spec.Type)
@@ -595,19 +611,33 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 				continue
 			}
 			if store != nil {
+				props := a.convertMetadataItemsToProperties(s.Spec.Metadata)
 				err := store.Init(state.Metadata{
-					Properties: a.convertMetadataItemsToProperties(s.Spec.Metadata),
+					Properties: props,
 				})
 				if err != nil {
 					log.Warnf("error initializing state store %s: %s", s.Spec.Type, err)
 					continue
 				}
 
-				a.stateStore = store
-				break
+				a.stateStores[s.ObjectMeta.Name] = store
+
+				// set specifed actor store if "actorStateStore" is true in the spec.
+				actorStoreSpecified := props[actorStateStore]
+				if actorStoreSpecified == "true" {
+					if a.actorStateStoreCount++; a.actorStateStoreCount == 1 {
+						a.actorStateStoreName = s.ObjectMeta.Name
+					}
+
+				}
 			}
 		}
 	}
+
+	if a.actorStateStoreName == "" || a.actorStateStoreCount != 1 {
+		log.Warnf("either no actor state store or multiple actor state stores are specified in the configuration, actor stores specified: %d", a.actorStateStoreCount)
+	}
+
 	return nil
 }
 
@@ -645,7 +675,7 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 func (a *DaprRuntime) initExporters() error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "exporter") == 0 {
-			exporter, err := a.exporterRegistry.CreateExporter(c.Spec.Type)
+			exporter, err := a.exporterRegistry.Create(c.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating exporter %s: %s", c.Spec.Type, err)
 				continue
@@ -668,7 +698,7 @@ func (a *DaprRuntime) initExporters() error {
 func (a *DaprRuntime) initPubSub() error {
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
-			pubSub, err := a.pubSubRegistry.CreatePubSub(c.Spec.Type)
+			pubSub, err := a.pubSubRegistry.Create(c.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating pub sub %s: %s", c.Spec.Type, err)
 				continue
@@ -717,9 +747,9 @@ func (a *DaprRuntime) initServiceDiscovery() error {
 	var err error
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		resolver, err = a.serviceDiscoveryRegistry.CreateResolver("kubernetes")
+		resolver, err = a.serviceDiscoveryRegistry.Create("kubernetes")
 	case modes.StandaloneMode:
-		resolver, err = a.serviceDiscoveryRegistry.CreateResolver("mdns")
+		resolver, err = a.serviceDiscoveryRegistry.Create("mdns")
 
 	default:
 		return fmt.Errorf("remote calls not supported for %s mode", string(a.runtimeConfig.Mode))
@@ -771,7 +801,12 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	}
 
 	if cloudEvent.Data != nil {
-		b, _ := a.json.Marshal(cloudEvent.Data)
+		var b []byte
+		if cloudEvent.DataContentType == "text/plain" {
+			b = []byte(cloudEvent.Data.(string))
+		} else if cloudEvent.DataContentType == "application/json" {
+			b, _ = a.json.Marshal(cloudEvent.Data)
+		}
 		envelope.Data = &any.Any{
 			Value: b,
 		}
@@ -790,13 +825,13 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.GRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
-	act := actors.NewActors(a.stateStore, a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
 	err := act.Init()
 	a.actor = act
 	return err
 }
 
-func (a *DaprRuntime) loadComponents() error {
+func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	var loader components.ComponentLoader
 
 	switch a.runtimeConfig.Mode {
@@ -814,7 +849,8 @@ func (a *DaprRuntime) loadComponents() error {
 	}
 	a.components = comps
 
-	secretstores_loader.Load()
+	// Register and initialize secret stores
+	a.secretStoresRegistry.Register(opts.secretStores...)
 	err = a.initSecretStores()
 	if err != nil {
 		log.Warnf("failed to init secret stores: %s", err)
@@ -1009,7 +1045,7 @@ func (a *DaprRuntime) initSecretStores() error {
 	// Preload Kubernetes secretstore
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		kubeSecretStore, err := a.secretStoresRegistry.CreateSecretStore("secretstores.kubernetes")
+		kubeSecretStore, err := a.secretStoresRegistry.Create("secretstores.kubernetes")
 		if err != nil {
 			return err
 		}
@@ -1030,7 +1066,7 @@ func (a *DaprRuntime) initSecretStores() error {
 		// Look up the secrets to authenticate this secretstore from K8S secret store
 		a.processComponentSecrets(c)
 
-		secretStore, err := a.secretStoresRegistry.CreateSecretStore(c.Spec.Type)
+		secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type)
 		if err != nil {
 			log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
 			continue

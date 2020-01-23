@@ -14,3 +14,5 @@ spec:
     value: dapr-redis-master:6379
   - name: redisPassword
     value: ""
+  - name: actorStateStore
+    value: "true"
