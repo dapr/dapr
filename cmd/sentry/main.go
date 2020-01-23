@@ -72,11 +72,19 @@ func main() {
 
 	ca := sentry.NewSentryCA()
 
-	log.Infof("starting watch on FS directory: %s", watchDir)
-	go watcher.StartIssuerWatcher(ctx, watchDir, func() {
-		log.Warning("issuer credentials changed. reloading")
-		ca.Restart(ctx, config)
-	})
+	log.Infof("starting watch on filesystem directory: %s", watchDir)
+	issuerEvent := make(chan struct{})
+	go watcher.StartIssuerWatcher(ctx, watchDir, issuerEvent)
+
+	go func() {
+		for {
+			select {
+			case <-issuerEvent:
+				log.Warning("issuer credentials changed. reloading")
+				ca.Restart(ctx, config)
+			}
+		}
+	}()
 
 	go ca.Run(ctx, config)
 

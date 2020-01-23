@@ -9,7 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func StartIssuerWatcher(ctx context.Context, dir string, onReload func()) {
+func StartIssuerWatcher(ctx context.Context, dir string, eventCh chan<- struct{}) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Errorf("failed to create watcher: %s", err)
@@ -30,7 +30,7 @@ LOOP:
 				if strings.Contains(event.Name, dir) {
 					// give time for either the key or cert to update
 					time.Sleep(time.Second * 1)
-					onReload()
+					eventCh <- struct{}{}
 				}
 			}
 		case err := <-watcher.Errors:
