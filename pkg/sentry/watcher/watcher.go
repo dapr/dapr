@@ -17,7 +17,7 @@ func StartIssuerWatcher(ctx context.Context, dir string, onReload func()) {
 	defer watcher.Close()
 
 	if err := watcher.Add(dir); err != nil {
-		log.Errorf("watcher error: %s")
+		log.Errorf("watcher error: %s", err)
 	}
 
 LOOP:
