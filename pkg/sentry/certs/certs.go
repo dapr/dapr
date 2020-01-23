@@ -183,6 +183,7 @@ func ParsePemCSR(csrPem []byte) (*x509.CertificateRequest, error) {
 	return csr, nil
 }
 
-func GeneratePrivateKey() (*ecdsa.PrivateKey, error) {
+// GenerateECPrivateKey returns a new EC Private Key
+func GenerateECPrivateKey() (*ecdsa.PrivateKey, error) {
 	return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 }

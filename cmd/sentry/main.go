@@ -22,6 +22,7 @@ func main() {
 	logLevel := flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
 	configName := flag.String("config", "default", "Path to config file, or name of a configuration object")
 	credsPath := flag.String("issuer-credentials", "/var/run/dapr/credentials", "Path to the credentials directory holding the issuer data")
+	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
 
 	flag.Parse()
 
@@ -33,7 +34,7 @@ func main() {
 		log.Fatalf("invalid value for --log-level: %s", *logLevel)
 	}
 
-	log.Infof("starting Sentry Certificate Authority -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("starting sentry certificate authority -- version %s -- commit %s", version.Version(), version.Commit())
 
 	issuerCertPath := filepath.Join(*credsPath, config.IssuerCertFilename)
 	issuerKeyPath := filepath.Join(*credsPath, config.IssuerKeyFilename)
@@ -54,11 +55,12 @@ func main() {
 	ctx := signals.Context()
 	config, err := config.FromConfigName(*configName)
 	if err != nil {
-		log.Error(err)
+		log.Warning(err)
 	}
 	config.IssuerCertPath = issuerCertPath
 	config.IssuerKeyPath = issuerKeyPath
 	config.RootCertPath = rootCertPath
+	config.TrustDomain = *trustDomain
 
 	sentry.NewSentryCA().Run(ctx, config)
 

@@ -2,42 +2,44 @@ package csr
 
 import (
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"time"
+
+	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
 const (
-	blockTypeRSAPrivateKey = "RSA PRIVATE KEY" // PKCS#5 private key
-	blockTypePrivateKey    = "PRIVATE KEY"     // PKCS#8 plain private key
-	encodeMsgCSR           = "CERTIFICATE REQUEST"
-	encodeMsgCert          = "CERTIFICATE"
+	blockTypeECPrivateKey = "EC PRIVATE KEY" // EC private key
+	blockTypePrivateKey   = "PRIVATE KEY"    // PKCS#8 plain private key
+	encodeMsgCSR          = "CERTIFICATE REQUEST"
+	encodeMsgCert         = "CERTIFICATE"
 )
 
 // GenerateCSR creates a X.509 certificate sign request and private key.
-func GenerateCSR(id string, keySize int, pkcs8 bool) (*x509.CertificateRequest, []byte, []byte, error) {
-	key, err := rsa.GenerateKey(rand.Reader, keySize)
+func GenerateCSR(id string, pkcs8 bool) ([]byte, []byte, error) {
+	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("unable to generate private keys: %s", err)
+		return nil, nil, fmt.Errorf("unable to generate private keys: %s", err)
 	}
 
 	templ, err := genCSRTemplate(id)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error generating csr template: %s", err)
+		return nil, nil, fmt.Errorf("error generating csr template: %s", err)
 	}
 
 	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, templ, crypto.PrivateKey(key))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create CSR: %s", err)
+		return nil, nil, fmt.Errorf("failed to create CSR: %s", err)
 	}
 
 	crtPem, keyPem, err := encode(true, csrBytes, key, pkcs8)
-	return templ, crtPem, keyPem, err
+	return crtPem, keyPem, err
 }
 
 func genCSRTemplate(org string) (*x509.CertificateRequest, error) {
@@ -68,7 +70,7 @@ func generateBaseCert(ttl time.Duration, publicKey interface{}) (*x509.Certifica
 }
 
 // GenerateCSRCertificate returns an x509 Certificate from a CSR, signing cert, public key, signing private key and duration.
-func GenerateCSRCertificate(csr *x509.CertificateRequest, signingCert *x509.Certificate, publicKey interface{}, signingKey crypto.PrivateKey,
+func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, signingCert *x509.Certificate, publicKey interface{}, signingKey crypto.PrivateKey,
 	ttl time.Duration, isCA bool) ([]byte, error) {
 	cert, err := generateBaseCert(ttl, publicKey)
 	if err != nil {
@@ -81,21 +83,17 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, signingCert *x509.Cert
 		cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth)
 	}
 
-	cert.Subject = csr.Subject
+	cert.Subject = pkix.Name{
+		CommonName: subject,
+	}
 	cert.Issuer = signingCert.Issuer
 	cert.IsCA = isCA
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = csr.SignatureAlgorithm
-	cert.Extensions = csr.Extensions
-	cert.ExtraExtensions = csr.ExtraExtensions
-	cert.DNSNames = csr.DNSNames
-	cert.EmailAddresses = csr.EmailAddresses
-	cert.IPAddresses = csr.IPAddresses
-	cert.URIs = csr.URIs
 	return x509.CreateCertificate(rand.Reader, cert, signingCert, publicKey, signingKey)
 }
 
-func encode(csr bool, csrOrCert []byte, privKey *rsa.PrivateKey, pkcs8 bool) ([]byte, []byte, error) {
+func encode(csr bool, csrOrCert []byte, privKey *ecdsa.PrivateKey, pkcs8 bool) ([]byte, []byte, error) {
 	encodeMsg := encodeMsgCert
 	if csr {
 		encodeMsg = encodeMsgCSR
@@ -106,13 +104,16 @@ func encode(csr bool, csrOrCert []byte, privKey *rsa.PrivateKey, pkcs8 bool) ([]
 	var err error
 
 	if pkcs8 {
-		if encodedKey, err = x509.MarshalPKCS8PrivateKey(privKey); err != nil {
+		if encodedKey, err = x509.MarshalECPrivateKey(privKey); err != nil {
 			return nil, nil, err
 		}
 		privPem = pem.EncodeToMemory(&pem.Block{Type: blockTypePrivateKey, Bytes: encodedKey})
 	} else {
-		encodedKey = x509.MarshalPKCS1PrivateKey(privKey)
-		privPem = pem.EncodeToMemory(&pem.Block{Type: blockTypeRSAPrivateKey, Bytes: encodedKey})
+		encodedKey, err = x509.MarshalECPrivateKey(privKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		privPem = pem.EncodeToMemory(&pem.Block{Type: blockTypeECPrivateKey, Bytes: encodedKey})
 	}
 	return csrOrCertPem, privPem, nil
 }

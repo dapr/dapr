@@ -2,6 +2,7 @@ package ca
 
 import (
 	"crypto"
+	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -22,8 +23,8 @@ import (
 // Validating and signing CSRs
 type CertificateAuthority interface {
 	LoadOrStoreTrustBundle() error
-	GetCACertBundle() TrustRootBundle
-	SignCSR(csr *x509.CertificateRequest, ttl time.Duration, isCA bool) (*SignedCertificate, error)
+	GetCACertBundle() TrustRootBundler
+	SignCSR(csrPem []byte, subject string, ttl time.Duration, isCA bool) (*SignedCertificate, error)
 	ValidateCSR(csr *x509.CertificateRequest) error
 }
 
@@ -60,7 +61,7 @@ func (s *SignedCertificate) GetChain() [][]byte {
 }
 
 // LoadOrStoreTrustBundle loads the root cert and issuer cert from the configured secret store.
-// Validation is perfromed and a protected trust bundle is created holding the trust anchors
+// Validation is performed and a protected trust bundle is created holding the trust anchors
 // and issuer credentials. If successful, a watcher is launched to keep track of the issuer expiration.
 func (c *defaultCA) LoadOrStoreTrustBundle() error {
 	bundle, err := c.validateAndBuildTrustBundle()
@@ -74,14 +75,14 @@ func (c *defaultCA) LoadOrStoreTrustBundle() error {
 }
 
 // GetCACertBundle returns the Trust Root Bundle
-func (c *defaultCA) GetCACertBundle() TrustRootBundle {
+func (c *defaultCA) GetCACertBundle() TrustRootBundler {
 	return c.bundle
 }
 
 // SignCSR signs a request with a PEM encoded CSR cert and duration.
 // If isCA is set to true, a CA cert will be issued. If isCA is set to false, a workload
 // Certificate will be issued instead.
-func (c *defaultCA) SignCSR(req *x509.CertificateRequest, ttl time.Duration, isCA bool) (*SignedCertificate, error) {
+func (c *defaultCA) SignCSR(csrPem []byte, subject string, ttl time.Duration, isCA bool) (*SignedCertificate, error) {
 	c.issuerLock.RLock()
 	defer c.issuerLock.RUnlock()
 
@@ -90,15 +91,22 @@ func (c *defaultCA) SignCSR(req *x509.CertificateRequest, ttl time.Duration, isC
 		certLifetime = c.config.WorkloadCertTTL
 	}
 
+	certLifetime += c.config.AllowedClockSkew
+
 	signingCert := c.bundle.issuerCreds.Certificate
 	signingKey := c.bundle.issuerCreds.PrivateKey
 
-	crtb, err := csr.GenerateCSRCertificate(req, signingCert, req.PublicKey, signingKey.Key, certLifetime, isCA)
+	cert, err := certs.ParsePemCSR(csrPem)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing csr pem: %s", err)
+	}
+
+	crtb, err := csr.GenerateCSRCertificate(cert, subject, signingCert, cert.PublicKey, signingKey.Key, certLifetime, isCA)
 	if err != nil {
 		return nil, fmt.Errorf("error signing csr: %s", err)
 	}
 
-	cert, err := x509.ParseCertificate(crtb)
+	csrCert, err := x509.ParseCertificate(crtb)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing cert: %s", err)
 	}
@@ -109,7 +117,7 @@ func (c *defaultCA) SignCSR(req *x509.CertificateRequest, ttl time.Duration, isC
 	})
 
 	return &SignedCertificate{
-		Certificate: cert,
+		Certificate: csrCert,
 		TrustChain:  append(c.bundle.issuerCreds.TrustChain, c.bundle.issuerCreds.Certificate),
 		CertPEM:     certPem,
 	}, nil
@@ -141,6 +149,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 	return &trustRootBundle{
 		issuerCreds:  issuerCreds,
 		trustAnchors: trustAnchors,
+		trustDomain:  c.config.TrustDomain,
 	}, nil
 }
 
@@ -150,19 +159,26 @@ func (c *defaultCA) startIssuerWatcher() {
 }
 
 // GenerateSidecarCertificate generates a keypair and returns a new certificate
-func (c *defaultCA) GenerateSidecarCertificate(dnsName string) (*certs.Credentials, error) {
-	pk, err := certs.GeneratePrivateKey()
+func (c *defaultCA) GenerateSidecarCertificate(subject string) (*certs.Credentials, error) {
+	pk, err := certs.GenerateECPrivateKey()
 	if err != nil {
 		return nil, err
 	}
 
 	csr := &x509.CertificateRequest{
-		Subject:   pkix.Name{CommonName: dnsName},
-		DNSNames:  []string{dnsName},
+		Subject:   pkix.Name{CommonName: subject},
+		DNSNames:  []string{subject},
 		PublicKey: &pk.PublicKey,
 	}
 
-	signed, err := c.SignCSR(csr, -1, false)
+	csrPem, err := x509.CreateCertificateRequest(rand.Reader, csr, pk)
+	if err != nil {
+		err = fmt.Errorf("error creating csr: %s", err)
+		log.Error(err)
+		return nil, err
+	}
+
+	signed, err := c.SignCSR(csrPem, subject, -1, false)
 	if err != nil {
 		err = fmt.Errorf("error signing csr: %s", err)
 		log.Error(err)

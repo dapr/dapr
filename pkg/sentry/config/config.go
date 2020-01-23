@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	RootCertFilename            = "trust.pem"
-	IssuerCertFilename          = "crt.pem"
-	IssuerKeyFilename           = "key.pem"
+	RootCertFilename            = "ca.crt"
+	IssuerCertFilename          = "issuer.crt"
+	IssuerKeyFilename           = "issuer.key"
 	kubernetesServiceHostEnvVar = "KUBERNETES_SERVICE_HOST"
 	kubernetesConfig            = "kubernetes"
 	selfHostedConfig            = "selfhosted"
@@ -30,6 +30,7 @@ const (
 // SentryConfig holds the configuration for the Certificate Authority.
 type SentryConfig struct {
 	Port             int
+	TrustDomain      string
 	CAStore          string
 	WorkloadCertTTL  time.Duration
 	AllowedClockSkew time.Duration
@@ -65,8 +66,13 @@ func FromConfigName(configName string) (SentryConfig, error) {
 }
 
 func printConfig(config SentryConfig) {
-	log.Infof("config settings - port: %v, ca store: %s, allowed CA clock skew: %s, workloadCertTTL: %s",
-		config.Port, config.CAStore, config.AllowedClockSkew.String(), config.WorkloadCertTTL.String())
+	caStore := "default"
+	if config.CAStore != "" {
+		caStore = config.CAStore
+	}
+
+	log.Infof("configuration: [port]: %v, [ca store]: %s, [allowed clock skew]: %s, [workload cert ttl]: %s",
+		config.Port, caStore, config.AllowedClockSkew.String(), config.WorkloadCertTTL.String())
 }
 
 func isKubernetesHosted() bool {
@@ -132,10 +138,20 @@ func parseConfiguration(conf SentryConfig, daprConfig *dapr_config.Configuration
 	if daprConfig.Spec.MTLSSpec.WorkloadCertTTL != "" {
 		d, err := time.ParseDuration(daprConfig.Spec.MTLSSpec.WorkloadCertTTL)
 		if err != nil {
-			return conf, fmt.Errorf("error parsing workloadCertTTL duration: %s", err)
+			return conf, fmt.Errorf("error parsing WorkloadCertTTL duration: %s", err)
 		}
 
 		conf.WorkloadCertTTL = d
 	}
+
+	if daprConfig.Spec.MTLSSpec.AllowedClockSkew != "" {
+		d, err := time.ParseDuration(daprConfig.Spec.MTLSSpec.AllowedClockSkew)
+		if err != nil {
+			return conf, fmt.Errorf("error parsing AllowedClockSkew duration: %s", err)
+		}
+
+		conf.AllowedClockSkew = d
+	}
+
 	return conf, nil
 }

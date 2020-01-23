@@ -45,13 +45,13 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig) {
 	go func() {
 		select {
 		case <-ctx.Done():
-			log.Info("Sentry Certificate Authority is shutting down")
+			log.Info("sentry Certificate Authority is shutting down")
 			s.server.Shutdown() // nolint: errcheck
 		case <-doneCh:
 		}
 	}()
 
-	log.Infof("Sentry Certificate Authority is running, protecting ya'll")
+	log.Infof("sentry certificate authority is running, protecting ya'll")
 	err = s.server.Run(conf.Port, certAuth.GetCACertBundle())
 	if err != nil {
 		log.Fatalf("error starting gRPC server: %s", err)

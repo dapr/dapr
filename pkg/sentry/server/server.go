@@ -18,12 +18,11 @@ import (
 )
 
 const (
-	serverCertExpiryBuffer = time.Minute
-	rsaKeySize             = 2048
+	serverCertExpiryBuffer = time.Minute * 15
 )
 
 type CAServer interface {
-	Run(port int, trustBundle ca.TrustRootBundle) error
+	Run(port int, trustBundle ca.TrustRootBundler) error
 	Shutdown()
 }
 
@@ -41,14 +40,14 @@ func NewCAServer(ca ca.CertificateAuthority) CAServer {
 
 // Run starts a secured gRPC server for the Sentry Certificate Authority.
 // It enforces client side cert validation using the trust root cert.
-func (s *server) Run(port int, trustBundle ca.TrustRootBundle) error {
+func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 	addr := fmt.Sprintf(":%v", port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("could not list on %s: %s", addr, err)
+		return fmt.Errorf("could not listen on %s: %s", addr, err)
 	}
 
-	tlsOpt := s.tlsServerOption(trustBundle)
+	tlsOpt := s.tlsServerOption(trustBundler)
 	s.srv = grpc.NewServer(tlsOpt)
 	pb.RegisterCAServer(s.srv, s)
 
@@ -58,17 +57,18 @@ func (s *server) Run(port int, trustBundle ca.TrustRootBundle) error {
 	return nil
 }
 
-func (s *server) tlsServerOption(trustBundle ca.TrustRootBundle) grpc.ServerOption {
-	cp := trustBundle.GetTrustAnchors()
+func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOption {
+	cp := trustBundler.GetTrustAnchors()
 
 	config := &tls.Config{
 		ClientCAs: cp,
 		// Require cert verification
-		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientAuth: tls.VerifyClientCertIfGiven,
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			if s.certificate == nil || needsRefresh(s.certificate, serverCertExpiryBuffer) {
 				cert, err := s.getServerCertificate()
 				if err != nil {
+					log.Error(err)
 					return nil, fmt.Errorf("failed to get TLS server certificate: %s", err)
 				}
 				s.certificate = cert
@@ -80,7 +80,7 @@ func (s *server) tlsServerOption(trustBundle ca.TrustRootBundle) grpc.ServerOpti
 }
 
 func (s *server) getServerCertificate() (*tls.Certificate, error) {
-	csr, _, pkPem, err := csr.GenerateCSR("", rsaKeySize, false)
+	csrPem, pkPem, err := csr.GenerateCSR("", false)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
 	serverCertTTL := issuerExp.Sub(now)
 
-	resp, err := s.certAuth.SignCSR(csr, serverCertTTL, false)
+	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), serverCertTTL, false)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		return nil, err
 	}
 
-	signed, err := s.certAuth.SignCSR(csr, -1, false)
+	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, -1, false)
 	if err != nil {
 		err = fmt.Errorf("error signing csr: %s", err)
 		log.Error(err)
