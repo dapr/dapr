@@ -10,19 +10,26 @@ import (
 // Respective expiry dates.
 type TrustRootBundler interface {
 	GetIssuerCertPem() []byte
+	GetRootCertPem() []byte
 	GetIssuerCertExpiry() time.Time
 	GetTrustAnchors() *x509.CertPool
 	GetTrustDomain() string
 }
 
 type trustRootBundle struct {
-	issuerCreds  *certs.Credentials
-	trustAnchors *x509.CertPool
-	trustDomain  string
+	issuerCreds   *certs.Credentials
+	trustAnchors  *x509.CertPool
+	trustDomain   string
+	rootCertPem   []byte
+	issuerCertPem []byte
+}
+
+func (t *trustRootBundle) GetRootCertPem() []byte {
+	return t.rootCertPem
 }
 
 func (t *trustRootBundle) GetIssuerCertPem() []byte {
-	return t.issuerCreds.Certificate.Raw
+	return t.issuerCertPem
 }
 
 func (t *trustRootBundle) GetIssuerCertExpiry() time.Time {

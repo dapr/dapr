@@ -28,7 +28,6 @@ type PrivateKey struct {
 type Credentials struct {
 	PrivateKey  *PrivateKey
 	Certificate *x509.Certificate
-	TrustChain  []*x509.Certificate
 }
 
 // DecodePEMKey takes a key PEM byte array and returns a PrivateKey that represents
@@ -122,12 +121,6 @@ func PEMCredentialsFromFiles(keyPath, certPath string) (*Credentials, error) {
 	creds := &Credentials{
 		PrivateKey:  pk,
 		Certificate: crts[0],
-		TrustChain:  make([]*x509.Certificate, len(crts)-1),
-	}
-
-	crts = crts[1:]
-	for i, c := range crts {
-		creds.TrustChain[len(crts)-i-1] = c
 	}
 
 	return creds, nil

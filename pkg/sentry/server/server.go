@@ -21,6 +21,7 @@ const (
 	serverCertExpiryBuffer = time.Minute * 15
 )
 
+// CAServer is an interface for the Certificate Authority server
 type CAServer interface {
 	Run(port int, trustBundle ca.TrustRootBundler) error
 	Shutdown()
@@ -32,6 +33,7 @@ type server struct {
 	srv         *grpc.Server
 }
 
+// NewCAServer returns a new CA Server running a gRPC server
 func NewCAServer(ca ca.CertificateAuthority) CAServer {
 	return &server{
 		certAuth: ca,
@@ -94,7 +96,11 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 		return nil, err
 	}
 
-	cert, err := tls.X509KeyPair(resp.CertPEM, pkPem)
+	certPem := resp.CertPEM
+	certPem = append(certPem, s.certAuth.GetCACertBundle().GetIssuerCertPem()...)
+	certPem = append(certPem, s.certAuth.GetCACertBundle().GetRootCertPem()...)
+
+	cert, err := tls.X509KeyPair(certPem, pkPem)
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +133,14 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		return nil, err
 	}
 
-	certs := signed.GetChain()
-	if len(certs) == 0 {
+	certPem := signed.CertPEM
+	issuerCert := s.certAuth.GetCACertBundle().GetIssuerCertPem()
+	rootCert := s.certAuth.GetCACertBundle().GetRootCertPem()
+
+	certPem = append(certPem, issuerCert...)
+	certPem = append(certPem, rootCert...)
+
+	if len(certPem) == 0 {
 		err = fmt.Errorf("insufficient data in certificate signing request, no certs signed")
 		log.Error(err)
 		return nil, err
@@ -140,8 +152,8 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	}
 
 	resp := &pb.SignCertificateResponse{
-		WorkloadCertificate:    certs[0],
-		TrustChainCertificates: certs[1:],
+		WorkloadCertificate:    certPem,
+		TrustChainCertificates: [][]byte{issuerCert, rootCert},
 		ValidUntil:             expiry,
 	}
 	return resp, nil

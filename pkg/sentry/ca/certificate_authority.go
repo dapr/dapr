@@ -48,16 +48,6 @@ type defaultCA struct {
 type SignedCertificate struct {
 	Certificate *x509.Certificate
 	CertPEM     []byte
-	TrustChain  []*x509.Certificate
-}
-
-func (s *SignedCertificate) GetChain() [][]byte {
-	chain := make([][]byte, len(s.TrustChain)+1)
-	chain[0] = s.Certificate.Raw
-	for i, c := range s.TrustChain {
-		chain[len(s.TrustChain)-i] = c.Raw
-	}
-	return chain
 }
 
 // LoadOrStoreTrustBundle loads the root cert and issuer cert from the configured secret store.
@@ -118,7 +108,6 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, ttl time.Duration, is
 
 	return &SignedCertificate{
 		Certificate: csrCert,
-		TrustChain:  append(c.bundle.issuerCreds.TrustChain, c.bundle.issuerCreds.Certificate),
 		CertPEM:     certPem,
 	}, nil
 }
@@ -141,15 +130,22 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		return nil, fmt.Errorf("error reading root cert from disk: %s", err)
 	}
 
+	issuerCertBytes, err := ioutil.ReadFile(c.config.IssuerCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading issuer cert from disk: %s", err)
+	}
+
 	trustAnchors, err := certs.CertPoolFromPEM(rootCertBytes)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing cert pool for trust anchors: %s", err)
 	}
 
 	return &trustRootBundle{
-		issuerCreds:  issuerCreds,
-		trustAnchors: trustAnchors,
-		trustDomain:  c.config.TrustDomain,
+		issuerCreds:   issuerCreds,
+		trustAnchors:  trustAnchors,
+		trustDomain:   c.config.TrustDomain,
+		rootCertPem:   rootCertBytes,
+		issuerCertPem: issuerCertBytes,
 	}, nil
 }
 
