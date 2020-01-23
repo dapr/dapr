@@ -77,12 +77,9 @@ func main() {
 	go watcher.StartIssuerWatcher(ctx, watchDir, issuerEvent)
 
 	go func() {
-		for {
-			select {
-			case <-issuerEvent:
-				log.Warning("issuer credentials changed. reloading")
-				ca.Restart(ctx, config)
-			}
+		for range issuerEvent {
+			log.Warning("issuer credentials changed. reloading")
+			ca.Restart(ctx, config)
 		}
 	}()
 
