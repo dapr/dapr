@@ -4,21 +4,72 @@ This section will walk you through on how to clone and build the Dapr runtime.
 First, make sure you have [Go 1.13](https://golang.org/dl/) installed.
 
 
-## Install Make
+## Setup environment
+
+This document helps you get started developing Dapr. If you find any problem while following this guide, please create a Pull Request to update this document.
+
+### Docker environment
+
+1. Install [Docker](https://docs.docker.com/install/)
+    > For Linux, you'll have to configure docker to run without sudo for this to work, because of the environment variables.  See the following on how to configure [this](https://docs.docker.com/install/linux/linux-postinstall/).
+
+2. Create your [Docker Hub account](https://hub.docker.com)
+
+
+### Go dev environment
+
+#### Linux and MacOS
+
+1. The Go language environment [(instructions)](https://golang.org/doc/install#tarball).
+   * Make sure that your GOPATH and PATH are configured correctly
+   ```bash
+   export GOPATH=~/go
+   export PATH=$PATH:$GOPATH/bin
+   ```
+2. [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Debugging
+
+#### Windows
+
+1. The Go language environment [(instructions)](https://golang.org/doc/install#windows).
+   Make sure that your GOPATH and PATH are configured correctly - You may set environment variables through the "Environment Variables" button on the "Advanced" tab of the "System" control panel. Some versions of Windows provide this control panel through the "Advanced System Settings" option inside the "System" control panel.
+   ```
+   GOPATH=c:\go
+   PATH=%GOPATH%\bin;...
+   ```
+2. [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Debugging
+3. [Git for Windows](https://gitforwindows.org)
+   * Install [Git with chocolatey](https://chocolatey.org/packages/git) and ensure that Git bin directory is in PATH environment variable
+    ```bash
+    choco install git -y --package-parameters="/GitAndUnixToolsOnPath /WindowsTerminal /NoShellIntegration"
+    ```
+4. [MinGW](http://www.mingw.org/)
+  Install [MinGW with chocolatey](https://chocolatey.org/packages/mingw) and ensure that MinGW bin directory is in PATH environment variable
+
+    ```bash
+    choco install mingw
+    ```
+
+### Kubernetes environment
+
+1. [Setup Minikube for Local environment](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-minikube.md)
+2. [Setup Azure Kubernetes Service](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-aks.md)
+3. [Helm 2.x](https://helm.sh/docs/intro/install/)
+
+### Installing Make
 
 Dapr uses `make` to build and test its binaries.
 
-### Windows
+#### Windows
 
 Download [MingGW](https://sourceforge.net/projects/mingw/files/MinGW/Extension/make/mingw32-make-3.80-3/) and use `ming32-make.exe` instead of `make`.
 
 Make sure `ming32-make.exe` is in your path.
 
-### Linux
+#### Linux
 
 ```sudo apt-get install build-essential```
 
-### Mac
+#### Mac
 
 In Xcode preferences go to the "Downloads" tab and under "Components" push the "Install" button next to "Command Line Tools". After you have successfully downloaded and installed the command line tools you should also type the following command in the Terminal to make sure all your Xcode command line tools are switched to use the new versions:
 
@@ -26,7 +77,7 @@ In Xcode preferences go to the "Downloads" tab and under "Components" push the "
 
 Once everything is successfully installed you should see make and other command line developer tools in /usr/bin.
 
-## Clone the repo
+## Cloning the repo
 
 ```bash
 cd $GOPATH/src
@@ -37,6 +88,7 @@ git clone https://github.com/dapr/dapr.git github.com/dapr/dapr
 ## Build the Dapr binaries
 
 You can build dapr binaries with the `make` tool.
+When running `make`, you need to be at the root of the `dapr/dapr` repo directory, for example: `$GOPATH/src/github.com/dapr/dapr`.<br><br>
 Once built, the release binaries will be found in `./dist/{os}_{arch}/release/`, where `{os}_{arch}` is your current OS and architecture.
 
 For example, running `make build` on MacOS will generate the directory `./dist/darwin_amd64/release.
