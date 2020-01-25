@@ -23,8 +23,8 @@ const (
 	selfHostedConfig            = "selfhosted"
 	defaultPort                 = 50001
 	defaultWorkloadCertTTL      = time.Hour * 24
-	defaultAllowedClockSkew     = time.Second * 20
-	defaultConfigName           = "mtls"
+	defaultAllowedClockSkew     = time.Minute * 15
+	defaultConfigName           = "default"
 )
 
 // SentryConfig holds the configuration for the Certificate Authority.
@@ -49,7 +49,7 @@ var configGetters = map[string]func(string) (SentryConfig, error){
 func FromConfigName(configName string) (SentryConfig, error) {
 	var confGetterFn func(string) (SentryConfig, error)
 
-	if isKubernetesHosted() {
+	if IsKubernetesHosted() {
 		confGetterFn = configGetters[kubernetesConfig]
 	} else {
 		confGetterFn = configGetters[selfHostedConfig]
@@ -57,7 +57,7 @@ func FromConfigName(configName string) (SentryConfig, error) {
 
 	conf, err := confGetterFn(configName)
 	if err != nil {
-		err = fmt.Errorf("error getting config: %s. loading default", err)
+		err = fmt.Errorf("loading default config. couldn't find config name: %s", configName)
 		conf = getDefaultConfig()
 	}
 
@@ -75,7 +75,7 @@ func printConfig(config SentryConfig) {
 		config.Port, caStore, config.AllowedClockSkew.String(), config.WorkloadCertTTL.String())
 }
 
-func isKubernetesHosted() bool {
+func IsKubernetesHosted() bool {
 	return os.Getenv(kubernetesServiceHostEnvVar) != ""
 }
 

@@ -69,6 +69,42 @@ func generateBaseCert(ttl time.Duration, publicKey interface{}) (*x509.Certifica
 	}, nil
 }
 
+func GenerateIssuerCertCSR(cn string, publicKey interface{}, ttl time.Duration) (*x509.Certificate, error) {
+	cert, err := generateBaseCert(ttl, publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	cert.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+	cert.Subject = pkix.Name{
+		CommonName: cn,
+	}
+	cert.IsCA = true
+	cert.BasicConstraintsValid = true
+	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
+	return cert, nil
+}
+
+// GenerateRootCertCSR returns a CA root cert x509 Certificate
+func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl time.Duration) (*x509.Certificate, error) {
+	cert, err := generateBaseCert(ttl, publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	cert.KeyUsage = x509.KeyUsageCertSign
+	cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
+	cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+	cert.Subject = pkix.Name{
+		CommonName:   cn,
+		Organization: []string{org},
+	}
+	cert.IsCA = true
+	cert.BasicConstraintsValid = true
+	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
+	return cert, nil
+}
+
 // GenerateCSRCertificate returns an x509 Certificate from a CSR, signing cert, public key, signing private key and duration.
 func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, signingCert *x509.Certificate, publicKey interface{}, signingKey crypto.PrivateKey,
 	ttl time.Duration, isCA bool) ([]byte, error) {
@@ -77,7 +113,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, signin
 		return nil, fmt.Errorf("error generating csr certificate: %s", err)
 	}
 	if isCA {
-		cert.KeyUsage = x509.KeyUsageCertSign
+		cert.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign
 	} else {
 		cert.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
 		cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth)

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"sync"
 	"time"
 
@@ -16,6 +17,12 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	caOrg                      = "dapr.io/sentry"
+	caCommonName               = "sentry"
+	selfSignedRootCertLifetime = time.Hour * 8760
 )
 
 // CertificateAuthority represents an interface for a compliant Certificate Authority.
@@ -118,22 +125,52 @@ func (c *defaultCA) ValidateCSR(csr *x509.CertificateRequest) error {
 	return nil
 }
 
+func shouldCreateCerts(conf config.SentryConfig) bool {
+	if _, err := os.Stat(conf.RootCertPath); os.IsNotExist(err) {
+		return true
+	}
+	b, err := ioutil.ReadFile(conf.IssuerCertPath)
+	if err != nil {
+		return true
+	}
+	return len(b) == 0
+}
+
 func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
-	issuerCreds, err := certs.PEMCredentialsFromFiles(c.config.IssuerKeyPath, c.config.IssuerCertPath)
-	if err != nil {
-		return nil, fmt.Errorf("error reading PEM credentials: %s", err)
+	var issuerCreds *certs.Credentials
+	var err error
+	var rootCertBytes []byte
+	var issuerCertBytes []byte
+
+	// certs exist on disk, load them
+	if !shouldCreateCerts(c.config) {
+		issuerCreds, err = certs.PEMCredentialsFromFiles(c.config.IssuerKeyPath, c.config.IssuerCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("error reading PEM credentials: %s", err)
+		}
+
+		rootCertBytes, err = ioutil.ReadFile(c.config.RootCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("error reading root cert from disk: %s", err)
+		}
+
+		issuerCertBytes, err = ioutil.ReadFile(c.config.IssuerCertPath)
+		if err != nil {
+			return nil, fmt.Errorf("error reading issuer cert from disk: %s", err)
+		}
+
+	} else {
+		// create self signed root and issuer certs
+		log.Info("root and issuer certs not found: generating self signed CA")
+		issuerCreds, rootCertBytes, issuerCertBytes, err = c.generateRootAndIssuerCerts()
+		if err != nil {
+			return nil, fmt.Errorf("error generating trust root bundle: %s", err)
+		}
+
+		log.Info("self signed certs generated and persisted successfully")
 	}
 
-	rootCertBytes, err := ioutil.ReadFile(c.config.RootCertPath)
-	if err != nil {
-		return nil, fmt.Errorf("error reading root cert from disk: %s", err)
-	}
-
-	issuerCertBytes, err := ioutil.ReadFile(c.config.IssuerCertPath)
-	if err != nil {
-		return nil, fmt.Errorf("error reading issuer cert from disk: %s", err)
-	}
-
+	// load trust anchors
 	trustAnchors, err := certs.CertPoolFromPEM(rootCertBytes)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing cert pool for trust anchors: %s", err)
@@ -182,4 +219,69 @@ func (c *defaultCA) GenerateSidecarCertificate(subject string) (*certs.Credentia
 		},
 		Certificate: signed.Certificate,
 	}, nil
+}
+
+func (c *defaultCA) generateRootAndIssuerCerts() (*certs.Credentials, []byte, []byte, error) {
+	rootKey, err := certs.GenerateECPrivateKey()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	rootCsr, err := csr.GenerateRootCertCSR(caOrg, caCommonName, &rootKey.PublicKey, selfSignedRootCertLifetime)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	rootCertBytes, err := x509.CreateCertificate(rand.Reader, rootCsr, rootCsr, &rootKey.PublicKey, rootKey)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	rootCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: rootCertBytes})
+
+	rootCert, err := x509.ParseCertificate(rootCertBytes)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	issuerKey, err := certs.GenerateECPrivateKey()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	issuerCsr, err := csr.GenerateIssuerCertCSR(caCommonName, &issuerKey.PublicKey, selfSignedRootCertLifetime)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	issuerCertBytes, err := x509.CreateCertificate(rand.Reader, issuerCsr, rootCert, &issuerKey.PublicKey, rootKey)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	issuerCertPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: issuerCertBytes})
+
+	encodedKey, err := x509.MarshalECPrivateKey(issuerKey)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	issuerKeyPem := pem.EncodeToMemory(&pem.Block{Type: certs.ECPrivateKey, Bytes: encodedKey})
+
+	issuerCert, err := x509.ParseCertificate(issuerCertBytes)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// store credentials so that next time sentry restarts it'll load normally
+	err = certs.StoreCredentials(c.config, rootCertPem, issuerCertPem, issuerKeyPem)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return &certs.Credentials{
+		PrivateKey: &certs.PrivateKey{
+			Type: certs.ECPrivateKey,
+			Key:  issuerKey,
+		},
+		Certificate: issuerCert,
+	}, rootCertPem, issuerCertPem, nil
 }

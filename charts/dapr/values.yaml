@@ -1,4 +1,4 @@
 global:
-  registry: docker.io/daprio
+  registry: docker.io/yaron2
   tag: latest
   imagePullPolicy: Always

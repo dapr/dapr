@@ -118,7 +118,7 @@ func TestSignCSR(t *testing.T) {
 		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*24, false)
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
-		assert.Equal(t, time.Now().AddDate(0, 0, 1).Day(), resp.Certificate.NotAfter.Day())
+		assert.Equal(t, time.Now().UTC().AddDate(0, 0, 1).Day(), resp.Certificate.NotAfter.UTC().Day())
 	})
 
 	t.Run("invalid csr", func(t *testing.T) {

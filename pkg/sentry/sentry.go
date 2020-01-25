@@ -10,7 +10,7 @@ import (
 )
 
 type CertificateAuthority interface {
-	Run(context.Context, config.SentryConfig)
+	Run(context.Context, config.SentryConfig, chan bool)
 	Restart(ctx context.Context, conf config.SentryConfig)
 }
 
@@ -25,7 +25,7 @@ func NewSentryCA() CertificateAuthority {
 }
 
 // Run loads the trust anchors and issuer certs, creates a new CA and runs the CA server.
-func (s *sentry) Run(ctx context.Context, conf config.SentryConfig) {
+func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan bool) {
 	// Create CA
 	certAuth, err := ca.NewCertificateAuthority(conf)
 	if err != nil {
@@ -53,6 +53,10 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig) {
 		}
 	}()
 
+	if readyCh != nil {
+		readyCh <- true
+	}
+
 	log.Infof("sentry certificate authority is running, protecting ya'll")
 	err = s.server.Run(conf.Port, certAuth.GetCACertBundle())
 	if err != nil {
@@ -63,5 +67,5 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig) {
 func (s *sentry) Restart(ctx context.Context, conf config.SentryConfig) {
 	s.server.Shutdown()
 	close(s.doneCh)
-	go s.Run(ctx, conf)
+	go s.Run(ctx, conf, nil)
 }

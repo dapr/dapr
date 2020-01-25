@@ -43,18 +43,6 @@ func main() {
 	issuerKeyPath := filepath.Join(*credsPath, config.IssuerKeyFilename)
 	rootCertPath := filepath.Join(*credsPath, config.RootCertFilename)
 
-	if _, err = os.Stat(issuerCertPath); err != nil {
-		log.Fatalf("can't find issuer cert at %s", issuerCertPath)
-	}
-
-	if _, err = os.Stat(issuerKeyPath); err != nil {
-		log.Fatalf("can't find issuer key at %s", issuerKeyPath)
-	}
-
-	if _, err = os.Stat(rootCertPath); err != nil {
-		log.Fatalf("can't find trust anchors at %s", rootCertPath)
-	}
-
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
@@ -74,16 +62,19 @@ func main() {
 
 	log.Infof("starting watch on filesystem directory: %s", watchDir)
 	issuerEvent := make(chan struct{})
-	go watcher.StartIssuerWatcher(ctx, watchDir, issuerEvent)
+	ready := make(chan bool)
 
+	go ca.Run(ctx, config, ready)
+
+	<-ready
+
+	go watcher.StartIssuerWatcher(ctx, watchDir, issuerEvent)
 	go func() {
 		for range issuerEvent {
 			log.Warning("issuer credentials changed. reloading")
 			ca.Restart(ctx, config)
 		}
 	}()
-
-	go ca.Run(ctx, config)
 
 	<-stop
 	shutdownDuration := 5 * time.Second
