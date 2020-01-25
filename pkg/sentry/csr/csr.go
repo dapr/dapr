@@ -93,8 +93,7 @@ func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl time.Duratio
 	}
 
 	cert.KeyUsage = x509.KeyUsageCertSign
-	cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
-	cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+	cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth)
 	cert.Subject = pkix.Name{
 		CommonName:   cn,
 		Organization: []string{org},

@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	secretName             = "dapr-trust-bundle"
+	kubeScrtName           = "dapr-trust-bundle"
 	defaultSecretNamespace = "default"
 )
 
@@ -20,9 +20,8 @@ const (
 func StoreCredentials(conf config.SentryConfig, rootCertPem, issuerCertPem, issuerKeyPem []byte) error {
 	if config.IsKubernetesHosted() {
 		return storeKubernetes(rootCertPem, issuerCertPem, issuerKeyPem)
-	} else {
-		return storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem, conf.RootCertPath, conf.IssuerCertPath, conf.IssuerKeyPath)
 	}
+	return storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem, conf.RootCertPath, conf.IssuerCertPath, conf.IssuerKeyPath)
 }
 
 func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
@@ -43,7 +42,7 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 			config.IssuerKeyFilename:  issuerCertKey,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
+			Name:      kubeScrtName,
 			Namespace: namespace,
 		},
 		Type: v1.SecretTypeOpaque,
