@@ -252,6 +252,8 @@ github.com/emicklei/go-restful/log
 github.com/evanphx/json-patch
 # github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5
 github.com/fasthttp-contrib/sessions
+# github.com/fsnotify/fsnotify v1.4.7
+github.com/fsnotify/fsnotify
 # github.com/ghodss/yaml v1.0.0
 github.com/ghodss/yaml
 # github.com/go-openapi/jsonpointer v0.19.3
