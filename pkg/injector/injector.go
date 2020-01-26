@@ -13,11 +13,14 @@ import (
 	"net/http"
 	"time"
 
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/utils"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/admission/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/kubernetes"
 )
 
 const port = 4000
@@ -31,6 +34,8 @@ type injector struct {
 	config       Config
 	deserializer runtime.Decoder
 	server       *http.Server
+	kubeClient   *kubernetes.Clientset
+	daprClient   scheme.Interface
 }
 
 // toAdmissionResponse is a helper function to create an AdmissionResponse
@@ -47,6 +52,11 @@ func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
 func NewInjector(config Config) Injector {
 	mux := http.NewServeMux()
 
+	kubeClient := utils.GetKubeClient()
+
+	conf := utils.GetConfig()
+	daprClient, _ := scheme.NewForConfig(conf)
+
 	i := &injector{
 		config: config,
 		deserializer: serializer.NewCodecFactory(
@@ -56,6 +66,8 @@ func NewInjector(config Config) Injector {
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
 		},
+		kubeClient: kubeClient,
+		daprClient: daprClient,
 	}
 
 	mux.HandleFunc("/mutate", i.handleRequest)
@@ -124,7 +136,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			err = fmt.Errorf("invalid kind for review: %s", ar.Kind)
 			log.Error(err)
 		} else {
-			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage)
+			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.kubeClient, i.daprClient)
 		}
 	}
 
