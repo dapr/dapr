@@ -40,7 +40,6 @@ const (
 	defaultLogLevel       = "info"
 	kubernetesMountPath   = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig         = "default"
-	mtlsScrtName          = "dapr-trust-bundle"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
