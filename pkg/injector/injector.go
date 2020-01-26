@@ -14,7 +14,6 @@ import (
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/utils"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/admission/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,13 +48,8 @@ func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
 }
 
 // NewInjector returns a new Injector instance with the given config
-func NewInjector(config Config) Injector {
+func NewInjector(config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
 	mux := http.NewServeMux()
-
-	kubeClient := utils.GetKubeClient()
-
-	conf := utils.GetConfig()
-	daprClient, _ := scheme.NewForConfig(conf)
 
 	i := &injector{
 		config: config,

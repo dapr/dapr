@@ -19,7 +19,7 @@ func TestConfigCorrectValues(t *testing.T) {
 		SidecarImage:           "c",
 		SidecarImagePullPolicy: "d",
 		Namespace:              "e",
-	})
+	}, nil, nil)
 
 	injector := i.(*injector)
 	assert.Equal(t, "a", injector.config.TLSCertFile)
