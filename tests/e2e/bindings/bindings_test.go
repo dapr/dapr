@@ -45,8 +45,12 @@ var testMessages = []string{
 	"10",
 }
 
-const numHealthChecks = 3 // Number of times to call the endpoint to check for health.
-const bindingPropagationDelay = 1 // Number of seconds to wait for binding travelling throughout the cluster.
+const (
+	// Number of times to call the endpoint to check for health.
+	numHealthChecks = 10
+	// Number of seconds to wait for binding travelling throughout the cluster.
+	bindingPropagationDelay = 5
+)
 
 var tr *runner.TestRunner
 
