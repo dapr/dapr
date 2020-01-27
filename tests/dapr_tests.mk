@@ -100,5 +100,5 @@ setup-test-components:
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
 
 # Clean up test environment
-clean-test-env: $(HOME)/.helm
+clean-test-env:
 	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
