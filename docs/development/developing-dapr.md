@@ -53,7 +53,7 @@ This document helps you get started developing Dapr. If you find any problem whi
 
 1. [Setup Minikube for Local environment](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-minikube.md)
 2. [Setup Azure Kubernetes Service](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-aks.md)
-3. [Helm 2.x](https://helm.sh/docs/intro/install/)
+3. [Helm 3.x](https://helm.sh/docs/intro/install/)
 
 ### Installing Make
 
@@ -221,12 +221,12 @@ mingw32-make.exe docker-push
 
 ## Deploy Dapr With Your Changes
 
-Now we'll deploy Dapr with your changes. 
+Now we'll deploy Dapr with your changes.
 
 If you deployed Dapr to your cluster before, delete it now using:
 
 ```
-helm del --purge dapr
+helm uninstall dapr -n dapr-system
 ```
 
 and run the following to deploy your change to your Kubernetes cluster:
