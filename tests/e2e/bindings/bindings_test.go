@@ -88,6 +88,8 @@ func TestBindings(t *testing.T) {
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(outputExternalURL, numHealthChecks)
 	require.NoError(t, err)
+	_, err := utils.HTTPGetNTimes(inputExternalURL, numHealthChecks)
+	require.NoError(t, err)
 
 	var req testSendRequest
 	for _, mes := range testMessages {
