@@ -49,7 +49,7 @@ const (
 	// Number of times to call the endpoint to check for health.
 	numHealthChecks = 10
 	// Number of seconds to wait for binding travelling throughout the cluster.
-	bindingPropagationDelay = 5
+	bindingPropagationDelay = 60
 )
 
 var tr *runner.TestRunner
