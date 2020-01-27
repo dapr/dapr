@@ -13,7 +13,7 @@ E2E_TESTAPP_DIR=./tests/apps
 KUBECTL=kubectl
 
 ifeq ($(DAPR_TEST_NAMESPACE),)
-DAPR_TEST_NAMESPACE=$(HELM_NAMESPACE)
+DAPR_TEST_NAMESPACE=$(DAPR_NAMESPACE)
 endif
 
 ifeq ($(DAPR_TEST_REGISTRY),)
@@ -74,18 +74,18 @@ test-e2e-all: check-e2e-env
 	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -count=1 -v -tags=e2e ./tests/e2e/...
 
 # add required helm repo
-setup-helm-init: $(HOME)/.helm
+setup-helm-init:
 	$(HELM) repo add stable https://kubernetes-charts.storage.googleapis.com/
 	$(HELM) repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
 	$(HELM) repo update
 
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) install --wait --timeout 1000 --name dapr-redis --set usePassword=false stable/redis --namespace $(DAPR_TEST_NAMESPACE)
+	$(HELM) install dapr-redis stable/redis --wait --timeout 5m0s --set usePassword=false --namespace $(DAPR_TEST_NAMESPACE)
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) install -f ./tests/config/kafka_override.yaml --wait --timeout 1000 --name dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) incubator/kafka
+	$(HELM) install dapr-kafka incubator/kafka --wait --timeout 10m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/kafka_override.yaml 
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-redis setup-test-env-kafka
