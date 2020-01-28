@@ -10,8 +10,6 @@
 # The test cluster pool for e2e test
 # TODO: Add more aks test clusters
 testclusterpool=(
-    "dapr-aks-e2e-01"
-    "dapr-aks-e2e-02"
     "dapr-aks-e2e-03"
     "dapr-aks-e2e-04"
 )
