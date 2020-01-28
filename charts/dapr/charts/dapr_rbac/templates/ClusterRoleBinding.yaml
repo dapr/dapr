@@ -32,27 +32,4 @@ roleRef:
   kind: ClusterRole
   name: secret-reader
   apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: sentry-secret-writer
-  namespace: {{ .Release.Namespace }}
-rules:
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["update"]
----
-kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: sentry-secret-writer
-  namespace: {{ .Release.Namespace }}
-subjects:
-- kind: ServiceAccount
-  name: sentry
-  namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: Role
-  name: sentry-secret-writer
-  apiGroup: rbac.authorization.k8s.io
+
