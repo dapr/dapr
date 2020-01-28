@@ -88,7 +88,7 @@ setup-test-env-kafka:
 	$(HELM) install dapr-kafka incubator/kafka --wait --timeout 10m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/kafka_override.yaml 
 
 # Install redis and kafka to test cluster
-setup-test-env: setup-test-env-redis setup-test-env-kafka
+setup-test-env: setup-test-env-kafka setup-test-env-redis
 
 # Apply component yaml for state, pubsub, and bindings
 setup-test-components:

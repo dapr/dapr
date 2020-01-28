@@ -6,6 +6,10 @@
 # Install 1 replica for e2e test
 replicas: 1
 
+# Disable persistent storage
+persistence:
+  enabled: false
+
 # Topic creation and configuration for dapr test
 topics:
   - name: dapr-test
