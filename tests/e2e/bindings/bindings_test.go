@@ -47,7 +47,7 @@ var testMessages = []string{
 
 const (
 	// Number of times to call the endpoint to check for health.
-	numHealthChecks = 10
+	numHealthChecks = 60
 	// Number of seconds to wait for binding travelling throughout the cluster.
 	bindingPropagationDelay = 5
 )

@@ -25,7 +25,7 @@ const (
 	appName                               = "actorfeatures"                      // App name in Dapr.
 	reminderName                          = "myReminder"                         // Reminder name.
 	timerName                             = "myTimer"                            // Timer name.
-	numHealthChecks                       = 10                                   // Number of get calls before starting tests.
+	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
 	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
 	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
