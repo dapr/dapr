@@ -7,10 +7,11 @@
 
 [ -z "$1" ] && echo "Namespace must be specified" && exit 0
 
-installed_apps=$(helm list -q)
+installed_apps=$(helm list -q -n $1)
+echo $installed_apps
 
 for app in $installed_apps; do
-    helm delete --purge $app
+    helm uninstall $app -n $1
 done
 
 echo "Trying to delete namespace..."

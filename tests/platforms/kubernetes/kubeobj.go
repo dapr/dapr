@@ -80,7 +80,7 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 						{
 							Name:            appDesc.AppName,
 							Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
-							ImagePullPolicy: "Always",
+							ImagePullPolicy: apiv1.PullAlways,
 							Ports: []apiv1.ContainerPort{
 								{
 									Name:          "http",

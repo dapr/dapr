@@ -22,8 +22,8 @@ testclusterpool=(
 [ -z "$DAPR_TEST_RESOURCE_GROUP" ] && DAPR_TEST_RESOURCE_GROUP="dapre2e"
 
 if [ -z "$DAPR_TEST_NAMESPACE" ]; then
-    if [ ! -z "$HELM_NAMESPACE" ]; then
-        DAPR_TEST_NAMESPACE=$HELM_NAMESPACE
+    if [ ! -z "$DAPR_NAMESPACE" ]; then
+        DAPR_TEST_NAMESPACE=$DAPR_NAMESPACE
     else
         DAPR_TEST_NAMESPACE="dapr-tests"
     fi
