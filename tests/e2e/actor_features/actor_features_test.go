@@ -25,7 +25,7 @@ const (
 	appName                               = "actorfeatures"                      // App name in Dapr.
 	reminderName                          = "myReminder"                         // Reminder name.
 	timerName                             = "myTimer"                            // Timer name.
-	numHealthChecks                       = 3                                    // Number of get calls before starting tests.
+	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
 	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
 	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
@@ -262,13 +262,14 @@ func TestServiceInvocation(t *testing.T) {
 		// Each test needs to have a different actorID
 		actorIDBase := "1006Instance"
 
-		// In Kubernetes, hostname should be the POD name. Single-node Kubernetes cluster should still be able to reproduce this test.
-		firstHostname, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+"0", "method", "hostname"), []byte{})
-		require.NoError(t, err)
-		for index := 1; index < actorsToCheckRebalance; index++ {
+		var hostnameForActor [actorsToCheckRebalance]string
+
+		// In Kubernetes, hostname should be the POD name.
+		// Records all hostnames from pods and compare them with the hostnames from new pods after scaling
+		for index := 0; index < actorsToCheckRebalance; index++ {
 			hostname, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			require.NoError(t, err)
-			require.Equal(t, string(firstHostname), string(hostname))
+			hostnameForActor[index] = string(hostname)
 		}
 
 		tr.Platform.Scale(appName, appScaleToCheckRebalance)
@@ -278,7 +279,7 @@ func TestServiceInvocation(t *testing.T) {
 			hostname, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			require.NoError(t, err)
 
-			if string(firstHostname) != string(hostname) {
+			if hostnameForActor[index] != string(hostname) {
 				anyActorMoved = true
 			}
 		}

@@ -102,6 +102,7 @@ jobs:
         run: |
           make setup-helm-init
           make setup-test-env
+          kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make docker-deploy-k8s
