@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	kubeScrtName           = "dapr-trust-bundle"
 	defaultSecretNamespace = "default"
 )
 
@@ -42,7 +41,7 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 			config.IssuerKeyFilename:  issuerCertKey,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      kubeScrtName,
+			Name:      KubeScrtName,
 			Namespace: namespace,
 		},
 		Type: v1.SecretTypeOpaque,

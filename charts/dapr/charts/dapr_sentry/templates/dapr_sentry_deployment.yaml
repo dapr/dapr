@@ -51,7 +51,7 @@ spec:
         - {{ .Values.logLevel }}
         - "--trust-domain"
         - {{ .Values.tls.trustDomain }}
-      serviceAccountName: sentry
+      serviceAccountName: dapr-operator
       volumes:
         - name: credentials
           secret:
