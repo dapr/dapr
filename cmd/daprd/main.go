@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
+	"github.com/dapr/components-contrib/state/hazelcast"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	state_redis "github.com/dapr/components-contrib/state/redis"
@@ -128,6 +129,9 @@ func main() {
 			}),
 			state_loader.New("sqlserver", func() state.Store {
 				return sqlserver.NewSQLServerStateStore()
+			}),
+			state_loader.New("hazelcast", func() state.Store {
+				return hazelcast.NewHazelcastStore()
 			}),
 		),
 		runtime.WithPubSubs(
