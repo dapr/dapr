@@ -23,6 +23,7 @@ type Configuration struct {
 type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
 }
 
 type PipelineSpec struct {
@@ -48,6 +49,12 @@ type TracingSpec struct {
 	Enabled      bool `json:"enabled" yaml:"enabled"`
 	ExpandParams bool `json:"expandParams" yaml:"expandParams"`
 	IncludeBody  bool `json:"includeBody" yaml:"includeBody"`
+}
+
+type MTLSSpec struct {
+	Enabled          bool   `json:"enabled"`
+	WorkloadCertTTL  string `json:"workloadCertTTL"`
+	AllowedClockSkew string `json:"allowedClockSkew"`
 }
 
 // LoadDefaultConfiguration returns the default config with tracing disabled

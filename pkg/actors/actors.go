@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const daprSeparator = "__delim__"
+const daprSeparator = "||"
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
