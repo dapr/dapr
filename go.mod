@@ -56,7 +56,4 @@ require (
 	pack.ag/amqp v0.12.3 // indirect
 )
 
-replace (
-	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
-	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
-)
+replace k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
