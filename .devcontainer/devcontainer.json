@@ -1,5 +1,6 @@
 {
-    "name": "Dapr Dev Environment",
+	"name": "Dapr Dev Environment",
+	// Update container version when you update dev-container
     "image": "docker.io/youngp/dapr-dev:0.1.0",
     // Uncomment if you want to use your local docker image
 	// "dockerFile": "../docker/Dockerfile-dev",
