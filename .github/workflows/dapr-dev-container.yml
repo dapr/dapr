@@ -17,8 +17,6 @@ jobs:
   build:
     name: build dev container
     runs-on: ubuntu-latest
-    env:
-      DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
@@ -27,7 +25,7 @@ jobs:
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: build dapr-dev-container
-        run: make build-dev-container
+        run: make build-dev-container DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }}
       - name: push container
         if: github.event_name != 'pull_request'
-        run: make push-dev-container
+        run: make push-dev-container DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }}
