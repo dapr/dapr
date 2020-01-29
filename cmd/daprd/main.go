@@ -134,7 +134,7 @@ func main() {
 			state_loader.New("hazelcast", func() state.Store {
 				return hazelcast.NewHazelcastStore()
 			}),
-			state_loader.New("cloudstate", func() state.Store {
+			state_loader.New("cloudstate.crdt", func() state.Store {
 				return cloudstate.NewCRDT()
 			}),
 		),
