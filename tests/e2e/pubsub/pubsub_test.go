@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const numHealthChecks = 3      // Number of get calls before starting tests.
+const numHealthChecks = 60      // Number of get calls before starting tests.
 
 // used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
 // This is random so the first message name is not the same every time.

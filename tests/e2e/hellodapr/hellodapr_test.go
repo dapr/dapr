@@ -29,7 +29,7 @@ type appResponse struct {
 	EndTime   int    `json:"end_time,omitempty"`
 }
 
-const numHealthChecks = 3 // Number of times to check for endpoint health per app.
+const numHealthChecks = 60 // Number of times to check for endpoint health per app.
 
 var tr *runner.TestRunner
 
