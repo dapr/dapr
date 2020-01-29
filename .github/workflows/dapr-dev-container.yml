@@ -18,7 +18,7 @@ jobs:
     name: build dev container
     runs-on: ubuntu-latest
     env:
-      DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
