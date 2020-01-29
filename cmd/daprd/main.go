@@ -36,6 +36,7 @@ import (
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
+	"github.com/dapr/components-contrib/state/cloudstate"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 
 	// Pub/Sub
@@ -132,6 +133,9 @@ func main() {
 			}),
 			state_loader.New("hazelcast", func() state.Store {
 				return hazelcast.NewHazelcastStore()
+			}),
+			state_loader.New("cloudstate.crdt", func() state.Store {
+				return cloudstate.NewCRDT()
 			}),
 		),
 		runtime.WithPubSubs(

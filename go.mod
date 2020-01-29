@@ -6,7 +6,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/dapr/components-contrib v0.0.0-20200129025514-6de230391d35
+	github.com/dapr/components-contrib v0.0.0-20200129221323-4433e605f1fe
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/frankban/quicktest v1.5.0 // indirect
@@ -28,6 +28,7 @@ require (
 	github.com/json-iterator/go v1.1.8
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
+	github.com/miekg/dns v1.1.27 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/phayes/freeport v0.0.0-20171002181615-b8543db493a5
