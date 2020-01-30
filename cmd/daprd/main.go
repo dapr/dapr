@@ -26,7 +26,9 @@ import (
 	// State Stores
 	"github.com/dapr/components-contrib/state"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
+	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
+	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -36,7 +38,6 @@ import (
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
-	"github.com/dapr/components-contrib/state/cloudstate"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 
 	// Pub/Sub
@@ -109,6 +110,9 @@ func main() {
 			}),
 			state_loader.New("azure.cosmosdb", func() state.Store {
 				return state_cosmosdb.NewCosmosDBStateStore()
+			}),
+			state_loader.New("azure.tablestorage", func() state.Store {
+				return state_azure_tablestorage.NewAzureTablesStateStore()
 			}),
 			state_loader.New("etcd", func() state.Store {
 				return etcd.NewETCD()
