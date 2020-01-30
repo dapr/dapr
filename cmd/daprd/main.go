@@ -27,6 +27,8 @@ import (
 	"github.com/dapr/components-contrib/state"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	"github.com/dapr/components-contrib/state/cassandra"
+	"github.com/dapr/components-contrib/state/cloudstate"
+	"github.com/dapr/components-contrib/state/couchbase"
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -36,7 +38,6 @@ import (
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
-	"github.com/dapr/components-contrib/state/cloudstate"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 
 	// Pub/Sub
@@ -136,6 +137,9 @@ func main() {
 			}),
 			state_loader.New("cloudstate.crdt", func() state.Store {
 				return cloudstate.NewCRDT()
+			}),
+			state_loader.New("couchbase", func() state.Store {
+				return couchbase.NewCouchbaseStateStore()
 			}),
 		),
 		runtime.WithPubSubs(
