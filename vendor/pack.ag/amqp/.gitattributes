@@ -1,3 +1,0 @@
-# Binary files (no line-ending conversions), diff using hexdump
-*.bin binary diff=hex
-

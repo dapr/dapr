@@ -1,0 +1,13 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+cluster:
+  enabled: false
+
+usePassword: false
+
+master:
+  persistence:
+    enabled: false

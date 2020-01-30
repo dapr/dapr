@@ -45,8 +45,12 @@ var testMessages = []string{
 	"10",
 }
 
-const numHealthChecks = 3 // Number of times to call the endpoint to check for health.
-const bindingPropagationDelay = 1 // Number of seconds to wait for binding travelling throughout the cluster.
+const (
+	// Number of times to call the endpoint to check for health.
+	numHealthChecks = 60
+	// Number of seconds to wait for binding travelling throughout the cluster.
+	bindingPropagationDelay = 5
+)
 
 var tr *runner.TestRunner
 
@@ -83,6 +87,8 @@ func TestBindings(t *testing.T) {
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(outputExternalURL, numHealthChecks)
+	require.NoError(t, err)
+	_, err = utils.HTTPGetNTimes(inputExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
 	var req testSendRequest

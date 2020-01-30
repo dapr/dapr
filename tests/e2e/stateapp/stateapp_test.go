@@ -22,7 +22,7 @@ import (
 )
 
 const appName = "stateapp"     // App name in Dapr.
-const numHealthChecks = 3      // Number of get calls before starting tests.
+const numHealthChecks = 60      // Number of get calls before starting tests.
 const testManyEntriesCount = 5 // Anything between 1 and the number above (inclusive).
 
 type testCommandRequest struct {

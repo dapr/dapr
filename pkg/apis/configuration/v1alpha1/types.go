@@ -28,6 +28,8 @@ type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
+	// +optional
+	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
 }
 
 // PipelineSpec defines the middleware pipeline
@@ -40,6 +42,13 @@ type HandlerSpec struct {
 	Name         string       `json:"name"`
 	Type         string       `json:"type"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty"`
+}
+
+// MTLSSpec defines mTLS configuration
+type MTLSSpec struct {
+	Enabled          bool   `json:"enabled"`
+	WorkloadCertTTL  string `json:"workloadCertTTL"`
+	AllowedClockSkew string `json:"allowedClockSkew"`
 }
 
 // SelectorSpec selects target services to which the handler is to be applied

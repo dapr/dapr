@@ -22,7 +22,7 @@ import (
 
 const (
 	appName                          = "actorapp"                                // App name in Dapr.
-	numHealthChecks                  = 3                                         // Number of get calls before starting tests.
+	numHealthChecks                  = 60                                        // Number of get calls before starting tests.
 	secondsToCheckActorRemainsActive = 1                                         // How much time to wait to make sure actor is deactivated
 	secondsToCheckActorDeactivation  = 15                                        // How much time to wait to make sure actor is deactivated
 	actorInvokeURLFormat             = "%s/test/testactor/%s/method/actormethod" // URL to invoke a Dapr's actor method in test app.
