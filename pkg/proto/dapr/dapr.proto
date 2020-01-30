@@ -20,7 +20,7 @@ service Dapr {
   rpc GetState(GetStateEnvelope) returns (GetStateResponseEnvelope) {}
   rpc SaveState(SaveStateEnvelope) returns (google.protobuf.Empty) {}
   rpc DeleteState(DeleteStateEnvelope) returns (google.protobuf.Empty) {}
-  rpc PerformStateTransaction(MultiStateEnvelope) return (google.protobuf.Empty) {}
+  rpc PerformStateTransaction(MultiStateEnvelope) returns (google.protobuf.Empty) {}
 }
 
 message InvokeServiceResponseEnvelope {
