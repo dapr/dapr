@@ -26,6 +26,7 @@ import (
 	// State Stores
 	"github.com/dapr/components-contrib/state"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
+	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
 	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/couchbase"
@@ -110,6 +111,9 @@ func main() {
 			}),
 			state_loader.New("azure.cosmosdb", func() state.Store {
 				return state_cosmosdb.NewCosmosDBStateStore()
+			}),
+			state_loader.New("azure.tablestorage", func() state.Store {
+				return state_azure_tablestorage.NewAzureTablesStateStore()
 			}),
 			state_loader.New("etcd", func() state.Store {
 				return etcd.NewETCD()
