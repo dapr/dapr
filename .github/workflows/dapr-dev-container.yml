@@ -1,0 +1,33 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-dev-container
+
+on:
+  push:
+    paths:
+      - 'docker/Dockerfile-dev'
+  pull_request:
+    paths:
+      - 'docker/Dockerfile-dev'
+
+jobs:
+  build:
+    name: build dev container
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+      - name: docker login
+        if: github.event_name != 'pull_request'
+        run: |
+          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: build dapr-dev-container
+        run: make build-dev-container DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }}
+      - name: push container
+        if: github.event_name != 'pull_request'
+        run: make push-dev-container DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }}
