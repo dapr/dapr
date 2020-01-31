@@ -26,10 +26,15 @@ import (
 	// State Stores
 	"github.com/dapr/components-contrib/state"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
+	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
+	"github.com/dapr/components-contrib/state/cloudstate"
+	"github.com/dapr/components-contrib/state/couchbase"
+	"github.com/dapr/components-contrib/state/aerospike"
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
+	"github.com/dapr/components-contrib/state/hazelcast"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
 	state_redis "github.com/dapr/components-contrib/state/redis"
@@ -67,6 +72,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
+	"github.com/dapr/components-contrib/bindings/azure/storagequeues"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/http"
@@ -107,6 +113,9 @@ func main() {
 			state_loader.New("azure.cosmosdb", func() state.Store {
 				return state_cosmosdb.NewCosmosDBStateStore()
 			}),
+			state_loader.New("azure.tablestorage", func() state.Store {
+				return state_azure_tablestorage.NewAzureTablesStateStore()
+			}),
 			state_loader.New("etcd", func() state.Store {
 				return etcd.NewETCD()
 			}),
@@ -127,6 +136,18 @@ func main() {
 			}),
 			state_loader.New("sqlserver", func() state.Store {
 				return sqlserver.NewSQLServerStateStore()
+			}),
+			state_loader.New("hazelcast", func() state.Store {
+				return hazelcast.NewHazelcastStore()
+			}),
+			state_loader.New("cloudstate.crdt", func() state.Store {
+				return cloudstate.NewCRDT()
+			}),
+			state_loader.New("couchbase", func() state.Store {
+				return couchbase.NewCouchbaseStateStore()
+			}),
+			state_loader.New("aerospike", func() state.Store {
+				return aerospike.NewAerospikeStateStore()
 			}),
 		),
 		runtime.WithPubSubs(
@@ -168,6 +189,9 @@ func main() {
 			}),
 			bindings_loader.NewInput("azure.servicebusqueues", func() bindings.InputBinding {
 				return servicebusqueues.NewAzureServiceBusQueues()
+			}),
+			bindings_loader.NewInput("azure.storagequeues", func() bindings.InputBinding {
+				return storagequeues.NewAzureStorageQueues()
 			}),
 			bindings_loader.NewInput("gcp.pubsub", func() bindings.InputBinding {
 				return pubsub.NewGCPPubSub()
@@ -216,6 +240,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("azure.servicebusqueues", func() bindings.OutputBinding {
 				return servicebusqueues.NewAzureServiceBusQueues()
+			}),
+			bindings_loader.NewOutput("azure.storagequeues", func() bindings.OutputBinding {
+				return storagequeues.NewAzureStorageQueues()
 			}),
 			bindings_loader.NewOutput("gcp.pubsub", func() bindings.OutputBinding {
 				return pubsub.NewGCPPubSub()

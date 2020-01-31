@@ -5,25 +5,12 @@ This chart bootstraps all of Dapr Operator components on a Kubernetes cluster us
 This chart installs multiple Dapr components via "child-charts":
 
 * Dapr Component and Configuration Kubernetes CRDs
-* Dapr RBAC components
-    * Cluster Role Binding
-    * Service Account
 * Dapr Operator
 * Dapr Placement
 
 ## Prerequisites
 * Kubernetes 1.9 or newer cluster with RBAC (Role-Based Access Control) enabled is required
-* Helm 2.14 or newer or alternately the ability to modify RBAC rules is also required
-
-1. If a service account has not already been installed for Tiller, install one:
-    ```
-    $ kubectl apply -f https://github.com/Azure/helm-charts/blob/master/docs/prerequisities/helm-rbac-config.yaml
-    ```
-
-2. Install Tiller on your cluster with the service account:
-    ```
-    $ helm init --service-account tiller --history-max 200
-    ```
+* Helm 3.0.2 or newer
 
 ## Resources Required
 The chart deploys pods that consume minimum resources as specified in the resources configuration parameter.
@@ -32,7 +19,7 @@ The chart deploys pods that consume minimum resources as specified in the resour
 
 Make sure helm is initialized in your running kubernetes cluster.
 
-For more details on initializing helm, Go [here](https://docs.helm.sh/helm/#helm)
+For more details on initializing helm, Go [here](https://helm.sh/docs/)
 
 1. Add Azure Container Registry as an helm repo
     ```
@@ -42,7 +29,7 @@ For more details on initializing helm, Go [here](https://docs.helm.sh/helm/#helm
 
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
-    helm install dapr/dapr --name dapr --namespace dapr-system
+    helm install dapr dapr/dapr --namespace dapr-system
     ``` 
 
 ## Verify installation
@@ -54,12 +41,7 @@ kubectl get pods --namespace dapr-system
 
 ## Uninstalling the Chart
 
-To uninstall/delete the `dapr` release but continue to track the release:
+To uninstall/delete the `dapr` release:
 ```
-helm delete dapr
-```
-
-To uninstall/delete the `dapr` release completely and make its name free for later use:
-```
-helm delete --purge dapr
+helm uninstall dapr -n dapr-system
 ```

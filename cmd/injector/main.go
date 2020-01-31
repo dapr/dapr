@@ -9,10 +9,12 @@ import (
 	"flag"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/dapr/utils"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -27,7 +29,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("error getting config: %s", err)
 	}
-	injector.NewInjector(cfg).Run(ctx)
+
+	kubeClient := utils.GetKubeClient()
+	conf := utils.GetConfig()
+	daprClient, _ := scheme.NewForConfig(conf)
+
+	injector.NewInjector(cfg, daprClient, kubeClient).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
