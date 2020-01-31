@@ -20,9 +20,6 @@
 	],
 	"settings": {
 		"terminal.integrated.shell.linux": "/bin/bash",
-		"remote.extensionKind": {
-			"ms-azuretools.vscode-docker": "workspace"
-		},
 		"go.gopath": "/go"
 	},
 	"extensions": [
