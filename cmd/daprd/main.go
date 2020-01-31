@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/components-contrib/state/cassandra"
 	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/couchbase"
+	"github.com/dapr/components-contrib/state/aerospike"
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -144,6 +145,9 @@ func main() {
 			}),
 			state_loader.New("couchbase", func() state.Store {
 				return couchbase.NewCouchbaseStateStore()
+			}),
+			state_loader.New("aerospike", func() state.Store {
+				return aerospike.NewAerospikeStateStore()
 			}),
 		),
 		runtime.WithPubSubs(
