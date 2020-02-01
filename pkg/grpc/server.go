@@ -84,8 +84,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	opts := []grpc_go.ServerOption{}
 
 	if s.tracingSpec.Enabled {
-		opts = append(opts, grpc_go.StreamInterceptor(diag.TracingGRPCMiddleware(s.tracingSpec)))
-		opts = append(opts, grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
+		opts = append(opts, grpc_go.StreamInterceptor(diag.TracingGRPCMiddleware(s.tracingSpec)), grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
 	}
 
 	if s.authenticator != nil {
