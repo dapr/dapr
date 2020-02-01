@@ -2,6 +2,7 @@ package security
 
 import (
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/dapr/dapr/pkg/sentry/certs"
@@ -41,6 +42,11 @@ func TestGetTrustAnchors(t *testing.T) {
 }
 
 func TestGenerateSidecarCSR(t *testing.T) {
+	// can't run this on Windows build agents, GH actions fails with "CryptAcquireContext: Provider DLL failed to initialize correctly."
+	if runtime.GOOS == "windows" {
+		return
+	}
+
 	t.Run("empty id", func(t *testing.T) {
 		_, _, err := generateCSRAndPrivateKey("")
 		assert.NotNil(t, err)
