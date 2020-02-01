@@ -25,7 +25,7 @@ type DirectMessaging interface {
 
 type directMessaging struct {
 	appChannel          channel.AppChannel
-	connectionCreatorFn func(address string) (*grpc.ClientConn, error)
+	connectionCreatorFn func(address, id string, skipTLS bool) (*grpc.ClientConn, error)
 	daprID              string
 	mode                modes.DaprMode
 	grpcPort            int
@@ -34,7 +34,7 @@ type directMessaging struct {
 }
 
 // NewDirectMessaging returns a new direct messaging api
-func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), resolver servicediscovery.Resolver) DirectMessaging {
+func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS bool) (*grpc.ClientConn, error), resolver servicediscovery.Resolver) DirectMessaging {
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: grpcConnectionFn,
@@ -88,7 +88,7 @@ func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessag
 		return nil, err
 	}
 
-	conn, err := d.connectionCreatorFn(address)
+	conn, err := d.connectionCreatorFn(address, req.Target, false)
 	if err != nil {
 		return nil, err
 	}

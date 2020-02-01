@@ -90,6 +90,10 @@ setup-test-env-kafka:
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis
 
+# Apply default config yaml
+setup-test-config:
+	$(KUBECTL) apply -f ./tests/config/dapr_default_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+
 # Apply component yaml for state, pubsub, and bindings
 setup-test-components:
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)

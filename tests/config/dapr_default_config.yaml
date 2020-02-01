@@ -1,0 +1,9 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: default
+spec:
+  mtls:
+    enabled: "false"
+    workloadCertTTL: "1h"
+    allowedClockSkew: "20m"

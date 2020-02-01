@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	"github.com/dapr/components-contrib/state/cassandra"
+	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -36,7 +37,6 @@ import (
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
-	"github.com/dapr/components-contrib/state/cloudstate"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 
 	// Pub/Sub
@@ -94,7 +94,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	rt.Run(
+	err = rt.Run(
 		runtime.WithSecretStores(
 			secretstores_loader.New("kubernetes", sercetstores_kubernetes.NewKubernetesSecretStore),
 			secretstores_loader.New("azure.keyvault", keyvault.NewAzureKeyvaultSecretStore),
@@ -255,6 +255,9 @@ func main() {
 			}),
 		),
 	)
+	if err != nil {
+		log.Fatalf("fatal error from runtime: %s", err)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
