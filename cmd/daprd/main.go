@@ -25,12 +25,12 @@ import (
 
 	// State Stores
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/components-contrib/state/aerospike"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
 	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/couchbase"
-	"github.com/dapr/components-contrib/state/aerospike"
 	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
@@ -96,6 +96,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
+
+	go func() {
+		// handle signals and perform any cleanup before exiting
+		cleanup(rt, stop)
+		os.Exit(0)
+	}()
 
 	rt.Run(
 		runtime.WithSecretStores(
@@ -268,8 +277,10 @@ func main() {
 		),
 	)
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
+	cleanup(rt, stop)
+}
+
+func cleanup(rt *runtime.DaprRuntime, stop <-chan os.Signal) {
 	<-stop
 	gracefulShutdownDuration := 5 * time.Second
 	log.Info("dapr shutting down. Waiting 5 seconds to finish outstanding operations")
