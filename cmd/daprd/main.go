@@ -251,7 +251,7 @@ func main() {
 			bindings_loader.NewOutput("azure.signalr", func() bindings.OutputBinding {
 				return signalr.NewSignalR()
 			}),
-			bindings_loader.NewOutput("twilio", func() bindings.OutputBinding {
+			bindings_loader.NewOutput("twilio.sms", func() bindings.OutputBinding {
 				return twilio.NewSMS()
 			}),
 		),
