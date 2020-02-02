@@ -71,13 +71,13 @@ func (d *directMessaging) invokeWithRetry(numRetries int, fn func(req *DirectMes
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			address, err := d.getAddressFromMessageRequest(req)
-			if err != nil {
-				return nil, err
+			address, addErr := d.getAddressFromMessageRequest(req)
+			if addErr != nil {
+				return nil, addErr
 			}
-			_, err = d.connectionCreatorFn(address, req.Target, false, true)
-			if err != nil {
-				return nil, err
+			_, connErr := d.connectionCreatorFn(address, req.Target, false, true)
+			if connErr != nil {
+				return nil, connErr
 			}
 			continue
 		}
