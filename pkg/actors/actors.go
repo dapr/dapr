@@ -24,10 +24,15 @@ import (
 	"github.com/mitchellh/mapstructure"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
-const daprSeparator = "||"
+const (
+	daprSeparator             = "||"
+	callRemoteActorRetryCount = 3
+)
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
@@ -53,7 +58,7 @@ type actorsRuntime struct {
 	placementSignal     chan struct{}
 	placementBlock      bool
 	operationUpdateLock *sync.Mutex
-	grpcConnectionFn    func(address, id string, skipTLS bool) (*grpc.ClientConn, error)
+	grpcConnectionFn    func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
 	config              Config
 	actorsTable         *sync.Map
 	activeTimers        *sync.Map
@@ -74,7 +79,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS bool) (*grpc.ClientConn, error), config Config) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -205,14 +210,35 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	} else {
-		resp, err = a.callRemoteActor(targetActorAddress, daprID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callRemoteActorWithRetry(callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, daprID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	}
 
 	if err != nil {
 		return nil, err
 	}
-
 	return resp, nil
+}
+
+// callRemoteActorWithRetry will call a remote actor for the specified number of retries and will only retry in the case of transient failures
+func (a *actorsRuntime) callRemoteActorWithRetry(numRetries int, fn func(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error),
+	targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
+	for i := 0; i < numRetries; i++ {
+		resp, err := fn(targetAddress, targetID, actorType, actorID, actorMethod, data, metadata)
+		if err == nil {
+			return resp, nil
+		}
+
+		code := status.Code(err)
+		if code == codes.Unavailable || code == codes.Unauthenticated {
+			_, err = a.grpcConnectionFn(targetAddress, targetID, false, true)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		return resp, err
+	}
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
 }
 
 func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
@@ -286,7 +312,7 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, acto
 		req.Metadata[k] = v
 	}
 
-	conn, err := a.grpcConnectionFn(targetAddress, targetID, false)
+	conn, err := a.grpcConnectionFn(targetAddress, targetID, false, false)
 	if err != nil {
 		return nil, err
 	}

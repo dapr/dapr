@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -38,6 +39,7 @@ type server struct {
 	authenticator auth.Authenticator
 	listener      net.Listener
 	srv           *grpc_go.Server
+	renewMutex    *sync.Mutex
 }
 
 // NewServer returns a new gRPC server
@@ -47,6 +49,7 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, aut
 		config:        config,
 		tracingSpec:   tracingSpec,
 		authenticator: authenticator,
+		renewMutex:    &sync.Mutex{},
 	}
 }
 
@@ -75,9 +78,8 @@ func (s *server) StartNonBlocking() error {
 	return nil
 }
 
-func (s *server) stop() error {
-	s.srv.Stop()
-	return s.listener.Close()
+func (s *server) stop() {
+	s.srv.GracefulStop()
 }
 
 func (s *server) getGRPCServer() (*grpc_go.Server, error) {
@@ -128,21 +130,21 @@ func (s *server) startWorkloadCertRotation(expiry time.Time) {
 		case <-done:
 			return
 		case <-ticker.C:
+			s.renewMutex.Lock()
 			renew := shouldRenewCert(expiry, certDuration)
 			if renew {
-				log.Info("renewing certificate: requesting new cert and restarting gRPC server")
-				err := s.stop()
-				if err != nil {
-					log.Errorf("error stopping server: %s", err)
-				}
 
-				err = s.StartNonBlocking()
+				log.Info("renewing certificate: requesting new cert and restarting gRPC server")
+				s.stop()
+
+				err := s.StartNonBlocking()
 				if err != nil {
 					log.Errorf("error starting server: %s", err)
 				} else {
 					close(done)
 				}
 			}
+			s.renewMutex.Unlock()
 		}
 	}
 }
