@@ -21,7 +21,8 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.13.3
+      GOVER: 1.13.7
+      GOLANGCILINT_VER: 1.23.2
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
@@ -50,7 +51,7 @@ jobs:
       - name: Install golangci-lint
         if: matrix.target_arch != 'arm'
         run: |
-          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v1.21.0
+          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v${{ env.GOLANGCILINT_VER }}
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
       - name: Parse release version and set REL_VERSION
