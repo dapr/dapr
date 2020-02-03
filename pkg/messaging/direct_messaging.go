@@ -62,6 +62,8 @@ func (d *directMessaging) Invoke(req *DirectMessageRequest) (*DirectMessageRespo
 }
 
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
+// TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target
+// Server shuts down.
 func (d *directMessaging) invokeWithRetry(numRetries int, fn func(req *DirectMessageRequest) (*DirectMessageResponse, error), req *DirectMessageRequest) (*DirectMessageResponse, error) {
 	for i := 0; i < numRetries; i++ {
 		resp, err := fn(req)
