@@ -1,10 +1,11 @@
 package grpc
 
-import "testing"
+import (
+	"testing"
+	"time"
 
-import "time"
-
-import "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
+)
 
 func TestCertRenewal(t *testing.T) {
 	t.Run("shouldn't renew", func(t *testing.T) {
