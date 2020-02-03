@@ -2,8 +2,9 @@ package ca
 
 import (
 	"crypto/x509"
-	"github.com/dapr/dapr/pkg/sentry/certs"
 	"time"
+
+	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
 // TrustRootBundle represents the root certificate, issuer certificate and their

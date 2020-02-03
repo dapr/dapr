@@ -158,7 +158,6 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error reading issuer cert from disk: %s", err)
 		}
-
 	} else {
 		// create self signed root and issuer certs
 		log.Info("root and issuer certs not found: generating self signed CA")
