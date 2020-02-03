@@ -133,7 +133,6 @@ func (s *server) startWorkloadCertRotation(expiry time.Time) {
 			s.renewMutex.Lock()
 			renew := shouldRenewCert(expiry, certDuration)
 			if renew {
-
 				log.Info("renewing certificate: requesting new cert and restarting gRPC server")
 				s.stop()
 
