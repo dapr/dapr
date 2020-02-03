@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	log "github.com/sirupsen/logrus"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/ghodss/yaml"
+	log "github.com/sirupsen/logrus"
 )
 
 // StandaloneComponents loads components in a standalone mode environment

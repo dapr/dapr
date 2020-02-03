@@ -1004,7 +1004,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 	pipeline := buildHTTPPineline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
-			config.HandlerSpec{
+			{
 				Type: "middleware.http.uppercase",
 				Name: "middleware.http.uppercase",
 			},
