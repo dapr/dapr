@@ -24,10 +24,15 @@ import (
 	"github.com/mitchellh/mapstructure"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
-const daprSeparator = "||"
+const (
+	daprSeparator             = "||"
+	callRemoteActorRetryCount = 3
+)
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
@@ -53,7 +58,7 @@ type actorsRuntime struct {
 	placementSignal     chan struct{}
 	placementBlock      bool
 	operationUpdateLock *sync.Mutex
-	grpcConnectionFn    func(address string) (*grpc.ClientConn, error)
+	grpcConnectionFn    func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
 	config              Config
 	actorsTable         *sync.Map
 	activeTimers        *sync.Map
@@ -74,7 +79,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), config Config) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -190,7 +195,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 }
 
 func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
-	targetActorAddress := a.lookupActorAddress(req.ActorType, req.ActorID)
+	targetActorAddress, daprID := a.lookupActorAddress(req.ActorType, req.ActorID)
 	if targetActorAddress == "" {
 		return nil, fmt.Errorf("error finding address for actor type %s with id %s", req.ActorType, req.ActorID)
 	}
@@ -205,14 +210,35 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	} else {
-		resp, err = a.callRemoteActor(targetActorAddress, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callRemoteActorWithRetry(callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, daprID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	}
 
 	if err != nil {
 		return nil, err
 	}
-
 	return resp, nil
+}
+
+// callRemoteActorWithRetry will call a remote actor for the specified number of retries and will only retry in the case of transient failures
+func (a *actorsRuntime) callRemoteActorWithRetry(numRetries int, fn func(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error),
+	targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
+	for i := 0; i < numRetries; i++ {
+		resp, err := fn(targetAddress, targetID, actorType, actorID, actorMethod, data, metadata)
+		if err == nil {
+			return resp, nil
+		}
+
+		code := status.Code(err)
+		if code == codes.Unavailable || code == codes.Unauthenticated {
+			_, err = a.grpcConnectionFn(targetAddress, targetID, false, true)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		return resp, err
+	}
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
 }
 
 func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
@@ -273,7 +299,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}, nil
 }
 
-func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
+func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	req := daprinternal_pb.CallActorEnvelope{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -286,7 +312,7 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, actorType, actorID, actor
 		req.Metadata[k] = v
 	}
 
-	conn, err := a.grpcConnectionFn(targetAddress)
+	conn, err := a.grpcConnectionFn(targetAddress, targetID, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -438,6 +464,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 				Load:     1,
 				Entities: a.config.HostedActorTypes,
 				Port:     int64(a.config.Port),
+				Id:       a.config.DaprID,
 			}
 
 			if stream != nil {
@@ -534,7 +561,7 @@ func (a *actorsRuntime) updatePlacements(in *daprinternal_pb.PlacementTables) {
 		for k, v := range in.Entries {
 			loadMap := map[string]*placement.Host{}
 			for lk, lv := range v.LoadMap {
-				loadMap[lk] = placement.NewHost(lv.Name, lv.Load, lv.Port)
+				loadMap[lk] = placement.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
 			}
 			c := placement.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
 			a.placementTables.Entries[k] = c
@@ -560,7 +587,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			// for each actor, deactivate if no longer hosted locally
 			actorKey := key.(string)
 			actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
-			address := a.lookupActorAddress(actorType, actorID)
+			address, _ := a.lookupActorAddress(actorType, actorID)
 			if address != "" && !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done
 				// cancel any reminders
@@ -632,7 +659,7 @@ func (a *actorsRuntime) evaluateReminders() {
 				defer wg.Done()
 
 				for _, r := range reminders {
-					targetActorAddress := a.lookupActorAddress(r.ActorType, r.ActorID)
+					targetActorAddress, _ := a.lookupActorAddress(r.ActorType, r.ActorID)
 					if targetActorAddress == "" {
 						continue
 					}
@@ -658,20 +685,20 @@ func (a *actorsRuntime) evaluateReminders() {
 	a.evaluationBusy = false
 }
 
-func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) string {
+func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) (string, string) {
 	// read lock for table map
 	a.placementTableLock.RLock()
 	defer a.placementTableLock.RUnlock()
 
 	t := a.placementTables.Entries[actorType]
 	if t == nil {
-		return ""
+		return "", ""
 	}
 	host, err := t.GetHost(actorID)
 	if err != nil || host == nil {
-		return ""
+		return "", ""
 	}
-	return fmt.Sprintf("%s:%v", host.Name, host.Port)
+	return fmt.Sprintf("%s:%v", host.Name, host.Port), host.DaprID
 }
 
 func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack, error) {

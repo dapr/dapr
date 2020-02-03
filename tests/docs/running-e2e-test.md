@@ -51,6 +51,12 @@ make docker-push
 make docker-deploy-k8s
 ```
 
+### Apply the test config
+
+```bash
+make setup-test-config
+```
+
 ### Register the default component configurations for testing
 
 ```bash

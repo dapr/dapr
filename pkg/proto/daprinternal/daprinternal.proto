@@ -102,4 +102,5 @@ message Host {
   int64 port = 2;
   int64 load = 3;
   repeated string entities = 4;
+  string id = 5;
 }
