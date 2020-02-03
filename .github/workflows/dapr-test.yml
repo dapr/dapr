@@ -106,9 +106,6 @@ jobs:
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make docker-deploy-k8s
-      - name: Deploy default config
-        if: env.TEST_CLUSTER != ''
-        run: make setup-test-config
       - name: Deploy test components
         if: env.TEST_CLUSTER != ''
         run: make setup-test-components
