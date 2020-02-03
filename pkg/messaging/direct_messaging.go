@@ -8,6 +8,7 @@ package messaging
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/dapr/components-contrib/servicediscovery"
@@ -16,6 +17,12 @@ import (
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+const (
+	invokeRemoteRetryCount = 3
 )
 
 // DirectMessaging is the API interface for invoking a remote app
@@ -25,7 +32,7 @@ type DirectMessaging interface {
 
 type directMessaging struct {
 	appChannel          channel.AppChannel
-	connectionCreatorFn func(address string) (*grpc.ClientConn, error)
+	connectionCreatorFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
 	daprID              string
 	mode                modes.DaprMode
 	grpcPort            int
@@ -34,7 +41,7 @@ type directMessaging struct {
 }
 
 // NewDirectMessaging returns a new direct messaging api
-func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address string) (*grpc.ClientConn, error), resolver servicediscovery.Resolver) DirectMessaging {
+func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), resolver servicediscovery.Resolver) DirectMessaging {
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: grpcConnectionFn,
@@ -48,15 +55,37 @@ func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode,
 
 // Invoke takes a message requests and invokes an app, either local or remote
 func (d *directMessaging) Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error) {
-	var invokeFn func(*DirectMessageRequest) (*DirectMessageResponse, error)
-
 	if req.Target == d.daprID {
-		invokeFn = d.invokeLocal
-	} else {
-		invokeFn = d.invokeRemote
+		return d.invokeLocal(req)
 	}
+	return d.invokeWithRetry(invokeRemoteRetryCount, d.invokeRemote, req)
+}
 
-	return invokeFn(req)
+// invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
+// TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target
+// Server shuts down.
+func (d *directMessaging) invokeWithRetry(numRetries int, fn func(req *DirectMessageRequest) (*DirectMessageResponse, error), req *DirectMessageRequest) (*DirectMessageResponse, error) {
+	for i := 0; i < numRetries; i++ {
+		resp, err := fn(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		code := status.Code(err)
+		if code == codes.Unavailable || code == codes.Unauthenticated {
+			address, addErr := d.getAddressFromMessageRequest(req)
+			if addErr != nil {
+				return nil, addErr
+			}
+			_, connErr := d.connectionCreatorFn(address, req.Target, false, true)
+			if connErr != nil {
+				return nil, connErr
+			}
+			continue
+		}
+		return resp, err
+	}
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", req.Target, numRetries)
 }
 
 func (d *directMessaging) invokeLocal(req *DirectMessageRequest) (*DirectMessageResponse, error) {
@@ -81,14 +110,22 @@ func (d *directMessaging) invokeLocal(req *DirectMessageRequest) (*DirectMessage
 	}, nil
 }
 
-func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessageResponse, error) {
+func (d *directMessaging) getAddressFromMessageRequest(req *DirectMessageRequest) (string, error) {
 	request := servicediscovery.ResolveRequest{ID: req.Target, Namespace: d.namespace, Port: d.grpcPort}
 	address, err := d.resolver.ResolveID(request)
+	if err != nil {
+		return "", err
+	}
+	return address, nil
+}
+
+func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessageResponse, error) {
+	address, err := d.getAddressFromMessageRequest(req)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := d.connectionCreatorFn(address)
+	conn, err := d.connectionCreatorFn(address, req.Target, false, false)
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,7 @@ package runtime
 import (
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/dapr/components-contrib/pubsub"
@@ -20,6 +21,7 @@ import (
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/sentry/certs"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -29,6 +31,18 @@ import (
 const (
 	TestRuntimeConfigID = "consumer0"
 )
+
+var testCertRoot = `-----BEGIN CERTIFICATE-----
+MIIBjjCCATOgAwIBAgIQdZeGNuAHZhXSmb37Pnx2QzAKBggqhkjOPQQDAjAYMRYw
+FAYDVQQDEw1jbHVzdGVyLmxvY2FsMB4XDTIwMDIwMTAwMzUzNFoXDTMwMDEyOTAw
+MzUzNFowGDEWMBQGA1UEAxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqG
+SM49AwEHA0IABAeMFRst4JhcFpebfgEs1MvJdD7h5QkCbLwChRHVEUoaDqd1aYjm
+bX5SuNBXz5TBEhHfTV3Objh6LQ2N+CBoCeOjXzBdMA4GA1UdDwEB/wQEAwIBBjAS
+BgNVHRMBAf8ECDAGAQH/AgEBMB0GA1UdDgQWBBRBWthv5ZQ3vALl2zXWwAXSmZ+m
+qTAYBgNVHREEETAPgg1jbHVzdGVyLmxvY2FsMAoGCCqGSM49BAMCA0kAMEYCIQDN
+rQNOck4ENOhmLROE/wqH0MKGjE6P8yzesgnp9fQI3AIhAJaVPrZloxl1dWCgmNWo
+Iklq0JnMgJU7nS+VpVvlgBN8
+-----END CERTIFICATE-----`
 
 type MockKubernetesStateStore struct {
 }
@@ -472,7 +486,9 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		1024,
 		DefaultProfilePort,
 		false,
-		-1)
+		-1,
+		false,
+		"")
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
 	rt.components = []components_v1alpha1.Component{
@@ -488,4 +504,27 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 	}
 
 	return rt
+}
+
+func TestMTLS(t *testing.T) {
+	t.Run("with mTLS enabled", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.runtimeConfig.mtlsEnabled = true
+		rt.runtimeConfig.SentryServiceAddress = "1.1.1.1"
+
+		os.Setenv(certs.TrustAnchorsEnvVar, testCertRoot)
+		defer os.Clearenv()
+
+		err := rt.establishSecurity("test", rt.runtimeConfig.SentryServiceAddress)
+		assert.Nil(t, err)
+		assert.NotNil(t, rt.authenticator)
+	})
+
+	t.Run("with mTLS disabled", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		err := rt.establishSecurity("test", rt.runtimeConfig.SentryServiceAddress)
+		assert.Nil(t, err)
+		assert.Nil(t, rt.authenticator)
+	})
 }

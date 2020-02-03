@@ -139,6 +139,7 @@ func (p *Service) PerformTablesUpdate(hosts []daprinternal_pb.PlacementService_R
 				Name: lv.Name,
 				Load: lv.Load,
 				Port: lv.Port,
+				Id:   lv.DaprID,
 			}
 			table.LoadMap[lk] = &h
 		}
@@ -198,7 +199,7 @@ func (p *Service) ProcessHost(host *daprinternal_pb.Host) {
 			p.entries[e] = NewConsistentHash()
 		}
 
-		exists := p.entries[e].Add(host.Name, host.Port)
+		exists := p.entries[e].Add(host.Name, host.Id, host.Port)
 		if !exists {
 			updateRequired = true
 		}
