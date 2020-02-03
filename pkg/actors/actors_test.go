@@ -394,7 +394,7 @@ func TestReminderFiresOnceWitnEmptyPeriod(t *testing.T) {
 }
 
 func TestConstructActorStateKey(t *testing.T) {
-	delim := "__delim__"
+	delim := "||"
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	expected := strings.Join([]string{TestDaprID, actorType, actorID, TestKeyName}, delim)
