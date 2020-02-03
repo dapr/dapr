@@ -98,7 +98,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	rt.Run(
+	err = rt.Run(
 		runtime.WithSecretStores(
 			secretstores_loader.New("kubernetes", sercetstores_kubernetes.NewKubernetesSecretStore),
 			secretstores_loader.New("azure.keyvault", keyvault.NewAzureKeyvaultSecretStore),
@@ -271,6 +271,9 @@ func main() {
 			}),
 		),
 	)
+	if err != nil {
+		log.Fatalf("fatal error from runtime: %s", err)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
