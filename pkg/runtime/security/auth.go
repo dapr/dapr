@@ -6,6 +6,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"sync"
 	"time"
 
@@ -16,9 +18,10 @@ import (
 )
 
 const (
-	serverName        = "cluster.local"
-	sentrySignTimeout = time.Second * 5
-	certType          = "CERTIFICATE"
+	serverName              = "cluster.local"
+	sentrySignTimeout       = time.Second * 5
+	certType                = "CERTIFICATE"
+	kubeServiceAccountToken = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 )
 
 type Authenticator interface {
@@ -89,7 +92,8 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	c := pb.NewCAClient(conn)
 	resp, err := c.SignCertificate(ctx, &pb.SignCertificateRequest{
 		CertificateSigningRequest: certPem,
-		Id:                        id,
+		Id:                        getSentryIdentifier(id),
+		Token:                     getToken(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error from sentry SignCertificate: %s", err)
@@ -122,4 +126,19 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 
 	a.currentSignedCert = signedCert
 	return signedCert, nil
+}
+
+// currently we support Kubernetes identities
+func getToken() string {
+	b, _ := ioutil.ReadFile(kubeServiceAccountToken)
+	return string(b)
+}
+
+func getSentryIdentifier(daprID string) string {
+	// return injected identity, default id if not present
+	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")
+	if localID != "" {
+		return localID
+	}
+	return daprID
 }

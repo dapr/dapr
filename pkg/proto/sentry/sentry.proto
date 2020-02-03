@@ -14,8 +14,9 @@ service CA {
 
 message SignCertificateRequest {
     string id = 1;
+    string token = 2;
     // A PEM-encoded x509 CSR.
-    bytes certificate_signing_request = 2;
+    bytes certificate_signing_request = 3;
 }
 
 message SignCertificateResponse {

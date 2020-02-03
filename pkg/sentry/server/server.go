@@ -11,6 +11,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/csr"
+	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/golang/protobuf/ptypes"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -31,12 +32,14 @@ type server struct {
 	certificate *tls.Certificate
 	certAuth    ca.CertificateAuthority
 	srv         *grpc.Server
+	validator   identity.Validator
 }
 
 // NewCAServer returns a new CA Server running a gRPC server
-func NewCAServer(ca ca.CertificateAuthority) CAServer {
+func NewCAServer(ca ca.CertificateAuthority, validator identity.Validator) CAServer {
 	return &server{
-		certAuth: ca,
+		certAuth:  ca,
+		validator: validator,
 	}
 }
 
@@ -122,6 +125,13 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	err = s.certAuth.ValidateCSR(csr)
 	if err != nil {
 		err = fmt.Errorf("error validating csr: %s", err)
+		log.Error(err)
+		return nil, err
+	}
+
+	err = s.validator.Validate(req.GetId(), req.GetToken())
+	if err != nil {
+		err = fmt.Errorf("error validating requester identity: %s", err)
 		log.Error(err)
 		return nil, err
 	}
