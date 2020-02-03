@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/grandcat/zeroconf"
+	log "github.com/sirupsen/logrus"
 )
 
 // RegisterMDNS uses mdns to publish an entry of the service to a local network

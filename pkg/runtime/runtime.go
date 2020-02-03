@@ -622,13 +622,12 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 
 				a.stateStores[s.ObjectMeta.Name] = store
 
-				// set specifed actor store if "actorStateStore" is true in the spec.
+				// set specified actor store if "actorStateStore" is true in the spec.
 				actorStoreSpecified := props[actorStateStore]
 				if actorStoreSpecified == "true" {
 					if a.actorStateStoreCount++; a.actorStateStoreCount == 1 {
 						a.actorStateStoreName = s.ObjectMeta.Name
 					}
-
 				}
 			}
 		}
