@@ -18,10 +18,10 @@ import (
 )
 
 const (
-	serverName              = "cluster.local"
-	sentrySignTimeout       = time.Second * 5
-	certType                = "CERTIFICATE"
-	kubeServiceAccountToken = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	serverName        = "cluster.local"
+	sentrySignTimeout = time.Second * 5
+	certType          = "CERTIFICATE"
+	kubeTknPath       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 )
 
 type Authenticator interface {
@@ -130,7 +130,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 
 // currently we support Kubernetes identities
 func getToken() string {
-	b, _ := ioutil.ReadFile(kubeServiceAccountToken)
+	b, _ := ioutil.ReadFile(kubeTknPath)
 	return string(b)
 }
 
