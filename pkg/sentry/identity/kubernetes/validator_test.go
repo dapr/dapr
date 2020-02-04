@@ -93,7 +93,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		err := v.Validate("a1:ns2", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: token/id mismatch", errPrefix), err)
+		assert.Equal(t, fmt.Errorf("%s: token/id mismatch. received id: a1:ns2", errPrefix), err)
 	})
 
 	t.Run("empty token", func(t *testing.T) {

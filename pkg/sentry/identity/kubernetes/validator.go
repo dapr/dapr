@@ -51,10 +51,10 @@ func (v *validator) Validate(id, token string) error {
 		return fmt.Errorf("%s: provided token is not a properly structured service account token", errPrefix)
 	}
 
-	podSa := prts[2]
-	podNs := prts[3]
+	podSa := prts[3]
+	podNs := prts[2]
 	if id != fmt.Sprintf("%s:%s", podSa, podNs) {
-		return fmt.Errorf("%s: token/id mismatch", errPrefix)
+		return fmt.Errorf("%s: token/id mismatch. received id: %s", errPrefix, id)
 	}
 	return nil
 }
