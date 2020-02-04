@@ -40,7 +40,7 @@ func (v *validator) Validate(id, token string) error {
 	}
 
 	if review.Status.Error != "" {
-		return fmt.Errorf("%s: invalid token: %s", errPrefix, err)
+		return fmt.Errorf("%s: invalid token: %s", errPrefix, review.Status.Error)
 	}
 	if !review.Status.Authenticated {
 		return fmt.Errorf("%s: authentication failed", errPrefix)
