@@ -92,13 +92,16 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	maxConcurrencyStr := fmt.Sprintf("%v", maxConcurrency)
 
 	var trustAnchors string
+	var identity string
+
 	mtlsEnabled := mTLSEnabled(daprClient)
 	if mtlsEnabled {
 		trustAnchors = getTrustAnchors(kubeClient, namespace)
+		identity = fmt.Sprintf("%s:%s", pod.Spec.ServiceAccountName, req.Namespace)
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -246,7 +249,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -277,7 +280,11 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 		c.Env = append(c.Env, corev1.EnvVar{
 			Name:  certs.TrustAnchorsEnvVar,
 			Value: trustAnchors,
-		})
+		},
+			corev1.EnvVar{
+				Name:  "SENTRY_LOCAL_IDENTITY",
+				Value: identity,
+			})
 	}
 
 	return c

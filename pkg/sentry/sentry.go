@@ -2,9 +2,14 @@ package sentry
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/identity"
+	"github.com/dapr/dapr/pkg/sentry/identity/kubernetes"
+	"github.com/dapr/dapr/pkg/sentry/identity/selfhosted"
+	k8s "github.com/dapr/dapr/pkg/sentry/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/server"
 	log "github.com/sirupsen/logrus"
 )
@@ -40,9 +45,16 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	}
 	log.Infof("trust root bundle loaded. issuer cert expiry: %s", certAuth.GetCACertBundle().GetIssuerCertExpiry().String())
 
+	// Create identity validator
+	v, err := createValidator()
+	if err != nil {
+		log.Fatalf("error creating validator: %s", err)
+	}
+	log.Info("validator created")
+
 	// Run the CA server
 	s.doneCh = make(chan struct{})
-	s.server = server.NewCAServer(certAuth)
+	s.server = server.NewCAServer(certAuth, v)
 
 	go func() {
 		select {
@@ -62,6 +74,18 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	if err != nil {
 		log.Fatalf("error starting gRPC server: %s", err)
 	}
+}
+
+func createValidator() (identity.Validator, error) {
+	if config.IsKubernetesHosted() {
+		// we're in Kubernetes, create client and init a new serviceaccount token validator
+		kubeClient, err := k8s.GetClient()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create kubernetes client: %s", err)
+		}
+		return kubernetes.NewValidator(kubeClient), nil
+	}
+	return selfhosted.NewValidator(), nil
 }
 
 func (s *sentry) Restart(ctx context.Context, conf config.SentryConfig) {
