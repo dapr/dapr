@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"os"
 
-	log "github.com/sirupsen/logrus"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
