@@ -15,12 +15,9 @@ func TestValidate(t *testing.T) {
 	t.Run("invalid token", func(t *testing.T) {
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor(
-			"*",
+			"create",
 			"tokenreviews",
 			func(action core.Action) (bool, runtime.Object, error) {
-				switch action.GetVerb() {
-				case "create":
-				}
 				return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{Error: "bad token"}}, nil
 			})
 
@@ -36,12 +33,9 @@ func TestValidate(t *testing.T) {
 	t.Run("unauthenticated", func(t *testing.T) {
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor(
-			"*",
+			"create",
 			"tokenreviews",
 			func(action core.Action) (bool, runtime.Object, error) {
-				switch action.GetVerb() {
-				case "create":
-				}
 				return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{Authenticated: false}}, nil
 			})
 
@@ -57,12 +51,9 @@ func TestValidate(t *testing.T) {
 	t.Run("bad token structure", func(t *testing.T) {
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor(
-			"*",
+			"create",
 			"tokenreviews",
 			func(action core.Action) (bool, runtime.Object, error) {
-				switch action.GetVerb() {
-				case "create":
-				}
 				return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{Authenticated: true, User: kauthapi.UserInfo{Username: "name"}}}, nil
 			})
 
@@ -78,12 +69,9 @@ func TestValidate(t *testing.T) {
 	t.Run("token id mismatch", func(t *testing.T) {
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor(
-			"*",
+			"create",
 			"tokenreviews",
 			func(action core.Action) (bool, runtime.Object, error) {
-				switch action.GetVerb() {
-				case "create":
-				}
 				return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{Authenticated: true, User: kauthapi.UserInfo{Username: "system:serviceaccount:a1:ns1"}}}, nil
 			})
 
