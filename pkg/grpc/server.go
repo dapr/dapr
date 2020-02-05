@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	certWatchInterval         = time.Second * 5
+	certWatchInterval         = time.Second * 3
 	renewWhenPercentagePassed = 70
 )
 
@@ -33,13 +33,16 @@ type Server interface {
 }
 
 type server struct {
-	api           API
-	config        ServerConfig
-	tracingSpec   config.TracingSpec
-	authenticator auth.Authenticator
-	listener      net.Listener
-	srv           *grpc_go.Server
-	renewMutex    *sync.Mutex
+	api                API
+	config             ServerConfig
+	tracingSpec        config.TracingSpec
+	authenticator      auth.Authenticator
+	listener           net.Listener
+	srv                *grpc_go.Server
+	renewMutex         *sync.Mutex
+	signedCert         *auth.SignedCertificate
+	tlsCert            tls.Certificate
+	signedCertDuration time.Duration
 }
 
 // NewServer returns a new gRPC server
@@ -78,8 +81,23 @@ func (s *server) StartNonBlocking() error {
 	return nil
 }
 
-func (s *server) stop() {
-	s.srv.GracefulStop()
+func (s *server) generateWorkloadCert() error {
+	log.Info("sending workload csr request to sentry")
+	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.DaprID)
+	if err != nil {
+		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %s", err)
+	}
+	log.Info("certificate signed successfully")
+
+	tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
+	if err != nil {
+		return fmt.Errorf("error creating x509 Key Pair: %s", err)
+	}
+
+	s.signedCert = signedCert
+	s.tlsCert = tlsCert
+	s.signedCertDuration = signedCert.Expiry.Sub(time.Now().UTC())
+	return nil
 }
 
 func (s *server) getGRPCServer() (*grpc_go.Server, error) {
@@ -90,69 +108,52 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	}
 
 	if s.authenticator != nil {
-		log.Info("sending workload csr request to sentry")
-		signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.DaprID)
+		err := s.generateWorkloadCert()
 		if err != nil {
-			return nil, fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %s", err)
+			return nil, err
 		}
 
-		tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
-		if err != nil {
-			return nil, fmt.Errorf("error creating x509 Key Pair: %s", err)
-		}
-
-		caCertPool := signedCert.TrustChain
 		tlsConfig := tls.Config{
-			Certificates: []tls.Certificate{tlsCert},
-			ClientCAs:    caCertPool,
-			ClientAuth:   tls.VerifyClientCertIfGiven,
+			Certificates: []tls.Certificate{s.tlsCert},
+			ClientCAs:    s.signedCert.TrustChain,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+				return &s.tlsCert, nil
+			},
 		}
 		ta := credentials.NewTLS(&tlsConfig)
 
-		log.Info("certificate signed successfully")
-
 		opts = append(opts, grpc_go.Creds(ta))
-		go s.startWorkloadCertRotation(signedCert.Expiry)
+		go s.startWorkloadCertRotation()
 	}
 	return grpc_go.NewServer(opts...), nil
 }
 
-func (s *server) startWorkloadCertRotation(expiry time.Time) {
-	log.Infof("starting workload cert expiry watcher. current cert expires on: %s", expiry.String())
-
-	certDuration := expiry.Sub(time.Now().UTC())
+func (s *server) startWorkloadCertRotation() {
+	log.Infof("starting workload cert expiry watcher. current cert expires on: %s", s.signedCert.Expiry.String())
 
 	ticker := time.NewTicker(certWatchInterval)
-	done := make(chan bool)
 
-	for {
-		select {
-		case <-done:
-			return
-		case <-ticker.C:
-			s.renewMutex.Lock()
-			renew := shouldRenewCert(expiry, certDuration)
-			if renew {
-				log.Info("renewing certificate: requesting new cert and restarting gRPC server")
-				s.stop()
+	for range ticker.C {
+		s.renewMutex.Lock()
+		renew := shouldRenewCert(s.signedCert.Expiry, s.signedCertDuration)
+		if renew {
+			log.Info("renewing certificate: requesting new cert and restarting gRPC server")
 
-				err := s.StartNonBlocking()
-				if err != nil {
-					log.Errorf("error starting server: %s", err)
-				} else {
-					close(done)
-				}
+			err := s.generateWorkloadCert()
+			if err != nil {
+				log.Errorf("error starting server: %s", err)
 			}
-			s.renewMutex.Unlock()
 		}
+		s.renewMutex.Unlock()
 	}
 }
 
-func shouldRenewCert(endDate time.Time, certDuration time.Duration) bool {
-	d := endDate.Sub(time.Now().UTC())
-	eS := certDuration.Seconds()
-	dS := d.Seconds()
+func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool {
+	expiresIn := certExpiryDate.Sub(time.Now().UTC())
+	expiresInSeconds := expiresIn.Seconds()
+	certDurationSeconds := certDuration.Seconds()
 
-	percentagePassed := ((eS - dS) * 100) / eS
+	percentagePassed := 100 - ((expiresInSeconds / certDurationSeconds) * 100)
 	return percentagePassed >= renewWhenPercentagePassed
 }
