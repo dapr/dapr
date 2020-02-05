@@ -28,7 +28,7 @@ type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-const numHealthChecks = 3 // Number of times to call the endpoint to check for health.
+const numHealthChecks = 60 // Number of times to call the endpoint to check for health.
 
 var tr *runner.TestRunner
 

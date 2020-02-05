@@ -19,7 +19,7 @@ func TestConfigCorrectValues(t *testing.T) {
 		SidecarImage:           "c",
 		SidecarImagePullPolicy: "d",
 		Namespace:              "e",
-	})
+	}, nil, nil)
 
 	injector := i.(*injector)
 	assert.Equal(t, "a", injector.config.TLSCertFile)
@@ -153,7 +153,7 @@ func TestKubernetesDNS(t *testing.T) {
 }
 
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", "-1", nil)
+	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", "-1", nil, "", "", false, "")
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
 }

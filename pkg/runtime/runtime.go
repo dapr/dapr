@@ -8,6 +8,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -45,6 +46,7 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
+	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
@@ -84,6 +86,7 @@ type DaprRuntime struct {
 	hostAddress              string
 	actorStateStoreName      string
 	actorStateStoreCount     int
+	authenticator            security.Authenticator
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -135,7 +138,12 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 }
 
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
-	err := a.loadComponents(opts)
+	err := a.establishSecurity(a.runtimeConfig.ID, a.runtimeConfig.SentryServiceAddress)
+	if err != nil {
+		return err
+	}
+
+	err = a.loadComponents(opts)
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
 	}
@@ -480,7 +488,7 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 func (a *DaprRuntime) startGRPCServer(port int) error {
 	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
-	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
+	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
 }
@@ -622,13 +630,12 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 
 				a.stateStores[s.ObjectMeta.Name] = store
 
-				// set specifed actor store if "actorStateStore" is true in the spec.
+				// set specified actor store if "actorStateStore" is true in the spec.
 				actorStoreSpecified := props[actorStateStore]
 				if actorStoreSpecified == "true" {
 					if a.actorStateStoreCount++; a.actorStateStoreCount == 1 {
 						a.actorStateStoreName = s.ObjectMeta.Name
 					}
-
 				}
 			}
 		}
@@ -1100,5 +1107,26 @@ func (a *DaprRuntime) getComponent(componentType string, name string) *component
 			return &c
 		}
 	}
+	return nil
+}
+
+func (a *DaprRuntime) establishSecurity(id, sentryAddress string) error {
+	if !a.runtimeConfig.mtlsEnabled {
+		log.Info("mTLS is disabled. Skipping certificate request and tls validation")
+		return nil
+	}
+	if sentryAddress == "" {
+		return errors.New("sentryAddress cannot be empty")
+	}
+	log.Info("mTLS enabled. creating sidecar authenticator")
+
+	auth, err := security.GetSidecarAuthenticator(id, sentryAddress)
+	if err != nil {
+		return err
+	}
+	a.authenticator = auth
+	a.grpc.SetAuthenticator(auth)
+
+	log.Info("authenticator created")
 	return nil
 }

@@ -16,7 +16,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
     ```bash
     export DAPR_REGISTRY=docker.io/your_dockerhub_id
     export DAPR_TAG=dev
-    export HELM_NAMESPACE=dapr-tests
+    export DAPR_NAMESPACE=dapr-tests
 
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
@@ -49,6 +49,12 @@ make docker-push
 
 # Deploy Dapr runtime to your cluster
 make docker-deploy-k8s
+```
+
+### Apply the test config
+
+```bash
+make setup-test-config
 ```
 
 ### Register the default component configurations for testing

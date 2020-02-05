@@ -29,11 +29,13 @@ func FromFlags() (*DaprRuntime, error) {
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	daprID := flag.String("dapr-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for an Dapr control plane")
+	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
 	placementServiceAddress := flag.String("placement-address", "", "Address for the Dapr placement service")
 	allowedOrigins := flag.String("allowed-origins", DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default port is %v", DefaultComponentsPath))
 	runtimeVersion := flag.Bool("version", false, "prints the runtime version")
 	maxConcurrency := flag.Int("max-concurrency", -1, "controls the concurrency level when forwarding requests to user code")
+	mtlsEnabled := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 
 	flag.Parse()
 
@@ -81,7 +83,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*daprID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency)
+		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress)
 
 	var globalConfig *global_config.Configuration
 

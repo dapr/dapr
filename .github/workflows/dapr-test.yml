@@ -12,14 +12,14 @@ jobs:
     name: end-to-end tests
     runs-on: ubuntu-latest
     env:
-      GOVER: 1.13.4
+      GOVER: 1.13.7
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
-      HELMVER: v2.16.1
-      HELM_NAMESPACE: dapr-tests
+      HELMVER: v3.0.3
+      DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
     steps:
       - name: Parse test payload
@@ -102,6 +102,7 @@ jobs:
         run: |
           make setup-helm-init
           make setup-test-env
+          kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make docker-deploy-k8s
