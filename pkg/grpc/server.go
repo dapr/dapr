@@ -81,10 +81,6 @@ func (s *server) StartNonBlocking() error {
 	return nil
 }
 
-func (s *server) stop() {
-	s.srv.GracefulStop()
-}
-
 func (s *server) generateWorkloadCert() error {
 	log.Info("sending workload csr request to sentry")
 	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.DaprID)
