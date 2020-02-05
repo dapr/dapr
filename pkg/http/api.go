@@ -41,8 +41,8 @@ type api struct {
 }
 
 type metadata struct {
-	ID                string                    `json:"id"`
-	ActiveActorsCount []actors.ActiveActorCount `json:"actors"`
+	ID                string                     `json:"id"`
+	ActiveActorsCount []actors.ActiveActorsCount `json:"actors"`
 }
 
 const (

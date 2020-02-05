@@ -33,6 +33,7 @@ const (
 	appScaleToCheckRebalance              = 2                                    // How many instances of the app to create to validate rebalance.
 	actorInvokeURLFormat                  = "%s/test/testactorfeatures/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
+	actorMetadataURLFormat                = "%s/test/metadata"
 )
 
 // represents a response for the APIs in this app.
@@ -285,5 +286,24 @@ func TestServiceInvocation(t *testing.T) {
 		}
 
 		require.True(t, anyActorMoved)
+	})
+
+	t.Run("Get actor metadata", func(t *testing.T) {
+		// Each test needs to have a different actorID
+		actorIDBase := "1008Instance"
+
+		for index := 0; index < 5; index++ {
+			_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
+			require.NoError(t, err)
+		}
+
+		res, err := utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
+
+		require.NoError(t, err)
+		expectedB, _ := json.Marshal(map[string]interface{}{
+			"id":     "1008Instance0",
+			"actors": []map[string]interface{}{{"type": "testactorfeatures", "count": 5}},
+		})
+		require.Equal(t, expectedB, res)
 	})
 }

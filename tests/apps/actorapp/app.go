@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	appPort = 3000
-
-	actorMethodURLFormat = "http://localhost:3500/v1.0/actors/%s/%s/method/%s"
+	appPort              = 3000
+	daprV1URL            = "http://localhost:3500/v1.0"
+	actorMethodURLFormat = daprV1URL + "/actors/%s/%s/method/%s"
 
 	registedActorType       = "testactor" // Actor type must be unique per test app.
 	actorIdleTimeout        = "5s"        // Short idle timeout.
@@ -203,6 +203,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
 	router.HandleFunc("/actors/{actorType}/{id}", activateDeactivateActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/{actorType}/{id}/method/{method}", testCallActorHandler).Methods("POST")
+	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 
 	router.Use(mux.CORSMethodMiddleware(router))

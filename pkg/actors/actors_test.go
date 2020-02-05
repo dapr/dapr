@@ -620,7 +620,7 @@ func TestTransactionalState(t *testing.T) {
 
 func TestActiveActorsCount(t *testing.T) {
 	t.Run("Actors Count", func(t *testing.T) {
-		expectedCounts := []ActiveActorCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
+		expectedCounts := []ActiveActorsCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
 
 		testActorRuntime := newTestActorsRuntime()
 
@@ -636,7 +636,7 @@ func TestActiveActorsCount(t *testing.T) {
 	})
 
 	t.Run("Actors Count empty", func(t *testing.T) {
-		expectedCounts := []ActiveActorCount{}
+		expectedCounts := []ActiveActorsCount{}
 
 		testActorRuntime := newTestActorsRuntime()
 

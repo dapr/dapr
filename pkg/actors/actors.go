@@ -48,7 +48,7 @@ type Actors interface {
 	CreateTimer(req *CreateTimerRequest) error
 	DeleteTimer(req *DeleteTimerRequest) error
 	IsActorHosted(req *ActorHostedRequest) bool
-	GetActiveActorsCount() []ActiveActorCount
+	GetActiveActorsCount() []ActiveActorsCount
 }
 
 type actorsRuntime struct {
@@ -71,8 +71,8 @@ type actorsRuntime struct {
 	evaluationChan      chan bool
 }
 
-// ActiveActorCount contain actorType and count of actors each type has
-type ActiveActorCount struct {
+// ActiveActorsCount contain actorType and count of actors each type has
+type ActiveActorsCount struct {
 	Type  string `json:"type"`
 	Count int    `json:"count"`
 }
@@ -1119,7 +1119,7 @@ func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
 	return nil
 }
 
-func (a *actorsRuntime) GetActiveActorsCount() []ActiveActorCount {
+func (a *actorsRuntime) GetActiveActorsCount() []ActiveActorsCount {
 
 	var actorCountMap = map[string]int{}
 	a.actorsTable.Range(func(key, value interface{}) bool {
@@ -1129,9 +1129,9 @@ func (a *actorsRuntime) GetActiveActorsCount() []ActiveActorCount {
 		return true
 	})
 
-	var activeActorsCount = []ActiveActorCount{}
+	var activeActorsCount = []ActiveActorsCount{}
 	for actorType, count := range actorCountMap {
-		activeActorsCount = append(activeActorsCount, ActiveActorCount{Type: actorType, Count: count})
+		activeActorsCount = append(activeActorsCount, ActiveActorsCount{Type: actorType, Count: count})
 	}
 
 	return activeActorsCount
