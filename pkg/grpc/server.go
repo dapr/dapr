@@ -138,21 +138,18 @@ func (s *server) startWorkloadCertRotation() {
 
 	ticker := time.NewTicker(certWatchInterval)
 
-	for {
-		select {
-		case <-ticker.C:
-			s.renewMutex.Lock()
-			renew := shouldRenewCert(s.signedCert.Expiry, s.signedCertDuration)
-			if renew {
-				log.Info("renewing certificate: requesting new cert and restarting gRPC server")
+	for range ticker.C {
+		s.renewMutex.Lock()
+		renew := shouldRenewCert(s.signedCert.Expiry, s.signedCertDuration)
+		if renew {
+			log.Info("renewing certificate: requesting new cert and restarting gRPC server")
 
-				err := s.generateWorkloadCert()
-				if err != nil {
-					log.Errorf("error starting server: %s", err)
-				}
+			err := s.generateWorkloadCert()
+			if err != nil {
+				log.Errorf("error starting server: %s", err)
 			}
-			s.renewMutex.Unlock()
 		}
+		s.renewMutex.Unlock()
 	}
 }
 
