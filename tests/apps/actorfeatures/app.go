@@ -284,8 +284,8 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 func testCallMetadataHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
-	invokeURL := fmt.Sprintf("%s/metadata", daprV1URL)
-	body, err := httpCall(r.Method, invokeURL, nil)
+	metadataURL := fmt.Sprintf("%s/metadata", daprV1URL)
+	body, err := httpCall(r.Method, metadataURL, nil)
 	if err != nil {
 		log.Printf("Could not read metadata response: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)

@@ -301,7 +301,7 @@ func TestServiceInvocation(t *testing.T) {
 
 		require.NoError(t, err)
 		expectedB, _ := json.Marshal(map[string]interface{}{
-			"id":     "1008Instance0",
+			"id":     "actorfeatures",
 			"actors": []map[string]interface{}{{"type": "testactorfeatures", "count": 5}},
 		})
 		require.Equal(t, expectedB, res)
