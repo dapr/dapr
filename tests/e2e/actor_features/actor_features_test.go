@@ -31,6 +31,8 @@ const (
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
 	actorsToCheckRebalance                = 10                                   // How many actors to create in the rebalance check test.
 	appScaleToCheckRebalance              = 2                                    // How many instances of the app to create to validate rebalance.
+	actorsToCheckMetadata                 = 5                                    // How many actors to create in get metdata test.
+	appScaleToCheckMetadata               = 1                                    // How many instances of the app to test get metadata.
 	actorInvokeURLFormat                  = "%s/test/testactorfeatures/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
 	actorMetadataURLFormat                = "%s/test/metadata"
@@ -289,10 +291,12 @@ func TestServiceInvocation(t *testing.T) {
 	})
 
 	t.Run("Get actor metadata", func(t *testing.T) {
+		tr.Platform.Scale(appName, appScaleToCheckMetadata)
+
 		// Each test needs to have a different actorID
 		actorIDBase := "1008Instance"
 
-		for index := 0; index < 5; index++ {
+		for index := 0; index < actorsToCheckMetadata; index++ {
 			_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			require.NoError(t, err)
 		}
