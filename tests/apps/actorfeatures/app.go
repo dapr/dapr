@@ -22,7 +22,7 @@ import (
 const (
 	appPort              = 3000
 	daprV1URL            = "http://localhost:3500/v1.0"
-	actorMethodURLFormat = daprV1URL + "/v1.0/actors/%s/%s/%s/%s"
+	actorMethodURLFormat = daprV1URL + "/actors/%s/%s/%s/%s"
 
 	registedActorType       = "testactorfeatures" // Actor type must be unique per test app.
 	actorIdleTimeout        = "1h"
