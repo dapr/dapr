@@ -40,7 +40,7 @@ code .
 The [default remote-container config](../../.devcontainer/devcontainer.json) uses the default image in [daprio dockerhub](https://hub.docker.com/r/daprio/dapr-dev). This section describes how to use your own development image.
 
 1. Edit [docker/Dockerfile-dev](../../docker/Dockerfile-dev)
-2. Uncomment `"dockerFile"` in [devcontainer.json](../../.devcontainer/devcontainer.json) to use container built by [docker/Dockerfile-dev](../../docker/Dockerfile-dev).
+2. Uncomment `"dockerFile"` in [devcontainer.json](../../.devcontainer/devcontainer.json) to use container built with [docker/Dockerfile-dev](../../docker/Dockerfile-dev).
 
 ```json
 {
