@@ -46,7 +46,6 @@ type Config struct {
 	Standalone              config.StandaloneConfig
 	Kubernetes              config.KubernetesConfig
 	MaxConcurrency          int
-	EnableMetrics           bool
 	mtlsEnabled             bool
 	SentryServiceAddress    string
 }
@@ -72,7 +71,6 @@ func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedO
 		},
 		EnableProfiling:      enableProfiling,
 		MaxConcurrency:       maxConcurrency,
-		EnableMetrics:        enableMetrics,
 		mtlsEnabled:          mtlsEnabled,
 		SentryServiceAddress: sentryAddress,
 	}
