@@ -9,19 +9,14 @@ import (
 	"fmt"
 	"strings"
 
-	"contrib.go.opencensus.io/exporter/prometheus"
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
-	"github.com/dapr/components-contrib/middleware/http/nethttpadaptor"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	routing "github.com/qiangxue/fasthttp-routing"
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/pprofhandler"
-	"go.opencensus.io/plugin/ochttp"
-	"go.opencensus.io/stats/view"
 )
 
 // Server is an interface for the Dapr HTTP server
@@ -50,12 +45,22 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 
 // StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
+
+	var routeFuncs []routeFunc
+	if s.metricsSpec.Enabled {
+		metricsRouteFunc := diag.MetricsHTTPRouteFunc(s.config.DaprID, s.metricsSpec)
+		routeFuncs = append(routeFuncs, metricsRouteFunc)
+	}
+
 	handler :=
 		s.useProxy(
 			s.useCors(
 				s.useComponents(
-					s.useRouter())))
+					s.useRouter(routeFuncs))))
 
+	if s.metricsSpec.Enabled {
+		handler = s.useMetrics(handler)
+	}
 	if s.tracingSpec.Enabled {
 		handler = s.useTracing(handler)
 	}
@@ -76,59 +81,17 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 	return diag.TracingHTTPMiddleware(s.tracingSpec, next)
 }
 
-const (
-	httpServerMetricsGroup = "http_server"
-)
-
-func getDefaultMetrics() []string {
-	return []string{
-		httpServerMetricsGroup,
-	}
+func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return diag.MetricsHTTPMiddleware(s.metricsSpec, next)
 }
 
-func (s *server) useRouter() fasthttp.RequestHandler {
+func (s *server) useRouter(routeFuncs []routeFunc) fasthttp.RequestHandler {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)
 	handler := router.HandleRequest
-	if s.config.EnableMetrics {
-		namespace := s.config.DaprID
-		if s.metricsSpec.Namespace != "" {
-			namespace = s.metricsSpec.Namespace
-		}
-		pe, err := prometheus.NewExporter(prometheus.Options{
-			Namespace: namespace,
-		})
-		if err != nil {
-			log.Fatalf("failed to create Prometheus exporter: %v", err)
-		}
-		view.RegisterExporter(pe)
-
-		route := "/metrics"
-		if s.metricsSpec.Route != "" {
-			route = s.metricsSpec.Route
-			if route[0] != '/' {
-				route = "/" + route
-			}
-		}
-		router.Get(route, func(c *routing.Context) error {
-			h := fasthttpadaptor.NewFastHTTPHandlerFunc(pe.ServeHTTP)
-			h(c.RequestCtx)
-			return nil
-		})
-
-		if s.metricsSpec.UseDefaultMetrics {
-			s.metricsSpec.EnabledMetricsGroups = getDefaultMetrics()
-		}
-
-		och := &ochttp.Handler{Handler: nethttpadaptor.NewNetHTTPHandlerFunc(handler)}
-		for _, metricsGroup := range s.metricsSpec.EnabledMetricsGroups {
-			if strings.ToLower(metricsGroup) == httpServerMetricsGroup {
-				if err := view.Register(ochttp.DefaultServerViews...); err != nil {
-					log.Fatalf("failed to register server views for HTTP metrics: %v", err)
-				}
-			}
-		}
-		handler = fasthttpadaptor.NewFastHTTPHandler(och)
+	for _, routeFunc := range routeFuncs {
+		methods, path, handlers := routeFunc()
+		router.To(methods, path, handlers...)
 	}
 	return handler
 }
@@ -187,3 +150,5 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 
 	return router
 }
+
+type routeFunc func() (methods string, path string, handlers []routing.Handler)
