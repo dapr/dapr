@@ -11,9 +11,14 @@ import (
 	"strconv"
 	"strings"
 
+	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/sentry/certs"
+	sentry_config "github.com/dapr/dapr/pkg/sentry/config"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -30,14 +35,16 @@ const (
 	sidecarGRPCPORT       = 50001
 	apiAddress            = "http://dapr-api"
 	placementService      = "dapr-placement"
+	sentryService         = "dapr-sentry"
 	sidecarHTTPPortName   = "dapr-http"
 	sidecarGRPCPortName   = "dapr-grpc"
 	defaultLogLevel       = "info"
 	kubernetesMountPath   = "/var/run/secrets/kubernetes.io/serviceaccount"
+	defaultConfig         = "default"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
-	namespace, image string) ([]PatchOperation, error) {
+	namespace, image string, kubeClient *kubernetes.Clientset, daprClient scheme.Interface) ([]PatchOperation, error) {
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
@@ -70,6 +77,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	id := getAppID(pod)
 	enableProfiling := profilingEnabled(pod.Annotations)
 	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
+	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
 	apiSrvAddress := getKubernetesDNS(apiAddress, namespace)
 	logLevel := getLogLevel(pod.Annotations)
 	maxConcurrency, err := getMaxConcurrency(pod.Annotations)
@@ -83,8 +91,17 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 	maxConcurrencyStr := fmt.Sprintf("%v", maxConcurrency)
 
+	var trustAnchors string
+	var identity string
+
+	mtlsEnabled := mTLSEnabled(daprClient)
+	if mtlsEnabled {
+		trustAnchors = getTrustAnchors(kubeClient, namespace)
+		identity = fmt.Sprintf("%s:%s", pod.Spec.ServiceAccountName, req.Namespace)
+	}
+
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, maxConcurrencyStr, tokenMount)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -107,6 +124,30 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	)
 
 	return patchOps, nil
+}
+
+func getTrustAnchors(kubeClient *kubernetes.Clientset, namespace string) string {
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(certs.KubeScrtName, meta_v1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+	b := secret.Data[sentry_config.RootCertFilename]
+	return string(b)
+}
+
+func mTLSEnabled(daprClient scheme.Interface) bool {
+	resp, err := daprClient.ConfigurationV1alpha1().Configurations(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
+	if err != nil {
+		// mTLS enabled by default
+		return true
+	}
+
+	for _, c := range resp.Items {
+		if c.GetName() == defaultConfig {
+			return c.Spec.MTLSSpec.Enabled
+		}
+	}
+	return true
 }
 
 func getTokenVolumeMount(pod corev1.Pod) *corev1.VolumeMount {
@@ -208,7 +249,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -225,7 +266,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 		},
 		Command: []string{"/daprd"},
 		Env:     []corev1.EnvVar{{Name: "HOST_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
-		Args:    []string{"--mode", "kubernetes", "--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--dapr-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency},
+		Args:    []string{"--mode", "kubernetes", "--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--dapr-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency, "--sentry-address", sentryAddress},
 	}
 
 	if tokenVolumeMount != nil {
@@ -233,5 +274,18 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			*tokenVolumeMount,
 		}
 	}
+
+	if mtlsEnabled && trustAnchors != "" {
+		c.Args = append(c.Args, "--enable-mtls")
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name:  certs.TrustAnchorsEnvVar,
+			Value: trustAnchors,
+		},
+			corev1.EnvVar{
+				Name:  "SENTRY_LOCAL_IDENTITY",
+				Value: identity,
+			})
+	}
+
 	return c
 }

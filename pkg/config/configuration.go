@@ -24,6 +24,7 @@ type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 	MetricsSpec      MetricsSpec  `json:"metrics,omitempty" yaml:"metrics,omitempty"`
+	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
 }
 
 type PipelineSpec struct {
@@ -58,6 +59,12 @@ type MetricsSpec struct {
 	Labels               map[string]string `json:"labels" yaml:"labels"`
 	UseDefaultMetrics    bool              `json:"useDefaultMetrics" yaml:"useDefaultMetrics"`
 	EnabledMetricsGroups []string          `json:"enabledMetricsGroups" yaml:"enabledMetricsGroups"`
+}
+
+type MTLSSpec struct {
+	Enabled          bool   `json:"enabled"`
+	WorkloadCertTTL  string `json:"workloadCertTTL"`
+	AllowedClockSkew string `json:"allowedClockSkew"`
 }
 
 // LoadDefaultConfiguration returns the default config with tracing disabled

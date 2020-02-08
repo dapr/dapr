@@ -32,6 +32,8 @@ type server struct {
 	api         API
 }
 
+type routeFunc func() (methods string, path string, handlers []routing.Handler)
+
 // NewServer returns a new HTTP server
 func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricsSpec config.MetricsSpec, pipeline http_middleware.Pipeline) Server {
 	return &server{
@@ -150,5 +152,3 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 
 	return router
 }
-
-type routeFunc func() (methods string, path string, handlers []routing.Handler)

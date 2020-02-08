@@ -47,10 +47,12 @@ type Config struct {
 	Kubernetes              config.KubernetesConfig
 	MaxConcurrency          int
 	EnableMetrics           bool
+	mtlsEnabled             bool
+	SentryServiceAddress    string
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, enableMetrics bool) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, enableMetrics bool, mtlsEnabled bool, sentryAddress string) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
@@ -68,8 +70,10 @@ func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedO
 		Kubernetes: config.KubernetesConfig{
 			ControlPlaneAddress: controlPlaneAddress,
 		},
-		EnableProfiling: enableProfiling,
-		MaxConcurrency:  maxConcurrency,
-		EnableMetrics: enableMetrics,
+		EnableProfiling:      enableProfiling,
+		MaxConcurrency:       maxConcurrency,
+		EnableMetrics:        enableMetrics,
+		mtlsEnabled:          mtlsEnabled,
+		SentryServiceAddress: sentryAddress,
 	}
 }

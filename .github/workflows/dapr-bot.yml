@@ -32,10 +32,20 @@ jobs:
             const isFromPulls = !!payload.issue.pull_request;
             const commentBody = payload.comment.body;
 
-            if (isFromPulls && commentBody && commentBody.indexOf("/ok-to-test") >= 0) {
+            if (isFromPulls && commentBody && commentBody.indexOf("/ok-to-test") == 0) {
               // Ignore the command unless the actor is in owner list
               if (owners.indexOf(context.actor) < 0) {
-                console.log(`${context.actor} doesn't have the permission to execute the comment`);
+                const errorMessage = `${context.actor} doesn't have the permission to execute the command`;
+
+                console.log(errorMessage);
+                
+                await github.issues.createComment({
+                  owner: issue.owner,
+                  repo: issue.repo,
+                  issue_number: issue.number,
+                  body: errorMessage
+                });
+
                 return;
               }
 
