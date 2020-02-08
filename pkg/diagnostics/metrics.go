@@ -25,7 +25,7 @@ func MetricsHTTPMiddleware(spec config.MetricsSpec, next fasthttp.RequestHandler
 	}
 	och := &ochttp.Handler{Handler: nethttpadaptor.NewNetHTTPHandlerFunc(next)}
 	for _, metricsGroup := range spec.EnabledMetricsGroups {
-		if strings.ToLower(metricsGroup) == httpServerMetricsGroup {
+		if strings.EqualFold(strings.ToLower(metricsGroup), httpServerMetricsGroup) {
 			if err := view.Register(ochttp.DefaultServerViews...); err != nil {
 				log.Fatalf("failed to register server views for HTTP metrics: %v", err)
 			}

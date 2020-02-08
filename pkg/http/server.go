@@ -47,7 +47,6 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 
 // StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
-
 	var routeFuncs []routeFunc
 	if s.metricsSpec.Enabled {
 		metricsRouteFunc := diag.MetricsHTTPRouteFunc(s.config.DaprID, s.metricsSpec)
@@ -80,10 +79,12 @@ func (s *server) StartNonBlocking() {
 }
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled tracing middleware")
 	return diag.TracingHTTPMiddleware(s.tracingSpec, next)
 }
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled metrics middleware")
 	return diag.MetricsHTTPMiddleware(s.metricsSpec, next)
 }
 
@@ -103,12 +104,14 @@ func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHan
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled cors middleware")
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)
 	return corsHandler.CorsMiddleware(next)
 }
 
 func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled proxy middleware")
 	return func(ctx *fasthttp.RequestCtx) {
 		var proto string
 		if ctx.IsTLS() {
