@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"go/token"
@@ -109,7 +110,14 @@ func readExportData(filename string) (*types.Package, error) {
 		return nil, err
 	}
 	defer f.Close()
-	return gcexportdata.Read(f, token.NewFileSet(), map[string]*types.Package{}, filename)
+	r := bufio.NewReader(f)
+	m := map[string]*types.Package{}
+	pkgPath, err := r.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	pkgPath = pkgPath[:len(pkgPath)-1] // remove delimiter
+	return gcexportdata.Read(r, token.NewFileSet(), m, pkgPath)
 }
 
 func writeExportData(pkg *packages.Package, filename string) error {
@@ -117,6 +125,9 @@ func writeExportData(pkg *packages.Package, filename string) error {
 	if err != nil {
 		return err
 	}
+	// Include the package path in the file. The exportdata format does
+	// not record the path of the package being written.
+	fmt.Fprintln(f, pkg.PkgPath)
 	err1 := gcexportdata.Write(f, pkg.Fset, pkg.Types)
 	err2 := f.Close()
 	if err1 != nil {

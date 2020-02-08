@@ -152,12 +152,13 @@ type Policy struct {
 	//
 	// Operations affecting conditional bindings must specify version 3. This can
 	// be either setting a conditional policy, modifying a conditional binding,
-	// or removing a conditional binding from the stored conditional policy.
+	// or removing a binding (conditional or unconditional) from the stored
+	// conditional policy.
 	// Operations on non-conditional policies may specify any valid value or
 	// leave the field unset.
 	//
-	// If no etag is provided in the call to `setIamPolicy`, any version
-	// compliance checks on the incoming and/or stored policy is skipped.
+	// If no etag is provided in the call to `setIamPolicy`, version compliance
+	// checks against the stored policy is skipped.
 	Version int32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	// Associates a list of `members` to a `role`. Optionally may specify a
 	// `condition` that determines when binding is in effect.
@@ -173,8 +174,8 @@ type Policy struct {
 	//
 	// If no `etag` is provided in the call to `setIamPolicy`, then the existing
 	// policy is overwritten. Due to blind-set semantics of an etag-less policy,
-	// 'setIamPolicy' will not fail even if either of incoming or stored policy
-	// does not meet the version requirements.
+	// 'setIamPolicy' will not fail even if the incoming policy version does not
+	// meet the requirements for modifying the stored policy.
 	Etag                 []byte   `protobuf:"bytes,3,opt,name=etag,proto3" json:"etag,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`

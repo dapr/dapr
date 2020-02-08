@@ -11,9 +11,11 @@ type metadata struct {
 	ConnectionString              string `json:"connectionString"`
 	ConsumerID                    string `json:"consumerID"`
 	TimeoutInSec                  int    `json:"timeoutInSec"`
+	HandlerTimeoutInSec           int    `json:"handlerTimeoutInSec"`
 	DisableEntityManagement       bool   `json:"disableEntityManagement"`
 	MaxDeliveryCount              *int   `json:"maxDeliveryCount"`
 	LockDurationInSec             *int   `json:"lockDurationInSec"`
 	DefaultMessageTimeToLiveInSec *int   `json:"defaultMessageTimeToLiveInSec"`
 	AutoDeleteOnIdleInSec         *int   `json:"autoDeleteOnIdleInSec"`
+	NumConcurrentHandlers         *int   `json:"numConcurrentHandlers"`
 }

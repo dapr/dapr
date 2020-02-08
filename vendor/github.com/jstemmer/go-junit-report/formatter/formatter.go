@@ -14,8 +14,8 @@ import (
 
 // JUnitTestSuites is a collection of JUnit test suites.
 type JUnitTestSuites struct {
-	XMLName xml.Name `xml:"testsuites"`
-	Suites  []JUnitTestSuite
+	XMLName xml.Name         `xml:"testsuites"`
+	Suites  []JUnitTestSuite `xml:"testsuite"`
 }
 
 // JUnitTestSuite is a single JUnit test suite which may contain many
@@ -27,7 +27,7 @@ type JUnitTestSuite struct {
 	Time       string          `xml:"time,attr"`
 	Name       string          `xml:"name,attr"`
 	Properties []JUnitProperty `xml:"properties>property,omitempty"`
-	TestCases  []JUnitTestCase
+	TestCases  []JUnitTestCase `xml:"testcase"`
 }
 
 // JUnitTestCase is a single test case with its result.

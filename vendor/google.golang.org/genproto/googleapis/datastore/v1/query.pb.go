@@ -220,12 +220,12 @@ type EntityResult struct {
 	// The version of the entity, a strictly positive number that monotonically
 	// increases with changes to the entity.
 	//
-	// This field is set for
-	// [`FULL`][google.datastore.v1.EntityResult.ResultType.FULL] entity results.
+	// This field is set for [`FULL`][google.datastore.v1.EntityResult.ResultType.FULL] entity
+	// results.
 	//
-	// For [missing][google.datastore.v1.LookupResponse.missing] entities in
-	// `LookupResponse`, this is the version of the snapshot that was used to look
-	// up the entity, and it is always set except for eventually consistent reads.
+	// For [missing][google.datastore.v1.LookupResponse.missing] entities in `LookupResponse`, this
+	// is the version of the snapshot that was used to look up the entity, and it
+	// is always set except for eventually consistent reads.
 	Version int64 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
 	// A cursor that points to the position after the result entity.
 	// Set only when the `EntityResult` is part of a `QueryResultBatch` message.

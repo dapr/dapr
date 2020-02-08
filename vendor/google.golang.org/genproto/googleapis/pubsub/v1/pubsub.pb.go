@@ -15,6 +15,8 @@ import (
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	field_mask "google.golang.org/genproto/protobuf/field_mask"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -2949,6 +2951,35 @@ type PublisherServer interface {
 	DeleteTopic(context.Context, *DeleteTopicRequest) (*empty.Empty, error)
 }
 
+// UnimplementedPublisherServer can be embedded to have forward compatible implementations.
+type UnimplementedPublisherServer struct {
+}
+
+func (*UnimplementedPublisherServer) CreateTopic(ctx context.Context, req *Topic) (*Topic, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateTopic not implemented")
+}
+func (*UnimplementedPublisherServer) UpdateTopic(ctx context.Context, req *UpdateTopicRequest) (*Topic, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTopic not implemented")
+}
+func (*UnimplementedPublisherServer) Publish(ctx context.Context, req *PublishRequest) (*PublishResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Publish not implemented")
+}
+func (*UnimplementedPublisherServer) GetTopic(ctx context.Context, req *GetTopicRequest) (*Topic, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTopic not implemented")
+}
+func (*UnimplementedPublisherServer) ListTopics(ctx context.Context, req *ListTopicsRequest) (*ListTopicsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTopics not implemented")
+}
+func (*UnimplementedPublisherServer) ListTopicSubscriptions(ctx context.Context, req *ListTopicSubscriptionsRequest) (*ListTopicSubscriptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTopicSubscriptions not implemented")
+}
+func (*UnimplementedPublisherServer) ListTopicSnapshots(ctx context.Context, req *ListTopicSnapshotsRequest) (*ListTopicSnapshotsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTopicSnapshots not implemented")
+}
+func (*UnimplementedPublisherServer) DeleteTopic(ctx context.Context, req *DeleteTopicRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteTopic not implemented")
+}
+
 func RegisterPublisherServer(s *grpc.Server, srv PublisherServer) {
 	s.RegisterService(&_Publisher_serviceDesc, srv)
 }
@@ -3558,6 +3589,59 @@ type SubscriberServer interface {
 	// captured by a snapshot. Note that both the subscription and the snapshot
 	// must be on the same topic.
 	Seek(context.Context, *SeekRequest) (*SeekResponse, error)
+}
+
+// UnimplementedSubscriberServer can be embedded to have forward compatible implementations.
+type UnimplementedSubscriberServer struct {
+}
+
+func (*UnimplementedSubscriberServer) CreateSubscription(ctx context.Context, req *Subscription) (*Subscription, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSubscription not implemented")
+}
+func (*UnimplementedSubscriberServer) GetSubscription(ctx context.Context, req *GetSubscriptionRequest) (*Subscription, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSubscription not implemented")
+}
+func (*UnimplementedSubscriberServer) UpdateSubscription(ctx context.Context, req *UpdateSubscriptionRequest) (*Subscription, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateSubscription not implemented")
+}
+func (*UnimplementedSubscriberServer) ListSubscriptions(ctx context.Context, req *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptions not implemented")
+}
+func (*UnimplementedSubscriberServer) DeleteSubscription(ctx context.Context, req *DeleteSubscriptionRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSubscription not implemented")
+}
+func (*UnimplementedSubscriberServer) ModifyAckDeadline(ctx context.Context, req *ModifyAckDeadlineRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ModifyAckDeadline not implemented")
+}
+func (*UnimplementedSubscriberServer) Acknowledge(ctx context.Context, req *AcknowledgeRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Acknowledge not implemented")
+}
+func (*UnimplementedSubscriberServer) Pull(ctx context.Context, req *PullRequest) (*PullResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Pull not implemented")
+}
+func (*UnimplementedSubscriberServer) StreamingPull(srv Subscriber_StreamingPullServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamingPull not implemented")
+}
+func (*UnimplementedSubscriberServer) ModifyPushConfig(ctx context.Context, req *ModifyPushConfigRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ModifyPushConfig not implemented")
+}
+func (*UnimplementedSubscriberServer) GetSnapshot(ctx context.Context, req *GetSnapshotRequest) (*Snapshot, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSnapshot not implemented")
+}
+func (*UnimplementedSubscriberServer) ListSnapshots(ctx context.Context, req *ListSnapshotsRequest) (*ListSnapshotsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSnapshots not implemented")
+}
+func (*UnimplementedSubscriberServer) CreateSnapshot(ctx context.Context, req *CreateSnapshotRequest) (*Snapshot, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSnapshot not implemented")
+}
+func (*UnimplementedSubscriberServer) UpdateSnapshot(ctx context.Context, req *UpdateSnapshotRequest) (*Snapshot, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateSnapshot not implemented")
+}
+func (*UnimplementedSubscriberServer) DeleteSnapshot(ctx context.Context, req *DeleteSnapshotRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSnapshot not implemented")
+}
+func (*UnimplementedSubscriberServer) Seek(ctx context.Context, req *SeekRequest) (*SeekResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Seek not implemented")
 }
 
 func RegisterSubscriberServer(s *grpc.Server, srv SubscriberServer) {

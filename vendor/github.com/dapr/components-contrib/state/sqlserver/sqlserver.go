@@ -430,6 +430,10 @@ func (s *SQLServer) Get(req *state.GetRequest) (*state.GetResponse, error) {
 		return nil, err
 	}
 
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
 	defer rows.Close()
 
 	if !rows.Next() {

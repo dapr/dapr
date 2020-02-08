@@ -4,16 +4,20 @@ State Stores provide a common way to interact with different data store implemen
 
 Currently supported state stores are:
 
-* Redis
-* HashiCorp Consul
-* Etcd
-* Cassandra
 * Azure CosmosDB
+* Azure Table Storage
+* Cassandra
+* Cloud Firestore (Datastore mode)
+* CloudState
+* Couchbase
+* Etcd
+* HashiCorp Consul
+* Hazelcast
 * Memcached
 * MongoDB
+* Redis
+* SQL Server
 * Zookeeper
-* Cloud Firestore (Datastore mode)
-* Couchbase
 
 ## Implementing a new State Store
 
