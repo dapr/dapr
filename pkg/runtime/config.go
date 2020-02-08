@@ -51,7 +51,7 @@ type Config struct {
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, enableMetrics bool, mtlsEnabled bool, sentryAddress string) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
