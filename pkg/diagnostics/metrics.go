@@ -4,16 +4,13 @@ import (
 	"fmt"
 	"strings"
 
-	"contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/dapr/components-contrib/middleware/http/nethttpadaptor"
 	"github.com/dapr/dapr/pkg/config"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	http_metrics "github.com/improbable-eng/go-httpwares/metrics"
-	"github.com/improbable-eng/go-httpwares/metrics/prometheus"
-	log "github.com/sirupsen/logrus"
+	http_prometheus "github.com/improbable-eng/go-httpwares/metrics/prometheus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
-	"go.opencensus.io/stats/view"
 	grpc_go "google.golang.org/grpc"
 )
 
@@ -77,20 +74,4 @@ func getDefaultMetrics() []string {
 		httpServerMetricsGroup,
 		grpcStreamServerMetricsGroup,
 	}
-}
-
-func metricsHTTPExporter(daprID string, spec config.MetricsSpec) fasthttp.RequestHandler {
-	namespace := daprID
-	if spec.Namespace != "" {
-		namespace = spec.Namespace
-	}
-	pe, err := prometheus.NewExporter(prometheus.Options{
-		Namespace:   namespace,
-		ConstLabels: spec.Labels,
-	})
-	if err != nil {
-		log.Fatalf("failed to create Prometheus exporter: %v", err)
-	}
-	view.RegisterExporter(pe)
-	return fasthttpadaptor.NewFastHTTPHandlerFunc(pe.ServeHTTP)
 }
