@@ -32,8 +32,6 @@ type server struct {
 	api         API
 }
 
-type routeFunc func() (methods string, path string, handlers []routing.Handler)
-
 // NewServer returns a new HTTP server
 func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricsSpec config.MetricsSpec, pipeline http_middleware.Pipeline) Server {
 	return &server{
@@ -47,17 +45,11 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, met
 
 // StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
-	var routeFuncs []routeFunc
-	if s.metricsSpec.Enabled {
-		metricsRouteFunc := diag.MetricsHTTPRouteFunc(s.config.DaprID, s.metricsSpec)
-		routeFuncs = append(routeFuncs, metricsRouteFunc)
-	}
-
 	handler :=
 		s.useProxy(
 			s.useCors(
 				s.useComponents(
-					s.useRouter(routeFuncs))))
+					s.useRouter())))
 
 	if s.metricsSpec.Enabled {
 		handler = s.useMetrics(handler)
@@ -79,23 +71,19 @@ func (s *server) StartNonBlocking() {
 }
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled tracing middleware")
+	log.Infof("enabled tracing http middleware")
 	return diag.TracingHTTPMiddleware(s.tracingSpec, next)
 }
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled metrics middleware")
+	log.Infof("enabled metrics http middleware")
 	return diag.MetricsHTTPMiddleware(s.metricsSpec, next)
 }
 
-func (s *server) useRouter(routeFuncs []routeFunc) fasthttp.RequestHandler {
+func (s *server) useRouter() fasthttp.RequestHandler {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)
 	handler := router.HandleRequest
-	for _, routeFunc := range routeFuncs {
-		methods, path, handlers := routeFunc()
-		router.To(methods, path, handlers...)
-	}
 	return handler
 }
 
@@ -104,14 +92,14 @@ func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHan
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled cors middleware")
+	log.Infof("enabled cors  http middleware")
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)
 	return corsHandler.CorsMiddleware(next)
 }
 
 func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled proxy middleware")
+	log.Infof("enabled proxy http middleware")
 	return func(ctx *fasthttp.RequestCtx) {
 		var proto string
 		if ctx.IsTLS() {

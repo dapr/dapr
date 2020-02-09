@@ -53,12 +53,13 @@ type TracingSpec struct {
 }
 
 type MetricsSpec struct {
-	Enabled              bool              `json:"enabled" yaml:"enabled"`
-	Route                string            `json:"route" yaml:"route"`
-	Namespace            string            `json:"namespace" yaml:"namespace"`
-	Labels               map[string]string `json:"labels" yaml:"labels"`
-	UseDefaultMetrics    bool              `json:"useDefaultMetrics" yaml:"useDefaultMetrics"`
-	EnabledMetricsGroups []string          `json:"enabledMetricsGroups" yaml:"enabledMetricsGroups"`
+	Enabled       bool              `json:"enabled" yaml:"enabled"`
+	Path          string            `json:"path" yaml:"path"`
+	Namespace     string            `json:"namespace" yaml:"namespace"`
+	Port          string            `json:"port" yaml:"port"`
+	Labels        map[string]string `json:"labels" yaml:"labels"`
+	UseDefaults   bool              `json:"useDefaults" yaml:"useDefaults"`
+	MetricsGroups []string          `json:"metricsGroups" yaml:"metricsGroups"`
 }
 
 type MTLSSpec struct {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	net_http "net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/dapr/components-contrib/pubsub"
@@ -217,12 +219,39 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("gRPC server is running on port %v", a.runtimeConfig.GRPCPort)
 
+	a.startMetricsServer(a.globalConfig.Spec.MetricsSpec)
+
 	err = a.announceSelf()
 	if err != nil {
 		log.Warnf("failed to broadcast address to local network: %s", err)
 	}
 
 	return nil
+}
+
+func (a *DaprRuntime) startMetricsServer(spec config.MetricsSpec) {
+	go func() {
+		port := spec.Port
+		if port == "" {
+			port = fmt.Sprintf(":%d", 9090)
+		}
+		// TODO: Improve port validation
+		if port[0] != ':' {
+			port = ":" + port
+		}
+		path := spec.Path
+		if path == "" {
+			path = "/metrics"
+		}
+		// TODO: Improve path validation
+		if path[0] != '/' {
+			path = "/" + path
+		}
+		net_http.HandleFunc(path, promhttp.Handler().ServeHTTP)
+
+		log.Infof("starting metrics server on port %v at path %s", port, path)
+		log.Fatal(net_http.ListenAndServe(port, nil))
+	}()
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -488,7 +517,7 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 func (a *DaprRuntime) startGRPCServer(port int) error {
 	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
-	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
+	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricsSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
 }

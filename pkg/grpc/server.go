@@ -17,6 +17,7 @@ import (
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	log "github.com/sirupsen/logrus"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -36,6 +37,7 @@ type server struct {
 	api                API
 	config             ServerConfig
 	tracingSpec        config.TracingSpec
+	metricsSpec        config.MetricsSpec
 	authenticator      auth.Authenticator
 	listener           net.Listener
 	srv                *grpc_go.Server
@@ -46,11 +48,12 @@ type server struct {
 }
 
 // NewServer returns a new gRPC server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricsSpec config.MetricsSpec, authenticator auth.Authenticator) Server {
 	return &server{
 		api:           api,
 		config:        config,
 		tracingSpec:   tracingSpec,
+		metricsSpec:   metricsSpec,
 		authenticator: authenticator,
 		renewMutex:    &sync.Mutex{},
 	}
@@ -72,6 +75,10 @@ func (s *server) StartNonBlocking() error {
 
 	daprinternal_pb.RegisterDaprInternalServer(server, s.api)
 	dapr_pb.RegisterDaprServer(server, s.api)
+
+	if s.metricsSpec.Enabled {
+		grpc_prometheus.Register(s.srv)
+	}
 
 	go func() {
 		if err := server.Serve(lis); err != nil {
@@ -104,7 +111,12 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	opts := []grpc_go.ServerOption{}
 
 	if s.tracingSpec.Enabled {
-		opts = append(opts, grpc_go.StreamInterceptor(diag.TracingGRPCMiddleware(s.tracingSpec)), grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
+		log.Infof("enabled tracing grpc middleware")
+		opts = append(opts, grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)), grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
+	}
+	if s.metricsSpec.Enabled {
+		log.Infof("enabled metrics grpc middleware")
+		opts = append(opts, grpc_go.StreamInterceptor(diag.MetricsGRPCMiddlewareStream(s.metricsSpec)), grpc_go.UnaryInterceptor(diag.MetricsGRPCMiddlewareUnary(s.metricsSpec)))
 	}
 
 	if s.authenticator != nil {
