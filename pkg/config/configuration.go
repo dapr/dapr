@@ -23,7 +23,6 @@ type Configuration struct {
 type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MetricsSpec      MetricsSpec  `json:"metrics,omitempty" yaml:"metrics,omitempty"`
 	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
 }
 
@@ -50,16 +49,6 @@ type TracingSpec struct {
 	Enabled      bool `json:"enabled" yaml:"enabled"`
 	ExpandParams bool `json:"expandParams" yaml:"expandParams"`
 	IncludeBody  bool `json:"includeBody" yaml:"includeBody"`
-}
-
-type MetricsSpec struct {
-	Enabled       bool              `json:"enabled" yaml:"enabled"`
-	Path          string            `json:"path" yaml:"path"`
-	Namespace     string            `json:"namespace" yaml:"namespace"`
-	Port          string            `json:"port" yaml:"port"`
-	Labels        map[string]string `json:"labels" yaml:"labels"`
-	UseDefaults   bool              `json:"useDefaults" yaml:"useDefaults"`
-	MetricsGroups []string          `json:"metricsGroups" yaml:"metricsGroups"`
 }
 
 type MTLSSpec struct {

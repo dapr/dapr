@@ -37,7 +37,6 @@ type server struct {
 	api                API
 	config             ServerConfig
 	tracingSpec        config.TracingSpec
-	metricsSpec        config.MetricsSpec
 	authenticator      auth.Authenticator
 	listener           net.Listener
 	srv                *grpc_go.Server
@@ -48,12 +47,11 @@ type server struct {
 }
 
 // NewServer returns a new gRPC server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricsSpec config.MetricsSpec, authenticator auth.Authenticator) Server {
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
 	return &server{
 		api:           api,
 		config:        config,
 		tracingSpec:   tracingSpec,
-		metricsSpec:   metricsSpec,
 		authenticator: authenticator,
 		renewMutex:    &sync.Mutex{},
 	}
@@ -76,7 +74,7 @@ func (s *server) StartNonBlocking() error {
 	daprinternal_pb.RegisterDaprInternalServer(server, s.api)
 	dapr_pb.RegisterDaprServer(server, s.api)
 
-	if s.metricsSpec.Enabled {
+	if s.config.EnableMetrics {
 		grpc_prometheus.Register(s.srv)
 	}
 
@@ -114,9 +112,9 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 		log.Infof("enabled tracing grpc middleware")
 		opts = append(opts, grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)), grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
 	}
-	if s.metricsSpec.Enabled {
+	if s.config.EnableMetrics {
 		log.Infof("enabled metrics grpc middleware")
-		opts = append(opts, grpc_go.StreamInterceptor(diag.MetricsGRPCMiddlewareStream(s.metricsSpec)), grpc_go.UnaryInterceptor(diag.MetricsGRPCMiddlewareUnary(s.metricsSpec)))
+		opts = append(opts, grpc_go.StreamInterceptor(diag.MetricsGRPCMiddlewareStream()), grpc_go.UnaryInterceptor(diag.MetricsGRPCMiddlewareUnary()))
 	}
 
 	if s.authenticator != nil {

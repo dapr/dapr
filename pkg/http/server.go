@@ -27,18 +27,16 @@ type Server interface {
 type server struct {
 	config      ServerConfig
 	tracingSpec config.TracingSpec
-	metricsSpec config.MetricsSpec
 	pipeline    http_middleware.Pipeline
 	api         API
 }
 
 // NewServer returns a new HTTP server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricsSpec config.MetricsSpec, pipeline http_middleware.Pipeline) Server {
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pipeline http_middleware.Pipeline) Server {
 	return &server{
 		api:         api,
 		config:      config,
 		tracingSpec: tracingSpec,
-		metricsSpec: metricsSpec,
 		pipeline:    pipeline,
 	}
 }
@@ -51,7 +49,7 @@ func (s *server) StartNonBlocking() {
 				s.useComponents(
 					s.useRouter())))
 
-	if s.metricsSpec.Enabled {
+	if s.config.EnableMetrics {
 		handler = s.useMetrics(handler)
 	}
 	if s.tracingSpec.Enabled {
@@ -77,7 +75,7 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	log.Infof("enabled metrics http middleware")
-	return diag.MetricsHTTPMiddleware(s.metricsSpec, next)
+	return diag.MetricsHTTPMiddleware(next)
 }
 
 func (s *server) useRouter() fasthttp.RequestHandler {
