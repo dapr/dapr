@@ -47,6 +47,16 @@ type actorLogEntry struct {
 	EndTimestamp   int    `json:"endTimestamp,omitempty"`
 }
 
+type activeActorsCount struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
+}
+
+type metadata struct {
+	ID     string              `json:"id"`
+	Actors []activeActorsCount `json:"actors"`
+}
+
 func parseLogEntries(resp []byte) []actorLogEntry {
 	logEntries := []actorLogEntry{}
 	err := json.Unmarshal(resp, &logEntries)
@@ -293,6 +303,16 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("Get actor metadata", func(t *testing.T) {
 		tr.Platform.Scale(appName, appScaleToCheckMetadata)
 
+		res, err := utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
+		require.NoError(t, err)
+
+		var prevMetadata metadata
+		err = json.Unmarshal(res, &prevMetadata)
+		require.NoError(t, err)
+		var prevActors int
+		if len(prevMetadata.Actors) > 0 {
+			prevActors = prevMetadata.Actors[0].Count
+		}
 		// Each test needs to have a different actorID
 		actorIDBase := "1008Instance"
 
@@ -301,13 +321,16 @@ func TestServiceInvocation(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		res, err := utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
+		res, err = utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 
 		require.NoError(t, err)
-		expectedB, _ := json.Marshal(map[string]interface{}{
-			"id":     "actorfeatures",
-			"actors": []map[string]interface{}{{"type": "testactorfeatures", "count": 5}},
+		expectedB, _ := json.Marshal(metadata{
+			ID: "actorfeatures",
+			Actors: []activeActorsCount{{
+				Type:  "testactorfeatures",
+				Count: prevActors + actorsToCheckMetadata,
+			}},
 		})
-		require.Equal(t, expectedB, res)
+		require.ElementsMatch(t, expectedB, res)
 	})
 }
