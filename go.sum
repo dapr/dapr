@@ -166,6 +166,8 @@ github.com/dapr/components-contrib v0.0.0-20200207061955-d2a6fa52640a h1:iVswprt
 github.com/dapr/components-contrib v0.0.0-20200207061955-d2a6fa52640a/go.mod h1:QNaKKTQp3O/EmXJLI27XBow1Ym6DI6EOZope5uAHLng=
 github.com/dapr/components-contrib v0.0.0-20200210190437-df6c3c3e32ff h1:JGnCLGUmbAtSjRTsfhq0MVjdkjU74yDWt4V6jFtUG+g=
 github.com/dapr/components-contrib v0.0.0-20200210190437-df6c3c3e32ff/go.mod h1:hGuI0lRDWuPL3grNzySyzrY+ILwgk503gskRrGwuEPI=
+github.com/dapr/components-contrib v0.0.0-20200210203652-e67ea01fbe5f h1:AkTVLvngrt4XRdXExkVY8jggFa2CnUEkiKsJx99gNp8=
+github.com/dapr/components-contrib v0.0.0-20200210203652-e67ea01fbe5f/go.mod h1:hGuI0lRDWuPL3grNzySyzrY+ILwgk503gskRrGwuEPI=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
