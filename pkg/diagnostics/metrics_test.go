@@ -43,7 +43,7 @@ func TestMetricsGRPCMiddlewareStream(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/", nil)
 	promhttp.Handler().ServeHTTP(w, req)
-	assert.Contains(t, w.Body.String(), testdata.GRPCStreamMetrics)
+	assertMetricsExist(t, w.Body.String(), testdata.GRPCStreamMetrics)
 }
 
 func TestMetricsGRPCMiddlewareUnary(t *testing.T) {
@@ -55,7 +55,7 @@ func TestMetricsGRPCMiddlewareUnary(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/", nil)
 	promhttp.Handler().ServeHTTP(w, req)
-	assert.Contains(t, w.Body.String(), testdata.GRPCUnaryMetrics)
+	assertMetricsExist(t, w.Body.String(), testdata.GRPCUnaryMetrics)
 }
 
 func TestMetricsHTTPMiddleware(t *testing.T) {
@@ -87,7 +87,7 @@ func assertMetricsExist(t *testing.T, actual, expected string) {
 	for i := 0; i < len(expectedLines); i++ {
 		expected := expectedLines[i]
 		if strings.HasPrefix(expected, "#") {
-			continue // ignore comments
+			continue // ignore comments and empty lines
 		}
 		match := r.FindString(expected)
 		metric := match[0 : len(match)-1]
@@ -98,7 +98,7 @@ func assertMetricsExist(t *testing.T, actual, expected string) {
 	for j := 0; j < len(actualLines); j++ {
 		actual := actualLines[j]
 		if strings.HasPrefix(actual, "#") || len(actual) == 0 {
-			continue // ignore comments
+			continue // ignore comments and empty lines
 		}
 		match := r.FindString(actual)
 		metric := match[0 : len(match)-1]
