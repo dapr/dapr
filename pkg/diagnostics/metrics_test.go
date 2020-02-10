@@ -96,7 +96,6 @@ func assertMetricsExist(t *testing.T, actual, expected string) {
 	}
 
 	// Remove metrics not on platform
-	// Remove metrics not on platform
 	switch runtime.GOOS {
 	case "darwin":
 		delete(expectedMap, "process_cpu_seconds_total")
