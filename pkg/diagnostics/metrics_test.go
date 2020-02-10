@@ -9,7 +9,7 @@ import (
 
 	"github.com/dapr/components-contrib/middleware/http/nethttpadaptor"
 	"github.com/dapr/dapr/pkg/diagnostics/testdata"
-	helloworld "github.com/dapr/dapr/pkg/diagnostics/utils"
+	pb "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 
@@ -19,7 +19,7 @@ import (
 )
 
 type server struct {
-	helloworld.UnimplementedGreeterServer
+	pb.UnimplementedGreeterServer
 }
 
 func TestBaselineMetrics(t *testing.T) {
@@ -40,7 +40,7 @@ func TestBaselineMetrics(t *testing.T) {
 func TestMetricsGRPCMiddlewareStream(t *testing.T) {
 	opt := grpc_go.StreamInterceptor(MetricsGRPCMiddlewareStream())
 	s := grpc_go.NewServer(opt)
-	helloworld.RegisterGreeterServer(s, &server{})
+	pb.RegisterGreeterServer(s, &server{})
 	grpc_prometheus.Register(s)
 
 	w := httptest.NewRecorder()
@@ -52,7 +52,7 @@ func TestMetricsGRPCMiddlewareStream(t *testing.T) {
 func TestMetricsGRPCMiddlewareUnary(t *testing.T) {
 	opt := grpc_go.UnaryInterceptor(MetricsGRPCMiddlewareUnary())
 	s := grpc_go.NewServer(opt)
-	helloworld.RegisterGreeterServer(s, &server{})
+	pb.RegisterGreeterServer(s, &server{})
 	grpc_prometheus.Register(s)
 
 	w := httptest.NewRecorder()

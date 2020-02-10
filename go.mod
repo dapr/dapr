@@ -18,7 +18,8 @@ require (
 	github.com/go-ozzo/ozzo-routing v2.1.4+incompatible // indirect
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/gddo v0.0.0-20190815223733-287de01127ef // indirect
-	github.com/golang/protobuf v1.3.2
+	github.com/golang/mock v1.4.0
+	github.com/golang/protobuf v1.3.3
 	github.com/google/uuid v1.1.1
 	github.com/googleapis/gnostic v0.3.1 // indirect
 	github.com/gorilla/mux v1.7.1
@@ -46,6 +47,8 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasthttp v1.6.0
 	go.opencensus.io v0.22.3
+	golang.org/x/net v0.0.0-20200202094626-16171245cfb2 // indirect
+	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5 // indirect
 	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
 	gonum.org/v1/gonum v0.0.0-20190911200027-40d3308efe80 // indirect
 	google.golang.org/grpc v1.26.0
