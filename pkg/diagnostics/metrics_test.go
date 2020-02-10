@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -18,6 +19,10 @@ import (
 	grpc_go "google.golang.org/grpc"
 )
 
+const (
+	metricsRegex = `.+?([{\s])`
+)
+
 type server struct {
 	pb.UnimplementedGreeterServer
 }
@@ -28,11 +33,14 @@ func TestBaselineMetrics(t *testing.T) {
 	promhttp.Handler().ServeHTTP(w, req)
 	bodySplit := strings.Split(w.Body.String(), "\n")
 	testDataSplit := strings.Split(testdata.BaselineMetrics, "\n")
+	r := regexp.MustCompile(metricsRegex)
 	for i := 0; i < len(testDataSplit); i++ {
-		if strings.HasPrefix(testDataSplit[i], "#") {
+		line := testDataSplit[i]
+		if strings.HasPrefix(line, "#") || len(line) == 0 {
 			continue // ignore comments
 		}
-		metric := strings.Split(testDataSplit[i], " ")[0]
+		match := r.FindString(line)
+		metric := match[0 : len(match)-1]
 		assert.Contains(t, bodySplit[i], metric)
 	}
 }
@@ -80,21 +88,27 @@ func TestMetricsHTTPMiddleware(t *testing.T) {
 	testDataSplit := strings.Split(testdata.HTTPServerMetrics, "\n")
 	testDataMap := make(map[string]bool)
 
+	r := regexp.MustCompile(metricsRegex)
 	// Build a map of expected metrics
 	for i := 0; i < len(testDataSplit); i++ {
-		if strings.HasPrefix(testDataSplit[i], "#") {
+		line := testDataSplit[i]
+		if strings.HasPrefix(line, "#") {
 			continue // ignore comments
 		}
-		metric := strings.Split(testDataSplit[i], " ")[0]
+
+		match := r.FindString(line)
+		metric := match[0 : len(match)-1]
 		testDataMap[metric] = false
 	}
 
 	// Find the metrics that are in the actual data
 	for j := 0; j < len(bodySplit); j++ {
-		if strings.HasPrefix(bodySplit[j], "#") {
+		line := bodySplit[j]
+		if strings.HasPrefix(line, "#") || len(line) == 0 {
 			continue // ignore comments
 		}
-		metric := strings.Split(bodySplit[j], " ")[0]
+		match := r.FindString(line)
+		metric := match[0 : len(match)-1]
 		if _, ok := testDataMap[metric]; ok {
 			testDataMap[metric] = true
 		}
