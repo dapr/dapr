@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -92,6 +93,21 @@ func assertMetricsExist(t *testing.T, actual, expected string) {
 		match := r.FindString(expected)
 		metric := match[0 : len(match)-1]
 		expectedMap[metric] = false
+	}
+
+	// Remove metrics not on platform
+	// Remove metrics not on platform
+	switch runtime.GOOS {
+	case "darwin":
+		delete(expectedMap, "process_cpu_seconds_total")
+		delete(expectedMap, "process_start_time_seconds")
+		delete(expectedMap, "process_open_fds")
+		delete(expectedMap, "process_max_fds")
+		delete(expectedMap, "process_resident_memory_bytes")
+		delete(expectedMap, "process_virtual_memory_bytes")
+		delete(expectedMap, "process_virtual_memory_max_bytes")
+	case "windows":
+		delete(expectedMap, "process_virtual_memory_max_bytes")
 	}
 
 	// Find the metrics that are in the actual data
