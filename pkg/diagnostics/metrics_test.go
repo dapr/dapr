@@ -31,18 +31,7 @@ func TestBaselineMetrics(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/", nil)
 	promhttp.Handler().ServeHTTP(w, req)
-	bodySplit := strings.Split(w.Body.String(), "\n")
-	testDataSplit := strings.Split(testdata.BaselineMetrics, "\n")
-	r := regexp.MustCompile(metricsRegex)
-	for i := 0; i < len(testDataSplit); i++ {
-		line := testDataSplit[i]
-		if strings.HasPrefix(line, "#") || len(line) == 0 {
-			continue // ignore comments
-		}
-		match := r.FindString(line)
-		metric := match[0 : len(match)-1]
-		assert.Contains(t, bodySplit[i], metric)
-	}
+	assertMetricsExist(t, w.Body.String(), testdata.BaselineMetrics)
 }
 
 func TestMetricsGRPCMiddlewareStream(t *testing.T) {
@@ -84,38 +73,42 @@ func TestMetricsHTTPMiddleware(t *testing.T) {
 	metricsReq, _ := http.NewRequest("GET", "/", strings.NewReader(""))
 	promhttp.Handler().ServeHTTP(metricsResWriter, metricsReq)
 
-	bodySplit := strings.Split(metricsResWriter.Body.String(), "\n")
-	testDataSplit := strings.Split(testdata.HTTPServerMetrics, "\n")
-	testDataMap := make(map[string]bool)
+	assertMetricsExist(t, metricsResWriter.Body.String(), testdata.HTTPServerMetrics)
+}
 
+func assertMetricsExist(t *testing.T, actual, expected string) {
 	r := regexp.MustCompile(metricsRegex)
+
+	actualLines := strings.Split(actual, "\n")
+	expectedLines := strings.Split(expected, "\n")
+
 	// Build a map of expected metrics
-	for i := 0; i < len(testDataSplit); i++ {
-		line := testDataSplit[i]
-		if strings.HasPrefix(line, "#") {
+	expectedMap := make(map[string]bool)
+	for i := 0; i < len(expectedLines); i++ {
+		expected := expectedLines[i]
+		if strings.HasPrefix(expected, "#") {
 			continue // ignore comments
 		}
-
-		match := r.FindString(line)
+		match := r.FindString(expected)
 		metric := match[0 : len(match)-1]
-		testDataMap[metric] = false
+		expectedMap[metric] = false
 	}
 
 	// Find the metrics that are in the actual data
-	for j := 0; j < len(bodySplit); j++ {
-		line := bodySplit[j]
-		if strings.HasPrefix(line, "#") || len(line) == 0 {
+	for j := 0; j < len(actualLines); j++ {
+		actual := actualLines[j]
+		if strings.HasPrefix(actual, "#") || len(actual) == 0 {
 			continue // ignore comments
 		}
-		match := r.FindString(line)
+		match := r.FindString(actual)
 		metric := match[0 : len(match)-1]
-		if _, ok := testDataMap[metric]; ok {
-			testDataMap[metric] = true
+		if _, ok := expectedMap[metric]; ok {
+			expectedMap[metric] = true
 		}
 	}
 
 	// Check all were found
-	for k, v := range testDataMap {
+	for k, v := range expectedMap {
 		assert.True(t, v, fmt.Sprintf("expected metric %s was missing!", k))
 	}
 }
