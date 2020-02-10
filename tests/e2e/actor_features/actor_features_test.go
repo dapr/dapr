@@ -27,6 +27,7 @@ const (
 	timerName                             = "myTimer"                            // Timer name.
 	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
 	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
+	secondsToCheckGetMetadata             = 10                                   // How much time to wait to check metadata.
 	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
 	actorsToCheckRebalance                = 10                                   // How many actors to create in the rebalance check test.
@@ -302,6 +303,7 @@ func TestServiceInvocation(t *testing.T) {
 
 	t.Run("Get actor metadata", func(t *testing.T) {
 		tr.Platform.Scale(appName, appScaleToCheckMetadata)
+		time.Sleep(secondsToCheckGetMetadata * time.Second)
 
 		res, err := utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		require.NoError(t, err)
@@ -313,6 +315,7 @@ func TestServiceInvocation(t *testing.T) {
 		if len(prevMetadata.Actors) > 0 {
 			prevActors = prevMetadata.Actors[0].Count
 		}
+
 		// Each test needs to have a different actorID
 		actorIDBase := "1008Instance"
 
@@ -322,15 +325,18 @@ func TestServiceInvocation(t *testing.T) {
 		}
 
 		res, err = utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
-
 		require.NoError(t, err)
-		expectedB, _ := json.Marshal(metadata{
-			ID: "actorfeatures",
+
+		expected := metadata{
+			ID: appName,
 			Actors: []activeActorsCount{{
 				Type:  "testactorfeatures",
 				Count: prevActors + actorsToCheckMetadata,
 			}},
-		})
-		require.ElementsMatch(t, expectedB, res)
+		}
+		var actual metadata
+		err = json.Unmarshal(res, &actual)
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
 	})
 }
