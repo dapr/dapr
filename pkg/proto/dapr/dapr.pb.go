@@ -4,12 +4,17 @@
 package dapr
 
 import (
+	context "context"
 	fmt "fmt"
+	math "math"
+
 	proto "github.com/golang/protobuf/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 	duration "github.com/golang/protobuf/ptypes/duration"
-	_ "github.com/golang/protobuf/ptypes/empty"
-	math "math"
+	empty "github.com/golang/protobuf/ptypes/empty"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -986,4 +991,300 @@ var fileDescriptor_221b5d054bffffd8 = []byte{
 	0x37, 0xe8, 0xc2, 0x81, 0xcb, 0xe4, 0xb9, 0x01, 0x84, 0x64, 0x98, 0x84, 0x0e, 0xc1, 0x9f, 0x7a,
 	0x3d, 0x5c, 0x58, 0x5f, 0x7b, 0x2e, 0xa1, 0xc2, 0xba, 0xe0, 0xfe, 0xec, 0xea, 0xb9, 0x3c, 0xdb,
 	0xff, 0x2f, 0x00, 0x00, 0xff, 0xff, 0x43, 0x9f, 0x88, 0x51, 0x54, 0x0c, 0x00, 0x00,
+}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+const _ = grpc.SupportPackageIsVersion4
+
+// DaprClient is the client API for Dapr service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type DaprClient interface {
+	PublishEvent(ctx context.Context, in *PublishEventEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
+	InvokeService(ctx context.Context, in *InvokeServiceEnvelope, opts ...grpc.CallOption) (*InvokeServiceResponseEnvelope, error)
+	InvokeBinding(ctx context.Context, in *InvokeBindingEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
+	GetState(ctx context.Context, in *GetStateEnvelope, opts ...grpc.CallOption) (*GetStateResponseEnvelope, error)
+	SaveState(ctx context.Context, in *SaveStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
+	DeleteState(ctx context.Context, in *DeleteStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
+	PerformTransaction(ctx context.Context, in *MultiStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
+}
+
+type daprClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewDaprClient(cc *grpc.ClientConn) DaprClient {
+	return &daprClient{cc}
+}
+
+func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventEnvelope, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.Dapr/PublishEvent", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) InvokeService(ctx context.Context, in *InvokeServiceEnvelope, opts ...grpc.CallOption) (*InvokeServiceResponseEnvelope, error) {
+	out := new(InvokeServiceResponseEnvelope)
+	err := c.cc.Invoke(ctx, "/dapr.Dapr/InvokeService", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) InvokeBinding(ctx context.Context, in *InvokeBindingEnvelope, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.Dapr/InvokeBinding", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) GetState(ctx context.Context, in *GetStateEnvelope, opts ...grpc.CallOption) (*GetStateResponseEnvelope, error) {
+	out := new(GetStateResponseEnvelope)
+	err := c.cc.Invoke(ctx, "/dapr.Dapr/GetState", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) SaveState(ctx context.Context, in *SaveStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.Dapr/SaveState", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.Dapr/DeleteState", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) PerformTransaction(ctx context.Context, in *MultiStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.Dapr/PerformTransaction", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DaprServer is the server API for Dapr service.
+type DaprServer interface {
+	PublishEvent(context.Context, *PublishEventEnvelope) (*empty.Empty, error)
+	InvokeService(context.Context, *InvokeServiceEnvelope) (*InvokeServiceResponseEnvelope, error)
+	InvokeBinding(context.Context, *InvokeBindingEnvelope) (*empty.Empty, error)
+	GetState(context.Context, *GetStateEnvelope) (*GetStateResponseEnvelope, error)
+	SaveState(context.Context, *SaveStateEnvelope) (*empty.Empty, error)
+	DeleteState(context.Context, *DeleteStateEnvelope) (*empty.Empty, error)
+	PerformTransaction(context.Context, *MultiStateEnvelope) (*empty.Empty, error)
+}
+
+// UnimplementedDaprServer can be embedded to have forward compatible implementations.
+type UnimplementedDaprServer struct {
+}
+
+func (*UnimplementedDaprServer) PublishEvent(ctx context.Context, req *PublishEventEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
+}
+func (*UnimplementedDaprServer) InvokeService(ctx context.Context, req *InvokeServiceEnvelope) (*InvokeServiceResponseEnvelope, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeService not implemented")
+}
+func (*UnimplementedDaprServer) InvokeBinding(ctx context.Context, req *InvokeBindingEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
+}
+func (*UnimplementedDaprServer) GetState(ctx context.Context, req *GetStateEnvelope) (*GetStateResponseEnvelope, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
+}
+func (*UnimplementedDaprServer) SaveState(ctx context.Context, req *SaveStateEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SaveState not implemented")
+}
+func (*UnimplementedDaprServer) DeleteState(ctx context.Context, req *DeleteStateEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteState not implemented")
+}
+func (*UnimplementedDaprServer) PerformTransaction(ctx context.Context, req *MultiStateEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PerformTransaction not implemented")
+}
+
+func RegisterDaprServer(s *grpc.Server, srv DaprServer) {
+	s.RegisterService(&_Dapr_serviceDesc, srv)
+}
+
+func _Dapr_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublishEventEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).PublishEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.Dapr/PublishEvent",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).PublishEvent(ctx, req.(*PublishEventEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_InvokeService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvokeServiceEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).InvokeService(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.Dapr/InvokeService",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).InvokeService(ctx, req.(*InvokeServiceEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_InvokeBinding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvokeBindingEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).InvokeBinding(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.Dapr/InvokeBinding",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).InvokeBinding(ctx, req.(*InvokeBindingEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_GetState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStateEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.Dapr/GetState",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetState(ctx, req.(*GetStateEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SaveState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveStateEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).SaveState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.Dapr/SaveState",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).SaveState(ctx, req.(*SaveStateEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DeleteState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteStateEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.Dapr/DeleteState",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteState(ctx, req.(*DeleteStateEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_PerformTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MultiStateEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).PerformTransaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.Dapr/PerformTransaction",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).PerformTransaction(ctx, req.(*MultiStateEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _Dapr_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "dapr.Dapr",
+	HandlerType: (*DaprServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "PublishEvent",
+			Handler:    _Dapr_PublishEvent_Handler,
+		},
+		{
+			MethodName: "InvokeService",
+			Handler:    _Dapr_InvokeService_Handler,
+		},
+		{
+			MethodName: "InvokeBinding",
+			Handler:    _Dapr_InvokeBinding_Handler,
+		},
+		{
+			MethodName: "GetState",
+			Handler:    _Dapr_GetState_Handler,
+		},
+		{
+			MethodName: "SaveState",
+			Handler:    _Dapr_SaveState_Handler,
+		},
+		{
+			MethodName: "DeleteState",
+			Handler:    _Dapr_DeleteState_Handler,
+		},
+		{
+			MethodName: "PerformTransaction",
+			Handler:    _Dapr_PerformTransaction_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "dapr/dapr.proto",
 }

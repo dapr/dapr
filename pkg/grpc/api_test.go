@@ -251,6 +251,54 @@ func TestDeleteState(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestPerformTransaction(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	assert.NoError(t, err)
+
+	server := grpc_go.NewServer()
+	go func() {
+		dapr_pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		server.Serve(lis)
+	}()
+
+	time.Sleep(5 * time.Second)
+
+	var opts []grpc_go.DialOption
+	opts = append(opts, grpc_go.WithInsecure())
+	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
+	defer close(t, conn)
+	assert.NoError(t, err)
+
+	client := dapr_pb.NewDaprClient(conn)
+	_, err = client.PerformTransaction(context.Background(), &dapr_pb.MultiStateEnvelope{
+		Requests: []*dapr_pb.MultiStateRequest{
+			{
+				OperationType: "Upsert",
+				Request: &dapr_pb.StateRequest{
+					Key:   "key1",
+					Value: &any.Any{Value: []byte("value1")},
+				},
+			},
+			{
+				OperationType: "Upsert",
+				Request: &dapr_pb.StateRequest{
+					Key:   "key2",
+					Value: &any.Any{Value: []byte("value2")},
+				},
+			},
+			{
+				OperationType: "Delete",
+				Request: &dapr_pb.StateRequest{
+					Key: "key1",
+				},
+			},
+		},
+	})
+	server.Stop()
+	assert.Nil(t, err)
+}
+
 func TestPublishTopic(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))

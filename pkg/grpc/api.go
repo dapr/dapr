@@ -49,6 +49,7 @@ type API interface {
 	GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error)
 	SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error)
+	PerformTransaction(ctx context.Context, in *dapr_pb.MultiStateEnvelope) (*empty.Empty, error)
 }
 
 type api struct {
