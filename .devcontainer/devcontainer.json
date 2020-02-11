@@ -9,7 +9,6 @@
 		// may need to update the USER_UID and USER_GID in docker/Dockerfile-dev
 		// to match your user if not 1000.
 		"-u", "dapr",
-		// Mount kubernetes and minikube config to dev container
 		"--mount", "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
 
 		// Comment out if you do not use kubectl inside container
