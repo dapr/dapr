@@ -85,6 +85,8 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* /go/src
 
+RUN chmod 777 -R /go
+
 # switch to USERNAME
 USER $USERNAME
 
