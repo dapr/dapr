@@ -15,7 +15,7 @@ If using [VS Code](https://code.visualstudio.com/), you can develop Dapr from a 
    - [Setup Minikube for Local environment](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-minikube.md)
    - [Setup Azure Kubernetes Service](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-aks.md)
 
-> Note: by default, [devcontainer configuration](../../.devcontainer/devcontainer.json) mounts `~/.kube` and `~/.minikube` directory to the container. Please comment out mounting option based on your environment.
+> Note: by default, [devcontainer configuration](../../.devcontainer/devcontainer.json) mounts `~/.kube` and `~/.minikube` directory to the container. Comment out mounting options based on your environment. Otherwise, you will face the mounting error.
 
 ```json
 "runArgs": [
