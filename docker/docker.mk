@@ -4,7 +4,7 @@
 # ------------------------------------------------------------
 
 # Update whenever you upgrade dev container image
-DEV_CONTAINER_VERSION_TAG?=0.1.0
+DEV_CONTAINER_VERSION_TAG?=0.1.1
 
 # Dapr container image name
 DEV_CONTAINER_IMAGE_NAME=dapr-dev
