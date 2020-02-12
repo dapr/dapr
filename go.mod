@@ -6,7 +6,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/dapr/components-contrib v0.0.0-20200207061955-d2a6fa52640a
+	github.com/dapr/components-contrib v0.0.0-20200210203652-e67ea01fbe5f
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/frankban/quicktest v1.5.0 // indirect
@@ -43,7 +43,7 @@ require (
 	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
 	gonum.org/v1/gonum v0.0.0-20190911200027-40d3308efe80 // indirect
 	google.golang.org/grpc v1.26.0
-	gopkg.in/yaml.v2 v2.2.4
+	gopkg.in/yaml.v2 v2.2.7
 	k8s.io/api v0.17.0
 	k8s.io/apimachinery v0.17.0
 	k8s.io/cli-runtime v0.17.0
