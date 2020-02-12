@@ -599,6 +599,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 			if binding != nil {
 				err := binding.Init(bindings.Metadata{
 					Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+					Name:       c.ObjectMeta.Name,
 				})
 				if err != nil {
 					log.Warnf("failed to init output binding %s: %s", c.Spec.Type, err)
