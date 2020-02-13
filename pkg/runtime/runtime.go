@@ -227,19 +227,22 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 	var handlers []http_middleware.Middleware
-	for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-		component := a.getComponent(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type, a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
-		if component == nil {
-			return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware %s of type %s",
-				a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
-				a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type)
+
+	if a.globalConfig != nil {
+		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
+			component := a.getComponent(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type, a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
+			if component == nil {
+				return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware %s of type %s",
+					a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
+					a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type)
+			}
+			handler, err := a.httpMiddlewareRegistry.Create(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type,
+				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
+			if err != nil {
+				return http_middleware.Pipeline{}, err
+			}
+			handlers = append(handlers, handler)
 		}
-		handler, err := a.httpMiddlewareRegistry.Create(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type,
-			middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
-		if err != nil {
-			return http_middleware.Pipeline{}, err
-		}
-		handlers = append(handlers, handler)
 	}
 	return http_middleware.Pipeline{Handlers: handlers}, nil
 }
@@ -596,6 +599,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 			if binding != nil {
 				err := binding.Init(bindings.Metadata{
 					Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
+					Name:       c.ObjectMeta.Name,
 				})
 				if err != nil {
 					log.Warnf("failed to init output binding %s: %s", c.Spec.Type, err)

@@ -166,6 +166,10 @@ github.com/dapr/components-contrib v0.0.0-20200207061955-d2a6fa52640a h1:iVswprt
 github.com/dapr/components-contrib v0.0.0-20200207061955-d2a6fa52640a/go.mod h1:QNaKKTQp3O/EmXJLI27XBow1Ym6DI6EOZope5uAHLng=
 github.com/dapr/components-contrib v0.0.0-20200210190437-df6c3c3e32ff h1:JGnCLGUmbAtSjRTsfhq0MVjdkjU74yDWt4V6jFtUG+g=
 github.com/dapr/components-contrib v0.0.0-20200210190437-df6c3c3e32ff/go.mod h1:hGuI0lRDWuPL3grNzySyzrY+ILwgk503gskRrGwuEPI=
+github.com/dapr/components-contrib v0.0.0-20200210203652-e67ea01fbe5f h1:AkTVLvngrt4XRdXExkVY8jggFa2CnUEkiKsJx99gNp8=
+github.com/dapr/components-contrib v0.0.0-20200210203652-e67ea01fbe5f/go.mod h1:hGuI0lRDWuPL3grNzySyzrY+ILwgk503gskRrGwuEPI=
+github.com/dapr/components-contrib v0.0.0-20200212164505-c5ee4b273f9e h1:T3gRqpg6R0W3FyVvVQ50x4heIVI4NsLpclCQNBds+Fc=
+github.com/dapr/components-contrib v0.0.0-20200212164505-c5ee4b273f9e/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -257,6 +261,7 @@ github.com/go-ozzo/ozzo-routing v2.1.4+incompatible h1:gQmNyAwMnBHr53Nma2gPTfVVc
 github.com/go-ozzo/ozzo-routing v2.1.4+incompatible/go.mod h1:hvoxy5M9SJaY0viZvcCsODidtUm5CzRbYKEWuQpr+2A=
 github.com/go-redis/redis v6.15.5+incompatible h1:pLky8I0rgiblWfa8C1EV7fPEUv0aH6vKRaYHc/YRHVk=
 github.com/go-redis/redis v6.15.5+incompatible/go.mod h1:NAIEuMOZ/fxfXJIrKDQDz8wamY7mA7PouImQ2Jvg6kA=
+github.com/go-redis/redis/v7 v7.0.1/go.mod h1:JDNMw23GTyLNC4GZu9njt15ctBQVn7xjRfnwdHj/Dcg=
 github.com/go-sql-driver/mysql v1.4.1/go.mod h1:zAC/RDZ24gD3HViQzih4MyKcchzm+sOG5ZlKdlhCg5w=
 github.com/go-stack/stack v1.8.0 h1:5SgMzNM5HxrEjV0ww2lTmX6E2Izsfxas4+YHWRs3Lsk=
 github.com/go-stack/stack v1.8.0/go.mod h1:v0f6uXyyMGvRgIKkXu+yp6POWl0qKG85gN/melR3HDY=
@@ -994,6 +999,7 @@ gopkg.in/yaml.v2 v2.2.2 h1:ZCJp+EgiOT7lHqUV2J862kp8Qj64Jo6az82+3Td9dZw=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 gopkg.in/yaml.v2 v2.2.4 h1:/eiJrUcujPVeJ3xlSWaiNi3uSVmDGBK1pDHUHAnao1I=
 gopkg.in/yaml.v2 v2.2.4/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
+gopkg.in/yaml.v2 v2.2.7 h1:VUgggvou5XRW9mHwD/yXxIYSMtY0zoKQf/v226p2nyo=
 gopkg.in/yaml.v2 v2.2.7/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 honnef.co/go/tools v0.0.0-20180728063816-88497007e858/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
 honnef.co/go/tools v0.0.0-20190102054323-c2f93a96b099/go.mod h1:rf3lG4BRIbNafJWhAfAdb/ePZxsR/4RtNHQocxwk9r4=
