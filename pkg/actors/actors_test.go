@@ -169,7 +169,7 @@ func TestTimerExecution(t *testing.T) {
 	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorKey)
 
-	err := testActorsRuntime.executeTimer(actorType, actorID, "timer1", "2s", "2ms", "callback", "data")
+	err := testActorsRuntime.executeTimer(actorType, actorID, "timer1", "2s", "2s", "callback", "data")
 	assert.Nil(t, err)
 }
 
