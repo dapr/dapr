@@ -801,7 +801,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 			stop := make(chan bool, 1)
 			a.activeReminders.Store(reminderKey, stop)
 
-			t := time.NewTicker(period)
+			t := a.configureTicker(period)
 			go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, reminder, dueTime, period string, data interface{}) {
 				for {
 					select {
@@ -956,7 +956,7 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 		return err
 	}
 
-	t := time.NewTicker(d)
+	t := a.configureTicker(d)
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
@@ -992,6 +992,17 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 		}
 	}(t, stop, req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
 	return nil
+}
+
+func (a *actorsRuntime) configureTicker(d time.Duration) *time.Ticker {
+	if d == 0 {
+		// NewTicker cannot take in 0.  The ticker is not exact anyways since it fires
+		// after "at least" the duration passed in, so we just change 0 to a valid small duration.
+		d = 1 * time.Nanosecond
+	}
+
+	t := time.NewTicker(d)
+	return t
 }
 
 func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, callback string, data interface{}) error {
