@@ -372,12 +372,14 @@ func (a *api) PerformTransaction(ctx context.Context, in *dapr_pb.MultiStateEnve
 				Request:   delReq,
 			}
 			requests = append(requests, req)
+		default:
+			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
 		}
 	}
 
 	err := transactionalStore.Multi(requests)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
 	}
 	return &empty.Empty{}, nil
 }
