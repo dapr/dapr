@@ -112,7 +112,7 @@ func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorKey stri
 	testActorsRuntime.startDeactivationTicker(scanInterval, actorIdleTimeout)
 }
 
-func initializeReminderData(actorID, actorType, name, period, dueTime, data string) CreateReminderRequest {
+func createReminderData(actorID, actorType, name, period, dueTime, data string) CreateReminderRequest {
 	return CreateReminderRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -123,7 +123,7 @@ func initializeReminderData(actorID, actorType, name, period, dueTime, data stri
 	}
 }
 
-func initializeTimerData(actorID, actorType, name, period, dueTime, callback, data string) CreateTimerRequest {
+func createTimerData(actorID, actorType, name, period, dueTime, callback, data string) CreateTimerRequest {
 	return CreateTimerRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -245,11 +245,11 @@ func TestOverrideReminder(t *testing.T) {
 	t.Run("override data", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
-		reminder := initializeReminderData(actorID, actorType, "reminder1", "1s", "1s", "a")
+		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "a")
 		err := testActorsRuntime.CreateReminder(&reminder)
 		assert.Nil(t, err)
 
-		reminder2 := initializeReminderData(actorID, actorType, "reminder1", "1s", "1s", "b")
+		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "b")
 		testActorsRuntime.CreateReminder(&reminder2)
 		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
@@ -259,11 +259,11 @@ func TestOverrideReminder(t *testing.T) {
 	t.Run("override dueTime", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
-		reminder := initializeReminderData(actorID, actorType, "reminder1", "1s", "1s", "")
+		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "")
 		err := testActorsRuntime.CreateReminder(&reminder)
 		assert.Nil(t, err)
 
-		reminder2 := initializeReminderData(actorID, actorType, "reminder1", "1s", "2s", "")
+		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "2s", "")
 		testActorsRuntime.CreateReminder(&reminder2)
 		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
@@ -273,11 +273,11 @@ func TestOverrideReminder(t *testing.T) {
 	t.Run("override period", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
-		reminder := initializeReminderData(actorID, actorType, "reminder1", "1s", "1s", "")
+		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "")
 		err := testActorsRuntime.CreateReminder(&reminder)
 		assert.Nil(t, err)
 
-		reminder2 := initializeReminderData(actorID, actorType, "reminder1", "2s", "1s", "")
+		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "")
 		testActorsRuntime.CreateReminder(&reminder2)
 		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
@@ -288,7 +288,7 @@ func TestOverrideReminder(t *testing.T) {
 func TestDeleteReminder(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	reminder := initializeReminderData(actorID, actorType, "reminder1", "1s", "1s", "")
+	reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "")
 	testActorsRuntime.CreateReminder(&reminder)
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
 	err := testActorsRuntime.DeleteReminder(&DeleteReminderRequest{
@@ -303,7 +303,7 @@ func TestDeleteReminder(t *testing.T) {
 func TestGetReminder(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	reminder := initializeReminderData(actorID, actorType, "reminder1", "1s", "1s", "a")
+	reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "a")
 	testActorsRuntime.CreateReminder(&reminder)
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
 	r, err := testActorsRuntime.GetReminder(&GetReminderRequest{
@@ -323,7 +323,7 @@ func TestDeleteTimer(t *testing.T) {
 	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorKey)
 
-	timer := initializeTimerData(actorID, actorType, "timer1", "100ms", "100ms", "callback", "")
+	timer := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "callback", "")
 	err := testActorsRuntime.CreateTimer(&timer)
 	assert.Nil(t, err)
 
@@ -346,7 +346,7 @@ func TestDeleteTimer(t *testing.T) {
 func TestReminderFires(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	reminder := initializeReminderData(actorID, actorType, "reminder1", "100ms", "100ms", "a")
+	reminder := createReminderData(actorID, actorType, "reminder1", "100ms", "100ms", "a")
 	err := testActorsRuntime.CreateReminder(&reminder)
 	assert.Nil(t, err)
 
@@ -362,7 +362,7 @@ func TestReminderDueDate(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
-	reminder := initializeReminderData(actorID, actorType, "reminder1", "100ms", "500ms", "a")
+	reminder := createReminderData(actorID, actorType, "reminder1", "100ms", "500ms", "a")
 	err := testActorsRuntime.CreateReminder(&reminder)
 	assert.Nil(t, err)
 
@@ -381,7 +381,7 @@ func TestReminderPeriod(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
-	reminder := initializeReminderData(actorID, actorType, "reminder1", "100ms", "100ms", "a")
+	reminder := createReminderData(actorID, actorType, "reminder1", "100ms", "100ms", "a")
 	err := testActorsRuntime.CreateReminder(&reminder)
 	assert.Nil(t, err)
 
@@ -403,7 +403,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
 	actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
-	reminder := initializeReminderData(actorID, actorType, "reminder1", "", "100ms", "a")
+	reminder := createReminderData(actorID, actorType, "reminder1", "", "100ms", "a")
 	err := testActorsRuntime.CreateReminder(&reminder)
 	assert.Nil(t, err)
 
