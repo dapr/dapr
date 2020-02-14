@@ -58,7 +58,7 @@ func generateBaseCert(ttl time.Duration, publicKey interface{}) (*x509.Certifica
 		return nil, err
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	notAfter := now.Add(ttl)
 
 	return &x509.Certificate{

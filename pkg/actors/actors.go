@@ -247,7 +247,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
 		lock:         &sync.RWMutex{},
 		busy:         true,
-		lastUsedTime: time.Now(),
+		lastUsedTime: time.Now().UTC(),
 		busyCh:       make(chan bool, 1),
 	})
 
@@ -265,7 +265,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	} else {
 		act.busy = true
 		act.busyCh = make(chan bool, 1)
-		act.lastUsedTime = time.Now()
+		act.lastUsedTime = time.Now().UTC()
 	}
 
 	method := fmt.Sprintf("actors/%s/%s/method/%s", actorType, actorID, actorMethod)

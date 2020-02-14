@@ -99,7 +99,7 @@ func fakeStore() state.Store {
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorKey string) {
 	actors.actorsTable.LoadOrStore(actorKey, &actor{
-		lastUsedTime: time.Now(),
+		lastUsedTime: time.Now().UTC(),
 		lock:         &sync.RWMutex{},
 		busy:         false,
 		busyCh:       make(chan bool, 1),
