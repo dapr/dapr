@@ -5,7 +5,7 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr stateapp service_invocation binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorfeatures
+E2E_TEST_APPS=hellodapr stateapp service_invocation binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorfeatures grpcapp
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -72,6 +72,9 @@ push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 # start all e2e tests
 test-e2e-all: check-e2e-env
 	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=e2e ./tests/e2e/...
+
+test-e2e-grpcapp: check-e2e-env
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=e2e ./tests/e2e/grpcapp...
 
 # add required helm repo
 setup-helm-init:
