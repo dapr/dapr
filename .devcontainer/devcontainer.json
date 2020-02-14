@@ -1,20 +1,24 @@
 {
 	"name": "Dapr Dev Environment",
 	// Update container version when you update dev-container
-	"image": "docker.io/daprio/dapr-dev:0.1.0",
+	"image": "docker.io/daprio/dapr-dev:0.1.1",
 	// Uncomment if you want to use your local docker image
 	// "dockerFile": "../docker/Dockerfile-dev",
 	"runArgs": [
 		// On Linux, this will prevent new files getting created as root, but you 
-		// may need to update the USER_UID and USER_GID in .devcontainer/Dockerfile
+		// may need to update the USER_UID and USER_GID in docker/Dockerfile-dev
 		// to match your user if not 1000.
 		"-u", "dapr",
-		// Mount kubernetes and minikube config to dev container
 		"--mount", "type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock",
+
+		// Comment out if you do not use kubectl inside container
 		"--mount", "type=bind,source=${env:HOME}${env:USERPROFILE}/.kube,target=/home/dapr/.kube-localhost",
+		// Comment out if you do not use minikube inside container
 		"--mount", "type=bind,source=${env:HOME}${env:USERPROFILE}/.minikube,target=/home/dapr/.minikube-localhost",
+
 		"-e", "SYNC_LOCALHOST_KUBECONFIG=true",
 		"--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined",
+
 		// Comment out if you want to have the network-isolated dev environment.
 		"--net=host"
 	],
