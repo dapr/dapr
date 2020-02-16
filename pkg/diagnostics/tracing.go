@@ -124,8 +124,8 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 	}
 }
 
-// TracingGRPCMiddleware plugs tracer into gRPC stream
-func TracingGRPCMiddleware(spec config.TracingSpec) grpc_go.StreamServerInterceptor {
+// TracingGRPCMiddlewareStream plugs tracer into gRPC stream
+func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc_go.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		span, spanc := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)

@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	appPort = 3000
-
-	actorMethodURLFormat = "http://localhost:3500/v1.0/actors/%s/%s/%s/%s"
+	appPort              = 3000
+	daprV1URL            = "http://localhost:3500/v1.0"
+	actorMethodURLFormat = daprV1URL + "/actors/%s/%s/%s/%s"
 
 	registedActorType       = "testactorfeatures" // Actor type must be unique per test app.
 	actorIdleTimeout        = "1h"
@@ -281,6 +281,20 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(response.Data)
 }
 
+func testCallMetadataHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+
+	metadataURL := fmt.Sprintf("%s/metadata", daprV1URL)
+	body, err := httpCall(r.Method, metadataURL, nil)
+	if err != nil {
+		log.Printf("Could not read metadata response: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(body)
+}
+
 func httpCall(method string, url string, requestBody interface{}) ([]byte, error) {
 	var body []byte
 	var err error
@@ -329,6 +343,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/actors/{actorType}/{id}", activateDeactivateActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/{actorType}/{id}/{callType}/{method}", testCallActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
+	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
 	router.HandleFunc("/test/logs", logsHandler).Methods("DELETE")
 
 	router.Use(mux.CORSMethodMiddleware(router))
