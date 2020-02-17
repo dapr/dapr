@@ -22,25 +22,28 @@ import (
 )
 
 const (
-	sidecarContainerName  = "daprd"
-	daprEnabledKey        = "dapr.io/enabled"
-	daprPortKey           = "dapr.io/port"
-	daprConfigKey         = "dapr.io/config"
-	daprProtocolKey       = "dapr.io/protocol"
-	daprIDKey             = "dapr.io/id"
-	daprProfilingKey      = "dapr.io/profiling"
-	daprLogLevel          = "dapr.io/log-level"
-	daprMaxConcurrencyKey = "dapr.io/max-concurrency"
-	sidecarHTTPPort       = 3500
-	sidecarGRPCPORT       = 50001
-	apiAddress            = "http://dapr-api"
-	placementService      = "dapr-placement"
-	sentryService         = "dapr-sentry"
-	sidecarHTTPPortName   = "dapr-http"
-	sidecarGRPCPortName   = "dapr-grpc"
-	defaultLogLevel       = "info"
-	kubernetesMountPath   = "/var/run/secrets/kubernetes.io/serviceaccount"
-	defaultConfig         = "default"
+	sidecarContainerName   = "daprd"
+	daprEnabledKey         = "dapr.io/enabled"
+	daprPortKey            = "dapr.io/port"
+	daprConfigKey          = "dapr.io/config"
+	daprProtocolKey        = "dapr.io/protocol"
+	daprIDKey              = "dapr.io/id"
+	daprProfilingKey       = "dapr.io/profiling"
+	daprLogLevel           = "dapr.io/log-level"
+	daprMaxConcurrencyKey  = "dapr.io/max-concurrency"
+	daprMetricsPortKey     = "dapr.io/metrics-port"
+	sidecarHTTPPort        = 3500
+	sidecarGRPCPort        = 50001
+	apiAddress             = "http://dapr-api"
+	placementService       = "dapr-placement"
+	sentryService          = "dapr-sentry"
+	sidecarHTTPPortName    = "dapr-http"
+	sidecarGRPCPortName    = "dapr-grpc"
+	sidecarMetricsPortName = "dapr-metrics"
+	defaultLogLevel        = "info"
+	kubernetesMountPath    = "/var/run/secrets/kubernetes.io/serviceaccount"
+	defaultConfig          = "default"
+	defaultMetricsPort     = 9090
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
@@ -80,6 +83,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
 	apiSrvAddress := getKubernetesDNS(apiAddress, namespace)
 	logLevel := getLogLevel(pod.Annotations)
+	metricsPort := getMetricsPort(pod.Annotations)
 	maxConcurrency, err := getMaxConcurrency(pod.Annotations)
 	if err != nil {
 		log.Warn(err)
@@ -101,7 +105,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity, metricsPort)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -205,6 +209,15 @@ func getProtocol(annotations map[string]string) string {
 	return "http"
 }
 
+func getMetricsPort(annotations map[string]string) int {
+	if val, ok := annotations[daprMetricsPortKey]; ok && val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			return v
+		}
+	}
+	return defaultMetricsPort
+}
+
 func getAppID(pod corev1.Pod) string {
 	if val, ok := pod.Annotations[daprIDKey]; ok && val != "" {
 		return val
@@ -249,7 +262,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -260,13 +273,17 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 				Name:          sidecarHTTPPortName,
 			},
 			{
-				ContainerPort: int32(sidecarGRPCPORT),
+				ContainerPort: int32(sidecarGRPCPort),
 				Name:          sidecarGRPCPortName,
+			},
+			{
+				ContainerPort: int32(metricsPort),
+				Name:          sidecarMetricsPortName,
 			},
 		},
 		Command: []string{"/daprd"},
 		Env:     []corev1.EnvVar{{Name: "HOST_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
-		Args:    []string{"--mode", "kubernetes", "--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--dapr-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency, "--sentry-address", sentryAddress},
+		Args:    []string{"--mode", "kubernetes", "--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPort), "--metrics-port", fmt.Sprintf("%v", metricsPort), "--app-port", applicationPort, "--dapr-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency, "--sentry-address", sentryAddress},
 	}
 
 	if tokenVolumeMount != nil {
