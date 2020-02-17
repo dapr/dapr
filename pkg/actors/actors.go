@@ -1131,7 +1131,6 @@ func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
 }
 
 func (a *actorsRuntime) GetActiveActorsCount() []ActiveActorsCount {
-
 	var actorCountMap = map[string]int{}
 	a.actorsTable.Range(func(key, value interface{}) bool {
 		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))

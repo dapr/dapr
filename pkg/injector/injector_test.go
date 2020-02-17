@@ -152,8 +152,30 @@ func TestKubernetesDNS(t *testing.T) {
 	assert.Equal(t, "a.b.svc.cluster.local", dns)
 }
 
+func TestGetMetricsPort(t *testing.T) {
+	t.Run("metrics port override", func(t *testing.T) {
+		m := map[string]string{daprMetricsPortKey: "5050"}
+		pod := corev1.Pod{}
+		pod.Annotations = m
+		p := getMetricsPort(pod.Annotations)
+		assert.Equal(t, 5050, p)
+	})
+	t.Run("invalid metrics port override", func(t *testing.T) {
+		m := map[string]string{daprMetricsPortKey: "abc"}
+		pod := corev1.Pod{}
+		pod.Annotations = m
+		p := getMetricsPort(pod.Annotations)
+		assert.Equal(t, defaultMetricsPort, p)
+	})
+	t.Run("no metrics port defined", func(t *testing.T) {
+		pod := corev1.Pod{}
+		p := getMetricsPort(pod.Annotations)
+		assert.Equal(t, defaultMetricsPort, p)
+	})
+}
+
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", "-1", nil, "", "", false, "")
+	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", "-1", nil, "", "", false, "", 9090)
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
 }
