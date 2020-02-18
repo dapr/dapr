@@ -5,7 +5,10 @@
 
 name: dapr-test
 
-on: repository_dispatch
+on:
+  schedule:
+    - cron: '* */2 * * *'
+  repository_dispatch:
 
 jobs:
   test-e2e:
