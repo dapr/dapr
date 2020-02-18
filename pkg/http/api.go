@@ -122,7 +122,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Delete},
+			Methods: []string{http.Get},
 			Route:   "secrets/<storeName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetSecret,
