@@ -28,8 +28,8 @@ jobs:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
         run: |
-          echo ##[set-env name=CHECKOUT_REPO;]${{ github.repository }}
-          echo ##[set-env name=CHECKOUT_REF;]refs/heads/master
+          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
+          echo ::set-env name=CHECKOUT_REF::refs/heads/master
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@0.3.0
