@@ -32,12 +32,10 @@ func FromFlags() (*DaprRuntime, error) {
 	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
 	placementServiceAddress := flag.String("placement-address", "", "Address for the Dapr placement service")
 	allowedOrigins := flag.String("allowed-origins", DefaultAllowedOrigins, "Allowed HTTP origins")
-	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default is false"))
+	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default port is %v", DefaultComponentsPath))
 	runtimeVersion := flag.Bool("version", false, "prints the runtime version")
 	maxConcurrency := flag.Int("max-concurrency", -1, "controls the concurrency level when forwarding requests to user code")
 	mtlsEnabled := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
-	metricsPort := flag.String("metrics-port", fmt.Sprintf("%v", DefaultMetricsPort), "The port for the metrics server")
-	enableMetrics := flag.String("enable-metrics", "true", fmt.Sprintf("Enable metrics. default is true"))
 
 	flag.Parse()
 
@@ -71,11 +69,6 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, fmt.Errorf("error parsing profile-port flag: %s", err)
 	}
 
-	metrPort, err := strconv.Atoi(*metricsPort)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing metrics-port flag: %s", err)
-	}
-
 	applicationPort := 0
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
@@ -89,13 +82,8 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	enableMetr, err := strconv.ParseBool(*enableMetrics)
-	if err != nil {
-		return nil, err
-	}
-
 	runtimeConfig := NewRuntimeConfig(*daprID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress, metrPort, enableMetr)
+		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress)
 
 	var globalConfig *global_config.Configuration
 
