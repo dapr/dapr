@@ -49,6 +49,9 @@ func (s *server) StartNonBlocking() {
 				s.useComponents(
 					s.useRouter())))
 
+	if s.config.EnableMetrics {
+		handler = s.useMetrics(handler)
+	}
 	if s.tracingSpec.Enabled {
 		handler = s.useTracing(handler)
 	}
@@ -66,7 +69,13 @@ func (s *server) StartNonBlocking() {
 }
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled tracing http middleware")
 	return diag.TracingHTTPMiddleware(s.tracingSpec, next)
+}
+
+func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled metrics http middleware")
+	return diag.MetricsHTTPMiddleware(next)
 }
 
 func (s *server) useRouter() fasthttp.RequestHandler {
@@ -80,12 +89,14 @@ func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHan
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled cors http middleware")
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)
 	return corsHandler.CorsMiddleware(next)
 }
 
 func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled proxy http middleware")
 	return func(ctx *fasthttp.RequestCtx) {
 		var proto string
 		if ctx.IsTLS() {
