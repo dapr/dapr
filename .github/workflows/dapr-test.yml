@@ -5,7 +5,10 @@
 
 name: dapr-test
 
-on: repository_dispatch
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  repository_dispatch:
 
 jobs:
   test-e2e:
@@ -22,7 +25,13 @@ jobs:
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
     steps:
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
+          echo ::set-env name=CHECKOUT_REF::refs/heads/master
       - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@0.3.0
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
@@ -33,7 +42,6 @@ jobs:
               console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
               console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
             }
-
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
         uses: actions/setup-go@v1
@@ -57,7 +65,7 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
       - name: Add the test status comment to PR
-        if: env.CHECKOUT_REPO != ''
+        if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
         env:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
@@ -113,7 +121,7 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
       - name: Add test result comment to PR
-        if: always() && env.TEST_CLUSTER != ''
+        if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
         env:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0

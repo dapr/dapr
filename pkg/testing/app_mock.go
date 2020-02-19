@@ -93,7 +93,7 @@ func (a *MockApp) handler(w http.ResponseWriter, r *http.Request) {
 	}
 	str, _ := json.Marshal(msg.Data)
 	if !a.noprint {
-		fmt.Println(string(str) + "#" + time.Now().Format(time.RFC3339))
+		fmt.Println(string(str) + "#" + time.Now().UTC().Format(time.RFC3339))
 	}
 
 	w.WriteHeader(200)
