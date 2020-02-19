@@ -10,28 +10,29 @@ import (
 
 func TestUseProxy(t *testing.T) {
 	eval := func(ctx *fasthttp.RequestCtx) {
-		var Forwarded, XForwardedFor, XForwardedHost, XForwardedProto string
+		var Forwarded, XForwardedFor, XForwardedHost, XForwardedProto bool
 		ctx.Request.Header.VisitAll(func(k []byte, v []byte) {
 			if strings.EqualFold(string(k), "forwarded") {
-				Forwarded = string(v)
+				Forwarded = true
 			}
 			if strings.EqualFold(string(k), "x-forwarded-for") {
-				XForwardedFor = string(v)
+				XForwardedFor = true
 			}
 			if strings.EqualFold(string(k), "x-forwarded-host") {
-				XForwardedHost = string(v)
+				XForwardedHost = true
 			}
 			if strings.EqualFold(string(k), "x-forwarded-proto") {
-				XForwardedProto = string(v)
+				XForwardedProto = true
 			}
 		})
-		assert.True(t, len(Forwarded) > 0)
-		assert.True(t, len(XForwardedFor) > 0)
-		assert.True(t, len(XForwardedHost) > 0)
-		assert.True(t, len(XForwardedProto) > 0)
+		assert.True(t, Forwarded)
+		assert.True(t, XForwardedFor)
+		assert.True(t, XForwardedHost)
+		assert.True(t, XForwardedProto)
 	}
 	s := NewTestServer()
-	s.useProxy(eval)
+	h := s.useProxy(eval)
+	h(&fasthttp.RequestCtx{})
 }
 
 func NewTestServer() *server { //nolint:golint
