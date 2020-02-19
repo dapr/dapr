@@ -81,8 +81,7 @@ func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandle
 func (s *server) useRouter() fasthttp.RequestHandler {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)
-	handler := router.HandleRequest
-	return handler
+	return router.HandleRequest
 }
 
 func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHandler {
