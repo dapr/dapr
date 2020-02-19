@@ -6,16 +6,15 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/dapr/components-contrib v0.0.0-20200212164505-c5ee4b273f9e
+	github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/frankban/quicktest v1.5.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-ozzo/ozzo-routing v2.1.4+incompatible // indirect
-	github.com/go-redis/redis v6.15.5+incompatible // indirect
 	github.com/gogo/protobuf v1.3.0 // indirect
-	github.com/golang/gddo v0.0.0-20190815223733-287de01127ef
+	github.com/golang/gddo v0.0.0-20190815223733-287de01127ef // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/google/uuid v1.1.1
 	github.com/googleapis/gnostic v0.3.1 // indirect
@@ -25,7 +24,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway v1.11.2 // indirect
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
-	github.com/inconshreveable/log15 v0.0.0-20200109203555-b30bc20e4fd1 // indirect
 	github.com/jcmturner/gofork v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.8
 	github.com/kelseyhightower/envconfig v1.4.0
