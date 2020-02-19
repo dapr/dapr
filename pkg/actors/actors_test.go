@@ -99,7 +99,7 @@ func fakeStore() state.Store {
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorKey string) {
 	actors.actorsTable.LoadOrStore(actorKey, &actor{
-		lastUsedTime: time.Now(),
+		lastUsedTime: time.Now().UTC(),
 		lock:         &sync.RWMutex{},
 		busy:         false,
 		busyCh:       make(chan bool, 1),
@@ -635,5 +635,32 @@ func TestTransactionalState(t *testing.T) {
 		})
 		assert.NotNil(t, err)
 		assert.Equal(t, "operation type Wrong not supported", err.Error())
+	})
+}
+
+func TestActiveActorsCount(t *testing.T) {
+	t.Run("Actors Count", func(t *testing.T) {
+		expectedCounts := []ActiveActorsCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
+
+		testActorRuntime := newTestActorsRuntime()
+
+		actorKey1 := testActorRuntime.constructCompositeKey("cat", "abcd")
+		fakeCallAndActivateActor(testActorRuntime, actorKey1)
+		actorKey2 := testActorRuntime.constructCompositeKey("cat", "xyz")
+		fakeCallAndActivateActor(testActorRuntime, actorKey2)
+		actorKey3 := testActorRuntime.constructCompositeKey("dog", "xyz")
+		fakeCallAndActivateActor(testActorRuntime, actorKey3)
+
+		actualCounts := testActorRuntime.GetActiveActorsCount()
+		assert.ElementsMatch(t, expectedCounts, actualCounts)
+	})
+
+	t.Run("Actors Count empty", func(t *testing.T) {
+		expectedCounts := []ActiveActorsCount{}
+
+		testActorRuntime := newTestActorsRuntime()
+
+		actualCounts := testActorRuntime.GetActiveActorsCount()
+		assert.Equal(t, expectedCounts, actualCounts)
 	})
 }

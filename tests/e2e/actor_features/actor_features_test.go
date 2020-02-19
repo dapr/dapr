@@ -27,12 +27,16 @@ const (
 	timerName                             = "myTimer"                            // Timer name.
 	numHealthChecks                       = 60                                   // Number of get calls before starting tests.
 	secondsToCheckTimerAndReminderResult  = 20                                   // How much time to wait to make sure the result is in logs.
+	secondsToCheckGetMetadata             = 10                                   // How much time to wait to check metadata.
 	secondsBetweenChecksForActorFailover  = 5                                    // How much time to wait to make sure the result is in logs.
 	minimumCallsForTimerAndReminderResult = 10                                   // How many calls to timer or reminder should be at minimum.
 	actorsToCheckRebalance                = 10                                   // How many actors to create in the rebalance check test.
 	appScaleToCheckRebalance              = 2                                    // How many instances of the app to create to validate rebalance.
+	actorsToCheckMetadata                 = 5                                    // How many actors to create in get metdata test.
+	appScaleToCheckMetadata               = 1                                    // How many instances of the app to test get metadata.
 	actorInvokeURLFormat                  = "%s/test/testactorfeatures/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
+	actorMetadataURLFormat                = "%s/test/metadata"
 )
 
 // represents a response for the APIs in this app.
@@ -42,6 +46,16 @@ type actorLogEntry struct {
 	ActorID        string `json:"actorId,omitempty"`
 	StartTimestamp int    `json:"startTimestamp,omitempty"`
 	EndTimestamp   int    `json:"endTimestamp,omitempty"`
+}
+
+type activeActorsCount struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
+}
+
+type metadata struct {
+	ID     string              `json:"id"`
+	Actors []activeActorsCount `json:"actors"`
 }
 
 func parseLogEntries(resp []byte) []actorLogEntry {
@@ -285,5 +299,44 @@ func TestServiceInvocation(t *testing.T) {
 		}
 
 		require.True(t, anyActorMoved)
+	})
+
+	t.Run("Get actor metadata", func(t *testing.T) {
+		tr.Platform.Scale(appName, appScaleToCheckMetadata)
+		time.Sleep(secondsToCheckGetMetadata * time.Second)
+
+		res, err := utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
+		require.NoError(t, err)
+
+		var prevMetadata metadata
+		err = json.Unmarshal(res, &prevMetadata)
+		require.NoError(t, err)
+		var prevActors int
+		if len(prevMetadata.Actors) > 0 {
+			prevActors = prevMetadata.Actors[0].Count
+		}
+
+		// Each test needs to have a different actorID
+		actorIDBase := "1008Instance"
+
+		for index := 0; index < actorsToCheckMetadata; index++ {
+			_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
+			require.NoError(t, err)
+		}
+
+		res, err = utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
+		require.NoError(t, err)
+
+		expected := metadata{
+			ID: appName,
+			Actors: []activeActorsCount{{
+				Type:  "testactorfeatures",
+				Count: prevActors + actorsToCheckMetadata,
+			}},
+		}
+		var actual metadata
+		err = json.Unmarshal(res, &actual)
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
 	})
 }

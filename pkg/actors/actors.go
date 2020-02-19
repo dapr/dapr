@@ -48,6 +48,7 @@ type Actors interface {
 	CreateTimer(req *CreateTimerRequest) error
 	DeleteTimer(req *DeleteTimerRequest) error
 	IsActorHosted(req *ActorHostedRequest) bool
+	GetActiveActorsCount() []ActiveActorsCount
 }
 
 type actorsRuntime struct {
@@ -68,6 +69,12 @@ type actorsRuntime struct {
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
 	evaluationChan      chan bool
+}
+
+// ActiveActorsCount contain actorType and count of actors each type has
+type ActiveActorsCount struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
 }
 
 const (
@@ -247,7 +254,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
 		lock:         &sync.RWMutex{},
 		busy:         true,
-		lastUsedTime: time.Now(),
+		lastUsedTime: time.Now().UTC(),
 		busyCh:       make(chan bool, 1),
 	})
 
@@ -265,7 +272,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	} else {
 		act.busy = true
 		act.busyCh = make(chan bool, 1)
-		act.lastUsedTime = time.Now()
+		act.lastUsedTime = time.Now().UTC()
 	}
 
 	method := fmt.Sprintf("actors/%s/%s/method/%s", actorType, actorID, actorMethod)
@@ -1121,4 +1128,22 @@ func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
 	}
 
 	return nil
+}
+
+func (a *actorsRuntime) GetActiveActorsCount() []ActiveActorsCount {
+
+	var actorCountMap = map[string]int{}
+	a.actorsTable.Range(func(key, value interface{}) bool {
+		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))
+		actorCountMap[actorType]++
+
+		return true
+	})
+
+	var activeActorsCount = []ActiveActorsCount{}
+	for actorType, count := range actorCountMap {
+		activeActorsCount = append(activeActorsCount, ActiveActorsCount{Type: actorType, Count: count})
+	}
+
+	return activeActorsCount
 }

@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	appPort = 3000
-
-	actorMethodURLFormat = "http://localhost:3500/v1.0/actors/%s/%s/method/%s"
+	appPort              = 3000
+	daprV1URL            = "http://localhost:3500/v1.0"
+	actorMethodURLFormat = daprV1URL + "/actors/%s/%s/method/%s"
 
 	registedActorType       = "testactor" // Actor type must be unique per test app.
 	actorIdleTimeout        = "5s"        // Short idle timeout.
@@ -191,7 +191,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 
 // epoch returns the current unix epoch timestamp
 func epoch() int {
-	return (int)(time.Now().UnixNano() / 1000000)
+	return (int)(time.Now().UTC().UnixNano() / 1000000)
 }
 
 // appRouter initializes restful api router
