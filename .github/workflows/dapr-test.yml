@@ -7,7 +7,7 @@ name: dapr-test
 
 on:
   schedule:
-    - cron: '* */2 * * *'
+    - cron: '0 */2 * * *'
   repository_dispatch:
 
 jobs:
@@ -65,7 +65,7 @@ jobs:
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
       - name: Add the test status comment to PR
-        if: env.CHECKOUT_REPO != ''
+        if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
         env:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
@@ -121,7 +121,7 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
       - name: Add test result comment to PR
-        if: always() && env.TEST_CLUSTER != ''
+        if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
         env:
           JOB_CONTEXT: ${{ toJson(job) }}
         uses: actions/github-script@0.3.0
