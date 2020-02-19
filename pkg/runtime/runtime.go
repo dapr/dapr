@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	net_http "net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -21,7 +20,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/dapr/components-contrib/pubsub"
@@ -114,7 +112,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 
 // Run performs initialization of the runtime with the runtime and global configurations
 func (a *DaprRuntime) Run(opts ...Option) error {
-	start := time.Now()
+	start := time.Now().UTC()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
 	log.Infof("dapr id: %s", a.runtimeConfig.ID)
 
@@ -219,23 +217,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("gRPC server is running on port %v", a.runtimeConfig.GRPCPort)
 
-	if a.runtimeConfig.EnableMetrics {
-		a.startMetricsServer()
-	}
-
 	err = a.announceSelf()
 	if err != nil {
 		log.Warnf("failed to broadcast address to local network: %s", err)
 	}
 
 	return nil
-}
-
-func (a *DaprRuntime) startMetricsServer() {
-	go func() {
-		log.Infof("starting metrics server on port %v", a.runtimeConfig.MetricsPort)
-		log.Fatal(net_http.ListenAndServe(fmt.Sprintf(":%d", a.runtimeConfig.MetricsPort), promhttp.Handler()))
-	}()
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -496,14 +483,14 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.pubSub, a.actor, a.sendToOutputBinding)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MetricsPort, a.runtimeConfig.EnableMetrics)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
 }
 
 func (a *DaprRuntime) startGRPCServer(port int) error {
 	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.EnableMetrics)
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
