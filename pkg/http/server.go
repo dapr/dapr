@@ -89,7 +89,7 @@ func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHan
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled cors  http middleware")
+	log.Infof("enabled cors http middleware")
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)
 	return corsHandler.CorsMiddleware(next)
