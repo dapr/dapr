@@ -123,7 +123,7 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{http.Get},
-			Route:   "secrets/<storeName>/<key>",
+			Route:   "secrets/<secretStoreName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetSecret,
 		},
