@@ -90,7 +90,7 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 		return nil, err
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
 	serverCertTTL := issuerExp.Sub(now)
 
@@ -180,5 +180,5 @@ func needsRefresh(cert *tls.Certificate, expiryBuffer time.Duration) bool {
 	}
 
 	// Check if the leaf certificate is about to expire.
-	return leaf.NotAfter.Add(-serverCertExpiryBuffer).Before(time.Now())
+	return leaf.NotAfter.Add(-serverCertExpiryBuffer).Before(time.Now().UTC())
 }

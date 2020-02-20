@@ -114,7 +114,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 
 // Run performs initialization of the runtime with the runtime and global configurations
 func (a *DaprRuntime) Run(opts ...Option) error {
-	start := time.Now()
+	start := time.Now().UTC()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
 	log.Infof("dapr id: %s", a.runtimeConfig.ID)
 
