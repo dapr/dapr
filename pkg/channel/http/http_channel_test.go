@@ -163,7 +163,9 @@ func TestContentType(t *testing.T) {
 		server := httptest.NewServer(handler)
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
 		request := &channel.InvokeRequest{
-			Metadata: map[string]string{ContentType: "application/json"},
+			Metadata: map[string]string{
+				"headers": "Content-Type&__header_equals__&application/json&__header_delim__&h2&__header_equals__&v2",
+			},
 		}
 		c.InvokeMethod(request)
 		assert.Equal(t, "application/json", handler.ContentType)
@@ -175,7 +177,9 @@ func TestContentType(t *testing.T) {
 		server := httptest.NewServer(handler)
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
 		request := &channel.InvokeRequest{
-			Metadata: map[string]string{ContentType: "custom"},
+			Metadata: map[string]string{
+				"headers": "Content-Type&__header_equals__&custom&__header_delim__&h2&__header_equals__&v2",
+			},
 		}
 		c.InvokeMethod(request)
 		assert.Equal(t, "custom", handler.ContentType)
