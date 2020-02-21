@@ -66,6 +66,10 @@ func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEn
 	return &empty.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error) {
+	return &dapr_pb.GetSecretResponseEnvelope{}, nil
+}
+
 func createExporters(meta exporters.Metadata) {
 	exporter := stringexporter.NewStringExporter()
 	exporter.Init("fakeID", "fakeAddress", meta)
