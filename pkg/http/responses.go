@@ -11,24 +11,33 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+const (
+	jsonContentTypeHeader = "application/json"
+	etagHeader            = "ETag"
+)
+
+// respondWithJSON overrides the content-type with application/json
 func respondWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte) {
-	ctx.Response.Header.SetContentType("application/json")
-	ctx.Response.SetStatusCode(code)
-	ctx.Response.SetBody(obj)
+	respond(ctx, code, obj)
+	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 }
 
+// respond sets a default application/json content type if content type is not present
+func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
+	ctx.Response.SetStatusCode(code)
+	ctx.Response.SetBody(obj)
+
+	if len(ctx.Response.Header.ContentType()) == 0 {
+		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+	}
+}
+
+// respondWithETaggedJSON overrides the content-type with application/json and etag header
 func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag string) {
-	ctx.Response.Header.SetContentType("application/json")
-	ctx.Response.Header.Set("ETag", etag)
-	ctx.Response.SetStatusCode(code)
-	ctx.Response.SetBody(obj)
+	respond(ctx, code, obj)
+	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+	ctx.Response.Header.Set(etagHeader, etag)
 }
-
-//func respondWithString(ctx *fasthttp.RequestCtx, code int, obj string) {
-//	ctx.Response.Header.SetContentType("application/json")
-//	ctx.Response.SetStatusCode(code)
-//	ctx.Response.SetBodyString(obj)
-//}
 
 func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {
 	b, _ := json.Marshal(&resp)
@@ -39,16 +48,3 @@ func respondEmpty(ctx *fasthttp.RequestCtx, code int) {
 	ctx.Response.SetBody(nil)
 	ctx.Response.SetStatusCode(code)
 }
-
-//func serializeToJSON(obj interface{}) ([]byte, error) {
-//	buffer := &bytes.Buffer{}
-//	encoder := json.NewEncoder(buffer)
-//	encoder.SetEscapeHTML(false)
-//	err := encoder.Encode(obj)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	bytes := buffer.Bytes()
-//	return bytes, nil
-//}
