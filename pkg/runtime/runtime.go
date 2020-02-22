@@ -21,8 +21,8 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -60,6 +60,8 @@ const (
 	parallelConcurrency = "parallel"
 	actorStateStore     = "actorStateStore"
 )
+
+var log = logger.NewLogger("dapr.runtime")
 
 // DaprRuntime holds all the core components of the runtime
 type DaprRuntime struct {
@@ -692,7 +694,7 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 		}
 	}
 
-	log.Printf("App is subscribed to the following topics: %v", topics)
+	log.Infof("App is subscribed to the following topics: %v", topics)
 	return topics
 }
 
