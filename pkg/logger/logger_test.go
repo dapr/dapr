@@ -85,7 +85,7 @@ func TestEnableJSON(t *testing.T) {
 		assert.True(t, testLogger.jsonFormatEnabled)
 		assert.Equal(t, "fakeLogger", testLogger.logger.Data[logFieldScope])
 		assert.Equal(t, expectedHost, testLogger.logger.Data[logFieldInstance])
-		assert.Equal(t, "edge", testLogger.logger.Data[logFieldDaprVer])
+		assert.Equal(t, version.Version(), testLogger.logger.Data[logFieldDaprVer])
 
 		testLogger.EnableJSONOutput(false)
 		assert.False(t, testLogger.jsonFormatEnabled)
