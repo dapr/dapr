@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/version"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -72,7 +73,7 @@ func TestEnableJSON(t *testing.T) {
 		assert.True(t, testLogger.jsonFormatEnabled)
 		assert.Equal(t, "fakeLogger", testLogger.logger.Data[logFieldScope])
 		assert.Equal(t, expectedHost, testLogger.logger.Data[logFieldInstance])
-		assert.Equal(t, "edge", testLogger.logger.Data[logFieldDaprVer])
+		assert.Equal(t, version.Version(), testLogger.logger.Data[logFieldDaprVer])
 	})
 
 	t.Run("disable JSON format", func(t *testing.T) {
