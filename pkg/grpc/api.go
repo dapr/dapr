@@ -13,6 +13,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -46,6 +47,7 @@ type API interface {
 	InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error)
 	InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelope) (*empty.Empty, error)
 	GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error)
+	GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error)
 	SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error)
 }
@@ -56,13 +58,14 @@ type api struct {
 	componentsHandler     components.ComponentHandler
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
+	secretStores          map[string]secretstores.SecretStore
 	pubSub                pubsub.PubSub
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(daprID string, appChannel channel.AppChannel, stateStores map[string]state.Store, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
 	return &api{
 		directMessaging:       directMessaging,
 		componentsHandler:     componentHandler,
@@ -71,6 +74,7 @@ func NewAPI(daprID string, appChannel channel.AppChannel, stateStores map[string
 		appChannel:            appChannel,
 		pubSub:                pubSub,
 		stateStores:           stateStores,
+		secretStores:          secretStores,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 	}
 }
@@ -332,6 +336,35 @@ func (a *api) getModifiedStateKey(key string) string {
 		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
 	}
 	return key
+}
+
+func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error) {
+	if a.secretStores == nil || len(a.secretStores) == 0 {
+		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
+	}
+
+	secretStoreName := in.Key
+
+	if a.secretStores[secretStoreName] == nil {
+		return nil, errors.New("ERR_SECRET_STORE_NOT_FOUND")
+	}
+
+	req := secretstores.GetSecretRequest{
+		Name:     in.Key,
+		Metadata: map[string]string{},
+	}
+
+	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
+
+	if err != nil {
+		return nil, fmt.Errorf("ERR_SECRET_GET: %s", err)
+	}
+
+	response := &dapr_pb.GetSecretResponseEnvelope{}
+	if getResponse.Data != nil {
+		response.Data = getResponse.Data
+	}
+	return response, nil
 }
 
 func duration(p *durpb.Duration) (time.Duration, error) {

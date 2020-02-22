@@ -13,6 +13,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
@@ -33,6 +34,7 @@ type api struct {
 	directMessaging       messaging.DirectMessaging
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
+	secretStores          map[string]secretstores.SecretStore
 	json                  jsoniter.API
 	actor                 actors.Actors
 	pubSub                pubsub.PubSub
@@ -46,29 +48,32 @@ type metadata struct {
 }
 
 const (
-	apiVersionV1        = "v1.0"
-	idParam             = "id"
-	methodParam         = "method"
-	actorTypeParam      = "actorType"
-	actorIDParam        = "actorId"
-	storeNameParam      = "storeName"
-	stateKeyParam       = "key"
-	topicParam          = "topic"
-	nameParam           = "name"
-	consistencyParam    = "consistency"
-	retryIntervalParam  = "retryInterval"
-	retryPatternParam   = "retryPattern"
-	retryThresholdParam = "retryThreshold"
-	concurrencyParam    = "concurrency"
-	daprSeparator       = "||"
+	apiVersionV1         = "v1.0"
+	idParam              = "id"
+	methodParam          = "method"
+	actorTypeParam       = "actorType"
+	actorIDParam         = "actorId"
+	storeNameParam       = "storeName"
+	stateKeyParam        = "key"
+	secretStoreNameParam = "secretStoreName"
+	secretNameParam      = "key"
+	topicParam           = "topic"
+	nameParam            = "name"
+	consistencyParam     = "consistency"
+	retryIntervalParam   = "retryInterval"
+	retryPatternParam    = "retryPattern"
+	retryThresholdParam  = "retryThreshold"
+	concurrencyParam     = "concurrency"
+	daprSeparator        = "||"
 )
 
 // NewAPI returns a new API
-func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
 		stateStores:           stateStores,
+		secretStores:          secretStores,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
 		pubSub:                pubSub,
@@ -76,6 +81,7 @@ func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messag
 		id:                    daprID,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructActorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
@@ -109,6 +115,17 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/<storeName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
+		},
+	}
+}
+
+func (a *api) constructSecretEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{http.Get},
+			Route:   "secrets/<secretStoreName>/<key>",
+			Version: apiVersionV1,
+			Handler: a.onGetSecret,
 		},
 	}
 }
@@ -350,6 +367,44 @@ func (a *api) onDeleteState(c *routing.Context) error {
 	return nil
 }
 
+func (a *api) onGetSecret(c *routing.Context) error {
+	if a.secretStores == nil || len(a.secretStores) == 0 {
+		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_CONFIGURED", "")
+		respondWithError(c.RequestCtx, 400, msg)
+		return nil
+	}
+
+	secretStoreName := c.Param(secretStoreNameParam)
+
+	if a.secretStores[secretStoreName] == nil {
+		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf("secret store name: %s", secretStoreName))
+		respondWithError(c.RequestCtx, 401, msg)
+		return nil
+	}
+
+	key := c.Param(secretNameParam)
+	req := secretstores.GetSecretRequest{
+		Name:     key,
+		Metadata: map[string]string{},
+	}
+
+	resp, err := a.secretStores[secretStoreName].GetSecret(req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
+		respondWithError(c.RequestCtx, 500, msg)
+		return nil
+	}
+
+	if resp.Data == nil {
+		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_SECRET_NAME_NOT_FOUND", ""))
+		return nil
+	}
+
+	respBytes, _ := a.json.Marshal(resp.Data)
+	respondWithJSON(c.RequestCtx, 200, respBytes)
+	return nil
+}
+
 func (a *api) onPostState(c *routing.Context) error {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
@@ -433,7 +488,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		a.setHeadersOnRequest(resp.Metadata, c)
-		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
+		respond(c.RequestCtx, statusCode, resp.Data)
 	}
 
 	return nil
