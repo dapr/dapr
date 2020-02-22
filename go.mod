@@ -3,7 +3,6 @@ module github.com/dapr/dapr
 go 1.13
 
 require (
-	contrib.go.opencensus.io/exporter/prometheus v0.1.0 // indirect
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
@@ -14,7 +13,6 @@ require (
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-chi/chi v4.0.3+incompatible // indirect
-	github.com/go-gl/glfw v0.0.0-20190409004039-e6da0acd62b1 // indirect
 	github.com/go-ozzo/ozzo-routing v2.1.4+incompatible // indirect
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/gddo v0.0.0-20190815223733-287de01127ef // indirect
@@ -30,7 +28,6 @@ require (
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/improbable-eng/go-httpwares v0.0.0-20191126155631-6144c42a79c9
-	github.com/inconshreveable/log15 v0.0.0-20200109203555-b30bc20e4fd1 // indirect
 	github.com/jcmturner/gofork v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.8
 	github.com/kelseyhightower/envconfig v1.4.0
