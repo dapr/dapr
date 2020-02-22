@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	defaultJSONformat  = false
+	defaultJSONOutput  = false
 	defaultOutputLevel = InfoLevel
-	defaultOutputSink  = "stdout"
 )
 
 var stringToDaprLoggingLevel = map[string]Level{
@@ -64,9 +63,16 @@ func (o *Options) SetOutputLevel(outputLevel Level) error {
 func (o *Options) AttachOptionFlags(
 	stringVar func(p *string, name string, value string, usage string),
 	boolVar func(p *bool, name string, value bool, usage string)) {
-
-	stringVar(&o.outputLevel, "log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
-	boolVar(&o.JSONFormatEnabled, "log-json-enabled", false, "Format log output as JSON or plain-text")
+	stringVar(
+		&o.outputLevel,
+		"log-level",
+		daprLoggingLevelToString[defaultOutputLevel],
+		"Options are debug, info, warning, error, fatal, or panic. (default info)")
+	boolVar(
+		&o.JSONFormatEnabled,
+		"log-json-enabled",
+		defaultJSONOutput,
+		"Format log output as JSON or plain-text")
 }
 
 // ApplyOptionsToLoggers applys options to all registered loggers

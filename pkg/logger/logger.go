@@ -21,7 +21,7 @@ const (
 	// LogTypeRequest is Request log type
 	LogTypeRequest = "request"
 
-	logFieldTimeStamp = "timestamp"
+	logFieldTimeStamp = "time"
 	logFieldLevel     = "level"
 	logFieldType      = "log_type"
 	logFieldScope     = "scope"
@@ -44,7 +44,7 @@ const (
 	WarnLevel
 	// ErrorLevel is for logging errors
 	ErrorLevel
-	// FatalLevel is for logging fatal messages. The sytem shutsdown after logging the message.
+	// FatalLevel is for logging fatal messages. The system shutsdown after logging the message.
 	FatalLevel
 )
 
@@ -93,8 +93,9 @@ type Logger interface {
 }
 
 type daprLogger struct {
-	name   string
-	logger *logrus.Entry
+	name              string
+	jsonFormatEnabled bool
+	logger            *logrus.Entry
 }
 
 var loggers = map[string]Logger{}
@@ -110,10 +111,11 @@ func NewLogger(name string) Logger {
 	if !ok {
 		newLogger := logrus.New()
 		dl := &daprLogger{
-			name:   name,
-			logger: newDefaultLogger(newLogger, name),
+			name:              name,
+			jsonFormatEnabled: defaultJSONOutput,
+			logger:            newDefaultLogger(newLogger, name),
 		}
-		dl.EnableJSONOutput(defaultJSONformat)
+		dl.EnableJSONOutput(defaultJSONOutput)
 		loggers[name] = dl
 		logger = loggers[name]
 	}
@@ -122,13 +124,9 @@ func NewLogger(name string) Logger {
 }
 
 func newDefaultLogger(logger *logrus.Logger, name string) *logrus.Entry {
-	// Configure the default log entry
-	hostname, _ := os.Hostname()
 	return logger.WithFields(logrus.Fields{
-		logFieldScope:    name,
-		logFieldInstance: hostname,
-		logFieldType:     LogTypeLog,
-		logFieldDaprVer:  version.Version(),
+		logFieldScope: name,
+		logFieldType:  LogTypeLog,
 	})
 }
 
@@ -136,11 +134,18 @@ func getLoggers() map[string]Logger {
 	loggersLock.RLock()
 	defer loggersLock.RUnlock()
 
-	return loggers
+	l := map[string]Logger{}
+	for k, v := range loggers {
+		l[k] = v
+	}
+
+	return l
 }
 
 func (l *daprLogger) SetDaprID(id string) {
-	l.logger.Data[logFieldDaprID] = id
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldDaprID] = id
+	}
 }
 
 func (l *daprLogger) SetScope(scope string) {
@@ -158,17 +163,29 @@ func (l *daprLogger) SetOutputLevel(outputLevel Level) {
 func (l *daprLogger) EnableJSONOutput(enabled bool) {
 	var formatter logrus.Formatter
 
+	l.jsonFormatEnabled = enabled
 	fieldMap := logrus.FieldMap{
 		logrus.FieldKeyLevel: logFieldLevel,
 		logrus.FieldKeyMsg:   logFieldMessage,
 	}
 
 	if enabled {
+		hostname, _ := os.Hostname()
+		l.logger.Data = logrus.Fields{
+			logFieldScope:    l.logger.Data[logFieldScope],
+			logFieldInstance: hostname,
+			logFieldType:     LogTypeLog,
+			logFieldDaprVer:  version.Version(),
+		}
 		formatter = &logrus.JSONFormatter{
 			DisableTimestamp: true,
 			FieldMap:         fieldMap,
 		}
 	} else {
+		l.logger.Data = logrus.Fields{
+			logFieldScope: l.logger.Data[logFieldScope],
+			logFieldType:  LogTypeLog,
+		}
 		formatter = &logrus.TextFormatter{
 			DisableTimestamp: true,
 			FieldMap:         fieldMap,
@@ -187,60 +204,80 @@ func (l *daprLogger) WithLogType(logType string) Logger {
 
 // Info logs a message at level Info.
 func (l *daprLogger) Info(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Info(args...)
 }
 
 // Infof logs a message at level Info.
 func (l *daprLogger) Infof(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Infof(format, args...)
 }
 
 // Debug logs a message at level Debug.
 func (l *daprLogger) Debug(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Debug(args...)
 }
 
 // Debugf logs a message at level Debug.
 func (l *daprLogger) Debugf(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Debugf(format, args...)
 }
 
 // Warn logs a message at level Warn.
 func (l *daprLogger) Warn(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Warn(args...)
 }
 
 // Warnf logs a message at level Warn.
 func (l *daprLogger) Warnf(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Warnf(format, args...)
 }
 
 // Error logs a message at level Error.
 func (l *daprLogger) Error(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Error(args...)
 }
 
 // Errorf logs a message at level Error.
 func (l *daprLogger) Errorf(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Errorf(format, args...)
 }
 
 // Fatal logs a message at level Fatal then the process will exit with status set to 1.
 func (l *daprLogger) Fatal(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Fatal(args...)
 }
 
 // Fatalf logs a message at level Fatal then the process will exit with status set to 1.
 func (l *daprLogger) Fatalf(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	}
 	l.logger.Fatalf(format, args...)
 }
