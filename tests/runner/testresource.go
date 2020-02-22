@@ -93,7 +93,7 @@ func (r *TestResources) tearDown() (retErr error) {
 		err := dr.Dispose()
 		if err != nil {
 			retErr = err
-			log.Errorf("Failed to tear down %s. got: %q", dr.Name(), err)
+			log.Printf("Failed to tear down %s. got: %q", dr.Name(), err)
 		}
 	}
 	return retErr

@@ -43,11 +43,11 @@ func (c *KubeTestPlatform) setup() (err error) {
 
 func (c *KubeTestPlatform) tearDown() error {
 	if err := c.AppResources.tearDown(); err != nil {
-		log.Errorf("failed to tear down AppResources. got: %q", err)
+		log.Printf("failed to tear down AppResources. got: %q", err)
 	}
 
 	if err := c.ComponentResources.tearDown(); err != nil {
-		log.Errorf("failed to tear down ComponentResources. got: %q", err)
+		log.Printf("failed to tear down ComponentResources. got: %q", err)
 	}
 
 	// TODO: clean up kube cluster
