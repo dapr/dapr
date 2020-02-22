@@ -21,6 +21,7 @@ const (
 	// LogTypeRequest is Request log type
 	LogTypeRequest = "request"
 
+	// Field names that defines Dapr log schema
 	logFieldTimeStamp = "time"
 	logFieldLevel     = "level"
 	logFieldType      = "log_type"
@@ -31,12 +32,12 @@ const (
 	logFieldDaprID    = "dapr_id"
 )
 
-// Level is Dapr Logger Level type
-type Level int
+// LogLevel is Dapr Logger Level type
+type LogLevel int
 
 const (
 	// DebugLevel has verbose message
-	DebugLevel Level = iota
+	DebugLevel LogLevel = iota
 	// InfoLevel is default log level
 	InfoLevel
 	// WarnLevel is for logging messages about possible issues
@@ -47,7 +48,7 @@ const (
 	FatalLevel
 )
 
-var daprLoggingLevelToLogrusLevel = map[Level]logrus.Level{
+var daprLoggingLevelToLogrusLevel = map[LogLevel]logrus.Level{
 	DebugLevel: logrus.DebugLevel,
 	InfoLevel:  logrus.InfoLevel,
 	WarnLevel:  logrus.WarnLevel,
@@ -63,7 +64,7 @@ type Logger interface {
 	// SetDaprID sets dapr_id field in log. Default value is empty string
 	SetDaprID(id string)
 	// SetOutputLevel sets log output level
-	SetOutputLevel(outputLevel Level)
+	SetOutputLevel(outputLevel LogLevel)
 
 	// WithLogType specify the log_type field in log. Default value is LogTypeLog
 	WithLogType(logType string) Logger
@@ -189,7 +190,7 @@ func (l *daprLogger) SetDaprID(id string) {
 }
 
 // SetOutputLevel sets log output level
-func (l *daprLogger) SetOutputLevel(outputLevel Level) {
+func (l *daprLogger) SetOutputLevel(outputLevel LogLevel) {
 	lvl, ok := daprLoggingLevelToLogrusLevel[outputLevel]
 	if !ok {
 		lvl = daprLoggingLevelToLogrusLevel[defaultOutputLevel]

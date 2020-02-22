@@ -39,7 +39,7 @@ func FromFlags() (*DaprRuntime, error) {
 	enableMetrics := flag.String("enable-metrics", "true", fmt.Sprintf("Enable metrics. default is true"))
 
 	loggerOptions := logger.Options{}
-	loggerOptions.AttachOptionFlags(flag.StringVar, flag.BoolVar)
+	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
 

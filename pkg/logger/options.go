@@ -14,7 +14,7 @@ const (
 	defaultOutputLevel = InfoLevel
 )
 
-var stringToDaprLoggingLevel = map[string]Level{
+var stringToDaprLoggingLevel = map[string]LogLevel{
 	"debug": DebugLevel,
 	"info":  InfoLevel,
 	"warn":  WarnLevel,
@@ -22,7 +22,7 @@ var stringToDaprLoggingLevel = map[string]Level{
 	"fatal": FatalLevel,
 }
 
-var daprLoggingLevelToString = map[Level]string{
+var daprLoggingLevelToString = map[LogLevel]string{
 	DebugLevel: "debug",
 	InfoLevel:  "info",
 	WarnLevel:  "warn",
@@ -32,14 +32,15 @@ var daprLoggingLevelToString = map[Level]string{
 
 // Options defines the sets of options for Dapr logging
 type Options struct {
-	// JSONFormatEnabled is to write log as JSON format
+	// JSONFormatEnabled is the flag to enable JSON formatted log
 	JSONFormatEnabled bool
 
+	// outputLevel is the level of logging
 	outputLevel string
 }
 
 // GetOutputLevel returns the log output level
-func (o *Options) GetOutputLevel() Level {
+func (o *Options) GetOutputLevel() LogLevel {
 	lvl, ok := stringToDaprLoggingLevel[o.outputLevel]
 	// fallback to defaultOutputLevel
 	if !ok {
@@ -50,7 +51,7 @@ func (o *Options) GetOutputLevel() Level {
 }
 
 // SetOutputLevel sets the log output level
-func (o *Options) SetOutputLevel(outputLevel Level) error {
+func (o *Options) SetOutputLevel(outputLevel LogLevel) error {
 	lvl, ok := daprLoggingLevelToString[outputLevel]
 	if ok {
 		o.outputLevel = lvl
@@ -59,8 +60,8 @@ func (o *Options) SetOutputLevel(outputLevel Level) error {
 	return fmt.Errorf("undefined Log Output Level: %d", outputLevel)
 }
 
-// AttachOptionFlags attaches log options to command flags
-func (o *Options) AttachOptionFlags(
+// AttachCmdFlags attaches log options to command flags
+func (o *Options) AttachCmdFlags(
 	stringVar func(p *string, name string, value string, usage string),
 	boolVar func(p *bool, name string, value bool, usage string)) {
 	stringVar(
