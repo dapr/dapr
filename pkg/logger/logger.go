@@ -100,18 +100,17 @@ type daprLogger struct {
 	logger *logrus.Entry
 }
 
-// loggers is the collection of Dapr Logger that is shared globally.
+// globalLoggers is the collection of Dapr Logger that is shared globally.
 // TODO: User will disable or enable logger on demand.
-var loggers = map[string]Logger{}
-var loggersLock = sync.RWMutex{}
+var globalLoggers = map[string]Logger{}
+var globalLoggersLock = sync.RWMutex{}
 
 // NewLogger creates new Logger instance.
 func NewLogger(name string) Logger {
-	loggersLock.Lock()
-	defer loggersLock.Unlock()
+	globalLoggersLock.Lock()
+	defer globalLoggersLock.Unlock()
 
-	logger, ok := loggers[name]
-
+	logger, ok := globalLoggers[name]
 	if !ok {
 		newLogger := logrus.New()
 		dl := &daprLogger{
@@ -120,8 +119,8 @@ func NewLogger(name string) Logger {
 			logger:            defaultLogger(newLogger, name),
 		}
 		dl.EnableJSONOutput(defaultJSONOutput)
-		loggers[name] = dl
-		logger = loggers[name]
+		globalLoggers[name] = dl
+		logger = globalLoggers[name]
 	}
 
 	return logger
@@ -135,11 +134,11 @@ func defaultLogger(logger *logrus.Logger, name string) *logrus.Entry {
 }
 
 func getLoggers() map[string]Logger {
-	loggersLock.RLock()
-	defer loggersLock.RUnlock()
+	globalLoggersLock.RLock()
+	defer globalLoggersLock.RUnlock()
 
 	l := map[string]Logger{}
-	for k, v := range loggers {
+	for k, v := range globalLoggers {
 		l[k] = v
 	}
 
@@ -152,6 +151,9 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) {
 
 	l.jsonFormatEnabled = enabled
 	fieldMap := logrus.FieldMap{
+		// If time field name is conflicted, logrus adds "fields." prefix.
+		// So rename to unused field @time to avoid the confliction.
+		logrus.FieldKeyTime:  "@time",
 		logrus.FieldKeyLevel: logFieldLevel,
 		logrus.FieldKeyMsg:   logFieldMessage,
 	}
