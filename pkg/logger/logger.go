@@ -29,7 +29,6 @@ const (
 	logFieldInstance  = "instance"
 	logFieldDaprVer   = "dapr_ver"
 	logFieldDaprID    = "dapr_id"
-	logFieldRequestID = "request_id"
 )
 
 // Level is Dapr Logger Level type
