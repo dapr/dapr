@@ -48,26 +48,23 @@ type metadata struct {
 }
 
 const (
-	apiVersionV1            = "v1.0"
-	idParam                 = "id"
-	methodParam             = "method"
-	actorTypeParam          = "actorType"
-	actorIDParam            = "actorId"
-	storeNameParam          = "storeName"
-	stateKeyParam           = "key"
-	secretStoreNameParam    = "secretStoreName"
-	secretNameParam         = "key"
-	secretNamespaceParam    = "metadata.namespace"
-	secretVersionParam      = "metadata.versionid"
-	secretVersionStageParam = "metadata.versionstage"
-	topicParam              = "topic"
-	nameParam               = "name"
-	consistencyParam        = "consistency"
-	retryIntervalParam      = "retryInterval"
-	retryPatternParam       = "retryPattern"
-	retryThresholdParam     = "retryThreshold"
-	concurrencyParam        = "concurrency"
-	daprSeparator           = "||"
+	apiVersionV1         = "v1.0"
+	idParam              = "id"
+	methodParam          = "method"
+	actorTypeParam       = "actorType"
+	actorIDParam         = "actorId"
+	storeNameParam       = "storeName"
+	stateKeyParam        = "key"
+	secretStoreNameParam = "secretStoreName"
+	secretNameParam      = "key"
+	topicParam           = "topic"
+	nameParam            = "name"
+	consistencyParam     = "consistency"
+	retryIntervalParam   = "retryInterval"
+	retryPatternParam    = "retryPattern"
+	retryThresholdParam  = "retryThreshold"
+	concurrencyParam     = "concurrency"
+	daprSeparator        = "||"
 )
 
 // NewAPI returns a new API
@@ -386,21 +383,14 @@ func (a *api) onGetSecret(c *routing.Context) error {
 	}
 
 	metadata := map[string]string{}
-
-	secretNamespace := string(c.QueryArgs().Peek(secretNamespaceParam))
-	if len(secretNamespace) > 0 {
-		metadata["namespace"] = secretNamespace
-	}
-
-	secretVersion := string(c.QueryArgs().Peek(secretVersionParam))
-	if len(secretVersion) > 0 {
-		metadata["VersionID"] = secretVersion
-	}
-
-	secretVersionStage := string(c.QueryArgs().Peek(secretVersionStageParam))
-	if len(secretVersionStage) > 0 {
-		metadata["VersionStage"] = secretVersionStage
-	}
+	const metadataPrefix string = "metadata."
+	c.QueryArgs().VisitAll(func(key []byte, value []byte) {
+		queryKey := string(key)
+		if strings.HasPrefix(queryKey, metadataPrefix) {
+			k := strings.TrimPrefix(queryKey, metadataPrefix)
+			metadata[k] = string(value)
+		}
+	})
 
 	key := c.Param(secretNameParam)
 	req := secretstores.GetSecretRequest{
