@@ -55,18 +55,17 @@ var daprLoggingLevelToLogrusLevel = map[Level]logrus.Level{
 	FatalLevel: logrus.FatalLevel,
 }
 
+// Logger includes the logging api sets
 type Logger interface {
-	// SetDaprID sets dapr_id field in log. Default value is empty string
-	SetDaprID(id string)
-	// SetScope sets scope field in log. Default value is Logger name
-	SetScope(scope string)
-	// SetOutputLevel sets output level
-	SetOutputLevel(outputLevel Level)
-
 	// EnableJSONOutput enables JSON formatted output log
 	EnableJSONOutput(enabled bool)
 
-	// WithLogType changes the default log_type field in log. Default value is LogTypeLog
+	// SetDaprID sets dapr_id field in log. Default value is empty string
+	SetDaprID(id string)
+	// SetOutputLevel sets log output level
+	SetOutputLevel(outputLevel Level)
+
+	// WithLogType specify the log_type field in log. Default value is LogTypeLog
 	WithLogType(logType string) Logger
 
 	// Info logs a message at level Info.
@@ -92,11 +91,16 @@ type Logger interface {
 }
 
 type daprLogger struct {
-	name              string
+	// name is the name of logger that is published to log as a scope
+	name string
+	// jsonFormatEnabled is a flag to turn on JSON formatted log
 	jsonFormatEnabled bool
-	logger            *logrus.Entry
+	// loger is the instance of logrus logger
+	logger *logrus.Entry
 }
 
+// loggers is the collection of Dapr Logger that is shared globally.
+// TODO: User will disable or enable logger on demand.
 var loggers = map[string]Logger{}
 var loggersLock = sync.RWMutex{}
 
@@ -112,7 +116,7 @@ func NewLogger(name string) Logger {
 		dl := &daprLogger{
 			name:              name,
 			jsonFormatEnabled: defaultJSONOutput,
-			logger:            newDefaultLogger(newLogger, name),
+			logger:            defaultLogger(newLogger, name),
 		}
 		dl.EnableJSONOutput(defaultJSONOutput)
 		loggers[name] = dl
@@ -122,7 +126,7 @@ func NewLogger(name string) Logger {
 	return logger
 }
 
-func newDefaultLogger(logger *logrus.Logger, name string) *logrus.Entry {
+func defaultLogger(logger *logrus.Logger, name string) *logrus.Entry {
 	return logger.WithFields(logrus.Fields{
 		logFieldScope: name,
 		logFieldType:  LogTypeLog,
@@ -141,24 +145,7 @@ func getLoggers() map[string]Logger {
 	return l
 }
 
-func (l *daprLogger) SetDaprID(id string) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldDaprID] = id
-	}
-}
-
-func (l *daprLogger) SetScope(scope string) {
-	l.logger.Data[logFieldScope] = scope
-}
-
-func (l *daprLogger) SetOutputLevel(outputLevel Level) {
-	lvl, ok := daprLoggingLevelToLogrusLevel[outputLevel]
-	if !ok {
-		lvl = daprLoggingLevelToLogrusLevel[defaultOutputLevel]
-	}
-	l.logger.Logger.SetLevel(lvl)
-}
-
+// EnableJSONOutput enables JSON formatted output log
 func (l *daprLogger) EnableJSONOutput(enabled bool) {
 	var formatter logrus.Formatter
 
@@ -194,6 +181,23 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) {
 	l.logger.Logger.SetFormatter(formatter)
 }
 
+// SetDaprID sets dapr_id field in log. Default value is empty string
+func (l *daprLogger) SetDaprID(id string) {
+	if l.jsonFormatEnabled {
+		l.logger.Data[logFieldDaprID] = id
+	}
+}
+
+// SetOutputLevel sets log output level
+func (l *daprLogger) SetOutputLevel(outputLevel Level) {
+	lvl, ok := daprLoggingLevelToLogrusLevel[outputLevel]
+	if !ok {
+		lvl = daprLoggingLevelToLogrusLevel[defaultOutputLevel]
+	}
+	l.logger.Logger.SetLevel(lvl)
+}
+
+// WithLogType specify the log_type field in log. Default value is LogTypeLog
 func (l *daprLogger) WithLogType(logType string) Logger {
 	return &daprLogger{
 		name:   l.name,
