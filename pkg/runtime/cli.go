@@ -12,13 +12,12 @@ import (
 	"strconv"
 
 	global_config "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/version"
-	log "github.com/sirupsen/logrus"
 )
 
 func FromFlags() (*DaprRuntime, error) {
-	logLevel := flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr to listen on")
 	daprGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprGRPCPort), "gRPC port for Dapr to listen on")
@@ -39,6 +38,9 @@ func FromFlags() (*DaprRuntime, error) {
 	metricsPort := flag.String("metrics-port", fmt.Sprintf("%v", DefaultMetricsPort), "The port for the metrics server")
 	enableMetrics := flag.String("enable-metrics", "true", fmt.Sprintf("Enable metrics. default is true"))
 
+	loggerOptions := logger.Options{}
+	loggerOptions.AttachOptionFlags(flag.StringVar, flag.BoolVar)
+
 	flag.Parse()
 
 	if *runtimeVersion {
@@ -46,15 +48,10 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
+	// Apply options to all loggers
+	logger.ApplyOptionsToLoggers(&loggerOptions)
 
-	parsedLogLevel, err := log.ParseLevel(*logLevel)
-	if err == nil {
-		log.SetLevel(parsedLogLevel)
-		log.Infof("log level set to: %s", parsedLogLevel)
-	} else {
-		return nil, fmt.Errorf("invalid value for --log-level: %s", *logLevel)
-	}
+	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
 
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {
