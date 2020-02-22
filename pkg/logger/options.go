@@ -12,6 +12,7 @@ import (
 const (
 	defaultJSONOutput  = false
 	defaultOutputLevel = InfoLevel
+	defaultDaprID      = ""
 )
 
 var stringToDaprLoggingLevel = map[string]LogLevel{
@@ -34,6 +35,9 @@ var daprLoggingLevelToString = map[LogLevel]string{
 type Options struct {
 	// JSONFormatEnabled is the flag to enable JSON formatted log
 	JSONFormatEnabled bool
+
+	// daprID is the unique id of Dapr Application
+	daprID string
 
 	// outputLevel is the level of logging
 	outputLevel string
@@ -60,6 +64,11 @@ func (o *Options) SetOutputLevel(outputLevel LogLevel) error {
 	return fmt.Errorf("undefined Log Output Level: %d", outputLevel)
 }
 
+// SetDaprID sets Dapr ID
+func (o *Options) SetDaprID(id string) {
+	o.daprID = id
+}
+
 // AttachCmdFlags attaches log options to command flags
 func (o *Options) AttachCmdFlags(
 	stringVar func(p *string, name string, value string, usage string),
@@ -76,6 +85,15 @@ func (o *Options) AttachCmdFlags(
 		"Format log output as JSON or plain-text")
 }
 
+// DefaultOptions returns default values of Options
+func DefaultOptions() Options {
+	return Options{
+		JSONFormatEnabled: defaultJSONOutput,
+		daprID:            defaultDaprID,
+		outputLevel:       daprLoggingLevelToString[defaultOutputLevel],
+	}
+}
+
 // ApplyOptionsToLoggers applys options to all registered loggers
 func ApplyOptionsToLoggers(options *Options) error {
 	internalLoggers := getLoggers()
@@ -83,6 +101,9 @@ func ApplyOptionsToLoggers(options *Options) error {
 	for _, v := range internalLoggers {
 		v.SetOutputLevel(options.GetOutputLevel())
 		v.EnableJSONOutput(options.JSONFormatEnabled)
+		if options.daprID != "" {
+			v.SetDaprID(options.daprID)
+		}
 	}
 
 	return nil

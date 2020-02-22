@@ -38,7 +38,7 @@ func FromFlags() (*DaprRuntime, error) {
 	metricsPort := flag.String("metrics-port", fmt.Sprintf("%v", DefaultMetricsPort), "The port for the metrics server")
 	enableMetrics := flag.String("enable-metrics", "true", fmt.Sprintf("Enable metrics. default is true"))
 
-	loggerOptions := logger.Options{}
+	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
@@ -49,6 +49,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	// Apply options to all loggers
+	loggerOptions.SetDaprID(*daprID)
 	logger.ApplyOptionsToLoggers(&loggerOptions)
 
 	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
