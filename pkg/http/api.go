@@ -498,7 +498,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
 		a.setHeadersOnRequest(resp.Metadata, c)
-		respondWithJSON(c.RequestCtx, statusCode, resp.Data)
+		respond(c.RequestCtx, statusCode, resp.Data)
 	}
 
 	return nil
