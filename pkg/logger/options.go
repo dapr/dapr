@@ -15,7 +15,7 @@ const (
 	defaultDaprID      = ""
 )
 
-var stringToDaprLoggingLevel = map[string]LogLevel{
+var stringToDaprLogLevel = map[string]LogLevel{
 	"debug": DebugLevel,
 	"info":  InfoLevel,
 	"warn":  WarnLevel,
@@ -23,7 +23,7 @@ var stringToDaprLoggingLevel = map[string]LogLevel{
 	"fatal": FatalLevel,
 }
 
-var daprLoggingLevelToString = map[LogLevel]string{
+var daprLogLevelToString = map[LogLevel]string{
 	DebugLevel: "debug",
 	InfoLevel:  "info",
 	WarnLevel:  "warn",
@@ -45,18 +45,18 @@ type Options struct {
 
 // GetOutputLevel returns the log output level
 func (o *Options) GetOutputLevel() LogLevel {
-	lvl, ok := stringToDaprLoggingLevel[o.outputLevel]
+	lvl, ok := stringToDaprLogLevel[o.outputLevel]
 	// fallback to defaultOutputLevel
 	if !ok {
 		lvl = defaultOutputLevel
-		o.outputLevel = daprLoggingLevelToString[defaultOutputLevel]
+		o.outputLevel = daprLogLevelToString[defaultOutputLevel]
 	}
 	return lvl
 }
 
 // SetOutputLevel sets the log output level
 func (o *Options) SetOutputLevel(outputLevel LogLevel) error {
-	lvl, ok := daprLoggingLevelToString[outputLevel]
+	lvl, ok := daprLogLevelToString[outputLevel]
 	if ok {
 		o.outputLevel = lvl
 		return nil
@@ -76,7 +76,7 @@ func (o *Options) AttachCmdFlags(
 	stringVar(
 		&o.outputLevel,
 		"log-level",
-		daprLoggingLevelToString[defaultOutputLevel],
+		daprLogLevelToString[defaultOutputLevel],
 		"Options are debug, info, warning, error, fatal, or panic. (default info)")
 	boolVar(
 		&o.JSONFormatEnabled,
@@ -90,7 +90,7 @@ func DefaultOptions() Options {
 	return Options{
 		JSONFormatEnabled: defaultJSONOutput,
 		daprID:            defaultDaprID,
-		outputLevel:       daprLoggingLevelToString[defaultOutputLevel],
+		outputLevel:       daprLogLevelToString[defaultOutputLevel],
 	}
 }
 

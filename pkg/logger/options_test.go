@@ -40,7 +40,7 @@ func TestOptions(t *testing.T) {
 
 		logLevelAsserted := false
 		testStringVarFn := func(p *string, name string, value string, usage string) {
-			if name == "log-level" && value == daprLoggingLevelToString[defaultOutputLevel] {
+			if name == "log-level" && value == daprLogLevelToString[defaultOutputLevel] {
 				logLevelAsserted = true
 			}
 		}
@@ -87,7 +87,7 @@ func TestApplyOptionsToLoggers(t *testing.T) {
 			(l.(*daprLogger)).logger.Data[logFieldDaprID])
 		assert.Equal(
 			t,
-			daprLoggingLevelToLogrusLevel[DebugLevel],
+			daprLogLevelToLogrusLevel[DebugLevel],
 			(l.(*daprLogger)).logger.Logger.GetLevel())
 	}
 }

@@ -33,7 +33,7 @@ const (
 )
 
 // LogLevel is Dapr Logger Level type
-type LogLevel int
+type LogLevel uint32
 
 const (
 	// DebugLevel has verbose message
@@ -48,7 +48,7 @@ const (
 	FatalLevel
 )
 
-var daprLoggingLevelToLogrusLevel = map[LogLevel]logrus.Level{
+var daprLogLevelToLogrusLevel = map[LogLevel]logrus.Level{
 	DebugLevel: logrus.DebugLevel,
 	InfoLevel:  logrus.InfoLevel,
 	WarnLevel:  logrus.WarnLevel,
@@ -193,9 +193,9 @@ func (l *daprLogger) SetDaprID(id string) {
 
 // SetOutputLevel sets log output level
 func (l *daprLogger) SetOutputLevel(outputLevel LogLevel) {
-	lvl, ok := daprLoggingLevelToLogrusLevel[outputLevel]
+	lvl, ok := daprLogLevelToLogrusLevel[outputLevel]
 	if !ok {
-		lvl = daprLoggingLevelToLogrusLevel[defaultOutputLevel]
+		lvl = daprLogLevelToLogrusLevel[defaultOutputLevel]
 	}
 	l.logger.Logger.SetLevel(lvl)
 }
@@ -213,7 +213,7 @@ func (l *daprLogger) Info(args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Info(args...)
+	l.logger.Log(logrus.InfoLevel, args...)
 }
 
 // Infof logs a message at level Info.
@@ -221,7 +221,7 @@ func (l *daprLogger) Infof(format string, args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Infof(format, args...)
+	l.logger.Logf(logrus.InfoLevel, format, args...)
 }
 
 // Debug logs a message at level Debug.
@@ -229,7 +229,7 @@ func (l *daprLogger) Debug(args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Debug(args...)
+	l.logger.Log(logrus.DebugLevel, args...)
 }
 
 // Debugf logs a message at level Debug.
@@ -237,7 +237,7 @@ func (l *daprLogger) Debugf(format string, args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Debugf(format, args...)
+	l.logger.Logf(logrus.DebugLevel, format, args...)
 }
 
 // Warn logs a message at level Warn.
@@ -245,7 +245,7 @@ func (l *daprLogger) Warn(args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Warn(args...)
+	l.logger.Log(logrus.WarnLevel, args...)
 }
 
 // Warnf logs a message at level Warn.
@@ -253,7 +253,7 @@ func (l *daprLogger) Warnf(format string, args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Warnf(format, args...)
+	l.logger.Logf(logrus.WarnLevel, format, args...)
 }
 
 // Error logs a message at level Error.
@@ -261,7 +261,7 @@ func (l *daprLogger) Error(args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Error(args...)
+	l.logger.Log(logrus.ErrorLevel, args...)
 }
 
 // Errorf logs a message at level Error.
@@ -269,7 +269,7 @@ func (l *daprLogger) Errorf(format string, args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Errorf(format, args...)
+	l.logger.Logf(logrus.ErrorLevel, format, args...)
 }
 
 // Fatal logs a message at level Fatal then the process will exit with status set to 1.
@@ -277,7 +277,7 @@ func (l *daprLogger) Fatal(args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Fatal(args...)
+	l.logger.Log(logrus.FatalLevel, args...)
 }
 
 // Fatalf logs a message at level Fatal then the process will exit with status set to 1.
@@ -285,5 +285,5 @@ func (l *daprLogger) Fatalf(format string, args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Fatalf(format, args...)
+	l.logger.Logf(logrus.FatalLevel, format, args...)
 }
