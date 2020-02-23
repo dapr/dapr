@@ -101,7 +101,7 @@ func ApplyOptionsToLoggers(options *Options) error {
 	for _, v := range internalLoggers {
 		v.SetOutputLevel(options.GetOutputLevel())
 		v.EnableJSONOutput(options.JSONFormatEnabled)
-		if options.daprID != "" {
+		if options.daprID != defaultDaprID {
 			v.SetDaprID(options.daprID)
 		}
 	}
