@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -190,4 +191,26 @@ func TestWithTypeFields(t *testing.T) {
 	json.Unmarshal(b, &o)
 
 	assert.Equalf(t, LogTypeLog, o[logFieldType], "testLogger must be %s type", LogTypeLog)
+}
+
+func TestToLogrusLevel(t *testing.T) {
+	t.Run("Dapr DebugLevel to Logrus.DebugLevel", func(t *testing.T) {
+		assert.Equal(t, logrus.DebugLevel, toLogrusLevel(DebugLevel))
+	})
+
+	t.Run("Dapr InfoLevel to Logrus.InfoLevel", func(t *testing.T) {
+		assert.Equal(t, logrus.InfoLevel, toLogrusLevel(InfoLevel))
+	})
+
+	t.Run("Dapr WarnLevel to Logrus.WarnLevel", func(t *testing.T) {
+		assert.Equal(t, logrus.WarnLevel, toLogrusLevel(WarnLevel))
+	})
+
+	t.Run("Dapr ErrorLevel to Logrus.ErrorLevel", func(t *testing.T) {
+		assert.Equal(t, logrus.ErrorLevel, toLogrusLevel(ErrorLevel))
+	})
+
+	t.Run("Dapr FatalLevel to Logrus.FatalLevel", func(t *testing.T) {
+		assert.Equal(t, logrus.FatalLevel, toLogrusLevel(FatalLevel))
+	})
 }
