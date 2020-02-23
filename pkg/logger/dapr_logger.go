@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"fmt"
 	"os"
 	"time"
 
@@ -9,14 +8,6 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/sirupsen/logrus"
 )
-
-var daprLogLevelToLogrusLevel = map[LogLevel]logrus.Level{
-	DebugLevel: logrus.DebugLevel,
-	InfoLevel:  logrus.InfoLevel,
-	WarnLevel:  logrus.WarnLevel,
-	ErrorLevel: logrus.ErrorLevel,
-	FatalLevel: logrus.FatalLevel,
-}
 
 // daprLogger is the implemention for logrus
 type daprLogger struct {
@@ -91,14 +82,15 @@ func (l *daprLogger) SetDaprID(id string) {
 	}
 }
 
+func toLogrusLevel(lvl LogLevel) logrus.Level {
+	// ignore error because it will never happens
+	l, _ := logrus.ParseLevel(string(lvl))
+	return l
+}
+
 // SetOutputLevel sets log output level
 func (l *daprLogger) SetOutputLevel(outputLevel LogLevel) error {
-	lvl, ok := daprLogLevelToLogrusLevel[outputLevel]
-	if !ok {
-		return fmt.Errorf("unsupported log level: %s", outputLevel)
-	}
-
-	l.logger.Logger.SetLevel(lvl)
+	l.logger.Logger.SetLevel(toLogrusLevel(outputLevel))
 
 	return nil
 }

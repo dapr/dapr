@@ -96,7 +96,7 @@ func TestApplyOptionsToLoggers(t *testing.T) {
 			(l.(*daprLogger)).logger.Data[logFieldDaprID])
 		assert.Equal(
 			t,
-			daprLogLevelToLogrusLevel[DebugLevel],
+			toLogrusLevel(DebugLevel),
 			(l.(*daprLogger)).logger.Logger.GetLevel())
 	}
 }
