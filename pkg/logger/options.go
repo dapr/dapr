@@ -70,7 +70,7 @@ func DefaultOptions() Options {
 func ApplyOptionsToLoggers(options *Options) error {
 	daprLogLevel := toLogLevel(options.outputLevel)
 	if daprLogLevel == UndefinedLevel {
-		return fmt.Errorf("unsupported log level: %s", options.outputLevel)
+		return fmt.Errorf("invalid value for --log-level: %s", options.outputLevel)
 	}
 
 	internalLoggers := getLoggers()

@@ -50,7 +50,9 @@ func FromFlags() (*DaprRuntime, error) {
 
 	// Apply options to all loggers
 	loggerOptions.SetDaprID(*daprID)
-	logger.ApplyOptionsToLoggers(&loggerOptions)
+	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+		return nil, err
+	}
 
 	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
 
