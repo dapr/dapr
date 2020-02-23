@@ -68,24 +68,27 @@ func DefaultOptions() Options {
 
 // ApplyOptionsToLoggers applys options to all registered loggers
 func ApplyOptionsToLoggers(options *Options) error {
-	daprLogLevel := toLogLevel(options.outputLevel)
-	if daprLogLevel == UndefinedLevel {
-		return fmt.Errorf("invalid value for --log-level: %s", options.outputLevel)
-	}
-
 	internalLoggers := getLoggers()
 
+	// Apply formatting options first
 	for _, v := range internalLoggers {
-		if err := v.SetOutputLevel(daprLogLevel); err != nil {
-			return err
-		}
-
 		if err := v.EnableJSONOutput(options.JSONFormatEnabled); err != nil {
 			return err
 		}
 
 		if options.daprID != undefinedDaprID {
 			v.SetDaprID(options.daprID)
+		}
+	}
+
+	daprLogLevel := toLogLevel(options.outputLevel)
+	if daprLogLevel == UndefinedLevel {
+		return fmt.Errorf("invalid value for --log-level: %s", options.outputLevel)
+	}
+
+	for _, v := range internalLoggers {
+		if err := v.SetOutputLevel(daprLogLevel); err != nil {
+			return err
 		}
 	}
 
