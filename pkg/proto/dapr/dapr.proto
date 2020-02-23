@@ -18,6 +18,7 @@ service Dapr {
   rpc InvokeService(InvokeServiceEnvelope) returns (InvokeServiceResponseEnvelope) {}
   rpc InvokeBinding(InvokeBindingEnvelope) returns (google.protobuf.Empty) {}
   rpc GetState(GetStateEnvelope) returns (GetStateResponseEnvelope) {}
+  rpc GetSecret(GetSecretEnvelope) returns (GetSecretResponseEnvelope) {}
   rpc SaveState(SaveStateEnvelope) returns (google.protobuf.Empty) {}
   rpc DeleteState(DeleteStateEnvelope) returns (google.protobuf.Empty) {}
 }
@@ -48,6 +49,16 @@ message GetStateEnvelope {
 message GetStateResponseEnvelope {
   google.protobuf.Any data = 1;
   string etag = 2;
+}
+
+message GetSecretEnvelope {
+  string storeName = 1;
+  string key = 2;
+  map<string,string> metadata = 3;
+}
+
+message GetSecretResponseEnvelope {
+  map<string,string> data = 1;
 }
 
 message InvokeBindingEnvelope {

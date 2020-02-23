@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel/http"
@@ -1415,4 +1416,54 @@ func (c fakeStateStore) Set(req *state.SetRequest) error {
 		}, req)
 	}
 	return errors.New("NOT FOUND")
+}
+
+func TestV1SecretEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	fakeStore := fakeSecretStore{}
+	fakeStores := map[string]secretstores.SecretStore{
+		"store1": fakeStore,
+	}
+	testAPI := &api{
+		secretStores: fakeStores,
+		json:         jsoniter.ConfigFastest,
+	}
+	fakeServer.StartServer(testAPI.constructSecretEndpoints())
+	storeName := "store1"
+	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 401, resp.StatusCode, "reading non-existing store should return 401")
+	})
+	t.Run("Get secret - 204 No Content Found", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
+	})
+	t.Run("Get secret - Good Key", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
+	})
+}
+
+type fakeSecretStore struct {
+}
+
+func (c fakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	if req.Name == "good-key" {
+		return secretstores.GetSecretResponse{
+			Data: map[string]string{"good-key": "life is good"},
+		}, nil
+	}
+	return secretstores.GetSecretResponse{Data: nil}, nil
+}
+func (c fakeSecretStore) Init(metadata secretstores.Metadata) error {
+	return nil
 }

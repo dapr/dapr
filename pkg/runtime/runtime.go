@@ -56,7 +56,6 @@ import (
 
 const (
 	appConfigEndpoint   = "dapr/config"
-	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
 	actorStateStore     = "actorStateStore"
 )
@@ -152,9 +151,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.blockUntilAppIsReady()
 
-	err = a.setHostAddress()
+	a.hostAddress, err = GetHostAddress()
 	if err != nil {
-		log.Warnf("failed to set host address: %s", err)
+		return fmt.Errorf("failed to determine host address: %s", err)
 	}
 
 	err = a.createAppChannel()
@@ -495,38 +494,19 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.pubSub, a.actor, a.sendToOutputBinding)
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.pubSub, a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MetricsPort, a.runtimeConfig.EnableMetrics)
+
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
 }
 
 func (a *DaprRuntime) startGRPCServer(port int) error {
-	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
+	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.EnableMetrics)
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
-}
-
-func (a *DaprRuntime) setHostAddress() error {
-	a.hostAddress = os.Getenv(hostIPEnvVar)
-	if a.hostAddress == "" {
-		addrs, err := net.InterfaceAddrs()
-		if err != nil {
-			return err
-		}
-
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil {
-					a.hostAddress = ipnet.IP.String()
-					return nil
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
