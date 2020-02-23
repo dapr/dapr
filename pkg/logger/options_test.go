@@ -16,15 +16,24 @@ func TestOptions(t *testing.T) {
 		o := DefaultOptions()
 		assert.Equal(t, defaultJSONOutput, o.JSONFormatEnabled)
 		assert.Equal(t, undefinedDaprID, o.daprID)
-		assert.Equal(t, defaultOutputLevel, o.GetOutputLevel())
+		assert.Equal(t, defaultOutputLevel, o.outputLevel)
 	})
 
 	t.Run("set outputlevel to debug level", func(t *testing.T) {
+		debugLevelString := "debug"
 		o := DefaultOptions()
-		assert.Equal(t, defaultOutputLevel, o.GetOutputLevel())
+		assert.Equal(t, defaultOutputLevel, o.outputLevel)
 
-		o.SetOutputLevel(DebugLevel)
-		assert.Equal(t, DebugLevel, o.GetOutputLevel())
+		o.SetOutputLevel(debugLevelString)
+		assert.Equal(t, debugLevelString, o.outputLevel)
+	})
+
+	t.Run("set outputlevel to fake level", func(t *testing.T) {
+		o := DefaultOptions()
+		assert.Equal(t, defaultOutputLevel, o.outputLevel)
+
+		err := o.SetOutputLevel("fake")
+		assert.Error(t, err)
 	})
 
 	t.Run("set dapr ID", func(t *testing.T) {
@@ -40,7 +49,7 @@ func TestOptions(t *testing.T) {
 
 		logLevelAsserted := false
 		testStringVarFn := func(p *string, name string, value string, usage string) {
-			if name == "log-level" && value == daprLogLevelToString[defaultOutputLevel] {
+			if name == "log-level" && value == defaultOutputLevel {
 				logLevelAsserted = true
 			}
 		}

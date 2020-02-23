@@ -11,25 +11,9 @@ import (
 
 const (
 	defaultJSONOutput  = false
-	defaultOutputLevel = InfoLevel
+	defaultOutputLevel = "info"
 	undefinedDaprID    = ""
 )
-
-var stringToDaprLogLevel = map[string]LogLevel{
-	"debug": DebugLevel,
-	"info":  InfoLevel,
-	"warn":  WarnLevel,
-	"error": ErrorLevel,
-	"fatal": FatalLevel,
-}
-
-var daprLogLevelToString = map[LogLevel]string{
-	DebugLevel: "debug",
-	InfoLevel:  "info",
-	WarnLevel:  "warn",
-	ErrorLevel: "error",
-	FatalLevel: "fatal",
-}
 
 // Options defines the sets of options for Dapr logging
 type Options struct {
@@ -43,25 +27,13 @@ type Options struct {
 	outputLevel string
 }
 
-// GetOutputLevel returns the log output level
-func (o *Options) GetOutputLevel() LogLevel {
-	lvl, ok := stringToDaprLogLevel[o.outputLevel]
-	// fallback to defaultOutputLevel
-	if !ok {
-		lvl = defaultOutputLevel
-		o.outputLevel = daprLogLevelToString[defaultOutputLevel]
-	}
-	return lvl
-}
-
 // SetOutputLevel sets the log output level
-func (o *Options) SetOutputLevel(outputLevel LogLevel) error {
-	lvl, ok := daprLogLevelToString[outputLevel]
-	if ok {
-		o.outputLevel = lvl
-		return nil
+func (o *Options) SetOutputLevel(outputLevel string) error {
+	if toLogLevel(outputLevel) == UndefinedLevel {
+		return fmt.Errorf("undefined Log Output Level:%s", outputLevel)
 	}
-	return fmt.Errorf("undefined Log Output Level: %d", outputLevel)
+	o.outputLevel = outputLevel
+	return nil
 }
 
 // SetDaprID sets Dapr ID
@@ -76,8 +48,8 @@ func (o *Options) AttachCmdFlags(
 	stringVar(
 		&o.outputLevel,
 		"log-level",
-		daprLogLevelToString[defaultOutputLevel],
-		"Options are debug, info, warning, error, fatal, or panic. (default info)")
+		defaultOutputLevel,
+		"Options are debug, info, warning, error, or fatal. (default info)")
 	boolVar(
 		&o.JSONFormatEnabled,
 		"log-json-enabled",
@@ -90,17 +62,28 @@ func DefaultOptions() Options {
 	return Options{
 		JSONFormatEnabled: defaultJSONOutput,
 		daprID:            undefinedDaprID,
-		outputLevel:       daprLogLevelToString[defaultOutputLevel],
+		outputLevel:       defaultOutputLevel,
 	}
 }
 
 // ApplyOptionsToLoggers applys options to all registered loggers
 func ApplyOptionsToLoggers(options *Options) error {
+	daprLogLevel := toLogLevel(options.outputLevel)
+	if daprLogLevel == UndefinedLevel {
+		return fmt.Errorf("unsupported log level: %s", options.outputLevel)
+	}
+
 	internalLoggers := getLoggers()
 
 	for _, v := range internalLoggers {
-		v.SetOutputLevel(options.GetOutputLevel())
-		v.EnableJSONOutput(options.JSONFormatEnabled)
+		if err := v.SetOutputLevel(daprLogLevel); err != nil {
+			return err
+		}
+
+		if err := v.EnableJSONOutput(options.JSONFormatEnabled); err != nil {
+			return err
+		}
+
 		if options.daprID != undefinedDaprID {
 			v.SetDaprID(options.daprID)
 		}

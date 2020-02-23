@@ -6,13 +6,8 @@
 package logger
 
 import (
-	"os"
+	"strings"
 	"sync"
-	"time"
-
-	"github.com/dapr/dapr/pkg/version"
-	"github.com/dapr/dapr/utils"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -33,38 +28,38 @@ const (
 )
 
 // LogLevel is Dapr Logger Level type
-type LogLevel uint32
+type LogLevel string
 
 const (
 	// DebugLevel has verbose message
-	DebugLevel LogLevel = iota
+	DebugLevel LogLevel = "debug"
 	// InfoLevel is default log level
-	InfoLevel
+	InfoLevel LogLevel = "info"
 	// WarnLevel is for logging messages about possible issues
-	WarnLevel
+	WarnLevel LogLevel = "warn"
 	// ErrorLevel is for logging errors
-	ErrorLevel
-	// FatalLevel is for logging fatal messages. The system shutsdown after logging the message.
-	FatalLevel
+	ErrorLevel LogLevel = "error"
+	// FatalLevel is for logging fatal messages. The system shuts down after logging the message.
+	FatalLevel LogLevel = "fatal"
+
+	// UndefinedLevel is undefined log level
+	UndefinedLevel LogLevel = ""
 )
 
-var daprLogLevelToLogrusLevel = map[LogLevel]logrus.Level{
-	DebugLevel: logrus.DebugLevel,
-	InfoLevel:  logrus.InfoLevel,
-	WarnLevel:  logrus.WarnLevel,
-	ErrorLevel: logrus.ErrorLevel,
-	FatalLevel: logrus.FatalLevel,
-}
+// globalLoggers is the collection of Dapr Logger that is shared globally.
+// TODO: User will disable or enable logger on demand.
+var globalLoggers = map[string]Logger{}
+var globalLoggersLock = sync.RWMutex{}
 
 // Logger includes the logging api sets
 type Logger interface {
 	// EnableJSONOutput enables JSON formatted output log
-	EnableJSONOutput(enabled bool)
+	EnableJSONOutput(enabled bool) error
 
 	// SetDaprID sets dapr_id field in log. Default value is empty string
 	SetDaprID(id string)
 	// SetOutputLevel sets log output level
-	SetOutputLevel(outputLevel LogLevel)
+	SetOutputLevel(outputLevel LogLevel) error
 
 	// WithLogType specify the log_type field in log. Default value is LogTypeLog
 	WithLogType(logType string) Logger
@@ -91,19 +86,24 @@ type Logger interface {
 	Fatalf(format string, args ...interface{})
 }
 
-type daprLogger struct {
-	// name is the name of logger that is published to log as a scope
-	name string
-	// jsonFormatEnabled is a flag to turn on JSON formatted log
-	jsonFormatEnabled bool
-	// loger is the instance of logrus logger
-	logger *logrus.Entry
-}
+// toLogLevel converts to LogLevel
+func toLogLevel(level string) LogLevel {
+	switch strings.ToLower(level) {
+	case "debug":
+		return DebugLevel
+	case "info":
+		return InfoLevel
+	case "warn":
+		return WarnLevel
+	case "error":
+		return ErrorLevel
+	case "fatal":
+		return FatalLevel
+	}
 
-// globalLoggers is the collection of Dapr Logger that is shared globally.
-// TODO: User will disable or enable logger on demand.
-var globalLoggers = map[string]Logger{}
-var globalLoggersLock = sync.RWMutex{}
+	// unsupported log level by Dapr
+	return UndefinedLevel
+}
 
 // NewLogger creates new Logger instance.
 func NewLogger(name string) Logger {
@@ -112,25 +112,11 @@ func NewLogger(name string) Logger {
 
 	logger, ok := globalLoggers[name]
 	if !ok {
-		newLogger := logrus.New()
-		dl := &daprLogger{
-			name:              name,
-			jsonFormatEnabled: defaultJSONOutput,
-			logger:            defaultLogger(newLogger, name),
-		}
-		dl.EnableJSONOutput(defaultJSONOutput)
-		globalLoggers[name] = dl
+		globalLoggers[name] = newDaprLogger(name)
 		logger = globalLoggers[name]
 	}
 
 	return logger
-}
-
-func defaultLogger(logger *logrus.Logger, name string) *logrus.Entry {
-	return logger.WithFields(logrus.Fields{
-		logFieldScope: name,
-		logFieldType:  LogTypeLog,
-	})
 }
 
 func getLoggers() map[string]Logger {
@@ -143,147 +129,4 @@ func getLoggers() map[string]Logger {
 	}
 
 	return l
-}
-
-// EnableJSONOutput enables JSON formatted output log
-func (l *daprLogger) EnableJSONOutput(enabled bool) {
-	var formatter logrus.Formatter
-
-	l.jsonFormatEnabled = enabled
-	fieldMap := logrus.FieldMap{
-		// If time field name is conflicted, logrus adds "fields." prefix.
-		// So rename to unused field @time to avoid the confliction.
-		logrus.FieldKeyTime:  "@time",
-		logrus.FieldKeyLevel: logFieldLevel,
-		logrus.FieldKeyMsg:   logFieldMessage,
-	}
-
-	if enabled {
-		hostname, _ := os.Hostname()
-		l.logger.Data = logrus.Fields{
-			logFieldScope:    l.logger.Data[logFieldScope],
-			logFieldInstance: hostname,
-			logFieldType:     LogTypeLog,
-			logFieldDaprVer:  version.Version(),
-		}
-		formatter = &logrus.JSONFormatter{
-			DisableTimestamp: true,
-			FieldMap:         fieldMap,
-		}
-	} else {
-		l.logger.Data = logrus.Fields{
-			logFieldScope: l.logger.Data[logFieldScope],
-			logFieldType:  LogTypeLog,
-		}
-		formatter = &logrus.TextFormatter{
-			DisableTimestamp: true,
-			FieldMap:         fieldMap,
-		}
-	}
-
-	l.logger.Logger.SetFormatter(formatter)
-}
-
-// SetDaprID sets dapr_id field in log. Default value is empty string
-func (l *daprLogger) SetDaprID(id string) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldDaprID] = id
-	}
-}
-
-// SetOutputLevel sets log output level
-func (l *daprLogger) SetOutputLevel(outputLevel LogLevel) {
-	lvl, ok := daprLogLevelToLogrusLevel[outputLevel]
-	if !ok {
-		lvl = daprLogLevelToLogrusLevel[defaultOutputLevel]
-	}
-	l.logger.Logger.SetLevel(lvl)
-}
-
-// WithLogType specify the log_type field in log. Default value is LogTypeLog
-func (l *daprLogger) WithLogType(logType string) Logger {
-	return &daprLogger{
-		name:   l.name,
-		logger: l.logger.WithField(logFieldType, logType),
-	}
-}
-
-// Info logs a message at level Info.
-func (l *daprLogger) Info(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Log(logrus.InfoLevel, args...)
-}
-
-// Infof logs a message at level Info.
-func (l *daprLogger) Infof(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Logf(logrus.InfoLevel, format, args...)
-}
-
-// Debug logs a message at level Debug.
-func (l *daprLogger) Debug(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Log(logrus.DebugLevel, args...)
-}
-
-// Debugf logs a message at level Debug.
-func (l *daprLogger) Debugf(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Logf(logrus.DebugLevel, format, args...)
-}
-
-// Warn logs a message at level Warn.
-func (l *daprLogger) Warn(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Log(logrus.WarnLevel, args...)
-}
-
-// Warnf logs a message at level Warn.
-func (l *daprLogger) Warnf(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Logf(logrus.WarnLevel, format, args...)
-}
-
-// Error logs a message at level Error.
-func (l *daprLogger) Error(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Log(logrus.ErrorLevel, args...)
-}
-
-// Errorf logs a message at level Error.
-func (l *daprLogger) Errorf(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Logf(logrus.ErrorLevel, format, args...)
-}
-
-// Fatal logs a message at level Fatal then the process will exit with status set to 1.
-func (l *daprLogger) Fatal(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Log(logrus.FatalLevel, args...)
-}
-
-// Fatalf logs a message at level Fatal then the process will exit with status set to 1.
-func (l *daprLogger) Fatalf(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
-	l.logger.Logf(logrus.FatalLevel, format, args...)
 }
