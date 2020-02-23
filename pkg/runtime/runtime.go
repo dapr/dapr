@@ -56,7 +56,6 @@ import (
 
 const (
 	appConfigEndpoint   = "dapr/config"
-	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
 	actorStateStore     = "actorStateStore"
 )
@@ -154,9 +153,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.blockUntilAppIsReady()
 
-	err = a.setHostAddress()
+	a.hostAddress, err = GetHostAddress()
 	if err != nil {
-		log.Warnf("failed to set host address: %s", err)
+		return fmt.Errorf("failed to determine host address: %s", err)
 	}
 
 	err = a.createAppChannel()
@@ -510,26 +509,6 @@ func (a *DaprRuntime) startGRPCServer(port int) error {
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
-}
-
-func (a *DaprRuntime) setHostAddress() error {
-	a.hostAddress = os.Getenv(hostIPEnvVar)
-	if a.hostAddress == "" {
-		addrs, err := net.InterfaceAddrs()
-		if err != nil {
-			return err
-		}
-
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil {
-					a.hostAddress = ipnet.IP.String()
-					return nil
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
