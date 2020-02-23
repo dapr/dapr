@@ -58,23 +58,21 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) error {
 		logrus.FieldKeyMsg:   logFieldMessage,
 	}
 
+	l.logger.Data = logrus.Fields{
+		logFieldScope: l.logger.Data[logFieldScope],
+		logFieldType:  LogTypeLog,
+	}
+
 	if enabled {
 		hostname, _ := os.Hostname()
-		l.logger.Data = logrus.Fields{
-			logFieldScope:    l.logger.Data[logFieldScope],
-			logFieldInstance: hostname,
-			logFieldType:     LogTypeLog,
-			logFieldDaprVer:  version.Version(),
-		}
+		l.logger.Data[logFieldInstance] = hostname
+		l.logger.Data[logFieldDaprVer] = version.Version()
+
 		formatter = &logrus.JSONFormatter{
 			DisableTimestamp: true,
 			FieldMap:         fieldMap,
 		}
 	} else {
-		l.logger.Data = logrus.Fields{
-			logFieldScope: l.logger.Data[logFieldScope],
-			logFieldType:  LogTypeLog,
-		}
 		formatter = &logrus.TextFormatter{
 			DisableTimestamp: true,
 			FieldMap:         fieldMap,
@@ -183,7 +181,7 @@ func (l *daprLogger) Fatal(args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Log(logrus.FatalLevel, args...)
+	l.logger.Fatal(args...)
 }
 
 // Fatalf logs a message at level Fatal then the process will exit with status set to 1.
@@ -191,5 +189,5 @@ func (l *daprLogger) Fatalf(format string, args ...interface{}) {
 	if l.jsonFormatEnabled {
 		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	}
-	l.logger.Logf(logrus.FatalLevel, format, args...)
+	l.logger.Fatalf(format, args...)
 }
