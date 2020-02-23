@@ -42,7 +42,7 @@ const (
 	// FatalLevel is for logging fatal messages. The system shuts down after logging the message.
 	FatalLevel LogLevel = "fatal"
 
-	// UndefinedLevel is undefined log level
+	// UndefinedLevel is for undefined log level
 	UndefinedLevel LogLevel = ""
 )
 
