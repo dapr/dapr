@@ -12,7 +12,7 @@ import (
 const (
 	defaultJSONOutput  = false
 	defaultOutputLevel = InfoLevel
-	defaultDaprID      = ""
+	undefinedDaprID    = ""
 )
 
 var stringToDaprLogLevel = map[string]LogLevel{
@@ -89,7 +89,7 @@ func (o *Options) AttachCmdFlags(
 func DefaultOptions() Options {
 	return Options{
 		JSONFormatEnabled: defaultJSONOutput,
-		daprID:            defaultDaprID,
+		daprID:            undefinedDaprID,
 		outputLevel:       daprLogLevelToString[defaultOutputLevel],
 	}
 }
@@ -101,7 +101,7 @@ func ApplyOptionsToLoggers(options *Options) error {
 	for _, v := range internalLoggers {
 		v.SetOutputLevel(options.GetOutputLevel())
 		v.EnableJSONOutput(options.JSONFormatEnabled)
-		if options.daprID != defaultDaprID {
+		if options.daprID != undefinedDaprID {
 			v.SetDaprID(options.daprID)
 		}
 	}

@@ -15,7 +15,7 @@ func TestOptions(t *testing.T) {
 	t.Run("default options", func(t *testing.T) {
 		o := DefaultOptions()
 		assert.Equal(t, defaultJSONOutput, o.JSONFormatEnabled)
-		assert.Equal(t, defaultDaprID, o.daprID)
+		assert.Equal(t, undefinedDaprID, o.daprID)
 		assert.Equal(t, defaultOutputLevel, o.GetOutputLevel())
 	})
 
@@ -29,7 +29,7 @@ func TestOptions(t *testing.T) {
 
 	t.Run("set dapr ID", func(t *testing.T) {
 		o := DefaultOptions()
-		assert.Equal(t, defaultDaprID, o.daprID)
+		assert.Equal(t, undefinedDaprID, o.daprID)
 
 		o.SetDaprID("dapr-app")
 		assert.Equal(t, "dapr-app", o.daprID)
