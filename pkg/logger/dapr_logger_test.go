@@ -164,3 +164,30 @@ func TestJSONLoggerFields(t *testing.T) {
 		})
 	}
 }
+
+func TestWithTypeFields(t *testing.T) {
+	var buf bytes.Buffer
+	testLogger := getTestLogger(&buf)
+	testLogger.EnableJSONOutput(true)
+	testLogger.SetDaprID("dapr_app")
+	testLogger.SetOutputLevel(InfoLevel)
+
+	// WithLogType will return new Logger with request log type
+	// Meanwhile, testLogger uses the default logtype
+	loggerWithRequestType := testLogger.WithLogType(LogTypeRequest)
+	loggerWithRequestType.Info("call user app")
+
+	b, _ := buf.ReadBytes('\n')
+	var o map[string]interface{}
+	json.Unmarshal(b, &o)
+
+	assert.Equalf(t, LogTypeRequest, o[logFieldType], "new logger must be %s type", LogTypeRequest)
+
+	// Log our via testLogger to ensure that testLogger still uses the default logtype
+	testLogger.Info("testLogger with log LogType")
+
+	b, _ = buf.ReadBytes('\n')
+	json.Unmarshal(b, &o)
+
+	assert.Equalf(t, LogTypeLog, o[logFieldType], "testLogger must be %s type", LogTypeLog)
+}
