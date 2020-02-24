@@ -10,24 +10,28 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/version"
-	log "github.com/sirupsen/logrus"
 )
+
+var log = logger.NewLogger("dapr.placement")
 
 func main() {
 	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 
-	logLevel := flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
 	port := flag.String("port", "50005", "")
+
+	loggerOptions := logger.DefaultOptions()
+	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
 	flag.Parse()
 
-	parsedLogLevel, err := log.ParseLevel(*logLevel)
-	if err == nil {
-		log.SetLevel(parsedLogLevel)
-		log.Infof("log level set to: %s", parsedLogLevel)
+	// Apply options to all loggers
+	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+		log.Fatal(err)
 	} else {
-		log.Fatalf("invalid value for --log-level: %s", *logLevel)
+		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 	}
 
 	stop := make(chan os.Signal, 1)

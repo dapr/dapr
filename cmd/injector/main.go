@@ -11,15 +11,13 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
-	log "github.com/sirupsen/logrus"
 )
 
-var (
-	logLevel = flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
-)
+var log = logger.NewLogger("dapr.injector")
 
 func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
@@ -42,13 +40,15 @@ func main() {
 }
 
 func init() {
+	loggerOptions := logger.DefaultOptions()
+	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
 	flag.Parse()
 
-	parsedLogLevel, err := log.ParseLevel(*logLevel)
-	if err == nil {
-		log.SetLevel(parsedLogLevel)
-		log.Infof("log level set to: %s", parsedLogLevel)
+	// Apply options to all loggers
+	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+		log.Fatal(err)
 	} else {
-		log.Fatalf("invalid value for --log-level: %s", *logLevel)
+		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 	}
 }

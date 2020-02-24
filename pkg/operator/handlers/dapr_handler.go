@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/kubernetes"
-	log "github.com/sirupsen/logrus"
+	"github.com/dapr/dapr/pkg/logger"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +21,8 @@ const (
 	daprSidecarHTTPPort      = 3500
 	daprSidecarGRPCPort      = 50001
 )
+
+var log = logger.NewLogger("dapr.operator.handlers")
 
 // DaprHandler handles the lifetime for Dapr CRDs
 type DaprHandler struct {
