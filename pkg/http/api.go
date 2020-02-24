@@ -382,10 +382,20 @@ func (a *api) onGetSecret(c *routing.Context) error {
 		return nil
 	}
 
+	metadata := map[string]string{}
+	const metadataPrefix string = "metadata."
+	c.QueryArgs().VisitAll(func(key []byte, value []byte) {
+		queryKey := string(key)
+		if strings.HasPrefix(queryKey, metadataPrefix) {
+			k := strings.TrimPrefix(queryKey, metadataPrefix)
+			metadata[k] = string(value)
+		}
+	})
+
 	key := c.Param(secretNameParam)
 	req := secretstores.GetSecretRequest{
 		Name:     key,
-		Metadata: map[string]string{},
+		Metadata: metadata,
 	}
 
 	resp, err := a.secretStores[secretStoreName].GetSecret(req)

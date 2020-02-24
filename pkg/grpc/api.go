@@ -351,7 +351,7 @@ func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*da
 
 	req := secretstores.GetSecretRequest{
 		Name:     in.Key,
-		Metadata: map[string]string{},
+		Metadata: in.Metadata,
 	}
 
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
