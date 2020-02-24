@@ -42,7 +42,7 @@ func RegisterMDNS(id string, port int) error {
 func LookupPortMDNS(id string) (int, error) {
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
-		log.Fatalf("Failed to initialize resolver:", err.Error())
+		log.Fatalf("Failed to initialize resolver: %v", err.Error())
 	}
 
 	port := -1

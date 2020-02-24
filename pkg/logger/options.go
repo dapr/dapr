@@ -12,7 +12,7 @@ import (
 const (
 	defaultJSONOutput  = false
 	defaultOutputLevel = "info"
-	undefinedDaprID    = ""
+	undefinedAppID     = ""
 )
 
 // Options defines the sets of options for Dapr logging
@@ -20,8 +20,8 @@ type Options struct {
 	// JSONFormatEnabled is the flag to enable JSON formatted log
 	JSONFormatEnabled bool
 
-	// daprID is the unique id of Dapr Application
-	daprID string
+	// appID is the unique id of Dapr Application
+	appID string
 
 	// outputLevel is the level of logging
 	outputLevel string
@@ -36,9 +36,9 @@ func (o *Options) SetOutputLevel(outputLevel string) error {
 	return nil
 }
 
-// SetDaprID sets Dapr ID
-func (o *Options) SetDaprID(id string) {
-	o.daprID = id
+// SetAppID sets Dapr ID
+func (o *Options) SetAppID(id string) {
+	o.appID = id
 }
 
 // AttachCmdFlags attaches log options to command flags
@@ -61,7 +61,7 @@ func (o *Options) AttachCmdFlags(
 func DefaultOptions() Options {
 	return Options{
 		JSONFormatEnabled: defaultJSONOutput,
-		daprID:            undefinedDaprID,
+		appID:             undefinedAppID,
 		outputLevel:       defaultOutputLevel,
 	}
 }
@@ -76,8 +76,8 @@ func ApplyOptionsToLoggers(options *Options) error {
 			return err
 		}
 
-		if options.daprID != undefinedDaprID {
-			v.SetDaprID(options.daprID)
+		if options.appID != undefinedAppID {
+			v.SetAppID(options.appID)
 		}
 	}
 

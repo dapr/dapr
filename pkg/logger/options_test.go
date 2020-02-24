@@ -40,7 +40,7 @@ func TestOptions(t *testing.T) {
 		o := DefaultOptions()
 		assert.Equal(t, undefinedDaprID, o.daprID)
 
-		o.SetDaprID("dapr-app")
+		o.SetAppID("dapr-app")
 		assert.Equal(t, "dapr-app", o.daprID)
 	})
 

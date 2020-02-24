@@ -49,7 +49,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	// Apply options to all loggers
-	loggerOptions.SetDaprID(*daprID)
+	loggerOptions.SetAppID(*daprID)
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		return nil, err
 	}
