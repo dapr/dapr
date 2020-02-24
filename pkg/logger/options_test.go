@@ -15,33 +15,16 @@ func TestOptions(t *testing.T) {
 	t.Run("default options", func(t *testing.T) {
 		o := DefaultOptions()
 		assert.Equal(t, defaultJSONOutput, o.JSONFormatEnabled)
-		assert.Equal(t, undefinedDaprID, o.daprID)
-		assert.Equal(t, defaultOutputLevel, o.outputLevel)
-	})
-
-	t.Run("set outputlevel to debug level", func(t *testing.T) {
-		debugLevelString := "debug"
-		o := DefaultOptions()
-		assert.Equal(t, defaultOutputLevel, o.outputLevel)
-
-		o.SetOutputLevel(debugLevelString)
-		assert.Equal(t, debugLevelString, o.outputLevel)
-	})
-
-	t.Run("set outputlevel to fake level", func(t *testing.T) {
-		o := DefaultOptions()
-		assert.Equal(t, defaultOutputLevel, o.outputLevel)
-
-		err := o.SetOutputLevel("fake")
-		assert.Error(t, err)
+		assert.Equal(t, undefinedAppID, o.appID)
+		assert.Equal(t, defaultOutputLevel, o.OutputLevel)
 	})
 
 	t.Run("set dapr ID", func(t *testing.T) {
 		o := DefaultOptions()
-		assert.Equal(t, undefinedDaprID, o.daprID)
+		assert.Equal(t, undefinedAppID, o.appID)
 
 		o.SetAppID("dapr-app")
-		assert.Equal(t, "dapr-app", o.daprID)
+		assert.Equal(t, "dapr-app", o.appID)
 	})
 
 	t.Run("attaching log related cmd flags", func(t *testing.T) {
@@ -72,8 +55,8 @@ func TestOptions(t *testing.T) {
 func TestApplyOptionsToLoggers(t *testing.T) {
 	testOptions := Options{
 		JSONFormatEnabled: true,
-		daprID:            "dapr-app",
-		outputLevel:       "debug",
+		appID:             "dapr-app",
+		OutputLevel:       "debug",
 	}
 
 	// Create two loggers

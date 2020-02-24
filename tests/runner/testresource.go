@@ -6,7 +6,8 @@
 package runner
 
 import (
-	"log"
+	"fmt"
+	"os"
 	"sync"
 )
 
@@ -93,7 +94,7 @@ func (r *TestResources) tearDown() (retErr error) {
 		err := dr.Dispose()
 		if err != nil {
 			retErr = err
-			log.Printf("Failed to tear down %s. got: %q", dr.Name(), err)
+			fmt.Fprintf(os.Stderr, "Failed to tear down %s. got: %q", dr.Name(), err)
 		}
 	}
 	return retErr

@@ -55,6 +55,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {

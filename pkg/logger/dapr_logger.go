@@ -37,7 +37,7 @@ func newDaprLogger(name string) *daprLogger {
 }
 
 // EnableJSONOutput enables JSON formatted output log
-func (l *daprLogger) EnableJSONOutput(enabled bool) error {
+func (l *daprLogger) EnableJSONOutput(enabled bool) {
 	var formatter logrus.Formatter
 
 	l.jsonFormatEnabled = enabled
@@ -71,8 +71,6 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) error {
 	}
 
 	l.logger.Logger.SetFormatter(formatter)
-
-	return nil
 }
 
 // SetAppID sets app_id field in log. Default value is empty string
@@ -89,10 +87,8 @@ func toLogrusLevel(lvl LogLevel) logrus.Level {
 }
 
 // SetOutputLevel sets log output level
-func (l *daprLogger) SetOutputLevel(outputLevel LogLevel) error {
+func (l *daprLogger) SetOutputLevel(outputLevel LogLevel) {
 	l.logger.Logger.SetLevel(toLogrusLevel(outputLevel))
-
-	return nil
 }
 
 // WithLogType specify the log_type field in log. Default value is LogTypeLog

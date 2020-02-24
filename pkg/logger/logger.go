@@ -43,7 +43,7 @@ const (
 	FatalLevel LogLevel = "fatal"
 
 	// UndefinedLevel is for undefined log level
-	UndefinedLevel LogLevel = ""
+	UndefinedLevel LogLevel = "undefined"
 )
 
 // globalLoggers is the collection of Dapr Logger that is shared globally.
@@ -54,12 +54,12 @@ var globalLoggersLock = sync.RWMutex{}
 // Logger includes the logging api sets
 type Logger interface {
 	// EnableJSONOutput enables JSON formatted output log
-	EnableJSONOutput(enabled bool) error
+	EnableJSONOutput(enabled bool)
 
 	// SetAppID sets dapr_id field in log. Default value is empty string
 	SetAppID(id string)
 	// SetOutputLevel sets log output level
-	SetOutputLevel(outputLevel LogLevel) error
+	SetOutputLevel(outputLevel LogLevel)
 
 	// WithLogType specify the log_type field in log. Default value is LogTypeLog
 	WithLogType(logType string) Logger

@@ -5,9 +5,7 @@
 
 package logger
 
-import (
-	"fmt"
-)
+import "fmt"
 
 const (
 	defaultJSONOutput  = false
@@ -17,14 +15,14 @@ const (
 
 // Options defines the sets of options for Dapr logging
 type Options struct {
-	// JSONFormatEnabled is the flag to enable JSON formatted log
-	JSONFormatEnabled bool
-
 	// appID is the unique id of Dapr Application
 	appID string
 
-	// outputLevel is the level of logging
-	outputLevel string
+	// JSONFormatEnabled is the flag to enable JSON formatted log
+	JSONFormatEnabled bool
+
+	// OutputLevel is the level of logging
+	OutputLevel string
 }
 
 // SetOutputLevel sets the log output level
@@ -32,7 +30,7 @@ func (o *Options) SetOutputLevel(outputLevel string) error {
 	if toLogLevel(outputLevel) == UndefinedLevel {
 		return fmt.Errorf("undefined Log Output Level:%s", outputLevel)
 	}
-	o.outputLevel = outputLevel
+	o.OutputLevel = outputLevel
 	return nil
 }
 
@@ -46,7 +44,7 @@ func (o *Options) AttachCmdFlags(
 	stringVar func(p *string, name string, value string, usage string),
 	boolVar func(p *bool, name string, value bool, usage string)) {
 	stringVar(
-		&o.outputLevel,
+		&o.OutputLevel,
 		"log-level",
 		defaultOutputLevel,
 		"Options are debug, info, warning, error, or fatal. (default info)")
@@ -62,7 +60,7 @@ func DefaultOptions() Options {
 	return Options{
 		JSONFormatEnabled: defaultJSONOutput,
 		appID:             undefinedAppID,
-		outputLevel:       defaultOutputLevel,
+		OutputLevel:       defaultOutputLevel,
 	}
 }
 
@@ -72,25 +70,20 @@ func ApplyOptionsToLoggers(options *Options) error {
 
 	// Apply formatting options first
 	for _, v := range internalLoggers {
-		if err := v.EnableJSONOutput(options.JSONFormatEnabled); err != nil {
-			return err
-		}
+		v.EnableJSONOutput(options.JSONFormatEnabled)
 
 		if options.appID != undefinedAppID {
 			v.SetAppID(options.appID)
 		}
 	}
 
-	daprLogLevel := toLogLevel(options.outputLevel)
+	daprLogLevel := toLogLevel(options.OutputLevel)
 	if daprLogLevel == UndefinedLevel {
-		return fmt.Errorf("invalid value for --log-level: %s", options.outputLevel)
+		return fmt.Errorf("invalid value for --log-level: %s", options.OutputLevel)
 	}
 
 	for _, v := range internalLoggers {
-		if err := v.SetOutputLevel(daprLogLevel); err != nil {
-			return err
-		}
+		v.SetOutputLevel(daprLogLevel)
 	}
-
 	return nil
 }
