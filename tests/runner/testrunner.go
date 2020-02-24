@@ -6,8 +6,10 @@
 package runner
 
 import (
+	"fmt"
+	"os"
+
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
-	log "github.com/sirupsen/logrus"
 )
 
 // runnerFailExitCode is the exit code when test runner setup is failed
@@ -62,19 +64,19 @@ func (tr *TestRunner) Start(m runnable) int {
 	err := tr.Platform.setup()
 	defer tr.tearDown()
 	if err != nil {
-		log.Errorf("Failed Platform.setup(), %s", err.Error())
+		fmt.Fprintf(os.Stderr, "Failed Platform.setup(), %s", err.Error())
 		return runnerFailExitCode
 	}
 
 	// install components
 	if err := tr.Platform.addComponents(tr.components); err != nil {
-		log.Errorf("Failed Platform.addComponents(), %s", err.Error())
+		fmt.Fprintf(os.Stderr, "Failed Platform.addComponents(), %s", err.Error())
 		return runnerFailExitCode
 	}
 
 	// Install apps
 	if err := tr.Platform.addApps(tr.initialApps); err != nil {
-		log.Errorf("Failed Platform.addApps(), %s", err.Error())
+		fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
 		return runnerFailExitCode
 	}
 
