@@ -12,6 +12,10 @@ E2E tests are designed for verifying the functional correctness by replicating e
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
   - [Install the latest helm v2](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#installing-dapr-on-a-kubernetes-cluster).
 * Create your DockerHub ID
+* Create dapr-tests namespace
+    ```bash
+    kubectl create namespace dapr-tests
+    ```
 * Set the environment variables
     ```bash
     export DAPR_REGISTRY=docker.io/your_dockerhub_id
