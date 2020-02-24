@@ -19,12 +19,12 @@ const (
 	// Field names that defines Dapr log schema
 	logFieldTimeStamp = "time"
 	logFieldLevel     = "level"
-	logFieldType      = "log_type"
+	logFieldType      = "type"
 	logFieldScope     = "scope"
-	logFieldMessage   = "message"
+	logFieldMessage   = "msg"
 	logFieldInstance  = "instance"
-	logFieldDaprVer   = "dapr_ver"
-	logFieldDaprID    = "dapr_id"
+	logFieldDaprVer   = "ver"
+	logFieldAppID     = "app_id"
 )
 
 // LogLevel is Dapr Logger Level type

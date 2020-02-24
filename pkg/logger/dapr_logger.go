@@ -78,7 +78,7 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) error {
 // SetDaprID sets dapr_id field in log. Default value is empty string
 func (l *daprLogger) SetDaprID(id string) {
 	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldDaprID] = id
+		l.logger.Data[logFieldAppID] = id
 	}
 }
 

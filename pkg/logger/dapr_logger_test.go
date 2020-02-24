@@ -154,7 +154,7 @@ func TestJSONLoggerFields(t *testing.T) {
 			json.Unmarshal(b, &o)
 
 			// assert
-			assert.Equal(t, tt.daprID, o[logFieldDaprID])
+			assert.Equal(t, tt.daprID, o[logFieldAppID])
 			assert.Equal(t, tt.instance, o[logFieldInstance])
 			assert.Equal(t, tt.level, o[logFieldLevel])
 			assert.Equal(t, LogTypeLog, o[logFieldType])
