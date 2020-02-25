@@ -57,6 +57,11 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name:   serviceName,
 			Labels: map[string]string{daprEnabledAnnotationKey: "true"},
+			Annotations: map[string]string{
+				"prometheus.io/scrape": "true",
+				"prometheus.io/port":   strconv.Itoa(metricsPort),
+				"prometheus.io/path":   "/",
+			},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: deployment.Spec.Selector.MatchLabels,
