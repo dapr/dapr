@@ -10,14 +10,16 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
-	log "github.com/sirupsen/logrus"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
+
+var log = logger.NewLogger("dapr.operator")
 
 // Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle
 type Operator interface {

@@ -18,11 +18,11 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -33,6 +33,8 @@ const (
 	daprSeparator             = "||"
 	callRemoteActorRetryCount = 3
 )
+
+var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {

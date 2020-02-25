@@ -11,17 +11,15 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
-	log "github.com/sirupsen/logrus"
 	"k8s.io/klog"
 )
 
-var (
-	logLevel = flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
-)
+var log = logger.NewLogger("dapr.operator")
 
 func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
@@ -52,13 +50,15 @@ func init() {
 	klog.InitFlags(klogFlags)
 	klogFlags.Set("logtostderr", "true")
 
+	loggerOptions := logger.DefaultOptions()
+	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
 	flag.Parse()
 
-	parsedLogLevel, err := log.ParseLevel(*logLevel)
-	if err == nil {
-		log.SetLevel(parsedLogLevel)
-		log.Infof("log level set to: %s", parsedLogLevel)
+	// Apply options to all loggers
+	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+		log.Fatal(err)
 	} else {
-		log.Fatalf("invalid value for --log-level: %s", *logLevel)
+		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 	}
 }

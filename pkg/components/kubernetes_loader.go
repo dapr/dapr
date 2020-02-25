@@ -13,11 +13,13 @@ import (
 	"github.com/cenkalti/backoff"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
-	log "github.com/sirupsen/logrus"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/valyala/fasthttp"
 )
 
 const maxRetryTime = time.Second * 30
+
+var log = logger.NewLogger("dapr.runtime.components")
 
 // KubernetesComponents loads components in a kubernetes environment
 type KubernetesComponents struct {

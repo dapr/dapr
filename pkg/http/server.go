@@ -11,13 +11,16 @@ import (
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/logger"
+
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	routing "github.com/qiangxue/fasthttp-routing"
-	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 )
+
+var log = logger.NewLogger("dapr.runtime.http")
 
 // Server is an interface for the Dapr HTTP server
 type Server interface {
