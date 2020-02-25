@@ -25,14 +25,14 @@ func getTestLogger(buf io.Writer) *daprLogger {
 func TestEnableJSON(t *testing.T) {
 	t.Run("enable JSON format", func(t *testing.T) {
 		var buf bytes.Buffer
-		expectedHost, _ := os.Hostname()
 		testLogger := getTestLogger(&buf)
 		assert.False(t, testLogger.jsonFormatEnabled)
 		assert.Equal(t, "fakeLogger", testLogger.logger.Data[logFieldScope])
 		assert.Equal(t, LogTypeLog, testLogger.logger.Data[logFieldType])
-		assert.Equal(t, expectedHost, testLogger.logger.Data[logFieldInstance])
-		assert.Equal(t, version.Version(), testLogger.logger.Data[logFieldDaprVer])
+		assert.Nil(t, testLogger.logger.Data[logFieldInstance])
+		assert.Nil(t, testLogger.logger.Data[logFieldDaprVer])
 
+		expectedHost, _ := os.Hostname()
 		testLogger.EnableJSONOutput(true)
 		assert.True(t, testLogger.jsonFormatEnabled)
 		assert.Equal(t, "fakeLogger", testLogger.logger.Data[logFieldScope])
@@ -55,8 +55,8 @@ func TestEnableJSON(t *testing.T) {
 		assert.False(t, testLogger.jsonFormatEnabled)
 		assert.Equal(t, "fakeLogger", testLogger.logger.Data[logFieldScope])
 		assert.Equal(t, LogTypeLog, testLogger.logger.Data[logFieldType])
-		assert.Equal(t, expectedHost, testLogger.logger.Data[logFieldInstance])
-		assert.Equal(t, version.Version(), testLogger.logger.Data[logFieldDaprVer])
+		assert.Nil(t, testLogger.logger.Data[logFieldInstance])
+		assert.Nil(t, testLogger.logger.Data[logFieldDaprVer])
 	})
 }
 
