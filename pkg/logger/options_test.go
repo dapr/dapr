@@ -39,7 +39,7 @@ func TestOptions(t *testing.T) {
 
 		logJSONEnabledAsserted := false
 		testBoolVarFn := func(p *bool, name string, value bool, usage string) {
-			if name == "log-json-enabled" && value == defaultJSONOutput {
+			if name == "log-as-json" && value == defaultJSONOutput {
 				logJSONEnabledAsserted = true
 			}
 		}
