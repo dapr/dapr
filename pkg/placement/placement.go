@@ -11,11 +11,13 @@ import (
 	"net"
 	"sync"
 
+	"github.com/dapr/dapr/pkg/logger"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
+
+var log = logger.NewLogger("dapr.placement")
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {

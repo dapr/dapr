@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/identity"
@@ -11,8 +12,9 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/identity/selfhosted"
 	k8s "github.com/dapr/dapr/pkg/sentry/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/server"
-	log "github.com/sirupsen/logrus"
 )
+
+var log = logger.NewLogger("dapr.sentry")
 
 type CertificateAuthority interface {
 	Run(context.Context, config.SentryConfig, chan bool)
