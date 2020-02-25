@@ -6,12 +6,17 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0 // indirect
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/dapr/components-contrib v0.0.0-20200212164505-c5ee4b273f9e
+	github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6
 	github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad
+	github.com/eapache/go-resiliency v1.2.0 // indirect
+	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
+	github.com/frankban/quicktest v1.5.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-chi/chi v4.0.3+incompatible // indirect
 	github.com/go-gl/glfw v0.0.0-20190409004039-e6da0acd62b1 // indirect
+	github.com/go-ozzo/ozzo-routing v2.1.4+incompatible // indirect
+	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/gddo v0.0.0-20190815223733-287de01127ef // indirect
 	github.com/golang/mock v1.4.0
 	github.com/golang/protobuf v1.3.3

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	sentry_config "github.com/dapr/dapr/pkg/sentry/config"
 	log "github.com/sirupsen/logrus"
@@ -282,7 +283,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			},
 		},
 		Command: []string{"/daprd"},
-		Env:     []corev1.EnvVar{{Name: "HOST_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
+		Env:     []corev1.EnvVar{{Name: runtime.HostIPEnvVar, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
 		Args:    []string{"--mode", "kubernetes", "--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPort), "--metrics-port", fmt.Sprintf("%v", metricsPort), "--app-port", applicationPort, "--dapr-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency, "--sentry-address", sentryAddress},
 	}
 

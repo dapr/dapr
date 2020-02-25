@@ -60,6 +60,11 @@ func (m *MockPlatform) Restart(name string) error {
 	return args.Error(0)
 }
 
+func (m *MockPlatform) OpenConnection(name string, targetPort ...int) ([]int, error) {
+	args := m.Called(name)
+	return []int{}, args.Error(0)
+}
+
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{

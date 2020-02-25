@@ -44,13 +44,10 @@ type Channel struct {
 	ch          chan int
 }
 
-func getContentType(metadata map[string]string) string {
-	if metadata != nil {
-		if val, ok := metadata[ContentType]; ok && val != "" {
-			return val
-		}
+func applyContentTypeIfNotPresent(req *fasthttp.Request) {
+	if len(req.Header.ContentType()) == 0 {
+		req.Header.SetContentType(defaultContentType)
 	}
-	return defaultContentType
 }
 
 // InvokeMethod invokes user code via HTTP
@@ -71,8 +68,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 			}
 		}
 	}
-	contentType := getContentType(invokeRequest.Metadata)
-	req.Header.SetContentType(contentType)
+	applyContentTypeIfNotPresent(req)
 
 	method := invokeRequest.Metadata[HTTPVerb]
 	if method == "" {
@@ -85,6 +81,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	if h.ch != nil {
 		h.ch <- 1
 	}
+
 	err := h.client.Do(req, resp)
 	if h.ch != nil {
 		<-h.ch

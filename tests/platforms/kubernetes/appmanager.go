@@ -259,9 +259,9 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 
 	var ports []int
 	for i := 0; i < len(targetPorts); i++ {
-		p, err := freeport.GetFreePort()
-		if err != nil {
-			return nil, err
+		p, perr := freeport.GetFreePort()
+		if perr != nil {
+			return nil, perr
 		}
 		ports = append(ports, p)
 	}
