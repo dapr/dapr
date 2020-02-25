@@ -49,16 +49,15 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) {
 		logrus.FieldKeyMsg:   logFieldMessage,
 	}
 
+	hostname, _ := os.Hostname()
 	l.logger.Data = logrus.Fields{
-		logFieldScope: l.logger.Data[logFieldScope],
-		logFieldType:  LogTypeLog,
+		logFieldScope:    l.logger.Data[logFieldScope],
+		logFieldType:     LogTypeLog,
+		logFieldInstance: hostname,
+		logFieldDaprVer:  version.Version(),
 	}
 
 	if enabled {
-		hostname, _ := os.Hostname()
-		l.logger.Data[logFieldInstance] = hostname
-		l.logger.Data[logFieldDaprVer] = version.Version()
-
 		formatter = &logrus.JSONFormatter{
 			DisableTimestamp: true,
 			FieldMap:         fieldMap,
@@ -102,80 +101,60 @@ func (l *daprLogger) WithLogType(logType string) Logger {
 
 // Info logs a message at level Info.
 func (l *daprLogger) Info(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Log(logrus.InfoLevel, args...)
 }
 
 // Infof logs a message at level Info.
 func (l *daprLogger) Infof(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Logf(logrus.InfoLevel, format, args...)
 }
 
 // Debug logs a message at level Debug.
 func (l *daprLogger) Debug(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Log(logrus.DebugLevel, args...)
 }
 
 // Debugf logs a message at level Debug.
 func (l *daprLogger) Debugf(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Logf(logrus.DebugLevel, format, args...)
 }
 
 // Warn logs a message at level Warn.
 func (l *daprLogger) Warn(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Log(logrus.WarnLevel, args...)
 }
 
 // Warnf logs a message at level Warn.
 func (l *daprLogger) Warnf(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Logf(logrus.WarnLevel, format, args...)
 }
 
 // Error logs a message at level Error.
 func (l *daprLogger) Error(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Log(logrus.ErrorLevel, args...)
 }
 
 // Errorf logs a message at level Error.
 func (l *daprLogger) Errorf(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Logf(logrus.ErrorLevel, format, args...)
 }
 
 // Fatal logs a message at level Fatal then the process will exit with status set to 1.
 func (l *daprLogger) Fatal(args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Fatal(args...)
 }
 
 // Fatalf logs a message at level Fatal then the process will exit with status set to 1.
 func (l *daprLogger) Fatalf(format string, args ...interface{}) {
-	if l.jsonFormatEnabled {
-		l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
-	}
+	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Fatalf(format, args...)
 }
