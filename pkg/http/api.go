@@ -302,7 +302,7 @@ func (a *api) onGetState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
-	if resp == nil {
+	if resp == nil || resp.Data == nil {
 		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_STATE_KEY_NOT_FOUND", ""))
 		return nil
 	}
