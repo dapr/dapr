@@ -5,7 +5,7 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr stateapp service_invocation binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorfeatures
+E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorfeatures
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -94,9 +94,11 @@ setup-test-env: setup-test-env-kafka setup-test-env-redis
 setup-test-config:
 	$(KUBECTL) apply -f ./tests/config/dapr_mtls_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
-# Apply component yaml for state, pubsub, and bindings
+# Apply component yaml for state, secrets, pubsub, and bindings
 setup-test-components:
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
