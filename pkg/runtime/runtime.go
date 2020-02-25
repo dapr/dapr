@@ -21,8 +21,8 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -56,10 +56,11 @@ import (
 
 const (
 	appConfigEndpoint   = "dapr/config"
-	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
 	actorStateStore     = "actorStateStore"
 )
+
+var log = logger.NewLogger("dapr.runtime")
 
 // DaprRuntime holds all the core components of the runtime
 type DaprRuntime struct {
@@ -152,9 +153,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.blockUntilAppIsReady()
 
-	err = a.setHostAddress()
+	a.hostAddress, err = GetHostAddress()
 	if err != nil {
-		log.Warnf("failed to set host address: %s", err)
+		return fmt.Errorf("failed to determine host address: %s", err)
 	}
 
 	err = a.createAppChannel()
@@ -510,26 +511,6 @@ func (a *DaprRuntime) startGRPCServer(port int) error {
 	return err
 }
 
-func (a *DaprRuntime) setHostAddress() error {
-	a.hostAddress = os.Getenv(hostIPEnvVar)
-	if a.hostAddress == "" {
-		addrs, err := net.InterfaceAddrs()
-		if err != nil {
-			return err
-		}
-
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil {
-					a.hostAddress = ipnet.IP.String()
-					return nil
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
 	client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
 	resp, err := client.GetBindingsSubscriptions(context.Background(), &empty.Empty{})
@@ -693,7 +674,7 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 		}
 	}
 
-	log.Printf("App is subscribed to the following topics: %v", topics)
+	log.Infof("App is subscribed to the following topics: %v", topics)
 	return topics
 }
 

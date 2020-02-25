@@ -9,13 +9,15 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/sentry/certs"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
 	ecPKType = "EC PRIVATE KEY"
 )
+
+var log = logger.NewLogger("dapr.runtime.security")
 
 func getTrustAnchors() (*x509.CertPool, error) {
 	trustAnchors := os.Getenv(certs.TrustAnchorsEnvVar)

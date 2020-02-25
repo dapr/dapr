@@ -5,9 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/fsnotify/fsnotify"
-	log "github.com/sirupsen/logrus"
 )
+
+var log = logger.NewLogger("dapr.sentry.watcher")
 
 func StartIssuerWatcher(ctx context.Context, dir string, eventCh chan<- struct{}) {
 	watcher, err := fsnotify.NewWatcher()

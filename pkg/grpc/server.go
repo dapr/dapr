@@ -14,11 +14,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/logger"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	log "github.com/sirupsen/logrus"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -27,6 +27,8 @@ const (
 	certWatchInterval         = time.Second * 3
 	renewWhenPercentagePassed = 70
 )
+
+var log = logger.NewLogger("dapr.runtime.grpc")
 
 // Server is an interface for the dapr gRPC server
 type Server interface {

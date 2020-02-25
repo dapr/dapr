@@ -11,8 +11,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/dapr/dapr/pkg/logger"
 )
+
+var log = logger.NewLogger("dapr.signals")
 
 // Context returns a context which will be canceled when either the SIGINT or
 // SIGTERM signal is caught. It also returns a function that can be used to
