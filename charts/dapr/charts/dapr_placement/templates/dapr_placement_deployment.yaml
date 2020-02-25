@@ -31,5 +31,5 @@ spec:
         - "--log-level"
         - {{ .Values.logLevel }}
         - "--log-json-enabled"
-        - {{ .Values.logJsonEnabled }}
+        - {{ .Values.global.logJsonEnabled }}
       serviceAccountName: dapr-operator

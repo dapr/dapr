@@ -2,3 +2,4 @@ global:
   registry: docker.io/daprio
   tag: latest
   imagePullPolicy: Always
+  logJsonEnabled: false

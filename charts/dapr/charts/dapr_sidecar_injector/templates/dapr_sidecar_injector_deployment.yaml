@@ -31,7 +31,7 @@ spec:
         - "--log-level"
         - {{ .Values.logLevel }}
         - "--log-json-enabled"
-        - {{ .Values.logJsonEnabled }}
+        - {{ .Values.global.logJsonEnabled }}
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt

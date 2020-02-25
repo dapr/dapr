@@ -50,7 +50,7 @@ spec:
         - "--log-level"
         - {{ .Values.logLevel }}
         - "--log-json-enabled"
-        - {{ .Values.logJsonEnabled }}
+        - {{ .Values.global.logJsonEnabled }}
         - "--trust-domain"
         - {{ .Values.tls.trustDomain }}
       serviceAccountName: dapr-operator
