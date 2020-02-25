@@ -58,3 +58,7 @@ spec:
         - name: credentials
           secret:
             secretName: dapr-trust-bundle       
+{{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}

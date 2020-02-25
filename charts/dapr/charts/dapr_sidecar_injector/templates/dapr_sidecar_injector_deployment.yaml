@@ -59,3 +59,7 @@ spec:
       - name: cert
         secret:
           secretName: dapr-sidecar-injector-cert
+{{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}
