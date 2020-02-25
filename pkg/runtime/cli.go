@@ -12,13 +12,12 @@ import (
 	"strconv"
 
 	global_config "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/version"
-	log "github.com/sirupsen/logrus"
 )
 
 func FromFlags() (*DaprRuntime, error) {
-	logLevel := flag.String("log-level", "info", "Options are debug, info, warning, error, fatal, or panic. (default info)")
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr to listen on")
 	daprGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprGRPCPort), "gRPC port for Dapr to listen on")
@@ -32,10 +31,15 @@ func FromFlags() (*DaprRuntime, error) {
 	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
 	placementServiceAddress := flag.String("placement-address", "", "Address for the Dapr placement service")
 	allowedOrigins := flag.String("allowed-origins", DefaultAllowedOrigins, "Allowed HTTP origins")
-	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default port is %v", DefaultComponentsPath))
+	enableProfiling := flag.String("enable-profiling", "false", fmt.Sprintf("Enable profiling. default is false"))
 	runtimeVersion := flag.Bool("version", false, "prints the runtime version")
 	maxConcurrency := flag.Int("max-concurrency", -1, "controls the concurrency level when forwarding requests to user code")
 	mtlsEnabled := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
+	metricsPort := flag.String("metrics-port", fmt.Sprintf("%v", DefaultMetricsPort), "The port for the metrics server")
+	enableMetrics := flag.String("enable-metrics", "true", fmt.Sprintf("Enable metrics. default is true"))
+
+	loggerOptions := logger.DefaultOptions()
+	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
 
@@ -44,15 +48,14 @@ func FromFlags() (*DaprRuntime, error) {
 		os.Exit(0)
 	}
 
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
-
-	parsedLogLevel, err := log.ParseLevel(*logLevel)
-	if err == nil {
-		log.SetLevel(parsedLogLevel)
-		log.Infof("log level set to: %s", parsedLogLevel)
-	} else {
-		return nil, fmt.Errorf("invalid value for --log-level: %s", *logLevel)
+	// Apply options to all loggers
+	loggerOptions.SetAppID(*daprID)
+	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+		return nil, err
 	}
+
+	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {
@@ -69,6 +72,11 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, fmt.Errorf("error parsing profile-port flag: %s", err)
 	}
 
+	metrPort, err := strconv.Atoi(*metricsPort)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing metrics-port flag: %s", err)
+	}
+
 	applicationPort := 0
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
@@ -82,8 +90,13 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
+	enableMetr, err := strconv.ParseBool(*enableMetrics)
+	if err != nil {
+		return nil, err
+	}
+
 	runtimeConfig := NewRuntimeConfig(*daprID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress)
+		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress, metrPort, enableMetr)
 
 	var globalConfig *global_config.Configuration
 

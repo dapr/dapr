@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/csr"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -24,6 +24,8 @@ const (
 	caCommonName               = "sentry"
 	selfSignedRootCertLifetime = time.Hour * 8760
 )
+
+var log = logger.NewLogger("dapr.sentry.ca")
 
 // CertificateAuthority represents an interface for a compliant Certificate Authority.
 // Responsibilities include loading trust anchors and issuer certs, providing safe access to the trust bundle,

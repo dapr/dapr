@@ -66,6 +66,10 @@ func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEn
 	return &empty.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error) {
+	return &dapr_pb.GetSecretResponseEnvelope{}, nil
+}
+
 func createExporters(meta exporters.Metadata) {
 	exporter := stringexporter.NewStringExporter()
 	exporter.Init("fakeID", "fakeAddress", meta)
@@ -88,7 +92,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	createExporters(meta)
 
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddleware(spec))),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddlewareStream(spec))),
 		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.TracingGRPCMiddlewareUnary(spec))),
 	)
 
@@ -135,7 +139,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	createExporters(meta)
 
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddleware(spec))),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddlewareStream(spec))),
 		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.TracingGRPCMiddlewareUnary(spec))),
 	)
 

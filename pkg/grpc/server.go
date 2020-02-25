@@ -14,10 +14,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/logger"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	log "github.com/sirupsen/logrus"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -26,6 +27,8 @@ const (
 	certWatchInterval         = time.Second * 3
 	renewWhenPercentagePassed = 70
 )
+
+var log = logger.NewLogger("dapr.runtime.grpc")
 
 // Server is an interface for the dapr gRPC server
 type Server interface {
@@ -73,6 +76,10 @@ func (s *server) StartNonBlocking() error {
 	daprinternal_pb.RegisterDaprInternalServer(server, s.api)
 	dapr_pb.RegisterDaprServer(server, s.api)
 
+	if s.config.EnableMetrics {
+		grpc_prometheus.Register(s.srv)
+	}
+
 	go func() {
 		if err := server.Serve(lis); err != nil {
 			log.Fatalf("gRPC serve error: %v", err)
@@ -104,7 +111,12 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	opts := []grpc_go.ServerOption{}
 
 	if s.tracingSpec.Enabled {
-		opts = append(opts, grpc_go.StreamInterceptor(diag.TracingGRPCMiddleware(s.tracingSpec)), grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
+		log.Infof("enabled tracing grpc middleware")
+		opts = append(opts, grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)), grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
+	}
+	if s.config.EnableMetrics {
+		log.Infof("enabled metrics grpc middleware")
+		opts = append(opts, grpc_go.StreamInterceptor(diag.MetricsGRPCMiddlewareStream()), grpc_go.UnaryInterceptor(diag.MetricsGRPCMiddlewareUnary()))
 	}
 
 	if s.authenticator != nil {

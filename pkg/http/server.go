@@ -11,13 +11,16 @@ import (
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/logger"
+
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	routing "github.com/qiangxue/fasthttp-routing"
-	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 )
+
+var log = logger.NewLogger("dapr.runtime.http")
 
 // Server is an interface for the Dapr HTTP server
 type Server interface {
@@ -49,6 +52,9 @@ func (s *server) StartNonBlocking() {
 				s.useComponents(
 					s.useRouter())))
 
+	if s.config.EnableMetrics {
+		handler = s.useMetrics(handler)
+	}
 	if s.tracingSpec.Enabled {
 		handler = s.useTracing(handler)
 	}
@@ -66,7 +72,13 @@ func (s *server) StartNonBlocking() {
 }
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled tracing http middleware")
 	return diag.TracingHTTPMiddleware(s.tracingSpec, next)
+}
+
+func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled metrics http middleware")
+	return diag.MetricsHTTPMiddleware(next)
 }
 
 func (s *server) useRouter() fasthttp.RequestHandler {
@@ -80,12 +92,14 @@ func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHan
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled cors http middleware")
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)
 	return corsHandler.CorsMiddleware(next)
 }
 
 func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	log.Infof("enabled proxy http middleware")
 	return func(ctx *fasthttp.RequestCtx) {
 		var proto string
 		if ctx.IsTLS() {
@@ -105,7 +119,7 @@ func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
 		ctx.Request.Header.Add("X-Forwarded-Host", fmt.Sprintf("%s", ctx.Host()))
 		// Add X-Forwarded-Proto: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
-		ctx.Request.Header.Add("X-Forwarded-", proto)
+		ctx.Request.Header.Add("X-Forwarded-Proto", proto)
 		next(ctx)
 	}
 }

@@ -7,6 +7,7 @@ package kubernetes
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

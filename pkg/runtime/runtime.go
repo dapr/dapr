@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	net_http "net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -20,7 +21,8 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
-	log "github.com/sirupsen/logrus"
+	"github.com/dapr/dapr/pkg/logger"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -54,10 +56,11 @@ import (
 
 const (
 	appConfigEndpoint   = "dapr/config"
-	hostIPEnvVar        = "HOST_IP"
 	parallelConcurrency = "parallel"
 	actorStateStore     = "actorStateStore"
 )
+
+var log = logger.NewLogger("dapr.runtime")
 
 // DaprRuntime holds all the core components of the runtime
 type DaprRuntime struct {
@@ -150,9 +153,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.blockUntilAppIsReady()
 
-	err = a.setHostAddress()
+	a.hostAddress, err = GetHostAddress()
 	if err != nil {
-		log.Warnf("failed to set host address: %s", err)
+		return fmt.Errorf("failed to determine host address: %s", err)
 	}
 
 	err = a.createAppChannel()
@@ -217,12 +220,23 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("gRPC server is running on port %v", a.runtimeConfig.GRPCPort)
 
+	if a.runtimeConfig.EnableMetrics {
+		a.startMetricsServer()
+	}
+
 	err = a.announceSelf()
 	if err != nil {
 		log.Warnf("failed to broadcast address to local network: %s", err)
 	}
 
 	return nil
+}
+
+func (a *DaprRuntime) startMetricsServer() {
+	go func() {
+		log.Infof("starting metrics server on port %v", a.runtimeConfig.MetricsPort)
+		log.Fatal(net_http.ListenAndServe(fmt.Sprintf(":%d", a.runtimeConfig.MetricsPort), promhttp.Handler()))
+	}()
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -482,38 +496,19 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.pubSub, a.actor, a.sendToOutputBinding)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.pubSub, a.actor, a.sendToOutputBinding)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MetricsPort, a.runtimeConfig.EnableMetrics)
+
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
 }
 
 func (a *DaprRuntime) startGRPCServer(port int) error {
-	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
+	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.EnableMetrics)
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
-}
-
-func (a *DaprRuntime) setHostAddress() error {
-	a.hostAddress = os.Getenv(hostIPEnvVar)
-	if a.hostAddress == "" {
-		addrs, err := net.InterfaceAddrs()
-		if err != nil {
-			return err
-		}
-
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil {
-					a.hostAddress = ipnet.IP.String()
-					return nil
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
@@ -679,7 +674,7 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 		}
 	}
 
-	log.Printf("App is subscribed to the following topics: %v", topics)
+	log.Infof("App is subscribed to the following topics: %v", topics)
 	return topics
 }
 
