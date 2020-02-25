@@ -3,4 +3,4 @@ global:
   tag: latest
   imagePullPolicy: Always
   imagePullSecrets: ""
-  logJsonEnabled: false
+  logAsJson: false

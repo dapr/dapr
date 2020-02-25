@@ -30,7 +30,7 @@ const (
 	daprIDKey             = "dapr.io/id"
 	daprProfilingKey      = "dapr.io/profiling"
 	daprLogLevel          = "dapr.io/log-level"
-	daprLogJSONEnabled    = "dapr.io/log-json-enabled"
+	daprLogAsJSON         = "dapr.io/log-as-json"
 	daprMaxConcurrencyKey = "dapr.io/max-concurrency"
 	sidecarHTTPPort       = 3500
 	sidecarGRPCPORT       = 50001
@@ -40,7 +40,7 @@ const (
 	sidecarHTTPPortName   = "dapr-http"
 	sidecarGRPCPortName   = "dapr-grpc"
 	defaultLogLevel       = "info"
-	defaultLogJSONEnabled = "false"
+	defaultLogAsJSON      = "false"
 	kubernetesMountPath   = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig         = "default"
 )
@@ -82,7 +82,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
 	apiSrvAddress := getKubernetesDNS(apiAddress, namespace)
 	logLevel := getLogLevel(pod.Annotations)
-	logJSONEnabled := getLogJSONEnabled(pod.Annotations)
+	logAsJSON := getLogAsJSON(pod.Annotations)
 	maxConcurrency, err := getMaxConcurrency(pod.Annotations)
 	if err != nil {
 		log.Warn(err)
@@ -104,7 +104,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logJSONEnabled, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -222,10 +222,10 @@ func getLogLevel(annotations map[string]string) string {
 	return defaultLogLevel
 }
 
-func getLogJSONEnabled(annotations map[string]string) string {
-	enabled, ok := annotations[daprLogJSONEnabled]
+func getLogAsJSON(annotations map[string]string) string {
+	enabled, ok := annotations[daprLogAsJSON]
 	if !ok {
-		return defaultLogJSONEnabled
+		return defaultLogAsJSON
 	}
 	if strings.EqualFold(enabled, "true") {
 		return "true"
@@ -263,7 +263,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, logJSONEnabled, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, logAsJSON, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -305,7 +305,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			"--config", config,
 			"--enable-profiling", enableProfiling,
 			"--log-level", logLevel,
-			"--log-json-enabled", logJSONEnabled,
+			"--log-as-json", logAsJSON,
 			"--max-concurrency", maxConcurrency,
 			"--sentry-address", sentryAddress,
 		},

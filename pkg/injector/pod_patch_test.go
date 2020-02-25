@@ -11,27 +11,27 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetLogJSONEnabled(t *testing.T) {
-	t.Run("dapr.io/log-json-enabled is true", func(t *testing.T) {
+func TestGetLogAsJSON(t *testing.T) {
+	t.Run("dapr.io/log-as-json is true", func(t *testing.T) {
 		var fakeAnnotation = map[string]string{
-			daprLogJSONEnabled: "true",
+			daprLogAsJSON: "true",
 		}
 
-		assert.Equal(t, "true", getLogJSONEnabled(fakeAnnotation))
+		assert.Equal(t, "true", getLogAsJSON(fakeAnnotation))
 	})
 
-	t.Run("dapr.io/log-json-enabled is false", func(t *testing.T) {
+	t.Run("dapr.io/log-as-json is false", func(t *testing.T) {
 		var fakeAnnotation = map[string]string{
-			daprLogJSONEnabled: "false",
+			daprLogAsJSON: "false",
 		}
 
-		assert.Equal(t, "false", getLogJSONEnabled(fakeAnnotation))
+		assert.Equal(t, "false", getLogAsJSON(fakeAnnotation))
 	})
 
-	t.Run("dapr.io/log-json-enabled is not given", func(t *testing.T) {
+	t.Run("dapr.io/log-as-json is not given", func(t *testing.T) {
 		var fakeAnnotation = map[string]string{}
 
-		assert.Equal(t, "false", getLogJSONEnabled(fakeAnnotation))
+		assert.Equal(t, "false", getLogAsJSON(fakeAnnotation))
 	})
 }
 
@@ -50,7 +50,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--config", "config",
 		"--enable-profiling", "false",
 		"--log-level", "info",
-		"--log-json-enabled", "true",
+		"--log-as-json", "true",
 		"--max-concurrency", "-1",
 		"--sentry-address", "sentry:50000",
 	}

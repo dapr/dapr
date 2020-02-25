@@ -49,8 +49,8 @@ spec:
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
-        - "--log-json-enabled"
-        - {{ .Values.global.logJsonEnabled }}
+        - "--log-as-json"
+        - {{ .Values.global.logAsJson }}
         - "--trust-domain"
         - {{ .Values.tls.trustDomain }}
       serviceAccountName: dapr-operator
