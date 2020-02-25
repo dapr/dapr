@@ -302,8 +302,8 @@ func (a *api) onGetState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
-	if resp == nil {
-		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_STATE_KEY_NOT_FOUND", ""))
+	if resp == nil || resp.Data == nil {
+		respondEmpty(c.RequestCtx, 204)
 		return nil
 	}
 	respondWithETaggedJSON(c.RequestCtx, 200, resp.Data, resp.ETag)
