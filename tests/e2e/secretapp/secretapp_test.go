@@ -63,8 +63,7 @@ func generateDaprSecret(kv utils.SimpleKeyValue) daprSecret {
 	}
 
 	secret := fmt.Sprintf("%v", kv.Value)
-	value := map[string]string{}
-	value[key] = secret
+	value := map[string]string{"username": secret}
 	return daprSecret{key, &value}
 }
 
