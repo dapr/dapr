@@ -21,7 +21,7 @@ const appPort = 3000
 
 // kubernetes is the name of the secret store
 /* #nosec */
-const secretURL = "http://localhost:3500/v1.0/secrets/kubernetes/%s?metadata.namespace=default"
+const secretURL = "http://localhost:3500/v1.0/secrets/kubernetes/%s?metadata.namespace=dapr-tests"
 
 // daprSecret represents a secret in Dapr.
 type daprSecret struct {
