@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/runtime"
-	log "github.com/sirupsen/logrus"
 
 	// Included components in compiled daprd
 
@@ -91,6 +91,8 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/valyala/fasthttp"
 )
+
+var log = logger.NewLogger("dapr.runtime")
 
 func main() {
 	rt, err := runtime.FromFlags()

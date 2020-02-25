@@ -6,9 +6,9 @@
 package runner
 
 import (
+	"fmt"
+	"os"
 	"sync"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // Disposable is an interface representing the disposable test resources
@@ -94,7 +94,7 @@ func (r *TestResources) tearDown() (retErr error) {
 		err := dr.Dispose()
 		if err != nil {
 			retErr = err
-			log.Errorf("Failed to tear down %s. got: %q", dr.Name(), err)
+			fmt.Fprintf(os.Stderr, "Failed to tear down %s. got: %q", dr.Name(), err)
 		}
 	}
 	return retErr

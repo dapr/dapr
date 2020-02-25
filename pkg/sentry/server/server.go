@@ -7,13 +7,13 @@ import (
 	"net"
 	"time"
 
+	"github.com/dapr/dapr/pkg/logger"
 	pb "github.com/dapr/dapr/pkg/proto/sentry"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/golang/protobuf/ptypes"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -21,6 +21,8 @@ import (
 const (
 	serverCertExpiryBuffer = time.Minute * 15
 )
+
+var log = logger.NewLogger("dapr.sentry.server")
 
 // CAServer is an interface for the Certificate Authority server
 type CAServer interface {
