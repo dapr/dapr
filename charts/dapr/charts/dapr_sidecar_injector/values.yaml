@@ -1,5 +1,6 @@
 replicaCount: 1
 logLevel: info
+logJsonEnabled: true
 
 image:
   name: dapr
