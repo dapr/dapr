@@ -320,10 +320,10 @@ func startPortForwarding(req PortForwardRequest) error {
 
 	go func() {
 		if err = fw.ForwardPorts(); err != nil {
-			log.Errorf("Error closing port fowarding: %+v", err)
+			log.Printf("Error closing port fowarding: %+v", err)
 			// TODO: How to handle error?
 		}
-		log.Print("Closed port fowarding")
+		log.Println("Closed port fowarding")
 	}()
 	return nil
 }
@@ -367,7 +367,7 @@ func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 
 // AcquireExternalURL gets external ingress endpoint from service when it is ready
 func (m *AppManager) AcquireExternalURL() string {
-	log.Printf("Waiting until service has reached target state...\n")
+	log.Println("Waiting until service has reached target state...")
 	svc, err := m.WaitUntilServiceState(m.IsServiceIngressReady)
 	if err != nil {
 		return ""
