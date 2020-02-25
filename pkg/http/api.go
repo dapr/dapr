@@ -406,7 +406,7 @@ func (a *api) onGetSecret(c *routing.Context) error {
 	}
 
 	if resp.Data == nil {
-		respondWithError(c.RequestCtx, 204, NewErrorResponse("ERR_SECRET_NAME_NOT_FOUND", ""))
+		respondEmpty(c.RequestCtx, 204)
 		return nil
 	}
 
