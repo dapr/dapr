@@ -12,7 +12,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"path"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -21,7 +20,7 @@ import (
 const appPort = 3000
 
 // kubernetes is the name of the secret store
-const secretURL = "http://localhost:3500/v1.0/secrets/kubernetes"
+const secretURL = "http://localhost:3500/v1.0/secrets/kubernetes/%s?metadata.namespace=default"
 
 // daprSecret represents a secret in Dapr.
 type daprSecret struct {
@@ -154,12 +153,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func createSecretURL(key string) (string, error) {
-	url, err := url.Parse(secretURL)
+	url, err := url.Parse(fmt.Sprintf(secretURL, key))
 	if err != nil {
 		return "", fmt.Errorf("could not parse %s: %s", secretURL, err.Error())
 	}
 
-	url.Path = path.Join(url.Path, key, "?metadata.namespace=default")
 	return url.String(), nil
 }
 
@@ -173,7 +171,7 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/test/{command}", handler).Methods("GET")
+	router.HandleFunc("/test/{command}", handler).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
