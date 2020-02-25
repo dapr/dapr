@@ -2,11 +2,9 @@ package logger
 
 import (
 	"os"
-	"sync"
 	"time"
 
 	"github.com/dapr/dapr/pkg/version"
-	"github.com/dapr/dapr/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,8 +14,6 @@ type daprLogger struct {
 	name string
 	// loger is the instance of logrus logger
 	logger *logrus.Entry
-
-	dataLock sync.Mutex
 }
 
 func newDaprLogger(name string) *daprLogger {
@@ -43,7 +39,7 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) {
 	fieldMap := logrus.FieldMap{
 		// If time field name is conflicted, logrus adds "fields." prefix.
 		// So rename to unused field @time to avoid the confliction.
-		logrus.FieldKeyTime:  "@time",
+		logrus.FieldKeyTime:  logFieldTimeStamp,
 		logrus.FieldKeyLevel: logFieldLevel,
 		logrus.FieldKeyMsg:   logFieldMessage,
 	}
@@ -58,28 +54,22 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) {
 
 	if enabled {
 		formatter = &logrus.JSONFormatter{
-			DisableTimestamp: true,
-			FieldMap:         fieldMap,
+			TimestampFormat: time.RFC3339Nano,
+			FieldMap:        fieldMap,
 		}
 	} else {
 		formatter = &logrus.TextFormatter{
-			DisableTimestamp: true,
-			FieldMap:         fieldMap,
+			TimestampFormat: time.RFC3339Nano,
+			FieldMap:        fieldMap,
 		}
 	}
 
 	l.logger.Logger.SetFormatter(formatter)
 }
 
-func (l *daprLogger) setDataField(field string, value interface{}) {
-	l.dataLock.Lock()
-	defer l.dataLock.Unlock()
-	l.logger.Data[field] = value
-}
-
 // SetAppID sets app_id field in log. Default value is empty string
 func (l *daprLogger) SetAppID(id string) {
-	l.setDataField(logFieldAppID, id)
+	l.logger = l.logger.WithField(logFieldAppID, id)
 }
 
 func toLogrusLevel(lvl LogLevel) logrus.Level {
@@ -103,60 +93,50 @@ func (l *daprLogger) WithLogType(logType string) Logger {
 
 // Info logs a message at level Info.
 func (l *daprLogger) Info(args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Log(logrus.InfoLevel, args...)
 }
 
 // Infof logs a message at level Info.
 func (l *daprLogger) Infof(format string, args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Logf(logrus.InfoLevel, format, args...)
 }
 
 // Debug logs a message at level Debug.
 func (l *daprLogger) Debug(args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Log(logrus.DebugLevel, args...)
 }
 
 // Debugf logs a message at level Debug.
 func (l *daprLogger) Debugf(format string, args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Logf(logrus.DebugLevel, format, args...)
 }
 
 // Warn logs a message at level Warn.
 func (l *daprLogger) Warn(args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Log(logrus.WarnLevel, args...)
 }
 
 // Warnf logs a message at level Warn.
 func (l *daprLogger) Warnf(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
 	l.logger.Logf(logrus.WarnLevel, format, args...)
 }
 
 // Error logs a message at level Error.
 func (l *daprLogger) Error(args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Log(logrus.ErrorLevel, args...)
 }
 
 // Errorf logs a message at level Error.
 func (l *daprLogger) Errorf(format string, args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Logf(logrus.ErrorLevel, format, args...)
 }
 
 // Fatal logs a message at level Fatal then the process will exit with status set to 1.
 func (l *daprLogger) Fatal(args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Fatal(args...)
 }
 
 // Fatalf logs a message at level Fatal then the process will exit with status set to 1.
 func (l *daprLogger) Fatalf(format string, args ...interface{}) {
-	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Fatalf(format, args...)
 }
