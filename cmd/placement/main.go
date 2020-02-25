@@ -18,8 +18,6 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func main() {
-	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
-
 	port := flag.String("port", "50005", "")
 
 	loggerOptions := logger.DefaultOptions()
@@ -30,9 +28,10 @@ func main() {
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		log.Fatal(err)
-	} else {
-		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 	}
+
+	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)

@@ -36,11 +36,10 @@ func main() {
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		log.Fatal(err)
-	} else {
-		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 	}
 
 	log.Infof("starting sentry certificate authority -- version %s -- commit %s", version.Version(), version.Commit())
+	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	issuerCertPath := filepath.Join(*credsPath, config.IssuerCertFilename)
 	issuerKeyPath := filepath.Join(*credsPath, config.IssuerKeyFilename)
