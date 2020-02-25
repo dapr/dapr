@@ -115,7 +115,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 
 		tlsConfig := tls.Config{
 			ClientCAs:  s.signedCert.TrustChain,
-			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientAuth: tls.VerifyClientCertIfGiven,
 			GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 				return &s.tlsCert, nil
 			},
