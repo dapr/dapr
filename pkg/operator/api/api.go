@@ -14,12 +14,14 @@ import (
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/gorilla/mux"
-	log "github.com/sirupsen/logrus"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var httpPort = 6500
+const httpPort = 6500
+
+var log = logger.NewLogger("dapr.operator.api")
 
 //Server runs the Dapr API server for components and configurations
 type Server interface {

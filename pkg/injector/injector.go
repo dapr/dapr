@@ -14,7 +14,7 @@ import (
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	log "github.com/sirupsen/logrus"
+	"github.com/dapr/dapr/pkg/logger"
 	"k8s.io/api/admission/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +23,8 @@ import (
 )
 
 const port = 4000
+
+var log = logger.NewLogger("dapr.injector")
 
 // Injector is the interface for the Dapr runtime sidecar injection component
 type Injector interface {
