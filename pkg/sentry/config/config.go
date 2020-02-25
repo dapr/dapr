@@ -9,8 +9,8 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	dapr_config "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/utils"
-	log "github.com/sirupsen/logrus"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -26,6 +26,8 @@ const (
 	defaultAllowedClockSkew     = time.Minute * 15
 	defaultConfigName           = "default"
 )
+
+var log = logger.NewLogger("dapr.sentry.config")
 
 // SentryConfig holds the configuration for the Certificate Authority.
 type SentryConfig struct {
