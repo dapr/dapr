@@ -41,7 +41,7 @@ const (
 	sidecarHTTPPortName   = "dapr-http"
 	sidecarGRPCPortName   = "dapr-grpc"
 	defaultLogLevel       = "info"
-	defaultLogJSONEnabled = "true"
+	defaultLogJSONEnabled = "false"
 	kubernetesMountPath   = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig         = "default"
 )
@@ -228,7 +228,7 @@ func getLogJSONEnabled(annotations map[string]string) string {
 	if !ok {
 		return defaultLogJSONEnabled
 	}
-	if strings.ToLower(enabled) == "true" {
+	if strings.EqualFold(enabled, "true") {
 		return "true"
 	}
 	return "false"

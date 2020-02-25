@@ -31,7 +31,7 @@ func TestGetLogJSONEnabled(t *testing.T) {
 	t.Run("dapr.io/log-json-enabled is not given", func(t *testing.T) {
 		var fakeAnnotation = map[string]string{}
 
-		assert.Equal(t, "true", getLogJSONEnabled(fakeAnnotation))
+		assert.Equal(t, "false", getLogJSONEnabled(fakeAnnotation))
 	})
 }
 
