@@ -2,6 +2,7 @@ package logger
 
 import (
 	"os"
+	"sync"
 	"time"
 
 	"github.com/dapr/dapr/pkg/version"
@@ -15,6 +16,8 @@ type daprLogger struct {
 	name string
 	// loger is the instance of logrus logger
 	logger *logrus.Entry
+
+	dataLock sync.Mutex
 }
 
 func newDaprLogger(name string) *daprLogger {
@@ -68,9 +71,15 @@ func (l *daprLogger) EnableJSONOutput(enabled bool) {
 	l.logger.Logger.SetFormatter(formatter)
 }
 
+func (l *daprLogger) setDataField(field string, value interface{}) {
+	l.dataLock.Lock()
+	defer l.dataLock.Unlock()
+	l.logger.Data[field] = value
+}
+
 // SetAppID sets app_id field in log. Default value is empty string
 func (l *daprLogger) SetAppID(id string) {
-	l.logger.Data[logFieldAppID] = id
+	l.setDataField(logFieldAppID, id)
 }
 
 func toLogrusLevel(lvl LogLevel) logrus.Level {
@@ -94,31 +103,31 @@ func (l *daprLogger) WithLogType(logType string) Logger {
 
 // Info logs a message at level Info.
 func (l *daprLogger) Info(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Log(logrus.InfoLevel, args...)
 }
 
 // Infof logs a message at level Info.
 func (l *daprLogger) Infof(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Logf(logrus.InfoLevel, format, args...)
 }
 
 // Debug logs a message at level Debug.
 func (l *daprLogger) Debug(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Log(logrus.DebugLevel, args...)
 }
 
 // Debugf logs a message at level Debug.
 func (l *daprLogger) Debugf(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Logf(logrus.DebugLevel, format, args...)
 }
 
 // Warn logs a message at level Warn.
 func (l *daprLogger) Warn(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Log(logrus.WarnLevel, args...)
 }
 
@@ -130,24 +139,24 @@ func (l *daprLogger) Warnf(format string, args ...interface{}) {
 
 // Error logs a message at level Error.
 func (l *daprLogger) Error(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Log(logrus.ErrorLevel, args...)
 }
 
 // Errorf logs a message at level Error.
 func (l *daprLogger) Errorf(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Logf(logrus.ErrorLevel, format, args...)
 }
 
 // Fatal logs a message at level Fatal then the process will exit with status set to 1.
 func (l *daprLogger) Fatal(args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Fatal(args...)
 }
 
 // Fatalf logs a message at level Fatal then the process will exit with status set to 1.
 func (l *daprLogger) Fatalf(format string, args ...interface{}) {
-	l.logger.Data[logFieldTimeStamp] = utils.ToISO8601DateTimeString(time.Now())
+	l.setDataField(logFieldTimeStamp, utils.ToISO8601DateTimeString(time.Now()))
 	l.logger.Fatalf(format, args...)
 }
