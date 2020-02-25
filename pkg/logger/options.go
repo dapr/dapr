@@ -50,9 +50,9 @@ func (o *Options) AttachCmdFlags(
 		"Options are debug, info, warning, error, or fatal. (default info)")
 	boolVar(
 		&o.JSONFormatEnabled,
-		"log-json-enabled",
+		"log-as-json",
 		defaultJSONOutput,
-		"Format log output as JSON or plain-text")
+		"whether print out log as JSON or plain-text. (default false)")
 }
 
 // DefaultOptions returns default values of Options
