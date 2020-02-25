@@ -58,9 +58,9 @@ type PortForwardRequest struct {
 	// pod is the selected pod for this port forwarding
 	pod apiv1.Pod
 	// localPort is the local port that will be selected to forward the PodPort
-	localPort int
+	localPorts []int
 	// podPort is the target port for the pod
-	podPort int
+	podPorts []int
 	// streams configures where to write or read input from
 	streams genericclioptions.IOStreams
 	// stopChannel is the channel used to manage the port forward lifecycle
@@ -120,10 +120,8 @@ func (m *AppManager) Init() error {
 		return err
 	}
 
-	// stopChannel control the port forwarding lifecycle. When it gets closed the port forward will terminate
-	m.stopChannel = make(chan struct{}, 1)
-	// readyChannel communicate when the port forward is ready to get traffic
 	m.readyChannel = make(chan struct{})
+	m.stopChannel = make(chan struct{})
 
 	return nil
 }
@@ -146,7 +144,6 @@ func (m *AppManager) Dispose() error {
 		return err
 	}
 
-	// stop the port forwrding channel
 	if m.stopChannel != nil {
 		close(m.stopChannel)
 	}
@@ -237,7 +234,7 @@ func (m *AppManager) ValidiateSideCar() (bool, error) {
 }
 
 // DoPortForwarding performs port forwarding for given podname to access test apps in the cluster
-func (m *AppManager) DoPortForwarding(podName string) error {
+func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int, error) {
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
 	podList, err := podClient.List(metav1.ListOptions{
@@ -245,7 +242,7 @@ func (m *AppManager) DoPortForwarding(podName string) error {
 	})
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	name := podName
@@ -260,9 +257,13 @@ func (m *AppManager) DoPortForwarding(podName string) error {
 
 	config := m.client.GetClientConfig()
 
-	port, err := freeport.GetFreePort()
-	if err != nil {
-		return err
+	var ports []int
+	for i := 0; i < len(targetPorts); i++ {
+		p, err := freeport.GetFreePort()
+		if err != nil {
+			return nil, err
+		}
+		ports = append(ports, p)
 	}
 
 	streams := genericclioptions.IOStreams{
@@ -279,20 +280,20 @@ func (m *AppManager) DoPortForwarding(podName string) error {
 				Namespace: m.namespace,
 			},
 		},
-		localPort:    port,
-		podPort:      m.app.AppPort,
+		localPorts:   ports,
+		podPorts:     targetPorts,
 		streams:      streams,
 		stopChannel:  m.stopChannel,
 		readyChannel: m.readyChannel,
 	})
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	<-m.readyChannel
 
-	return nil
+	return ports, nil
 }
 
 func startPortForwarding(req PortForwardRequest) error {
@@ -308,13 +309,20 @@ func startPortForwarding(req PortForwardRequest) error {
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)
 
-	ports := []string{fmt.Sprintf("%d:%d", req.localPort, req.podPort)}
+	var ports []string
+	for i, p := range req.podPorts {
+		ports = append(ports, fmt.Sprintf("%d:%d", req.localPorts[i], p))
+	}
 	fw, err := portforward.New(dialer, ports, req.stopChannel, req.readyChannel, req.streams.Out, req.streams.ErrOut)
 	if err != nil {
 		return err
 	}
 
-	return fw.ForwardPorts()
+	go func() {
+		fw.ForwardPorts() // TODO: error check
+		log.Infof("closed port forwarding")
+	}()
+	return nil
 }
 
 // ScaleDeploymentReplica scales the deployment
