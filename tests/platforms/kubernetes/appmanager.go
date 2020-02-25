@@ -319,8 +319,11 @@ func startPortForwarding(req PortForwardRequest) error {
 	}
 
 	go func() {
-		fw.ForwardPorts() // TODO: error check
-		log.Infof("closed port forwarding")
+		if err = fw.ForwardPorts(); err != nil {
+			log.Errorf("Error closing port fowarding: %+v", err)
+			// TODO: How to handle error?
+		}
+		log.Print("Closed port fowarding")
 	}()
 	return nil
 }
