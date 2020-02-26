@@ -18,6 +18,7 @@ type daprLogger struct {
 
 func newDaprLogger(name string) *daprLogger {
 	newLogger := logrus.New()
+	newLogger.SetOutput(os.Stdout)
 
 	dl := &daprLogger{
 		name: name,
