@@ -175,7 +175,7 @@ func TestGetMetricsPort(t *testing.T) {
 }
 
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", "-1", nil, "", "", false, "", 9090)
+	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", "true", "-1", nil, "", "", false, "", 9090)
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
 }

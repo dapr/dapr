@@ -37,10 +37,10 @@ func TestOptions(t *testing.T) {
 			}
 		}
 
-		logJSONEnabledAsserted := false
+		logAsJSONAsserted := false
 		testBoolVarFn := func(p *bool, name string, value bool, usage string) {
 			if name == "log-as-json" && value == defaultJSONOutput {
-				logJSONEnabledAsserted = true
+				logAsJSONAsserted = true
 			}
 		}
 
@@ -48,7 +48,7 @@ func TestOptions(t *testing.T) {
 
 		// assert
 		assert.True(t, logLevelAsserted)
-		assert.True(t, logJSONEnabledAsserted)
+		assert.True(t, logAsJSONAsserted)
 	})
 }
 
