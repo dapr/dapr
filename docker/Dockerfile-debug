@@ -1,12 +1,3 @@
-FROM --platform=$TARGETPLATFORM golang:latest
-ARG TARGETPLATFORM
+FROM golang:latest
 WORKDIR /
 ADD debug/. /
-RUN apk add -U --no-cache ca-certificates
-RUN mkdir -p /linux/amd64
-ADD ./linux_amd64/debug /linux/amd64
-RUN mkdir -p /linux/arm/v7
-ADD ./linux_arm/debug /linux/arm/v7
-# Copy only target platform to root
-RUN cp /$TARGETPLATFORM/* /
-RUN rm -rf /linux
