@@ -31,7 +31,7 @@ spec:
         - "--log-level"
         - {{ .Values.logLevel }}
         - "--log-as-json"
-        - {{ .Values.global.logAsJson }}
+        - "{{ .Values.global.logAsJson }}"
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt
@@ -42,7 +42,7 @@ spec:
           value: "{{ .Values.image.name }}"
 {{- else }}
           value: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
-          {{- end }}
+{{- end }}
         - name: NAMESPACE
           valueFrom:
             fieldRef:

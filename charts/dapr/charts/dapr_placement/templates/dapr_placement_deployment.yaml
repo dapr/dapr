@@ -31,7 +31,7 @@ spec:
         - "--log-level"
         - {{ .Values.logLevel }}
         - "--log-as-json"
-        - {{ .Values.global.logAsJson }}
+        - "{{ .Values.global.logAsJson }}"
       serviceAccountName: dapr-operator
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
