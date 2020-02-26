@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -14,12 +15,15 @@ import (
 )
 
 const (
-	daprEnabledAnnotationKey = "dapr.io/enabled"
-	daprIDAnnotationKey      = "dapr.io/id"
-	daprSidecarHTTPPortName  = "dapr-http"
-	daprSidecarGRPCPortName  = "dapr-grpc"
-	daprSidecarHTTPPort      = 3500
-	daprSidecarGRPCPort      = 50001
+	daprEnabledAnnotationKey   = "dapr.io/enabled"
+	daprIDAnnotationKey        = "dapr.io/id"
+	daprMetricsPortKey         = "dapr.io/metrics-port"
+	daprSidecarHTTPPortName    = "dapr-http"
+	daprSidecarGRPCPortName    = "dapr-grpc"
+	daprSidecarMetricsPortName = "dapr-metrics"
+	daprSidecarHTTPPort        = 3500
+	daprSidecarGRPCPort        = 50001
+	defaultMetricsPort         = 9090
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -43,7 +47,7 @@ func (h *DaprHandler) Init() error {
 	return nil
 }
 
-func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployment) error {
+func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployment, metricsPort int) error {
 	serviceName := fmt.Sprintf("%s-dapr", name)
 	exists := h.kubeAPI.ServiceExists(serviceName, deployment.GetNamespace())
 	if exists {
@@ -55,6 +59,11 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name:   serviceName,
 			Labels: map[string]string{daprEnabledAnnotationKey: "true"},
+			Annotations: map[string]string{
+				"prometheus.io/scrape": "true",
+				"prometheus.io/port":   strconv.Itoa(metricsPort),
+				"prometheus.io/path":   "/",
+			},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: deployment.Spec.Selector.MatchLabels,
@@ -70,6 +79,12 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 					Port:       int32(daprSidecarGRPCPort),
 					TargetPort: intstr.FromInt(daprSidecarGRPCPort),
 					Name:       daprSidecarGRPCPortName,
+				},
+				{
+					Protocol:   corev1.ProtocolTCP,
+					Port:       int32(metricsPort),
+					TargetPort: intstr.FromInt(metricsPort),
+					Name:       daprSidecarMetricsPortName,
 				},
 			},
 		},
@@ -124,6 +139,17 @@ func (h *DaprHandler) isAnnotatedForDapr(deployment *appsv1.Deployment) bool {
 	}
 }
 
+func (h *DaprHandler) getMetricsPort(deployment *appsv1.Deployment) int {
+	annotations := deployment.Spec.Template.ObjectMeta.Annotations
+	metricsPort := defaultMetricsPort
+	if val, ok := annotations[daprMetricsPortKey]; ok {
+		if v, err := strconv.Atoi(val); err == nil {
+			metricsPort = v
+		}
+	}
+	return metricsPort
+}
+
 // ObjectCreated handles Dapr enabled deployment state changes
 func (h *DaprHandler) ObjectCreated(obj interface{}) {
 	h.deploymentsLock.Lock()
@@ -138,7 +164,8 @@ func (h *DaprHandler) ObjectCreated(obj interface{}) {
 			return
 		}
 
-		err := h.createDaprService(id, deployment)
+		metricsPort := h.getMetricsPort(deployment)
+		err := h.createDaprService(id, deployment, metricsPort)
 		if err != nil {
 			log.Errorf("failed creating service for deployment %s: %s", deployment.GetName(), err)
 		}

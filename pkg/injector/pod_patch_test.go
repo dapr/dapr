@@ -36,7 +36,7 @@ func TestLogAsJSONEnabled(t *testing.T) {
 }
 
 func TestGetSideCarContainer(t *testing.T) {
-	container := getSidecarContainer("5000", "http", "app_id", "config", "darpio/dapr", "dapr-system", "controlplane:9000", "placement:50000", "false", "info", true, "-1", nil, "", "sentry:50000", true, "pod_identity")
+	container := getSidecarContainer("5000", "http", "app_id", "config", "darpio/dapr", "dapr-system", "controlplane:9000", "placement:50000", "false", "info", true, "-1", nil, "", "sentry:50000", true, "pod_identity", 9090)
 
 	var expectedArgs = []string{
 		"--mode", "kubernetes",
@@ -52,6 +52,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--log-level", "info",
 		"--max-concurrency", "-1",
 		"--sentry-address", "sentry:50000",
+		"--metrics-port", "9090",
 		"--log-as-json",
 	}
 
