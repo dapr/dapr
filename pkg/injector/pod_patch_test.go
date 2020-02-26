@@ -11,13 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetLogAsJSON(t *testing.T) {
+func TestLogAsJSONEnabled(t *testing.T) {
 	t.Run("dapr.io/log-as-json is true", func(t *testing.T) {
 		var fakeAnnotation = map[string]string{
 			daprLogAsJSON: "true",
 		}
 
-		assert.Equal(t, "true", getLogAsJSON(fakeAnnotation))
+		assert.Equal(t, true, logAsJSONEnabled(fakeAnnotation))
 	})
 
 	t.Run("dapr.io/log-as-json is false", func(t *testing.T) {
@@ -25,18 +25,18 @@ func TestGetLogAsJSON(t *testing.T) {
 			daprLogAsJSON: "false",
 		}
 
-		assert.Equal(t, "false", getLogAsJSON(fakeAnnotation))
+		assert.Equal(t, false, logAsJSONEnabled(fakeAnnotation))
 	})
 
 	t.Run("dapr.io/log-as-json is not given", func(t *testing.T) {
 		var fakeAnnotation = map[string]string{}
 
-		assert.Equal(t, "false", getLogAsJSON(fakeAnnotation))
+		assert.Equal(t, false, logAsJSONEnabled(fakeAnnotation))
 	})
 }
 
 func TestGetSideCarContainer(t *testing.T) {
-	container := getSidecarContainer("5000", "http", "app_id", "config", "darpio/dapr", "dapr-system", "controlplane:9000", "placement:50000", "false", "info", "true", "-1", nil, "", "sentry:50000", true, "pod_identity")
+	container := getSidecarContainer("5000", "http", "app_id", "config", "darpio/dapr", "dapr-system", "controlplane:9000", "placement:50000", "false", "info", true, "-1", nil, "", "sentry:50000", true, "pod_identity")
 
 	var expectedArgs = []string{
 		"--mode", "kubernetes",
@@ -50,9 +50,9 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--config", "config",
 		"--enable-profiling", "false",
 		"--log-level", "info",
-		"--log-as-json", "true",
 		"--max-concurrency", "-1",
 		"--sentry-address", "sentry:50000",
+		"--log-as-json",
 	}
 
 	assert.EqualValues(t, expectedArgs, container.Args)
