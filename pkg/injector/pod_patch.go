@@ -30,6 +30,7 @@ const (
 	daprIDKey             = "dapr.io/id"
 	daprProfilingKey      = "dapr.io/profiling"
 	daprLogLevel          = "dapr.io/log-level"
+	daprLogAsJSON         = "dapr.io/log-as-json"
 	daprMaxConcurrencyKey = "dapr.io/max-concurrency"
 	sidecarHTTPPort       = 3500
 	sidecarGRPCPORT       = 50001
@@ -39,6 +40,7 @@ const (
 	sidecarHTTPPortName   = "dapr-http"
 	sidecarGRPCPortName   = "dapr-grpc"
 	defaultLogLevel       = "info"
+	defaultLogAsJSON      = "false"
 	kubernetesMountPath   = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig         = "default"
 )
@@ -80,6 +82,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
 	apiSrvAddress := getKubernetesDNS(apiAddress, namespace)
 	logLevel := getLogLevel(pod.Annotations)
+	logAsJSON := getLogAsJSON(pod.Annotations)
 	maxConcurrency, err := getMaxConcurrency(pod.Annotations)
 	if err != nil {
 		log.Warn(err)
@@ -101,7 +104,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -219,6 +222,17 @@ func getLogLevel(annotations map[string]string) string {
 	return defaultLogLevel
 }
 
+func getLogAsJSON(annotations map[string]string) string {
+	enabled, ok := annotations[daprLogAsJSON]
+	if !ok {
+		return defaultLogAsJSON
+	}
+	if strings.EqualFold(enabled, "true") {
+		return "true"
+	}
+	return "false"
+}
+
 func profilingEnabled(annotations map[string]string) bool {
 	enabled, ok := annotations[daprProfilingKey]
 	if !ok {
@@ -249,7 +263,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel, logAsJSON, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -265,8 +279,36 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			},
 		},
 		Command: []string{"/daprd"},
-		Env:     []corev1.EnvVar{{Name: runtime.HostIPEnvVar, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}, {Name: "NAMESPACE", Value: namespace}},
-		Args:    []string{"--mode", "kubernetes", "--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort), "--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT), "--app-port", applicationPort, "--dapr-id", id, "--control-plane-address", controlPlaneAddress, "--protocol", applicationProtocol, "--placement-address", placementServiceAddress, "--config", config, "--enable-profiling", enableProfiling, "--log-level", logLevel, "--max-concurrency", maxConcurrency, "--sentry-address", sentryAddress},
+		Env: []corev1.EnvVar{
+			{
+				Name: runtime.HostIPEnvVar,
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "status.podIP",
+					},
+				},
+			},
+			{
+				Name:  "NAMESPACE",
+				Value: namespace,
+			},
+		},
+		Args: []string{
+			"--mode", "kubernetes",
+			"--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort),
+			"--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT),
+			"--app-port", applicationPort,
+			"--dapr-id", id,
+			"--control-plane-address", controlPlaneAddress,
+			"--protocol", applicationProtocol,
+			"--placement-address", placementServiceAddress,
+			"--config", config,
+			"--enable-profiling", enableProfiling,
+			"--log-level", logLevel,
+			"--log-as-json", logAsJSON,
+			"--max-concurrency", maxConcurrency,
+			"--sentry-address", sentryAddress,
+		},
 	}
 
 	if tokenVolumeMount != nil {
