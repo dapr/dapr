@@ -58,10 +58,14 @@ ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
 GOLANGCI_LINT:=golangci-lint.exe
 export ARCHIVE_EXT = .zip
+# To use buildx: https://github.com/docker/buildx#docker-ce
+export DOCKER_CLI_EXPERIMENTAL=enabled
 else
 BINARY_EXT_LOCAL:=
 GOLANGCI_LINT:=golangci-lint
 export ARCHIVE_EXT = .tar.gz
+# To use buildx: https://github.com/docker/buildx#docker-ce
+export DOCKER_CLI_EXPERIMENTAL=enabled
 endif
 
 export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
@@ -72,6 +76,8 @@ OUT_DIR := ./dist
 DOCKER:=docker
 DOCKERFILE_DIR?=./docker
 DOCKERFILE:=Dockerfile
+# Supported docker image architecture
+DOCKERMUTI_ARCH=linux/amd64,linux/arm/v7
 
 # Helm template and install setting
 HELM:=helm
@@ -188,20 +194,22 @@ endif
 
 # build docker image for linux
 docker-build: check-docker-env
+	-$(DOCKER) buildx create --use --name daprbuild
 	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) build -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(LINUX_BINS_OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)
+	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)
 ifeq ($(LATEST_RELEASE),true)
 	$(info Building $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
-	$(DOCKER) tag $(DOCKER_IMAGE_TAG) $(DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH -t $(DOCKER_IMAGE_LATEST_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)
 endif
 
 # push docker image to the registry
 docker-push: docker-build
+	-$(DOCKER) buildx create --use --name daprbuild
 	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) push $(DOCKER_IMAGE_TAG)
+	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
 ifeq ($(LATEST_RELEASE),true)
 	$(info Pushing $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
-	$(DOCKER) push $(DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_LATEST_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
 endif
 
 ################################################################################
