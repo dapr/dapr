@@ -36,10 +36,10 @@ type ConsistentHashTables struct {
 
 // Host represents a host of stateful entities with a given name, id, port and load
 type Host struct {
-	Name   string
-	Port   int64
-	Load   int64
-	DaprID string
+	Name  string
+	Port  int64
+	Load  int64
+	AppID string
 }
 
 // Consistent represents a data structure for consistent hashing
@@ -63,10 +63,10 @@ func NewPlacementTables(version string, entries map[string]*Consistent) *Consist
 // NewHost returns a new host
 func NewHost(name, id string, load int64, port int64) *Host {
 	return &Host{
-		Name:   name,
-		Load:   load,
-		Port:   port,
-		DaprID: id,
+		Name:  name,
+		Load:  load,
+		Port:  port,
+		AppID: id,
 	}
 }
 
@@ -105,7 +105,7 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 		return true
 	}
 
-	c.loadMap[host] = &Host{Name: host, DaprID: id, Load: 0, Port: port}
+	c.loadMap[host] = &Host{Name: host, AppID: id, Load: 0, Port: port}
 	for i := 0; i < replicationFactor; i++ {
 		h := c.hash(fmt.Sprintf("%s%d", host, i))
 		c.hosts[h] = host

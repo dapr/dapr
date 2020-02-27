@@ -11,7 +11,7 @@ type MockExporter struct {
 }
 
 // Init is a mock initialization method
-func (m *MockExporter) Init(daprID string, hostAddress string, metadata exporters.Metadata) error {
-	args := m.Called(daprID, hostAddress, metadata)
+func (m *MockExporter) Init(appID string, hostAddress string, metadata exporters.Metadata) error {
+	args := m.Called(appID, hostAddress, metadata)
 	return args.Error(0)
 }

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	TestDaprID  = "fakeDaprID"
+	TestAppID   = "fakeAppID"
 	TestKeyName = "key0"
 )
 
@@ -80,7 +80,7 @@ func newTestActorsRuntime() *actorsRuntime {
 		mock.AnythingOfType("*channel.InvokeRequest")).Return(fakeHTTPResponse, nil)
 
 	store := fakeStore()
-	config := NewConfig("", TestDaprID, "", nil, 0, "", "", "", false)
+	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false)
 	a := NewActors(store, mockAppChannel, nil, config)
 
 	return a.(*actorsRuntime)
@@ -417,7 +417,7 @@ func TestConstructActorStateKey(t *testing.T) {
 	delim := "||"
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
-	expected := strings.Join([]string{TestDaprID, actorType, actorID, TestKeyName}, delim)
+	expected := strings.Join([]string{TestAppID, actorType, actorID, TestKeyName}, delim)
 
 	// act
 	stateKey := testActorsRuntime.constructActorStateKey(actorType, actorID, TestKeyName)
@@ -428,7 +428,7 @@ func TestConstructActorStateKey(t *testing.T) {
 	// Check split
 	keys := strings.Split(stateKey, delim)
 	assert.Equal(t, 4, len(keys))
-	assert.Equal(t, TestDaprID, keys[0])
+	assert.Equal(t, TestAppID, keys[0])
 	assert.Equal(t, actorType, keys[1])
 	assert.Equal(t, actorID, keys[2])
 	assert.Equal(t, TestKeyName, keys[3])
