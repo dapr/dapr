@@ -43,7 +43,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--dapr-http-port", "3500",
 		"--dapr-grpc-port", "50001",
 		"--app-port", "5000",
-		"--dapr-id", "app_id",
+		"--app-id", "app_id",
 		"--control-plane-address", "controlplane:9000",
 		"--protocol", "http",
 		"--placement-address", "placement:50000",

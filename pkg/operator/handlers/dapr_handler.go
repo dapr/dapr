@@ -15,7 +15,7 @@ import (
 
 const (
 	daprEnabledAnnotationKey = "dapr.io/enabled"
-	daprIDAnnotationKey      = "dapr.io/id"
+	appIDAnnotationKey       = "dapr.io/id"
 	daprSidecarHTTPPortName  = "dapr-http"
 	daprSidecarGRPCPortName  = "dapr-grpc"
 	daprSidecarHTTPPort      = 3500
@@ -101,9 +101,9 @@ func (h *DaprHandler) deleteDaprService(name string, deployment *appsv1.Deployme
 	return nil
 }
 
-func (h *DaprHandler) getDaprID(deployment *appsv1.Deployment) string {
+func (h *DaprHandler) getAppID(deployment *appsv1.Deployment) string {
 	annotations := deployment.Spec.Template.ObjectMeta.Annotations
-	if val, ok := annotations[daprIDAnnotationKey]; ok && val != "" {
+	if val, ok := annotations[appIDAnnotationKey]; ok && val != "" {
 		return val
 	}
 
@@ -132,7 +132,7 @@ func (h *DaprHandler) ObjectCreated(obj interface{}) {
 	deployment := obj.(*appsv1.Deployment)
 	annotated := h.isAnnotatedForDapr(deployment)
 	if annotated {
-		id := h.getDaprID(deployment)
+		id := h.getAppID(deployment)
 		if id == "" {
 			log.Errorf("skipping service creation: id for deployment %s is empty", deployment.GetName())
 			return
@@ -157,7 +157,7 @@ func (h *DaprHandler) ObjectDeleted(obj interface{}) {
 	deployment := obj.(*appsv1.Deployment)
 	annotated := h.isAnnotatedForDapr(deployment)
 	if annotated {
-		id := h.getDaprID(deployment)
+		id := h.getAppID(deployment)
 		if id == "" {
 			log.Warnf("skipping service deletion: id for deployment %s is empty", deployment.GetName())
 			return

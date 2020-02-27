@@ -186,7 +186,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -200,7 +200,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 					http.HTTPVerb:    "POST",
 					http.QueryString: "", // without query string
 				},
-				Target: "fakeDaprID",
+				Target: "fakeAppID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -212,7 +212,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod?param1=val1&param2=val2"
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -226,7 +226,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 					http.HTTPVerb:    "POST",
 					http.QueryString: "param1=val1&param2=val2",
 				},
-				Target: "fakeDaprID",
+				Target: "fakeAppID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -272,7 +272,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -286,7 +286,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 					http.HTTPVerb:    "POST",
 					http.QueryString: "", // without query string
 				},
-				Target: "fakeDaprID",
+				Target: "fakeAppID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -300,7 +300,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod?param1=val1&param2=val2"
+		apiPath := "v1.0/invoke/fakeAppId/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
@@ -314,7 +314,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 					http.HTTPVerb:    "POST",
 					http.QueryString: "param1=val1&param2=val2",
 				},
-				Target: "fakeDaprID",
+				Target: "fakeAppID",
 			}).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act

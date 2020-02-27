@@ -96,7 +96,7 @@ func TestGetProtocol(t *testing.T) {
 
 func TestGetAppID(t *testing.T) {
 	t.Run("get app id", func(t *testing.T) {
-		m := map[string]string{daprIDKey: "app"}
+		m := map[string]string{appIDKey: "app"}
 		pod := corev1.Pod{}
 		pod.Annotations = m
 		id := getAppID(pod)

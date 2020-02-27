@@ -68,7 +68,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -78,7 +78,7 @@ func NewAPI(daprID string, appChannel channel.AppChannel, directMessaging messag
 		actor:                 actor,
 		pubSub:                pubSub,
 		sendToOutputBindingFn: sendToOutputBindingFn,
-		id:                    daprID,
+		id:                    appID,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)

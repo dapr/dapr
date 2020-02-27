@@ -141,7 +141,7 @@ func (p *Service) PerformTablesUpdate(hosts []daprinternal_pb.PlacementService_R
 				Name: lv.Name,
 				Load: lv.Load,
 				Port: lv.Port,
-				Id:   lv.DaprID,
+				Id:   lv.AppID,
 			}
 			table.LoadMap[lk] = &h
 		}

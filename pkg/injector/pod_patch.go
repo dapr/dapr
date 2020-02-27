@@ -27,7 +27,7 @@ const (
 	daprPortKey           = "dapr.io/port"
 	daprConfigKey         = "dapr.io/config"
 	daprProtocolKey       = "dapr.io/protocol"
-	daprIDKey             = "dapr.io/id"
+	appIDKey              = "dapr.io/id"
 	daprProfilingKey      = "dapr.io/profiling"
 	daprLogLevel          = "dapr.io/log-level"
 	daprLogAsJSON         = "dapr.io/log-as-json"
@@ -209,7 +209,7 @@ func getProtocol(annotations map[string]string) string {
 }
 
 func getAppID(pod corev1.Pod) string {
-	if val, ok := pod.Annotations[daprIDKey]; ok && val != "" {
+	if val, ok := pod.Annotations[appIDKey]; ok && val != "" {
 		return val
 	}
 	return pod.GetName()
@@ -298,7 +298,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			"--dapr-http-port", fmt.Sprintf("%v", sidecarHTTPPort),
 			"--dapr-grpc-port", fmt.Sprintf("%v", sidecarGRPCPORT),
 			"--app-port", applicationPort,
-			"--dapr-id", id,
+			"--app-id", id,
 			"--control-plane-address", controlPlaneAddress,
 			"--protocol", applicationProtocol,
 			"--placement-address", placementServiceAddress,
