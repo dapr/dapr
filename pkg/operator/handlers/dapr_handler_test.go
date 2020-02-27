@@ -17,7 +17,7 @@ func TestNewDaprHandler(t *testing.T) {
 	assert.True(t, d != nil)
 }
 
-func TestGetDaprID(t *testing.T) {
+func TestGetAppID(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	t.Run("WithValidId", func(t *testing.T) {
 		// Arrange
@@ -25,7 +25,7 @@ func TestGetDaprID(t *testing.T) {
 		deployment := getDeployment(expected, "true")
 
 		// Act
-		got := testDaprHandler.getDaprID(deployment)
+		got := testDaprHandler.getAppID(deployment)
 
 		// Assert
 		assert.Equal(t, expected, got)
@@ -37,7 +37,7 @@ func TestGetDaprID(t *testing.T) {
 		deployment := getDeployment(expected, "true")
 
 		// Act
-		got := testDaprHandler.getDaprID(deployment)
+		got := testDaprHandler.getAppID(deployment)
 
 		// Assert
 		assert.Equal(t, expected, got)
@@ -123,13 +123,13 @@ func getDeploymentWithMetricsPortAnnotation(daprID string, daprEnabled string, m
 	return d
 }
 
-func getDeployment(daprID string, daprEnabled string) *appsv1.Deployment {
+func getDeployment(appID string, daprEnabled string) *appsv1.Deployment {
 	// Arrange
 	metadata := meta_v1.ObjectMeta{
 		Name:   "app",
 		Labels: map[string]string{"app": "test_app"},
 		Annotations: map[string]string{
-			daprIDAnnotationKey:      daprID,
+			appIDAnnotationKey:       appID,
 			daprEnabledAnnotationKey: daprEnabled,
 		},
 	}

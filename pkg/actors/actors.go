@@ -204,7 +204,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 }
 
 func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
-	targetActorAddress, daprID := a.lookupActorAddress(req.ActorType, req.ActorID)
+	targetActorAddress, appID := a.lookupActorAddress(req.ActorType, req.ActorID)
 	if targetActorAddress == "" {
 		return nil, fmt.Errorf("error finding address for actor type %s with id %s", req.ActorType, req.ActorID)
 	}
@@ -219,7 +219,7 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	} else {
-		resp, err = a.callRemoteActorWithRetry(callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, daprID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callRemoteActorWithRetry(callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, appID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	}
 
 	if err != nil {
@@ -457,7 +457,7 @@ func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
 }
 
 func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) string {
-	return a.constructCompositeKey(a.config.DaprID, actorType, actorID, key)
+	return a.constructCompositeKey(a.config.AppID, actorType, actorID, key)
 }
 
 func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
@@ -473,7 +473,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 				Load:     1,
 				Entities: a.config.HostedActorTypes,
 				Port:     int64(a.config.Port),
-				Id:       a.config.DaprID,
+				Id:       a.config.AppID,
 			}
 
 			if stream != nil {
@@ -707,7 +707,7 @@ func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) (string, s
 	if err != nil || host == nil {
 		return "", ""
 	}
-	return fmt.Sprintf("%s:%v", host.Name, host.Port), host.DaprID
+	return fmt.Sprintf("%s:%v", host.Name, host.Port), host.AppID
 }
 
 func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack, error) {

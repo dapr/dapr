@@ -90,7 +90,7 @@ func (s *server) StartNonBlocking() error {
 
 func (s *server) generateWorkloadCert() error {
 	log.Info("sending workload csr request to sentry")
-	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.DaprID)
+	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID)
 	if err != nil {
 		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %s", err)
 	}
