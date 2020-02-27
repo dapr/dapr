@@ -101,6 +101,37 @@ func HTTPGet(url string) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
+// HTTPGetRawNTimes calls the url n times and returns the first success or last error.
+func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
+	var res *http.Response
+	var err error
+	for i := n - 1; i >= 0; i-- {
+		res, err = HTTPGetRaw(url)
+		if i == 0 {
+			break
+		}
+
+		if err != nil {
+			time.Sleep(time.Second)
+		} else {
+			return res, nil
+		}
+	}
+
+	return res, err
+}
+
+// HTTPGetRaw is a helper to make GET request call to url
+func HTTPGetRaw(url string) (*http.Response, error) {
+	client := newHTTPClient()
+	resp, err := client.Get(sanitizeHTTPURL(url)) //nolint
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // HTTPPost is a helper to make POST request call to url
 func HTTPPost(url string, data []byte) ([]byte, error) {
 	client := newHTTPClient()

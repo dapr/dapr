@@ -30,8 +30,9 @@ spec:
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
+{{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
-        - "{{ .Values.global.logAsJson }}"
+{{- end }}
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt

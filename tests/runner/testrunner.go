@@ -30,6 +30,7 @@ type PlatformInterface interface {
 	AcquireAppExternalURL(name string) string
 	Restart(name string) error
 	Scale(name string, replicas int32) error
+	OpenConnection(name string, targetPort ...int) ([]int, error)
 }
 
 // TestRunner holds initial test apps and testing platform instance
