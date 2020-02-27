@@ -300,7 +300,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeAppId/method/fakeMethod?param1=val1&param2=val2"
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
