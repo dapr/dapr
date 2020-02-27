@@ -33,7 +33,7 @@ type DirectMessaging interface {
 type directMessaging struct {
 	appChannel          channel.AppChannel
 	connectionCreatorFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
-	daprID              string
+	appID               string
 	mode                modes.DaprMode
 	grpcPort            int
 	namespace           string
@@ -41,11 +41,11 @@ type directMessaging struct {
 }
 
 // NewDirectMessaging returns a new direct messaging api
-func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), resolver servicediscovery.Resolver) DirectMessaging {
+func NewDirectMessaging(appID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), resolver servicediscovery.Resolver) DirectMessaging {
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: grpcConnectionFn,
-		daprID:              daprID,
+		appID:               appID,
 		mode:                mode,
 		grpcPort:            port,
 		namespace:           namespace,
@@ -55,7 +55,7 @@ func NewDirectMessaging(daprID, namespace string, port int, mode modes.DaprMode,
 
 // Invoke takes a message requests and invokes an app, either local or remote
 func (d *directMessaging) Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error) {
-	if req.Target == d.daprID {
+	if req.Target == d.appID {
 		return d.invokeLocal(req)
 	}
 	return d.invokeWithRetry(invokeRemoteRetryCount, d.invokeRemote, req)
