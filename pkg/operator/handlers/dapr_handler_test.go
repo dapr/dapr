@@ -83,6 +83,46 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 	})
 }
 
+func TestGetMetricsPort(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+	t.Run("metrics port override", func(t *testing.T) {
+		// Arrange
+		deployment := getDeploymentWithMetricsPortAnnotation("test_id", "true", "5050")
+
+		// Act
+		p := testDaprHandler.getMetricsPort(deployment)
+
+		// Assert
+		assert.Equal(t, 5050, p)
+	})
+	t.Run("invalid metrics port override", func(t *testing.T) {
+		// Arrange
+		deployment := getDeploymentWithMetricsPortAnnotation("test_id", "true", "abc")
+
+		// Act
+		p := testDaprHandler.getMetricsPort(deployment)
+
+		// Assert
+		assert.Equal(t, defaultMetricsPort, p)
+	})
+	t.Run("no metrics port override", func(t *testing.T) {
+		// Arrange
+		deployment := getDeployment("test_id", "true")
+
+		// Act
+		p := testDaprHandler.getMetricsPort(deployment)
+
+		// Assert
+		assert.Equal(t, defaultMetricsPort, p)
+	})
+}
+
+func getDeploymentWithMetricsPortAnnotation(daprID string, daprEnabled string, metricsPort string) *appsv1.Deployment {
+	d := getDeployment(daprID, daprEnabled)
+	d.Spec.Template.ObjectMeta.Annotations[daprMetricsPortKey] = metricsPort
+	return d
+}
+
 func getDeployment(appID string, daprEnabled string) *appsv1.Deployment {
 	// Arrange
 	metadata := meta_v1.ObjectMeta{
