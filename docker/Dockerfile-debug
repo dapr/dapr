@@ -1,3 +1,9 @@
 FROM golang:latest
+ARG TARGETPLATFORM
+ADD . /dist
+RUN if [ $TARGETPLATFORM = linux/amd64 ]; then mkdir -p /dist/linux/amd64 && mv /dist/linux_amd64/debug /dist/linux/amd64/; fi
+RUN if [ $TARGETPLATFORM = linux/arm/v7 ]; then mkdir -p /dist/linux/arm/v7 && mv /dist/linux_arm/debug /dist/linux/arm/v7/; fi
+RUN cp /dist/$TARGETPLATFORM/debug/* /
+RUN rm -rf /dist
+
 WORKDIR /
-ADD debug/. /
