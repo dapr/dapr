@@ -55,6 +55,7 @@ docker-push: docker-build
 # publish muti-arch docker image to the registry
 docker-publish: check-docker-env
 	-$(DOCKER) buildx create --use --name daprbuild
+	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
 	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
 	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
 ifeq ($(LATEST_RELEASE),true)
