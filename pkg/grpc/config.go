@@ -7,16 +7,16 @@ package grpc
 
 // ServerConfig is the config object for a grpc server
 type ServerConfig struct {
-	DaprID        string
+	AppID         string
 	HostAddress   string
 	Port          int
 	EnableMetrics bool
 }
 
 // NewServerConfig returns a new grpc server config
-func NewServerConfig(daprID string, hostAddress string, port int, enableMetrics bool) ServerConfig {
+func NewServerConfig(appID string, hostAddress string, port int, enableMetrics bool) ServerConfig {
 	return ServerConfig{
-		DaprID:        daprID,
+		AppID:         appID,
 		HostAddress:   hostAddress,
 		Port:          port,
 		EnableMetrics: enableMetrics,

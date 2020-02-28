@@ -55,6 +55,9 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 	if appDesc.AppProtocol != "" {
 		annotationObject["dapr.io/protocol"] = appDesc.AppProtocol
 	}
+	if appDesc.MetricsPort != "" {
+		annotationObject["dapr.io/metrics-port"] = appDesc.MetricsPort
+	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

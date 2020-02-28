@@ -15,4 +15,5 @@ type AppDescription struct {
 	RegistryName   string
 	Replicas       int32
 	IngressEnabled bool
+	MetricsPort    string
 }

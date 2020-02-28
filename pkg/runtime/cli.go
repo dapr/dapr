@@ -26,7 +26,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appProtocol := flag.String("protocol", string(HTTPProtocol), "Protocol for the application: gRPC or http")
 	componentsPath := flag.String("components-path", DefaultComponentsPath, "Path for components directory. Standalone mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
-	daprID := flag.String("dapr-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
+	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for an Dapr control plane")
 	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
 	placementServiceAddress := flag.String("placement-address", "", "Address for the Dapr placement service")
@@ -49,7 +49,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	// Apply options to all loggers
-	loggerOptions.SetAppID(*daprID)
+	loggerOptions.SetAppID(*appID)
 	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	runtimeConfig := NewRuntimeConfig(*daprID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
+	runtimeConfig := NewRuntimeConfig(*appID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
 		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress, metrPort, enableMetr)
 
 	var globalConfig *global_config.Configuration
