@@ -58,26 +58,15 @@ ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
 GOLANGCI_LINT:=golangci-lint.exe
 export ARCHIVE_EXT = .zip
-# To use buildx: https://github.com/docker/buildx#docker-ce
-export DOCKER_CLI_EXPERIMENTAL=enabled
 else
 BINARY_EXT_LOCAL:=
 GOLANGCI_LINT:=golangci-lint
 export ARCHIVE_EXT = .tar.gz
-# To use buildx: https://github.com/docker/buildx#docker-ce
-export DOCKER_CLI_EXPERIMENTAL=enabled
 endif
 
 export BINARY_EXT ?= $(BINARY_EXT_LOCAL)
 
 OUT_DIR := ./dist
-
-# Docker image build and push setting
-DOCKER:=docker
-DOCKERFILE_DIR?=./docker
-DOCKERFILE:=Dockerfile
-# Supported docker image architecture
-DOCKERMUTI_ARCH=linux/amd64,linux/arm/v7
 
 # Helm template and install setting
 HELM:=helm
@@ -102,7 +91,6 @@ else ifeq ($(DEBUG),0)
   BUILDTYPE_DIR:=release
   LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
 else
-  DOCKERFILE:=Dockerfile-debug
   BUILDTYPE_DIR:=debug
   GCFLAGS:=-gcflags="all=-N -l"
   LDFLAGS:="$(DEFAULT_LDFLAGS)"
@@ -172,45 +160,6 @@ endef
 # Generate archive-*.[zip|tar.gz] targets
 $(foreach ITEM,$(BINARIES),$(eval $(call genArchiveBinary,$(ITEM),$(ARCHIVE_OUT_DIR))))
 
-################################################################################
-# Target: docker-build, docker-push                                            #
-################################################################################
-
-LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)
-DOCKER_IMAGE_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):$(DAPR_TAG)
-
-ifeq ($(LATEST_RELEASE),true)
-DOCKER_IMAGE_LATEST_TAG=$(DAPR_REGISTRY)/$(RELEASE_NAME):$(LATEST_TAG)
-endif
-
-# check the required environment variables
-check-docker-env:
-ifeq ($(DAPR_REGISTRY),)
-	$(error DAPR_REGISTRY environment variable must be set)
-endif
-ifeq ($(DAPR_TAG),)
-	$(error DAPR_TAG environment variable must be set)
-endif
-
-# build docker image for linux
-docker-build: check-docker-env
-	-$(DOCKER) buildx create --use --name daprbuild
-	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)
-ifeq ($(LATEST_RELEASE),true)
-	$(info Building $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
-	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH -t $(DOCKER_IMAGE_LATEST_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)
-endif
-
-# push docker image to the registry
-docker-push: docker-build
-	-$(DOCKER) buildx create --use --name daprbuild
-	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
-ifeq ($(LATEST_RELEASE),true)
-	$(info Pushing $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
-	$(DOCKER) buildx build --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_LATEST_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
-endif
 
 ################################################################################
 # Target: manifest-gen                                                         #

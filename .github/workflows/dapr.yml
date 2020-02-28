@@ -82,6 +82,15 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
+      - name: Install Docker CE for buildx
+        run: |
+          sudo apt update
+          sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+          sudo apt update
+          sudo apt install docker-ce
+          docker -v
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: download artifacts - dapr_linux_amd64
@@ -121,15 +130,10 @@ jobs:
               echo "Extracting $tgzfile ..."
               tar xzvf $tgzfile -C $RELEASE_DIR
             done
-
-            DOCKER_VERSION=$REL_VERSION
-            if [ "${img_arch}" == "arm" ]; then
-              DOCKER_VERSION=${REL_VERSION}-arm
-            fi
           done
           
           echo "Build docker image and push image ..."
-          make docker-push DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$DOCKER_VERSION
+          make docker-publish DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: publish binaries to github
         if: startswith(github.ref, 'refs/tags/v')
         run: |

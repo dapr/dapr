@@ -1,16 +1,14 @@
-FROM --platform=$TARGETPLATFORM alpine:latest as alpine
+FROM alpine:latest as alpine
 ARG TARGETPLATFORM
 RUN apk add -U --no-cache ca-certificates
-RUN mkdir -p /linux/amd64
-ADD ./linux_amd64/release /linux/amd64
-RUN mkdir -p /linux/arm/v7
-ADD ./linux_arm/release /linux/arm/v7
-RUN mkdir /release
-# Copy only target platform to root
-RUN cp /$TARGETPLATFORM/* /release
+# current directory must be ./dist
+ADD . /dist
+RUN if [ $TARGETPLATFORM = linux/amd64 ]; then mkdir -p /dist/linux/amd64 && mv /dist/linux_amd64/release /dist/linux/amd64/; fi
+RUN if [ $TARGETPLATFORM = linux/arm/v7 ]; then mkdir -p /dist/linux/arm/v7 && mv /dist/linux_arm/release /dist/linux/arm/v7/; fi
 
 FROM scratch
+ARG TARGETPLATFORM
 ENTRYPOINT []
 WORKDIR /
 COPY --from=alpine /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=alpine /release /
+COPY --from=alpine /dist/$TARGETPLATFORM/release /
