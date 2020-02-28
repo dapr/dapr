@@ -95,15 +95,15 @@ jobs:
       - name: Build dapr and its docker image
         if: env.TEST_CLUSTER != ''
         run: |
-          make build-linux GOARCH=arm
-          make build-linux GOARCH=amd64
-          make docker-push
+          make build-linux
+          make docker-build
       - name: Build e2e test apps
         if: env.TEST_CLUSTER != ''
         run: make build-e2e-app-all
       - name: Push docker images to test dockerhub
         if: env.TEST_CLUSTER != ''
         run: |
+          make docker-push
           make push-e2e-app-all
       - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
         if: env.TEST_CLUSTER != ''
