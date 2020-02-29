@@ -18,6 +18,7 @@ import (
 	// Included components in compiled daprd
 
 	// Secret stores
+	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
 	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
@@ -43,6 +44,7 @@ import (
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 
 	// Pub/Sub
+	pubs "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	"github.com/dapr/components-contrib/pubsub/nats"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
@@ -57,6 +59,7 @@ import (
 	exporters_loader "github.com/dapr/dapr/pkg/components/exporters"
 
 	// Service Discovery
+	"github.com/dapr/components-contrib/servicediscovery"
 	servicediscovery_kubernetes "github.com/dapr/components-contrib/servicediscovery/kubernetes"
 	"github.com/dapr/components-contrib/servicediscovery/mdns"
 	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
@@ -100,161 +103,183 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var logContrib = logger.NewLogger("dapr.contrib")
+
 	err = rt.Run(
 		runtime.WithSecretStores(
-			secretstores_loader.New("kubernetes", sercetstores_kubernetes.NewKubernetesSecretStore),
-			secretstores_loader.New("azure.keyvault", keyvault.NewAzureKeyvaultSecretStore),
-			secretstores_loader.New("hashicorp.vault", vault.NewHashiCorpVaultSecretStore),
+			secretstores_loader.New("kubernetes", func() secretstores.SecretStore {
+				return sercetstores_kubernetes.NewKubernetesSecretStore(logContrib)
+			}),
+			secretstores_loader.New("azure.keyvault", func() secretstores.SecretStore {
+				return keyvault.NewAzureKeyvaultSecretStore(logContrib)
+			}),
+			secretstores_loader.New("hashicorp.vault", func() secretstores.SecretStore {
+				return vault.NewHashiCorpVaultSecretStore(logContrib)
+			}),
 		),
 		runtime.WithStates(
 			state_loader.New("redis", func() state.Store {
-				return state_redis.NewRedisStateStore()
+				return state_redis.NewRedisStateStore(logContrib)
 			}),
 			state_loader.New("consul", func() state.Store {
-				return consul.NewConsulStateStore()
+				return consul.NewConsulStateStore(logContrib)
 			}),
 			state_loader.New("azure.cosmosdb", func() state.Store {
-				return state_cosmosdb.NewCosmosDBStateStore()
+				return state_cosmosdb.NewCosmosDBStateStore(logContrib)
 			}),
 			state_loader.New("azure.tablestorage", func() state.Store {
-				return state_azure_tablestorage.NewAzureTablesStateStore()
+				return state_azure_tablestorage.NewAzureTablesStateStore(logContrib)
 			}),
 			state_loader.New("etcd", func() state.Store {
-				return etcd.NewETCD()
+				return etcd.NewETCD(logContrib)
 			}),
 			state_loader.New("cassandra", func() state.Store {
-				return cassandra.NewCassandraStateStore()
+				return cassandra.NewCassandraStateStore(logContrib)
 			}),
 			state_loader.New("memcached", func() state.Store {
-				return memcached.NewMemCacheStateStore()
+				return memcached.NewMemCacheStateStore(logContrib)
 			}),
 			state_loader.New("mongodb", func() state.Store {
-				return mongodb.NewMongoDB()
+				return mongodb.NewMongoDB(logContrib)
 			}),
 			state_loader.New("zookeeper", func() state.Store {
-				return zookeeper.NewZookeeperStateStore()
+				return zookeeper.NewZookeeperStateStore(logContrib)
 			}),
 			state_loader.New("gcp.firestore", func() state.Store {
-				return firestore.NewFirestoreStateStore()
+				return firestore.NewFirestoreStateStore(logContrib)
 			}),
 			state_loader.New("sqlserver", func() state.Store {
-				return sqlserver.NewSQLServerStateStore()
+				return sqlserver.NewSQLServerStateStore(logContrib)
 			}),
 			state_loader.New("hazelcast", func() state.Store {
-				return hazelcast.NewHazelcastStore()
+				return hazelcast.NewHazelcastStore(logContrib)
 			}),
 			state_loader.New("cloudstate.crdt", func() state.Store {
-				return cloudstate.NewCRDT()
+				return cloudstate.NewCRDT(logContrib)
 			}),
 			state_loader.New("couchbase", func() state.Store {
-				return couchbase.NewCouchbaseStateStore()
+				return couchbase.NewCouchbaseStateStore(logContrib)
 			}),
 			state_loader.New("aerospike", func() state.Store {
-				return aerospike.NewAerospikeStateStore()
+				return aerospike.NewAerospikeStateStore(logContrib)
 			}),
 		),
 		runtime.WithPubSubs(
-			pubsub_loader.New("redis", pubsub_redis.NewRedisStreams),
-			pubsub_loader.New("nats", nats.NewNATSPubSub),
-			pubsub_loader.New("azure.servicebus", servicebus.NewAzureServiceBus),
-			pubsub_loader.New("rabbitmq", rabbitmq.NewRabbitMQ),
+			pubsub_loader.New("redis", func() pubs.PubSub {
+				return pubsub_redis.NewRedisStreams(logContrib)
+			}),
+			pubsub_loader.New("nats", func() pubs.PubSub {
+				return nats.NewNATSPubSub(logContrib)
+			}),
+			pubsub_loader.New("azure.servicebus", func() pubs.PubSub {
+				return servicebus.NewAzureServiceBus(logContrib)
+			}),
+			pubsub_loader.New("rabbitmq", func() pubs.PubSub {
+				return rabbitmq.NewRabbitMQ(logContrib)
+			}),
 		),
 		runtime.WithExporters(
 			exporters_loader.New("zipkin", func() exporters.Exporter {
-				return zipkin.NewZipkinExporter()
+				return zipkin.NewZipkinExporter(logContrib)
 			}),
 			exporters_loader.New("string", func() exporters.Exporter {
-				return stringexporter.NewStringExporter()
+				return stringexporter.NewStringExporter(logContrib)
 			}),
 			exporters_loader.New("native", func() exporters.Exporter {
-				return native.NewNativeExporter()
+				return native.NewNativeExporter(logContrib)
 			}),
 		),
 		runtime.WithServiceDiscovery(
-			servicediscovery_loader.New("mdns", mdns.NewMDNSResolver),
-			servicediscovery_loader.New("kubernetes", servicediscovery_kubernetes.NewKubernetesResolver),
+			servicediscovery_loader.New("mdns", func() servicediscovery.Resolver {
+				return mdns.NewMDNSResolver(logContrib)
+			}),
+			servicediscovery_loader.New("kubernetes", func() servicediscovery.Resolver {
+				return servicediscovery_kubernetes.NewKubernetesResolver(logContrib)
+			}),
 		),
 		runtime.WithInputBindings(
 			bindings_loader.NewInput("aws.sqs", func() bindings.InputBinding {
-				return sqs.NewAWSSQS()
+				return sqs.NewAWSSQS(logContrib)
 			}),
 			bindings_loader.NewInput("azure.eventhubs", func() bindings.InputBinding {
-				return eventhubs.NewAzureEventHubs()
+				return eventhubs.NewAzureEventHubs(logContrib)
 			}),
 			bindings_loader.NewInput("kafka", func() bindings.InputBinding {
-				return kafka.NewKafka()
+				return kafka.NewKafka(logContrib)
 			}),
 			bindings_loader.NewInput("mqtt", func() bindings.InputBinding {
-				return mqtt.NewMQTT()
+				return mqtt.NewMQTT(logContrib)
 			}),
 			bindings_loader.NewInput("rabbitmq", func() bindings.InputBinding {
-				return bindings_rabbitmq.NewRabbitMQ()
+				return bindings_rabbitmq.NewRabbitMQ(logContrib)
 			}),
 			bindings_loader.NewInput("azure.servicebusqueues", func() bindings.InputBinding {
-				return servicebusqueues.NewAzureServiceBusQueues()
+				return servicebusqueues.NewAzureServiceBusQueues(logContrib)
 			}),
 			bindings_loader.NewInput("azure.storagequeues", func() bindings.InputBinding {
-				return storagequeues.NewAzureStorageQueues()
+				return storagequeues.NewAzureStorageQueues(logContrib)
 			}),
 			bindings_loader.NewInput("gcp.pubsub", func() bindings.InputBinding {
-				return pubsub.NewGCPPubSub()
+				return pubsub.NewGCPPubSub(logContrib)
 			}),
-			bindings_loader.NewInput("kubernetes", kubernetes.NewKubernetes),
+			bindings_loader.NewInput("kubernetes", func() bindings.InputBinding {
+				return kubernetes.NewKubernetes(logContrib)
+			}),
 		),
 		runtime.WithOutputBindings(
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
-				return sqs.NewAWSSQS()
+				return sqs.NewAWSSQS(logContrib)
 			}),
 			bindings_loader.NewOutput("aws.sns", func() bindings.OutputBinding {
-				return sns.NewAWSSNS()
+				return sns.NewAWSSNS(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.eventhubs", func() bindings.OutputBinding {
-				return eventhubs.NewAzureEventHubs()
+				return eventhubs.NewAzureEventHubs(logContrib)
 			}),
 			bindings_loader.NewOutput("aws.dynamodb", func() bindings.OutputBinding {
-				return dynamodb.NewDynamoDB()
+				return dynamodb.NewDynamoDB(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.cosmosdb", func() bindings.OutputBinding {
-				return bindings_cosmosdb.NewCosmosDB()
+				return bindings_cosmosdb.NewCosmosDB(logContrib)
 			}),
 			bindings_loader.NewOutput("gcp.bucket", func() bindings.OutputBinding {
-				return bucket.NewGCPStorage()
+				return bucket.NewGCPStorage(logContrib)
 			}),
 			bindings_loader.NewOutput("http", func() bindings.OutputBinding {
-				return http.NewHTTP()
+				return http.NewHTTP(logContrib)
 			}),
 			bindings_loader.NewOutput("kafka", func() bindings.OutputBinding {
-				return kafka.NewKafka()
+				return kafka.NewKafka(logContrib)
 			}),
 			bindings_loader.NewOutput("mqtt", func() bindings.OutputBinding {
-				return mqtt.NewMQTT()
+				return mqtt.NewMQTT(logContrib)
 			}),
 			bindings_loader.NewOutput("rabbitmq", func() bindings.OutputBinding {
-				return bindings_rabbitmq.NewRabbitMQ()
+				return bindings_rabbitmq.NewRabbitMQ(logContrib)
 			}),
 			bindings_loader.NewOutput("redis", func() bindings.OutputBinding {
-				return redis.NewRedis()
+				return redis.NewRedis(logContrib)
 			}),
 			bindings_loader.NewOutput("aws.s3", func() bindings.OutputBinding {
-				return s3.NewAWSS3()
+				return s3.NewAWSS3(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.blobstorage", func() bindings.OutputBinding {
-				return blobstorage.NewAzureBlobStorage()
+				return blobstorage.NewAzureBlobStorage(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.servicebusqueues", func() bindings.OutputBinding {
-				return servicebusqueues.NewAzureServiceBusQueues()
+				return servicebusqueues.NewAzureServiceBusQueues(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.storagequeues", func() bindings.OutputBinding {
-				return storagequeues.NewAzureStorageQueues()
+				return storagequeues.NewAzureStorageQueues(logContrib)
 			}),
 			bindings_loader.NewOutput("gcp.pubsub", func() bindings.OutputBinding {
-				return pubsub.NewGCPPubSub()
+				return pubsub.NewGCPPubSub(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.signalr", func() bindings.OutputBinding {
-				return signalr.NewSignalR()
+				return signalr.NewSignalR(logContrib)
 			}),
 			bindings_loader.NewOutput("twilio.sms", func() bindings.OutputBinding {
-				return twilio.NewSMS()
+				return twilio.NewSMS(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

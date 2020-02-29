@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"github.com/dapr/components-contrib/middleware/http/nethttpadaptor"
+	"github.com/dapr/dapr/pkg/logger"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	http_metrics "github.com/improbable-eng/go-httpwares/metrics"
 	http_prometheus "github.com/improbable-eng/go-httpwares/metrics/prometheus"
@@ -9,6 +10,8 @@ import (
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 	grpc_go "google.golang.org/grpc"
 )
+
+var log = logger.NewLogger("diagnostics.metrics")
 
 // MetricsGRPCMiddlewareStream gets a metrics enabled GRPC stream middlware
 func MetricsGRPCMiddlewareStream() grpc_go.StreamServerInterceptor {
@@ -29,5 +32,5 @@ func MetricsHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler
 		http_prometheus.WithLatency(),
 		http_prometheus.WithSizes(),
 		http_prometheus.WithPathLabel()))
-	return fasthttpadaptor.NewFastHTTPHandler(mw(nethttpadaptor.NewNetHTTPHandlerFunc(next)))
+	return fasthttpadaptor.NewFastHTTPHandler(mw(nethttpadaptor.NewNetHTTPHandlerFunc(log, next)))
 }
