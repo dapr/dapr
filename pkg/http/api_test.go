@@ -30,6 +30,7 @@ import (
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -636,7 +637,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 }
 
 func createExporters(meta exporters.Metadata) {
-	exporter := stringexporter.NewStringExporter()
+	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
 	exporter.Init("fakeID", "fakeAddress", meta)
 }
 func TestV1ActorEndpointsWithTracer(t *testing.T) {
