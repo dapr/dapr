@@ -95,7 +95,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-var log = logger.NewLogger("runtime")
+var log = logger.NewLogger("dapr.runtime")
 
 func main() {
 	rt, err := runtime.FromFlags()
@@ -103,7 +103,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var logContrib = logger.NewLogger("contrib")
+	var logContrib = logger.NewLogger("dapr.contrib")
 
 	err = rt.Run(
 		runtime.WithSecretStores(
