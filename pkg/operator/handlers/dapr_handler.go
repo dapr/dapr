@@ -16,7 +16,7 @@ import (
 
 const (
 	daprEnabledAnnotationKey   = "dapr.io/enabled"
-	appIDAnnotationKey        = "dapr.io/id"
+	appIDAnnotationKey         = "dapr.io/id"
 	daprMetricsPortKey         = "dapr.io/metrics-port"
 	daprSidecarHTTPPortName    = "dapr-http"
 	daprSidecarGRPCPortName    = "dapr-grpc"

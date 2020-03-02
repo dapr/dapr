@@ -12,6 +12,7 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/nethttpadaptor"
 	"github.com/dapr/dapr/pkg/diagnostics/testdata"
 	pb "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 
@@ -60,9 +61,10 @@ func TestMetricsGRPCMiddlewareUnary(t *testing.T) {
 }
 
 func TestMetricsHTTPMiddleware(t *testing.T) {
+	fakeLogger := logger.NewLogger("test")
 	inner := func(ctx *fasthttp.RequestCtx) {}
 	mw := MetricsHTTPMiddleware(inner)
-	outter := nethttpadaptor.NewNetHTTPHandlerFunc(mw)
+	outter := nethttpadaptor.NewNetHTTPHandlerFunc(fakeLogger, mw)
 
 	// HTTP metrics are not initialized with a zero value
 	// so we have to invoke the metrics middleware manually.

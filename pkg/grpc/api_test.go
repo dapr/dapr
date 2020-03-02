@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/logger"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"github.com/golang/protobuf/ptypes/any"
@@ -71,7 +72,7 @@ func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelo
 }
 
 func createExporters(meta exporters.Metadata) {
-	exporter := stringexporter.NewStringExporter()
+	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
 	exporter.Init("fakeID", "fakeAddress", meta)
 }
 
