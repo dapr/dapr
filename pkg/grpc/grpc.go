@@ -52,10 +52,6 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int) (channel.AppChann
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
 func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error) {
-	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
-		return val, nil
-	}
-
 	g.lock.Lock()
 	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
 		g.lock.Unlock()
