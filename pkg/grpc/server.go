@@ -18,6 +18,7 @@ import (
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -107,17 +108,36 @@ func (s *server) generateWorkloadCert() error {
 	return nil
 }
 
-func (s *server) getGRPCServer() (*grpc_go.Server, error) {
+func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
+
+	streamServerInterceptorChains := []grpc_go.StreamServerInterceptor{}
+	unaryInterceptorChains := []grpc_go.UnaryServerInterceptor{}
 
 	if s.tracingSpec.Enabled {
 		log.Infof("enabled tracing grpc middleware")
-		opts = append(opts, grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)), grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
+		streamServerInterceptorChains = append(streamServerInterceptorChains, diag.TracingGRPCMiddlewareStream(s.tracingSpec))
+		unaryInterceptorChains = append(unaryInterceptorChains, diag.TracingGRPCMiddlewareUnary(s.tracingSpec))
 	}
+
 	if s.config.EnableMetrics {
 		log.Infof("enabled metrics grpc middleware")
-		opts = append(opts, grpc_go.StreamInterceptor(diag.MetricsGRPCMiddlewareStream()), grpc_go.UnaryInterceptor(diag.MetricsGRPCMiddlewareUnary()))
+		streamServerInterceptorChains = append(streamServerInterceptorChains, diag.MetricsGRPCMiddlewareStream())
+		unaryInterceptorChains = append(unaryInterceptorChains, diag.MetricsGRPCMiddlewareUnary())
 	}
+
+	if s.tracingSpec.Enabled || s.config.EnableMetrics {
+		opts = append(
+			opts,
+			grpc_middleware.WithStreamServerChain(streamServerInterceptorChains...),
+			grpc_middleware.WithUnaryServerChain(unaryInterceptorChains...))
+	}
+
+	return opts
+}
+
+func (s *server) getGRPCServer() (*grpc_go.Server, error) {
+	opts := s.getMiddlewareOptions()
 
 	if s.authenticator != nil {
 		err := s.generateWorkloadCert()
@@ -137,6 +157,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 		opts = append(opts, grpc_go.Creds(ta))
 		go s.startWorkloadCertRotation()
 	}
+
 	return grpc_go.NewServer(opts...), nil
 }
 
