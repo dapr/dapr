@@ -612,9 +612,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
 	expectedBody := map[string]interface{}{
-		"id":         "xyz",
-		"actors":     []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
-		"appCommand": "",
+		"id":       "xyz",
+		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
+		"extended": make(map[string]string),
 	}
 	expectedBodyBytes, _ := json.Marshal(expectedBody)
 

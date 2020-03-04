@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -40,34 +41,33 @@ type api struct {
 	pubSub                pubsub.PubSub
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
-	metadata              map[string]string
+	extendedMetadata      sync.Map
 }
 
 type metadata struct {
-	ID                string                     `json:"id"`
-	ActiveActorsCount []actors.ActiveActorsCount `json:"actors"`
-	AppCommand        string                     `json:"appCommand"`
+	ID                string                      `json:"id"`
+	ActiveActorsCount []actors.ActiveActorsCount  `json:"actors"`
+	Extended          map[interface{}]interface{} `json:"extended"`
 }
 
 const (
-	apiVersionV1          = "v1.0"
-	idParam               = "id"
-	methodParam           = "method"
-	actorTypeParam        = "actorType"
-	actorIDParam          = "actorId"
-	storeNameParam        = "storeName"
-	stateKeyParam         = "key"
-	secretStoreNameParam  = "secretStoreName"
-	secretNameParam       = "key"
-	topicParam            = "topic"
-	nameParam             = "name"
-	consistencyParam      = "consistency"
-	retryIntervalParam    = "retryInterval"
-	retryPatternParam     = "retryPattern"
-	retryThresholdParam   = "retryThreshold"
-	concurrencyParam      = "concurrency"
-	daprSeparator         = "||"
-	metadataKeyAppCommand = "appCommand"
+	apiVersionV1         = "v1.0"
+	idParam              = "id"
+	methodParam          = "method"
+	actorTypeParam       = "actorType"
+	actorIDParam         = "actorId"
+	storeNameParam       = "storeName"
+	stateKeyParam        = "key"
+	secretStoreNameParam = "secretStoreName"
+	secretNameParam      = "key"
+	topicParam           = "topic"
+	nameParam            = "name"
+	consistencyParam     = "consistency"
+	retryIntervalParam   = "retryInterval"
+	retryPatternParam    = "retryPattern"
+	retryThresholdParam  = "retryThreshold"
+	concurrencyParam     = "concurrency"
+	daprSeparator        = "||"
 )
 
 // NewAPI returns a new API
@@ -82,7 +82,6 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 		pubSub:                pubSub,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		id:                    appID,
-		metadata:              make(map[string]string),
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
@@ -882,10 +881,18 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 }
 
 func (a *api) onGetMetadata(c *routing.Context) error {
+	temp := make(map[interface{}]interface{})
+
+	// Copy synchronously so it can be serialized to JSON.
+	a.extendedMetadata.Range(func(key, value interface{}) bool {
+		temp[key] = value
+		return true
+	})
+
 	mtd := metadata{
 		ID:                a.id,
 		ActiveActorsCount: a.actor.GetActiveActorsCount(),
-		AppCommand:        a.metadata[metadataKeyAppCommand],
+		Extended:          temp,
 	}
 
 	mtdBytes, err := a.json.Marshal(mtd)
@@ -902,16 +909,7 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 func (a *api) onPutMetadata(c *routing.Context) error {
 	key := c.Param("key")
 	body := c.PostBody()
-	switch key {
-	// only known keys.
-	case metadataKeyAppCommand:
-		a.metadata[key] = string(body)
-	default:
-		msg := NewErrorResponse("ERR_METADATA_PUT", "unknown metadata key")
-		respondWithError(c.RequestCtx, 404, msg)
-		return nil
-	}
-
+	a.extendedMetadata.Store(key, string(body))
 	respondEmpty(c.RequestCtx, 200)
 	return nil
 }
