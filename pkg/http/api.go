@@ -40,31 +40,34 @@ type api struct {
 	pubSub                pubsub.PubSub
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
+	metadata              map[string]string
 }
 
 type metadata struct {
 	ID                string                     `json:"id"`
 	ActiveActorsCount []actors.ActiveActorsCount `json:"actors"`
+	AppCommand        string                     `json:"appCommand"`
 }
 
 const (
-	apiVersionV1         = "v1.0"
-	idParam              = "id"
-	methodParam          = "method"
-	actorTypeParam       = "actorType"
-	actorIDParam         = "actorId"
-	storeNameParam       = "storeName"
-	stateKeyParam        = "key"
-	secretStoreNameParam = "secretStoreName"
-	secretNameParam      = "key"
-	topicParam           = "topic"
-	nameParam            = "name"
-	consistencyParam     = "consistency"
-	retryIntervalParam   = "retryInterval"
-	retryPatternParam    = "retryPattern"
-	retryThresholdParam  = "retryThreshold"
-	concurrencyParam     = "concurrency"
-	daprSeparator        = "||"
+	apiVersionV1          = "v1.0"
+	idParam               = "id"
+	methodParam           = "method"
+	actorTypeParam        = "actorType"
+	actorIDParam          = "actorId"
+	storeNameParam        = "storeName"
+	stateKeyParam         = "key"
+	secretStoreNameParam  = "secretStoreName"
+	secretNameParam       = "key"
+	topicParam            = "topic"
+	nameParam             = "name"
+	consistencyParam      = "consistency"
+	retryIntervalParam    = "retryInterval"
+	retryPatternParam     = "retryPattern"
+	retryThresholdParam   = "retryThreshold"
+	concurrencyParam      = "concurrency"
+	daprSeparator         = "||"
+	metadataKeyAppCommand = "appCommand"
 )
 
 // NewAPI returns a new API
@@ -79,6 +82,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 		pubSub:                pubSub,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		id:                    appID,
+		metadata:              make(map[string]string),
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
@@ -235,6 +239,12 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Route:   "metadata",
 			Version: apiVersionV1,
 			Handler: a.onGetMetadata,
+		},
+		{
+			Methods: []string{http.Put},
+			Route:   "metadata/<key>",
+			Version: apiVersionV1,
+			Handler: a.onPutMetadata,
 		},
 	}
 }
@@ -875,6 +885,7 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 	mtd := metadata{
 		ID:                a.id,
 		ActiveActorsCount: a.actor.GetActiveActorsCount(),
+		AppCommand:        a.metadata[metadataKeyAppCommand],
 	}
 
 	mtdBytes, err := a.json.Marshal(mtd)
@@ -885,6 +896,23 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 		respondWithJSON(c.RequestCtx, 200, mtdBytes)
 	}
 
+	return nil
+}
+
+func (a *api) onPutMetadata(c *routing.Context) error {
+	key := c.Param("key")
+	body := c.PostBody()
+	switch key {
+	// only known keys.
+	case metadataKeyAppCommand:
+		a.metadata[key] = string(body)
+	default:
+		msg := NewErrorResponse("ERR_METADATA_PUT", "unknown metadata key")
+		respondWithError(c.RequestCtx, 404, msg)
+		return nil
+	}
+
+	respondEmpty(c.RequestCtx, 200)
 	return nil
 }
 
