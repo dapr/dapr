@@ -20,16 +20,26 @@ import (
 var log = logger.NewLogger("dapr.runtime.discovery")
 
 // RegisterMDNS uses mdns to publish an entry of the service to a local network
-func RegisterMDNS(id string, port int) error {
+func RegisterMDNS(id string, grpcPort int, httpPort int) error {
 	go func() {
 		host, _ := os.Hostname()
 		info := []string{id}
-		server, err := zeroconf.Register(host, id, "local.", port, info, nil)
+		server, err := zeroconf.Register(host, id, "local.", grpcPort, info, nil)
 		if err != nil {
 			log.Errorf("error from zeroconf register: %s", err)
 			return
 		}
 		defer server.Shutdown()
+
+		generalInfo := []string {
+			fmt.Sprintf("grpcPort=%d", grpcPort),
+			fmt.Sprintf("httpPort=%d", httpPort),
+		}
+		generalServer, err := zeroconf.Register(id, "_dapr._tcp", "local.", grpcPort, generalInfo, nil)
+		if err != nil {
+			log.Errorf("error from general zeroconf register: %s", err)
+		}
+		defer generalServer.Shutdown()
 
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)

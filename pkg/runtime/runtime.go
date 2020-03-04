@@ -1038,7 +1038,7 @@ func (a *DaprRuntime) createAppChannel() error {
 func (a *DaprRuntime) announceSelf() error {
 	switch a.runtimeConfig.Mode {
 	case modes.StandaloneMode:
-		err := discovery.RegisterMDNS(a.runtimeConfig.ID, a.runtimeConfig.GRPCPort)
+		err := discovery.RegisterMDNS(a.runtimeConfig.ID, a.runtimeConfig.GRPCPort, a.runtimeConfig.HTTPPort)
 		if err != nil {
 			return err
 		}
