@@ -3,6 +3,7 @@ module github.com/dapr/dapr
 go 1.13
 
 require (
+	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/coreos/etcd v3.3.18+incompatible // indirect

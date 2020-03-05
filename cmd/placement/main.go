@@ -11,6 +11,7 @@ import (
 	"os/signal"
 
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/version"
 )
@@ -23,6 +24,9 @@ func main() {
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
+	metricsExporter := metrics.NewDaprMetricExporter()
+	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
 	flag.Parse()
 
 	// Apply options to all loggers
@@ -32,6 +36,10 @@ func main() {
 
 	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
+
+	// Initialize dapr metrics exporter
+	metricsExporter.Init(metrics.DefaultMetricNamespace)
+	metricsExporter.StartMetricServer()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)

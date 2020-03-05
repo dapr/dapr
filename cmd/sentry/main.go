@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/watcher"
@@ -31,6 +32,9 @@ func main() {
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
+	metricsExporter := metrics.NewDaprMetricExporter()
+	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
 	flag.Parse()
 
 	// Apply options to all loggers
@@ -40,6 +44,10 @@ func main() {
 
 	log.Infof("starting sentry certificate authority -- version %s -- commit %s", version.Version(), version.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
+
+	// Initialize dapr metrics exporter
+	metricsExporter.Init(metrics.DefaultMetricNamespace)
+	metricsExporter.StartMetricServer()
 
 	issuerCertPath := filepath.Join(*credsPath, config.IssuerCertFilename)
 	issuerKeyPath := filepath.Join(*credsPath, config.IssuerKeyFilename)
