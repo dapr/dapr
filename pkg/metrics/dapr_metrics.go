@@ -6,7 +6,10 @@ import (
 	"net/http"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
+	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/dapr/dapr/pkg/logger"
+	prom "github.com/prometheus/client_golang/prometheus"
+	"go.opencensus.io/stats/view"
 )
 
 const (
@@ -44,15 +47,25 @@ func (m *DaprMetricExporter) Init(namespace string) {
 		return
 	}
 
-	var err error
 	// TODO: support multiple exporters
-	m.exporter, err = prometheus.NewExporter(prometheus.Options{
-		Namespace: namespace,
+
+	// Add default health metrics for process
+	registry := prom.NewRegistry()
+	registry.MustRegister(prom.NewProcessCollector(prom.ProcessCollectorOpts{}))
+	registry.MustRegister(prom.NewGoCollector())
+
+	var err error
+	m.exporter, err = ocprom.NewExporter(ocprom.Options{
+		Namespace: m.namespace,
+		Registry:  registry,
 	})
 
 	if err != nil {
 		m.logger.Fatalf("Failed to create Prometheus exporter: %v", err)
 	}
+
+	// register exporter to view
+	view.RegisterExporter(m.exporter)
 }
 
 // StartMetricServer starts metrics server
