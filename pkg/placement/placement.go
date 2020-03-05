@@ -15,9 +15,25 @@ import (
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 )
 
 var log = logger.NewLogger("dapr.placement")
+var metricsSource, _ = tag.NewKey("metricsSource")
+
+// MHostsCounter to record the number of hosts
+var MHostsCounter = stats.Int64("dapr.placement/hosts_added", "The number of hosts", "1")
+
+// HostsCountView to create metric view
+var HostsCountView = &view.View{
+	Name:        "dapr.placement/hosts_count",
+	Measure:     MHostsCounter,
+	Description: "The number of hosts",
+	Aggregation: view.Count(),
+}
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
@@ -37,7 +53,7 @@ type placementOptions struct {
 
 // NewPlacementService returns a new placement service
 func NewPlacementService() *Service {
-	return &Service{
+	var s = &Service{
 		entriesLock:       &sync.RWMutex{},
 		entries:           make(map[string]*Consistent),
 		hostsEntitiesLock: &sync.RWMutex{},
@@ -45,11 +61,22 @@ func NewPlacementService() *Service {
 		hostsLock:         &sync.Mutex{},
 		updateLock:        &sync.Mutex{},
 	}
+
+	// Register the metrics views
+	if err := view.Register(HostsCountView); err != nil {
+		log.Fatalf("Failed to register views: %v", err)
+	}
+
+	return s
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts
 func (p *Service) ReportDaprStatus(srv daprinternal_pb.PlacementService_ReportDaprStatusServer) error {
 	ctx := srv.Context()
+	ctx, err := tag.New(ctx, tag.Insert(metricsSource, "dapr.placement"))
+	if err != nil {
+		return err
+	}
 	p.hostsLock.Lock()
 	md, _ := metadata.FromIncomingContext(srv.Context())
 	v := md.Get("id")
@@ -65,6 +92,10 @@ func (p *Service) ReportDaprStatus(srv daprinternal_pb.PlacementService_ReportDa
 	// send the current placements
 	p.PerformTablesUpdate([]daprinternal_pb.PlacementService_ReportDaprStatusServer{srv},
 		placementOptions{incrementGeneration: false})
+
+	defer func() {
+		stats.Record(ctx, MHostsCounter.M(int64(len(p.hosts))))
+	}()
 
 	for {
 		select {
