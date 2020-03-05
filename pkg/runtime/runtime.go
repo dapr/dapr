@@ -458,7 +458,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		resp, err := a.appChannel.InvokeMethod(&req)
-		if err != nil {
+		if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 
@@ -487,7 +487,8 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 		if resp != nil {
 			err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
 			if err != nil {
-				log.Debugf("binding error [%s]: %s", name, err)
+				log.Debugf("error from app consumer for binding [%s]: %s", name, err)
+				return err
 			}
 		}
 		return nil
