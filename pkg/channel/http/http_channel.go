@@ -86,12 +86,17 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 			req.Header.Set(tracing.CorrelationID, corID)
 		}
 	}
+	var span tracing.TracerSpan
+	var spanc tracing.TracerSpan
 
-	span, spanc := tracing.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
-	defer span.Span.End()
-	defer spanc.Span.End()
+	if h.tracingSpec.Enabled {
+		span, spanc = tracing.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
 
-	req.Header.Set(tracing.CorrelationID, tracing.SerializeSpanContext(*spanc.SpanContext))
+		defer span.Span.End()
+		defer spanc.Span.End()
+
+		req.Header.Set(tracing.CorrelationID, tracing.SerializeSpanContext(*spanc.SpanContext))
+	}
 
 	resp := fasthttp.AcquireResponse()
 
@@ -100,6 +105,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 
 	err := h.client.Do(req, resp)
+
 	if h.ch != nil {
 		<-h.ch
 	}
@@ -122,15 +128,17 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
 	}
 
-	spanc.Span.SetStatus(trace.Status{
-		Code:    tracing.ProjectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
-	})
+	if h.tracingSpec.Enabled {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    tracing.ProjectStatusCode(resp.StatusCode()),
+			Message: strconv.Itoa(resp.StatusCode()),
+		})
 
-	span.Span.SetStatus(trace.Status{
-		Code:    tracing.ProjectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
-	})
+		span.Span.SetStatus(trace.Status{
+			Code:    tracing.ProjectStatusCode(resp.StatusCode()),
+			Message: strconv.Itoa(resp.StatusCode()),
+		})
+	}
 
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
