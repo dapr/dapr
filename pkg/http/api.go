@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
@@ -898,7 +899,10 @@ func (a *api) onPublish(c *routing.Context) error {
 	topic := c.Param(topicParam)
 	body := c.PostBody()
 
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
+	corID := c.Request.Header.Peek(tracing.CorrelationID)
+
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, string(corID), body)
+
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER", err.Error())

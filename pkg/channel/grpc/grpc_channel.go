@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
@@ -26,7 +27,7 @@ type Channel struct {
 }
 
 // CreateLocalChannel creates a gRPC connection with user code
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
 	c := &Channel{
 		client:      conn,
 		baseAddress: fmt.Sprintf("127.0.0.1:%v", port),

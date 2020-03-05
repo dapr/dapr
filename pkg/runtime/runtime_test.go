@@ -20,6 +20,7 @@ import (
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -396,9 +397,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	}
 
 	expectedRequest := &channel.InvokeRequest{
-		Method:   testPubSubMessage.Topic,
-		Payload:  testPubSubMessage.Data,
-		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post, http_channel.ContentType: pubsub.ContentType},
+		Method:  testPubSubMessage.Topic,
+		Payload: testPubSubMessage.Data,
+		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post, http_channel.ContentType: pubsub.ContentType,
+			tracing.CorrelationID: ""},
 	}
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)

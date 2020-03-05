@@ -8,11 +8,15 @@ package http
 import (
 	"crypto/tls"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/valyala/fasthttp"
+	"go.opencensus.io/trace"
 )
 
 const (
@@ -42,6 +46,7 @@ type Channel struct {
 	client      *fasthttp.Client
 	baseAddress string
 	ch          chan int
+	tracingSpec config.TracingSpec
 }
 
 func applyContentTypeIfNotPresent(req *fasthttp.Request) {
@@ -76,6 +81,18 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 	req.Header.SetMethod(method)
 
+	if invokeRequest.Metadata != nil {
+		if corID, ok := invokeRequest.Metadata[tracing.CorrelationID]; ok {
+			req.Header.Set(tracing.CorrelationID, corID)
+		}
+	}
+
+	span, spanc := tracing.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
+	defer span.Span.End()
+	defer spanc.Span.End()
+
+	req.Header.Set(tracing.CorrelationID, tracing.SerializeSpanContext(*spanc.SpanContext))
+
 	resp := fasthttp.AcquireResponse()
 
 	if h.ch != nil {
@@ -104,6 +121,17 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	if len(headers) > 0 {
 		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
 	}
+
+	spanc.Span.SetStatus(trace.Status{
+		Code:    tracing.ProjectStatusCode(resp.StatusCode()),
+		Message: strconv.Itoa(resp.StatusCode()),
+	})
+
+	span.Span.SetStatus(trace.Status{
+		Code:    tracing.ProjectStatusCode(resp.StatusCode()),
+		Message: strconv.Itoa(resp.StatusCode()),
+	})
+
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
 
@@ -115,10 +143,11 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 
 // CreateLocalChannel creates an HTTP AppChannel
 // nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec) (channel.AppChannel, error) {
 	c := &Channel{
 		client:      &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}, ReadTimeout: time.Second * 60, MaxIdemponentCallAttempts: 0},
 		baseAddress: fmt.Sprintf("http://127.0.0.1:%v", port),
+		tracingSpec: spec,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)
