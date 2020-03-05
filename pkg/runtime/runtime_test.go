@@ -11,6 +11,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -528,5 +529,84 @@ func TestMTLS(t *testing.T) {
 		err := rt.establishSecurity("test", rt.runtimeConfig.SentryServiceAddress)
 		assert.Nil(t, err)
 		assert.Nil(t, rt.authenticator)
+	})
+}
+
+type mockBinding struct {
+	hasError bool
+	data     string
+}
+
+func (b *mockBinding) Init(metadata bindings.Metadata) error {
+	return nil
+}
+
+func (b *mockBinding) Read(handler func(*bindings.ReadResponse) error) error {
+	b.data = "test"
+
+	err := handler(&bindings.ReadResponse{
+		Metadata: map[string]string{},
+		Data:     []byte(b.data),
+	})
+	b.hasError = err != nil
+	return nil
+}
+
+func TestReadInputBindings(t *testing.T) {
+	t.Run("app acknowledge, no retry", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
+			Data:     []byte("OK"),
+		}
+
+		mockAppChannel.On("InvokeMethod", &channel.InvokeRequest{Method: "test", Payload: []byte("test"), Metadata: map[string]string{}}).Return(fakeHTTPResponse, nil)
+		rt.appChannel = mockAppChannel
+
+		b := mockBinding{}
+		rt.readFromBinding("test", &b)
+
+		assert.False(t, b.hasError)
+	})
+
+	t.Run("app returns error", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "500"},
+			Data:     []byte("OK"),
+		}
+
+		mockAppChannel.On("InvokeMethod", &channel.InvokeRequest{Method: "test", Payload: []byte("test"), Metadata: map[string]string{}}).Return(fakeHTTPResponse, nil)
+		rt.appChannel = mockAppChannel
+
+		b := mockBinding{}
+		rt.readFromBinding("test", &b)
+
+		assert.True(t, b.hasError)
+	})
+
+	t.Run("binding has data", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
+			Data:     []byte("OK"),
+		}
+
+		mockAppChannel.On("InvokeMethod", &channel.InvokeRequest{Method: "test", Payload: []byte("test"), Metadata: map[string]string{}}).Return(fakeHTTPResponse, nil)
+		rt.appChannel = mockAppChannel
+
+		b := mockBinding{}
+		rt.readFromBinding("test", &b)
+
+		assert.Equal(t, "test", b.data)
 	})
 }
