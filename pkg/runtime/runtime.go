@@ -41,6 +41,7 @@ import (
 	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
@@ -90,6 +91,7 @@ type DaprRuntime struct {
 	actorStateStoreName      string
 	actorStateStoreCount     int
 	authenticator            security.Authenticator
+	namespace                string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -140,11 +142,16 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	return nil
 }
 
+func (a *DaprRuntime) getNamespace() string {
+	return os.Getenv("NAMESPACE")
+}
+
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	err := a.establishSecurity(a.runtimeConfig.ID, a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
 		return err
 	}
+	a.namespace = a.getNamespace()
 
 	err = a.loadComponents(opts)
 	if err != nil {
@@ -289,7 +296,7 @@ func (a *DaprRuntime) beginReadInputBindings() error {
 func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(
 		a.runtimeConfig.ID,
-		os.Getenv("NAMESPACE"),
+		a.namespace,
 		a.runtimeConfig.GRPCPort,
 		a.runtimeConfig.Mode,
 		a.appChannel,
@@ -337,7 +344,7 @@ func (a *DaprRuntime) OnComponentUpdated(component components_v1alpha1.Component
 		//TODO: implement update for input bindings too
 		binding, err := a.bindingsRegistry.CreateOutputBinding(component.Spec.Type)
 		if err != nil {
-			log.Errorf("Failed to create output binding: %s", err)
+			log.Errorf("failed to create output binding: %s", err)
 			return
 		}
 
@@ -774,11 +781,19 @@ func (a *DaprRuntime) initServiceDiscovery() error {
 }
 
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
+	subject := ""
+	var cloudEvent pubsub.CloudEventsEnvelope
+	err := a.json.Unmarshal(msg.Data, &cloudEvent)
+	if err == nil {
+		subject = cloudEvent.Subject
+	}
+
 	req := channel.InvokeRequest{
 		Method:  msg.Topic,
 		Payload: msg.Data,
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post,
-			http_channel.ContentType: pubsub.ContentType},
+			http_channel.ContentType: pubsub.ContentType,
+			tracing.CorrelationID:    subject},
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
@@ -838,6 +853,31 @@ func (a *DaprRuntime) initActors() error {
 	return err
 }
 
+func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {
+	authorized := []components_v1alpha1.Component{}
+
+	for _, c := range components {
+		if a.namespace == "" || (a.namespace != "" && c.ObjectMeta.Namespace == a.namespace) {
+			// scopes are defined, make sure this runtime ID is authorized
+			if len(c.Scopes) > 0 {
+				found := false
+				for _, s := range c.Scopes {
+					if s == a.runtimeConfig.ID {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					continue
+				}
+			}
+			authorized = append(authorized, c)
+		}
+	}
+	return authorized
+}
+
 func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	var loader components.ComponentLoader
 
@@ -854,7 +894,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	if err != nil {
 		return err
 	}
-	a.components = comps
+	a.components = a.getAuthorizedComponents(comps)
 
 	// Register and initialize secret stores
 	a.secretStoresRegistry.Register(opts.secretStores...)
@@ -1012,7 +1052,7 @@ func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) 
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -1023,7 +1063,7 @@ func (a *DaprRuntime) createAppChannel() error {
 			return fmt.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec)
 		if err != nil {
 			return err
 		}

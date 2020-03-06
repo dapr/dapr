@@ -19,6 +19,7 @@ import (
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/components"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
@@ -161,7 +162,12 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 		body = in.Data.Value
 	}
 
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
+	corID, ok := ctx.Value(tracing.CorrelationID).(string)
+	if !ok {
+		corID = ""
+	}
+
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)

@@ -28,8 +28,8 @@ import (
 type key string
 
 const (
-	correlationID      = "X-Correlation-ID"
-	correlationKey key = correlationID
+	CorrelationID      = "X-Correlation-ID"
+	correlationKey key = CorrelationID
 )
 
 // TracerSpan defines a tracing span that a tracer users to keep track of call scopes
@@ -67,6 +67,30 @@ func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 	return context
 }
 
+// TraceSpanFromFastHTTPContext creates a tracing span form a fasthttp request
+func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) (TracerSpan, TracerSpan) {
+	var ctx context.Context
+	var span *trace.Span
+	var ctxc context.Context
+	var spanc *trace.Span
+
+	corID := string(r.Header.Peek(CorrelationID))
+	if corID != "" {
+		spanContext := DeserializeSpanContext(corID)
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(r.RequestURI()), spanContext, trace.WithSpanKind(trace.SpanKindServer))
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(r.RequestURI())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
+	} else {
+		ctx, span = trace.StartSpan(context.Background(), string(r.RequestURI()), trace.WithSpanKind(trace.SpanKindServer))
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(r.RequestURI())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	addAnnotations(r, span, spec.ExpandParams, spec.IncludeBody)
+
+	context := span.SpanContext()
+	contextc := spanc.SpanContext()
+	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
+}
+
 // TraceSpanFromFastHTTPContext creates a tracing span form a fasthttp request context
 func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) (TracerSpan, TracerSpan) {
 	var ctx context.Context
@@ -74,7 +98,7 @@ func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpe
 	var ctxc context.Context
 	var spanc *trace.Span
 
-	corID := string(c.Request.Header.Peek(correlationID))
+	corID := string(c.Request.Header.Peek(CorrelationID))
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
 		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(c.Path()), spanContext, trace.WithSpanKind(trace.SpanKindServer))
@@ -84,24 +108,24 @@ func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpe
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
-	addAnnotations(c, span, spec.ExpandParams, spec.IncludeBody)
+	addAnnotations(&c.Request, span, spec.ExpandParams, spec.IncludeBody)
 
 	context := span.SpanContext()
 	contextc := spanc.SpanContext()
 	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
 }
 
-func addAnnotations(ctx *fasthttp.RequestCtx, span *trace.Span, expandParams bool, includeBody bool) {
+func addAnnotations(req *fasthttp.Request, span *trace.Span, expandParams bool, includeBody bool) {
 	if expandParams {
-		ctx.VisitUserValues(func(key []byte, value interface{}) {
-			span.AddAttributes(trace.StringAttribute(string(key), value.(string)))
-		})
-		ctx.Request.Header.VisitAll(func(key []byte, value []byte) {
+		//ctx.VisitUserValues(func(key []byte, value interface{}) {
+		//	span.AddAttributes(trace.StringAttribute(string(key), value.(string)))
+		//})
+		req.Header.VisitAll(func(key []byte, value []byte) {
 			span.AddAttributes(trace.StringAttribute(string(key), string(value)))
 		})
 	}
 	if includeBody {
-		span.AddAttributes(trace.StringAttribute("data", string(ctx.PostBody())))
+		span.AddAttributes(trace.StringAttribute("data", string(req.Body())))
 	}
 }
 
@@ -111,16 +135,9 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 		span, spanc := TraceSpanFromFastHTTPContext(ctx, spec)
 		defer span.Span.End()
 		defer spanc.Span.End()
-		ctx.Request.Header.Set(correlationID, SerializeSpanContext(*spanc.SpanContext))
+		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(*spanc.SpanContext))
 		next(ctx)
-		spanc.Span.SetStatus(trace.Status{
-			Code:    projectStatusCode(ctx.Response.StatusCode()),
-			Message: strconv.Itoa(ctx.Response.StatusCode()),
-		})
-		span.Span.SetStatus(trace.Status{
-			Code:    projectStatusCode(ctx.Response.StatusCode()),
-			Message: strconv.Itoa(ctx.Response.StatusCode()),
-		})
+		UpdateSpanPairStatusesFromHTTPResponse(span, spanc, &ctx.Response)
 	}
 }
 
@@ -133,26 +150,43 @@ func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc_go.StreamServerIn
 		defer span.Span.End()
 		defer spanc.Span.End()
 		err := handler(srv, wrappedStream)
-		if err != nil {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-		} else {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-		}
+		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
 		return err
+	}
+}
+
+// UpdateSpanPairStatuses updates tracer span statuses based on HTTP response
+func UpdateSpanPairStatusesFromHTTPResponse(span, spanc TracerSpan, resp *fasthttp.Response) {
+	spanc.Span.SetStatus(trace.Status{
+		Code:    ProjectStatusCode(resp.StatusCode()),
+		Message: strconv.Itoa(resp.StatusCode()),
+	})
+	span.Span.SetStatus(trace.Status{
+		Code:    ProjectStatusCode(resp.StatusCode()),
+		Message: strconv.Itoa(resp.StatusCode()),
+	})
+}
+
+// UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
+func UpdateSpanPairStatusesFromError(span, spanc TracerSpan, err error, method string) {
+	if err != nil {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeInternal,
+			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
+		})
+		span.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeInternal,
+			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
+		})
+	} else {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeOK,
+			Message: fmt.Sprintf("method %s succeeded", method),
+		})
+		span.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeOK,
+			Message: fmt.Sprintf("method %s succeeded", method),
+		})
 	}
 }
 
@@ -164,25 +198,7 @@ func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInte
 		defer spanc.Span.End()
 		newCtx := context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
 		resp, err := handler(newCtx, req)
-		if err != nil {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-		} else {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-		}
+		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
 		return resp, err
 	}
 }
@@ -231,7 +247,7 @@ func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bo
 	//}
 }
 
-func projectStatusCode(code int) int32 {
+func ProjectStatusCode(code int) int32 {
 	switch code {
 	case 200:
 		return trace.StatusCodeOK
