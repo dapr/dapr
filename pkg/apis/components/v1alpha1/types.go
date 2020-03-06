@@ -22,6 +22,8 @@ type Component struct {
 	Spec ComponentSpec `json:"spec,omitempty"`
 	// +optional
 	Auth `json:"auth,omitempty"`
+	// +optional
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // ComponentSpec is the spec for a component
