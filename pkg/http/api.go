@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -41,11 +42,13 @@ type api struct {
 	pubSub                pubsub.PubSub
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
+	extendedMetadata      sync.Map
 }
 
 type metadata struct {
-	ID                string                     `json:"id"`
-	ActiveActorsCount []actors.ActiveActorsCount `json:"actors"`
+	ID                string                      `json:"id"`
+	ActiveActorsCount []actors.ActiveActorsCount  `json:"actors"`
+	Extended          map[interface{}]interface{} `json:"extended"`
 }
 
 const (
@@ -236,6 +239,12 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Route:   "metadata",
 			Version: apiVersionV1,
 			Handler: a.onGetMetadata,
+		},
+		{
+			Methods: []string{http.Put},
+			Route:   "metadata/<key>",
+			Version: apiVersionV1,
+			Handler: a.onPutMetadata,
 		},
 	}
 }
@@ -873,9 +882,18 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 }
 
 func (a *api) onGetMetadata(c *routing.Context) error {
+	temp := make(map[interface{}]interface{})
+
+	// Copy synchronously so it can be serialized to JSON.
+	a.extendedMetadata.Range(func(key, value interface{}) bool {
+		temp[key] = value
+		return true
+	})
+
 	mtd := metadata{
 		ID:                a.id,
 		ActiveActorsCount: a.actor.GetActiveActorsCount(),
+		Extended:          temp,
 	}
 
 	mtdBytes, err := a.json.Marshal(mtd)
@@ -886,6 +904,14 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 		respondWithJSON(c.RequestCtx, 200, mtdBytes)
 	}
 
+	return nil
+}
+
+func (a *api) onPutMetadata(c *routing.Context) error {
+	key := c.Param("key")
+	body := c.PostBody()
+	a.extendedMetadata.Store(key, string(body))
+	respondEmpty(c.RequestCtx, 200)
 	return nil
 }
 

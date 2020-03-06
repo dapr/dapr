@@ -212,14 +212,14 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
-	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
-	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
-
 	err = a.startGRPCServer(a.runtimeConfig.GRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start gRPC server: %s", err)
 	}
 	log.Infof("gRPC server is running on port %v", a.runtimeConfig.GRPCPort)
+
+	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
+	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	if a.runtimeConfig.EnableMetrics {
 		a.startMetricsServer()
