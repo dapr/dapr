@@ -17,8 +17,8 @@ const (
 	defaultMetricsPath     = "/"
 )
 
-// MetricsExporter is the interface for metrics exporters
-type MetricsExporter interface {
+// Exporter is the interface for metrics exporters
+type Exporter interface {
 	// Options returns Exporter options
 	Options() *Options
 	// Init intializes metrics exporter
@@ -26,7 +26,7 @@ type MetricsExporter interface {
 }
 
 // NewExporter creates new MetricsExporter instance
-func NewExporter(namespace string) MetricsExporter {
+func NewExporter(namespace string) Exporter {
 	// TODO: support multiple exporters
 	return &promMetricsExporter{
 		nil,
