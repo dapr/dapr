@@ -32,7 +32,6 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasthttp v1.6.0
-	go.etcd.io/etcd v3.3.17+incompatible
 	go.opencensus.io v0.22.3
 	google.golang.org/grpc v1.26.0
 	gopkg.in/yaml.v2 v2.2.7
