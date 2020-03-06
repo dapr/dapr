@@ -13,6 +13,12 @@ spec:
     metadata:
       labels:
         app: dapr-operator
+{{- if eq .Values.global.prometheus.enabled true }}
+      annotations:
+        prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
+        prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+        prometheus.io/path: "/"
+{{- end }}
     spec:
       containers:
       - name: dapr-operator
@@ -36,6 +42,11 @@ spec:
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
+{{- end }}
+{{- if eq .Values.global.prometheus.enabled false }}
+        - "--enable-metrics=false"
+        - "--metrics-port"
+        - "{{ .Values.global.prometheus.port }}"
 {{- end }}
       serviceAccountName: dapr-operator
 {{- if .Values.global.imagePullSecrets }}
