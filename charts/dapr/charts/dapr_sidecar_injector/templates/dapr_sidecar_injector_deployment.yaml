@@ -65,6 +65,11 @@ spec:
         - name: https
           containerPort: 4000
           protocol: TCP
+{{- if eq .Values.global.prometheus.enabled true }}
+        - name: metrics
+          containerPort: {{ .Values.global.prometheus.port }}
+          protocol: TCP
+{{- end }}
         volumeMounts:
         - name: cert
           mountPath: /dapr/cert

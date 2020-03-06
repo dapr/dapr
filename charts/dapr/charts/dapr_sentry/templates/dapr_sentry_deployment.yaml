@@ -46,6 +46,11 @@ spec:
               fieldPath: metadata.namespace
         ports:
         - containerPort: 50001
+{{- if eq .Values.global.prometheus.enabled true }}
+        - name: metrics
+          containerPort: {{ .Values.global.prometheus.port }}
+          protocol: TCP
+{{- end }}
         volumeMounts:
           - name: credentials
             mountPath: /var/run/dapr/credentials

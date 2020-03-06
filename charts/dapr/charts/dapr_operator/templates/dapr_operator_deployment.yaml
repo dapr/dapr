@@ -35,6 +35,11 @@ spec:
               fieldPath: metadata.namespace
         ports:
         - containerPort: 6500
+{{- if eq .Values.global.prometheus.enabled true }}
+        - name: metrics
+          containerPort: {{ .Values.global.prometheus.port }}
+          protocol: TCP
+{{- end }}
         command:
         - "./operator"
         args:
