@@ -91,6 +91,7 @@ type DaprRuntime struct {
 	actorStateStoreName      string
 	actorStateStoreCount     int
 	authenticator            security.Authenticator
+	namespace                string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -141,11 +142,16 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	return nil
 }
 
+func (a *DaprRuntime) getNamespace() string {
+	return os.Getenv("NAMESPACE")
+}
+
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	err := a.establishSecurity(a.runtimeConfig.ID, a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
 		return err
 	}
+	a.namespace = a.getNamespace()
 
 	err = a.loadComponents(opts)
 	if err != nil {
@@ -290,7 +296,7 @@ func (a *DaprRuntime) beginReadInputBindings() error {
 func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(
 		a.runtimeConfig.ID,
-		os.Getenv("NAMESPACE"),
+		a.namespace,
 		a.runtimeConfig.GRPCPort,
 		a.runtimeConfig.Mode,
 		a.appChannel,
@@ -338,7 +344,7 @@ func (a *DaprRuntime) OnComponentUpdated(component components_v1alpha1.Component
 		//TODO: implement update for input bindings too
 		binding, err := a.bindingsRegistry.CreateOutputBinding(component.Spec.Type)
 		if err != nil {
-			log.Errorf("Failed to create output binding: %s", err)
+			log.Errorf("failed to create output binding: %s", err)
 			return
 		}
 
@@ -847,6 +853,31 @@ func (a *DaprRuntime) initActors() error {
 	return err
 }
 
+func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {
+	authorized := []components_v1alpha1.Component{}
+
+	for _, c := range components {
+		if a.namespace == "" || (a.namespace != "" && c.ObjectMeta.Namespace == a.namespace) {
+			// scopes are defined, make sure this runtime ID is authorized
+			if len(c.Scopes) > 0 {
+				found := false
+				for _, s := range c.Scopes {
+					if s == a.runtimeConfig.ID {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					continue
+				}
+			}
+			authorized = append(authorized, c)
+		}
+	}
+	return authorized
+}
+
 func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	var loader components.ComponentLoader
 
@@ -863,7 +894,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	if err != nil {
 		return err
 	}
-	a.components = comps
+	a.components = a.getAuthorizedComponents(comps)
 
 	// Register and initialize secret stores
 	a.secretStoresRegistry.Register(opts.secretStores...)
