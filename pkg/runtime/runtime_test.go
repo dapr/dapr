@@ -610,3 +610,110 @@ func TestReadInputBindings(t *testing.T) {
 		assert.Equal(t, "test", b.data)
 	})
 }
+
+func TestNamespace(t *testing.T) {
+	t.Run("empty namespace", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		ns := rt.getNamespce()
+
+		assert.Empty(t, ns)
+	})
+
+	t.Run("non-empty namespace", func(t *testing.T) {
+		os.Setenv("NAMESPACE", "a")
+		defer os.Clearenv()
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		ns := rt.getNamespce()
+
+		assert.Equal(t, "a", ns)
+	})
+}
+
+func TestAuthorizedComponents(t *testing.T) {
+	t.Run("standalone mode, no namespce", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = "test"
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 1)
+		assert.Equal(t, "test", comps[0].Name)
+	})
+
+	t.Run("namespace mismatch", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Namespace = "b"
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("namespace match", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Namespace = "a"
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 1)
+	})
+
+	t.Run("in scope, namespace match", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Namespace = "a"
+		component.Scopes = []string{TestRuntimeConfigID}
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 1)
+	})
+
+	t.Run("not in scope, namespace match", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Namespace = "a"
+		component.Scopes = []string{"other"}
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("in scope, namespace mismatch", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Namespace = "b"
+		component.Scopes = []string{TestRuntimeConfigID}
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+
+	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.namespace = "a"
+
+		component := components_v1alpha1.Component{}
+		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Namespace = "b"
+		component.Scopes = []string{"other"}
+
+		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
+		assert.True(t, len(comps) == 0)
+	})
+}
