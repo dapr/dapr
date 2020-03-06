@@ -36,7 +36,6 @@ require (
 	github.com/tidwall/pretty v1.0.1 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20200122045848-3419fae592fc // indirect
 	github.com/valyala/fasthttp v1.6.0
-	go.etcd.io/etcd v3.3.17+incompatible
 	go.opencensus.io v0.22.3
 	google.golang.org/grpc v1.26.0
 	gopkg.in/couchbase/gocbcore.v7 v7.1.16 // indirect

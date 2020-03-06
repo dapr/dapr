@@ -13,6 +13,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
+	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/golang/protobuf/ptypes"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -138,6 +139,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		return nil, err
 	}
 
+	monitoring.CSRRecieved()
 	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, -1, false)
 	if err != nil {
 		err = fmt.Errorf("error signing csr: %s", err)
@@ -168,6 +170,9 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		TrustChainCertificates: [][]byte{issuerCert, rootCert},
 		ValidUntil:             expiry,
 	}
+
+	monitoring.CertIssueSuceeed()
+
 	return resp, nil
 }
 
@@ -180,6 +185,8 @@ func needsRefresh(cert *tls.Certificate, expiryBuffer time.Duration) bool {
 	if leaf == nil {
 		return true
 	}
+
+	monitoring.RootCertExpiry(leaf.NotAfter)
 
 	// Check if the leaf certificate is about to expire.
 	return leaf.NotAfter.Add(-serverCertExpiryBuffer).Before(time.Now().UTC())
