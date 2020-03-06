@@ -631,14 +631,16 @@ func TestNamespace(t *testing.T) {
 }
 
 func TestAuthorizedComponents(t *testing.T) {
+	name := "test"
+
 	t.Run("standalone mode, no namespce", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Name = name
 
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
 		assert.True(t, len(comps) == 1)
-		assert.Equal(t, "test", comps[0].Name)
+		assert.Equal(t, name, comps[0].Name)
 	})
 
 	t.Run("namespace mismatch", func(t *testing.T) {
@@ -658,7 +660,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Name = name
 		component.ObjectMeta.Namespace = "a"
 
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
@@ -670,7 +672,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Name = name
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{TestRuntimeConfigID}
 
@@ -683,7 +685,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Name = name
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{"other"}
 
@@ -696,7 +698,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Name = name
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{TestRuntimeConfigID}
 
@@ -709,7 +711,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Name = name
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
 

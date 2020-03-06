@@ -1032,8 +1032,6 @@ k8s.io/code-generator v0.0.0-20190912042602-ebc0eb3a5c23 h1:2oyDSO/D/4/bch5ZhL+s
 k8s.io/code-generator v0.0.0-20190912042602-ebc0eb3a5c23/go.mod h1:V5BD6M4CyaN5m+VthcclXWsVcT1Hu+glwa1bi3MIsyE=
 k8s.io/code-generator v0.17.3 h1:q/hDMk2cvFzSxol7k/VA1qCssR7VSMXHQHhzuX29VJ8=
 k8s.io/code-generator v0.17.3/go.mod h1:l8BLVwASXQZTo2xamW5mQNFCe1XPiAesVq7Y1t7PiQQ=
-k8s.io/code-generator v0.19.0-alpha.0.0.20200306081859-6a048a382944 h1:hJe2cBG1eCroWcaCCP7HZLRix/BjH41mPOK1aeTcEm0=
-k8s.io/code-generator v0.19.0-alpha.0.0.20200306081859-6a048a382944/go.mod h1:+UHX5rSbxmR8kzS+FAv7um6dtYrZokQvjHpDSYRVkTc=
 k8s.io/gengo v0.0.0-20190128074634-0689ccc1d7d6/go.mod h1:ezvh/TsK7cY6rbqRK0oQQ8IAqLxYwwyPxAX1Pzy0ii0=
 k8s.io/gengo v0.0.0-20190822140433-26a664648505 h1:ZY6yclUKVbZ+SdWnkfY+Je5vrMpKOxmGeKRbsXVmqYM=
 k8s.io/gengo v0.0.0-20190822140433-26a664648505/go.mod h1:ezvh/TsK7cY6rbqRK0oQQ8IAqLxYwwyPxAX1Pzy0ii0=
