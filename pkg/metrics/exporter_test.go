@@ -21,12 +21,12 @@ func TestMetricsExporter(t *testing.T) {
 
 	t.Run("return error if exporter is not initialized", func(t *testing.T) {
 		e := &promMetricsExporter{
-			nil,
 			&exporter{
 				namespace: "test",
 				options:   defaultMetricOptions(),
 				logger:    logger.NewLogger("dapr.metrics"),
 			},
+			nil,
 		}
 		assert.Error(t, e.startMetricServer())
 	})

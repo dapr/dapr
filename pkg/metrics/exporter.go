@@ -19,22 +19,22 @@ const (
 
 // Exporter is the interface for metrics exporters
 type Exporter interface {
-	// Options returns Exporter options
-	Options() *Options
 	// Init intializes metrics exporter
 	Init() error
+	// Options returns Exporter options
+	Options() *Options
 }
 
 // NewExporter creates new MetricsExporter instance
 func NewExporter(namespace string) Exporter {
 	// TODO: support multiple exporters
 	return &promMetricsExporter{
-		nil,
 		&exporter{
 			namespace: namespace,
 			options:   defaultMetricOptions(),
 			logger:    logger.NewLogger("dapr.metrics"),
 		},
+		nil,
 	}
 }
 
@@ -52,8 +52,8 @@ func (m *exporter) Options() *Options {
 
 // promMetricsExporter is prometheus metric exporter
 type promMetricsExporter struct {
-	ocExporter *ocprom.Exporter
 	*exporter
+	ocExporter *ocprom.Exporter
 }
 
 // Init initializes opencensus exporter
@@ -84,7 +84,7 @@ func (m *promMetricsExporter) Init() error {
 	return m.startMetricServer()
 }
 
-// StartMetricServer starts metrics server
+// startMetricServer starts metrics server
 func (m *promMetricsExporter) startMetricServer() error {
 	if !m.exporter.Options().MetricsEnabled {
 		// skip if metrics is not enabled
