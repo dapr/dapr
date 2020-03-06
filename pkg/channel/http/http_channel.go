@@ -8,7 +8,6 @@ package http
 import (
 	"crypto/tls"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
 )
 
 const (
@@ -86,6 +84,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 			req.Header.Set(tracing.CorrelationID, corID)
 		}
 	}
+
 	var span tracing.TracerSpan
 	var spanc tracing.TracerSpan
 
@@ -129,15 +128,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 
 	if h.tracingSpec.Enabled {
-		spanc.Span.SetStatus(trace.Status{
-			Code:    tracing.ProjectStatusCode(resp.StatusCode()),
-			Message: strconv.Itoa(resp.StatusCode()),
-		})
-
-		span.Span.SetStatus(trace.Status{
-			Code:    tracing.ProjectStatusCode(resp.StatusCode()),
-			Message: strconv.Itoa(resp.StatusCode()),
-		})
+		tracing.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, *resp)
 	}
 
 	fasthttp.ReleaseRequest(req)

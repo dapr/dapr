@@ -137,14 +137,7 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 		defer spanc.Span.End()
 		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(*spanc.SpanContext))
 		next(ctx)
-		spanc.Span.SetStatus(trace.Status{
-			Code:    ProjectStatusCode(ctx.Response.StatusCode()),
-			Message: strconv.Itoa(ctx.Response.StatusCode()),
-		})
-		span.Span.SetStatus(trace.Status{
-			Code:    ProjectStatusCode(ctx.Response.StatusCode()),
-			Message: strconv.Itoa(ctx.Response.StatusCode()),
-		})
+		UpdateSpanPairStatusesFromHTTPResponse(span, spanc, ctx.Response)
 	}
 }
 
@@ -157,26 +150,43 @@ func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc_go.StreamServerIn
 		defer span.Span.End()
 		defer spanc.Span.End()
 		err := handler(srv, wrappedStream)
-		if err != nil {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-		} else {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-		}
+		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
 		return err
+	}
+}
+
+// UpdateSpanPairStatuses updates tracer span statuses based on HTTP response
+func UpdateSpanPairStatusesFromHTTPResponse(span, spanc TracerSpan, resp fasthttp.Response) {
+	spanc.Span.SetStatus(trace.Status{
+		Code:    ProjectStatusCode(resp.StatusCode()),
+		Message: strconv.Itoa(resp.StatusCode()),
+	})
+	span.Span.SetStatus(trace.Status{
+		Code:    ProjectStatusCode(resp.StatusCode()),
+		Message: strconv.Itoa(resp.StatusCode()),
+	})
+}
+
+// UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
+func UpdateSpanPairStatusesFromError(span, spanc TracerSpan, err error, method string) {
+	if err != nil {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeInternal,
+			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
+		})
+		span.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeInternal,
+			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
+		})
+	} else {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeOK,
+			Message: fmt.Sprintf("method %s succeeded", method),
+		})
+		span.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeOK,
+			Message: fmt.Sprintf("method %s succeeded", method),
+		})
 	}
 }
 
@@ -188,25 +198,7 @@ func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInte
 		defer spanc.Span.End()
 		newCtx := context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
 		resp, err := handler(newCtx, req)
-		if err != nil {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-		} else {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-		}
+		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
 		return resp, err
 	}
 }

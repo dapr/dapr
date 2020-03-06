@@ -14,6 +14,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
@@ -24,6 +25,7 @@ type Channel struct {
 	client      *grpc.ClientConn
 	baseAddress string
 	ch          chan int
+	tracingSpec config.TracingSpec
 }
 
 // CreateLocalChannel creates a gRPC connection with user code
@@ -31,6 +33,7 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	c := &Channel{
 		client:      conn,
 		baseAddress: fmt.Sprintf("127.0.0.1:%v", port),
+		tracingSpec: spec,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)
@@ -62,7 +65,23 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 		g.ch <- 1
 	}
 	c := daprclient_pb.NewDaprClientClient(g.client)
+
+	var span tracing.TracerSpan
+	var spanc tracing.TracerSpan
+
+	if g.tracingSpec.Enabled {
+		span, spanc := tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
+
+		defer span.Span.End()
+		defer spanc.Span.End()
+	}
+
 	resp, err := c.OnInvoke(ctx, &msg)
+
+	if g.tracingSpec.Enabled {
+		tracing.UpdateSpanPairStatusesFromError(span, spanc, err, req.Method)
+	}
+
 	if g.ch != nil {
 		<-g.ch
 	}
