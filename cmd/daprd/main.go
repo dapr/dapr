@@ -19,7 +19,9 @@ import (
 
 	// Secret stores
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
+	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
 	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -115,6 +117,12 @@ func main() {
 			}),
 			secretstores_loader.New("hashicorp.vault", func() secretstores.SecretStore {
 				return vault.NewHashiCorpVaultSecretStore(logContrib)
+			}),
+			secretstores_loader.New("aws.secretmanager", func() secretstores.SecretStore {
+				return secretmanager.NewSecretManager(logContrib)
+			}),
+			secretstores_loader.New("gcp.secretmanager", func() secretstores.SecretStore {
+				return gcp_secretmanager.NewSecreteManager(logContrib)
 			}),
 		),
 		runtime.WithStates(
