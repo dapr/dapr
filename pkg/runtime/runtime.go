@@ -141,7 +141,7 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	return nil
 }
 
-func (a *DaprRuntime) getNamespce() string {
+func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
@@ -150,7 +150,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		return err
 	}
-	a.namespace = a.getNamespce()
+	a.namespace = a.getNamespace()
 
 	err = a.loadComponents(opts)
 	if err != nil {

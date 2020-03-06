@@ -614,7 +614,7 @@ func TestReadInputBindings(t *testing.T) {
 func TestNamespace(t *testing.T) {
 	t.Run("empty namespace", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		ns := rt.getNamespce()
+		ns := rt.getNamespace()
 
 		assert.Empty(t, ns)
 	})
@@ -624,7 +624,7 @@ func TestNamespace(t *testing.T) {
 		defer os.Clearenv()
 
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		ns := rt.getNamespce()
+		ns := rt.getNamespace()
 
 		assert.Equal(t, "a", ns)
 	})
