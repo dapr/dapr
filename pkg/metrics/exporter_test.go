@@ -8,32 +8,33 @@ package metrics
 import (
 	"testing"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMetricsExporter(t *testing.T) {
 	t.Run("returns default options", func(t *testing.T) {
-		e := NewDaprMetricExporter()
+		e := NewExporter("test")
 		op := e.Options()
 		assert.Equal(t, defaultMetricOptions(), op)
 	})
 
 	t.Run("return error if exporter is not initialized", func(t *testing.T) {
-		e := NewDaprMetricExporter()
-		assert.Error(t, e.StartMetricServer())
-	})
-
-	t.Run("return error if exporter is not initialized", func(t *testing.T) {
-		e := NewDaprMetricExporter()
-		assert.Error(t, e.StartMetricServer())
+		e := &promMetricsExporter{
+			nil,
+			&exporter{
+				namespace: "test",
+				options:   defaultMetricOptions(),
+				logger:    logger.NewLogger("dapr.metrics"),
+			},
+		}
+		assert.Error(t, e.startMetricServer())
 	})
 
 	t.Run("skip starting metric server", func(t *testing.T) {
-		e := NewDaprMetricExporter()
+		e := NewExporter("test")
 		e.Options().MetricsEnabled = false
-		e.Init("test")
-		assert.Equal(t, "test", e.namespace)
-		assert.Nil(t, e.exporter)
-		assert.NoError(t, e.StartMetricServer())
+		err := e.Init()
+		assert.NoError(t, err)
 	})
 }

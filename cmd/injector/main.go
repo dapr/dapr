@@ -44,7 +44,7 @@ func init() {
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
-	metricsExporter := metrics.NewDaprMetricExporter()
+	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
@@ -57,6 +57,7 @@ func init() {
 	}
 
 	// Initialize dapr metrics exporter
-	metricsExporter.Init(metrics.DefaultMetricNamespace)
-	metricsExporter.StartMetricServer()
+	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
+	}
 }
