@@ -12,7 +12,6 @@ require (
 	github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
-	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/mock v1.4.0
 	github.com/golang/protobuf v1.3.3
 	github.com/google/uuid v1.1.1
@@ -35,8 +34,6 @@ require (
 	github.com/valyala/fasthttp v1.6.0
 	go.opencensus.io v0.22.3
 	google.golang.org/grpc v1.26.0
-	gopkg.in/couchbase/gocbcore.v7 v7.1.16 // indirect
-	gopkg.in/couchbaselabs/gojcbmock.v1 v1.0.4 // indirect
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.17.0
 	k8s.io/apimachinery v0.17.0
