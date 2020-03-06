@@ -12,6 +12,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
@@ -53,6 +54,9 @@ func init() {
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
+	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
+	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
 	flag.Parse()
 
 	// Apply options to all loggers
@@ -60,5 +64,10 @@ func init() {
 		log.Fatal(err)
 	} else {
 		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
+	}
+
+	// Initialize dapr metrics exporter
+	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
 	}
 }
