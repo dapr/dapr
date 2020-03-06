@@ -41,6 +41,7 @@ import (
 	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
@@ -780,11 +781,19 @@ func (a *DaprRuntime) initServiceDiscovery() error {
 }
 
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
+	subject := ""
+	var cloudEvent pubsub.CloudEventsEnvelope
+	err := a.json.Unmarshal(msg.Data, &cloudEvent)
+	if err == nil {
+		subject = cloudEvent.Subject
+	}
+
 	req := channel.InvokeRequest{
 		Method:  msg.Topic,
 		Payload: msg.Data,
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post,
-			http_channel.ContentType: pubsub.ContentType},
+			http_channel.ContentType: pubsub.ContentType,
+			tracing.CorrelationID:    subject},
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
@@ -1043,7 +1052,7 @@ func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) 
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -1054,7 +1063,7 @@ func (a *DaprRuntime) createAppChannel() error {
 			return fmt.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec)
 		if err != nil {
 			return err
 		}
