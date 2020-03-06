@@ -4,3 +4,6 @@ global:
   logAsJson: false
   imagePullPolicy: Always
   imagePullSecrets: ""
+  prometheus:
+    enabled: true
+    port: 9090
