@@ -61,7 +61,7 @@ func (m *DaprMetricExporter) Init(namespace string) {
 	})
 
 	if err != nil {
-		m.logger.Fatalf("Failed to create Prometheus exporter: %v", err)
+		m.logger.Fatalf("failed to create Prometheus exporter: %v", err)
 	}
 
 	// register exporter to view
@@ -87,7 +87,7 @@ func (m *DaprMetricExporter) StartMetricServer() error {
 		mux.Handle(defaultMetricsPath, m.exporter)
 
 		if err := http.ListenAndServe(addr, mux); err != nil {
-			m.logger.Fatalf("Failed to start metrics server: %v", err)
+			m.logger.Fatalf("failed to start metrics server: %v", err)
 		}
 	}()
 
