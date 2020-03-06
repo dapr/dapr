@@ -70,7 +70,7 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 	var spanc tracing.TracerSpan
 
 	if g.tracingSpec.Enabled {
-		span, spanc := tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
+		span, spanc = tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
 
 		defer span.Span.End()
 		defer spanc.Span.End()

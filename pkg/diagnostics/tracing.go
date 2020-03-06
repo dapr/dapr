@@ -137,7 +137,7 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 		defer spanc.Span.End()
 		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(*spanc.SpanContext))
 		next(ctx)
-		UpdateSpanPairStatusesFromHTTPResponse(span, spanc, ctx.Response)
+		UpdateSpanPairStatusesFromHTTPResponse(span, spanc, &ctx.Response)
 	}
 }
 
@@ -156,7 +156,7 @@ func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc_go.StreamServerIn
 }
 
 // UpdateSpanPairStatuses updates tracer span statuses based on HTTP response
-func UpdateSpanPairStatusesFromHTTPResponse(span, spanc TracerSpan, resp fasthttp.Response) {
+func UpdateSpanPairStatusesFromHTTPResponse(span, spanc TracerSpan, resp *fasthttp.Response) {
 	spanc.Span.SetStatus(trace.Status{
 		Code:    ProjectStatusCode(resp.StatusCode()),
 		Message: strconv.Itoa(resp.StatusCode()),

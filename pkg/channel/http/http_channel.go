@@ -128,7 +128,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 
 	if h.tracingSpec.Enabled {
-		tracing.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, *resp)
+		tracing.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, resp)
 	}
 
 	fasthttp.ReleaseRequest(req)
