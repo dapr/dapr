@@ -34,7 +34,7 @@ var (
 		"The number of root certificate rotated.",
 		stats.UnitDimensionless)
 	issuerCredentialChangeTotal = stats.Int64(
-		"sentry/issuer/cert/changed_total",
+		"sentry/issuercert/changed_total",
 		"The number of issuer cert updates, when issuer cert or key is changed",
 		stats.UnitDimensionless)
 
