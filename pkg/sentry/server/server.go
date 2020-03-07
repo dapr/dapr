@@ -13,6 +13,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
+	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/golang/protobuf/ptypes"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -109,6 +110,9 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	monitoring.RootCertRotationSucceed()
+
 	return &cert, nil
 }
 
@@ -116,11 +120,14 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 // The method receives a request with an identity and initial cert and returns
 // A signed certificate including the trust chain to the caller along with an expiry date.
 func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateRequest) (*pb.SignCertificateResponse, error) {
+	monitoring.CertSignRequestRecieved()
+
 	csrPem := req.GetCertificateSigningRequest()
 	csr, err := certs.ParsePemCSR(csrPem)
 	if err != nil {
 		err = fmt.Errorf("cannot parse certificate signing request pem: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.CertParseError)
 		return nil, err
 	}
 
@@ -128,6 +135,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error validating csr: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.CertValidationError)
 		return nil, err
 	}
 
@@ -135,6 +143,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error validating requester identity: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.ReqIDError)
 		return nil, err
 	}
 
@@ -142,6 +151,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error signing csr: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.CertSignError)
 		return nil, err
 	}
 
@@ -155,6 +165,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if len(certPem) == 0 {
 		err = fmt.Errorf("insufficient data in certificate signing request, no certs signed")
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.InsufficientDataError)
 		return nil, err
 	}
 
@@ -168,6 +179,9 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		TrustChainCertificates: [][]byte{issuerCert, rootCert},
 		ValidUntil:             expiry,
 	}
+
+	monitoring.CertSignSucceed()
+
 	return resp, nil
 }
 
@@ -180,6 +194,8 @@ func needsRefresh(cert *tls.Certificate, expiryBuffer time.Duration) bool {
 	if leaf == nil {
 		return true
 	}
+
+	monitoring.RootCertExpiry(leaf.NotAfter)
 
 	// Check if the leaf certificate is about to expire.
 	return leaf.NotAfter.Add(-serverCertExpiryBuffer).Before(time.Now().UTC())

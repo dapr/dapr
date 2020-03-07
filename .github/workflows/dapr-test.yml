@@ -15,7 +15,7 @@ jobs:
     name: end-to-end tests
     runs-on: ubuntu-latest
     env:
-      GOVER: 1.13.7
+      GOVER: 1.14
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org
