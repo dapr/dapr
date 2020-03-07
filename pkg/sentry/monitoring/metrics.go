@@ -30,11 +30,11 @@ var (
 		"The unix timestamp, in seconds, when root cert will expire.",
 		stats.UnitDimensionless)
 	rootCertRotateTotal = stats.Int64(
-		"sentry/rootcert/rotated",
+		"sentry/rootcert/rotation_total",
 		"The number of root certificate rotated.",
 		stats.UnitDimensionless)
 	issuerCredentialChangeTotal = stats.Int64(
-		"sentry/issuer/cert/changed",
+		"sentry/issuer/cert/change_total",
 		"The number of issuer cert updates, when issuer cert or key is changed",
 		stats.UnitDimensionless)
 
