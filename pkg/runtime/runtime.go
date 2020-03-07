@@ -1119,6 +1119,7 @@ func (a *DaprRuntime) initSecretStores() error {
 		secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type)
 		if err != nil {
 			log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
+			diag.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Creation")
 			continue
 		}
 
@@ -1127,10 +1128,12 @@ func (a *DaprRuntime) initSecretStores() error {
 		})
 		if err != nil {
 			log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
+			diag.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Init")
 			continue
 		}
 
 		a.secretStores[c.ObjectMeta.Name] = secretStore
+		diag.DefaultServiceMonitoring.ComponentInitialized(c.Spec.Type)
 	}
 
 	return nil
@@ -1171,5 +1174,7 @@ func (a *DaprRuntime) establishSecurity(id, sentryAddress string) error {
 	a.grpc.SetAuthenticator(auth)
 
 	log.Info("authenticator created")
+
+	diag.DefaultServiceMonitoring.MTLSInitCompleted()
 	return nil
 }

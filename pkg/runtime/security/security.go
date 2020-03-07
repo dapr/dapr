@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 )
@@ -51,11 +52,13 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
+		diag.DefaultServiceMonitoring.MTLSInitFailed("PriKeyGen")
 		return nil, nil, fmt.Errorf("failed to generate private key: %s", err)
 	}
 
 	encodedKey, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
+		diag.DefaultServiceMonitoring.MTLSInitFailed("PriKeyEnc")
 		return nil, nil, err
 	}
 	keyPem := pem.EncodeToMemory(&pem.Block{Type: ecPKType, Bytes: encodedKey})
@@ -66,6 +69,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 	}
 	csrb, err := x509.CreateCertificateRequest(rand.Reader, &csr, key)
 	if err != nil {
+		diag.DefaultServiceMonitoring.MTLSInitFailed("CSR")
 		return nil, nil, fmt.Errorf("failed to create sidecar csr: %s", err)
 	}
 	return csrb, keyPem, nil

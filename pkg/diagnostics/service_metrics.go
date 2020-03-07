@@ -10,14 +10,18 @@ import (
 
 // ServiceMetrics holds dapr runtime metric monitoring methods
 type ServiceMetrics struct {
-	componentLoaded        *stats.Int64Measure
-	componentInitCompleted *stats.Int64Measure
-	componentInitFailed    *stats.Int64Measure
+	componentLoaded               *stats.Int64Measure
+	componentInitCompleted        *stats.Int64Measure
+	componentInitFailed           *stats.Int64Measure
+	mtlsInitCompleted             *stats.Int64Measure
+	mtlsInitFailed                *stats.Int64Measure
+	mtlsWorkloadCertRotated       *stats.Int64Measure
+	mtlsWorkloadCertRotatedFailed *stats.Int64Measure
 
 	// Metrics Tags
-	appIDTag          tag.Key
-	componentTag      tag.Key
-	compFailReasonTag tag.Key
+	appIDTag      tag.Key
+	componentTag  tag.Key
+	failReasonTag tag.Key
 
 	ctx context.Context
 }
@@ -36,24 +40,44 @@ func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregatio
 func NewServiceMetrics() *ServiceMetrics {
 	appIDTag, _ := tag.NewKey("app_id")
 	componentTag, _ := tag.NewKey("component")
-	compFailReasonTag, _ := tag.NewKey("reason")
+	failReasonTag, _ := tag.NewKey("reason")
 
 	return &ServiceMetrics{
 		// Runtime Component metrics
 		componentLoaded: stats.Int64(
-			"runtime/component/loaded", "The number of successfully loaded components",
+			"runtime/component/loaded",
+			"The number of successfully loaded components",
 			stats.UnitDimensionless),
 		componentInitCompleted: stats.Int64(
-			"runtime/component/init_total", "The number of initialized components",
+			"runtime/component/init_total",
+			"The number of initialized components",
 			stats.UnitDimensionless),
 		componentInitFailed: stats.Int64(
-			"runtime/component/init_fail_total", "The number of component initialization failures",
+			"runtime/component/init_fail_total",
+			"The number of component initialization failures",
 			stats.UnitDimensionless),
 
-		appIDTag:          appIDTag,
-		componentTag:      componentTag,
-		compFailReasonTag: compFailReasonTag,
-		ctx:               context.Background(),
+		mtlsInitCompleted: stats.Int64(
+			"runtime/mtls/init_total",
+			"The number of successful mTLS authenticator initialization.",
+			stats.UnitDimensionless),
+		mtlsInitFailed: stats.Int64(
+			"runtime/mtls/init_fail_total",
+			"The number of mTLS authenticator init failures",
+			stats.UnitDimensionless),
+		mtlsWorkloadCertRotated: stats.Int64(
+			"runtime/mtls/workload_cert_rotated_total",
+			"The number of mTLS authenticator init failures",
+			stats.UnitDimensionless),
+		mtlsWorkloadCertRotatedFailed: stats.Int64(
+			"runtime/mtls/workload_cert_rotated_fail_total",
+			"The number of mTLS authenticator init failures",
+			stats.UnitDimensionless),
+
+		appIDTag:      appIDTag,
+		componentTag:  componentTag,
+		failReasonTag: failReasonTag,
+		ctx:           context.Background(),
 	}
 }
 
@@ -64,7 +88,11 @@ func (s *ServiceMetrics) Init(appID string) error {
 	err := view.Register(
 		newView(s.componentLoaded, []tag.Key{s.appIDTag}, view.Count()),
 		newView(s.componentInitCompleted, []tag.Key{s.appIDTag, s.componentTag}, view.Count()),
-		newView(s.componentInitFailed, []tag.Key{s.appIDTag, s.componentTag, s.compFailReasonTag}, view.Count()),
+		newView(s.componentInitFailed, []tag.Key{s.appIDTag, s.componentTag, s.failReasonTag}, view.Count()),
+		newView(s.mtlsInitCompleted, []tag.Key{s.appIDTag}, view.Count()),
+		newView(s.mtlsInitFailed, []tag.Key{s.appIDTag, s.failReasonTag}, view.Count()),
+		newView(s.mtlsWorkloadCertRotated, []tag.Key{s.appIDTag}, view.Count()),
+		newView(s.mtlsWorkloadCertRotatedFailed, []tag.Key{s.appIDTag, s.failReasonTag}, view.Count()),
 	)
 
 	return err
@@ -87,6 +115,30 @@ func (s *ServiceMetrics) ComponentInitialized(component string) {
 func (s *ServiceMetrics) ComponentInitFailed(component string, reason string) {
 	stats.RecordWithTags(
 		s.ctx,
-		[]tag.Mutator{tag.Upsert(s.componentTag, component), tag.Upsert(s.compFailReasonTag, reason)},
+		[]tag.Mutator{tag.Upsert(s.componentTag, component), tag.Upsert(s.failReasonTag, reason)},
 		s.componentInitFailed.M(1))
+}
+
+// MTLSInitCompleted records metric when component is initialized
+func (s *ServiceMetrics) MTLSInitCompleted() {
+	stats.Record(s.ctx, s.mtlsInitCompleted.M(1))
+}
+
+// MTLSInitFailed records metric when component initialization is failed
+func (s *ServiceMetrics) MTLSInitFailed(reason string) {
+	stats.RecordWithTags(
+		s.ctx, []tag.Mutator{tag.Upsert(s.failReasonTag, reason)},
+		s.mtlsInitFailed.M(1))
+}
+
+// MTLSWorkLoadCertRotationCompleted records metric when component is initialized
+func (s *ServiceMetrics) MTLSWorkLoadCertRotationCompleted() {
+	stats.Record(s.ctx, s.mtlsWorkloadCertRotated.M(1))
+}
+
+// MTLSWorkLoadCertRotationFailed records metric when component initialization is failed
+func (s *ServiceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
+	stats.RecordWithTags(
+		s.ctx, []tag.Mutator{tag.Upsert(s.failReasonTag, reason)},
+		s.mtlsWorkloadCertRotatedFailed.M(1))
 }
