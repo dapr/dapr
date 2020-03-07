@@ -13,6 +13,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement"
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/version"
 )
 
@@ -39,6 +40,10 @@ func main() {
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 
