@@ -63,9 +63,11 @@ func (m *promMetricsExporter) Init() error {
 	}
 
 	// Add default health metrics for process
-	registry := prom.NewRegistry()
-	registry.MustRegister(prom.NewProcessCollector(prom.ProcessCollectorOpts{}))
-	registry.MustRegister(prom.NewGoCollector())
+	registry := prom.DefaultRegisterer.(*prom.Registry)
+	// TODO: Register the required collectors once we remove grpc and http middleware pkg
+	// registry := prom.NewRegistry()
+	// registry.MustRegister(prom.NewProcessCollector(prom.ProcessCollectorOpts{}))
+	// registry.MustRegister(prom.NewGoCollector())
 
 	var err error
 	m.ocExporter, err = ocprom.NewExporter(ocprom.Options{
