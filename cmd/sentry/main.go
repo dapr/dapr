@@ -51,7 +51,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := monitoring.InitServiceMetrics(); err != nil {
+	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 

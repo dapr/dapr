@@ -49,8 +49,8 @@ func RootCertExpiry(expiry time.Time) {
 	stats.Record(context.Background(), certIssueSuccessTotal.M(expiry.Unix()))
 }
 
-// InitServiceMetrics initializes metrics
-func InitServiceMetrics() error {
+// InitMetrics initializes metrics
+func InitMetrics() error {
 	err := view.Register(
 		newView(csrReceivedTotal, []tag.Key{}, view.Count()),
 		newView(certIssueSuccessTotal, []tag.Key{}, view.Count()),
