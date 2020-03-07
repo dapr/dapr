@@ -14,8 +14,8 @@ import (
 var (
 	// Metrics definitions
 	csrReceivedTotal = stats.Int64(
-		"sentry/csr/received_total",
-		"The number of CSRs received by Dapr Sentry server.",
+		"sentry/cert/sign/request_received_total",
+		"The number of CSRs received.",
 		stats.UnitDimensionless)
 	certSignSuccessTotal = stats.Int64(
 		"sentry/cert/sign/success_total",
@@ -30,11 +30,11 @@ var (
 		"The unix timestamp, in seconds, when root cert will expire.",
 		stats.UnitDimensionless)
 	rootCertRotateTotal = stats.Int64(
-		"sentry/rootcert/rotation_total",
+		"sentry/rootcert/rotated_total",
 		"The number of root certificate rotated.",
 		stats.UnitDimensionless)
 	issuerCredentialChangeTotal = stats.Int64(
-		"sentry/issuer/cert/change_total",
+		"sentry/issuer/cert/changed_total",
 		"The number of issuer cert updates, when issuer cert or key is changed",
 		stats.UnitDimensionless)
 
