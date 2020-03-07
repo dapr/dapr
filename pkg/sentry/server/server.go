@@ -180,7 +180,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		ValidUntil:             expiry,
 	}
 
-	monitoring.CertSignSuceeed()
+	monitoring.CertSignSucceed()
 
 	return resp, nil
 }

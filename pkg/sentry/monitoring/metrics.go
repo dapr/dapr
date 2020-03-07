@@ -71,12 +71,12 @@ func CertSignRequestRecieved() {
 	stats.Record(context.Background(), csrReceivedTotal.M(1))
 }
 
-// CertSignSuceeed counts suceeded cert issuance
-func CertSignSuceeed() {
+// CertSignSucceed counts succeeded cert issuance
+func CertSignSucceed() {
 	stats.Record(context.Background(), certSignSuccessTotal.M(1))
 }
 
-// CertSignFailed counts suceeded cert issuance
+// CertSignFailed counts succeeded cert issuance
 func CertSignFailed(failure certSignErrorType) {
 	ctx, err := tag.New(context.Background(), tag.Insert(errorTypeTag, string(failure)))
 	if err != nil {
