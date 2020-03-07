@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -65,6 +66,8 @@ func (p *Service) ReportDaprStatus(srv daprinternal_pb.PlacementService_ReportDa
 	// send the current placements
 	p.PerformTablesUpdate([]daprinternal_pb.PlacementService_ReportDaprStatusServer{srv},
 		placementOptions{incrementGeneration: false})
+
+	monitoring.RecordActiveHostsCount(len(p.hosts))
 
 	for {
 		select {
