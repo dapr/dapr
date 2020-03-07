@@ -8,18 +8,23 @@ import (
 	http_prometheus "github.com/improbable-eng/go-httpwares/metrics/prometheus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
-	grpc_go "google.golang.org/grpc"
+	"google.golang.org/grpc"
 )
 
-var log = logger.NewLogger("diagnostics.metrics")
+var (
+	log = logger.NewLogger("diagnostics.metrics")
+
+	// DefaultServiceMonitoring holds service metrics recording methods
+	DefaultServiceMonitoring = NewServiceMetrics()
+)
 
 // MetricsGRPCMiddlewareStream gets a metrics enabled GRPC stream middlware
-func MetricsGRPCMiddlewareStream() grpc_go.StreamServerInterceptor {
+func MetricsGRPCMiddlewareStream() grpc.StreamServerInterceptor {
 	return grpc_prometheus.StreamServerInterceptor
 }
 
 // MetricsGRPCMiddlewareUnary gets a metrics enabled GRPC unary middlware
-func MetricsGRPCMiddlewareUnary() grpc_go.UnaryServerInterceptor {
+func MetricsGRPCMiddlewareUnary() grpc.UnaryServerInterceptor {
 	return grpc_prometheus.UnaryServerInterceptor
 }
 
@@ -33,4 +38,10 @@ func MetricsHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler
 		http_prometheus.WithSizes(),
 		http_prometheus.WithPathLabel()))
 	return fasthttpadaptor.NewFastHTTPHandler(mw(nethttpadaptor.NewNetHTTPHandlerFunc(log, next)))
+}
+
+// InitMetrics initializes metrics
+func InitMetrics(appID string) error {
+	err := DefaultServiceMonitoring.Init(appID)
+	return err
 }

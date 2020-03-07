@@ -37,6 +37,7 @@ import (
 	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
@@ -559,6 +560,7 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 			binding, err := registry.CreateInputBinding(c.Spec.Type)
 			if err != nil {
 				log.Errorf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				diagnostics.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Creation")
 				continue
 			}
 			err = binding.Init(bindings.Metadata{
@@ -567,11 +569,13 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 			})
 			if err != nil {
 				log.Errorf("failed to init input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				diagnostics.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Init")
 				continue
 			}
 
 			log.Infof("successful init for input binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
 			a.inputBindings[c.ObjectMeta.Name] = binding
+			diagnostics.DefaultServiceMonitoring.ComponentInitialized(c.Spec.Type)
 		}
 	}
 	return nil
@@ -583,6 +587,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
 			if err != nil {
 				log.Errorf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				diagnostics.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Creation")
 				continue
 			}
 
@@ -593,10 +598,12 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 				})
 				if err != nil {
 					log.Errorf("failed to init output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+					diagnostics.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Init")
 					continue
 				}
 				log.Infof("successful init for output binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
 				a.outputBindings[c.ObjectMeta.Name] = binding
+				diagnostics.DefaultServiceMonitoring.ComponentInitialized(c.Spec.Type)
 			}
 		}
 	}
@@ -610,6 +617,7 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 			store, err := registry.CreateStateStore(s.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating state store %s: %s", s.Spec.Type, err)
+				diagnostics.DefaultServiceMonitoring.ComponentInitFailed(s.Spec.Type, "Creation")
 				continue
 			}
 			if store != nil {
@@ -618,6 +626,7 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 					Properties: props,
 				})
 				if err != nil {
+					diagnostics.DefaultServiceMonitoring.ComponentInitFailed(s.Spec.Type, "Init")
 					log.Warnf("error initializing state store %s: %s", s.Spec.Type, err)
 					continue
 				}
@@ -631,6 +640,7 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 						a.actorStateStoreName = s.ObjectMeta.Name
 					}
 				}
+				diagnostics.DefaultServiceMonitoring.ComponentInitialized(s.Spec.Type)
 			}
 		}
 	}
@@ -679,6 +689,7 @@ func (a *DaprRuntime) initExporters() error {
 			exporter, err := a.exporterRegistry.Create(c.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating exporter %s: %s", c.Spec.Type, err)
+				diagnostics.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Creation")
 				continue
 			}
 
@@ -689,8 +700,10 @@ func (a *DaprRuntime) initExporters() error {
 			})
 			if err != nil {
 				log.Warnf("error initializing exporter %s: %s", c.Spec.Type, err)
+				diagnostics.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Init")
 				continue
 			}
+			diagnostics.DefaultServiceMonitoring.ComponentInitialized(c.Spec.Type)
 		}
 	}
 	return nil
@@ -702,6 +715,7 @@ func (a *DaprRuntime) initPubSub() error {
 			pubSub, err := a.pubSubRegistry.Create(c.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating pub sub %s: %s", c.Spec.Type, err)
+				diagnostics.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Creation")
 				continue
 			}
 
@@ -713,10 +727,12 @@ func (a *DaprRuntime) initPubSub() error {
 			})
 			if err != nil {
 				log.Warnf("error initializing pub sub %s: %s", c.Spec.Type, err)
+				diagnostics.DefaultServiceMonitoring.ComponentInitFailed(c.Spec.Type, "Init")
 				continue
 			}
 
 			a.pubSub = pubSub
+			diagnostics.DefaultServiceMonitoring.ComponentInitialized(c.Spec.Type)
 			break
 		}
 	}
@@ -898,6 +914,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 			modified := a.processComponentSecrets(component)
 			a.components[index] = modified
 			log.Infof("found component %s (%s)", modified.ObjectMeta.Name, modified.Spec.Type)
+			diagnostics.DefaultServiceMonitoring.ComponentLoaded()
 			wg.Done()
 		}(&wg, c, i)
 	}
