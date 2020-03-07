@@ -87,6 +87,7 @@ func main() {
 	go watcher.StartIssuerWatcher(ctx, watchDir, issuerEvent)
 	go func() {
 		for range issuerEvent {
+			monitoring.IssuerCredentialChanged()
 			log.Warn("issuer credentials changed. reloading")
 			ca.Restart(ctx, config)
 		}

@@ -110,6 +110,9 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	monitoring.RootCertRotationSucceed()
+
 	return &cert, nil
 }
 
@@ -117,11 +120,14 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 // The method receives a request with an identity and initial cert and returns
 // A signed certificate including the trust chain to the caller along with an expiry date.
 func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateRequest) (*pb.SignCertificateResponse, error) {
+	monitoring.CertSignRequestRecieved()
+
 	csrPem := req.GetCertificateSigningRequest()
 	csr, err := certs.ParsePemCSR(csrPem)
 	if err != nil {
 		err = fmt.Errorf("cannot parse certificate signing request pem: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.CertParseError)
 		return nil, err
 	}
 
@@ -129,6 +135,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error validating csr: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.CertValidationError)
 		return nil, err
 	}
 
@@ -136,14 +143,15 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error validating requester identity: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.ReqIDError)
 		return nil, err
 	}
 
-	monitoring.CSRRecieved()
 	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, -1, false)
 	if err != nil {
 		err = fmt.Errorf("error signing csr: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.CertSignError)
 		return nil, err
 	}
 
@@ -157,6 +165,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if len(certPem) == 0 {
 		err = fmt.Errorf("insufficient data in certificate signing request, no certs signed")
 		log.Error(err)
+		monitoring.CertSignFailed(monitoring.InsufficientDataError)
 		return nil, err
 	}
 
@@ -171,7 +180,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		ValidUntil:             expiry,
 	}
 
-	monitoring.CertIssueSuceeed()
+	monitoring.CertSignSuceeed()
 
 	return resp, nil
 }
