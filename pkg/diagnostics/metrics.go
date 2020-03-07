@@ -14,8 +14,8 @@ import (
 var (
 	log = logger.NewLogger("diagnostics.metrics")
 
-	// DefaultServiceMonitoring holds service metrics recording methods
-	DefaultServiceMonitoring = NewServiceMetrics()
+	// DefaultMonitoring holds service metrics recording methods
+	DefaultMonitoring = NewServiceMetrics()
 )
 
 // MetricsGRPCMiddlewareStream gets a metrics enabled GRPC stream middlware
@@ -42,6 +42,6 @@ func MetricsHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler
 
 // InitMetrics initializes metrics
 func InitMetrics(appID string) error {
-	err := DefaultServiceMonitoring.Init(appID)
+	err := DefaultMonitoring.Init(appID)
 	return err
 }

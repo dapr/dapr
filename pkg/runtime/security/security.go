@@ -52,13 +52,13 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
-		diag.DefaultServiceMonitoring.MTLSInitFailed("PriKeyGen")
+		diag.DefaultMonitoring.MTLSInitFailed("PriKeyGen")
 		return nil, nil, fmt.Errorf("failed to generate private key: %s", err)
 	}
 
 	encodedKey, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
-		diag.DefaultServiceMonitoring.MTLSInitFailed("PriKeyEnc")
+		diag.DefaultMonitoring.MTLSInitFailed("PriKeyEnc")
 		return nil, nil, err
 	}
 	keyPem := pem.EncodeToMemory(&pem.Block{Type: ecPKType, Bytes: encodedKey})
@@ -69,7 +69,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 	}
 	csrb, err := x509.CreateCertificateRequest(rand.Reader, &csr, key)
 	if err != nil {
-		diag.DefaultServiceMonitoring.MTLSInitFailed("CSR")
+		diag.DefaultMonitoring.MTLSInitFailed("CSR")
 		return nil, nil, fmt.Errorf("failed to create sidecar csr: %s", err)
 	}
 	return csrb, keyPem, nil

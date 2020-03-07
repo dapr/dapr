@@ -83,7 +83,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	}
 	conn, err := grpc.Dial(a.sentryAddress, grpc.WithTransportCredentials(credentials.NewTLS(config)))
 	if err != nil {
-		diag.DefaultServiceMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
+		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
 		return nil, fmt.Errorf("error establishing connection to sentry: %s", err)
 	}
 	defer conn.Close()
@@ -98,7 +98,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		Token:                     getToken(),
 	})
 	if err != nil {
-		diag.DefaultServiceMonitoring.MTLSWorkLoadCertRotationFailed("sign")
+		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %s", err)
 	}
 
@@ -106,7 +106,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	validTimestamp := resp.GetValidUntil()
 	expiry, err := ptypes.Timestamp(validTimestamp)
 	if err != nil {
-		diag.DefaultServiceMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
+		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
 		return nil, fmt.Errorf("error parsing ValidUntil: %s", err)
 	}
 
@@ -114,7 +114,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	for _, c := range resp.GetTrustChainCertificates() {
 		ok := trustChain.AppendCertsFromPEM(c)
 		if !ok {
-			diag.DefaultServiceMonitoring.MTLSWorkLoadCertRotationFailed("chaining")
+			diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("chaining")
 			return nil, fmt.Errorf("failed adding trust chain cert to x509 CertPool: %s", err)
 		}
 	}
