@@ -271,12 +271,12 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 func (a *DaprRuntime) initBindings() {
 	err := a.initOutputBindings(a.bindingsRegistry)
 	if err != nil {
-		log.Warnf("failed to init output bindings: %s", err)
+		log.Errorf("failed to init output bindings: %s", err)
 	}
 
 	err = a.initInputBindings(a.bindingsRegistry)
 	if err != nil {
-		log.Warnf("failed to init input bindings: %s", err)
+		log.Errorf("failed to init input bindings: %s", err)
 	}
 }
 
@@ -285,7 +285,7 @@ func (a *DaprRuntime) beginReadInputBindings() error {
 		go func(name string, binding bindings.InputBinding) {
 			err := a.readFromBinding(name, binding)
 			if err != nil {
-				log.Warnf("error reading from input binding: %s", err)
+				log.Errorf("error reading from input binding %s: %s", name, err)
 			}
 		}(key, b)
 	}
@@ -572,7 +572,7 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 
 			binding, err := registry.CreateInputBinding(c.Spec.Type)
 			if err != nil {
-				log.Debugf("failed to create input binding %s: %s", c.Spec.Type, err)
+				log.Errorf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				continue
 			}
 			err = binding.Init(bindings.Metadata{
@@ -580,10 +580,11 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 				Name:       c.ObjectMeta.Name,
 			})
 			if err != nil {
-				log.Warnf("failed to init input binding %s: %s", c.Spec.Type, err)
+				log.Errorf("failed to init input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				continue
 			}
 
+			log.Infof("successful init for input binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
 			a.inputBindings[c.ObjectMeta.Name] = binding
 		}
 	}
@@ -595,7 +596,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
 			if err != nil {
-				log.Debugf("failed to create output binding %s: %s", c.Spec.Type, err)
+				log.Errorf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				continue
 			}
 
@@ -605,10 +606,10 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 					Name:       c.ObjectMeta.Name,
 				})
 				if err != nil {
-					log.Warnf("failed to init output binding %s: %s", c.Spec.Type, err)
+					log.Errorf("failed to init output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 					continue
 				}
-
+				log.Infof("successful init for output binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
 				a.outputBindings[c.ObjectMeta.Name] = binding
 			}
 		}
@@ -910,7 +911,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 		go func(wg *sync.WaitGroup, component components_v1alpha1.Component, index int) {
 			modified := a.processComponentSecrets(component)
 			a.components[index] = modified
-			log.Infof("loaded component %s (%s)", modified.ObjectMeta.Name, modified.Spec.Type)
+			log.Infof("found component %s (%s)", modified.ObjectMeta.Name, modified.Spec.Type)
 			wg.Done()
 		}(&wg, c, i)
 	}
