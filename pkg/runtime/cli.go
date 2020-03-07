@@ -13,10 +13,12 @@ import (
 
 	global_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/version"
 )
 
+// FromFlags parses command flags and returns DaprRuntime instance
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr to listen on")
@@ -35,11 +37,12 @@ func FromFlags() (*DaprRuntime, error) {
 	runtimeVersion := flag.Bool("version", false, "prints the runtime version")
 	maxConcurrency := flag.Int("max-concurrency", -1, "controls the concurrency level when forwarding requests to user code")
 	mtlsEnabled := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
-	metricsPort := flag.String("metrics-port", fmt.Sprintf("%v", DefaultMetricsPort), "The port for the metrics server")
-	enableMetrics := flag.String("enable-metrics", "true", fmt.Sprintf("Enable metrics. default is true"))
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
+	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
+	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
 
@@ -57,6 +60,11 @@ func FromFlags() (*DaprRuntime, error) {
 	log.Infof("starting Dapr Runtime -- version %s -- commit %s", version.Version(), version.Commit())
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
+	// Initialize dapr metrics exporter
+	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
+	}
+
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing dapr-http-port flag: %s", err)
@@ -72,11 +80,6 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, fmt.Errorf("error parsing profile-port flag: %s", err)
 	}
 
-	metrPort, err := strconv.Atoi(*metricsPort)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing metrics-port flag: %s", err)
-	}
-
 	applicationPort := 0
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
@@ -90,13 +93,8 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	enableMetr, err := strconv.ParseBool(*enableMetrics)
-	if err != nil {
-		return nil, err
-	}
-
 	runtimeConfig := NewRuntimeConfig(*appID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress, metrPort, enableMetr)
+		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress, metricsExporter.Options().MetricsEnabled)
 
 	var globalConfig *global_config.Configuration
 

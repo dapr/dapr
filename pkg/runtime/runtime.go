@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	net_http "net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -21,9 +20,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/servicediscovery"
@@ -45,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
@@ -227,23 +224,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
-	if a.runtimeConfig.EnableMetrics {
-		a.startMetricsServer()
-	}
-
 	err = a.announceSelf()
 	if err != nil {
 		log.Warnf("failed to broadcast address to local network: %s", err)
 	}
 
 	return nil
-}
-
-func (a *DaprRuntime) startMetricsServer() {
-	go func() {
-		log.Infof("starting metrics server on port %v", a.runtimeConfig.MetricsPort)
-		log.Fatal(net_http.ListenAndServe(fmt.Sprintf(":%d", a.runtimeConfig.MetricsPort), promhttp.Handler()))
-	}()
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -505,7 +491,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.pubSub, a.actor, a.sendToOutputBinding)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MetricsPort, a.runtimeConfig.EnableMetrics)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.EnableMetrics)
 
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()

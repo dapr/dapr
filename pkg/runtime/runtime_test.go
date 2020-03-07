@@ -492,7 +492,6 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		-1,
 		false,
 		"",
-		DefaultMetricsPort,
 		true)
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
