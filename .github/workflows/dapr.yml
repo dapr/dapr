@@ -21,8 +21,8 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.13.7
-      GOLANGCILINT_VER: 1.23.2
+      GOVER: 1.14
+      GOLANGCILINT_VER: 1.23.8
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
