@@ -5,13 +5,18 @@ go 1.14
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
+	github.com/Azure/go-autorest/autorest/to v0.3.0 // indirect
+	github.com/Azure/go-autorest/autorest/validation v0.2.0 // indirect
+	github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
+	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/dapr/components-contrib v0.0.0-20200305065926-4602757a455e
 	github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
+	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/mock v1.4.0
 	github.com/golang/protobuf v1.3.3
 	github.com/google/uuid v1.1.1
@@ -19,11 +24,14 @@ require (
 	github.com/grandcat/zeroconf v0.0.0-20190424104450-85eadb44205c
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+	github.com/hashicorp/go-msgpack v0.5.5 // indirect
 	github.com/improbable-eng/go-httpwares v0.0.0-20191126155631-6144c42a79c9
 	github.com/json-iterator/go v1.1.8
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.1.2
+	github.com/nats-io/jwt v0.3.2 // indirect
+	github.com/onsi/ginkgo v1.10.2 // indirect
 	github.com/phayes/freeport v0.0.0-20171002181615-b8543db493a5
 	github.com/prometheus/client_golang v1.2.1
 	github.com/prometheus/client_model v0.2.0
@@ -33,6 +41,7 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/valyala/fasthttp v1.6.0
 	go.opencensus.io v0.22.3
+	go.uber.org/multierr v1.2.0 // indirect
 	google.golang.org/grpc v1.26.0
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.17.0
