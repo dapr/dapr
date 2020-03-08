@@ -17,7 +17,7 @@ var (
 )
 
 var (
-	log = logger.NewLogger("diagnostics.metrics")
+	log = logger.NewLogger("dapr.diagnostics.metrics")
 
 	// DefaultMonitoring holds service monitoring metrics definitions
 	DefaultMonitoring = newServiceMetrics()
