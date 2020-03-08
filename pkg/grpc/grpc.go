@@ -13,6 +13,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -65,7 +66,9 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
+		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
 	}
+
 	if !skipTLS && g.auth != nil {
 		signedCert := g.auth.GetCurrentSignedCert()
 		cert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)

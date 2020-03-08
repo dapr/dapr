@@ -81,7 +81,10 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		RootCAs:            a.trustAnchors,
 		ServerName:         serverName,
 	}
-	conn, err := grpc.Dial(a.sentryAddress, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+	conn, err := grpc.Dial(
+		a.sentryAddress,
+		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+		grpc.WithTransportCredentials(credentials.NewTLS(config)))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
 		return nil, fmt.Errorf("error establishing connection to sentry: %s", err)

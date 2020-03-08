@@ -1,47 +1,56 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package diagnostics
 
 import (
-	"github.com/dapr/components-contrib/middleware/http/nethttpadaptor"
 	"github.com/dapr/dapr/pkg/logger"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	http_metrics "github.com/improbable-eng/go-httpwares/metrics"
-	http_prometheus "github.com/improbable-eng/go-httpwares/metrics/prometheus"
-	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
-	"google.golang.org/grpc"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
+)
+
+var (
+	appIDKey = tag.MustNewKey("app_id")
 )
 
 var (
 	log = logger.NewLogger("diagnostics.metrics")
 
-	// DefaultMonitoring holds service metrics recording methods
-	DefaultMonitoring = NewServiceMetrics()
+	// DefaultMonitoring holds service monitoring metrics definitions
+	DefaultMonitoring = newServiceMetrics()
+	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middleswares
+	DefaultGRPCMonitoring = newGRPCMetrics()
+	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middleswares
+	DefaultHTTPMonitoring = newHTTPMetrics()
 )
 
-// MetricsGRPCMiddlewareStream gets a metrics enabled GRPC stream middlware
-func MetricsGRPCMiddlewareStream() grpc.StreamServerInterceptor {
-	return grpc_prometheus.StreamServerInterceptor
-}
-
-// MetricsGRPCMiddlewareUnary gets a metrics enabled GRPC unary middlware
-func MetricsGRPCMiddlewareUnary() grpc.UnaryServerInterceptor {
-	return grpc_prometheus.UnaryServerInterceptor
-}
-
-// MetricsHTTPMiddleware gets a metrics enabled HTTP middleware
-func MetricsHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	// TODO: support custom labels
-	mw := http_metrics.Middleware(http_prometheus.ServerMetrics(
-		http_prometheus.WithName("daprd"),
-		http_prometheus.WithHostLabel(),
-		http_prometheus.WithLatency(),
-		http_prometheus.WithSizes(),
-		http_prometheus.WithPathLabel()))
-	return fasthttpadaptor.NewFastHTTPHandler(mw(nethttpadaptor.NewNetHTTPHandlerFunc(log, next)))
+// newView creates opencensus View instance using stats.Measure
+func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
+	return &view.View{
+		Name:        measure.Name(),
+		Description: measure.Description(),
+		Measure:     measure,
+		TagKeys:     keys,
+		Aggregation: aggregation,
+	}
 }
 
 // InitMetrics initializes metrics
 func InitMetrics(appID string) error {
-	err := DefaultMonitoring.Init(appID)
-	return err
+	if err := DefaultMonitoring.Init(appID); err != nil {
+		return err
+	}
+
+	if err := DefaultGRPCMonitoring.Init(appID); err != nil {
+		return err
+	}
+
+	if err := DefaultHTTPMonitoring.Init(appID); err != nil {
+		return err
+	}
+
+	return nil
 }

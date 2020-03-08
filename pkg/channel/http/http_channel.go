@@ -13,7 +13,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/valyala/fasthttp"
 )
 
@@ -80,21 +80,21 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	req.Header.SetMethod(method)
 
 	if invokeRequest.Metadata != nil {
-		if corID, ok := invokeRequest.Metadata[tracing.CorrelationID]; ok {
-			req.Header.Set(tracing.CorrelationID, corID)
+		if corID, ok := invokeRequest.Metadata[diag.CorrelationID]; ok {
+			req.Header.Set(diag.CorrelationID, corID)
 		}
 	}
 
-	var span tracing.TracerSpan
-	var spanc tracing.TracerSpan
+	var span diag.TracerSpan
+	var spanc diag.TracerSpan
 
 	if h.tracingSpec.Enabled {
-		span, spanc = tracing.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
+		span, spanc = diag.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
 
 		defer span.Span.End()
 		defer spanc.Span.End()
 
-		req.Header.Set(tracing.CorrelationID, tracing.SerializeSpanContext(*spanc.SpanContext))
+		req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(*spanc.SpanContext))
 	}
 
 	resp := fasthttp.AcquireResponse()
@@ -128,7 +128,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 
 	if h.tracingSpec.Enabled {
-		tracing.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, resp)
+		diag.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, resp)
 	}
 
 	fasthttp.ReleaseRequest(req)

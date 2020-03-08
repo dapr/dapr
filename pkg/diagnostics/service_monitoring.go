@@ -8,8 +8,8 @@ import (
 	"go.opencensus.io/tag"
 )
 
-// ServiceMetrics holds dapr runtime metric monitoring methods
-type ServiceMetrics struct {
+// serviceMetrics holds dapr runtime metric monitoring methods
+type serviceMetrics struct {
 	// component metrics
 	componentLoaded        *stats.Int64Measure
 	componentInitCompleted *stats.Int64Measure
@@ -44,18 +44,8 @@ type ServiceMetrics struct {
 	ctx context.Context
 }
 
-func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
-	return &view.View{
-		Name:        measure.Name(),
-		Description: measure.Description(),
-		Measure:     measure,
-		TagKeys:     keys,
-		Aggregation: aggregation,
-	}
-}
-
-// NewServiceMetrics returns ServiceMetrics instance with default service metric6 stats
-func NewServiceMetrics() *ServiceMetrics {
+// newServiceMetrics returns serviceMetrics instance with default service metric stats
+func newServiceMetrics() *serviceMetrics {
 	appIDTag := tag.MustNewKey("app_id")
 	componentTag := tag.MustNewKey("component")
 	failReasonTag := tag.MustNewKey("reason")
@@ -63,7 +53,7 @@ func NewServiceMetrics() *ServiceMetrics {
 	actorTypeTag := tag.MustNewKey("actor_type")
 	actorIDTag := tag.MustNewKey("actor_id")
 
-	return &ServiceMetrics{
+	return &serviceMetrics{
 		// Runtime Component metrics
 		componentLoaded: stats.Int64(
 			"runtime/component/loaded",
@@ -138,12 +128,13 @@ func NewServiceMetrics() *ServiceMetrics {
 		actorTypeTag: actorTypeTag,
 		actorIDTag:   actorIDTag,
 
+		// TODO: use the correct context for each request
 		ctx: context.Background(),
 	}
 }
 
 // Init initialize metrics views for metrics
-func (s *ServiceMetrics) Init(appID string) error {
+func (s *serviceMetrics) Init(appID string) error {
 	s.ctx, _ = tag.New(s.ctx, tag.Insert(s.appIDTag, appID))
 
 	err := view.Register(
@@ -170,12 +161,12 @@ func (s *ServiceMetrics) Init(appID string) error {
 }
 
 // ComponentLoaded records metric when component is loaded successfully
-func (s *ServiceMetrics) ComponentLoaded() {
+func (s *serviceMetrics) ComponentLoaded() {
 	stats.Record(s.ctx, s.componentLoaded.M(1))
 }
 
 // ComponentInitialized records metric when component is initialized
-func (s *ServiceMetrics) ComponentInitialized(component string) {
+func (s *serviceMetrics) ComponentInitialized(component string) {
 	stats.RecordWithTags(
 		s.ctx,
 		[]tag.Mutator{tag.Upsert(s.componentTag, component)},
@@ -183,7 +174,7 @@ func (s *ServiceMetrics) ComponentInitialized(component string) {
 }
 
 // ComponentInitFailed records metric when component initialization is failed
-func (s *ServiceMetrics) ComponentInitFailed(component string, reason string) {
+func (s *serviceMetrics) ComponentInitFailed(component string, reason string) {
 	stats.RecordWithTags(
 		s.ctx,
 		[]tag.Mutator{tag.Upsert(s.componentTag, component), tag.Upsert(s.failReasonTag, reason)},
@@ -191,52 +182,52 @@ func (s *ServiceMetrics) ComponentInitFailed(component string, reason string) {
 }
 
 // MTLSInitCompleted records metric when component is initialized
-func (s *ServiceMetrics) MTLSInitCompleted() {
+func (s *serviceMetrics) MTLSInitCompleted() {
 	stats.Record(s.ctx, s.mtlsInitCompleted.M(1))
 }
 
 // MTLSInitFailed records metric when component initialization is failed
-func (s *ServiceMetrics) MTLSInitFailed(reason string) {
+func (s *serviceMetrics) MTLSInitFailed(reason string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{tag.Upsert(s.failReasonTag, reason)},
 		s.mtlsInitFailed.M(1))
 }
 
 // MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded
-func (s *ServiceMetrics) MTLSWorkLoadCertRotationCompleted() {
+func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
 	stats.Record(s.ctx, s.mtlsWorkloadCertRotated.M(1))
 }
 
 // MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed
-func (s *ServiceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
+func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{tag.Upsert(s.failReasonTag, reason)},
 		s.mtlsWorkloadCertRotatedFailed.M(1))
 }
 
 // ActorStatusReported records metrics when status is reported to placement service.
-func (s *ServiceMetrics) ActorStatusReported(operation string) {
+func (s *serviceMetrics) ActorStatusReported(operation string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{tag.Upsert(s.operationTag, operation)},
 		s.actorStatusReportTotal.M(1))
 }
 
 // ActorStatusReportFailed records metrics when status report to placement service is failed.
-func (s *ServiceMetrics) ActorStatusReportFailed(operation string, reason string) {
+func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{tag.Upsert(s.operationTag, operation), tag.Upsert(s.failReasonTag, reason)},
 		s.actorStatusReportFailedTotal.M(1))
 }
 
 // ActorPlacementTableOperationReceived records metric when runtime receives table operation.
-func (s *ServiceMetrics) ActorPlacementTableOperationReceived(operation string) {
+func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{tag.Upsert(s.operationTag, operation)},
 		s.actorTableOperationRecvTotal.M(1))
 }
 
 // ActorRebalanced records metric when actors are drained.
-func (s *ServiceMetrics) ActorRebalanced(actorType, actorID string) {
+func (s *serviceMetrics) ActorRebalanced(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{
 			tag.Upsert(s.actorTypeTag, actorType),
@@ -246,7 +237,7 @@ func (s *ServiceMetrics) ActorRebalanced(actorType, actorID string) {
 }
 
 // ActorActivated records metric when actor is activated.
-func (s *ServiceMetrics) ActorActivated(actorType, actorID string) {
+func (s *serviceMetrics) ActorActivated(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{
 			tag.Upsert(s.actorTypeTag, actorType),
@@ -256,7 +247,7 @@ func (s *ServiceMetrics) ActorActivated(actorType, actorID string) {
 }
 
 // ActorActivationFailed records metric when actor activation is failed.
-func (s *ServiceMetrics) ActorActivationFailed(actorType, actorID string, reason string) {
+func (s *serviceMetrics) ActorActivationFailed(actorType, actorID string, reason string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{
 			tag.Upsert(s.actorTypeTag, actorType),
@@ -267,7 +258,7 @@ func (s *ServiceMetrics) ActorActivationFailed(actorType, actorID string, reason
 }
 
 // ActorDeactivated records metric when actor is deactivated.
-func (s *ServiceMetrics) ActorDeactivated(actorType, actorID string) {
+func (s *serviceMetrics) ActorDeactivated(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{
 			tag.Upsert(s.actorTypeTag, actorType),
@@ -277,7 +268,7 @@ func (s *ServiceMetrics) ActorDeactivated(actorType, actorID string) {
 }
 
 // ActorDeactivationFailed records metric when actor deactivation is failed.
-func (s *ServiceMetrics) ActorDeactivationFailed(actorType, actorID, reason string) {
+func (s *serviceMetrics) ActorDeactivationFailed(actorType, actorID, reason string) {
 	stats.RecordWithTags(
 		s.ctx, []tag.Mutator{
 			tag.Upsert(s.actorTypeTag, actorType),

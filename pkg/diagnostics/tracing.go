@@ -39,12 +39,12 @@ type TracerSpan struct {
 	SpanContext *trace.SpanContext
 }
 
-//SerializeSpanContext serializes a span context into a simple string
+// SerializeSpanContext serializes a span context into a simple string
 func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
 
-//DeserializeSpanContext deserializes a span context from a string
+// DeserializeSpanContext deserializes a span context from a string
 func DeserializeSpanContext(ctx string) trace.SpanContext {
 	parts := strings.Split(ctx, ";")
 	spanID, _ := hex.DecodeString(parts[0])
@@ -67,7 +67,7 @@ func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 	return context
 }
 
-// TraceSpanFromFastHTTPContext creates a tracing span form a fasthttp request
+// TraceSpanFromFastHTTPRequest creates a tracing span form a fasthttp request
 func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) (TracerSpan, TracerSpan) {
 	var ctx context.Context
 	var span *trace.Span
@@ -155,7 +155,7 @@ func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc_go.StreamServerIn
 	}
 }
 
-// UpdateSpanPairStatuses updates tracer span statuses based on HTTP response
+// UpdateSpanPairStatusesFromHTTPResponse updates tracer span statuses based on HTTP response
 func UpdateSpanPairStatusesFromHTTPResponse(span, spanc TracerSpan, resp *fasthttp.Response) {
 	spanc.Span.SetStatus(trace.Status{
 		Code:    ProjectStatusCode(resp.StatusCode()),

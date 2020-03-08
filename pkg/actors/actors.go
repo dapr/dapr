@@ -515,7 +515,10 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 	for {
 		retryInterval := time.Millisecond * 250
 
-		conn, err := grpc.Dial(placementAddress, grpc.WithInsecure())
+		conn, err := grpc.Dial(
+			placementAddress,
+			grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+			grpc.WithInsecure())
 		if err != nil {
 			log.Warnf("error connecting to placement service: %v", err)
 			diag.DefaultMonitoring.ActorStatusReportFailed("dial", "placement")

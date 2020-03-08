@@ -78,7 +78,7 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	log.Infof("enabled metrics http middleware")
-	return diag.MetricsHTTPMiddleware(next)
+	return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
 }
 
 func (s *server) useRouter() fasthttp.RequestHandler {
