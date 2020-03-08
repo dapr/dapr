@@ -56,12 +56,12 @@ func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregatio
 
 // NewServiceMetrics returns ServiceMetrics instance with default service metric6 stats
 func NewServiceMetrics() *ServiceMetrics {
-	appIDTag, _ := tag.NewKey("app_id")
-	componentTag, _ := tag.NewKey("component")
-	failReasonTag, _ := tag.NewKey("reason")
-	operationTag, _ := tag.NewKey("operation")
-	actorTypeTag, _ := tag.NewKey("actor_type")
-	actorIDTag, _ := tag.NewKey("actor_id")
+	appIDTag := tag.MustNewKey("app_id")
+	componentTag := tag.MustNewKey("component")
+	failReasonTag := tag.MustNewKey("reason")
+	operationTag := tag.MustNewKey("operation")
+	actorTypeTag := tag.MustNewKey("actor_type")
+	actorIDTag := tag.MustNewKey("actor_id")
 
 	return &ServiceMetrics{
 		// Runtime Component metrics
