@@ -14,7 +14,7 @@ This document helps you get started developing Dapr. If you find any problem whi
 
 ### Linux and MacOS
 
-1. The Go language environment [(instructions)](https://golang.org/doc/install#tarball).
+1. Go 1.14 [(instructions)](https://golang.org/doc/install#tarball).
    * Make sure that your GOPATH and PATH are configured correctly
    ```bash
    export GOPATH=~/go
