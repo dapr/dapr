@@ -79,11 +79,11 @@ func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path st
 		h.serverRequestBytes.M(contentSize))
 }
 
-func (h *httpMetrics) ServerResponsed(ctx context.Context, method, path, status string, contentSize int64, elasped float64) {
+func (h *httpMetrics) ServerResponsed(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
 	stats.RecordWithTags(
 		ctx,
 		h.createTagMutators(tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method), tag.Upsert(httpStatusCodeKey, status)),
-		h.serverLatency.M(elasped))
+		h.serverLatency.M(elapsed))
 
 	stats.RecordWithTags(
 		ctx,
@@ -95,35 +95,35 @@ func (h *httpMetrics) Init(appID string) error {
 	h.appID = appID
 
 	views := []*view.View{
-		&view.View{
+		{
 			Name:        "http/server/request_count",
 			Description: "The Number of HTTP requests",
 			TagKeys:     []tag.Key{appIDKey, httpPathKey, httpMethodKey},
 			Measure:     h.serverRequestCount,
 			Aggregation: view.Count(),
 		},
-		&view.View{
+		{
 			Name:        "http/server/request_bytes",
 			Description: "Size distribution of HTTP request body",
 			TagKeys:     []tag.Key{appIDKey},
 			Measure:     h.serverRequestBytes,
 			Aggregation: defaultSizeDistribution,
 		},
-		&view.View{
+		{
 			Name:        "http/server/response_bytes",
 			Description: "Size distribution of HTTP response body",
 			TagKeys:     []tag.Key{appIDKey},
 			Measure:     h.serverResponseBytes,
 			Aggregation: defaultSizeDistribution,
 		},
-		&view.View{
+		{
 			Name:        "http/server/latency",
 			Description: "Latency distribution of HTTP requests",
 			TagKeys:     []tag.Key{appIDKey},
 			Measure:     h.serverLatency,
 			Aggregation: defaultLatencyDistribution,
 		},
-		&view.View{
+		{
 			Name:        "http/server/response_count",
 			Description: "The number of HTTP responses",
 			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},

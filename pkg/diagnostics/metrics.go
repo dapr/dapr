@@ -6,7 +6,6 @@
 package diagnostics
 
 import (
-	"github.com/dapr/dapr/pkg/logger"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -17,8 +16,6 @@ var (
 )
 
 var (
-	log = logger.NewLogger("dapr.diagnostics.metrics")
-
 	// DefaultMonitoring holds service monitoring metrics definitions
 	DefaultMonitoring = newServiceMetrics()
 	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middleswares
