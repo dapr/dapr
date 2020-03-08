@@ -14,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -147,10 +146,6 @@ promhttp_metric_handler_requests_total{code="200"} 0
 promhttp_metric_handler_requests_total{code="500"} 0
 promhttp_metric_handler_requests_total{code="503"} 0`
 )
-
-type server struct {
-	pb.UnimplementedGreeterServer
-}
 
 func TestBaselineMetrics(t *testing.T) {
 	w := httptest.NewRecorder()
