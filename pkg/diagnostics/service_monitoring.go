@@ -50,15 +50,15 @@ func newServiceMetrics() *serviceMetrics {
 		// Runtime Component metrics
 		componentLoaded: stats.Int64(
 			"runtime/component/loaded",
-			"The number of successfully loaded components",
+			"The number of successfully loaded components.",
 			stats.UnitDimensionless),
 		componentInitCompleted: stats.Int64(
 			"runtime/component/init_total",
-			"The number of initialized components",
+			"The number of initialized components.",
 			stats.UnitDimensionless),
 		componentInitFailed: stats.Int64(
 			"runtime/component/init_fail_total",
-			"The number of component initialization failures",
+			"The number of component initialization failures.",
 			stats.UnitDimensionless),
 
 		// mTLS
@@ -68,15 +68,15 @@ func newServiceMetrics() *serviceMetrics {
 			stats.UnitDimensionless),
 		mtlsInitFailed: stats.Int64(
 			"runtime/mtls/init_fail_total",
-			"The number of mTLS authenticator init failures",
+			"The number of mTLS authenticator init failures.",
 			stats.UnitDimensionless),
 		mtlsWorkloadCertRotated: stats.Int64(
 			"runtime/mtls/workload_cert_rotated_total",
-			"The number of the successful workload certificate rotations",
+			"The number of the successful workload certificate rotations.",
 			stats.UnitDimensionless),
 		mtlsWorkloadCertRotatedFailed: stats.Int64(
 			"runtime/mtls/workload_cert_rotated_fail_total",
-			"The number of the failed workload certificate rotations",
+			"The number of the failed workload certificate rotations.",
 			stats.UnitDimensionless),
 
 		// Actor
@@ -86,7 +86,7 @@ func newServiceMetrics() *serviceMetrics {
 			stats.UnitDimensionless),
 		actorStatusReportFailedTotal: stats.Int64(
 			"runtime/actor/status_report_fail_total",
-			"The number of the failed status reports to placement service",
+			"The number of the failed status reports to placement service.",
 			stats.UnitDimensionless),
 		actorTableOperationRecvTotal: stats.Int64(
 			"runtime/actor/table_operation_recv_total",

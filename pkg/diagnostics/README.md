@@ -39,29 +39,29 @@ Dapr uses prometheus process and go collectors by default.
 
 ### gRPC monitoring metrics
 
-Dapr uses opencensus ocgrpc plugin to generate server and client metrics.
+Dapr leverages opencensus ocgrpc plugin to generate gRPC server and client metrics.
 
 * [server metrics](https://github.com/census-instrumentation/opencensus-go/blob/master/plugin/ocgrpc/server_metrics.go)
 * [client_metrics](https://github.com/census-instrumentation/opencensus-go/blob/master/plugin/ocgrpc/client_metrics.go)
 
 #### gRPC Server metrics
 
-* dapr_grpc.io_server_received_bytes_per_rpc: Distribution of received bytes per RPC, by method.
-* dapr_grpc.io_server_sent_bytes_per_rpc: Distribution of total sent bytes per RPC, by method.
-* dapr_grpc.io_server_server_latency: Distribution of server latency in milliseconds, by method.
-* dapr_grpc.io_server_completed_rpcs: Count of RPCs by method and status.
-* dapr_grpc.io_server_received_messages_per_rpc: Distribution of messages received count per RPC, by method.
-* dapr_grpc.io_server_sent_messages_per_rpc: Distribution of messages sent count per RPC, by method.
+* dapr_grpc_io_server_received_bytes_per_rpc: Distribution of received bytes per RPC, by method.
+* dapr_grpc_io_server_sent_bytes_per_rpc: Distribution of total sent bytes per RPC, by method.
+* dapr_grpc_io_server_server_latency: Distribution of server latency in milliseconds, by method.
+* dapr_grpc_io_server_completed_rpcs: Count of RPCs by method and status.
+* dapr_grpc_io_server_received_messages_per_rpc: Distribution of messages received count per RPC, by method.
+* dapr_grpc_io_server_sent_messages_per_rpc: Distribution of messages sent count per RPC, by method.
 
 #### gRPC Client metrics
 
-* dapr_grpc.io_client_sent_bytes_per_rpc: Distribution of bytes sent per RPC, by method.
-* dapr_grpc.io_client_received_bytes_per_rpc: Distribution of bytes received per RPC, by method.
-* dapr_grpc.io_client_roundtrip_latency: Distribution of round-trip latency, by method.
-* dapr_grpc.io_client_completed_rpcs: Count of RPCs by method and status.
-* dapr_grpc.io_client_sent_messages_per_rpc: Distribution of sent messages count per RPC, by method.
-* dapr_grpc.io_client_received_messages_per_rpc: Distribution of received messages count per RPC, by method.
-* dapr_grpc.io_client_server_latency: Distribution of server latency as viewed by client, by method.
+* dapr_grpc_io_client_sent_bytes_per_rpc: Distribution of bytes sent per RPC, by method.
+* dapr_grpc_io_client_received_bytes_per_rpc: Distribution of bytes received per RPC, by method.
+* dapr_grpc_io_client_roundtrip_latency: Distribution of round-trip latency, by method.
+* dapr_grpc_io_client_completed_rpcs: Count of RPCs by method and status.
+* dapr_grpc_io_client_sent_messages_per_rpc: Distribution of sent messages count per RPC, by method.
+* dapr_grpc_io_client_received_messages_per_rpc: Distribution of received messages count per RPC, by method.
+* dapr_grpc_io_client_server_latency: Distribution of server latency as viewed by client, by method.
 
 ### HTTP monitoring metrics
 
