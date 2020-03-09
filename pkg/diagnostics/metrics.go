@@ -41,8 +41,8 @@ func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregatio
 	}
 }
 
-// withTagWithAppID creates tag mutator with App ID
-func withTagWithAppID(appID string, mutators ...tag.Mutator) []tag.Mutator {
+// tagMutatorsWithAppID creates tag mutator with App ID
+func tagMutatorsWithAppID(appID string, mutators ...tag.Mutator) []tag.Mutator {
 	var newMutators = []tag.Mutator{}
 	if appID != "" {
 		newMutators = append(newMutators, tag.Upsert(appIDKey, appID))

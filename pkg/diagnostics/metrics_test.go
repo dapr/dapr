@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.opencensus.io/tag"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -203,4 +204,18 @@ func assertMetricsExist(t *testing.T, actual, expected string) {
 	for k, v := range expectedMap {
 		assert.True(t, v, fmt.Sprintf("expected metric %s was missing!", k))
 	}
+}
+
+func TestTagMutatorsWithAppID(t *testing.T) {
+	t.Run("with app id", func(t *testing.T) {
+		var operationKey = tag.MustNewKey("operation")
+		mutators := tagMutatorsWithAppID("appID", tag.Upsert(operationKey, "test"))
+		assert.Equal(t, 2, len(mutators))
+	})
+
+	t.Run("without app id", func(t *testing.T) {
+		var operationKey = tag.MustNewKey("operation")
+		mutators := tagMutatorsWithAppID("", tag.Upsert(operationKey, "test"))
+		assert.Equal(t, 1, len(mutators))
+	})
 }

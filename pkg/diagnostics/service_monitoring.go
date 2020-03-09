@@ -144,14 +144,14 @@ func (s *serviceMetrics) Init(appID string) error {
 
 // ComponentLoaded records metric when component is loaded successfully
 func (s *serviceMetrics) ComponentLoaded() {
-	stats.RecordWithTags(s.ctx, withTagWithAppID(s.appID), s.componentLoaded.M(1))
+	stats.RecordWithTags(s.ctx, tagMutatorsWithAppID(s.appID), s.componentLoaded.M(1))
 }
 
 // ComponentInitialized records metric when component is initialized
 func (s *serviceMetrics) ComponentInitialized(component string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTagWithAppID(s.appID, tag.Upsert(componentKey, component)),
+		tagMutatorsWithAppID(s.appID, tag.Upsert(componentKey, component)),
 		s.componentInitCompleted.M(1))
 }
 
@@ -159,52 +159,52 @@ func (s *serviceMetrics) ComponentInitialized(component string) {
 func (s *serviceMetrics) ComponentInitFailed(component string, reason string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTagWithAppID(s.appID, tag.Upsert(componentKey, component), tag.Upsert(failReasonKey, reason)),
+		tagMutatorsWithAppID(s.appID, tag.Upsert(componentKey, component), tag.Upsert(failReasonKey, reason)),
 		s.componentInitFailed.M(1))
 }
 
 // MTLSInitCompleted records metric when component is initialized
 func (s *serviceMetrics) MTLSInitCompleted() {
-	stats.RecordWithTags(s.ctx, withTagWithAppID(s.appID), s.mtlsInitCompleted.M(1))
+	stats.RecordWithTags(s.ctx, tagMutatorsWithAppID(s.appID), s.mtlsInitCompleted.M(1))
 }
 
 // MTLSInitFailed records metric when component initialization is failed
 func (s *serviceMetrics) MTLSInitFailed(reason string) {
 	stats.RecordWithTags(
-		s.ctx, withTagWithAppID(s.appID, tag.Upsert(failReasonKey, reason)),
+		s.ctx, tagMutatorsWithAppID(s.appID, tag.Upsert(failReasonKey, reason)),
 		s.mtlsInitFailed.M(1))
 }
 
 // MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded
 func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
-	stats.RecordWithTags(s.ctx, withTagWithAppID(s.appID), s.mtlsWorkloadCertRotated.M(1))
+	stats.RecordWithTags(s.ctx, tagMutatorsWithAppID(s.appID), s.mtlsWorkloadCertRotated.M(1))
 }
 
 // MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed
 func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
 	stats.RecordWithTags(
-		s.ctx, withTagWithAppID(s.appID, tag.Upsert(failReasonKey, reason)),
+		s.ctx, tagMutatorsWithAppID(s.appID, tag.Upsert(failReasonKey, reason)),
 		s.mtlsWorkloadCertRotatedFailed.M(1))
 }
 
 // ActorStatusReported records metrics when status is reported to placement service.
 func (s *serviceMetrics) ActorStatusReported(operation string) {
 	stats.RecordWithTags(
-		s.ctx, withTagWithAppID(s.appID, tag.Upsert(operationKey, operation)),
+		s.ctx, tagMutatorsWithAppID(s.appID, tag.Upsert(operationKey, operation)),
 		s.actorStatusReportTotal.M(1))
 }
 
 // ActorStatusReportFailed records metrics when status report to placement service is failed.
 func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string) {
 	stats.RecordWithTags(
-		s.ctx, withTagWithAppID(s.appID, tag.Upsert(operationKey, operation), tag.Upsert(failReasonKey, reason)),
+		s.ctx, tagMutatorsWithAppID(s.appID, tag.Upsert(operationKey, operation), tag.Upsert(failReasonKey, reason)),
 		s.actorStatusReportFailedTotal.M(1))
 }
 
 // ActorPlacementTableOperationReceived records metric when runtime receives table operation.
 func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) {
 	stats.RecordWithTags(
-		s.ctx, withTagWithAppID(s.appID, tag.Upsert(operationKey, operation)),
+		s.ctx, tagMutatorsWithAppID(s.appID, tag.Upsert(operationKey, operation)),
 		s.actorTableOperationRecvTotal.M(1))
 }
 
@@ -212,7 +212,7 @@ func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) 
 func (s *serviceMetrics) ActorRebalanced(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTagWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID)),
+		tagMutatorsWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID)),
 		s.actorRebalancedTotal.M(1))
 }
 
@@ -220,7 +220,7 @@ func (s *serviceMetrics) ActorRebalanced(actorType, actorID string) {
 func (s *serviceMetrics) ActorActivated(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTagWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID)),
+		tagMutatorsWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID)),
 		s.actorActivatedTotal.M(1))
 }
 
@@ -228,7 +228,7 @@ func (s *serviceMetrics) ActorActivated(actorType, actorID string) {
 func (s *serviceMetrics) ActorActivationFailed(actorType, actorID string, reason string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTagWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID), tag.Upsert(failReasonKey, reason)),
+		tagMutatorsWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID), tag.Upsert(failReasonKey, reason)),
 		s.actorActivatedFailedTotal.M(1))
 }
 
@@ -236,7 +236,7 @@ func (s *serviceMetrics) ActorActivationFailed(actorType, actorID string, reason
 func (s *serviceMetrics) ActorDeactivated(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTagWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID)),
+		tagMutatorsWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID)),
 		s.actorDeactivationTotal.M(1))
 }
 
@@ -244,6 +244,6 @@ func (s *serviceMetrics) ActorDeactivated(actorType, actorID string) {
 func (s *serviceMetrics) ActorDeactivationFailed(actorType, actorID, reason string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTagWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID), tag.Upsert(failReasonKey, reason)),
+		tagMutatorsWithAppID(s.appID, tag.Upsert(actorTypeKey, actorType), tag.Upsert(actorIDKey, actorID), tag.Upsert(failReasonKey, reason)),
 		s.actorDeactivationFailedTotal.M(1))
 }

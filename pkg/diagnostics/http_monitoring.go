@@ -65,23 +65,23 @@ func newHTTPMetrics() *httpMetrics {
 func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path string, contentSize int64) {
 	stats.RecordWithTags(
 		ctx,
-		withTagWithAppID(h.appID, tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method)),
+		tagMutatorsWithAppID(h.appID, tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method)),
 		h.serverRequestCount.M(1))
 	stats.RecordWithTags(
 		ctx,
-		withTagWithAppID(h.appID),
+		tagMutatorsWithAppID(h.appID),
 		h.serverRequestBytes.M(contentSize))
 }
 
 func (h *httpMetrics) ServerResponsed(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
 	stats.RecordWithTags(
 		ctx,
-		withTagWithAppID(h.appID, tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method), tag.Upsert(httpStatusCodeKey, status)),
+		tagMutatorsWithAppID(h.appID, tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method), tag.Upsert(httpStatusCodeKey, status)),
 		h.serverLatency.M(elapsed))
 
 	stats.RecordWithTags(
 		ctx,
-		withTagWithAppID(h.appID),
+		tagMutatorsWithAppID(h.appID),
 		h.serverResponseBytes.M(contentSize))
 }
 
