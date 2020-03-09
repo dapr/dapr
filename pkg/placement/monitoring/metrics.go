@@ -19,11 +19,11 @@ var (
 		"The total number of active hosts reported to placement service.",
 		stats.UnitDimensionless)
 	activeActorTypesTotal = stats.Int64(
-		"placement/actorTypes_total",
+		"placement/actortypes_total",
 		"The total number of active actor types reported to placement service.",
 		stats.UnitDimensionless)
 	activeNonActorTypesTotal = stats.Int64(
-		"placement/nonactorTypes_total",
+		"placement/nonactortypes_total",
 		"The total number of active non actor types reported to placement service.",
 		stats.UnitDimensionless)
 )
