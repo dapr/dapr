@@ -6,6 +6,8 @@
 package diagnostics
 
 import (
+	"time"
+
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -16,6 +18,9 @@ var (
 )
 
 var (
+	// DefaultReportinPeriod is the default view reporting period
+	DefaultReportinPeriod = 1 * time.Minute
+
 	// DefaultMonitoring holds service monitoring metrics definitions
 	DefaultMonitoring = newServiceMetrics()
 	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middleswares
@@ -48,6 +53,9 @@ func InitMetrics(appID string) error {
 	if err := DefaultHTTPMonitoring.Init(appID); err != nil {
 		return err
 	}
+
+	// Set reporting period of views
+	view.SetReportingPeriod(DefaultReportingPeriod)
 
 	return nil
 }
