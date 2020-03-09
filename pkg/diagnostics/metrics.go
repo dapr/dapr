@@ -14,12 +14,13 @@ import (
 )
 
 var (
+	// appIDKey is a tag key for App ID
 	appIDKey = tag.MustNewKey("app_id")
 )
 
 var (
-	// DefaultReportinPeriod is the default view reporting period
-	DefaultReportinPeriod = 1 * time.Minute
+	// DefaultReportingPeriod is the default view reporting period
+	DefaultReportingPeriod = 1 * time.Minute
 
 	// DefaultMonitoring holds service monitoring metrics definitions
 	DefaultMonitoring = newServiceMetrics()
@@ -38,6 +39,16 @@ func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregatio
 		TagKeys:     keys,
 		Aggregation: aggregation,
 	}
+}
+
+// withTagWithAppID creates tag mutator with App ID
+func withTagWithAppID(appID string, mutators ...tag.Mutator) []tag.Mutator {
+	var newMutators = []tag.Mutator{}
+	if appID != "" {
+		newMutators = append(newMutators, tag.Upsert(appIDKey, appID))
+	}
+
+	return append(newMutators, mutators...)
 }
 
 // InitMetrics initializes metrics

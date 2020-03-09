@@ -28,6 +28,7 @@ import (
 type key string
 
 const (
+	// CorrelationID is the header key name of correlation id for trace
 	CorrelationID      = "X-Correlation-ID"
 	correlationKey key = CorrelationID
 )

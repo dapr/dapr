@@ -15,6 +15,13 @@ import (
 	"google.golang.org/grpc/stats"
 )
 
+// Dapr wraps ocgrpc plugin to emit metrics:
+// https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ocgrpc
+
+// TODO: by default, ocgrpc emits both trace and metrics. This implementation turns off
+// trace because we have our own trace middleware. Later, we need to consider to turn on trace
+// to leverage the popular existing implementation instead of implementing our own.
+
 func addAppIDToCtx(ctx context.Context, appID string) context.Context {
 	// return if appID is not given
 	if appID == "" {
@@ -32,7 +39,6 @@ func addAppIDToCtx(ctx context.Context, appID string) context.Context {
 
 // gRPCServerHandler is the wrapper of grpc server plugin of opencensus
 // to add custom tag key and disable tracing
-// https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ocgrpc
 type gRPCServerHandler struct {
 	ocHandler *ocgrpc.ServerHandler
 	appID     string
@@ -54,8 +60,7 @@ func (s *gRPCServerHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) c
 }
 
 // gRPCClientHandler is the wrapper of grpc client plugin of opencensus
-// to add custom tag key and disable tracing
-// https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ocgrpc
+// to add custom tag key and disable tracing.
 type gRPCClientHandler struct {
 	ocHandler *ocgrpc.ClientHandler
 	appID     string

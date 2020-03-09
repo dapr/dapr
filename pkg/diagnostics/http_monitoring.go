@@ -16,13 +16,17 @@ import (
 	"go.opencensus.io/tag"
 )
 
+// To track the metrics for fasthttp using opencensus, this implementation is inspired by
+// https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ochttp
+
+// Tag key definitions for http requests
 var (
 	httpStatusCodeKey = tag.MustNewKey("status")
 	httpPathKey       = tag.MustNewKey("path")
 	httpMethodKey     = tag.MustNewKey("method")
 )
 
-// Default distributions inspired by https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ochttp
+// Default distributions
 var (
 	defaultSizeDistribution    = view.Distribution(1024, 2048, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824, 4294967296)
 	defaultLatencyDistribution = view.Distribution(1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1000, 2000, 5000, 10000, 20000, 50000, 100000)
@@ -38,7 +42,6 @@ type httpMetrics struct {
 }
 
 func newHTTPMetrics() *httpMetrics {
-	// http metrics are inspired by https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ochttp
 	return &httpMetrics{
 		serverRequestCount: stats.Int64(
 			"http/server/request_count",
@@ -59,35 +62,26 @@ func newHTTPMetrics() *httpMetrics {
 	}
 }
 
-func (h *httpMetrics) createTagMutators(mutators ...tag.Mutator) []tag.Mutator {
-	var newMutators = []tag.Mutator{}
-	if h.appID != "" {
-		newMutators = append(newMutators, tag.Upsert(appIDKey, h.appID))
-	}
-
-	return append(newMutators, mutators...)
-}
-
 func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path string, contentSize int64) {
 	stats.RecordWithTags(
 		ctx,
-		h.createTagMutators(tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method)),
+		withTagWithAppID(h.appID, tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method)),
 		h.serverRequestCount.M(1))
 	stats.RecordWithTags(
 		ctx,
-		h.createTagMutators(),
+		withTagWithAppID(h.appID),
 		h.serverRequestBytes.M(contentSize))
 }
 
 func (h *httpMetrics) ServerResponsed(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
 	stats.RecordWithTags(
 		ctx,
-		h.createTagMutators(tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method), tag.Upsert(httpStatusCodeKey, status)),
+		withTagWithAppID(h.appID, tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method), tag.Upsert(httpStatusCodeKey, status)),
 		h.serverLatency.M(elapsed))
 
 	stats.RecordWithTags(
 		ctx,
-		h.createTagMutators(),
+		withTagWithAppID(h.appID),
 		h.serverResponseBytes.M(contentSize))
 }
 
