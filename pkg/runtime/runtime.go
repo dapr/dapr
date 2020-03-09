@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	net_http "net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -21,9 +20,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/servicediscovery"
@@ -41,10 +37,11 @@ import (
 	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
@@ -227,23 +224,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
-	if a.runtimeConfig.EnableMetrics {
-		a.startMetricsServer()
-	}
-
 	err = a.announceSelf()
 	if err != nil {
 		log.Warnf("failed to broadcast address to local network: %s", err)
 	}
 
 	return nil
-}
-
-func (a *DaprRuntime) startMetricsServer() {
-	go func() {
-		log.Infof("starting metrics server on port %v", a.runtimeConfig.MetricsPort)
-		log.Fatal(net_http.ListenAndServe(fmt.Sprintf(":%d", a.runtimeConfig.MetricsPort), promhttp.Handler()))
-	}()
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -505,7 +491,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.pubSub, a.actor, a.sendToOutputBinding)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MetricsPort, a.runtimeConfig.EnableMetrics)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	server.StartNonBlocking()
@@ -513,7 +499,7 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 
 func (a *DaprRuntime) startGRPCServer(port int) error {
 	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.runtimeConfig.EnableMetrics)
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
@@ -573,6 +559,7 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 			binding, err := registry.CreateInputBinding(c.Spec.Type)
 			if err != nil {
 				log.Errorf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
 			err = binding.Init(bindings.Metadata{
@@ -581,11 +568,13 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 			})
 			if err != nil {
 				log.Errorf("failed to init input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
 				continue
 			}
 
 			log.Infof("successful init for input binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
 			a.inputBindings[c.ObjectMeta.Name] = binding
+			diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 		}
 	}
 	return nil
@@ -597,6 +586,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
 			if err != nil {
 				log.Errorf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
 
@@ -607,10 +597,12 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 				})
 				if err != nil {
 					log.Errorf("failed to init output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+					diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
 					continue
 				}
 				log.Infof("successful init for output binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
 				a.outputBindings[c.ObjectMeta.Name] = binding
+				diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 			}
 		}
 	}
@@ -624,6 +616,7 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 			store, err := registry.CreateStateStore(s.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating state store %s: %s", s.Spec.Type, err)
+				diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation")
 				continue
 			}
 			if store != nil {
@@ -632,6 +625,7 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 					Properties: props,
 				})
 				if err != nil {
+					diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
 					log.Warnf("error initializing state store %s: %s", s.Spec.Type, err)
 					continue
 				}
@@ -645,6 +639,7 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 						a.actorStateStoreName = s.ObjectMeta.Name
 					}
 				}
+				diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 			}
 		}
 	}
@@ -693,6 +688,7 @@ func (a *DaprRuntime) initExporters() error {
 			exporter, err := a.exporterRegistry.Create(c.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating exporter %s: %s", c.Spec.Type, err)
+				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
 
@@ -703,8 +699,10 @@ func (a *DaprRuntime) initExporters() error {
 			})
 			if err != nil {
 				log.Warnf("error initializing exporter %s: %s", c.Spec.Type, err)
+				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
 				continue
 			}
+			diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 		}
 	}
 	return nil
@@ -716,6 +714,7 @@ func (a *DaprRuntime) initPubSub() error {
 			pubSub, err := a.pubSubRegistry.Create(c.Spec.Type)
 			if err != nil {
 				log.Warnf("error creating pub sub %s: %s", c.Spec.Type, err)
+				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
 
@@ -727,10 +726,12 @@ func (a *DaprRuntime) initPubSub() error {
 			})
 			if err != nil {
 				log.Warnf("error initializing pub sub %s: %s", c.Spec.Type, err)
+				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
 				continue
 			}
 
 			a.pubSub = pubSub
+			diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 			break
 		}
 	}
@@ -794,7 +795,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		Payload: msg.Data,
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post,
 			http_channel.ContentType: pubsub.ContentType,
-			tracing.CorrelationID:    subject},
+			diag.CorrelationID:       subject},
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
@@ -912,6 +913,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 			modified := a.processComponentSecrets(component)
 			a.components[index] = modified
 			log.Infof("found component %s (%s)", modified.ObjectMeta.Name, modified.Spec.Type)
+			diag.DefaultMonitoring.ComponentLoaded()
 			wg.Done()
 		}(&wg, c, i)
 	}
@@ -1117,6 +1119,7 @@ func (a *DaprRuntime) initSecretStores() error {
 		secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type)
 		if err != nil {
 			log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 			continue
 		}
 
@@ -1125,10 +1128,12 @@ func (a *DaprRuntime) initSecretStores() error {
 		})
 		if err != nil {
 			log.Warnf("failed to init state store %s named %s: %s", c.Spec.Type, c.ObjectMeta.Name, err)
+			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
 			continue
 		}
 
 		a.secretStores[c.ObjectMeta.Name] = secretStore
+		diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	}
 
 	return nil
@@ -1169,5 +1174,7 @@ func (a *DaprRuntime) establishSecurity(id, sentryAddress string) error {
 	a.grpc.SetAuthenticator(auth)
 
 	log.Info("authenticator created")
+
+	diag.DefaultMonitoring.MTLSInitCompleted()
 	return nil
 }
