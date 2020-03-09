@@ -6,6 +6,7 @@
 package http
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"strings"
@@ -37,6 +38,8 @@ const (
 	// ContentType is the header for Content-Type
 	ContentType        = "Content-Type"
 	defaultContentType = "application/json"
+
+	httpInternalErrorCode = "500"
 )
 
 // Channel is an HTTP implementation of an AppChannel
@@ -103,12 +106,21 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 		h.ch <- 1
 	}
 
+	// TODO: Use propagated context
+	ctx := context.Background()
+	// Emit metric when request is sent
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, method, invokeRequest.Method, len(invokeRequest.Payload))
+
+	startRequest := time.Now()
 	err := h.client.Do(req, resp)
+	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
 	if h.ch != nil {
 		<-h.ch
 	}
 	if err != nil {
+		// Track failure request
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, method, invokeRequest.Method, httpInternalErrorCode, 0, elapsedMs)
 		return nil, err
 	}
 
@@ -117,6 +129,10 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	copy(arr, body)
 
 	statusCode := resp.StatusCode()
+
+	// Emit metric when requst is completed
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, method, invokeRequest.Method, statusCode, len(body), elapsedMs)
+
 	headers := []string{}
 	resp.Header.VisitAll(func(key []byte, value []byte) {
 		headers = append(headers, fmt.Sprintf("%s&__header_equals__&%s", string(key), string(value)))

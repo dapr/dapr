@@ -38,6 +38,10 @@ type httpMetrics struct {
 	serverResponseBytes *stats.Int64Measure
 	serverLatency       *stats.Float64Measure
 
+	clientSentBytes        *stats.Int64Measure
+	clientReceivedBytes    *stats.Int64Measure
+	clientRoundtripLatency *stats.Float64Measure
+
 	appID string
 }
 
@@ -58,6 +62,19 @@ func newHTTPMetrics() *httpMetrics {
 		serverLatency: stats.Float64(
 			"http/server/latency",
 			"HTTP request end to end latency in server.",
+			stats.UnitMilliseconds),
+
+		clientSentBytes: stats.Int64(
+			"http/client/sent_bytes",
+			"Total bytes sent in request body (not including headers)",
+			stats.UnitBytes),
+		clientReceivedBytes: stats.Int64(
+			"http/client/received_bytes",
+			"Total bytes received in response bodies (not including headers but including error responses with bodies)",
+			stats.UnitBytes),
+		clientRoundtripLatency: stats.Float64(
+			"http/client/roundtrip_latency",
+			"Time between first byte of request headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
 	}
 }
@@ -80,6 +97,23 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	stats.RecordWithTags(
 		ctx, withTags(appIDKey, h.appID),
 		h.serverResponseBytes.M(contentSize))
+}
+
+func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path string, contentSize int64) {
+	stats.RecordWithTags(
+		ctx,
+		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
+		h.clientSentBytes.M(contentSize))
+}
+
+func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
+	stats.RecordWithTags(
+		ctx,
+		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+		h.clientRoundtripLatency.M(elapsed))
+	stats.RecordWithTags(
+		ctx, withTags(appIDKey, h.appID),
+		h.clientReceivedBytes.M(contentSize))
 }
 
 func (h *httpMetrics) Init(appID string) error {
@@ -120,6 +154,35 @@ func (h *httpMetrics) Init(appID string) error {
 			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
 			Measure:     h.serverLatency,
 			Aggregation: view.Count(),
+		},
+
+		{
+			Name:        "http/client/sent_bytes",
+			Measure:     h.clientSentBytes,
+			Aggregation: defaultSizeDistribution,
+			Description: "Total bytes sent in request body (not including headers)",
+			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
+		},
+		{
+			Name:        "http/client/received_bytes",
+			Measure:     h.clientReceivedBytes,
+			Aggregation: defaultSizeDistribution,
+			Description: "Total bytes received in response bodies (not including headers but including error responses with bodies)",
+			TagKeys:     []tag.Key{appIDKey.httpStatusCodeKey},
+		},
+		{
+			Name:        "http/client/roundtrip_latency",
+			Measure:     h.clientRoundtripLatency,
+			Aggregation: defaultLatencyDistribution,
+			Description: "End-to-end latency",
+			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
+		},
+		{
+			Name:        "http/client/completed_count",
+			Measure:     h.clientRoundtripLatency,
+			Aggregation: view.Count(),
+			Description: "Count of completed requests",
+			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
 		},
 	}
 
