@@ -234,4 +234,12 @@ func TestWithTags(t *testing.T) {
 		mutators := withTags(appKey, "test", operationKey, 1)
 		assert.Equal(t, 1, len(mutators))
 	})
+
+	t.Run("skip empty value key", func(t *testing.T) {
+		var appKey = tag.MustNewKey("app_id")
+		var operationKey = tag.MustNewKey("operation")
+		var methodKey = tag.MustNewKey("method")
+		mutators := withTags(appKey, "", operationKey, "op", methodKey, "method")
+		assert.Equal(t, 2, len(mutators))
+	})
 }
