@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -109,7 +110,9 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	// TODO: Use propagated context
 	ctx := context.Background()
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, method, invokeRequest.Method, len(invokeRequest.Payload))
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(
+		ctx, method, invokeRequest.Method,
+		int64(len(invokeRequest.Payload)))
 
 	startRequest := time.Now()
 	err := h.client.Do(req, resp)
@@ -120,7 +123,9 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 	if err != nil {
 		// Track failure request
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, method, invokeRequest.Method, httpInternalErrorCode, 0, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(
+			ctx, method, invokeRequest.Method,
+			httpInternalErrorCode, 0, elapsedMs)
 		return nil, err
 	}
 
@@ -131,7 +136,9 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	statusCode := resp.StatusCode()
 
 	// Emit metric when requst is completed
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, method, invokeRequest.Method, statusCode, len(body), elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(
+		ctx, method, invokeRequest.Method,
+		strconv.Itoa(statusCode), int64(len(body)), elapsedMs)
 
 	headers := []string{}
 	resp.Header.VisitAll(func(key []byte, value []byte) {

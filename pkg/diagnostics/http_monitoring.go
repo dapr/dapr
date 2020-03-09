@@ -168,7 +168,7 @@ func (h *httpMetrics) Init(appID string) error {
 			Measure:     h.clientReceivedBytes,
 			Aggregation: defaultSizeDistribution,
 			Description: "Total bytes received in response bodies (not including headers but including error responses with bodies)",
-			TagKeys:     []tag.Key{appIDKey.httpStatusCodeKey},
+			TagKeys:     []tag.Key{appIDKey},
 		},
 		{
 			Name:        "http/client/roundtrip_latency",
