@@ -20,15 +20,15 @@ const (
 var (
 	serviceCreatedTotal = stats.Int64(
 		"operator/service_created_total",
-		"The total number of dapr service created.",
+		"The total number of dapr services created.",
 		stats.UnitDimensionless)
 	serviceDeletedTotal = stats.Int64(
 		"operator/service_deleted_total",
-		"The total number of dapr service deleted.",
+		"The total number of dapr services deleted.",
 		stats.UnitDimensionless)
 	serviceUpdatedTotal = stats.Int64(
 		"operator/service_updated_total",
-		"The total number of dapr service updated.",
+		"The total number of dapr services updated.",
 		stats.UnitDimensionless)
 
 	// appIDKey is a tag key for App ID
