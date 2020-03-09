@@ -35,13 +35,13 @@ func RecordActiveHostsCount(count int) {
 	stats.Record(context.Background(), activeHostsTotal.M(int64(count)))
 }
 
-// RecordActiveActorTypesCount records the number of active actor types
-func RecordActiveActorTypesCount(count int) {
+// RecordActorTypesCount records the number of active actor types
+func RecordActorTypesCount(count int) {
 	stats.Record(context.Background(), actorTypesTotal.M(int64(count)))
 }
 
-// RecordActiveNonActorHostsCount records the number of active non actor hosts
-func RecordActiveNonActorHostsCount(count int) {
+// RecordNonActorHostsCount records the number of active non actor hosts
+func RecordNonActorHostsCount(count int) {
 	stats.Record(context.Background(), nonActorHostsTotal.M(int64(count)))
 }
 
