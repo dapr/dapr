@@ -55,7 +55,10 @@ func withTags(opts ...interface{}) []tag.Mutator {
 		if !ok {
 			break
 		}
-		tagMutators = append(tagMutators, tag.Upsert(key, value))
+		// skip if value is empty
+		if value != "" {
+			tagMutators = append(tagMutators, tag.Upsert(key, value))
+		}
 	}
 	return tagMutators
 }
