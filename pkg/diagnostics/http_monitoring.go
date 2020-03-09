@@ -54,7 +54,7 @@ func newHTTPMetrics() *httpMetrics {
 			stats.UnitBytes),
 		serverLatency: stats.Float64(
 			"http/server/latency",
-			"HTTP server end to end latency in server",
+			"HTTP request end to end latency in server",
 			stats.UnitMilliseconds),
 	}
 }
