@@ -18,11 +18,29 @@ var (
 		"placement/hosts_total",
 		"The total number of active hosts reported to placement service.",
 		stats.UnitDimensionless)
+	activeActorTypesTotal = stats.Int64(
+		"placement/actorTypes_total",
+		"The total number of active actor types reported to placement service.",
+		stats.UnitDimensionless)
+	activeNonActorTypesTotal = stats.Int64(
+		"placement/nonactorTypes_total",
+		"The total number of active non actor types reported to placement service.",
+		stats.UnitDimensionless)
 )
 
 // RecordActiveHostsCount records the number of active hosts
 func RecordActiveHostsCount(count int) {
 	stats.Record(context.Background(), activeHostsTotal.M(int64(count)))
+}
+
+// RecordActiveActorTypesCount records the number of active actor types
+func RecordActiveActorTypesCount(count int) {
+	stats.Record(context.Background(), activeActorTypesTotal.M(int64(count)))
+}
+
+// RecordActiveNonActorTypesCount records the number of active non actor types
+func RecordActiveNonActorTypesCount(count int) {
+	stats.Record(context.Background(), activeNonActorTypesTotal.M(int64(count)))
 }
 
 func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
