@@ -77,7 +77,6 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		ctx,
 		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 		h.serverLatency.M(elapsed))
-
 	stats.RecordWithTags(
 		ctx, withTags(appIDKey, h.appID),
 		h.serverResponseBytes.M(contentSize))
@@ -130,13 +129,15 @@ func (h *httpMetrics) Init(appID string) error {
 // FastHTTPMiddleware is the middleware to track http server-side requests
 func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		var reqContentSize int64 = 0
-		if ctx.Request.Header.ContentLength() < 0 {
-			reqContentSize = int64(ctx.Request.Header.ContentLength())
+		reqContentSize := ctx.Request.Header.ContentLength()
+		if reqContentSize < 0 {
+			reqContentSize = 0
 		}
+
 		method := string(ctx.Method())
 		path := string(ctx.Path())
-		h.ServerRequestReceived(ctx, method, path, reqContentSize)
+
+		h.ServerRequestReceived(ctx, method, path, int64(reqContentSize))
 
 		start := time.Now()
 

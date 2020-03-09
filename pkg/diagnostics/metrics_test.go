@@ -206,20 +206,6 @@ func assertMetricsExist(t *testing.T, actual, expected string) {
 	}
 }
 
-func TestTagMutatorsWithAppID(t *testing.T) {
-	t.Run("with app id", func(t *testing.T) {
-		var operationKey = tag.MustNewKey("operation")
-		mutators := tagMutatorsWithAppID("appID", tag.Upsert(operationKey, "test"))
-		assert.Equal(t, 2, len(mutators))
-	})
-
-	t.Run("without app id", func(t *testing.T) {
-		var operationKey = tag.MustNewKey("operation")
-		mutators := tagMutatorsWithAppID("", tag.Upsert(operationKey, "test"))
-		assert.Equal(t, 1, len(mutators))
-	})
-}
-
 func TestWithTags(t *testing.T) {
 	t.Run("one tag", func(t *testing.T) {
 		var appKey = tag.MustNewKey("app_id")
