@@ -113,10 +113,8 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 			grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
 	}
 
-	if s.config.EnableMetrics {
-		log.Infof("enabled metrics grpc middleware")
-		opts = append(opts, grpc_go.StatsHandler(diag.DefaultGRPCMonitoring.ServerStatsHandler))
-	}
+	log.Infof("enabled metrics grpc middleware")
+	opts = append(opts, grpc_go.StatsHandler(diag.DefaultGRPCMonitoring.ServerStatsHandler))
 
 	return opts
 }

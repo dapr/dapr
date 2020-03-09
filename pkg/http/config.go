@@ -13,11 +13,10 @@ type ServerConfig struct {
 	Port            int
 	ProfilePort     int
 	EnableProfiling bool
-	EnableMetrics   bool
 }
 
 // NewServerConfig returns a new HTTP server config
-func NewServerConfig(appID string, hostAddress string, port int, profilePort int, allowedOrigins string, enableProfiling bool, enableMetrics bool) ServerConfig {
+func NewServerConfig(appID string, hostAddress string, port int, profilePort int, allowedOrigins string, enableProfiling bool) ServerConfig {
 	return ServerConfig{
 		AllowedOrigins:  allowedOrigins,
 		AppID:           appID,
@@ -25,6 +24,5 @@ func NewServerConfig(appID string, hostAddress string, port int, profilePort int
 		Port:            port,
 		ProfilePort:     profilePort,
 		EnableProfiling: enableProfiling,
-		EnableMetrics:   enableMetrics,
 	}
 }

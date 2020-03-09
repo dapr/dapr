@@ -52,9 +52,8 @@ func (s *server) StartNonBlocking() {
 				s.useComponents(
 					s.useRouter())))
 
-	if s.config.EnableMetrics {
-		handler = s.useMetrics(handler)
-	}
+	handler = s.useMetrics(handler)
+
 	if s.tracingSpec.Enabled {
 		handler = s.useTracing(handler)
 	}
