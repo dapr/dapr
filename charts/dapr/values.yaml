@@ -7,3 +7,6 @@ global:
   prometheus:
     enabled: true
     port: 9090
+
+dapr_config:
+  enabled: true
