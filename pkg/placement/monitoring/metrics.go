@@ -18,14 +18,16 @@ var (
 		"placement/hosts_total",
 		"The total number of active hosts reported to placement service.",
 		stats.UnitDimensionless)
-	activeActorTypesTotal = stats.Int64(
+	actorTypesTotal = stats.Int64(
 		"placement/actortypes_total",
-		"The total number of active actor types reported to placement service.",
+		"The total number of actor types reported to placement service.",
 		stats.UnitDimensionless)
-	activeNonActorTypesTotal = stats.Int64(
+	nonActorTypesTotal = stats.Int64(
 		"placement/nonactortypes_total",
-		"The total number of active non actor types reported to placement service.",
+		"The total number of non actor types reported to placement service.",
 		stats.UnitDimensionless)
+
+	nilKey = []tag.Key{}
 )
 
 // RecordActiveHostsCount records the number of active hosts
@@ -35,12 +37,12 @@ func RecordActiveHostsCount(count int) {
 
 // RecordActiveActorTypesCount records the number of active actor types
 func RecordActiveActorTypesCount(count int) {
-	stats.Record(context.Background(), activeActorTypesTotal.M(int64(count)))
+	stats.Record(context.Background(), actorTypesTotal.M(int64(count)))
 }
 
 // RecordActiveNonActorTypesCount records the number of active non actor types
 func RecordActiveNonActorTypesCount(count int) {
-	stats.Record(context.Background(), activeNonActorTypesTotal.M(int64(count)))
+	stats.Record(context.Background(), nonActorTypesTotal.M(int64(count)))
 }
 
 func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
@@ -56,7 +58,9 @@ func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregatio
 // InitMetrics initialize the placement service metrics
 func InitMetrics() error {
 	err := view.Register(
-		newView(activeHostsTotal, []tag.Key{}, view.LastValue()),
+		newView(activeHostsTotal, nilKey, view.LastValue()),
+		newView(actorTypesTotal, nilKey, view.LastValue()),
+		newView(nonActorTypesTotal, nilKey, view.LastValue()),
 	)
 
 	return err
