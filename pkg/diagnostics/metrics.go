@@ -41,14 +41,23 @@ func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregatio
 	}
 }
 
-// tagMutatorsWithAppID creates tag mutator with App ID
-func tagMutatorsWithAppID(appID string, mutators ...tag.Mutator) []tag.Mutator {
-	var newMutators = []tag.Mutator{}
-	if appID != "" {
-		newMutators = append(newMutators, tag.Upsert(appIDKey, appID))
+// withTags converts tag key and value pairs to tag.Mutator array.
+// withTags(key1, value1, key2, value2) returns
+// []tag.Mutator{tag.Upsert(key1, value1), tag.Upsert(key2, value2)}
+func withTags(opts ...interface{}) []tag.Mutator {
+	tagMutators := []tag.Mutator{}
+	for i := 0; i < len(opts)-1; i += 2 {
+		key, ok := opts[i].(tag.Key)
+		if !ok {
+			break
+		}
+		value, ok := opts[i+1].(string)
+		if !ok {
+			break
+		}
+		tagMutators = append(tagMutators, tag.Upsert(key, value))
 	}
-
-	return append(newMutators, mutators...)
+	return tagMutators
 }
 
 // InitMetrics initializes metrics

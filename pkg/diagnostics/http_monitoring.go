@@ -65,23 +65,21 @@ func newHTTPMetrics() *httpMetrics {
 func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path string, contentSize int64) {
 	stats.RecordWithTags(
 		ctx,
-		tagMutatorsWithAppID(h.appID, tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method)),
+		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
 		h.serverRequestCount.M(1))
 	stats.RecordWithTags(
-		ctx,
-		tagMutatorsWithAppID(h.appID),
+		ctx, withTags(appIDKey, h.appID),
 		h.serverRequestBytes.M(contentSize))
 }
 
-func (h *httpMetrics) ServerResponsed(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
+func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
 	stats.RecordWithTags(
 		ctx,
-		tagMutatorsWithAppID(h.appID, tag.Upsert(httpPathKey, path), tag.Upsert(httpMethodKey, method), tag.Upsert(httpStatusCodeKey, status)),
+		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 		h.serverLatency.M(elapsed))
 
 	stats.RecordWithTags(
-		ctx,
-		tagMutatorsWithAppID(h.appID),
+		ctx, withTags(appIDKey, h.appID),
 		h.serverResponseBytes.M(contentSize))
 }
 
@@ -133,7 +131,7 @@ func (h *httpMetrics) Init(appID string) error {
 func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		var reqContentSize int64 = 0
-		if ctx.Request.Header.ContentLength() != -1 {
+		if ctx.Request.Header.ContentLength() < 0 {
 			reqContentSize = int64(ctx.Request.Header.ContentLength())
 		}
 		method := string(ctx.Method())
@@ -147,7 +145,6 @@ func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.
 		status := strconv.Itoa(ctx.Response.StatusCode())
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		respSize := int64(len(ctx.Response.Body()))
-
-		h.ServerResponsed(ctx, method, path, status, respSize, elapsed)
+		h.ServerRequestCompleted(ctx, method, path, status, respSize, elapsed)
 	}
 }

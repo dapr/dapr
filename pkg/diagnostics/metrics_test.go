@@ -219,3 +219,33 @@ func TestTagMutatorsWithAppID(t *testing.T) {
 		assert.Equal(t, 1, len(mutators))
 	})
 }
+
+func TestWithTags(t *testing.T) {
+	t.Run("one tag", func(t *testing.T) {
+		var appKey = tag.MustNewKey("app_id")
+		mutators := withTags(appKey, "test")
+		assert.Equal(t, 1, len(mutators))
+	})
+
+	t.Run("two tags", func(t *testing.T) {
+		var appKey = tag.MustNewKey("app_id")
+		var operationKey = tag.MustNewKey("operation")
+		mutators := withTags(appKey, "test", operationKey, "op")
+		assert.Equal(t, 2, len(mutators))
+	})
+
+	t.Run("three tags", func(t *testing.T) {
+		var appKey = tag.MustNewKey("app_id")
+		var operationKey = tag.MustNewKey("operation")
+		var methodKey = tag.MustNewKey("method")
+		mutators := withTags(appKey, "test", operationKey, "op", methodKey, "method")
+		assert.Equal(t, 3, len(mutators))
+	})
+
+	t.Run("two tags with wrong value type", func(t *testing.T) {
+		var appKey = tag.MustNewKey("app_id")
+		var operationKey = tag.MustNewKey("operation")
+		mutators := withTags(appKey, "test", operationKey, 1)
+		assert.Equal(t, 1, len(mutators))
+	})
+}
