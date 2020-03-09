@@ -45,19 +45,19 @@ func newHTTPMetrics() *httpMetrics {
 	return &httpMetrics{
 		serverRequestCount: stats.Int64(
 			"http/server/request_count",
-			"Number of HTTP requests started in server",
+			"Number of HTTP requests started in server.",
 			stats.UnitDimensionless),
 		serverRequestBytes: stats.Int64(
 			"http/server/request_bytes",
-			"HTTP request body size if set as ContentLength (uncompressed) in server",
+			"HTTP request body size if set as ContentLength (uncompressed) in server.",
 			stats.UnitBytes),
 		serverResponseBytes: stats.Int64(
 			"http/server/response_bytes",
-			"HTTP response body size (uncompressed) in server",
+			"HTTP response body size (uncompressed) in server.",
 			stats.UnitBytes),
 		serverLatency: stats.Float64(
 			"http/server/latency",
-			"HTTP request end to end latency in server",
+			"HTTP request end to end latency in server.",
 			stats.UnitMilliseconds),
 	}
 }
