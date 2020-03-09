@@ -55,6 +55,7 @@ func (s *gRPCServerHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) c
 
 // gRPCClientHandler is the wrapper of grpc client plugin of opencensus
 // to add custom tag key and disable tracing
+// https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ocgrpc
 type gRPCClientHandler struct {
 	ocHandler *ocgrpc.ClientHandler
 	appID     string
