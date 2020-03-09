@@ -212,7 +212,7 @@ func (p *Service) ProcessHost(host *daprinternal_pb.Host) {
 	}
 
 	monitoring.RecordActiveActorTypesCount(len(p.entries))
-	monitoring.RecordActiveNonActorTypesCount(len(p.hosts) - len(p.entries))
+	monitoring.RecordActiveNonActorHostsCount(len(p.hosts) - len(p.entries))
 
 	if updateRequired {
 		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
