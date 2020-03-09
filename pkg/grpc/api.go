@@ -186,10 +186,13 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 
 func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error) {
 	req := messaging.DirectMessageRequest{
-		Data:     in.Data.Value,
 		Method:   in.Method,
 		Metadata: in.Metadata,
 		Target:   in.Id,
+	}
+
+	if in.Data != nil {
+		req.Data = in.Data.Value
 	}
 
 	resp, err := a.directMessaging.Invoke(&req)
