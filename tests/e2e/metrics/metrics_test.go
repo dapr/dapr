@@ -146,7 +146,7 @@ func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
 	decoder := expfmt.NewDecoder(res.Body, rfmt)
 
 	// This test will loop through each of the metrics and look for a specifc
-	// metric `http_handler_completed_requests_total`. Once it finds the metric
+	// metric `dapr_http_server_request_count`. Once it finds the metric
 	// it will check the `path` label is as expected for the invoked action.
 	var foundMetric bool
 	var foundPath bool
@@ -158,7 +158,7 @@ func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
 		}
 		require.NoError(t, err)
 
-		if strings.EqualFold(mf.GetName(), "http_handler_completed_requests_total") {
+		if strings.EqualFold(mf.GetName(), "dapr_http_server_request_count") {
 			foundMetric = true
 			for _, m := range mf.GetMetric() {
 				if m == nil {
@@ -222,9 +222,9 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 	decoder := expfmt.NewDecoder(res.Body, rfmt)
 
 	// This test will loop through each of the metrics and look for a specifc
-	// metric `grpc_server_msg_received_total`. This metric will exist for
-	// multiple `grpc_method` labels, therefore, we loop through the labels
-	// to find the the instance that has `grpc=method="SaveState". Once we
+	// metric `dapr_grpc_io_server_completed_rpcs`. This metric will exist for
+	// multiple `grpc_server_method` labels, therefore, we loop through the labels
+	// to find the the instance that has `grpc_server_method="SaveState". Once we
 	// find the desired metric entry, we check the metric's value is as expected.`
 	var foundMetric bool
 	var foundMethod bool
@@ -236,7 +236,7 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 		}
 		require.NoError(t, err)
 
-		if strings.EqualFold(mf.GetName(), "grpc_server_msg_received_total") {
+		if strings.EqualFold(mf.GetName(), "dapr_grpc_io_server_completed_rpcs") {
 			foundMetric = true
 			for _, m := range mf.GetMetric() {
 				if m == nil {
@@ -248,8 +248,8 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 						continue
 					}
 
-					if strings.EqualFold(l.GetName(), "grpc_method") {
-						if strings.EqualFold(l.GetValue(), "SaveState") {
+					if strings.EqualFold(l.GetName(), "grpc_server_method") {
+						if strings.EqualFold(l.GetValue(), "dapr.Dapr/SaveState") {
 							foundMethod = true
 
 							// Check value is as expected

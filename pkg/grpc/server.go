@@ -18,8 +18,6 @@ import (
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -77,10 +75,6 @@ func (s *server) StartNonBlocking() error {
 	daprinternal_pb.RegisterDaprInternalServer(server, s.api)
 	dapr_pb.RegisterDaprServer(server, s.api)
 
-	if s.config.EnableMetrics {
-		grpc_prometheus.Register(s.srv)
-	}
-
 	go func() {
 		if err := server.Serve(lis); err != nil {
 			log.Fatalf("gRPC serve error: %v", err)
@@ -111,27 +105,16 @@ func (s *server) generateWorkloadCert() error {
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
-	streamServerInterceptorChains := []grpc_go.StreamServerInterceptor{}
-	unaryInterceptorChains := []grpc_go.UnaryServerInterceptor{}
-
 	if s.tracingSpec.Enabled {
 		log.Infof("enabled tracing grpc middleware")
-		streamServerInterceptorChains = append(streamServerInterceptorChains, diag.TracingGRPCMiddlewareStream(s.tracingSpec))
-		unaryInterceptorChains = append(unaryInterceptorChains, diag.TracingGRPCMiddlewareUnary(s.tracingSpec))
-	}
-
-	if s.config.EnableMetrics {
-		log.Infof("enabled metrics grpc middleware")
-		streamServerInterceptorChains = append(streamServerInterceptorChains, diag.MetricsGRPCMiddlewareStream())
-		unaryInterceptorChains = append(unaryInterceptorChains, diag.MetricsGRPCMiddlewareUnary())
-	}
-
-	if s.tracingSpec.Enabled || s.config.EnableMetrics {
 		opts = append(
 			opts,
-			grpc_middleware.WithStreamServerChain(streamServerInterceptorChains...),
-			grpc_middleware.WithUnaryServerChain(unaryInterceptorChains...))
+			grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)),
+			grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
 	}
+
+	log.Infof("enabled metrics grpc middleware")
+	opts = append(opts, grpc_go.StatsHandler(diag.DefaultGRPCMonitoring.ServerStatsHandler))
 
 	return opts
 }
@@ -176,6 +159,7 @@ func (s *server) startWorkloadCertRotation() {
 			if err != nil {
 				log.Errorf("error starting server: %s", err)
 			}
+			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
 		}
 		s.renewMutex.Unlock()
 	}
