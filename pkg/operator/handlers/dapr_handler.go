@@ -171,7 +171,7 @@ func (h *DaprHandler) ObjectCreated(obj interface{}) {
 			log.Errorf("failed creating service for deployment %s: %s", deployment.GetName(), err)
 		}
 
-		monitoring.RecordServiceCreatedCount()
+		monitoring.RecordServiceCreatedCount(id)
 	}
 }
 
@@ -198,6 +198,6 @@ func (h *DaprHandler) ObjectDeleted(obj interface{}) {
 			log.Errorf("failed deleting service for deployment %s: %s", deployment.GetName(), err)
 		}
 
-		monitoring.RecordServiceDeletedCount()
+		monitoring.RecordServiceDeletedCount(id)
 	}
 }
