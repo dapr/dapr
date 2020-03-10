@@ -2,10 +2,9 @@ package monitoring
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/dapr/dapr/pkg/logger"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -21,8 +20,8 @@ var (
 		"sentry/cert/sign/success_total",
 		"The number of certificates issuances that have succeeded.",
 		stats.UnitDimensionless)
-	certSignErrorTotal = stats.Int64(
-		"sentry/cert/sign/error_total",
+	certSignFailedTotal = stats.Int64(
+		"sentry/cert/sign/failure_total",
 		"The number of errors occurred when signing the CSR.",
 		stats.UnitDimensionless)
 	rootCertExpiryTimestamp = stats.Int64(
@@ -38,33 +37,19 @@ var (
 		"The number of issuer cert updates, when issuer cert or key is changed",
 		stats.UnitDimensionless)
 
-	nilKey = []tag.Key{}
-
 	// Metrics Tags
-	errorTypeTag tag.Key
+	failedReasonKey = tag.MustNewKey("reason")
 )
 
-type certSignErrorType string
+type certSignFailReason string
 
 const (
-	CertParseError        certSignErrorType = "CertParse"
-	CertValidationError   certSignErrorType = "CertValidation"
-	ReqIDError            certSignErrorType = "ReqIDValidation"
-	CertSignError         certSignErrorType = "CertSign"
-	InsufficientDataError certSignErrorType = "InsufficientData"
+	CertParseError        certSignFailReason = "cert_parse"
+	CertValidationError   certSignFailReason = "cert_validation"
+	ReqIDError            certSignFailReason = "req_id_validation"
+	CertSignError         certSignFailReason = "cert_sign"
+	InsufficientDataError certSignFailReason = "insufficient_data"
 )
-
-var log = logger.NewLogger("dapr.sentry.monitoring")
-
-func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
-	return &view.View{
-		Name:        measure.Name(),
-		Description: measure.Description(),
-		Measure:     measure,
-		TagKeys:     keys,
-		Aggregation: aggregation,
-	}
-}
 
 // CertSignRequestRecieved counts when CSR received.
 func CertSignRequestRecieved() {
@@ -77,14 +62,11 @@ func CertSignSucceed() {
 }
 
 // CertSignFailed counts succeeded cert issuance
-func CertSignFailed(failure certSignErrorType) {
-	ctx, err := tag.New(context.Background(), tag.Insert(errorTypeTag, string(failure)))
-	if err != nil {
-		log.Warnf("error creating monitoring context: %v", err)
-		return
-	}
-
-	stats.Record(ctx, certSignErrorTotal.M(1))
+func CertSignFailed(reason certSignFailReason) {
+	stats.RecordWithTags(
+		context.Background(),
+		diag_utils.WithTags(failedReasonKey, string(reason)),
+		certSignFailedTotal.M(1))
 }
 
 // RootCertExpiry records root cert expiry
@@ -104,19 +86,13 @@ func IssuerCredentialChanged() {
 
 // InitMetrics initializes metrics
 func InitMetrics() error {
-	var err error
-	if errorTypeTag, err = tag.NewKey("error_type"); err != nil {
-		return fmt.Errorf("failed to create new key: %v", err)
-	}
-
-	err = view.Register(
-		newView(csrReceivedTotal, nilKey, view.Count()),
-		newView(certSignSuccessTotal, nilKey, view.Count()),
-		newView(certSignErrorTotal, nilKey, view.Count()),
-		newView(rootCertRotateTotal, nilKey, view.Count()),
-		newView(issuerCredentialChangeTotal, nilKey, view.Count()),
-		newView(rootCertExpiryTimestamp, nilKey, view.LastValue()),
+	var nilKey = []tag.Key{}
+	return view.Register(
+		diag_utils.NewMeasureView(csrReceivedTotal, nilKey, view.Count()),
+		diag_utils.NewMeasureView(certSignSuccessTotal, nilKey, view.Count()),
+		diag_utils.NewMeasureView(certSignFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
+		diag_utils.NewMeasureView(rootCertRotateTotal, nilKey, view.Count()),
+		diag_utils.NewMeasureView(issuerCredentialChangeTotal, nilKey, view.Count()),
+		diag_utils.NewMeasureView(rootCertExpiryTimestamp, nilKey, view.LastValue()),
 	)
-
-	return err
 }
