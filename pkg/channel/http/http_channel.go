@@ -8,6 +8,7 @@ package http
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -121,12 +122,18 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	if h.ch != nil {
 		<-h.ch
 	}
+
 	if err != nil {
 		// Track failure request
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(
 			ctx, method, invokeRequest.Method,
 			httpInternalErrorCode, 0, elapsedMs)
 		return nil, err
+	}
+
+	if resp.StatusCode() != 200 {
+		errorText := fmt.Sprintf("method invocation failed with %d", resp.StatusCode())
+		return nil, errors.New(errorText)
 	}
 
 	body := resp.Body()
