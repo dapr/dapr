@@ -121,7 +121,6 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.StatusUnsupportedMediaType,
 		)
 
-		monitoring.RecordFailedSidecarInjectionCount()
 		return
 	}
 
