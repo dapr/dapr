@@ -5,7 +5,6 @@ import (
 	"time"
 
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/logger"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -51,18 +50,6 @@ const (
 	CertSignError         certSignFailReason = "cert_sign"
 	InsufficientDataError certSignFailReason = "insufficient_data"
 )
-
-var log = logger.NewLogger("dapr.sentry.monitoring")
-
-func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
-	return &view.View{
-		Name:        measure.Name(),
-		Description: measure.Description(),
-		Measure:     measure,
-		TagKeys:     keys,
-		Aggregation: aggregation,
-	}
-}
 
 // CertSignRequestRecieved counts when CSR received.
 func CertSignRequestRecieved() {
