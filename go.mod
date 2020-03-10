@@ -8,7 +8,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
-	github.com/dapr/components-contrib v0.0.0-20200305065926-4602757a455e
+	github.com/dapr/components-contrib v0.0.0-20200310050752-cf077cca6569
 	github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
@@ -29,7 +29,7 @@ require (
 	github.com/qiangxue/fasthttp-routing v0.0.0-20160225050629-6ccdc2a18d87
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
-	github.com/valyala/fasthttp v1.6.0
+	github.com/valyala/fasthttp v1.9.0
 	go.opencensus.io v0.22.3
 	google.golang.org/grpc v1.26.0
 	gopkg.in/yaml.v2 v2.2.8

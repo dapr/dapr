@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"context"
 
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -122,36 +123,36 @@ func newServiceMetrics() *serviceMetrics {
 func (s *serviceMetrics) Init(appID string) error {
 	s.appID = appID
 	return view.Register(
-		newView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
-		newView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
-		newView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey}, view.Count()),
+		diag_utils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
+		diag_utils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
+		diag_utils.NewMeasureView(s.componentInitFailed, []tag.Key{appIDKey, componentKey, failReasonKey}, view.Count()),
 
-		newView(s.mtlsInitCompleted, []tag.Key{appIDKey}, view.Count()),
-		newView(s.mtlsInitFailed, []tag.Key{appIDKey, failReasonKey}, view.Count()),
-		newView(s.mtlsWorkloadCertRotated, []tag.Key{appIDKey}, view.Count()),
-		newView(s.mtlsWorkloadCertRotatedFailed, []tag.Key{appIDKey, failReasonKey}, view.Count()),
+		diag_utils.NewMeasureView(s.mtlsInitCompleted, []tag.Key{appIDKey}, view.Count()),
+		diag_utils.NewMeasureView(s.mtlsInitFailed, []tag.Key{appIDKey, failReasonKey}, view.Count()),
+		diag_utils.NewMeasureView(s.mtlsWorkloadCertRotated, []tag.Key{appIDKey}, view.Count()),
+		diag_utils.NewMeasureView(s.mtlsWorkloadCertRotatedFailed, []tag.Key{appIDKey, failReasonKey}, view.Count()),
 
-		newView(s.actorStatusReportTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey, operationKey}, view.Count()),
-		newView(s.actorStatusReportFailedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey, operationKey, failReasonKey}, view.Count()),
-		newView(s.actorTableOperationRecvTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey, operationKey}, view.Count()),
-		newView(s.actorRebalancedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
-		newView(s.actorActivatedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
-		newView(s.actorActivatedFailedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
-		newView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
-		newView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorStatusReportTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey, operationKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorStatusReportFailedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey, operationKey, failReasonKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorTableOperationRecvTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey, operationKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorRebalancedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorActivatedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorActivatedFailedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.Count()),
 	)
 }
 
 // ComponentLoaded records metric when component is loaded successfully
 func (s *serviceMetrics) ComponentLoaded() {
-	stats.RecordWithTags(s.ctx, withTags(appIDKey, s.appID), s.componentLoaded.M(1))
+	stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.componentLoaded.M(1))
 }
 
 // ComponentInitialized records metric when component is initialized
 func (s *serviceMetrics) ComponentInitialized(component string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTags(appIDKey, s.appID, componentKey, component),
+		diag_utils.WithTags(appIDKey, s.appID, componentKey, component),
 		s.componentInitCompleted.M(1))
 }
 
@@ -159,52 +160,52 @@ func (s *serviceMetrics) ComponentInitialized(component string) {
 func (s *serviceMetrics) ComponentInitFailed(component string, reason string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason),
+		diag_utils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason),
 		s.componentInitFailed.M(1))
 }
 
 // MTLSInitCompleted records metric when component is initialized
 func (s *serviceMetrics) MTLSInitCompleted() {
-	stats.RecordWithTags(s.ctx, withTags(appIDKey, s.appID), s.mtlsInitCompleted.M(1))
+	stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.mtlsInitCompleted.M(1))
 }
 
 // MTLSInitFailed records metric when component initialization is failed
 func (s *serviceMetrics) MTLSInitFailed(reason string) {
 	stats.RecordWithTags(
-		s.ctx, withTags(appIDKey, s.appID, failReasonKey, reason),
+		s.ctx, diag_utils.WithTags(appIDKey, s.appID, failReasonKey, reason),
 		s.mtlsInitFailed.M(1))
 }
 
 // MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded
 func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
-	stats.RecordWithTags(s.ctx, withTags(appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
+	stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
 }
 
 // MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed
 func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
 	stats.RecordWithTags(
-		s.ctx, withTags(appIDKey, s.appID, failReasonKey, reason),
+		s.ctx, diag_utils.WithTags(appIDKey, s.appID, failReasonKey, reason),
 		s.mtlsWorkloadCertRotatedFailed.M(1))
 }
 
 // ActorStatusReported records metrics when status is reported to placement service.
 func (s *serviceMetrics) ActorStatusReported(operation string) {
 	stats.RecordWithTags(
-		s.ctx, withTags(appIDKey, s.appID, operationKey, operation),
+		s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation),
 		s.actorStatusReportTotal.M(1))
 }
 
 // ActorStatusReportFailed records metrics when status report to placement service is failed.
 func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string) {
 	stats.RecordWithTags(
-		s.ctx, withTags(appIDKey, s.appID, operationKey, operation, failReasonKey, reason),
+		s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation, failReasonKey, reason),
 		s.actorStatusReportFailedTotal.M(1))
 }
 
 // ActorPlacementTableOperationReceived records metric when runtime receives table operation.
 func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) {
 	stats.RecordWithTags(
-		s.ctx, withTags(appIDKey, s.appID, operationKey, operation),
+		s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation),
 		s.actorTableOperationRecvTotal.M(1))
 }
 
@@ -212,7 +213,7 @@ func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) 
 func (s *serviceMetrics) ActorRebalanced(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
+		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
 		s.actorRebalancedTotal.M(1))
 }
 
@@ -220,7 +221,7 @@ func (s *serviceMetrics) ActorRebalanced(actorType, actorID string) {
 func (s *serviceMetrics) ActorActivated(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
+		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
 		s.actorActivatedTotal.M(1))
 }
 
@@ -228,7 +229,7 @@ func (s *serviceMetrics) ActorActivated(actorType, actorID string) {
 func (s *serviceMetrics) ActorActivationFailed(actorType, actorID string, reason string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID, failReasonKey, reason),
+		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID, failReasonKey, reason),
 		s.actorActivatedFailedTotal.M(1))
 }
 
@@ -236,7 +237,7 @@ func (s *serviceMetrics) ActorActivationFailed(actorType, actorID string, reason
 func (s *serviceMetrics) ActorDeactivated(actorType, actorID string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
+		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
 		s.actorDeactivationTotal.M(1))
 }
 
@@ -244,6 +245,6 @@ func (s *serviceMetrics) ActorDeactivated(actorType, actorID string) {
 func (s *serviceMetrics) ActorDeactivationFailed(actorType, actorID, reason string) {
 	stats.RecordWithTags(
 		s.ctx,
-		withTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID, failReasonKey, reason),
+		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID, failReasonKey, reason),
 		s.actorDeactivationFailedTotal.M(1))
 }
