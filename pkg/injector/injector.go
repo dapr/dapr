@@ -14,8 +14,10 @@ import (
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/logger"
 	"k8s.io/api/admission/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -98,6 +100,8 @@ func (i *injector) Run(ctx context.Context) {
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
+	monitoring.RecordSidecarInjectionRequestsCount()
+
 	var body []byte
 	if r.Body != nil {
 		if data, err := ioutil.ReadAll(r.Body); err == nil {
@@ -118,6 +122,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			"invalid Content-Type, expect `application/json`",
 			http.StatusUnsupportedMediaType,
 		)
+
 		return
 	}
 
@@ -136,8 +141,21 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var pod corev1.Pod
+	var id string
+
+	if ar.Request != nil {
+		err = json.Unmarshal(ar.Request.Object.Raw, &pod)
+		if err != nil {
+			log.Errorf("could not unmarshal raw object: %v", err)
+		} else {
+			id = getAppID(pod)
+		}
+	}
+
 	if err != nil {
 		admissionResponse = toAdmissionResponse(err)
+		monitoring.RecordFailedSidecarInjectionCount(id, "patch")
 	} else if len(patchOps) == 0 {
 		admissionResponse = &v1beta1.AdmissionResponse{
 			Allowed: true,
@@ -176,6 +194,8 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("could not encode response: %v", err),
 			http.StatusInternalServerError,
 		)
+
+		monitoring.RecordFailedSidecarInjectionCount(id, "response")
 		return
 	}
 
@@ -187,5 +207,9 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("could not write response: %v", err),
 			http.StatusInternalServerError,
 		)
+
+		monitoring.RecordFailedSidecarInjectionCount(id, "response")
+	} else {
+		monitoring.RecordSuccessfulSidecarInjectionCount(id)
 	}
 }
