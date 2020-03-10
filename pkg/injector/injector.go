@@ -120,6 +120,8 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			"invalid Content-Type, expect `application/json`",
 			http.StatusUnsupportedMediaType,
 		)
+
+		monitoring.RecordFailedSidecarInjectionCount()
 		return
 	}
 
@@ -162,6 +164,18 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var pod corev1.Pod
+	var id string
+
+	if ar.Request != nil {
+		err := json.Unmarshal(ar.Request.Object.Raw, &pod)
+		if err != nil {
+			log.Errorf("could not unmarshal raw object: %v", err)
+		} else {
+			id = getAppID(pod)
+		}
+	}
+
 	admissionReview := v1beta1.AdmissionReview{}
 	if admissionResponse != nil {
 		admissionReview.Response = admissionResponse
@@ -178,15 +192,10 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("could not encode response: %v", err),
 			http.StatusInternalServerError,
 		)
+
+		monitoring.RecordFailedSidecarInjectionCount(id, "failed_to_encode_response")
 		return
 	}
-
-	var pod corev1.Pod
-	if err := json.Unmarshal(ar.Request.Object.Raw, &pod); err != nil {
-		log.Errorf("could not unmarshal raw object: %v", err)
-	}
-
-	id := getAppID(pod)
 
 	log.Infof("ready to write response ...")
 	if _, err := w.Write(resp); err != nil {
@@ -197,8 +206,8 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError,
 		)
 
-		monitoring.RecordFailedAdmissionReviewResponseCount(id, pod.Name)
+		monitoring.RecordFailedSidecarInjectionCount(id, "failed_to_write_response")
+	} else {
+		monitoring.RecordSuccessfulSidecarInjectionCount(id)
 	}
-
-	monitoring.RecordSuccessfulAdmissionReviewResponseCount(id, pod.Name)
 }
