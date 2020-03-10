@@ -8,7 +8,7 @@ package monitoring
 import (
 	"context"
 
-	"github.com/dapr/dapr/pkg/diagnostics/utils"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -38,17 +38,17 @@ var (
 
 // RecordServiceCreatedCount records the number of dapr service created
 func RecordServiceCreatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), utils.WithTags(appIDKey, appID), serviceCreatedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceCreatedTotal.M(1))
 }
 
 // RecordServiceDeletedCount records the number of dapr service deleted
 func RecordServiceDeletedCount(appID string) {
-	stats.RecordWithTags(context.Background(), utils.WithTags(appIDKey, appID), serviceDeletedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceDeletedTotal.M(1))
 }
 
 // RecordServiceUpdatedCount records the number of dapr service updated
 func RecordServiceUpdatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), utils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
+	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
 }
 
 func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {

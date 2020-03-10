@@ -8,7 +8,7 @@ package diagnostics
 import (
 	"context"
 
-	"github.com/dapr/dapr/pkg/diagnostics/utils"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/trace"
@@ -37,11 +37,11 @@ func (s *gRPCServerHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo)
 }
 
 func (s *gRPCServerHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
-	s.ocHandler.HandleRPC(utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rs)
+	s.ocHandler.HandleRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rs)
 }
 
 func (s *gRPCServerHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) context.Context {
-	return s.ocHandler.TagRPC(utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rti)
+	return s.ocHandler.TagRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rti)
 }
 
 // gRPCClientHandler is the wrapper of grpc client plugin of opencensus
@@ -58,11 +58,11 @@ func (c *gRPCClientHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo)
 }
 
 func (c *gRPCClientHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
-	c.ocHandler.HandleRPC(utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rs)
+	c.ocHandler.HandleRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rs)
 }
 
 func (c *gRPCClientHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) context.Context {
-	return c.ocHandler.TagRPC(utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rti)
+	return c.ocHandler.TagRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rti)
 }
 
 // grpcMetrics holds gRPC server and client stats handlers
@@ -74,11 +74,11 @@ type grpcMetrics struct {
 // Init initializes metric view and creates gRPC server/client handlers
 func (g *grpcMetrics) Init(appID string) error {
 	// Register default grpc server views
-	if err := view.Register(utils.AddNewTagKey(ocgrpc.DefaultServerViews, &appIDKey)...); err != nil {
+	if err := view.Register(diag_utils.AddNewTagKey(ocgrpc.DefaultServerViews, &appIDKey)...); err != nil {
 		return err
 	}
 
-	if err := view.Register(utils.AddNewTagKey(ocgrpc.DefaultClientViews, &appIDKey)...); err != nil {
+	if err := view.Register(diag_utils.AddNewTagKey(ocgrpc.DefaultClientViews, &appIDKey)...); err != nil {
 		return err
 	}
 
