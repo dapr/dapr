@@ -51,6 +51,25 @@ func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
 	}
 }
 
+func getAppIDFromRequest(req *v1beta1.AdmissionRequest) string {
+	// default App ID
+	appID := ""
+
+	// if req is not given
+	if req == nil {
+		return appID
+	}
+
+	var pod corev1.Pod
+	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
+		log.Warnf("could not unmarshal raw object: %v", err)
+	} else {
+		appID = getAppID(pod)
+	}
+
+	return appID
+}
+
 // NewInjector returns a new Injector instance with the given config
 func NewInjector(config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
 	mux := http.NewServeMux()
@@ -129,6 +148,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	var admissionResponse *v1beta1.AdmissionResponse
 	var patchOps []PatchOperation
 	var err error
+
 	ar := v1beta1.AdmissionReview{}
 	if _, _, err = i.deserializer.Decode(body, nil, &ar); err != nil {
 		log.Errorf("Can't decode body: %v", err)
@@ -141,17 +161,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var pod corev1.Pod
-	var id string
-
-	if ar.Request != nil {
-		err = json.Unmarshal(ar.Request.Object.Raw, &pod)
-		if err != nil {
-			log.Errorf("could not unmarshal raw object: %v", err)
-		} else {
-			id = getAppID(pod)
-		}
-	}
+	diagAppID := getAppIDFromRequest(ar.Request)
 
 	if err != nil {
 		admissionResponse = toAdmissionResponse(err)
@@ -195,7 +205,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError,
 		)
 
-		monitoring.RecordFailedSidecarInjectionCount(id, "response")
+		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
 		return
 	}
 
@@ -208,8 +218,8 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError,
 		)
 
-		monitoring.RecordFailedSidecarInjectionCount(id, "response")
+		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
 	} else {
-		monitoring.RecordSuccessfulSidecarInjectionCount(id)
+		monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
 	}
 }
