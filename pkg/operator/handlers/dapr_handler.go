@@ -8,6 +8,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/operator/monitoring"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -169,6 +170,8 @@ func (h *DaprHandler) ObjectCreated(obj interface{}) {
 		if err != nil {
 			log.Errorf("failed creating service for deployment %s: %s", deployment.GetName(), err)
 		}
+
+		monitoring.RecordServiceCreatedCount(id)
 	}
 }
 
@@ -194,5 +197,7 @@ func (h *DaprHandler) ObjectDeleted(obj interface{}) {
 		if err != nil {
 			log.Errorf("failed deleting service for deployment %s: %s", deployment.GetName(), err)
 		}
+
+		monitoring.RecordServiceDeletedCount(id)
 	}
 }

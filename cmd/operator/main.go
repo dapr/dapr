@@ -14,6 +14,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
+	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
@@ -68,6 +69,10 @@ func init() {
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 }
