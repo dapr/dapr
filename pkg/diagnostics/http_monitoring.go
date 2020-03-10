@@ -145,7 +145,7 @@ func (h *httpMetrics) Init(appID string) error {
 		{
 			Name:        "http/server/latency",
 			Description: "Latency distribution of HTTP requests",
-			TagKeys:     []tag.Key{appIDKey},
+			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
 			Measure:     h.serverLatency,
 			Aggregation: defaultLatencyDistribution,
 		},
