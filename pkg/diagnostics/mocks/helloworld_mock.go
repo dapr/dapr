@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	helloworld "github.com/dapr/dapr/pkg/diagnostics/utils"
+	helloworld "github.com/dapr/dapr/pkg/diagnostics/mocks"
 	gomock "github.com/golang/mock/gomock"
 	grpc "google.golang.org/grpc"
 )
