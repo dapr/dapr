@@ -2,3 +2,5 @@ mtls:
   enabled: "true"
   workloadCertTTL: 24h
   allowedClockSkew: 15m
+
+  enabled: true
