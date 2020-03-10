@@ -167,7 +167,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	var id string
 
 	if ar.Request != nil {
-		err := json.Unmarshal(ar.Request.Object.Raw, &pod)
+		err = json.Unmarshal(ar.Request.Object.Raw, &pod)
 		if err != nil {
 			log.Errorf("could not unmarshal raw object: %v", err)
 		} else {
