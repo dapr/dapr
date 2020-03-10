@@ -100,6 +100,8 @@ func (i *injector) Run(ctx context.Context) {
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
+	monitoring.RecordSidecarInjectionRequestsCount()
+
 	var body []byte
 	if r.Body != nil {
 		if data, err := ioutil.ReadAll(r.Body); err == nil {
@@ -139,8 +141,21 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var pod corev1.Pod
+	var id string
+
+	if ar.Request != nil {
+		err = json.Unmarshal(ar.Request.Object.Raw, &pod)
+		if err != nil {
+			log.Errorf("could not unmarshal raw object: %v", err)
+		} else {
+			id = getAppID(pod)
+		}
+	}
+
 	if err != nil {
 		admissionResponse = toAdmissionResponse(err)
+		monitoring.RecordFailedSidecarInjectionCount(id, "patch")
 	} else if len(patchOps) == 0 {
 		admissionResponse = &v1beta1.AdmissionResponse{
 			Allowed: true,
@@ -163,18 +178,6 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var pod corev1.Pod
-	var id string
-
-	if ar.Request != nil {
-		err = json.Unmarshal(ar.Request.Object.Raw, &pod)
-		if err != nil {
-			log.Errorf("could not unmarshal raw object: %v", err)
-		} else {
-			id = getAppID(pod)
-		}
-	}
-
 	admissionReview := v1beta1.AdmissionReview{}
 	if admissionResponse != nil {
 		admissionReview.Response = admissionResponse
@@ -192,7 +195,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError,
 		)
 
-		monitoring.RecordFailedSidecarInjectionCount(id, "failed_to_encode_response")
+		monitoring.RecordFailedSidecarInjectionCount(id, "response")
 		return
 	}
 
@@ -205,7 +208,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError,
 		)
 
-		monitoring.RecordFailedSidecarInjectionCount(id, "failed_to_write_response")
+		monitoring.RecordFailedSidecarInjectionCount(id, "response")
 	} else {
 		monitoring.RecordSuccessfulSidecarInjectionCount(id)
 	}

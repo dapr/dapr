@@ -20,14 +20,20 @@ const (
 )
 
 var (
+	sidecarInjectionRequestsTotal = stats.Int64(
+		"injector/sidecar_injection/requests_total",
+		"The total number of sidecar injection requests.",
+		stats.UnitDimensionless)
 	succeededSidecarInjectedTotal = stats.Int64(
-		"injector/sidecar_injection_succeeded_total",
+		"injector/sidecar_injection/succeeded_total",
 		"The total number of successful sidecar injections.",
 		stats.UnitDimensionless)
 	failedSidecarInjectedTotal = stats.Int64(
-		"injector/sidecar_injection_failed_total",
+		"injector/sidecar_injection/failed_total",
 		"The total number of failed sidecar injections.",
 		stats.UnitDimensionless)
+
+	noKeys = []tag.Key{}
 
 	// appIDKey is a tag key for App ID
 	appIDKey = tag.MustNewKey(appID)
@@ -35,6 +41,11 @@ var (
 	// failedReasonKey is a tag key for failed reason
 	failedReasonKey = tag.MustNewKey(failedReason)
 )
+
+// RecordSidecarInjectionRequestsCount records the total number of sidecar injection requests
+func RecordSidecarInjectionRequestsCount() {
+	stats.Record(context.Background(), sidecarInjectionRequestsTotal.M(1))
+}
 
 // RecordSuccessfulSidecarInjectionCount records the number of successful sidecar injections
 func RecordSuccessfulSidecarInjectionCount(appID string) {
@@ -49,6 +60,7 @@ func RecordFailedSidecarInjectionCount(appID, reason string) {
 // InitMetrics initialize the injector service metrics
 func InitMetrics() error {
 	err := view.Register(
+		diag_utils.NewMeasureView(sidecarInjectionRequestsTotal, noKeys, view.Count()),
 		diag_utils.NewMeasureView(succeededSidecarInjectedTotal, []tag.Key{appIDKey}, view.Count()),
 		diag_utils.NewMeasureView(failedSidecarInjectedTotal, []tag.Key{appIDKey, failedReasonKey}, view.Count()),
 	)
