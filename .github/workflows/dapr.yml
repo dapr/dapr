@@ -85,10 +85,6 @@ jobs:
         uses: azure/setup-helm@v1
         with:
           version: ${{ env.HELMVER }}
-      - name: Generate helm chart manifest
-        run: make manifest-gen
-      - name: Rename helm chart manifest
-        run: mv ./dist/install/dapr.yaml $ARTIFACT_DIR/dapr-operator.yaml
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
       - name: Install Docker CE for buildx
@@ -102,6 +98,10 @@ jobs:
           docker -v
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
+      - name: Generate helm chart manifest
+        run: make manifest-gen
+      - name: Rename helm chart manifest
+        run: mv ./dist/install/dapr.yaml $ARTIFACT_DIR/dapr-operator.yaml
       - name: download artifacts - dapr_linux_amd64
         uses: actions/download-artifact@master
         with:
