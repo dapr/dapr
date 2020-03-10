@@ -14,8 +14,10 @@ import (
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/logger"
 	"k8s.io/api/admission/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -179,6 +181,13 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var pod corev1.Pod
+	if err := json.Unmarshal(ar.Request.Object.Raw, &pod); err != nil {
+		log.Errorf("could not unmarshal raw object: %v", err)
+	}
+
+	id := getAppID(pod)
+
 	log.Infof("ready to write response ...")
 	if _, err := w.Write(resp); err != nil {
 		log.Errorf("can't write response: %v", err)
@@ -187,5 +196,9 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf("could not write response: %v", err),
 			http.StatusInternalServerError,
 		)
+
+		monitoring.RecordFailedAdmissionReviewResponseCount(id, pod.Name)
 	}
+
+	monitoring.RecordSuccessfulAdmissionReviewResponseCount(id, pod.Name)
 }
