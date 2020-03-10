@@ -6,10 +6,14 @@
 package injector
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestConfigCorrectValues(t *testing.T) {
@@ -178,4 +182,30 @@ func TestGetContainer(t *testing.T) {
 	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", false, "", 9090)
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
+}
+
+func TestGetAppIDFromRequest(t *testing.T) {
+	t.Run("can handle empty admissionrequest object", func(t *testing.T) {
+		fakeReq := &v1beta1.AdmissionRequest{}
+		appID := getAppIDFromRequest(fakeReq)
+		assert.Equal(t, "", appID)
+	})
+
+	t.Run("can get correct appID", func(t *testing.T) {
+		fakePod := corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					"dapr.io/id": "fakeID",
+				},
+			},
+		}
+		rawBytes, _ := json.Marshal(fakePod)
+		fakeReq := &v1beta1.AdmissionRequest{
+			Object: runtime.RawExtension{
+				Raw: rawBytes,
+			},
+		}
+		appID := getAppIDFromRequest(fakeReq)
+		assert.Equal(t, "fakeID", appID)
+	})
 }
