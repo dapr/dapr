@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -82,37 +83,37 @@ func newHTTPMetrics() *httpMetrics {
 func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path string, contentSize int64) {
 	stats.RecordWithTags(
 		ctx,
-		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
+		utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
 		h.serverRequestCount.M(1))
 	stats.RecordWithTags(
-		ctx, withTags(appIDKey, h.appID),
+		ctx, utils.WithTags(appIDKey, h.appID),
 		h.serverRequestBytes.M(contentSize))
 }
 
 func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
 	stats.RecordWithTags(
 		ctx,
-		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+		utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 		h.serverLatency.M(elapsed))
 	stats.RecordWithTags(
-		ctx, withTags(appIDKey, h.appID),
+		ctx, utils.WithTags(appIDKey, h.appID),
 		h.serverResponseBytes.M(contentSize))
 }
 
 func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path string, contentSize int64) {
 	stats.RecordWithTags(
 		ctx,
-		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
+		utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
 		h.clientSentBytes.M(contentSize))
 }
 
 func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
 	stats.RecordWithTags(
 		ctx,
-		withTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+		utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 		h.clientRoundtripLatency.M(elapsed))
 	stats.RecordWithTags(
-		ctx, withTags(appIDKey, h.appID),
+		ctx, utils.WithTags(appIDKey, h.appID),
 		h.clientReceivedBytes.M(contentSize))
 }
 

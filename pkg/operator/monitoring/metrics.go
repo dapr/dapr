@@ -8,6 +8,7 @@ package monitoring
 import (
 	"context"
 
+	"github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -37,36 +38,17 @@ var (
 
 // RecordServiceCreatedCount records the number of dapr service created
 func RecordServiceCreatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), withTags(appIDKey, appID), serviceCreatedTotal.M(1))
+	stats.RecordWithTags(context.Background(), utils.WithTags(appIDKey, appID), serviceCreatedTotal.M(1))
 }
 
 // RecordServiceDeletedCount records the number of dapr service deleted
 func RecordServiceDeletedCount(appID string) {
-	stats.RecordWithTags(context.Background(), withTags(appIDKey, appID), serviceDeletedTotal.M(1))
+	stats.RecordWithTags(context.Background(), utils.WithTags(appIDKey, appID), serviceDeletedTotal.M(1))
 }
 
 // RecordServiceUpdatedCount records the number of dapr service updated
 func RecordServiceUpdatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), withTags(appIDKey, appID), serviceUpdatedTotal.M(1))
-}
-
-// withTags converts tag key and value pairs to tag.Mutator array.
-// withTags(key1, value1, key2, value2) returns
-// []tag.Mutator{tag.Upsert(key1, value1), tag.Upsert(key2, value2)}
-func withTags(opts ...interface{}) []tag.Mutator {
-	tagMutators := []tag.Mutator{}
-	for i := 0; i < len(opts)-1; i += 2 {
-		key, ok := opts[i].(tag.Key)
-		if !ok {
-			break
-		}
-		value, ok := opts[i+1].(string)
-		if !ok {
-			break
-		}
-		tagMutators = append(tagMutators, tag.Upsert(key, value))
-	}
-	return tagMutators
+	stats.RecordWithTags(context.Background(), utils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
 }
 
 func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
