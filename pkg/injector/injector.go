@@ -165,7 +165,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		admissionResponse = toAdmissionResponse(err)
-		monitoring.RecordFailedSidecarInjectionCount(id, "patch")
+		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "patch")
 	} else if len(patchOps) == 0 {
 		admissionResponse = &v1beta1.AdmissionResponse{
 			Allowed: true,
