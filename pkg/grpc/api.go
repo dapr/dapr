@@ -349,7 +349,7 @@ func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*da
 		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
 	}
 
-	secretStoreName := in.Key
+	secretStoreName := in.StoreName
 
 	if a.secretStores[secretStoreName] == nil {
 		return nil, errors.New("ERR_SECRET_STORE_NOT_FOUND")
