@@ -8,9 +8,9 @@ package diagnostics
 import (
 	"context"
 
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/stats"
 )
@@ -21,21 +21,6 @@ import (
 // TODO: by default, ocgrpc emits both trace and metrics. This implementation turns off
 // trace because we have our own trace middleware. Later, we need to consider to turn on trace
 // to leverage the popular existing implementation instead of implementing our own.
-
-func addAppIDToCtx(ctx context.Context, appID string) context.Context {
-	// return if appID is not given
-	if appID == "" {
-		return ctx
-	}
-
-	newCtx, err := tag.New(ctx, tag.Upsert(appIDKey, appID))
-	if err != nil {
-		// return original if adding tagkey is failed.
-		return ctx
-	}
-
-	return newCtx
-}
 
 // gRPCServerHandler is the wrapper of grpc server plugin of opencensus
 // to add custom tag key and disable tracing
@@ -52,11 +37,11 @@ func (s *gRPCServerHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo)
 }
 
 func (s *gRPCServerHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
-	s.ocHandler.HandleRPC(addAppIDToCtx(ctx, s.appID), rs)
+	s.ocHandler.HandleRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rs)
 }
 
 func (s *gRPCServerHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) context.Context {
-	return s.ocHandler.TagRPC(addAppIDToCtx(ctx, s.appID), rti)
+	return s.ocHandler.TagRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rti)
 }
 
 // gRPCClientHandler is the wrapper of grpc client plugin of opencensus
@@ -73,11 +58,11 @@ func (c *gRPCClientHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo)
 }
 
 func (c *gRPCClientHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
-	c.ocHandler.HandleRPC(addAppIDToCtx(ctx, c.appID), rs)
+	c.ocHandler.HandleRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rs)
 }
 
 func (c *gRPCClientHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) context.Context {
-	return c.ocHandler.TagRPC(addAppIDToCtx(ctx, c.appID), rti)
+	return c.ocHandler.TagRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rti)
 }
 
 // grpcMetrics holds gRPC server and client stats handlers
@@ -86,22 +71,14 @@ type grpcMetrics struct {
 	ClientStatsHandler stats.Handler
 }
 
-func (g *grpcMetrics) addNewTagKey(views []*view.View, key *tag.Key) []*view.View {
-	for _, v := range views {
-		v.TagKeys = append(v.TagKeys, *key)
-	}
-
-	return views
-}
-
 // Init initializes metric view and creates gRPC server/client handlers
 func (g *grpcMetrics) Init(appID string) error {
 	// Register default grpc server views
-	if err := view.Register(g.addNewTagKey(ocgrpc.DefaultServerViews, &appIDKey)...); err != nil {
+	if err := view.Register(diag_utils.AddNewTagKey(ocgrpc.DefaultServerViews, &appIDKey)...); err != nil {
 		return err
 	}
 
-	if err := view.Register(g.addNewTagKey(ocgrpc.DefaultClientViews, &appIDKey)...); err != nil {
+	if err := view.Register(diag_utils.AddNewTagKey(ocgrpc.DefaultClientViews, &appIDKey)...); err != nil {
 		return err
 	}
 

@@ -8,7 +8,6 @@ package diagnostics
 import (
 	"time"
 
-	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 )
@@ -29,39 +28,6 @@ var (
 	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middleswares
 	DefaultHTTPMonitoring = newHTTPMetrics()
 )
-
-// newView creates opencensus View instance using stats.Measure
-func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
-	return &view.View{
-		Name:        measure.Name(),
-		Description: measure.Description(),
-		Measure:     measure,
-		TagKeys:     keys,
-		Aggregation: aggregation,
-	}
-}
-
-// withTags converts tag key and value pairs to tag.Mutator array.
-// withTags(key1, value1, key2, value2) returns
-// []tag.Mutator{tag.Upsert(key1, value1), tag.Upsert(key2, value2)}
-func withTags(opts ...interface{}) []tag.Mutator {
-	tagMutators := []tag.Mutator{}
-	for i := 0; i < len(opts)-1; i += 2 {
-		key, ok := opts[i].(tag.Key)
-		if !ok {
-			break
-		}
-		value, ok := opts[i+1].(string)
-		if !ok {
-			break
-		}
-		// skip if value is empty
-		if value != "" {
-			tagMutators = append(tagMutators, tag.Upsert(key, value))
-		}
-	}
-	return tagMutators
-}
 
 // InitMetrics initializes metrics
 func InitMetrics(appID string) error {
