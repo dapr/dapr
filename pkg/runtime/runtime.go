@@ -794,8 +794,8 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		Method:  msg.Topic,
 		Payload: msg.Data,
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post,
-			http_channel.ContentType: pubsub.ContentType,
-			diag.CorrelationID:       subject},
+			"headers":          fmt.Sprintf("%s%s%s", http_channel.ContentType, http_channel.HeaderEquals, pubsub.ContentType),
+			diag.CorrelationID: subject},
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
