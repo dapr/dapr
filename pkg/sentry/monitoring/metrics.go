@@ -55,7 +55,7 @@ func CertSignSucceed() {
 func CertSignFailed(reason string) {
 	stats.RecordWithTags(
 		context.Background(),
-		diag_utils.WithTags(failedReasonKey, string(reason)),
+		diag_utils.WithTags(failedReasonKey, reason),
 		certSignFailedTotal.M(1))
 }
 
