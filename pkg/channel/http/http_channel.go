@@ -41,6 +41,8 @@ const (
 	defaultContentType = "application/json"
 
 	httpInternalErrorCode = "500"
+	HeaderDelim           = "&__header_delim__&"
+	HeaderEquals          = "&__header_equals__&"
 )
 
 // Channel is an HTTP implementation of an AppChannel
@@ -68,9 +70,9 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 	if invokeRequest.Metadata != nil {
 		if val, ok := invokeRequest.Metadata["headers"]; ok {
-			headers := strings.Split(val, "&__header_delim__&")
+			headers := strings.Split(val, HeaderDelim)
 			for _, h := range headers {
-				kv := strings.Split(h, "&__header_equals__&")
+				kv := strings.Split(h, HeaderEquals)
 				req.Header.Set(kv[0], kv[1])
 			}
 		}
