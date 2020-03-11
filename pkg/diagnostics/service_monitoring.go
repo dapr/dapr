@@ -94,7 +94,7 @@ func newServiceMetrics() *serviceMetrics {
 			"The number of the received actor placement table operations.",
 			stats.UnitDimensionless),
 		actorRebalancedTotal: stats.Int64(
-			"runtime/actor/reblanaced_total",
+			"runtime/actor/rebalanced_total",
 			"The number of the actor rebalance requests.",
 			stats.UnitDimensionless),
 		actorActivatedTotal: stats.Int64(
