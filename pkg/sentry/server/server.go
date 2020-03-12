@@ -76,6 +76,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 			if s.certificate == nil || needsRefresh(s.certificate, serverCertExpiryBuffer) {
 				cert, err := s.getServerCertificate()
 				if err != nil {
+					monitoring.ServerCertIssueFailed("server_cert")
 					log.Error(err)
 					return nil, fmt.Errorf("failed to get TLS server certificate: %s", err)
 				}
@@ -111,8 +112,6 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 		return nil, err
 	}
 
-	monitoring.RootCertRotationSucceed()
-
 	return &cert, nil
 }
 
@@ -127,7 +126,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("cannot parse certificate signing request pem: %s", err)
 		log.Error(err)
-		monitoring.CertSignFailed(monitoring.CertParseError)
+		monitoring.CertSignFailed("cert_parse")
 		return nil, err
 	}
 
@@ -135,7 +134,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error validating csr: %s", err)
 		log.Error(err)
-		monitoring.CertSignFailed(monitoring.CertValidationError)
+		monitoring.CertSignFailed("cert_validation")
 		return nil, err
 	}
 
@@ -143,7 +142,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error validating requester identity: %s", err)
 		log.Error(err)
-		monitoring.CertSignFailed(monitoring.ReqIDError)
+		monitoring.CertSignFailed("req_id_validation")
 		return nil, err
 	}
 
@@ -151,7 +150,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error signing csr: %s", err)
 		log.Error(err)
-		monitoring.CertSignFailed(monitoring.CertSignError)
+		monitoring.CertSignFailed("cert_sign")
 		return nil, err
 	}
 
@@ -165,7 +164,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if len(certPem) == 0 {
 		err = fmt.Errorf("insufficient data in certificate signing request, no certs signed")
 		log.Error(err)
-		monitoring.CertSignFailed(monitoring.InsufficientDataError)
+		monitoring.CertSignFailed("insufficient_data")
 		return nil, err
 	}
 
@@ -194,8 +193,6 @@ func needsRefresh(cert *tls.Certificate, expiryBuffer time.Duration) bool {
 	if leaf == nil {
 		return true
 	}
-
-	monitoring.RootCertExpiry(leaf.NotAfter)
 
 	// Check if the leaf certificate is about to expire.
 	return leaf.NotAfter.Add(-serverCertExpiryBuffer).Before(time.Now().UTC())

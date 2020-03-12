@@ -147,18 +147,18 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 
 	resp, err := a.appChannel.InvokeMethod(&req)
 	if err != nil {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, actorID, "invoke")
+		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
 	}
 
 	if status := a.getStatusCodeFromMetadata(resp.Metadata); status != 200 {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, actorID, fmt.Sprintf("status_code_%d", status))
+		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
 		return fmt.Errorf("error from actor service: %s", string(resp.Data))
 	}
 
 	actorKey := a.constructCompositeKey(actorType, actorID)
 	a.actorsTable.Delete(actorKey)
-	diag.DefaultMonitoring.ActorDeactivated(actorType, actorID)
+	diag.DefaultMonitoring.ActorDeactivated(actorType)
 	return nil
 }
 
@@ -352,13 +352,13 @@ func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
 
 	resp, err := a.appChannel.InvokeMethod(&req)
 	if status := a.getStatusCodeFromMetadata(resp.Metadata); err != nil || status != 200 {
-		diag.DefaultMonitoring.ActorActivationFailed(actorType, actorID, fmt.Sprintf("status_code_%d", status))
+		diag.DefaultMonitoring.ActorActivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
 		key := a.constructCompositeKey(actorType, actorID)
 		a.actorsTable.Delete(key)
 		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
 	}
 
-	diag.DefaultMonitoring.ActorActivated(actorType, actorID)
+	diag.DefaultMonitoring.ActorActivated(actorType)
 
 	return nil
 }
@@ -646,7 +646,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				// don't allow state changes
 				a.actorsTable.Delete(key)
 
-				diag.DefaultMonitoring.ActorRebalanced(actorType, actorID)
+				diag.DefaultMonitoring.ActorRebalanced(actorType)
 
 				for {
 					// wait until actor is not busy, then deactivate

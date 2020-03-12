@@ -11,6 +11,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector"
+	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/signals"
@@ -58,6 +59,11 @@ func init() {
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Initialize injector service metrics
+	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 }
