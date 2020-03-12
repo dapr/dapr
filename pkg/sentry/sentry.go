@@ -11,6 +11,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/identity/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/identity/selfhosted"
 	k8s "github.com/dapr/dapr/pkg/sentry/kubernetes"
+	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
 )
 
@@ -46,6 +47,7 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 		log.Fatalf("error loading trust root bundle: %s", err)
 	}
 	log.Infof("trust root bundle loaded. issuer cert expiry: %s", certAuth.GetCACertBundle().GetIssuerCertExpiry().String())
+	monitoring.IssuerCertExpiry(certAuth.GetCACertBundle().GetIssuerCertExpiry())
 
 	// Create identity validator
 	v, err := createValidator()

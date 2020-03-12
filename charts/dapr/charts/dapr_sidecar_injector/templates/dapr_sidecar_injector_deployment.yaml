@@ -22,7 +22,7 @@ spec:
     spec:
       serviceAccountName: dapr-operator
       containers:
-      - name: sidecar-injector
+      - name: dapr-sidecar-injector
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
