@@ -8,6 +8,7 @@ package monitoring
 import (
 	"context"
 
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
@@ -27,7 +28,7 @@ var (
 		"The total number of non actor hosts reported to placement service.",
 		stats.UnitDimensionless)
 
-	nilKey = []tag.Key{}
+	noKeys = []tag.Key{}
 )
 
 // RecordActiveHostsCount records the number of active hosts
@@ -45,22 +46,12 @@ func RecordNonActorHostsCount(count int) {
 	stats.Record(context.Background(), nonActorHostsTotal.M(int64(count)))
 }
 
-func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
-	return &view.View{
-		Name:        measure.Name(),
-		Description: measure.Description(),
-		Measure:     measure,
-		TagKeys:     keys,
-		Aggregation: aggregation,
-	}
-}
-
 // InitMetrics initialize the placement service metrics
 func InitMetrics() error {
 	err := view.Register(
-		newView(activeHostsTotal, nilKey, view.LastValue()),
-		newView(actorTypesTotal, nilKey, view.LastValue()),
-		newView(nonActorHostsTotal, nilKey, view.LastValue()),
+		diag_utils.NewMeasureView(activeHostsTotal, noKeys, view.LastValue()),
+		diag_utils.NewMeasureView(actorTypesTotal, noKeys, view.LastValue()),
+		diag_utils.NewMeasureView(nonActorHostsTotal, noKeys, view.LastValue()),
 	)
 
 	return err
