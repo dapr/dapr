@@ -51,22 +51,12 @@ func RecordServiceUpdatedCount(appID string) {
 	stats.RecordWithTags(context.Background(), diag_utils.WithTags(appIDKey, appID), serviceUpdatedTotal.M(1))
 }
 
-func newView(measure stats.Measure, keys []tag.Key, aggregation *view.Aggregation) *view.View {
-	return &view.View{
-		Name:        measure.Name(),
-		Description: measure.Description(),
-		Measure:     measure,
-		TagKeys:     keys,
-		Aggregation: aggregation,
-	}
-}
-
-// InitMetrics initialize the placement service metrics
+// InitMetrics initialize the operator service metrics
 func InitMetrics() error {
 	err := view.Register(
-		newView(serviceCreatedTotal, []tag.Key{appIDKey}, view.Count()),
-		newView(serviceDeletedTotal, []tag.Key{appIDKey}, view.Count()),
-		newView(serviceUpdatedTotal, []tag.Key{appIDKey}, view.Count()),
+		diag_utils.NewMeasureView(serviceCreatedTotal, []tag.Key{appIDKey}, view.Count()),
+		diag_utils.NewMeasureView(serviceDeletedTotal, []tag.Key{appIDKey}, view.Count()),
+		diag_utils.NewMeasureView(serviceUpdatedTotal, []tag.Key{appIDKey}, view.Count()),
 	)
 
 	return err
