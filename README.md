@@ -56,7 +56,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Cross platform virtual actors
 * Secrets management to retrieve secrets from secure key vaults
 * Rate limiting
-* Built-in distributed tracing using [OpenTelemetry](https://opentelemetry.io)
+* Built-in [Observability](https://github.com/dapr/docs/tree/master/concepts/observability) support
 * Runs natively on Kubernetes using a dedicated Operator and CRDs
 * Supports all programming languages via HTTP and gRPC
 * Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
