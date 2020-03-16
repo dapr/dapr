@@ -15,9 +15,9 @@ import (
 )
 
 var (
-	activeHostsTotal = stats.Int64(
+	hostsTotal = stats.Int64(
 		"placement/hosts_total",
-		"The total number of active hosts reported to placement service.",
+		"The total number of hosts reported to placement service.",
 		stats.UnitDimensionless)
 	actorTypesTotal = stats.Int64(
 		"placement/actortypes_total",
@@ -27,31 +27,43 @@ var (
 		"placement/nonactorhosts_total",
 		"The total number of non actor hosts reported to placement service.",
 		stats.UnitDimensionless)
+	replicasPerActorTypeTotal = stats.Int64(
+		"placement/replicas_peractortype_total",
+		"The total number of replicas per actor type reported to placement service.",
+		stats.UnitDimensionless)
 
-	noKeys = []tag.Key{}
+	noKeys       = []tag.Key{}
+	actorTypeKey = tag.MustNewKey("actor_type")
+	hostNameKey  = tag.MustNewKey("host_name")
 )
 
-// RecordActiveHostsCount records the number of active hosts
-func RecordActiveHostsCount(count int) {
-	stats.Record(context.Background(), activeHostsTotal.M(int64(count)))
+// RecordHostsCount records the number of hosts
+func RecordHostsCount(count int) {
+	stats.Record(context.Background(), hostsTotal.M(int64(count)))
 }
 
-// RecordActorTypesCount records the number of active actor types
+// RecordActorTypesCount records the number of actor types
 func RecordActorTypesCount(count int) {
 	stats.Record(context.Background(), actorTypesTotal.M(int64(count)))
 }
 
-// RecordNonActorHostsCount records the number of active non actor hosts
+// RecordNonActorHostsCount records the number of non actor hosts
 func RecordNonActorHostsCount(count int) {
 	stats.Record(context.Background(), nonActorHostsTotal.M(int64(count)))
+}
+
+// RecordPerActorTypeReplicasCount records the number of replicas per actor type
+func RecordPerActorTypeReplicasCount(actorType, hostName string) {
+	stats.RecordWithTags(context.Background(), diag_utils.WithTags(actorTypeKey, actorType, hostNameKey, hostName), replicasPerActorTypeTotal.M(1))
 }
 
 // InitMetrics initialize the placement service metrics
 func InitMetrics() error {
 	err := view.Register(
-		diag_utils.NewMeasureView(activeHostsTotal, noKeys, view.LastValue()),
+		diag_utils.NewMeasureView(hostsTotal, noKeys, view.LastValue()),
 		diag_utils.NewMeasureView(actorTypesTotal, noKeys, view.LastValue()),
 		diag_utils.NewMeasureView(nonActorHostsTotal, noKeys, view.LastValue()),
+		diag_utils.NewMeasureView(replicasPerActorTypeTotal, []tag.Key{actorTypeKey, hostNameKey}, view.Count()),
 	)
 
 	return err

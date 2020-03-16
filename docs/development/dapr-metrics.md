@@ -1,6 +1,15 @@
-## Dapr Runtime metrics
+# Dapr metrics
 
 Dapr metric name starts with `dapr_` prefix except for health metrics.
+
+  * [Dapr Common metrics](#dapr-common-metrics)
+  * [Dapr Operator metrics](#dapr-operator-metrics)
+  * [Dapr Sidecar Injector metrics](#dapr-sidecar-injector-metrics)
+  * [Dapr Placement metrics](#dapr-placement-metrics)
+  * [Dapr Sentry metrics](#dapr-sentry-metrics)
+  * [Dapr Runtime metrics](#dapr-runtime-metrics)
+
+## Dapr Common metrics
 
 ### Health metrics
 
@@ -9,9 +18,47 @@ Dapr uses prometheus process and go collectors by default.
 * process_* : [prometheus process collector](https://github.com/prometheus/client_golang/blob/master/prometheus/process_collector.go)
 * go_* : [prometheus go collector](https://github.com/prometheus/client_golang/blob/master/prometheus/go_collector.go)
 
+## Dapr Operator metrics
+
+[monitoring metrics](../../pkg/operator/monitoring/metrics.go)
+
+* dapr_operator_service_created_total: The total number of dapr services created.
+* dapr_operator_service_deleted_total: The total number of dapr services deleted.
+* dapr_operator_service_updated_total: The total number of dapr services updated.
+
+## Dapr Sidecar-injector metrics
+
+[monitoring metrics](../../pkg/injector/monitoring/metrics.go)
+
+* dapr_injector_sidecar_injection/requests_total: The total number of sidecar injection requests.
+* dapr_injector_sidecar_injection/succeeded_total: The total number of successful sidecar injections.
+* dapr_injector_sidecar_injection/failed_total: The total number of failed sidecar injections.
+
+## Dapr Placement metrics
+
+[monitoring metrics](../../pkg/placement/monitoring/metrics.go)
+
+* dapr_placement_hosts_total: The total number of hosts reported to placement service.
+* dapr_placement_actortypes_total: The total number of actor types reported to placement service.
+* dapr_placement_nonactorhosts_total: The total number of non actor hosts reported to placement service.
+* dapr_placement_replicas_peractortype_total: The total number of replicas per actor type reported to placement service.
+
+## Dapr Sentry metrics
+
+[monitoring metrics](../../pkg/sentry/monitoring/metrics.go)
+
+* dapr_sentry_cert_sign_request_received_total: The number of CSRs received.
+* dapr_sentry_cert_sign_success_total: The number of certificates issuances that have succeeded.
+* dapr_sentry_cert_sign_failure_total: The number of errors occurred when signing the CSR.
+* dapr_sentry_servercert_issue_failed_total: The number of server TLS certificate issuance failures.
+* dapr_sentry_issuercert_changed_total: The number of issuer cert updates, when issuer cert or key is changed
+* dapr_sentry_issuercert_expiry_timestamp: The unix timestamp, in seconds, when issuer/root cert will expire.
+
+## Dapr Runtime metrics
+
 ### Service related metrics
 
-[service metrics](./service_monitoring.go)
+[service metrics](../../pkg/diagnostics/service_monitoring.go)
 
 #### Component
 
@@ -67,7 +114,7 @@ Dapr leverages opencensus ocgrpc plugin to generate gRPC server and client metri
 
 We support only server side metrics.
 
-* [server metrics](./http_monitoring.go)
+* [server metrics](../../pkg/diagnostics/http_monitoring.go)
 
 #### Server metrics
 
