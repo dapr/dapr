@@ -100,8 +100,10 @@ jobs:
         run: python ./.github/scripts/get_release_version.py
       - name: Generate helm chart manifest
         run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
-      - name: Rename helm chart manifest
-        run: mv ./dist/install/dapr.yaml $ARTIFACT_DIR/dapr-operator.yaml
+      - name: move helm chart manifest to artifact
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}
+          mv ./dist/install/dapr.yaml ${{ env.ARTIFACT_DIR }}/dapr-operator.yaml
       - name: download artifacts - dapr_linux_amd64
         uses: actions/download-artifact@master
         with:
