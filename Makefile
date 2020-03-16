@@ -172,7 +172,7 @@ dapr.yaml: check-docker-env
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
-		--set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
+		--include-crds=true --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #
