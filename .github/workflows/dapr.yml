@@ -99,7 +99,7 @@ jobs:
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Generate helm chart manifest
-        run: make manifest-gen
+        run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: Rename helm chart manifest
         run: mv ./dist/install/dapr.yaml $ARTIFACT_DIR/dapr-operator.yaml
       - name: download artifacts - dapr_linux_amd64
