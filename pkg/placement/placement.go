@@ -67,7 +67,7 @@ func (p *Service) ReportDaprStatus(srv daprinternal_pb.PlacementService_ReportDa
 	p.PerformTablesUpdate([]daprinternal_pb.PlacementService_ReportDaprStatusServer{srv},
 		placementOptions{incrementGeneration: false})
 
-	monitoring.RecordActiveHostsCount(len(p.hosts))
+	monitoring.RecordHostsCount(len(p.hosts))
 
 	for {
 		select {
@@ -207,6 +207,7 @@ func (p *Service) ProcessHost(host *daprinternal_pb.Host) {
 		exists := p.entries[e].Add(host.Name, host.Id, host.Port)
 		if !exists {
 			updateRequired = true
+			monitoring.RecordPerActorTypeReplicasCount(e, host.Name)
 		}
 		p.entriesLock.Unlock()
 	}
