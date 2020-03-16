@@ -20,15 +20,28 @@ Dapr uses prometheus process and go collectors by default.
 
 ## Dapr Operator metrics
 
-WIP
+[monitoring metrics](../../pkg/operator/monitoring/metrics.go)
+
+* dapr_operator_service_created_total: The total number of dapr services created.
+* dapr_operator_service_deleted_total: The total number of dapr services deleted.
+* dapr_operator_service_updated_total: The total number of dapr services updated.
 
 ## Dapr Sidecar-injector metrics
 
-WIP
+[monitoring metrics](../../pkg/injector/monitoring/metrics.go)
+
+* dapr_injector_sidecar_injection/requests_total: The total number of sidecar injection requests.
+* dapr_injector_sidecar_injection/succeeded_total: The total number of successful sidecar injections.
+* dapr_injector_sidecar_injection/failed_total: The total number of failed sidecar injections.
 
 ## Dapr Placement metrics
 
-WIP
+[monitoring metrics](../../pkg/placement/monitoring/metrics.go)
+
+* dapr_placement_hosts_total: The total number of hosts reported to placement service.
+* dapr_placement_actortypes_total: The total number of actor types reported to placement service.
+* dapr_placement_nonactorhosts_total: The total number of non actor hosts reported to placement service.
+* dapr_placement_replicas_peractortype_total: The total number of replicas per actor type reported to placement service.
 
 ## Dapr Sentry metrics
 
