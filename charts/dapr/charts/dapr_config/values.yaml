@@ -3,5 +3,5 @@ mtls:
   workloadCertTTL: 24h
   allowedClockSkew: 15m
 
-  # This value is essential in determining whether to build this chart or not based on the usecase. For example this chart should not be included while generating manifest file for dapr which is achieved by overriding this value.
-  dapr_config_chart_included: true
+# This value is essential in determining whether to build this chart or not based on the usecase. For example this chart should not be included while generating manifest file for dapr which is achieved by overriding this value.
+dapr_config_chart_included: true
