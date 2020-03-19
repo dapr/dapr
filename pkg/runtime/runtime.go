@@ -954,10 +954,10 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 			resp = r
 		}
 
-		// Use the default DefaultSecretRefKeyName key if SecretKeyRef.Key is not given
+		// Use the SecretKeyRef.Name key if SecretKeyRef.Key is not given
 		secretKeyName := m.SecretKeyRef.Key
 		if secretKeyName == "" {
-			secretKeyName = secretstores.DefaultSecretRefKeyName
+			secretKeyName = m.SecretKeyRef.Name
 		}
 
 		val, ok := resp.Data[secretKeyName]
