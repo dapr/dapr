@@ -76,13 +76,14 @@ func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) 
 	var spanc *trace.Span
 
 	corID := string(r.Header.Peek(CorrelationID))
+	uriSpanName := string(r.Header.RequestURI())
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(r.RequestURI()), spanContext, trace.WithSpanKind(trace.SpanKindServer))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(r.RequestURI())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), uriSpanName, spanContext, trace.WithSpanKind(trace.SpanKindServer))
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(uriSpanName), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), string(r.RequestURI()), trace.WithSpanKind(trace.SpanKindServer))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(r.RequestURI())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
+		ctx, span = trace.StartSpan(context.Background(), uriSpanName, trace.WithSpanKind(trace.SpanKindServer))
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(uriSpanName), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
 	addAnnotations(r, span, spec.ExpandParams, spec.IncludeBody)
