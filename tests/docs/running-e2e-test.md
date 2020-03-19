@@ -10,7 +10,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
 ### Prerequisites
 
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-  - [Install the latest helm v2](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#installing-dapr-on-a-kubernetes-cluster).
+  - [Install the latest Helm v3](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#using-helm-advanced).
 * Create your DockerHub ID
 * Create dapr-tests namespace
     ```bash
@@ -33,7 +33,8 @@ E2E tests are designed for verifying the functional correctness by replicating e
     ```bash
     make setup-helm-init
     make setup-test-env-redis
-    # You can skip kafka install if you do not use bindings for your tests
+    
+    # This may take a few minutes.  You can skip kafka install if you do not use bindings for your tests.  
     make setup-test-env-kafka
     ```
 
@@ -55,7 +56,7 @@ make docker-push
 make docker-deploy-k8s
 ```
 
-### Apply the test config
+### Optional: Apply this configuration to disable mTLS
 
 ```bash
 make setup-test-config
