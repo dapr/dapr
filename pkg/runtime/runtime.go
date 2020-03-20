@@ -805,15 +805,16 @@ func (a *DaprRuntime) isPubSubOperationAllowed(topic string, topicsList []string
 			return allowed
 		}
 	}
+	if len(topicsList) == 0 {
+		return true
+	}
 
 	// check if a granular scope has been applied
 	allowed = false
-	if len(topicsList) > 0 {
-		for _, t := range topicsList {
-			if t == topic {
-				allowed = true
-				break
-			}
+	for _, t := range topicsList {
+		if t == topic {
+			allowed = true
+			break
 		}
 	}
 	return allowed
