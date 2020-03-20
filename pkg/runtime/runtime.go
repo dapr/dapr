@@ -804,8 +804,7 @@ func (a *DaprRuntime) isPubSubOperationAllowed(topic string, topicsList []string
 		if !allowed {
 			return allowed
 		}
-	}
-	if len(topicsList) == 0 {
+	} else if len(topicsList) == 0 {
 		return true
 	}
 
