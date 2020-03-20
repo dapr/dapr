@@ -91,6 +91,7 @@ type DaprRuntime struct {
 	authenticator            security.Authenticator
 	namespace                string
 	allowedPublishings       []string
+	allowedTopics            []string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -743,6 +744,7 @@ func (a *DaprRuntime) initPubSub() error {
 
 			allowedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
 			a.allowedPublishings = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
+			a.allowedTopics = scopes.GetAllowedTopics(properties)
 
 			a.pubSub = pubSub
 			diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
@@ -761,18 +763,7 @@ func (a *DaprRuntime) initPubSub() error {
 	if a.pubSub != nil && a.appChannel != nil {
 		topics := a.getSubscribedTopicsFromApp()
 		for _, t := range topics {
-			allowed := false
-
-			if len(allowedSubscriptions) == 0 {
-				allowed = true
-			} else {
-				for _, s := range allowedSubscriptions {
-					if s == t {
-						allowed = true
-						break
-					}
-				}
-			}
+			allowed := a.isPubSubOperationAllowed(t, allowedSubscriptions)
 			if !allowed {
 				log.Warnf("subscription to topic %s is not allowed", t)
 				continue
@@ -793,19 +784,39 @@ func (a *DaprRuntime) initPubSub() error {
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
-	if len(a.allowedPublishings) > 0 {
-		allowed := false
-		for _, t := range a.allowedPublishings {
-			if t == req.Topic {
+	if allowed := a.isPubSubOperationAllowed(req.Topic, a.allowedPublishings); !allowed {
+		return fmt.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
+	}
+	return a.pubSub.Publish(req)
+}
+
+func (a *DaprRuntime) isPubSubOperationAllowed(topic string, topicsList []string) bool {
+	allowed := false
+
+	// first check if allowedTopics contain it
+	if len(a.allowedTopics) > 0 {
+		for _, t := range a.allowedTopics {
+			if t == topic {
 				allowed = true
 				break
 			}
 		}
 		if !allowed {
-			return fmt.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
+			return allowed
 		}
 	}
-	return a.pubSub.Publish(req)
+
+	// check if a granular scope has been applied
+	allowed = false
+	if len(topicsList) > 0 {
+		for _, t := range topicsList {
+			if t == topic {
+				allowed = true
+				break
+			}
+		}
+	}
+	return allowed
 }
 
 func (a *DaprRuntime) initServiceDiscovery() error {

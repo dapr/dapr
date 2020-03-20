@@ -5,6 +5,7 @@ import "strings"
 const (
 	SubscriptionScopes = "subscriptionScopes"
 	PublishingScopes   = "publishingScopes"
+	AllowedTopics      = "allowedTopics"
 	appsSeperator      = ";"
 	appSeperator       = "="
 	topicSeperator     = ","
@@ -31,6 +32,15 @@ func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
 			topics = strings.Split(appTopics[1], topicSeperator)
 			break
 		}
+	}
+	return topics
+}
+
+func GetAllowedTopics(metadata map[string]string) []string {
+	topics := []string{}
+
+	if val, ok := metadata[AllowedTopics]; ok && val != "" {
+		topics = strings.Split(val, topicSeperator)
 	}
 	return topics
 }

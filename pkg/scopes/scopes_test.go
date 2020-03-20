@@ -51,4 +51,9 @@ func TestAllowedTopics(t *testing.T) {
 		topics := GetScopedTopics(SubscriptionScopes, "test", map[string]string{SubscriptionScopes: "test1=topic1"})
 		assert.Len(t, topics, 0)
 	})
+
+	t.Run("get 2 allowed topics", func(t *testing.T) {
+		topics := GetAllowedTopics(map[string]string{AllowedTopics: "topic1,topic2"})
+		assert.Len(t, topics, 2)
+	})
 }

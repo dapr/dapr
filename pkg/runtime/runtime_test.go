@@ -341,6 +341,32 @@ func TestInitPubSub(t *testing.T) {
 		})
 		assert.NotNil(t, err)
 	})
+
+	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
+		rt.allowedTopics = []string{"topic1"}
+		a := rt.isPubSubOperationAllowed("topic1", rt.allowedPublishings)
+		assert.True(t, a)
+	})
+
+	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
+		rt.allowedTopics = []string{"topic1"}
+		a := rt.isPubSubOperationAllowed("topic2", rt.allowedPublishings)
+		assert.False(t, a)
+	})
+
+	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
+		rt.allowedTopics = []string{"topic1"}
+		rt.allowedPublishings = []string{"topic1"}
+		a := rt.isPubSubOperationAllowed("topic1", rt.allowedPublishings)
+		assert.True(t, a)
+	})
+
+	t.Run("test allowed topics, with scopes, operation not allowed", func(t *testing.T) {
+		rt.allowedTopics = []string{"topic1"}
+		rt.allowedPublishings = []string{"topic2"}
+		a := rt.isPubSubOperationAllowed("topic1", rt.allowedPublishings)
+		assert.False(t, a)
+	})
 }
 
 func TestInitSecretStores(t *testing.T) {
