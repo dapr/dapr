@@ -60,20 +60,20 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
-	pubSub                pubsub.PubSub
+	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
+func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
 	return &api{
 		directMessaging:       directMessaging,
 		componentsHandler:     componentHandler,
 		actor:                 actor,
 		id:                    appID,
 		appChannel:            appChannel,
-		pubSub:                pubSub,
+		publishFn:             publishFn,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
 		sendToOutputBindingFn: sendToOutputBindingFn,
@@ -151,7 +151,7 @@ func (a *api) UpdateComponent(ctx context.Context, in *daprinternal_pb.Component
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
-	if a.pubSub == nil {
+	if a.publishFn == nil {
 		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
 
@@ -177,7 +177,7 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 		Topic: topic,
 		Data:  b,
 	}
-	err = a.pubSub.Publish(&req)
+	err = a.publishFn(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
 	}
