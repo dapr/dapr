@@ -774,6 +774,7 @@ func (a *DaprRuntime) initPubSub() error {
 				}
 			}
 			if !allowed {
+				log.Warnf("subscription to topic %s is not allowed", t)
 				continue
 			}
 
