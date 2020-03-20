@@ -344,27 +344,27 @@ func TestInitPubSub(t *testing.T) {
 
 	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
 		rt.allowedTopics = []string{"topic1"}
-		a := rt.isPubSubOperationAllowed("topic1", rt.allowedPublishings)
+		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
 		rt.allowedTopics = []string{"topic1"}
-		a := rt.isPubSubOperationAllowed("topic2", rt.allowedPublishings)
+		a := rt.isPubSubOperationAllowed("topic2", rt.scopedPublishings)
 		assert.False(t, a)
 	})
 
 	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
 		rt.allowedTopics = []string{"topic1"}
-		rt.allowedPublishings = []string{"topic1"}
-		a := rt.isPubSubOperationAllowed("topic1", rt.allowedPublishings)
+		rt.scopedPublishings = []string{"topic1"}
+		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, with scopes, operation not allowed", func(t *testing.T) {
 		rt.allowedTopics = []string{"topic1"}
-		rt.allowedPublishings = []string{"topic2"}
-		a := rt.isPubSubOperationAllowed("topic1", rt.allowedPublishings)
+		rt.scopedPublishings = []string{"topic2"}
+		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
 		assert.False(t, a)
 	})
 }

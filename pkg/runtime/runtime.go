@@ -90,7 +90,7 @@ type DaprRuntime struct {
 	actorStateStoreCount     int
 	authenticator            security.Authenticator
 	namespace                string
-	allowedPublishings       []string
+	scopedPublishings        []string
 	allowedTopics            []string
 }
 
@@ -719,7 +719,7 @@ func (a *DaprRuntime) initExporters() error {
 }
 
 func (a *DaprRuntime) initPubSub() error {
-	var allowedSubscriptions []string
+	var scopedSubscriptions []string
 
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
@@ -742,8 +742,8 @@ func (a *DaprRuntime) initPubSub() error {
 				continue
 			}
 
-			allowedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
-			a.allowedPublishings = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
+			scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
+			a.scopedPublishings = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
 			a.allowedTopics = scopes.GetAllowedTopics(properties)
 
 			a.pubSub = pubSub
@@ -763,7 +763,7 @@ func (a *DaprRuntime) initPubSub() error {
 	if a.pubSub != nil && a.appChannel != nil {
 		topics := a.getSubscribedTopicsFromApp()
 		for _, t := range topics {
-			allowed := a.isPubSubOperationAllowed(t, allowedSubscriptions)
+			allowed := a.isPubSubOperationAllowed(t, scopedSubscriptions)
 			if !allowed {
 				log.Warnf("subscription to topic %s is not allowed", t)
 				continue
@@ -784,7 +784,7 @@ func (a *DaprRuntime) initPubSub() error {
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
-	if allowed := a.isPubSubOperationAllowed(req.Topic, a.allowedPublishings); !allowed {
+	if allowed := a.isPubSubOperationAllowed(req.Topic, a.scopedPublishings); !allowed {
 		return fmt.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
 	}
 	return a.pubSub.Publish(req)
