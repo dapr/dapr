@@ -160,13 +160,13 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("publish adapter is nil, no pub sub component", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt = NewTestDaprRuntime(modes.StandaloneMode)
 		a := rt.getPublishAdapter()
 		assert.Nil(t, a)
 	})
 
 	t.Run("publish adapter not nil, with pub sub component", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt = NewTestDaprRuntime(modes.StandaloneMode)
 		rt.pubSub = initMockPubSubForRuntime(rt)
 		a := rt.getPublishAdapter()
 		assert.NotNil(t, a)
