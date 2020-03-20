@@ -39,7 +39,7 @@ type api struct {
 	secretStores          map[string]secretstores.SecretStore
 	json                  jsoniter.API
 	actor                 actors.Actors
-	pubSub                pubsub.PubSub
+	publishFn             func(req *pubsub.PublishRequest) error
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
 	extendedMetadata      sync.Map
@@ -72,7 +72,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -80,7 +80,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 		secretStores:          secretStores,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
-		pubSub:                pubSub,
+		publishFn:             publishFn,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		id:                    appID,
 	}
@@ -916,7 +916,7 @@ func (a *api) onPutMetadata(c *routing.Context) error {
 }
 
 func (a *api) onPublish(c *routing.Context) error {
-	if a.pubSub == nil {
+	if a.publishFn == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
@@ -940,7 +940,7 @@ func (a *api) onPublish(c *routing.Context) error {
 		Topic: topic,
 		Data:  b,
 	}
-	err = a.pubSub.Publish(&req)
+	err = a.publishFn(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)

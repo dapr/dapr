@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/stretchr/testify/assert"
@@ -156,6 +157,189 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("publish adapter is nil, no pub sub component", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		a := rt.getPublishAdapter()
+		assert.Nil(t, a)
+	})
+
+	t.Run("publish adapter not nil, with pub sub component", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.pubSub = initMockPubSubForRuntime(rt)
+		a := rt.getPublishAdapter()
+		assert.NotNil(t, a)
+	})
+
+	t.Run("test subscribe, app allowed 1 topic", func(t *testing.T) {
+		mockPubSub := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
+			Data:     []byte("[ \"topic0\" ]"),
+		}
+
+		mockAppChannel.On(
+			"InvokeMethod",
+			&channel.InvokeRequest{
+				Method:   "dapr/subscribe",
+				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
+			}).Return(fakeHTTPResponse, nil)
+
+		// act
+		err := rt.initPubSub()
+
+		// assert
+		assert.Nil(t, err)
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
+	})
+
+	t.Run("test subscribe, app allowed 2 topic", func(t *testing.T) {
+		mockPubSub := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
+			Data:     []byte("[ \"topic0\", \"topic1\" ]"),
+		}
+
+		mockAppChannel.On(
+			"InvokeMethod",
+			&channel.InvokeRequest{
+				Method:   "dapr/subscribe",
+				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
+			}).Return(fakeHTTPResponse, nil)
+
+		// act
+		err := rt.initPubSub()
+
+		// assert
+		assert.Nil(t, err)
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+	})
+
+	t.Run("test subscribe, app not allowed 1 topic", func(t *testing.T) {
+		mockPubSub := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
+			Data:     []byte("[ \"topic3\" ]"),
+		}
+
+		mockAppChannel.On(
+			"InvokeMethod",
+			&channel.InvokeRequest{
+				Method:   "dapr/subscribe",
+				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
+			}).Return(fakeHTTPResponse, nil)
+
+		// act
+		err := rt.initPubSub()
+
+		// assert
+		assert.Nil(t, err)
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+	})
+
+	t.Run("test subscribe, app not allowed 1 topic, allowed one topic", func(t *testing.T) {
+		mockPubSub := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
+			Data:     []byte("[ \"topic0\", \"topic3\" ]"),
+		}
+
+		mockAppChannel.On(
+			"InvokeMethod",
+			&channel.InvokeRequest{
+				Method:   "dapr/subscribe",
+				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
+			}).Return(fakeHTTPResponse, nil)
+
+		// act
+		err := rt.initPubSub()
+
+		// assert
+		assert.Nil(t, err)
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
+	})
+
+	t.Run("test publish, topic allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
+			Data:     []byte("[ \"topic0\" ]"),
+		}
+
+		mockAppChannel.On(
+			"InvokeMethod",
+			&channel.InvokeRequest{
+				Method:   "dapr/subscribe",
+				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
+			}).Return(fakeHTTPResponse, nil)
+
+		// act
+		err := rt.initPubSub()
+		assert.Nil(t, err)
+
+		rt.pubSub = &mockPublishPubSub{}
+		err = rt.Publish(&pubsub.PublishRequest{
+			Topic: "topic0",
+		})
+		assert.Nil(t, err)
+	})
+
+	t.Run("test publish, topic not allowed", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		fakeHTTPResponse := &channel.InvokeResponse{
+			Metadata: map[string]string{http_channel.HTTPStatusCode: "200"},
+			Data:     []byte("[ \"topic0\" ]"),
+		}
+
+		mockAppChannel.On(
+			"InvokeMethod",
+			&channel.InvokeRequest{
+				Method:   "dapr/subscribe",
+				Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
+			}).Return(fakeHTTPResponse, nil)
+
+		// act
+		err := rt.initPubSub()
+		assert.Nil(t, err)
+
+		rt.pubSub = &mockPublishPubSub{}
+		err = rt.Publish(&pubsub.PublishRequest{
+			Topic: "topic5",
+		})
+		assert.NotNil(t, err)
 	})
 }
 
@@ -453,9 +637,11 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 func getFakeProperties() map[string]string {
 	return map[string]string{
-		"host":       "localhost",
-		"password":   "fakePassword",
-		"consumerID": TestRuntimeConfigID,
+		"host":                    "localhost",
+		"password":                "fakePassword",
+		"consumerID":              TestRuntimeConfigID,
+		scopes.SubscriptionScopes: fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID),
+		scopes.PublishingScopes:   fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID),
 	}
 }
 
@@ -472,6 +658,14 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		{
 			Name:  "consumerID",
 			Value: TestRuntimeConfigID,
+		},
+		{
+			Name:  scopes.SubscriptionScopes,
+			Value: fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID),
+		},
+		{
+			Name:  scopes.PublishingScopes,
+			Value: fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID),
 		},
 	}
 }
@@ -720,4 +914,22 @@ func TestAuthorizedComponents(t *testing.T) {
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
 		assert.True(t, len(comps) == 0)
 	})
+}
+
+type mockPublishPubSub struct {
+}
+
+// Init is a mock initialization method
+func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
+	return nil
+}
+
+// Publish is a mock publish method
+func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
+	return nil
+}
+
+// Subscribe is a mock subscribe method
+func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler func(msg *pubsub.NewMessage) error) error {
+	return nil
 }
