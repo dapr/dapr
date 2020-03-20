@@ -19,17 +19,17 @@ func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
 		apps := strings.Split(val, appsSeperator)
 		for _, a := range apps {
 			appTopics := strings.Split(a, appSeperator)
-			if len(appTopics) > 1 {
-				app := appTopics[0]
-				if app != appID {
-					continue
-				}
-
-				topics = strings.Split(appTopics[1], topicSeperator)
-				break
-			} else {
-				break
+			if len(appTopics) == 0 {
+				continue
 			}
+
+			app := appTopics[0]
+			if app != appID {
+				continue
+			}
+
+			topics = strings.Split(appTopics[1], topicSeperator)
+			break
 		}
 	}
 	return topics
