@@ -361,11 +361,29 @@ func TestInitPubSub(t *testing.T) {
 		assert.True(t, a)
 	})
 
-	t.Run("test allowed topics, with scopes, operation not allowed", func(t *testing.T) {
+	t.Run("topic is in allowed topics, not in existing publishing scopes, operation allowed", func(t *testing.T) {
 		rt.allowedTopics = []string{"topic1"}
 		rt.scopedPublishings = []string{"topic2"}
 		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
+		assert.True(t, a)
+	})
+
+	t.Run("topic in allowed topics, no in publishing scopes, operation allowed", func(t *testing.T) {
+		rt.allowedTopics = []string{"topic1"}
+		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
+		assert.True(t, a)
+	})
+
+	t.Run("topic is not in allowed topics, in publishing scopes, operation not allowed", func(t *testing.T) {
+		rt.allowedTopics = []string{}
+		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
 		assert.False(t, a)
+	})
+
+	t.Run("topic is not in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
+		rt.allowedTopics = []string{}
+		a := rt.isPubSubOperationAllowed("topic1", []string{})
+		assert.True(t, a)
 	})
 }
 
