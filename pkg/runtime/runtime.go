@@ -236,7 +236,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
-	// Announce presence to local network if self-hosted
+	// Announce presence in the local network if self-hosted
 	err = a.announceSelf()
 	if err != nil {
 		log.Warnf("failed to broadcast address to local network: %s", err)
