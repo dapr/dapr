@@ -1469,3 +1469,23 @@ func (c fakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 func (c fakeSecretStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
+
+func TestV1HealthzEndpoint(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	testAPI := &api{
+		actor: nil,
+		json:  jsoniter.ConfigFastest,
+	}
+
+	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
+
+	t.Run("Healthz - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	fakeServer.Shutdown()
+}
