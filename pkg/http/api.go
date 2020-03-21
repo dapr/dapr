@@ -91,6 +91,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
 
 	return api
 }
@@ -245,6 +246,17 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Route:   "metadata/<key>",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata,
+		},
+	}
+}
+
+func (a *api) constructHealthzEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{http.Get},
+			Route:   "healthz",
+			Version: apiVersionV1,
+			Handler: a.onGetHealthz,
 		},
 	}
 }
@@ -962,4 +974,9 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	}
 
 	return 200
+}
+
+func (a *api) onGetHealthz(c *routing.Context) error {
+	respondEmpty(c.RequestCtx, 200)
+	return nil
 }
