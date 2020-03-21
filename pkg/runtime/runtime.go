@@ -218,15 +218,25 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
-	err = a.startGRPCServer(a.runtimeConfig.GRPCPort)
+	// Create and start internal and external gRPC servers
+	grpcAPI := a.getGRPCAPI()
+	err = a.startgRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
-		log.Fatalf("failed to start gRPC server: %s", err)
+		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
-	log.Infof("gRPC server is running on port %v", a.runtimeConfig.GRPCPort)
+	log.Infof("API gRPC server is running on port %v", a.runtimeConfig.APIGRPCPort)
 
+	err = a.startgRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
+	if err != nil {
+		log.Fatalf("failed to start internal gRPC server: %s", err)
+	}
+	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.InternalGRPCPort)
+
+	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
+	// Announce presence to local network if self-hosted
 	err = a.announceSelf()
 	if err != nil {
 		log.Warnf("failed to broadcast address to local network: %s", err)
@@ -286,7 +296,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(
 		a.runtimeConfig.ID,
 		a.namespace,
-		a.runtimeConfig.GRPCPort,
+		a.runtimeConfig.InternalGRPCPort,
 		a.runtimeConfig.Mode,
 		a.appChannel,
 		a.grpc.GetGRPCConnection,
@@ -500,12 +510,22 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 	server.StartNonBlocking()
 }
 
-func (a *DaprRuntime) startGRPCServer(port int) error {
-	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a)
+func (a *DaprRuntime) startgRPCInternalServer(api grpc.API, port int) error {
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
-	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
+	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
+}
+
+func (a *DaprRuntime) startgRPCAPIServer(api grpc.API, port int) error {
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
+	err := server.StartNonBlocking()
+	return err
+}
+
+func (a *DaprRuntime) getGRPCAPI() grpc.API {
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a)
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
@@ -912,7 +932,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 
 func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
-		a.runtimeConfig.GRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
+		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
 	err := act.Init()
 	a.actor = act
@@ -1146,7 +1166,7 @@ func (a *DaprRuntime) createAppChannel() error {
 func (a *DaprRuntime) announceSelf() error {
 	switch a.runtimeConfig.Mode {
 	case modes.StandaloneMode:
-		err := discovery.RegisterMDNS(a.runtimeConfig.ID, a.runtimeConfig.GRPCPort)
+		err := discovery.RegisterMDNS(a.runtimeConfig.ID, a.runtimeConfig.InternalGRPCPort)
 		if err != nil {
 			return err
 		}

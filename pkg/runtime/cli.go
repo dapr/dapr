@@ -13,6 +13,7 @@ import (
 
 	global_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -23,7 +24,8 @@ import (
 func FromFlags() (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", fmt.Sprintf("%v", DefaultDaprHTTPPort), "HTTP port for Dapr to listen on")
-	daprGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprGRPCPort), "gRPC port for Dapr to listen on")
+	daprAPIGRPCPort := flag.String("dapr-grpc-port", fmt.Sprintf("%v", DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
+	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("protocol", string(HTTPProtocol), "Protocol for the application: gRPC or http")
@@ -75,7 +77,7 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, fmt.Errorf("error parsing dapr-http-port flag: %s", err)
 	}
 
-	daprGRPC, err := strconv.Atoi(*daprGRPCPort)
+	daprAPIGRPC, err := strconv.Atoi(*daprAPIGRPCPort)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing dapr-grpc-port flag: %s", err)
 	}
@@ -85,7 +87,20 @@ func FromFlags() (*DaprRuntime, error) {
 		return nil, fmt.Errorf("error parsing profile-port flag: %s", err)
 	}
 
-	applicationPort := 0
+	var daprInternalGRPC int
+	if *daprInternalGRPCPort != "" {
+		daprInternalGRPC, err = strconv.Atoi(*daprInternalGRPCPort)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing dapr-internal-grpc-port: %s", err)
+		}
+	} else {
+		daprInternalGRPC, err = grpc.GetFreePort()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get free port for internal grpc server: %s", err)
+		}
+	}
+
+	var applicationPort int
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
 		if err != nil {
@@ -99,7 +114,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*appID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, daprHTTP, daprGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress)
+		*appProtocol, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress)
 
 	var globalConfig *global_config.Configuration
 
