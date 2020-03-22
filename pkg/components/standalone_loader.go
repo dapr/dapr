@@ -6,12 +6,14 @@
 package components
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
-	"github.com/ghodss/yaml"
+	"gopkg.in/yaml.v2"
 )
 
 // StandaloneComponents loads components in a standalone mode environment
@@ -40,18 +42,25 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 		if !file.IsDir() {
 			b, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", dir, file.Name()))
 			if err != nil {
-				log.Warnf("error reading file: %s", err)
+				log.Warnf("error reading file %s/%s : %s", dir, file.Name(), err)
 				continue
 			}
 
-			var component components_v1alpha1.Component
-			err = yaml.Unmarshal(b, &component)
-			if err != nil {
-				log.Warnf("error parsing file: %s", err)
-				continue
-			}
+			decoder := yaml.NewDecoder(bytes.NewReader(b))
 
-			list = append(list, component)
+			for {
+				var component components_v1alpha1.Component
+				err = decoder.Decode(&component)
+				if err == io.EOF {
+					break
+				}
+
+				if err != nil {
+					log.Warnf("error parsing file %s/%s : %s", dir, file.Name(), err)
+					continue
+				}
+				list = append(list, component)
+			}
 		}
 	}
 
