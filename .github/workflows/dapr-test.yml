@@ -49,7 +49,7 @@ jobs:
           go-version: ${{ env.GOVER }}
       - name: Check out code into the Go module directory
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
