@@ -42,6 +42,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--mode", "kubernetes",
 		"--dapr-http-port", "3500",
 		"--dapr-grpc-port", "50001",
+		"--dapr-internal-grpc-port", "50002",
 		"--app-port", "5000",
 		"--app-id", "app_id",
 		"--control-plane-address", "controlplane:9000",

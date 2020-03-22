@@ -44,11 +44,12 @@ func (c *ComponentsHandler) ObjectDeleted(obj interface{}) {
 func (c *ComponentsHandler) ObjectCreated(obj interface{}) {
 	log.Info("notified about a component update")
 
-	component := obj.(*components_v1alpha1.Component)
-	err := c.publishComponentToDaprRuntimes(component)
-	if err != nil {
-		log.Errorf("error from ObjectCreated: %s", err)
-	}
+	//TODO: Replace HTTP Server with Streaming gRPC API and use it to update the sidecars
+	//component := obj.(*components_v1alpha1.Component)
+	//err := c.publishComponentToDaprRuntimes(component)
+	//if err != nil {
+	//	log.Errorf("error from ObjectCreated: %s", err)
+	//}
 }
 
 func (c *ComponentsHandler) publishComponentToDaprRuntimes(component *components_v1alpha1.Component) error {
@@ -101,7 +102,7 @@ func (c *ComponentsHandler) publishComponentToDaprRuntimes(component *components
 func (c *ComponentsHandler) publishComponentToService(component pb.Component, endpoints *corev1.Endpoints) {
 	if endpoints != nil && len(endpoints.Subsets) > 0 {
 		for _, a := range endpoints.Subsets[0].Addresses {
-			address := fmt.Sprintf("%s:%s", a.IP, fmt.Sprintf("%v", daprSidecarGRPCPort))
+			address := fmt.Sprintf("%s:%s", a.IP, fmt.Sprintf("%v", daprSidecarInternalGRPCPort))
 			go c.updateDaprRuntime(component, address)
 		}
 	}

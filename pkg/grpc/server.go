@@ -25,6 +25,8 @@ import (
 const (
 	certWatchInterval         = time.Second * 3
 	renewWhenPercentagePassed = 70
+	apiServer                 = "apiServer"
+	internalServer            = "internalServer"
 )
 
 var log = logger.NewLogger("dapr.runtime.grpc")
@@ -45,16 +47,28 @@ type server struct {
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
+	kind               string
 }
 
-// NewServer returns a new gRPC server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
+// NewAPIServer returns a new user facing gRPC API server
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
+	return &server{
+		api:         api,
+		config:      config,
+		tracingSpec: tracingSpec,
+		kind:        apiServer,
+	}
+}
+
+// NewInternalServer returns a new gRPC server for Dapr to Dapr communications
+func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
 	return &server{
 		api:           api,
 		config:        config,
 		tracingSpec:   tracingSpec,
 		authenticator: authenticator,
 		renewMutex:    &sync.Mutex{},
+		kind:          internalServer,
 	}
 }
 
@@ -72,9 +86,12 @@ func (s *server) StartNonBlocking() error {
 	}
 	s.srv = server
 
-	daprinternal_pb.RegisterDaprInternalServer(server, s.api)
-	dapr_pb.RegisterDaprServer(server, s.api)
+	if s.kind == internalServer {
+		daprinternal_pb.RegisterDaprInternalServer(server, s.api)
 
+	} else if s.kind == apiServer {
+		dapr_pb.RegisterDaprServer(server, s.api)
+	}
 	go func() {
 		if err := server.Serve(lis); err != nil {
 			log.Fatalf("gRPC serve error: %v", err)
@@ -130,7 +147,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 
 		tlsConfig := tls.Config{
 			ClientCAs:  s.signedCert.TrustChain,
-			ClientAuth: tls.VerifyClientCertIfGiven,
+			ClientAuth: tls.RequireAndVerifyClientCert,
 			GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 				return &s.tlsCert, nil
 			},
