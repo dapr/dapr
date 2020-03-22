@@ -45,7 +45,7 @@ jobs:
             target_arch: arm
     steps:
       - name: Set up Go ${{ env.GOVER }}
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v2-beta
         with:
           go-version: ${{ env.GOVER }}
       - name: Install golangci-lint
