@@ -43,13 +43,6 @@ func (c *ComponentsHandler) ObjectDeleted(obj interface{}) {
 // ObjectCreated handles created crd operations
 func (c *ComponentsHandler) ObjectCreated(obj interface{}) {
 	log.Info("notified about a component update")
-
-	//TODO: Replace HTTP Server with Streaming gRPC API and use it to update the sidecars
-	//component := obj.(*components_v1alpha1.Component)
-	//err := c.publishComponentToDaprRuntimes(component)
-	//if err != nil {
-	//	log.Errorf("error from ObjectCreated: %s", err)
-	//}
 }
 
 func (c *ComponentsHandler) publishComponentToDaprRuntimes(component *components_v1alpha1.Component) error {
@@ -95,7 +88,6 @@ func (c *ComponentsHandler) publishComponentToDaprRuntimes(component *components
 		}
 		go c.publishComponentToService(payload, endpoints)
 	}
-
 	return nil
 }
 
