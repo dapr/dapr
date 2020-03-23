@@ -341,7 +341,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/healthz",
+					Path: sidecarHealthzPath,
 					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
 				},
 			},
@@ -353,7 +353,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/healthz",
+					Path: sidecarHealthzPath,
 					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
 				},
 			},
