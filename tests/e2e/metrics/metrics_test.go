@@ -9,7 +9,6 @@ package metrics_e2e
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,7 +26,6 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 type testCommandRequest struct {
@@ -187,11 +185,7 @@ func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
 
 func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	daprAddress := fmt.Sprintf("localhost:%d", daprPort)
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
-	}
-	creds := credentials.NewTLS(tlsConfig)
-	conn, err := grpc.Dial(daprAddress, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
 	require.NoError(t, err)
 	defer conn.Close()
 

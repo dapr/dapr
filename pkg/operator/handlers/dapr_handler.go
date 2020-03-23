@@ -16,15 +16,17 @@ import (
 )
 
 const (
-	daprEnabledAnnotationKey   = "dapr.io/enabled"
-	appIDAnnotationKey         = "dapr.io/id"
-	daprMetricsPortKey         = "dapr.io/metrics-port"
-	daprSidecarHTTPPortName    = "dapr-http"
-	daprSidecarGRPCPortName    = "dapr-grpc"
-	daprSidecarMetricsPortName = "dapr-metrics"
-	daprSidecarHTTPPort        = 3500
-	daprSidecarGRPCPort        = 50001
-	defaultMetricsPort         = 9090
+	daprEnabledAnnotationKey        = "dapr.io/enabled"
+	appIDAnnotationKey              = "dapr.io/id"
+	daprMetricsPortKey              = "dapr.io/metrics-port"
+	daprSidecarHTTPPortName         = "dapr-http"
+	daprSidecarAPIGRPCPortName      = "dapr-grpc"
+	daprSidecarInternalGRPCPortName = "dapr-internal"
+	daprSidecarMetricsPortName      = "dapr-metrics"
+	daprSidecarHTTPPort             = 3500
+	daprSidecarAPIGRPCPort          = 50001
+	daprSidecarInternalGRPCPort     = 50002
+	defaultMetricsPort              = 9090
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -77,9 +79,14 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(daprSidecarGRPCPort),
-					TargetPort: intstr.FromInt(daprSidecarGRPCPort),
-					Name:       daprSidecarGRPCPortName,
+					Port:       int32(daprSidecarAPIGRPCPort),
+					TargetPort: intstr.FromInt(daprSidecarAPIGRPCPort),
+					Name:       daprSidecarAPIGRPCPortName,
+				}, {
+					Protocol:   corev1.ProtocolTCP,
+					Port:       int32(daprSidecarInternalGRPCPort),
+					TargetPort: intstr.FromInt(daprSidecarInternalGRPCPort),
+					Name:       daprSidecarInternalGRPCPortName,
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
