@@ -18,36 +18,41 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 )
 
 const (
-	sidecarContainerName        = "daprd"
-	daprEnabledKey              = "dapr.io/enabled"
-	daprPortKey                 = "dapr.io/port"
-	daprConfigKey               = "dapr.io/config"
-	daprProtocolKey             = "dapr.io/protocol"
-	appIDKey                    = "dapr.io/id"
-	daprProfilingKey            = "dapr.io/profiling"
-	daprLogLevel                = "dapr.io/log-level"
-	daprLogAsJSON               = "dapr.io/log-as-json"
-	daprMaxConcurrencyKey       = "dapr.io/max-concurrency"
-	daprMetricsPortKey          = "dapr.io/metrics-port"
-	sidecarHTTPPort             = 3500
-	sidecarAPIGRPCPort          = 50001
-	sidecarInternalGRPCPort     = 50002
-	apiAddress                  = "dapr-api"
-	placementService            = "dapr-placement"
-	sentryService               = "dapr-sentry"
-	sidecarHTTPPortName         = "dapr-http"
-	sidecarGRPCPortName         = "dapr-grpc"
-	sidecarInternalGRPCPortName = "dapr-internal"
-	sidecarMetricsPortName      = "dapr-metrics"
-	defaultLogLevel             = "info"
-	defaultLogAsJSON            = false
-	kubernetesMountPath         = "/var/run/secrets/kubernetes.io/serviceaccount"
-	defaultConfig               = "default"
-	defaultMetricsPort          = 9090
+	sidecarContainerName         = "daprd"
+	daprEnabledKey               = "dapr.io/enabled"
+	daprPortKey                  = "dapr.io/port"
+	daprConfigKey                = "dapr.io/config"
+	daprProtocolKey              = "dapr.io/protocol"
+	appIDKey                     = "dapr.io/id"
+	daprProfilingKey             = "dapr.io/profiling"
+	daprLogLevel                 = "dapr.io/log-level"
+	daprLogAsJSON                = "dapr.io/log-as-json"
+	daprMaxConcurrencyKey        = "dapr.io/max-concurrency"
+	daprMetricsPortKey           = "dapr.io/metrics-port"
+	sidecarHTTPPort              = 3500
+	sidecarAPIGRPCPort           = 50001
+	sidecarInternalGRPCPort      = 50002
+	apiAddress                   = "dapr-api"
+	placementService             = "dapr-placement"
+	sentryService                = "dapr-sentry"
+	sidecarHTTPPortName          = "dapr-http"
+	sidecarGRPCPortName          = "dapr-grpc"
+	sidecarInternalGRPCPortName  = "dapr-internal"
+	sidecarMetricsPortName       = "dapr-metrics"
+	defaultLogLevel              = "info"
+	defaultLogAsJSON             = false
+	kubernetesMountPath          = "/var/run/secrets/kubernetes.io/serviceaccount"
+	defaultConfig                = "default"
+	defaultMetricsPort           = 9090
+	sidecarHealthzPath           = "/healthz"
+	defaultHealthzProbeDelay     = 5
+	defaultHealthzProbeTimeout   = 5
+	defaultHealthzProbeThreshold = 1
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
@@ -332,6 +337,30 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			"--max-concurrency", maxConcurrency,
 			"--sentry-address", sentryAddress,
 			"--metrics-port", fmt.Sprintf("%v", metricsPort),
+		},
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/healthz",
+					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
+				},
+			},
+			InitialDelaySeconds: defaultHealthzProbeDelay,
+			TimeoutSeconds:      defaultHealthzProbeTimeout,
+			PeriodSeconds:       2 * defaultHealthzProbeTimeout,
+			FailureThreshold:    3 * defaultHealthzProbeThreshold,
+		},
+		LivenessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/healthz",
+					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
+				},
+			},
+			InitialDelaySeconds: 3 * defaultHealthzProbeDelay,
+			TimeoutSeconds:      defaultHealthzProbeTimeout,
+			PeriodSeconds:       2 * defaultHealthzProbeTimeout,
+			FailureThreshold:    3 * defaultHealthzProbeThreshold,
 		},
 	}
 
