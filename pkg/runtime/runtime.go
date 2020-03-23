@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
@@ -89,6 +90,8 @@ type DaprRuntime struct {
 	actorStateStoreCount     int
 	authenticator            security.Authenticator
 	namespace                string
+	scopedPublishings        []string
+	allowedTopics            []string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -490,7 +493,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.pubSub, a.actor, a.sendToOutputBinding)
+	api := http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
@@ -498,11 +501,18 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 }
 
 func (a *DaprRuntime) startGRPCServer(port int) error {
-	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.pubSub, a.directMessaging, a.actor, a.sendToOutputBinding, a)
+	api := grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a)
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
 	server := grpc.NewServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
+}
+
+func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
+	if a.pubSub == nil {
+		return nil
+	}
+	return a.Publish
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
@@ -709,6 +719,8 @@ func (a *DaprRuntime) initExporters() error {
 }
 
 func (a *DaprRuntime) initPubSub() error {
+	var scopedSubscriptions []string
+
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
 			pubSub, err := a.pubSubRegistry.Create(c.Spec.Type)
@@ -730,6 +742,10 @@ func (a *DaprRuntime) initPubSub() error {
 				continue
 			}
 
+			scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
+			a.scopedPublishings = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
+			a.allowedTopics = scopes.GetAllowedTopics(properties)
+
 			a.pubSub = pubSub
 			diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 			break
@@ -747,6 +763,12 @@ func (a *DaprRuntime) initPubSub() error {
 	if a.pubSub != nil && a.appChannel != nil {
 		topics := a.getSubscribedTopicsFromApp()
 		for _, t := range topics {
+			allowed := a.isPubSubOperationAllowed(t, scopedSubscriptions)
+			if !allowed {
+				log.Warnf("subscription to topic %s is not allowed", t)
+				continue
+			}
+
 			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
 				Topic: t,
 			}, publishFunc)
@@ -756,6 +778,48 @@ func (a *DaprRuntime) initPubSub() error {
 		}
 	}
 	return nil
+}
+
+// Publish is an adapter method for the runtime to pre-validate publish requests
+// And then forward them to the Pub/Sub component.
+// This method is used by the HTTP and gRPC APIs.
+func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
+	if allowed := a.isPubSubOperationAllowed(req.Topic, a.scopedPublishings); !allowed {
+		return fmt.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
+	}
+	return a.pubSub.Publish(req)
+}
+
+func (a *DaprRuntime) isPubSubOperationAllowed(topic string, topicsList []string) bool {
+	inAllowedTopics := false
+
+	// first check if allowedTopics contain it
+	if len(a.allowedTopics) > 0 {
+		for _, t := range a.allowedTopics {
+			if t == topic {
+				inAllowedTopics = true
+				break
+			}
+		}
+		if !inAllowedTopics {
+			return false
+		}
+	} else if len(topicsList) == 0 {
+		return true
+	}
+
+	// check if a granular scope has been applied
+	allowedScope := false
+	for _, t := range topicsList {
+		if t == topic {
+			allowedScope = true
+			break
+		}
+	}
+	if inAllowedTopics && !allowedScope {
+		return true
+	}
+	return allowedScope
 }
 
 func (a *DaprRuntime) initServiceDiscovery() error {
