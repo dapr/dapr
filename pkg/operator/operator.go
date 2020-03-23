@@ -33,7 +33,6 @@ type operator struct {
 	componentsInformer  cache.SharedInformer
 	ctx                 context.Context
 	daprHandler         handlers.Handler
-	componentsHandler   handlers.Handler
 }
 
 // NewOperator returns a new Dapr Operator
@@ -56,8 +55,7 @@ func NewOperator(kubeAPI *k8s.API) Operator {
 			nil,
 			nil,
 		),
-		daprHandler:       handlers.NewDaprHandler(kubeAPI),
-		componentsHandler: handlers.NewComponentsHandler(kubeClient),
+		daprHandler: handlers.NewDaprHandler(kubeAPI),
 	}
 
 	o.deploymentsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -78,7 +76,6 @@ func NewOperator(kubeAPI *k8s.API) Operator {
 }
 
 func (o *operator) syncComponent(obj interface{}) {
-	o.componentsHandler.ObjectCreated(obj)
 }
 
 func (o *operator) syncDeployment(obj interface{}) {
