@@ -20,8 +20,8 @@ const (
 	HTTPProtocol Protocol = "http"
 	// DefaultDaprHTTPPort is the default http port for Dapr
 	DefaultDaprHTTPPort = 3500
-	// DefaultDaprGRPCPort is the default gRPC port for Dapr
-	DefaultDaprGRPCPort = 50001
+	// DefaultDaprAPIGRPCPort is the default API gRPC port for Dapr
+	DefaultDaprAPIGRPCPort = 50001
 	// DefaultProfilePort is the default port for profiling endpoints
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints
@@ -38,7 +38,8 @@ type Config struct {
 	HTTPPort                int
 	ProfilePort             int
 	EnableProfiling         bool
-	GRPCPort                int
+	APIGRPCPort             int
+	InternalGRPCPort        int
 	ApplicationPort         int
 	ApplicationProtocol     Protocol
 	Mode                    modes.DaprMode
@@ -53,11 +54,12 @@ type Config struct {
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
-		GRPCPort:                grpcPort,
+		InternalGRPCPort:        internalGRPCPort,
+		APIGRPCPort:             apiGRPCPort,
 		ApplicationPort:         appPort,
 		ProfilePort:             profilePort,
 		ApplicationProtocol:     Protocol(appProtocol),
