@@ -220,13 +220,13 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
-	err = a.startgRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
+	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
 	log.Infof("API gRPC server is running on port %v", a.runtimeConfig.APIGRPCPort)
 
-	err = a.startgRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
+	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
@@ -510,14 +510,14 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 	server.StartNonBlocking()
 }
 
-func (a *DaprRuntime) startgRPCInternalServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
 }
 
-func (a *DaprRuntime) startgRPCAPIServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
 	err := server.StartNonBlocking()
