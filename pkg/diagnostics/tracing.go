@@ -239,6 +239,12 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bool, includeBody bool) {
 	if expandParams {
 		for k, vv := range md {
+			// 'grpc-trace-bin' includes non-utf8 characters and ocagent cannot export it.
+			// TODO: Why do we need expandParams option? Remove the option to export grpc metadata.
+			if k == "grpc-trace-bin" {
+				continue
+			}
+
 			for _, v := range vv {
 				span.AddAttributes(trace.StringAttribute(k, v))
 			}
