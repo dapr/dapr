@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/version"
 )
 
@@ -121,7 +122,12 @@ func FromFlags() (*DaprRuntime, error) {
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			globalConfig, err = global_config.LoadKubernetesConfiguration(*config, os.Getenv("NAMESPACE"), *controlPlaneAddress)
+			client, conn, err := client.GetOperatorClient(*controlPlaneAddress)
+			if err != nil {
+				return nil, err
+			}
+			defer conn.Close()
+			globalConfig, err = global_config.LoadKubernetesConfiguration(*config, os.Getenv("NAMESPACE"), client)
 		case modes.StandaloneMode:
 			globalConfig, err = global_config.LoadStandaloneConfiguration(*config)
 		}

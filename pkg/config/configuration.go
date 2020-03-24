@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/dapr/dapr/pkg/operator/client"
 	pb "github.com/dapr/dapr/pkg/proto/operator"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -93,14 +92,8 @@ func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
-func LoadKubernetesConfiguration(config, namespace, controlPlaneAddress string) (*Configuration, error) {
-	client, conn, err := client.GetOperatorClient(controlPlaneAddress)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	resp, err := client.GetConfiguration(context.Background(), &pb.GetConfigurationRequest{
+func LoadKubernetesConfiguration(config, namespace string, operatorClient pb.OperatorClient) (*Configuration, error) {
+	resp, err := operatorClient.GetConfiguration(context.Background(), &pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
 	})
