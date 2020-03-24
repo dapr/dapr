@@ -1489,7 +1489,7 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	t.Run("Healthz - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
-		testAPI.SetReadyStatus(true)
+		testAPI.MarkStatusAsReady()
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)

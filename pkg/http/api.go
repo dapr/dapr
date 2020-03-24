@@ -29,7 +29,7 @@ import (
 // API returns a list of HTTP endpoints for Dapr
 type API interface {
 	APIEndpoints() []Endpoint
-	SetReadyStatus(s bool)
+	MarkStatusAsReady()
 }
 
 type api struct {
@@ -103,9 +103,9 @@ func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
 }
 
-// SetReadyStatus sets the ready status of dapr
-func (a *api) SetReadyStatus(status bool) {
-	a.readyStatus = status
+// MarkStatusAsReady marks the ready status of dapr
+func (a *api) MarkStatusAsReady() {
+	a.readyStatus = true
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {

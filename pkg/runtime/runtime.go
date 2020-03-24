@@ -142,7 +142,8 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
 
 	if a.daprHTTPAPI != nil {
-		a.daprHTTPAPI.SetReadyStatus(true)
+		// gRPC server start failure is logged as Fatal in initRuntime method. Setting the status only when runtime is initialized.
+		a.daprHTTPAPI.MarkStatusAsReady()
 	}
 
 	return nil
