@@ -1480,8 +1480,16 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
 
+	t.Run("Healthz - 500 ERR_HEALTH_NOT_READY", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 500, resp.StatusCode, "dapr not ready should return 500")
+	})
+
 	t.Run("Healthz - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
+		testAPI.SetReadyStatus(true)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)

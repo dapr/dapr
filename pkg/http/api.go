@@ -29,6 +29,7 @@ import (
 // API returns a list of HTTP endpoints for Dapr
 type API interface {
 	APIEndpoints() []Endpoint
+	SetReadyStatus(s bool)
 }
 
 type api struct {
@@ -43,6 +44,7 @@ type api struct {
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
 	extendedMetadata      sync.Map
+	readyStatus           bool
 }
 
 type metadata struct {
@@ -99,6 +101,11 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 // APIEndpoints returns the list of registered endpoints
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
+}
+
+// SetReadyStatus sets the ready status of dapr
+func (a *api) SetReadyStatus(status bool) {
+	a.readyStatus = status
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
@@ -977,6 +984,12 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 }
 
 func (a *api) onGetHealthz(c *routing.Context) error {
-	respondEmpty(c.RequestCtx, 200)
+	if a.readyStatus == false {
+		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", "dapr is not ready")
+		respondWithError(c.RequestCtx, 500, msg)
+	} else {
+		respondEmpty(c.RequestCtx, 200)
+	}
+
 	return nil
 }
