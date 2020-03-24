@@ -47,9 +47,9 @@ func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component
 	}
 	defer conn.Close()
 	err = backoff.Retry(func() error {
-		resp, err := client.GetComponents(context.Background(), &empty.Empty{})
-		if err != nil {
-			return err
+		resp, getErr := client.GetComponents(context.Background(), &empty.Empty{})
+		if getErr != nil {
+			return getErr
 		}
 		comps := resp.GetComponents()
 

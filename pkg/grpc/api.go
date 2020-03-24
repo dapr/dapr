@@ -17,7 +17,6 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/components"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
@@ -53,7 +52,6 @@ type API interface {
 type api struct {
 	actor                 actors.Actors
 	directMessaging       messaging.DirectMessaging
-	componentsHandler     components.ComponentHandler
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
