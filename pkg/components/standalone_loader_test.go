@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestisYaml(t *testing.T) {
+func TestIsYaml(t *testing.T) {
 	request := &StandaloneComponents{
 		config: config.StandaloneConfig{
 			ComponentsPath: "test_component_path",
