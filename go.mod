@@ -9,7 +9,7 @@ require (
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/dapr/components-contrib v0.0.0-20200310050752-cf077cca6569
-	github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad
+	github.com/dapr/go-sdk v0.0.0-20200312165010-7bb7a2205f3b
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/mock v1.4.0
