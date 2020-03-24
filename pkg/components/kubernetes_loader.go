@@ -55,9 +55,9 @@ func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component
 
 		for _, c := range comps {
 			var component components_v1alpha1.Component
-			err := json.Unmarshal(c.Value, &component)
-			if err != nil {
-				log.Warnf("error deserializing component: %s", err)
+			serErr := json.Unmarshal(c.Value, &component)
+			if serErr != nil {
+				log.Warnf("error deserializing component: %s", serErr)
 				continue
 			}
 			components = append(components, component)
