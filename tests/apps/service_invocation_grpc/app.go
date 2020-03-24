@@ -25,11 +25,6 @@ import (
 type server struct {
 }
 
-type testCommandRequest struct {
-	RemoteApp string `json:"remoteApp,omitempty"`
-	Method    string `json:"method,omitempty"`
-}
-
 type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
@@ -37,12 +32,13 @@ type appResponse struct {
 func main() {
 	log.Printf("Initializing grpc")
 
+	/* #nosec */
 	lis, err := net.Listen("tcp", ":3000")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	// create grpc server
+	/* #nosec */
 	s := grpc.NewServer()
 	pb.RegisterDaprClientServer(s, &server{})
 
@@ -55,7 +51,6 @@ func main() {
 
 // This is the server side in a grpc -> grpc test.  It responds with the same string it was sent.
 func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
-
 	var t string
 	err := json.Unmarshal(data, &t)
 	if err != nil {
@@ -74,13 +69,11 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 // This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload
 func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any, error) {
-
-	fmt.Println(fmt.Sprintf("Got invoked method %s and data: %s", in.Method, string(in.Data.Value)))
+	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.Data.Value))
 
 	var err error
 	var response []byte
 	switch in.Method {
-
 	case "httpToGrpcTest":
 		// not a typo, the handling is the same as the case below
 		response, err = s.grpcTestHandler(in.Data.Value)
@@ -91,7 +84,7 @@ func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any,
 
 	if err != nil {
 		msg := "Error: " + err.Error()
-		response, err = json.Marshal(msg)
+		response, _ = json.Marshal(msg)
 	}
 
 	return &any.Any{
@@ -115,7 +108,7 @@ func (s *server) GetBindingsSubscriptions(ctx context.Context, in *empty.Empty) 
 	}, nil
 }
 
-// This method gets invoked every time a new event is fired from a registerd binding. The message carries the binding name, a payload and optional metadata
+// This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata
 func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventEnvelope) (*pb.BindingResponseEnvelope, error) {
 	fmt.Println("Invoked from binding")
 	return &pb.BindingResponseEnvelope{}, nil

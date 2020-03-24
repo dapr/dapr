@@ -202,7 +202,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/httptohttptest", httpTohttpTest).Methods("POST")
 	router.HandleFunc("/grpctogrpctest", grpcToGrpcTest).Methods("POST")
 	router.HandleFunc("/httptogrpctest", httpToGrpcTest).Methods("POST")
-	router.HandleFunc("/grpctohttptest", grpcToHttpTest).Methods("POST")
+	router.HandleFunc("/grpctohttptest", grpcToHTTPTest).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
@@ -238,6 +238,12 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 
 	testMessage := guuid.New().String()
 	b, err := json.Marshal(testMessage)
+	if err != nil {
+		fmt.Printf("marshal had error %s\n", err)
+		onSerializationFailed(w, err)
+		return
+	}
+
 	fmt.Printf("grpcToGrpcTest calling with message %s\n", string(b))
 	resp, err := client.InvokeService(context.Background(), &daprsdk.InvokeServiceEnvelope{
 		Id:     commandBody.RemoteApp,
@@ -387,7 +393,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// no check, body wasn't sent
-	if "ok" != resp.Message {
+	if resp.Message != "ok" {
 		errorMessage := "Expected " + "ok" + " received " + resp.Message
 		logAndSetResponse(w, http.StatusInternalServerError, errorMessage)
 		return
@@ -455,16 +461,6 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	logAndSetResponse(w, http.StatusOK, "success")
 }
 
-func unmarshalAppResponse(data []byte) (appResponse, error) {
-	var appResp appResponse
-	err := json.Unmarshal(data, &appResp)
-	if err != nil {
-		return appResponse{}, err
-	}
-
-	return appResp, nil
-}
-
 // data should be serialized by caller
 func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error) {
 	var body []byte
@@ -498,8 +494,8 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 // Performs calls from grpc client to http server.  It sends a random string to the other app
 // and expects the response to contain the same string inside an appResponse.
 // It uses all 4 http methods (verbs) in metadata to invoke the proper http method.
-func grpcToHttpTest(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Enter grpcToHttpTest")
+func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Enter grpcToHTTPTest")
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
@@ -507,7 +503,7 @@ func grpcToHttpTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("grpcToHttpTest - target app: %s\n", commandBody.RemoteApp)
+	fmt.Printf("grpcToHTTPTest - target app: %s\n", commandBody.RemoteApp)
 
 	daprAddress := fmt.Sprintf("localhost:%s", "50001")
 
@@ -534,7 +530,7 @@ func grpcToHttpTest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		fmt.Printf("grpcToHttpTest calling with verb %s, message %s\n", v, testMessage)
+		fmt.Printf("grpcToHTTPTest calling with verb %s, message %s\n", v, testMessage)
 
 		envelope := dapr.InvokeServiceEnvelope{
 			Id:       commandBody.RemoteApp,
@@ -556,7 +552,6 @@ func grpcToHttpTest(w http.ResponseWriter, r *http.Request) {
 		default:
 			fmt.Println("Unexpected option")
 			if err != nil {
-
 				logAndSetResponse(w, http.StatusInternalServerError, "unexpected option "+v)
 				return
 			}
@@ -687,6 +682,7 @@ func HTTPDelete(url string, data []byte) ([]byte, error) {
 	}
 
 	body, err := extractBody(res.Body)
+	defer res.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -714,6 +710,7 @@ func HTTPPut(url string, data []byte) ([]byte, error) {
 	}
 
 	body, err := extractBody(res.Body)
+	defer res.Body.Close()
 	if err != nil {
 		return nil, err
 	}
