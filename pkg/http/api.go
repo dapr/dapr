@@ -984,7 +984,7 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 }
 
 func (a *api) onGetHealthz(c *routing.Context) error {
-	if a.readyStatus == false {
+	if !a.readyStatus {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", "dapr is not ready")
 		respondWithError(c.RequestCtx, 500, msg)
 	} else {
