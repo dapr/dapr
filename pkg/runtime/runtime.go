@@ -45,6 +45,7 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/operator/client"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -156,6 +157,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	err = a.loadComponents(opts)
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
+	}
+	err = a.beginComponentsUpdates()
+	if err != nil {
+		log.Warnf("failed to watch component updates: %s", err)
 	}
 
 	a.blockUntilAppIsReady()
@@ -303,9 +308,45 @@ func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
 		resolver)
 }
 
-// OnComponentUpdated updates the Dapr runtime with new or changed components
-// This method is invoked from the Dapr Control Plane whenever a component update happens
-func (a *DaprRuntime) OnComponentUpdated(component components_v1alpha1.Component) {
+func (a *DaprRuntime) beginComponentsUpdates() error {
+	if a.runtimeConfig.Mode != modes.KubernetesMode {
+		return nil
+	}
+
+	go func() {
+		client, conn, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress)
+		if err != nil {
+			log.Errorf("error connecting to operator: %s", err)
+			return
+		}
+		defer conn.Close()
+
+		stream, err := client.ComponentUpdate(context.Background(), &empty.Empty{})
+		if err != nil {
+			log.Errorf("error from operator stream: %s", err)
+			return
+		}
+		for {
+			c, err := stream.Recv()
+			if err != nil {
+				log.Errorf("error from operator stream: %s", err)
+				return
+			}
+			log.Debug("received component update")
+
+			var component components_v1alpha1.Component
+			err = json.Unmarshal(c.Component.Value, &component)
+			if err != nil {
+				log.Warnf("error deserializing component: %s", err)
+				continue
+			}
+			a.onComponentUpdated(component)
+		}
+	}()
+	return nil
+}
+
+func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) {
 	update := false
 
 	for i, c := range a.components {
@@ -525,7 +566,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a)
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding)
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
