@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/version"
 )
 
@@ -117,20 +118,29 @@ func FromFlags() (*DaprRuntime, error) {
 		*appProtocol, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, enableProf, *maxConcurrency, *mtlsEnabled, *sentryAddress)
 
 	var globalConfig *global_config.Configuration
+	var configErr error
 
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			globalConfig, err = global_config.LoadKubernetesConfiguration(*config, *controlPlaneAddress)
+			client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress)
+			if clientErr != nil {
+				return nil, clientErr
+			}
+			defer conn.Close()
+
+			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, os.Getenv("NAMESPACE"), client)
 		case modes.StandaloneMode:
-			globalConfig, err = global_config.LoadStandaloneConfiguration(*config)
+			globalConfig, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
-	} else {
-		globalConfig = global_config.LoadDefaultConfiguration()
-	}
-	if err != nil {
-		log.Warnf("error loading config: %s. loading default config", err)
 	}
 
+	if configErr != nil {
+		log.Warnf("error loading configuration: %s", err)
+	}
+	if globalConfig == nil {
+		log.Info("loading default configuration")
+		globalConfig = global_config.LoadDefaultConfiguration()
+	}
 	return NewDaprRuntime(runtimeConfig, globalConfig), nil
 }

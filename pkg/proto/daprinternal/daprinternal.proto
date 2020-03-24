@@ -3,13 +3,11 @@ syntax = "proto3";
 package daprinternal;
 
 import "google/protobuf/any.proto";
-import "google/protobuf/empty.proto";
 
 // Dapr Internal definitions
 service DaprInternal {
   rpc CallActor (CallActorEnvelope) returns (InvokeResponse) {}
   rpc CallLocal (LocalCallEnvelope) returns (InvokeResponse) {}
-  rpc UpdateComponent (Component) returns (google.protobuf.Empty) {}
 }
 
 message LocalCallEnvelope {
@@ -29,37 +27,6 @@ message CallActorEnvelope {
 message InvokeResponse {
   google.protobuf.Any data = 1;
   map<string,string> metadata = 2;
-}
-
-message Component {
-  ComponentMetadata metadata = 1;
-  ComponentSpec spec = 2;
-  ComponentAuth auth = 3;
-}
-
-message ComponentMetadata {
-  string name = 1;
-  string namespace = 2;
-}
-
-message ComponentSpec {
-  string type = 1;
-  repeated ComponentMetadataItem metadata = 2;
-}
-
-message ComponentMetadataItem {
-  string name = 1;
-  string value = 2;
-  ComponentSecretKeyRef secretKeyRef = 3;
-}
-
-message ComponentSecretKeyRef {
-  string name = 1;
-  string key = 2;
-}
-
-message ComponentAuth {
-  string secretStore = 1;
 }
 
 message SaveStateEnvelope {
