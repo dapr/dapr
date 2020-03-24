@@ -121,7 +121,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			globalConfig, err = global_config.LoadKubernetesConfiguration(*config, *controlPlaneAddress)
+			globalConfig, err = global_config.LoadKubernetesConfiguration(*config, os.Getenv("NAMESPACE"), *controlPlaneAddress)
 		case modes.StandaloneMode:
 			globalConfig, err = global_config.LoadStandaloneConfiguration(*config)
 		}

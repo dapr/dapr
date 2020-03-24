@@ -6,13 +6,14 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"time"
 
-	"github.com/valyala/fasthttp"
+	"github.com/dapr/dapr/pkg/operator/client"
+	pb "github.com/dapr/dapr/pkg/proto/operator"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -92,28 +93,27 @@ func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
-func LoadKubernetesConfiguration(config, controlPlaneAddress string) (*Configuration, error) {
-	url := fmt.Sprintf("%s/configurations/%s", controlPlaneAddress, config)
-	req := fasthttp.AcquireRequest()
-	req.SetRequestURI(url)
-	req.Header.SetContentType("application/json")
-
-	resp := fasthttp.AcquireResponse()
-	client := &fasthttp.Client{
-		ReadTimeout: time.Second * 10,
-	}
-	err := client.Do(req, resp)
+func LoadKubernetesConfiguration(config, namespace, controlPlaneAddress string) (*Configuration, error) {
+	client, conn, err := client.GetOperatorClient(controlPlaneAddress)
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Close()
 
-	body := resp.Body()
-
+	resp, err := client.GetConfiguration(context.Background(), &pb.GetConfigurationRequest{
+		Name:      config,
+		Namespace: namespace,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.Configuration == nil {
+		return nil, fmt.Errorf("configuration %s not found", config)
+	}
 	var conf Configuration
-	err = json.Unmarshal(body, &conf)
+	err = json.Unmarshal(resp.Configuration.Value, &conf)
 	if err != nil {
 		return nil, err
 	}
-
 	return &conf, nil
 }
