@@ -104,17 +104,5 @@ message StateRequest {
   google.protobuf.Any value = 2;
   string etag = 3;
   map<string,string> metadata = 4;
-  StateRequestOptions options = 5;
-}
-
-message StateRequestOptions {
-  string concurrency = 1;
-  string consistency = 2;
-  StateRetryPolicy retryPolicy = 3;
-}
-
-message StateRetryPolicy {
-  int32 threshold = 1;
-  string pattern = 2;
-  google.protobuf.Duration interval = 3;
+  StateOptions options = 5;
 }
