@@ -6,15 +6,20 @@
 package components
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"path/filepath"
+	"strings"
 
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
-	"gopkg.in/yaml.v2"
+	"github.com/ghodss/yaml"
 )
+
+const yamlSeparator = "\n---"
 
 // StandaloneComponents loads components in a standalone mode environment
 type StandaloneComponents struct {
@@ -39,30 +44,93 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 	list := []components_v1alpha1.Component{}
 
 	for _, file := range files {
-		if !file.IsDir() {
+		if !file.IsDir() && s.IsYaml(file.Name()) {
 			b, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", dir, file.Name()))
+
 			if err != nil {
 				log.Warnf("error reading file %s/%s : %s", dir, file.Name(), err)
 				continue
 			}
 
-			decoder := yaml.NewDecoder(bytes.NewReader(b))
-
-			for {
-				var component components_v1alpha1.Component
-				err = decoder.Decode(&component)
-				if err == io.EOF {
-					break
-				}
-
-				if err != nil {
-					log.Warnf("error parsing file %s/%s : %s", dir, file.Name(), err)
-					continue
-				}
-				list = append(list, component)
-			}
+			components, _ := s.DecodeYaml(fmt.Sprintf("%s/%s", dir, file.Name()), b)
+			list = append(list, components...)
 		}
 	}
 
 	return list, nil
+}
+
+// IsYaml checks whether the file is yaml or not
+func (s *StandaloneComponents) IsYaml(fileName string) bool {
+	extension := strings.ToLower(filepath.Ext(fileName))
+	if extension == ".yaml" || extension == ".yml" {
+		return true
+	}
+	return false
+}
+
+// DecodeYaml decodes the yaml document
+func (s *StandaloneComponents) DecodeYaml(filename string, b []byte) ([]components_v1alpha1.Component, []error) {
+	list := []components_v1alpha1.Component{}
+	errors := []error{}
+	scanner := bufio.NewScanner(bytes.NewReader(b))
+	scanner.Split(s.SplitYamlDoc)
+
+	for {
+		var component components_v1alpha1.Component
+		err := s.Decode(scanner, &component)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Warnf("error parsing yaml resource in %s : %s", filename, err)
+			errors = append(errors, err)
+			continue
+		}
+		list = append(list, component)
+	}
+
+	return list, errors
+}
+
+// Decode reads the YAML resource in document
+func (s *StandaloneComponents) Decode(scanner *bufio.Scanner, c interface{}) error {
+	if scanner.Scan() {
+		return yaml.Unmarshal(scanner.Bytes(), &c)
+	}
+
+	err := scanner.Err()
+	if err == nil {
+		err = io.EOF
+	}
+	return err
+}
+
+// SplitYamlDoc - splits the yaml docs
+func (s *StandaloneComponents) SplitYamlDoc(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	sep := len([]byte(yamlSeparator))
+	if i := bytes.Index(data, []byte(yamlSeparator)); i >= 0 {
+		i += sep
+		after := data[i:]
+
+		if len(after) == 0 {
+			if atEOF {
+				return len(data), data[:len(data)-sep], nil
+			}
+			return 0, nil, nil
+		}
+		if j := bytes.IndexByte(after, '\n'); j >= 0 {
+			return i + j + 1, data[0 : i-sep], nil
+		}
+		return 0, nil, nil
+	}
+	// If we're at EOF, we have a final, non-terminated line. Return it.
+	if atEOF {
+		return len(data), data, nil
+	}
+	// Request more data.
+	return 0, nil, nil
 }
