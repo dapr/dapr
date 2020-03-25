@@ -6,15 +6,16 @@
 package components
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/cenkalti/backoff"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/valyala/fasthttp"
+	"github.com/dapr/dapr/pkg/operator/client"
+	"github.com/golang/protobuf/ptypes/empty"
 )
 
 const maxRetryTime = time.Second * 30
@@ -38,41 +39,30 @@ func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component
 	b := backoff.NewExponentialBackOff()
 	b.MaxElapsedTime = maxRetryTime
 
-	url := fmt.Sprintf("%s/components", k.config.ControlPlaneAddress)
 	var components []components_v1alpha1.Component
 
-	err := backoff.Retry(func() error {
-		body, err := requestControlPlane(url)
-		if err != nil {
-			return err
+	client, conn, err := client.GetOperatorClient(k.config.ControlPlaneAddress)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	err = backoff.Retry(func() error {
+		resp, getErr := client.GetComponents(context.Background(), &empty.Empty{})
+		if getErr != nil {
+			return getErr
 		}
-		err = json.Unmarshal(body, &components)
-		if err != nil {
-			return nil
+		comps := resp.GetComponents()
+
+		for _, c := range comps {
+			var component components_v1alpha1.Component
+			serErr := json.Unmarshal(c.Value, &component)
+			if serErr != nil {
+				log.Warnf("error deserializing component: %s", serErr)
+				continue
+			}
+			components = append(components, component)
 		}
 		return nil
 	}, b)
-
 	return components, err
-}
-
-// Retry mechanism when requesting the Operator API
-func requestControlPlane(url string) ([]byte, error) {
-	req := fasthttp.AcquireRequest()
-	req.SetRequestURI(url)
-	req.Header.SetContentType("application/json")
-
-	resp := fasthttp.AcquireResponse()
-	client := &fasthttp.Client{
-		ReadTimeout: time.Second * 10,
-	}
-	err := client.Do(req, resp)
-	if err != nil {
-		// Request failed, try again
-		log.Info("Retrying getting components")
-		return nil, err
-	}
-
-	body := resp.Body()
-	return body, nil
 }

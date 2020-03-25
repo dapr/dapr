@@ -88,7 +88,6 @@ func (s *server) StartNonBlocking() error {
 
 	if s.kind == internalServer {
 		daprinternal_pb.RegisterDaprInternalServer(server, s.api)
-
 	} else if s.kind == apiServer {
 		dapr_pb.RegisterDaprServer(server, s.api)
 	}
