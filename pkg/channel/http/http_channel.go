@@ -59,6 +59,11 @@ func applyContentTypeIfNotPresent(req *fasthttp.Request) {
 	}
 }
 
+// GetBaseAddress returns the application base address
+func (h *Channel) GetBaseAddress() string {
+	return h.baseAddress
+}
+
 // InvokeMethod invokes user code via HTTP
 func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.InvokeResponse, error) {
 	req := fasthttp.AcquireRequest()
