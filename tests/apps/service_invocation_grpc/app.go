@@ -76,8 +76,7 @@ func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any,
 	switch in.Method {
 	case "httpToGrpcTest":
 		// not a typo, the handling is the same as the case below
-		response, err = s.grpcTestHandler(in.Data.Value)
-
+		fallthrough
 	case "grpcToGrpcTest":
 		response, err = s.grpcTestHandler(in.Data.Value)
 	}
