@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
@@ -72,6 +73,7 @@ type actorsRuntime struct {
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
 	evaluationChan      chan bool
+	appHealthy          bool
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -106,6 +108,7 @@ func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnec
 		evaluationLock:      &sync.RWMutex{},
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
+		appHealthy:          true,
 	}
 }
 
@@ -128,7 +131,15 @@ func (a *actorsRuntime) Init() error {
 	log.Infof("actor runtime started. actor idle timeout: %s. actor scan interval: %s",
 		a.config.ActorIdleTimeout.String(), a.config.ActorDeactivationScanInterval.String())
 
+	go a.startAppHealthCheck()
 	return nil
+}
+
+func (a *actorsRuntime) startAppHealthCheck(opts ...health.HealthCheckOption) {
+	ch := health.StartEndpointHealthCheck(a.appChannel.GetBaseAddress(), opts...)
+	for {
+		a.appHealthy = <-ch
+	}
 }
 
 func (a *actorsRuntime) constructCompositeKey(keys ...string) string {
@@ -470,7 +481,6 @@ func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) s
 func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
 	log.Infof("starting connection attempt to placement service at %s", placementAddress)
 	stream := a.getPlacementClientPersistently(placementAddress, hostAddress)
-
 	log.Infof("established connection to placement service at %s", placementAddress)
 
 	go func() {
@@ -484,6 +494,15 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 			}
 
 			if stream != nil {
+				if !a.appHealthy {
+					// app is unresponsive, close the stream and disconnect from the placement service
+					err := stream.CloseSend()
+					if err != nil {
+						log.Errorf("error closing stream to placement service: %s", err)
+					}
+					continue
+				}
+
 				if err := stream.Send(&host); err != nil {
 					diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
 					log.Warnf("failed to report status to placement service : %v", err)
