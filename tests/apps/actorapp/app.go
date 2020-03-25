@@ -189,6 +189,11 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(""))
+}
+
 // epoch returns the current unix epoch timestamp
 func epoch() int {
 	return (int)(time.Now().UTC().UnixNano() / 1000000)
@@ -204,6 +209,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/actors/{actorType}/{id}", activateDeactivateActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/{actorType}/{id}/method/{method}", testCallActorHandler).Methods("POST")
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
+	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
