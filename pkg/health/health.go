@@ -64,6 +64,7 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 				}
 			} else {
 				ch <- true
+				failureCount = 0
 			}
 			if resp != nil && resp.Body != nil {
 				resp.Body.Close()

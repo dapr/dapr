@@ -90,10 +90,12 @@ func TestApplyOptions(t *testing.T) {
 }
 
 type testServer struct {
-	statusCode int
+	statusCode    int
+	numberOfCalls int
 }
 
 func (t *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.numberOfCalls++
 	w.WriteHeader(t.statusCode)
 	w.Write([]byte(""))
 }
@@ -138,6 +140,28 @@ func TestResponses(t *testing.T) {
 			assert.False(t, healthy)
 			server.Close()
 			return
+		}
+	})
+
+	t.Run("test app recovery", func(t *testing.T) {
+		test := &testServer{
+			statusCode: 500,
+		}
+		server := httptest.NewServer(test)
+
+		ch := StartEndpointHealthCheck(server.URL, WithInterval(time.Second*1), WithFailureThreshold(1))
+		count := 0
+		for {
+			healthy := <-ch
+			count++
+			if count != 2 {
+				assert.False(t, healthy)
+				test.statusCode = 200
+			} else {
+				assert.True(t, healthy)
+				server.Close()
+				return
+			}
 		}
 	})
 }
