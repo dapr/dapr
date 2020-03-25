@@ -8,6 +8,7 @@ package operator
 import (
 	"context"
 
+	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
@@ -33,6 +34,7 @@ type operator struct {
 	componentsInformer  cache.SharedInformer
 	ctx                 context.Context
 	daprHandler         handlers.Handler
+	apiServer           api.Server
 }
 
 // NewOperator returns a new Dapr Operator
@@ -76,6 +78,10 @@ func NewOperator(kubeAPI *k8s.API) Operator {
 }
 
 func (o *operator) syncComponent(obj interface{}) {
+	c, ok := obj.(*v1alpha1.Component)
+	if ok {
+		o.apiServer.OnComponentUpdated(c)
+	}
 }
 
 func (o *operator) syncDeployment(obj interface{}) {
@@ -104,7 +110,7 @@ func (o *operator) Run(ctx context.Context) {
 		o.componentsInformer.Run(ctx.Done())
 		cancel()
 	}()
-	apiSrv := api.NewAPIServer(o.daprClient)
-	apiSrv.Run(ctx)
+	o.apiServer = api.NewAPIServer(o.daprClient)
+	o.apiServer.Run()
 	cancel()
 }
