@@ -672,5 +672,4 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 	time.Sleep(time.Second * 2)
 	assert.False(t, testActorRuntime.appHealthy)
-	return
 }

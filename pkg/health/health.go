@@ -19,8 +19,8 @@ const (
 	successStatusCode = 200
 )
 
-// HealthCheckOption is an a function that applies a health check option
-type HealthCheckOption func(o *healthCheckOptions)
+// Option is an a function that applies a health check option
+type Option func(o *healthCheckOptions)
 
 type healthCheckOptions struct {
 	initialDelay      time.Duration
@@ -33,7 +33,7 @@ type healthCheckOptions struct {
 // StartEndpointHealthCheck starts a health check on the specified address with the given options.
 // It returns a channel that will emit true if the endpoint is healthy and false if the failure conditions
 // Have been met.
-func StartEndpointHealthCheck(endpointAddress string, opts ...HealthCheckOption) chan bool {
+func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool {
 	options := &healthCheckOptions{}
 	applyDefaults(options)
 
@@ -82,35 +82,35 @@ func applyDefaults(o *healthCheckOptions) {
 }
 
 // WithInitialDelay sets the initial delay for the health check
-func WithInitialDelay(delay time.Duration) HealthCheckOption {
+func WithInitialDelay(delay time.Duration) Option {
 	return func(o *healthCheckOptions) {
 		o.initialDelay = delay
 	}
 }
 
 // WithFailureThreshold sets the failure threshold for the health check
-func WithFailureThreshold(threshold int) HealthCheckOption {
+func WithFailureThreshold(threshold int) Option {
 	return func(o *healthCheckOptions) {
 		o.failureThreshold = threshold
 	}
 }
 
 // WithRequestTimeout sets the request timeout for the health check
-func WithRequestTimeout(timeout time.Duration) HealthCheckOption {
+func WithRequestTimeout(timeout time.Duration) Option {
 	return func(o *healthCheckOptions) {
 		o.requestTimeout = timeout
 	}
 }
 
 // WithSuccessStatusCode sets the status code for the health check
-func WithSuccessStatusCode(code int) HealthCheckOption {
+func WithSuccessStatusCode(code int) Option {
 	return func(o *healthCheckOptions) {
 		o.successStatusCode = code
 	}
 }
 
 // WithInterval sets the interval for the health check
-func WithInterval(interval time.Duration) HealthCheckOption {
+func WithInterval(interval time.Duration) Option {
 	return func(o *healthCheckOptions) {
 		o.interval = interval
 	}

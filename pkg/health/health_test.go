@@ -71,13 +71,13 @@ func TestApplyOptions(t *testing.T) {
 		opts := healthCheckOptions{}
 		applyDefaults(&opts)
 
-		customOpts := []HealthCheckOption{}
-		customOpts = append(customOpts, WithFailureThreshold(10))
-		customOpts = append(customOpts, WithInitialDelay(time.Second*11))
-		customOpts = append(customOpts, WithInterval(time.Second*12))
-		customOpts = append(customOpts, WithRequestTimeout(time.Second*13))
-		customOpts = append(customOpts, WithSuccessStatusCode(201))
-
+		customOpts := []Option{
+			WithFailureThreshold(10),
+			WithInitialDelay(time.Second * 11),
+			WithInterval(time.Second * 12),
+			WithRequestTimeout(time.Second * 13),
+			WithSuccessStatusCode(201),
+		}
 		for _, o := range customOpts {
 			o(&opts)
 		}

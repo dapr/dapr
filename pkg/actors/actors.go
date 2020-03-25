@@ -136,8 +136,8 @@ func (a *actorsRuntime) Init() error {
 	return nil
 }
 
-func (a *actorsRuntime) startAppHealthCheck(opts ...health.HealthCheckOption) {
-	healthAddress := fmt.Sprintf(path.Join(a.appChannel.GetBaseAddress(), "healthz"))
+func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
+	healthAddress := fmt.Sprintf("%s/healthz", path.Join(a.appChannel.GetBaseAddress()))
 	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
 	for {
 		a.appHealthy = <-ch
