@@ -70,6 +70,7 @@ import (
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
+	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
 	"github.com/dapr/components-contrib/bindings/aws/sns"
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
@@ -213,6 +214,9 @@ func main() {
 			bindings_loader.NewInput("aws.sqs", func() bindings.InputBinding {
 				return sqs.NewAWSSQS(logContrib)
 			}),
+			bindings_loader.NewInput("aws.kinesis", func() bindings.InputBinding {
+				return kinesis.NewAWSKinesis(logContrib)
+			}),
 			bindings_loader.NewInput("azure.eventhubs", func() bindings.InputBinding {
 				return eventhubs.NewAzureEventHubs(logContrib)
 			}),
@@ -244,6 +248,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("aws.sns", func() bindings.OutputBinding {
 				return sns.NewAWSSNS(logContrib)
+			}),
+			bindings_loader.NewOutput("aws.kinesis", func() bindings.OutputBinding {
+				return kinesis.NewAWSKinesis(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.eventhubs", func() bindings.OutputBinding {
 				return eventhubs.NewAzureEventHubs(logContrib)
