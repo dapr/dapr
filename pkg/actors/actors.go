@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -136,7 +137,8 @@ func (a *actorsRuntime) Init() error {
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.HealthCheckOption) {
-	ch := health.StartEndpointHealthCheck(a.appChannel.GetBaseAddress(), opts...)
+	healthAddress := fmt.Sprintf(path.Join(a.appChannel.GetBaseAddress(), "healthz"))
+	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
 	for {
 		a.appHealthy = <-ch
 	}
