@@ -49,10 +49,11 @@ const (
 	kubernetesMountPath          = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig                = "default"
 	defaultMetricsPort           = 9090
-	sidecarHealthzPath           = "/healthz"
+	sidecarHealthzPath           = "healthz"
 	defaultHealthzProbeDelay     = 5
 	defaultHealthzProbeTimeout   = 5
 	defaultHealthzProbeThreshold = 1
+	apiVersionV1                 = "v1.0"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
@@ -341,7 +342,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: sidecarHealthzPath,
+					Path: fmt.Sprintf("%s/%s", apiVersionV1, sidecarHealthzPath),
 					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
 				},
 			},
@@ -353,7 +354,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: sidecarHealthzPath,
+					Path: fmt.Sprintf("%s/%s", apiVersionV1, sidecarHealthzPath),
 					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
 				},
 			},
