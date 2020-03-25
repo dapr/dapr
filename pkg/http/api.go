@@ -29,6 +29,7 @@ import (
 // API returns a list of HTTP endpoints for Dapr
 type API interface {
 	APIEndpoints() []Endpoint
+	MarkStatusAsReady()
 }
 
 type api struct {
@@ -43,6 +44,7 @@ type api struct {
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
 	extendedMetadata      sync.Map
+	readyStatus           bool
 }
 
 type metadata struct {
@@ -91,6 +93,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
 
 	return api
 }
@@ -98,6 +101,11 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 // APIEndpoints returns the list of registered endpoints
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
+}
+
+// MarkStatusAsReady marks the ready status of dapr
+func (a *api) MarkStatusAsReady() {
+	a.readyStatus = true
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
@@ -245,6 +253,17 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Route:   "metadata/<key>",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata,
+		},
+	}
+}
+
+func (a *api) constructHealthzEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{http.Get},
+			Route:   "healthz",
+			Version: apiVersionV1,
+			Handler: a.onGetHealthz,
 		},
 	}
 }
@@ -962,4 +981,15 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	}
 
 	return 200
+}
+
+func (a *api) onGetHealthz(c *routing.Context) error {
+	if !a.readyStatus {
+		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", "dapr is not ready")
+		respondWithError(c.RequestCtx, 500, msg)
+	} else {
+		respondEmpty(c.RequestCtx, 200)
+	}
+
+	return nil
 }

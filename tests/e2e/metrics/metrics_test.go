@@ -170,7 +170,12 @@ func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
 					if strings.EqualFold(l.GetName(), "path") {
 						foundPath = true
 
-						require.Equal(t, fmt.Sprintf("/v1.0/invoke/%s/method/tests/green", app), l.GetValue())
+						if strings.Contains(l.GetValue(), "healthz") {
+							require.Equal(t, "/v1.0/healthz", l.GetValue())
+						} else {
+							require.Equal(t, fmt.Sprintf("/v1.0/invoke/%s/method/tests/green", app), l.GetValue())
+						}
+
 						break
 					}
 				}
