@@ -137,6 +137,10 @@ func (a *actorsRuntime) Init() error {
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
+	if len(a.config.HostedActorTypes) == 0 {
+		return
+	}
+
 	healthAddress := fmt.Sprintf("%s/healthz", path.Join(a.appChannel.GetBaseAddress()))
 	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
 	for {
