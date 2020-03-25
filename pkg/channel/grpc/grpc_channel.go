@@ -46,6 +46,11 @@ const (
 	QueryString = "http.query_string"
 )
 
+// GetBaseAddress returns the application base address
+func (g *Channel) GetBaseAddress() string {
+	return g.baseAddress
+}
+
 // InvokeMethod invokes user code via gRPC
 func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)

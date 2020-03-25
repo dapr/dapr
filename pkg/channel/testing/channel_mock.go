@@ -10,6 +10,11 @@ type MockAppChannel struct {
 	mock.Mock
 }
 
+// GetBaseAddress is a mock get base address method
+func (m *MockAppChannel) GetBaseAddress() string {
+	return ""
+}
+
 // InvokeMethod is a mock invocation method
 func (m *MockAppChannel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
 	args := m.Called(req)

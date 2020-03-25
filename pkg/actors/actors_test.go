@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/health"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -663,4 +664,13 @@ func TestActiveActorsCount(t *testing.T) {
 		actualCounts := testActorRuntime.GetActiveActorsCount()
 		assert.Equal(t, expectedCounts, actualCounts)
 	})
+}
+
+func TestActorsAppHealthCheck(t *testing.T) {
+	testActorRuntime := newTestActorsRuntime()
+	testActorRuntime.config.HostedActorTypes = []string{"actor1"}
+	go testActorRuntime.startAppHealthCheck(health.WithFailureThreshold(1), health.WithInterval(1))
+
+	time.Sleep(time.Second * 2)
+	assert.False(t, testActorRuntime.appHealthy)
 }
