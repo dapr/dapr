@@ -367,11 +367,13 @@ func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 
 // AcquireExternalURL gets external ingress endpoint from service when it is ready
 func (m *AppManager) AcquireExternalURL() string {
-	log.Println("Waiting until service has reached target state...")
+	log.Printf("Waiting until service ingress is ready for %s...\n", m.app.AppName)
 	svc, err := m.WaitUntilServiceState(m.IsServiceIngressReady)
 	if err != nil {
 		return ""
 	}
+
+	log.Printf("Service ingress for %s is ready...\n", m.app.AppName)
 	return m.AcquireExternalURLFromService(svc)
 }
 
