@@ -107,16 +107,18 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	maxConcurrencyStr := fmt.Sprintf("%v", maxConcurrency)
 
 	var trustAnchors string
+	var certChain string
+	var certKey string
 	var identity string
 
 	mtlsEnabled := mTLSEnabled(daprClient)
 	if mtlsEnabled {
-		trustAnchors = getTrustAnchors(kubeClient, namespace)
+		trustAnchors, certChain, certKey = getTrustAnchorsAndCertChain(kubeClient, namespace)
 		identity = fmt.Sprintf("%s:%s", pod.Spec.ServiceAccountName, req.Namespace)
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, sentryAddress, mtlsEnabled, identity, metricsPort)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -141,13 +143,15 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	return patchOps, nil
 }
 
-func getTrustAnchors(kubeClient *kubernetes.Clientset, namespace string) string {
+func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {
 	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(certs.KubeScrtName, meta_v1.GetOptions{})
 	if err != nil {
-		return ""
+		return "", "", ""
 	}
-	b := secret.Data[sentry_config.RootCertFilename]
-	return string(b)
+	rootCert := secret.Data[sentry_config.RootCertFilename]
+	certChain := secret.Data[sentry_config.IssuerCertFilename]
+	certKey := secret.Data[sentry_config.IssuerKeyFilename]
+	return string(rootCert), string(certChain), string(certKey)
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
@@ -284,7 +288,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -381,6 +385,14 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			Name:  certs.TrustAnchorsEnvVar,
 			Value: trustAnchors,
 		},
+			corev1.EnvVar{
+				Name:  certs.CertChainEnvVar,
+				Value: certChain,
+			},
+			corev1.EnvVar{
+				Name:  certs.CertKeyEnvVar,
+				Value: certKey,
+			},
 			corev1.EnvVar{
 				Name:  "SENTRY_LOCAL_IDENTITY",
 				Value: identity,

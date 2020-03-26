@@ -12,7 +12,7 @@ func mockGenCSR(id string) ([]byte, []byte, error) {
 }
 
 func getTestAuthenticator() Authenticator {
-	return newAuthenticator("test", x509.NewCertPool(), mockGenCSR)
+	return newAuthenticator("test", x509.NewCertPool(), nil, nil, mockGenCSR)
 }
 
 func TestGetTrustAuthAnchors(t *testing.T) {

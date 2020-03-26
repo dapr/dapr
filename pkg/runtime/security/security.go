@@ -34,15 +34,32 @@ func getTrustAnchors() (*x509.CertPool, error) {
 	return cp, nil
 }
 
+func getCertChainAndKey() ([]byte, []byte, error) {
+	cert := os.Getenv(certs.CertChainEnvVar)
+	if cert == "" {
+		return nil, nil, fmt.Errorf("couldn't find cert chain in environment variable %s", certs.CertChainEnvVar)
+	}
+	key := os.Getenv(certs.CertKeyEnvVar)
+	if cert == "" {
+		return nil, nil, fmt.Errorf("couldn't find cert key in environment variable %s", certs.CertKeyEnvVar)
+	}
+	return []byte(cert), []byte(key), nil
+}
+
 // GetSidecarAuthenticator returns a new authenticator with the extracted trust anchors
 func GetSidecarAuthenticator(id, sentryAddress string) (Authenticator, error) {
 	trustAnchors, err := getTrustAnchors()
 	if err != nil {
 		return nil, err
 	}
-	log.Info("trust anchors extracted successfully")
 
-	return newAuthenticator(sentryAddress, trustAnchors, generateCSRAndPrivateKey), nil
+	cert, key, err := getCertChainAndKey()
+	if err != nil {
+		return nil, err
+	}
+	log.Info("trust anchors and cert chain extracted successfully")
+
+	return newAuthenticator(sentryAddress, trustAnchors, cert, key, generateCSRAndPrivateKey), nil
 }
 
 func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {

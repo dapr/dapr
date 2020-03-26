@@ -33,6 +33,8 @@ type Authenticator interface {
 
 type authenticator struct {
 	trustAnchors      *x509.CertPool
+	certChainPem      []byte
+	keyPem            []byte
 	genCSRFunc        func(id string) ([]byte, []byte, error)
 	sentryAddress     string
 	currentSignedCert *SignedCertificate
@@ -46,9 +48,11 @@ type SignedCertificate struct {
 	TrustChain    *x509.CertPool
 }
 
-func newAuthenticator(sentryAddress string, trustAnchors *x509.CertPool, genCSRFunc func(id string) ([]byte, []byte, error)) Authenticator {
+func newAuthenticator(sentryAddress string, trustAnchors *x509.CertPool, certChainPem, keyPem []byte, genCSRFunc func(id string) ([]byte, []byte, error)) Authenticator {
 	return &authenticator{
 		trustAnchors:  trustAnchors,
+		certChainPem:  certChainPem,
+		keyPem:        keyPem,
 		genCSRFunc:    genCSRFunc,
 		sentryAddress: sentryAddress,
 		certMutex:     &sync.RWMutex{},
@@ -76,10 +80,16 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	}
 	certPem := pem.EncodeToMemory(&pem.Block{Type: certType, Bytes: csrb})
 
+	cert, err := tls.X509KeyPair(a.certChainPem, a.keyPem)
+	if err != nil {
+		return nil, err
+	}
+
 	config := &tls.Config{
 		InsecureSkipVerify: false,
 		RootCAs:            a.trustAnchors,
 		ServerName:         serverName,
+		Certificates:       []tls.Certificate{cert},
 	}
 	conn, err := grpc.Dial(
 		a.sentryAddress,
