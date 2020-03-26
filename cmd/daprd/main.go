@@ -48,6 +48,7 @@ import (
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
+	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
 	"github.com/dapr/components-contrib/pubsub/nats"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
@@ -189,6 +190,9 @@ func main() {
 			}),
 			pubsub_loader.New("hazelcast", func() pubs.PubSub {
 				return pubsub_hazelcast.NewHazelcastPubSub(logContrib)
+			}),
+			pubsub_loader.New("gcp.pubsub", func() pubs.PubSub {
+				return pubsub_gcp.NewGCPPubSub(logContrib)
 			}),
 		),
 		runtime.WithExporters(
