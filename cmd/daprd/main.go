@@ -48,6 +48,7 @@ import (
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
+	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
 	"github.com/dapr/components-contrib/pubsub/nats"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
@@ -70,6 +71,7 @@ import (
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
+	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
 	"github.com/dapr/components-contrib/bindings/aws/sns"
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
@@ -189,6 +191,9 @@ func main() {
 			pubsub_loader.New("hazelcast", func() pubs.PubSub {
 				return pubsub_hazelcast.NewHazelcastPubSub(logContrib)
 			}),
+			pubsub_loader.New("gcp.pubsub", func() pubs.PubSub {
+				return pubsub_gcp.NewGCPPubSub(logContrib)
+			}),
 		),
 		runtime.WithExporters(
 			exporters_loader.New("zipkin", func() exporters.Exporter {
@@ -212,6 +217,9 @@ func main() {
 		runtime.WithInputBindings(
 			bindings_loader.NewInput("aws.sqs", func() bindings.InputBinding {
 				return sqs.NewAWSSQS(logContrib)
+			}),
+			bindings_loader.NewInput("aws.kinesis", func() bindings.InputBinding {
+				return kinesis.NewAWSKinesis(logContrib)
 			}),
 			bindings_loader.NewInput("azure.eventhubs", func() bindings.InputBinding {
 				return eventhubs.NewAzureEventHubs(logContrib)
@@ -244,6 +252,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("aws.sns", func() bindings.OutputBinding {
 				return sns.NewAWSSNS(logContrib)
+			}),
+			bindings_loader.NewOutput("aws.kinesis", func() bindings.OutputBinding {
+				return kinesis.NewAWSKinesis(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.eventhubs", func() bindings.OutputBinding {
 				return eventhubs.NewAzureEventHubs(logContrib)
