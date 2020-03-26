@@ -757,6 +757,8 @@ func TestMTLS(t *testing.T) {
 		rt.runtimeConfig.SentryServiceAddress = "1.1.1.1"
 
 		os.Setenv(certs.TrustAnchorsEnvVar, testCertRoot)
+		os.Setenv(certs.CertChainEnvVar, "a")
+		os.Setenv(certs.CertKeyEnvVar, "b")
 		defer os.Clearenv()
 
 		err := rt.establishSecurity("test", rt.runtimeConfig.SentryServiceAddress)
