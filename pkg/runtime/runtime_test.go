@@ -59,6 +59,7 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 		Data: map[string]string{
 			"key1":   "value1",
 			"_value": "_value_data",
+			"name1":  "value1",
 		},
 	}, nil
 }
@@ -573,7 +574,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		assert.NoError(t, err)
 
 		mod := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "_value_data", mod.Spec.Metadata[0].Value)
+		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
 	})
 }
 
