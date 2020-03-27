@@ -107,7 +107,7 @@ func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelo
 		Metadata:  in.Metadata,
 	}
 
-	resp, err := a.actor.Call(&req)
+	resp, err := a.actor.Call(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelo
 		req.Data = in.Data.Value
 	}
 
-	resp, err := a.directMessaging.Invoke(&req)
+	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	"github.com/google/uuid"
@@ -51,6 +53,11 @@ type metadata struct {
 	ID                string                      `json:"id"`
 	ActiveActorsCount []actors.ActiveActorsCount  `json:"actors"`
 	Extended          map[interface{}]interface{} `json:"extended"`
+}
+
+// TraceValues represent trace state for each request.
+type TraceValues struct {
+	TraceID string
 }
 
 const (
@@ -504,6 +511,10 @@ func (a *api) setHeaders(c *routing.Context, metadata map[string]string) {
 }
 
 func (a *api) onDirectMessage(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	targetID := c.Param(idParam)
 	path := string(c.Path())
 	method := path[strings.Index(path, "method/")+7:]
@@ -519,7 +530,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	}
 	a.setHeaders(c, req.Metadata)
 
-	resp, err := a.directMessaging.Invoke(&req)
+	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -533,6 +544,10 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 }
 
 func (a *api) onCreateActorReminder(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -555,7 +570,7 @@ func (a *api) onCreateActorReminder(c *routing.Context) error {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.actor.CreateReminder(&req)
+	err = a.actor.CreateReminder(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -567,6 +582,10 @@ func (a *api) onCreateActorReminder(c *routing.Context) error {
 }
 
 func (a *api) onCreateActorTimer(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -589,7 +608,7 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.actor.CreateTimer(&req)
+	err = a.actor.CreateTimer(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -601,6 +620,10 @@ func (a *api) onCreateActorTimer(c *routing.Context) error {
 }
 
 func (a *api) onDeleteActorReminder(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -617,7 +640,7 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 		ActorType: actorType,
 	}
 
-	err := a.actor.DeleteReminder(&req)
+	err := a.actor.DeleteReminder(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -629,6 +652,10 @@ func (a *api) onDeleteActorReminder(c *routing.Context) error {
 }
 
 func (a *api) onActorStateTransaction(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -639,7 +666,7 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 	actorID := c.Param(actorIDParam)
 	body := c.PostBody()
 
-	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -664,7 +691,7 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 		Operations: ops,
 	}
 
-	err = a.actor.TransactionalStateOperation(&req)
+	err = a.actor.TransactionalStateOperation(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -676,6 +703,10 @@ func (a *api) onActorStateTransaction(c *routing.Context) error {
 }
 
 func (a *api) onGetActorReminder(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -686,7 +717,7 @@ func (a *api) onGetActorReminder(c *routing.Context) error {
 	actorID := c.Param(actorIDParam)
 	name := c.Param(nameParam)
 
-	resp, err := a.actor.GetReminder(&actors.GetReminderRequest{
+	resp, err := a.actor.GetReminder(ctx, &actors.GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Name:      name,
@@ -706,6 +737,10 @@ func (a *api) onGetActorReminder(c *routing.Context) error {
 }
 
 func (a *api) onDeleteActorTimer(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -722,7 +757,7 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 		ActorType: actorType,
 	}
 
-	err := a.actor.DeleteTimer(&req)
+	err := a.actor.DeleteTimer(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -734,6 +769,10 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 }
 
 func (a *api) onDirectActorMessage(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -754,7 +793,7 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 	}
 	a.setHeaders(c, req.Metadata)
 
-	resp, err := a.actor.Call(&req)
+	resp, err := a.actor.Call(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -782,6 +821,10 @@ func (a *api) setHeadersOnRequest(metadata map[string]string, c *routing.Context
 }
 
 func (a *api) onSaveActorState(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -793,7 +836,7 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 	key := c.Param(stateKeyParam)
 	body := c.PostBody()
 
-	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -821,7 +864,7 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 		Value:     val,
 	}
 
-	err = a.actor.SaveState(&req)
+	err = a.actor.SaveState(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_SAVE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -833,6 +876,10 @@ func (a *api) onSaveActorState(c *routing.Context) error {
 }
 
 func (a *api) onGetActorState(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -849,7 +896,7 @@ func (a *api) onGetActorState(c *routing.Context) error {
 		Key:       key,
 	}
 
-	resp, err := a.actor.GetState(&req)
+	resp, err := a.actor.GetState(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_GET", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -861,6 +908,10 @@ func (a *api) onGetActorState(c *routing.Context) error {
 }
 
 func (a *api) onDeleteActorState(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -871,7 +922,7 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 	actorID := c.Param(actorIDParam)
 	key := c.Param(stateKeyParam)
 
-	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -888,7 +939,7 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 		Key:       key,
 	}
 
-	err := a.actor.DeleteState(&req)
+	err := a.actor.DeleteState(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_DELETE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -900,6 +951,10 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 }
 
 func (a *api) onGetMetadata(c *routing.Context) error {
+	// Get the new context with the required trace values.
+	ctx, cancel := newContext(c)
+	defer cancel()
+
 	temp := make(map[interface{}]interface{})
 
 	// Copy synchronously so it can be serialized to JSON.
@@ -910,7 +965,7 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 
 	mtd := metadata{
 		ID:                a.id,
-		ActiveActorsCount: a.actor.GetActiveActorsCount(),
+		ActiveActorsCount: a.actor.GetActiveActorsCount(ctx),
 		Extended:          temp,
 	}
 
@@ -993,4 +1048,20 @@ func (a *api) onGetHealthz(c *routing.Context) error {
 	}
 
 	return nil
+}
+
+func getCorrelationId(c *routing.Context) string {
+
+	return string(c.Request.Header.Peek(diagnostics.CorrelationID))
+}
+
+func newContext(c *routing.Context) (context.Context, context.CancelFunc) {
+	corId := getCorrelationId(c)
+	v := TraceValues{
+		TraceID: corId,
+	}
+
+	// Set the context with the required trace values.
+	ctx := context.WithValue(c.RequestCtx, diagnostics.CorrelationIDCtxKey, &v)
+	return context.WithCancel(ctx)
 }
