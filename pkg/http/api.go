@@ -996,7 +996,7 @@ func (a *api) onPublish(c *routing.Context) error {
 	}
 
 	path := string(c.Path())
-	topic := path[strings.Index(path, "publish/") + 8:]
+	topic := path[strings.Index(path, "publish/")+8:]
 
 	body := c.PostBody()
 
@@ -1050,18 +1050,18 @@ func (a *api) onGetHealthz(c *routing.Context) error {
 	return nil
 }
 
-func getCorrelationId(c *routing.Context) string {
+func getCorrelationID(c *routing.Context) string {
 
 	return string(c.Request.Header.Peek(diagnostics.CorrelationID))
 }
 
 func newContext(c *routing.Context) (context.Context, context.CancelFunc) {
-	corId := getCorrelationId(c)
+	corID := getCorrelationID(c)
 	v := TraceValues{
-		TraceID: corId,
+		TraceID: corID,
 	}
 
 	// Set the context with the required trace values.
-	ctx := context.WithValue(c.RequestCtx, diagnostics.CorrelationIDCtxKey, &v)
+	ctx := context.WithValue(c.RequestCtx, diagnostics.CtxCorrelationIDKey, &v)
 	return context.WithCancel(ctx)
 }

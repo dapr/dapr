@@ -249,7 +249,6 @@ func TestOverrideReminder(t *testing.T) {
 	t.Run("override data", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		actorType, actorID := getTestActorTypeAndID()
-		ctx := context.Background()
 		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "a")
 		err := testActorsRuntime.CreateReminder(ctx, &reminder)
 		assert.Nil(t, err)
