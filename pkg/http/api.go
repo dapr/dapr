@@ -63,7 +63,6 @@ const (
 	stateKeyParam        = "key"
 	secretStoreNameParam = "secretStoreName"
 	secretNameParam      = "key"
-	topicParam           = "topic"
 	nameParam            = "name"
 	consistencyParam     = "consistency"
 	retryIntervalParam   = "retryInterval"
@@ -940,7 +939,7 @@ func (a *api) onPublish(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
-	
+
 	path := string(c.Path())
 	topic := path[strings.Index(path, "publish/") + 8:]
 
