@@ -146,7 +146,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{http.Post, http.Put},
-			Route:   "publish/<topic>",
+			Route:   "publish/*",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
 		},
@@ -940,8 +940,10 @@ func (a *api) onPublish(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
+	
+	path := string(c.Path())
+	topic := path[strings.Index(path, "publish/") + 8:]
 
-	topic := c.Param(topicParam)
 	body := c.PostBody()
 
 	corID := c.Request.Header.Peek(tracing.CorrelationID)
