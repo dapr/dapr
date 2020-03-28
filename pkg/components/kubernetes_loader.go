@@ -14,7 +14,7 @@ import (
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/operator/client"
+	"github.com/dapr/dapr/pkg/proto/operator"
 	"github.com/golang/protobuf/ptypes/empty"
 )
 
@@ -25,12 +25,14 @@ var log = logger.NewLogger("dapr.runtime.components")
 // KubernetesComponents loads components in a kubernetes environment
 type KubernetesComponents struct {
 	config config.KubernetesConfig
+	client operator.OperatorClient
 }
 
 // NewKubernetesComponents returns a new kubernetes loader
-func NewKubernetesComponents(configuration config.KubernetesConfig) *KubernetesComponents {
+func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClient operator.OperatorClient) *KubernetesComponents {
 	return &KubernetesComponents{
 		config: configuration,
+		client: operatorClient,
 	}
 }
 
@@ -41,13 +43,8 @@ func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component
 
 	var components []components_v1alpha1.Component
 
-	client, conn, err := client.GetOperatorClient(k.config.ControlPlaneAddress)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	err = backoff.Retry(func() error {
-		resp, getErr := client.GetComponents(context.Background(), &empty.Empty{})
+	err := backoff.Retry(func() error {
+		resp, getErr := k.client.GetComponents(context.Background(), &empty.Empty{})
 		if getErr != nil {
 			return getErr
 		}

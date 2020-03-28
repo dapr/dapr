@@ -24,18 +24,25 @@ Iklq0JnMgJU7nS+VpVvlgBN8
 func TestGetTrustAnchors(t *testing.T) {
 	t.Run("invalid root cert", func(t *testing.T) {
 		os.Setenv(certs.TrustAnchorsEnvVar, "111")
+		os.Setenv(certs.CertChainEnvVar, "111")
+		os.Setenv(certs.CertKeyEnvVar, "111")
 		defer os.Clearenv()
 
-		caPool, err := getTrustAnchors()
+		certChain, _ := GetCertChain()
+		caPool, err := CertPool(certChain.Cert)
 		assert.Error(t, err)
 		assert.Nil(t, caPool)
 	})
 
 	t.Run("valid root cert", func(t *testing.T) {
 		os.Setenv(certs.TrustAnchorsEnvVar, testRootCert)
+		os.Setenv(certs.CertChainEnvVar, "111")
+		os.Setenv(certs.CertKeyEnvVar, "111")
 		defer os.Clearenv()
 
-		caPool, err := getTrustAnchors()
+		certChain, err := GetCertChain()
+		assert.Nil(t, err)
+		caPool, err := CertPool(certChain.RootCA)
 		assert.Nil(t, err)
 		assert.NotNil(t, caPool)
 	})

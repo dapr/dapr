@@ -22,6 +22,8 @@ import (
 )
 
 var log = logger.NewLogger("dapr.operator")
+var config string
+var certChainPath string
 
 func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
@@ -29,9 +31,8 @@ func main() {
 	ctx := signals.Context()
 
 	kubeClient := utils.GetKubeClient()
-
-	config := utils.GetConfig()
-	daprClient, err := scheme.NewForConfig(config)
+	kubeConfig := utils.GetConfig()
+	daprClient, err := scheme.NewForConfig(kubeConfig)
 
 	if err != nil {
 		log.Fatalf("error building Kubernetes clients: %s", err)
@@ -39,7 +40,13 @@ func main() {
 
 	kubeAPI := k8s.NewAPI(kubeClient, daprClient)
 
-	operator.NewOperator(kubeAPI).Run(ctx)
+	config, err := operator.LoadConfiguration(config, daprClient)
+	if err != nil {
+		log.Fatal(err)
+	}
+	config.SetCredentialsPath(certChainPath)
+
+	operator.NewOperator(kubeAPI, config).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
@@ -58,6 +65,8 @@ func init() {
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
+	flag.StringVar(&config, "config", "default", "Path to config file, or name of a configuration object")
+	flag.StringVar(&certChainPath, "certchain", "/var/run/dapr/credentials", "Path to the credentials directory holding the cert chain")
 	flag.Parse()
 
 	// Apply options to all loggers

@@ -13,8 +13,8 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/runtime"
+	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/dapr/dapr/pkg/sentry/certs"
-	sentry_config "github.com/dapr/dapr/pkg/sentry/config"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -148,9 +148,9 @@ func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace str
 	if err != nil {
 		return "", "", ""
 	}
-	rootCert := secret.Data[sentry_config.RootCertFilename]
-	certChain := secret.Data[sentry_config.IssuerCertFilename]
-	certKey := secret.Data[sentry_config.IssuerKeyFilename]
+	rootCert := secret.Data[certchain.RootCertFilename]
+	certChain := secret.Data[certchain.IssuerCertFilename]
+	certKey := secret.Data[certchain.IssuerKeyFilename]
 	return string(rootCert), string(certChain), string(certKey)
 }
 

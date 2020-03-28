@@ -13,12 +13,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
+	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
-	"github.com/dapr/dapr/pkg/sentry/watcher"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 )
@@ -55,9 +56,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	issuerCertPath := filepath.Join(*credsPath, config.IssuerCertFilename)
-	issuerKeyPath := filepath.Join(*credsPath, config.IssuerKeyFilename)
-	rootCertPath := filepath.Join(*credsPath, config.RootCertFilename)
+	issuerCertPath := filepath.Join(*credsPath, certchain.IssuerCertFilename)
+	issuerKeyPath := filepath.Join(*credsPath, certchain.IssuerKeyFilename)
+	rootCertPath := filepath.Join(*credsPath, certchain.RootCertFilename)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -84,7 +85,8 @@ func main() {
 
 	<-ready
 
-	go watcher.StartIssuerWatcher(ctx, watchDir, issuerEvent)
+	go fswatcher.Watch(ctx, watchDir, issuerEvent)
+
 	go func() {
 		for range issuerEvent {
 			monitoring.IssuerCertChanged()

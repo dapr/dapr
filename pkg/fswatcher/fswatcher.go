@@ -1,25 +1,23 @@
-package watcher
+package fswatcher
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/fsnotify/fsnotify"
 )
 
-var log = logger.NewLogger("dapr.sentry.watcher")
-
-func StartIssuerWatcher(ctx context.Context, dir string, eventCh chan<- struct{}) {
+func Watch(ctx context.Context, dir string, eventCh chan<- struct{}) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Errorf("failed to create watcher: %s", err)
+		return fmt.Errorf("failed to create watcher: %s", err)
 	}
 	defer watcher.Close()
 
 	if err := watcher.Add(dir); err != nil {
-		log.Errorf("watcher error: %s", err)
+		return fmt.Errorf("watcher error: %s", err)
 	}
 
 LOOP:
@@ -28,19 +26,17 @@ LOOP:
 		// watch for events
 		case event := <-watcher.Events:
 			if event.Op == fsnotify.Create || event.Op == fsnotify.Write {
-				// check if issuer cert or key changes
 				if strings.Contains(event.Name, dir) {
-					// give time for either the key or cert to update
+					// give time for other updates to occur
 					time.Sleep(time.Second * 1)
 					eventCh <- struct{}{}
 				}
 			}
-		case err := <-watcher.Errors:
-			log.Errorf("watcher error event: %s", err)
+		case <-watcher.Errors:
 			break LOOP
 		case <-ctx.Done():
-			log.Info("stopping watcher")
 			break LOOP
 		}
 	}
+	return nil
 }

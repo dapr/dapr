@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	serverName        = "cluster.local"
+	TLSServerName     = "cluster.local"
 	sentrySignTimeout = time.Second * 5
 	certType          = "CERTIFICATE"
 	kubeTknPath       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -88,7 +88,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	config := &tls.Config{
 		InsecureSkipVerify: false,
 		RootCAs:            a.trustAnchors,
-		ServerName:         serverName,
+		ServerName:         TLSServerName,
 		Certificates:       []tls.Certificate{cert},
 	}
 	conn, err := grpc.Dial(

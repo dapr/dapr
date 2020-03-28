@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
 )
 
@@ -120,10 +121,17 @@ func FromFlags() (*DaprRuntime, error) {
 	var globalConfig *global_config.Configuration
 	var configErr error
 
+	if *mtlsEnabled {
+		runtimeConfig.CertChain, err = security.GetCertChain()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
-			client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress)
+			client, conn, clientErr := client.GetOperatorClient(*controlPlaneAddress, security.TLSServerName, runtimeConfig.CertChain)
 			if clientErr != nil {
 				return nil, clientErr
 			}
