@@ -63,7 +63,6 @@ const (
 	stateKeyParam        = "key"
 	secretStoreNameParam = "secretStoreName"
 	secretNameParam      = "key"
-	topicParam           = "topic"
 	nameParam            = "name"
 	consistencyParam     = "consistency"
 	retryIntervalParam   = "retryInterval"
@@ -146,7 +145,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{http.Post, http.Put},
-			Route:   "publish/<topic>",
+			Route:   "publish/*",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
 		},
@@ -941,7 +940,9 @@ func (a *api) onPublish(c *routing.Context) error {
 		return nil
 	}
 
-	topic := c.Param(topicParam)
+	path := string(c.Path())
+	topic := path[strings.Index(path, "publish/") + 8:]
+
 	body := c.PostBody()
 
 	corID := c.Request.Header.Peek(tracing.CorrelationID)
