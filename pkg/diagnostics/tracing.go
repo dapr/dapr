@@ -31,9 +31,6 @@ const (
 	// CorrelationID is the header key name of correlation id for trace
 	CorrelationID      = "X-Correlation-ID"
 	correlationKey key = CorrelationID
-	// CtxCorrelationIDKey is the key for correlationId in the request context
-	CtxCorrelationID        = "CtxCorrelationID"
-	CtxCorrelationIDKey key = CtxCorrelationID
 )
 
 // TracerSpan defines a tracing span that a tracer users to keep track of call scopes
