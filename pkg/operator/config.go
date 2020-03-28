@@ -9,42 +9,38 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	credentialsPath = "/var/run/dapr/credentials"
-)
-
-type OperatorConfig struct {
+type Config struct {
 	MTLSEnabled     bool
 	CredentialsPath string
 }
 
-func LoadConfiguration(name string, client scheme.Interface) (*OperatorConfig, error) {
+func LoadConfiguration(name string, client scheme.Interface) (*Config, error) {
 	namespace := os.Getenv("NAMESPACE")
 	conf, err := client.ConfigurationV1alpha1().Configurations(namespace).Get(name, v1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-	return &OperatorConfig{
+	return &Config{
 		MTLSEnabled: conf.Spec.MTLSSpec.Enabled,
 	}, nil
 }
 
 // CredentialsPath sets the directory where the cert chain credentials should be looked in
-func (o *OperatorConfig) SetCredentialsPath(path string) {
+func (o *Config) SetCredentialsPath(path string) {
 	o.CredentialsPath = path
 }
 
 // RootCertPath returns the file path for the root cert
-func (o *OperatorConfig) RootCertPath() string {
+func (o *Config) RootCertPath() string {
 	return filepath.Join(o.CredentialsPath, certchain.RootCertFilename)
 }
 
 // CertPath returns the file path for the cert
-func (o *OperatorConfig) CertPath() string {
+func (o *Config) CertPath() string {
 	return filepath.Join(o.CredentialsPath, certchain.IssuerCertFilename)
 }
 
 // KeyPath returns the file path for the cert key
-func (o *OperatorConfig) KeyPath() string {
+func (o *Config) KeyPath() string {
 	return filepath.Join(o.CredentialsPath, certchain.IssuerKeyFilename)
 }

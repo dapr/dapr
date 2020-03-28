@@ -37,11 +37,11 @@ type operator struct {
 	ctx                 context.Context
 	daprHandler         handlers.Handler
 	apiServer           api.Server
-	config              *OperatorConfig
+	config              *Config
 }
 
 // NewOperator returns a new Dapr Operator
-func NewOperator(kubeAPI *k8s.API, config *OperatorConfig) Operator {
+func NewOperator(kubeAPI *k8s.API, config *Config) Operator {
 	kubeClient := kubeAPI.GetKubeClient()
 	daprClient := kubeAPI.GetDaprClient()
 
@@ -127,7 +127,7 @@ func (o *operator) Run(ctx context.Context) {
 
 			go func() {
 				log.Infof("starting watch for certs on filesystem: %s", o.config.CredentialsPath)
-				err := fswatcher.Watch(ctx, o.config.CredentialsPath, fsevent)
+				err = fswatcher.Watch(ctx, o.config.CredentialsPath, fsevent)
 				if err != nil {
 					log.Fatal("error starting watch on filesystem: %s", err)
 				}

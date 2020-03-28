@@ -141,7 +141,6 @@ func shouldCreateCerts(conf config.SentryConfig) bool {
 
 func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 	var issuerCreds *certs.Credentials
-	var err error
 	var rootCertBytes []byte
 	var issuerCertBytes []byte
 
@@ -169,6 +168,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 	} else {
 		// create self signed root and issuer certs
 		log.Info("root and issuer certs not found: generating self signed CA")
+		var err error
 		issuerCreds, rootCertBytes, issuerCertBytes, err = c.generateRootAndIssuerCerts()
 		if err != nil {
 			return nil, fmt.Errorf("error generating trust root bundle: %s", err)
