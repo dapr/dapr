@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/proto/operator"
 	pb "github.com/dapr/dapr/pkg/proto/operator"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -45,6 +47,11 @@ func (o *mockOperator) ComponentUpdate(in *empty.Empty, srv pb.Operator_Componen
 	return nil
 }
 
+func getOperatorClient(address string) operator.OperatorClient {
+	conn, _ := grpc.Dial(address, grpc.WithInsecure())
+	return operator.NewOperatorClient(conn)
+}
+
 func TestLoadComponents(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -58,7 +65,10 @@ func TestLoadComponents(t *testing.T) {
 		s.Serve(lis)
 	}()
 
+	time.Sleep(time.Second * 1)
+
 	request := &KubernetesComponents{
+		client: getOperatorClient(fmt.Sprintf("localhost:%d", port)),
 		config: config.KubernetesConfig{
 			ControlPlaneAddress: fmt.Sprintf("localhost:%v", port),
 		},

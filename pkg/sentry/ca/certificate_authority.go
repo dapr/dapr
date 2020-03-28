@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/csr"
@@ -21,7 +22,7 @@ import (
 
 const (
 	caOrg                      = "dapr.io/sentry"
-	caCommonName               = "sentry"
+	caCommonName               = "cluster.local"
 	selfSignedRootCertLifetime = time.Hour * 8760
 )
 
@@ -146,7 +147,12 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 
 	// certs exist on disk, load them
 	if !shouldCreateCerts(c.config) {
-		issuerCreds, err = certs.PEMCredentialsFromFiles(c.config.IssuerKeyPath, c.config.IssuerCertPath)
+		certChain, err := certchain.LoadFromDisk(c.config.RootCertPath, c.config.IssuerCertPath, c.config.IssuerKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("error loading cert chain from disk: %s", err)
+		}
+
+		issuerCreds, err = certs.PEMCredentialsFromFiles(certChain.Cert, certChain.Key)
 		if err != nil {
 			return nil, fmt.Errorf("error reading PEM credentials: %s", err)
 		}

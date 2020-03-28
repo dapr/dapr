@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
+	"github.com/dapr/dapr/pkg/proto/operator"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/golang/protobuf/ptypes/any"
@@ -94,6 +95,7 @@ type DaprRuntime struct {
 	scopedPublishings        []string
 	allowedTopics            []string
 	daprHTTPAPI              http.API
+	operatorClient           operator.OperatorClient
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -153,12 +155,27 @@ func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
+func (a *DaprRuntime) getOperatorClient() (operator.OperatorClient, error) {
+	if a.runtimeConfig.Mode == modes.KubernetesMode {
+		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
+		if err != nil {
+			return nil, fmt.Errorf("error creating operator client: %s", err)
+		}
+		return client, nil
+	}
+	return nil, nil
+}
+
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
-	err := a.establishSecurity(a.runtimeConfig.ID, a.runtimeConfig.SentryServiceAddress)
+	err := a.establishSecurity(a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
 		return err
 	}
 	a.namespace = a.getNamespace()
+	a.operatorClient, err = a.getOperatorClient()
+	if err != nil {
+		return err
+	}
 
 	err = a.loadComponents(opts)
 	if err != nil {
@@ -320,14 +337,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	}
 
 	go func() {
-		client, conn, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress)
-		if err != nil {
-			log.Errorf("error connecting to operator: %s", err)
-			return
-		}
-		defer conn.Close()
-
-		stream, err := client.ComponentUpdate(context.Background(), &empty.Empty{})
+		stream, err := a.operatorClient.ComponentUpdate(context.Background(), &empty.Empty{})
 		if err != nil {
 			log.Errorf("error from operator stream: %s", err)
 			return
@@ -1016,7 +1026,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes)
+		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.operatorClient)
 	case modes.StandaloneMode:
 		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	default:
@@ -1287,7 +1297,7 @@ func (a *DaprRuntime) getComponent(componentType string, name string) *component
 	return nil
 }
 
-func (a *DaprRuntime) establishSecurity(id, sentryAddress string) error {
+func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	if !a.runtimeConfig.mtlsEnabled {
 		log.Info("mTLS is disabled. Skipping certificate request and tls validation")
 		return nil
@@ -1297,7 +1307,7 @@ func (a *DaprRuntime) establishSecurity(id, sentryAddress string) error {
 	}
 	log.Info("mTLS enabled. creating sidecar authenticator")
 
-	auth, err := security.GetSidecarAuthenticator(id, sentryAddress)
+	auth, err := security.GetSidecarAuthenticator(sentryAddress, a.runtimeConfig.CertChain)
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,8 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -15,9 +17,11 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/logger"
 	pb "github.com/dapr/dapr/pkg/proto/operator"
+	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,7 +31,7 @@ var log = logger.NewLogger("dapr.operator.api")
 
 //Server runs the Dapr API server for components and configurations
 type Server interface {
-	Run()
+	Run(certChain *certchain.CertChain)
 	OnComponentUpdated(component *v1alpha1.Component)
 }
 
@@ -45,17 +49,48 @@ func NewAPIServer(client scheme.Interface) Server {
 }
 
 // Run starts a new gRPC server
-func (a *apiServer) Run() {
+func (a *apiServer) Run(certChain *certchain.CertChain) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
 	if err != nil {
 		log.Fatal("error starting tcp listener: %s", err)
 	}
 
-	s := grpc.NewServer()
+	opts := a.getServerOptions(certChain)
+	s := grpc.NewServer(opts...)
 	pb.RegisterOperatorServer(s, a)
+
+	log.Info("starting gRPC server")
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("gRPC server error: %v", err)
 	}
+}
+
+func (a *apiServer) getServerOptions(certChain *certchain.CertChain) []grpc.ServerOption {
+	opts := []grpc.ServerOption{}
+	if certChain == nil {
+		return opts
+	}
+
+	cp := x509.NewCertPool()
+	cp.AppendCertsFromPEM(certChain.RootCA)
+
+	if certChain != nil {
+		log.Info("setting up tls configuration")
+
+		cert, err := tls.X509KeyPair(certChain.Cert, certChain.Key)
+		if err != nil {
+			log.Fatalf("failed to create server certificate: %s", err)
+		}
+
+		config := &tls.Config{
+			ClientCAs: cp,
+			// Require cert verification
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			Certificates: []tls.Certificate{cert},
+		}
+		opts = append(opts, grpc.Creds(credentials.NewTLS(config)))
+	}
+	return opts
 }
 
 func (a *apiServer) OnComponentUpdated(component *v1alpha1.Component) {
