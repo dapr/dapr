@@ -327,6 +327,11 @@ func httpCall(method string, url string, requestBody interface{}) ([]byte, error
 	return resBody, nil
 }
 
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(""))
+}
+
 // epoch returns the current unix epoch timestamp
 func epoch() int {
 	return (int)(time.Now().UTC().UnixNano() / 1000000)
@@ -345,6 +350,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
 	router.HandleFunc("/test/logs", logsHandler).Methods("DELETE")
+	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
