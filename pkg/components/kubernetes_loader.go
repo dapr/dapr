@@ -18,8 +18,6 @@ import (
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 )
 
-const maxRetryTime = time.Second * 30
-
 var log = logger.NewLogger("dapr.runtime.components")
 
 // KubernetesComponents loads components in a kubernetes environment

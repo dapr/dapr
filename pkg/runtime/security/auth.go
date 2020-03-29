@@ -14,6 +14,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	pb "github.com/dapr/dapr/pkg/proto/sentry"
 	"github.com/golang/protobuf/ptypes"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -94,22 +95,20 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	conn, err := grpc.Dial(
 		a.sentryAddress,
 		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
-		grpc.WithTransportCredentials(credentials.NewTLS(config)))
+		grpc.WithTransportCredentials(credentials.NewTLS(config)),
+		grpc.WithUnaryInterceptor(grpc_retry.UnaryClientInterceptor()))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
 		return nil, fmt.Errorf("error establishing connection to sentry: %s", err)
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), sentrySignTimeout)
-	defer cancel()
-
 	c := pb.NewCAClient(conn)
-	resp, err := c.SignCertificate(ctx, &pb.SignCertificateRequest{
+	resp, err := c.SignCertificate(context.Background(), &pb.SignCertificateRequest{
 		CertificateSigningRequest: certPem,
 		Id:                        getSentryIdentifier(id),
 		Token:                     getToken(),
-	})
+	}, grpc_retry.WithMax(100), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %s", err)
