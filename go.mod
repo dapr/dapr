@@ -5,7 +5,6 @@ go 1.14
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
-	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/dapr/components-contrib v0.0.0-20200325000036-1ac30f7be571
