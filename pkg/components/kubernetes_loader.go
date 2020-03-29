@@ -36,21 +36,21 @@ func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClie
 
 // LoadComponents returns components from a given control plane address
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
-	var components []components_v1alpha1.Component
 	resp, err := k.client.GetComponents(context.Background(), &empty.Empty{}, grpc_retry.WithMax(100), grpc_retry.WithPerRetryTimeout(5*time.Second))
 	if err != nil {
 		return nil, err
 	}
 	comps := resp.GetComponents()
 
+	components := []components_v1alpha1.Component{}
 	for _, c := range comps {
 		var component components_v1alpha1.Component
-		serErr := json.Unmarshal(c.Value, &component)
-		if serErr != nil {
-			log.Warnf("error deserializing component: %s", serErr)
+		err := json.Unmarshal(c.Value, &component)
+		if err != nil {
+			log.Warnf("error deserializing component: %s", err)
 			continue
 		}
 		components = append(components, component)
 	}
-	return components, err
+	return components, nil
 }
