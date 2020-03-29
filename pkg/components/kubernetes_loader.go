@@ -20,6 +20,11 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.components")
 
+const (
+	operatorCallTimeout = time.Second * 5
+	operatorMaxRetries  = 100
+)
+
 // KubernetesComponents loads components in a kubernetes environment
 type KubernetesComponents struct {
 	config config.KubernetesConfig
@@ -36,7 +41,7 @@ func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClie
 
 // LoadComponents returns components from a given control plane address
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
-	resp, err := k.client.GetComponents(context.Background(), &empty.Empty{}, grpc_retry.WithMax(100), grpc_retry.WithPerRetryTimeout(5*time.Second))
+	resp, err := k.client.GetComponents(context.Background(), &empty.Empty{}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, err
 	}

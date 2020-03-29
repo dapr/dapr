@@ -24,6 +24,7 @@ const (
 	sentrySignTimeout = time.Second * 5
 	certType          = "CERTIFICATE"
 	kubeTknPath       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	sentryMaxRetries  = 100
 )
 
 type Authenticator interface {
@@ -108,7 +109,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		CertificateSigningRequest: certPem,
 		Id:                        getSentryIdentifier(id),
 		Token:                     getToken(),
-	}, grpc_retry.WithMax(100), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
+	}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %s", err)

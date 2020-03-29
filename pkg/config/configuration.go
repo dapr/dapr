@@ -18,6 +18,11 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+const (
+	operatorCallTimeout = time.Second * 5
+	operatorMaxRetries  = 100
+)
+
 type Configuration struct {
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 }
@@ -98,7 +103,7 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient pb.Ope
 	resp, err := operatorClient.GetConfiguration(context.Background(), &pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
-	}, grpc_retry.WithMax(100), grpc_retry.WithPerRetryTimeout(5*time.Second))
+	}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, err
 	}
