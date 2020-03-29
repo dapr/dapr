@@ -8,6 +8,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	pb "github.com/dapr/dapr/pkg/proto/operator"
 	"github.com/dapr/dapr/pkg/sentry/certchain"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -17,6 +18,7 @@ import (
 func GetOperatorClient(address, serverName string, certChain *certchain.CertChain) (pb.OperatorClient, *grpc.ClientConn, error) {
 	opts := []grpc.DialOption{
 		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+		grpc.WithUnaryInterceptor(grpc_retry.UnaryClientInterceptor()),
 	}
 	if certChain != nil {
 		cp := x509.NewCertPool()

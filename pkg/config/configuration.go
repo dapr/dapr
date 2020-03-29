@@ -11,8 +11,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"time"
 
 	pb "github.com/dapr/dapr/pkg/proto/operator"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -96,7 +98,7 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient pb.Ope
 	resp, err := operatorClient.GetConfiguration(context.Background(), &pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
-	})
+	}, grpc_retry.WithMax(100), grpc_retry.WithPerRetryTimeout(5*time.Second))
 	if err != nil {
 		return nil, err
 	}
