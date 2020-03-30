@@ -7,7 +7,6 @@ package actors
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,7 +29,6 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -539,27 +537,6 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 			}
 		}
 	}()
-}
-
-func (a *actorsRuntime) getClientOptions(certChain *dapr_credentials.CertChain) ([]grpc.DialOption, error) {
-	opts := []grpc.DialOption{
-		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
-	}
-	if certChain != nil {
-		cp := x509.NewCertPool()
-		ok := cp.AppendCertsFromPEM(certChain.RootCA)
-		if !ok {
-			return nil, errors.New("failed to append PEM root cert to x509 CertPool")
-		}
-		config, err := dapr_credentials.TLSConfigFromCertAndKey(certChain.Cert, certChain.Key, security.TLSServerName, cp)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
-		}
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)))
-	} else {
-		opts = append(opts, grpc.WithInsecure())
-	}
-	return opts, nil
 }
 
 func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) daprinternal_pb.PlacementService_ReportDaprStatusClient {
