@@ -15,9 +15,6 @@ import (
 )
 
 const (
-	RootCertFilename            = "ca.crt"
-	IssuerCertFilename          = "issuer.crt"
-	IssuerKeyFilename           = "issuer.key"
 	kubernetesServiceHostEnvVar = "KUBERNETES_SERVICE_HOST"
 	kubernetesConfig            = "kubernetes"
 	selfHostedConfig            = "selfhosted"

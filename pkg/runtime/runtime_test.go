@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -762,7 +763,11 @@ func TestMTLS(t *testing.T) {
 		os.Setenv(certs.CertKeyEnvVar, "b")
 		defer os.Clearenv()
 
-		err := rt.establishSecurity("test", rt.runtimeConfig.SentryServiceAddress)
+		certChain, err := security.GetCertChain()
+		assert.Nil(t, err)
+		rt.runtimeConfig.CertChain = certChain
+
+		err = rt.establishSecurity(rt.runtimeConfig.SentryServiceAddress)
 		assert.Nil(t, err)
 		assert.NotNil(t, rt.authenticator)
 	})
@@ -770,7 +775,7 @@ func TestMTLS(t *testing.T) {
 	t.Run("with mTLS disabled", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
-		err := rt.establishSecurity("test", rt.runtimeConfig.SentryServiceAddress)
+		err := rt.establishSecurity(rt.runtimeConfig.SentryServiceAddress)
 		assert.Nil(t, err)
 		assert.Nil(t, rt.authenticator)
 	})

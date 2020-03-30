@@ -10,59 +10,52 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/cenkalti/backoff"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/operator/client"
+	"github.com/dapr/dapr/pkg/proto/operator"
 	"github.com/golang/protobuf/ptypes/empty"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 )
 
-const maxRetryTime = time.Second * 30
-
 var log = logger.NewLogger("dapr.runtime.components")
+
+const (
+	operatorCallTimeout = time.Second * 5
+	operatorMaxRetries  = 100
+)
 
 // KubernetesComponents loads components in a kubernetes environment
 type KubernetesComponents struct {
 	config config.KubernetesConfig
+	client operator.OperatorClient
 }
 
 // NewKubernetesComponents returns a new kubernetes loader
-func NewKubernetesComponents(configuration config.KubernetesConfig) *KubernetesComponents {
+func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClient operator.OperatorClient) *KubernetesComponents {
 	return &KubernetesComponents{
 		config: configuration,
+		client: operatorClient,
 	}
 }
 
 // LoadComponents returns components from a given control plane address
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
-	b := backoff.NewExponentialBackOff()
-	b.MaxElapsedTime = maxRetryTime
-
-	var components []components_v1alpha1.Component
-
-	client, conn, err := client.GetOperatorClient(k.config.ControlPlaneAddress)
+	resp, err := k.client.GetComponents(context.Background(), &empty.Empty{}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
-	err = backoff.Retry(func() error {
-		resp, getErr := client.GetComponents(context.Background(), &empty.Empty{})
-		if getErr != nil {
-			return getErr
-		}
-		comps := resp.GetComponents()
+	comps := resp.GetComponents()
 
-		for _, c := range comps {
-			var component components_v1alpha1.Component
-			serErr := json.Unmarshal(c.Value, &component)
-			if serErr != nil {
-				log.Warnf("error deserializing component: %s", serErr)
-				continue
-			}
-			components = append(components, component)
+	components := []components_v1alpha1.Component{}
+	for _, c := range comps {
+		var component components_v1alpha1.Component
+		err := json.Unmarshal(c.Value, &component)
+		if err != nil {
+			log.Warnf("error deserializing component: %s", err)
+			continue
 		}
-		return nil
-	}, b)
-	return components, err
+		components = append(components, component)
+	}
+	return components, nil
 }

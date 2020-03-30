@@ -9,7 +9,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 )
 
 const (
@@ -88,17 +87,7 @@ func decodeCertificatePEM(crtb []byte) (*x509.Certificate, []byte, error) {
 }
 
 // PEMCredentialsFromFiles takes a path for a key/cert pair and returns a validated Credentials wrapper with a trust chain.
-func PEMCredentialsFromFiles(keyPath, certPath string) (*Credentials, error) {
-	keyPem, err := ioutil.ReadFile(keyPath)
-	if err != nil {
-		return nil, err
-	}
-
-	certPem, err := ioutil.ReadFile(certPath)
-	if err != nil {
-		return nil, err
-	}
-
+func PEMCredentialsFromFiles(certPem, keyPem []byte) (*Credentials, error) {
 	pk, err := DecodePEMKey(keyPem)
 	if err != nil {
 		return nil, err

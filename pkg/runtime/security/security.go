@@ -11,6 +11,7 @@ import (
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
@@ -20,46 +21,44 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.security")
 
-func getTrustAnchors() (*x509.CertPool, error) {
-	trustAnchors := os.Getenv(certs.TrustAnchorsEnvVar)
-	if trustAnchors == "" {
-		return nil, fmt.Errorf("couldn't find trust anchors in environment variable %s", certs.TrustAnchorsEnvVar)
-	}
-
+func CertPool(certPem []byte) (*x509.CertPool, error) {
 	cp := x509.NewCertPool()
-	ok := cp.AppendCertsFromPEM([]byte(trustAnchors))
+	ok := cp.AppendCertsFromPEM(certPem)
 	if !ok {
 		return nil, errors.New("failed to append PEM root cert to x509 CertPool")
 	}
 	return cp, nil
 }
 
-func getCertChainAndKey() ([]byte, []byte, error) {
+func GetCertChain() (*certchain.CertChain, error) {
+	trustAnchors := os.Getenv(certs.TrustAnchorsEnvVar)
+	if trustAnchors == "" {
+		return nil, fmt.Errorf("couldn't find trust anchors in environment variable %s", certs.TrustAnchorsEnvVar)
+	}
 	cert := os.Getenv(certs.CertChainEnvVar)
 	if cert == "" {
-		return nil, nil, fmt.Errorf("couldn't find cert chain in environment variable %s", certs.CertChainEnvVar)
+		return nil, fmt.Errorf("couldn't find cert chain in environment variable %s", certs.CertChainEnvVar)
 	}
 	key := os.Getenv(certs.CertKeyEnvVar)
 	if cert == "" {
-		return nil, nil, fmt.Errorf("couldn't find cert key in environment variable %s", certs.CertKeyEnvVar)
+		return nil, fmt.Errorf("couldn't find cert key in environment variable %s", certs.CertKeyEnvVar)
 	}
-	return []byte(cert), []byte(key), nil
+	return &certchain.CertChain{
+		RootCA: []byte(trustAnchors),
+		Cert:   []byte(cert),
+		Key:    []byte(key),
+	}, nil
 }
 
 // GetSidecarAuthenticator returns a new authenticator with the extracted trust anchors
-func GetSidecarAuthenticator(id, sentryAddress string) (Authenticator, error) {
-	trustAnchors, err := getTrustAnchors()
-	if err != nil {
-		return nil, err
-	}
-
-	cert, key, err := getCertChainAndKey()
+func GetSidecarAuthenticator(sentryAddress string, certChain *certchain.CertChain) (Authenticator, error) {
+	trustAnchors, err := CertPool(certChain.RootCA)
 	if err != nil {
 		return nil, err
 	}
 	log.Info("trust anchors and cert chain extracted successfully")
 
-	return newAuthenticator(sentryAddress, trustAnchors, cert, key, generateCSRAndPrivateKey), nil
+	return newAuthenticator(sentryAddress, trustAnchors, certChain.Cert, certChain.Key, generateCSRAndPrivateKey), nil
 }
 
 func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {

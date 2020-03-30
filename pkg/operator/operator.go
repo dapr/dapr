@@ -10,10 +10,12 @@ import (
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/fswatcher"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
+	"github.com/dapr/dapr/pkg/sentry/certchain"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -35,10 +37,11 @@ type operator struct {
 	ctx                 context.Context
 	daprHandler         handlers.Handler
 	apiServer           api.Server
+	config              *Config
 }
 
 // NewOperator returns a new Dapr Operator
-func NewOperator(kubeAPI *k8s.API) Operator {
+func NewOperator(kubeAPI *k8s.API, config *Config) Operator {
 	kubeClient := kubeAPI.GetKubeClient()
 	daprClient := kubeAPI.GetDaprClient()
 
@@ -58,6 +61,7 @@ func NewOperator(kubeAPI *k8s.API) Operator {
 			nil,
 		),
 		daprHandler: handlers.NewDaprHandler(kubeAPI),
+		config:      config,
 	}
 
 	o.deploymentsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -110,7 +114,37 @@ func (o *operator) Run(ctx context.Context) {
 		o.componentsInformer.Run(ctx.Done())
 		cancel()
 	}()
+
 	o.apiServer = api.NewAPIServer(o.daprClient)
-	o.apiServer.Run()
+
+	var certChain *certchain.CertChain
+	if o.config.MTLSEnabled {
+		log.Info("mTLS enabled, getting tls certificates")
+		// try to load certs from disk, if not yet there, start a watch on the local filesystem
+		chain, err := certchain.LoadFromDisk(o.config.RootCertPath(), o.config.CertPath(), o.config.KeyPath())
+		if err != nil {
+			fsevent := make(chan struct{})
+
+			go func() {
+				log.Infof("starting watch for certs on filesystem: %s", o.config.CredentialsPath)
+				err = fswatcher.Watch(ctx, o.config.CredentialsPath, fsevent)
+				if err != nil {
+					log.Fatal("error starting watch on filesystem: %s", err)
+				}
+			}()
+
+			<-fsevent
+			log.Info("certificates detected")
+
+			chain, err = certchain.LoadFromDisk(o.config.RootCertPath(), o.config.CertPath(), o.config.KeyPath())
+			if err != nil {
+				log.Fatal("failed to load cert chain from disk: %s", err)
+			}
+		}
+		certChain = chain
+		log.Info("tls certificates loaded successfully")
+	}
+
+	o.apiServer.Run(certChain)
 	cancel()
 }
