@@ -10,6 +10,7 @@ import (
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/credentials"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -24,6 +25,10 @@ import (
 var log = logger.NewLogger("dapr.operator")
 var config string
 var certChainPath string
+
+const (
+	defaultCredentialsPath = "/var/run/dapr/credentials"
+)
 
 func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
@@ -44,7 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	config.SetCredentialsPath(certChainPath)
+	config.Credentials = credentials.NewTLSCredentials(certChainPath)
 
 	operator.NewOperator(kubeAPI, config).Run(ctx)
 
@@ -66,7 +71,7 @@ func init() {
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.StringVar(&config, "config", "default", "Path to config file, or name of a configuration object")
-	flag.StringVar(&certChainPath, "certchain", "/var/run/dapr/credentials", "Path to the credentials directory holding the cert chain")
+	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
 	flag.Parse()
 
 	// Apply options to all loggers

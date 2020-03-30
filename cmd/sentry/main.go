@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
-	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
@@ -26,9 +26,13 @@ import (
 
 var log = logger.NewLogger("dapr.sentry")
 
+const (
+	defaultCredentialsPath = "/var/run/dapr/credentials"
+)
+
 func main() {
 	configName := flag.String("config", "default", "Path to config file, or name of a configuration object")
-	credsPath := flag.String("issuer-credentials", "/var/run/dapr/credentials", "Path to the credentials directory holding the issuer data")
+	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
 
 	loggerOptions := logger.DefaultOptions()
@@ -56,9 +60,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	issuerCertPath := filepath.Join(*credsPath, certchain.IssuerCertFilename)
-	issuerKeyPath := filepath.Join(*credsPath, certchain.IssuerKeyFilename)
-	rootCertPath := filepath.Join(*credsPath, certchain.RootCertFilename)
+	issuerCertPath := filepath.Join(*credsPath, credentials.IssuerCertFilename)
+	issuerKeyPath := filepath.Join(*credsPath, credentials.IssuerKeyFilename)
+	rootCertPath := filepath.Join(*credsPath, credentials.RootCertFilename)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

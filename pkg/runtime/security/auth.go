@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	pb "github.com/dapr/dapr/pkg/proto/sentry"
 	"github.com/golang/protobuf/ptypes"
@@ -82,17 +82,11 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	}
 	certPem := pem.EncodeToMemory(&pem.Block{Type: certType, Bytes: csrb})
 
-	cert, err := tls.X509KeyPair(a.certChainPem, a.keyPem)
+	config, err := dapr_credentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
 	}
 
-	config := &tls.Config{
-		InsecureSkipVerify: false,
-		RootCAs:            a.trustAnchors,
-		ServerName:         TLSServerName,
-		Certificates:       []tls.Certificate{cert},
-	}
 	conn, err := grpc.Dial(
 		a.sentryAddress,
 		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),

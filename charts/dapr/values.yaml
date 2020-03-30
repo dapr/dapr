@@ -7,3 +7,7 @@ global:
   prometheus:
     enabled: true
     port: 9090
+  mtls:
+    enabled: true
+    workloadCertTTL: 24h
+    allowedClockSkew: 15m

@@ -10,12 +10,12 @@ import (
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
-	"github.com/dapr/dapr/pkg/sentry/certchain"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -117,17 +117,17 @@ func (o *operator) Run(ctx context.Context) {
 
 	o.apiServer = api.NewAPIServer(o.daprClient)
 
-	var certChain *certchain.CertChain
+	var certChain *credentials.CertChain
 	if o.config.MTLSEnabled {
 		log.Info("mTLS enabled, getting tls certificates")
 		// try to load certs from disk, if not yet there, start a watch on the local filesystem
-		chain, err := certchain.LoadFromDisk(o.config.RootCertPath(), o.config.CertPath(), o.config.KeyPath())
+		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
 		if err != nil {
 			fsevent := make(chan struct{})
 
 			go func() {
-				log.Infof("starting watch for certs on filesystem: %s", o.config.CredentialsPath)
-				err = fswatcher.Watch(ctx, o.config.CredentialsPath, fsevent)
+				log.Infof("starting watch for certs on filesystem: %s", o.config.Credentials.Path())
+				err = fswatcher.Watch(ctx, o.config.Credentials.Path(), fsevent)
 				if err != nil {
 					log.Fatal("error starting watch on filesystem: %s", err)
 				}
@@ -136,7 +136,7 @@ func (o *operator) Run(ctx context.Context) {
 			<-fsevent
 			log.Info("certificates detected")
 
-			chain, err = certchain.LoadFromDisk(o.config.RootCertPath(), o.config.CertPath(), o.config.KeyPath())
+			chain, err = credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
 			if err != nil {
 				log.Fatal("failed to load cert chain from disk: %s", err)
 			}

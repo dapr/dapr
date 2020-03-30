@@ -7,21 +7,18 @@ package api
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net"
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
 	pb "github.com/dapr/dapr/pkg/proto/operator"
-	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -31,7 +28,7 @@ var log = logger.NewLogger("dapr.operator.api")
 
 //Server runs the Dapr API server for components and configurations
 type Server interface {
-	Run(certChain *certchain.CertChain)
+	Run(certChain *dapr_credentials.CertChain)
 	OnComponentUpdated(component *v1alpha1.Component)
 }
 
@@ -49,13 +46,16 @@ func NewAPIServer(client scheme.Interface) Server {
 }
 
 // Run starts a new gRPC server
-func (a *apiServer) Run(certChain *certchain.CertChain) {
+func (a *apiServer) Run(certChain *dapr_credentials.CertChain) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
 	if err != nil {
 		log.Fatal("error starting tcp listener: %s", err)
 	}
 
-	opts := a.getServerOptions(certChain)
+	opts, err := dapr_credentials.GetServerOptions(certChain)
+	if err != nil {
+		log.Fatal("error creating gRPC options: %s", err)
+	}
 	s := grpc.NewServer(opts...)
 	pb.RegisterOperatorServer(s, a)
 
@@ -63,34 +63,6 @@ func (a *apiServer) Run(certChain *certchain.CertChain) {
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("gRPC server error: %v", err)
 	}
-}
-
-func (a *apiServer) getServerOptions(certChain *certchain.CertChain) []grpc.ServerOption {
-	opts := []grpc.ServerOption{}
-	if certChain == nil {
-		return opts
-	}
-
-	cp := x509.NewCertPool()
-	cp.AppendCertsFromPEM(certChain.RootCA)
-
-	if certChain != nil {
-		log.Info("setting up tls configuration")
-
-		cert, err := tls.X509KeyPair(certChain.Cert, certChain.Key)
-		if err != nil {
-			log.Fatalf("failed to create server certificate: %s", err)
-		}
-
-		config := &tls.Config{
-			ClientCAs: cp,
-			// Require cert verification
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			Certificates: []tls.Certificate{cert},
-		}
-		opts = append(opts, grpc.Creds(credentials.NewTLS(config)))
-	}
-	return opts
 }
 
 func (a *apiServer) OnComponentUpdated(component *v1alpha1.Component) {

@@ -11,6 +11,7 @@ import (
 	"net"
 	"sync"
 
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
@@ -225,13 +226,17 @@ func (p *Service) ProcessHost(host *daprinternal_pb.Host) {
 }
 
 // Run starts the placement service gRPC server
-func (p *Service) Run(port string) {
+func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	opts, err := dapr_credentials.GetServerOptions(certChain)
+	if err != nil {
+		log.Fatalf("error creating gRPC options: %s", err)
+	}
+	s := grpc.NewServer(opts...)
 	daprinternal_pb.RegisterPlacementServiceServer(s, p)
 
 	if err := s.Serve(lis); err != nil {

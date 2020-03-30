@@ -7,8 +7,8 @@ package runtime
 
 import (
 	config "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/sentry/certchain"
 )
 
 // Protocol is a communications protocol
@@ -52,7 +52,7 @@ type Config struct {
 	MaxConcurrency          int
 	mtlsEnabled             bool
 	SentryServiceAddress    string
-	CertChain               *certchain.CertChain
+	CertChain               *credentials.CertChain
 }
 
 // NewRuntimeConfig returns a new runtime config

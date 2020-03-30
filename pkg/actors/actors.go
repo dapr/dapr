@@ -18,11 +18,13 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/grpc"
@@ -74,6 +76,7 @@ type actorsRuntime struct {
 	evaluationBusy      bool
 	evaluationChan      chan bool
 	appHealthy          bool
+	certChain           *dapr_credentials.CertChain
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -91,7 +94,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config, certChain *dapr_credentials.CertChain) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -109,6 +112,7 @@ func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnec
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
 		appHealthy:          true,
+		certChain:           certChain,
 	}
 }
 
@@ -539,14 +543,22 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 	for {
 		retryInterval := time.Millisecond * 250
 
+		opts, err := dapr_credentials.GetClientOptions(a.certChain, security.TLSServerName)
+		if err != nil {
+			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
+			return nil
+		}
+		opts = append(opts, grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler))
+
 		conn, err := grpc.Dial(
 			placementAddress,
-			grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
-			grpc.WithInsecure())
+			opts...,
+		)
 		if err != nil {
 			log.Warnf("error connecting to placement service: %v", err)
 			diag.DefaultMonitoring.ActorStatusReportFailed("dial", "placement")
 			time.Sleep(retryInterval)
+			conn.Close()
 			continue
 		}
 
