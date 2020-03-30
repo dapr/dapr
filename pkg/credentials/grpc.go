@@ -3,6 +3,7 @@ package credentials
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 
 	"google.golang.org/grpc"
@@ -31,6 +32,25 @@ func GetServerOptions(certChain *CertChain) ([]grpc.ServerOption, error) {
 			Certificates: []tls.Certificate{cert},
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(config)))
+	}
+	return opts, nil
+}
+
+func GetClientOptions(certChain *CertChain, serverName string) ([]grpc.DialOption, error) {
+	opts := []grpc.DialOption{}
+	if certChain != nil {
+		cp := x509.NewCertPool()
+		ok := cp.AppendCertsFromPEM(certChain.RootCA)
+		if !ok {
+			return nil, errors.New("failed to append PEM root cert to x509 CertPool")
+		}
+		config, err := TLSConfigFromCertAndKey(certChain.Cert, certChain.Key, serverName, cp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
+		}
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
 	}
 	return opts, nil
 }
