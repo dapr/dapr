@@ -26,9 +26,13 @@ import (
 
 var log = logger.NewLogger("dapr.sentry")
 
+const (
+	defaultCredentialsPath = "/var/run/dapr/credentials"
+)
+
 func main() {
 	configName := flag.String("config", "default", "Path to config file, or name of a configuration object")
-	credsPath := flag.String("issuer-credentials", "/var/run/dapr/credentials", "Path to the credentials directory holding the issuer data")
+	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
 
 	loggerOptions := logger.DefaultOptions()

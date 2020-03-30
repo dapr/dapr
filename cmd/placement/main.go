@@ -24,6 +24,10 @@ var log = logger.NewLogger("dapr.placement")
 var certChainPath string
 var tlsEnabled bool
 
+const (
+	defaultCredentialsPath = "/var/run/dapr/credentials"
+)
+
 func main() {
 	port := flag.String("port", "50005", "")
 
@@ -33,7 +37,7 @@ func main() {
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
-	flag.StringVar(&certChainPath, "certchain", "/var/run/dapr/credentials", "Path to the credentials directory holding the cert chain")
+	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
 	flag.BoolVar(&tlsEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
 	flag.Parse()
 
