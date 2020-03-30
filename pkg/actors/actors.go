@@ -7,6 +7,7 @@ package actors
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,15 +19,18 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -74,6 +78,7 @@ type actorsRuntime struct {
 	evaluationBusy      bool
 	evaluationChan      chan bool
 	appHealthy          bool
+	certChain           *dapr_credentials.CertChain
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -91,7 +96,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config, certChain *dapr_credentials.CertChain) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -109,6 +114,7 @@ func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnec
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
 		appHealthy:          true,
+		certChain:           certChain,
 	}
 }
 
@@ -535,18 +541,47 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
+func (a *actorsRuntime) getClientOptions(certChain *dapr_credentials.CertChain) ([]grpc.DialOption, error) {
+	opts := []grpc.DialOption{
+		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+	}
+	if certChain != nil {
+		cp := x509.NewCertPool()
+		ok := cp.AppendCertsFromPEM(certChain.RootCA)
+		if !ok {
+			return nil, errors.New("failed to append PEM root cert to x509 CertPool")
+		}
+		config, err := dapr_credentials.TLSConfigFromCertAndKey(certChain.Cert, certChain.Key, security.TLSServerName, cp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
+		}
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+	return opts, nil
+}
+
 func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) daprinternal_pb.PlacementService_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
+		opts, err := a.getClientOptions(a.certChain)
+		if err != nil {
+			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
+			return nil
+		}
+
+		opts = append(opts)
 		conn, err := grpc.Dial(
 			placementAddress,
-			grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
-			grpc.WithInsecure())
+			opts...,
+		)
 		if err != nil {
 			log.Warnf("error connecting to placement service: %v", err)
 			diag.DefaultMonitoring.ActorStatusReportFailed("dial", "placement")
 			time.Sleep(retryInterval)
+			conn.Close()
 			continue
 		}
 

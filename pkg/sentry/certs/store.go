@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/dapr/dapr/pkg/sentry/certchain"
+	certchain "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/kubernetes"
 	v1 "k8s.io/api/core/v1"

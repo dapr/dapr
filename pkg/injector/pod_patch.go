@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	certchain "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/runtime"
-	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"

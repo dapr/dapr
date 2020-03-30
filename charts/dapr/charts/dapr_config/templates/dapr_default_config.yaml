@@ -5,7 +5,7 @@ metadata:
   name: default
 spec:
   mtls:
-    enabled: {{ .Values.mtls.enabled }}
+    enabled: {{ .Values.global.mtls.enabled }}
     workloadCertTTL: {{ .Values.mtls.workloadCertTTL }}
     allowedClockSkew: {{ .Values.mtls.allowedClockSkew }}
 {{- end }}

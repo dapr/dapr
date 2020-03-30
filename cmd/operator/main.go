@@ -10,6 +10,7 @@ import (
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	certchain "github.com/dapr/dapr/pkg/credentials"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -44,7 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	config.SetCredentialsPath(certChainPath)
+	config.Credentials = certchain.NewTLSCredentials(certChainPath)
 
 	operator.NewOperator(kubeAPI, config).Run(ctx)
 
