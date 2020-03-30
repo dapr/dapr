@@ -55,7 +55,7 @@ spec:
 {{- if contains "/" .Values.image.name }}
           value: "{{ .Values.image.name }}"
 {{- else }}
-          value: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
+          value: "{{ .Values.global.registry }}/daprd:{{ .Values.global.tag }}"
 {{- end }}
         - name: NAMESPACE
           valueFrom:
