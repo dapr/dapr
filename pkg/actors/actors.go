@@ -571,8 +571,6 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
 			return nil
 		}
-
-		opts = append(opts)
 		conn, err := grpc.Dial(
 			placementAddress,
 			opts...,
