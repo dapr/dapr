@@ -4,10 +4,12 @@ import (
 	"path/filepath"
 )
 
+// TLSCredentials holds paths for credentials
 type TLSCredentials struct {
 	credentialsPath string
 }
 
+// NewTLSCredentials returns a new TLSCredentials
 func NewTLSCredentials(path string) TLSCredentials {
 	return TLSCredentials{
 		credentialsPath: path,

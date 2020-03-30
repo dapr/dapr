@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	certchain "github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -60,9 +60,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	issuerCertPath := filepath.Join(*credsPath, certchain.IssuerCertFilename)
-	issuerKeyPath := filepath.Join(*credsPath, certchain.IssuerKeyFilename)
-	rootCertPath := filepath.Join(*credsPath, certchain.RootCertFilename)
+	issuerCertPath := filepath.Join(*credsPath, credentials.IssuerCertFilename)
+	issuerKeyPath := filepath.Join(*credsPath, credentials.IssuerKeyFilename)
+	rootCertPath := filepath.Join(*credsPath, credentials.RootCertFilename)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

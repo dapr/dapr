@@ -4,15 +4,17 @@ import (
 	"os"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	certchain "github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/credentials"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Config returns an operator config options
 type Config struct {
 	MTLSEnabled bool
-	Credentials certchain.TLSCredentials
+	Credentials credentials.TLSCredentials
 }
 
+// LoadConfiguration loads the Kubernetes configuration and returns an Operator Config
 func LoadConfiguration(name string, client scheme.Interface) (*Config, error) {
 	namespace := os.Getenv("NAMESPACE")
 	conf, err := client.ConfigurationV1alpha1().Configurations(namespace).Get(name, v1.GetOptions{})
