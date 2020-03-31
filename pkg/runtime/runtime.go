@@ -867,7 +867,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	return a.pubSub.Publish(req)
 }
 
-func (a *DaprRuntime) isPubSubOperationAllowed(topic string, topicsList []string) bool {
+func (a *DaprRuntime) isPubSubOperationAllowed(topic string, scopedTopics []string) bool {
 	inAllowedTopics := false
 
 	// first check if allowedTopics contain it
@@ -881,20 +881,18 @@ func (a *DaprRuntime) isPubSubOperationAllowed(topic string, topicsList []string
 		if !inAllowedTopics {
 			return false
 		}
-	} else if len(topicsList) == 0 {
+	}
+	if len(scopedTopics) == 0 {
 		return true
 	}
 
 	// check if a granular scope has been applied
 	allowedScope := false
-	for _, t := range topicsList {
+	for _, t := range scopedTopics {
 		if t == topic {
 			allowedScope = true
 			break
 		}
-	}
-	if inAllowedTopics && !allowedScope {
-		return true
 	}
 	return allowedScope
 }
