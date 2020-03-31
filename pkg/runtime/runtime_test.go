@@ -363,29 +363,28 @@ func TestInitPubSub(t *testing.T) {
 		assert.True(t, a)
 	})
 
-	t.Run("topic is in allowed topics, not in existing publishing scopes, operation allowed", func(t *testing.T) {
+	t.Run("topic in allowed topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
 		rt.allowedTopics = []string{"topic1"}
 		rt.scopedPublishings = []string{"topic2"}
-		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
-		assert.True(t, a)
-	})
-
-	t.Run("topic in allowed topics, no in publishing scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = []string{"topic1"}
-		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
-		assert.True(t, a)
-	})
-
-	t.Run("topic is not in allowed topics, in publishing scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = []string{}
 		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
 		assert.False(t, a)
 	})
 
-	t.Run("topic is not in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = []string{}
-		a := rt.isPubSubOperationAllowed("topic1", []string{})
+	t.Run("topic in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
+		rt.allowedTopics = []string{"topic1"}
+		rt.scopedPublishings = []string{}
+		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
 		assert.True(t, a)
+	})
+
+	t.Run("topics A and B in allowed topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
+		rt.allowedTopics = []string{"A", "B"}
+		rt.scopedPublishings = []string{"A"}
+		a := rt.isPubSubOperationAllowed("A", rt.scopedPublishings)
+		assert.True(t, a)
+
+		b := rt.isPubSubOperationAllowed("B", rt.scopedPublishings)
+		assert.False(t, b)
 	})
 }
 
