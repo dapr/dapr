@@ -751,11 +751,14 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 		}
 
 		resp, err := a.appChannel.InvokeMethod(req)
-		if err == nil && http.GetStatusCodeFromMetadata(resp.Metadata) == 200 {
+		statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
+		if err == nil && statusCode == 200 {
 			err := json.Unmarshal(resp.Data, &topics)
 			if err != nil {
 				log.Errorf("error getting topics from app: %s", err)
 			}
+		} else if statusCode != 200 && statusCode != 404 {
+			log.Warnf("app returned http status code %v from subscription endpoint", statusCode)
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
@@ -765,7 +768,7 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 		}
 	}
 
-	log.Infof("App is subscribed to the following topics: %v", topics)
+	log.Infof("app is subscribed to the following topics: %v", topics)
 	return topics
 }
 
@@ -938,8 +941,9 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-	if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
-		err = fmt.Errorf("error from app consumer: %s", err)
+	statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
+	if err != nil || statusCode != 200 {
+		err = fmt.Errorf("error from app while processing pub/sub event: %s. status code returned: %v", string(resp.Data), statusCode)
 		log.Debug(err)
 		return err
 	}
@@ -978,7 +982,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
 	_, err = client.OnTopicEvent(context.Background(), envelope)
 	if err != nil {
-		err = fmt.Errorf("error from consumer app: %s", err)
+		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
 		log.Debug(err)
 		return err
 	}
@@ -1126,7 +1130,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		return
 	}
 
-	log.Infof("application protocol: %s. waiting on port %v", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
+	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
 	for {
 		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("localhost", fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
