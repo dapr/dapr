@@ -49,7 +49,7 @@ jobs:
         with:
           go-version: ${{ env.GOVER }}
       - name: Install golangci-lint
-        if: matrix.target_arch != 'arm'
+        if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
         run: |
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v${{ env.GOLANGCILINT_VER }}
       - name: Check out code into the Go module directory
