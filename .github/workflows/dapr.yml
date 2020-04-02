@@ -57,7 +57,7 @@ jobs:
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
-        if: matrix.target_arch != 'arm'
+        if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
         run: make lint
       - name: Run make test
         if: matrix.target_arch != 'arm'
