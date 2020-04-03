@@ -36,7 +36,7 @@ func (o *mockOperator) GetComponents(ctx context.Context, in *empty.Empty) (*pb.
 
 	return &pb.GetComponentResponse{
 		Components: []*any.Any{
-			&any.Any{
+			{
 				Value: b,
 			},
 		},

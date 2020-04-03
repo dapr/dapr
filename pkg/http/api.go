@@ -941,7 +941,7 @@ func (a *api) onPublish(c *routing.Context) error {
 	}
 
 	path := string(c.Path())
-	topic := path[strings.Index(path, "publish/") + 8:]
+	topic := path[strings.Index(path, "publish/")+8:]
 
 	body := c.PostBody()
 

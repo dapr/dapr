@@ -50,8 +50,8 @@ const (
 	defaultConfig                = "default"
 	defaultMetricsPort           = 9090
 	sidecarHealthzPath           = "healthz"
-	defaultHealthzProbeDelay     = 5
-	defaultHealthzProbeTimeout   = 5
+	defaultHealthzProbeDelay     = 1
+	defaultHealthzProbeTimeout   = 3
 	defaultHealthzProbeThreshold = 1
 	apiVersionV1                 = "v1.0"
 )
