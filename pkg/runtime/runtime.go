@@ -123,7 +123,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 func (a *DaprRuntime) Run(opts ...Option) error {
 	start := time.Now().UTC()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
-	log.Infof("dapr id: %s", a.runtimeConfig.ID)
+	log.Infof("app id: %s", a.runtimeConfig.ID)
 
 	var o runtimeOpts
 	for _, opt := range opts {
