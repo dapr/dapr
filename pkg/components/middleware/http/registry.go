@@ -57,7 +57,7 @@ func (p *httpMiddlewareRegistry) Create(name string, metadata middleware.Metadat
 	if method, ok := p.middleware[name]; ok {
 		return method(metadata), nil
 	}
-	return nil, fmt.Errorf("couldn't find HTTP middleware %s", name)
+	return nil, fmt.Errorf("HTTP middleware %s has not been registered", name)
 }
 
 func createFullName(name string) string {
