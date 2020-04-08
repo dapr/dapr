@@ -94,7 +94,9 @@ import (
 
 	// HTTP Middleware
 	middleware "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
+	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/valyala/fasthttp"
@@ -317,6 +319,14 @@ func main() {
 			}),
 			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) http_middleware.Middleware {
 				handler, _ := oauth2.NewOAuth2Middleware().GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := ratelimit.NewRateLimitMiddleware(log).GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("bearer", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := bearer.NewBearerMiddleware(log).GetHandler(metadata)
 				return handler
 			}),
 		),
