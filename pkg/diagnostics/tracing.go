@@ -18,7 +18,6 @@ import (
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
@@ -31,6 +30,7 @@ const (
 	// CorrelationID is the header key name of correlation id for trace
 	CorrelationID      = "X-Correlation-ID"
 	correlationKey key = CorrelationID
+	headerPrefix       = "dapr-"
 )
 
 // TracerSpan defines a tracing span that a tracer users to keep track of call scopes
@@ -86,7 +86,7 @@ func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) 
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(uriSpanName), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
-	addAnnotations(r, span, spec.ExpandParams, spec.IncludeBody)
+	addAnnotations(r, span)
 
 	context := span.SpanContext()
 	contextc := spanc.SpanContext()
@@ -110,25 +110,20 @@ func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpe
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
-	addAnnotations(&c.Request, span, spec.ExpandParams, spec.IncludeBody)
+	addAnnotations(&c.Request, span)
 
 	context := span.SpanContext()
 	contextc := spanc.SpanContext()
 	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
 }
 
-func addAnnotations(req *fasthttp.Request, span *trace.Span, expandParams bool, includeBody bool) {
-	if expandParams {
-		//ctx.VisitUserValues(func(key []byte, value interface{}) {
-		//	span.AddAttributes(trace.StringAttribute(string(key), value.(string)))
-		//})
-		req.Header.VisitAll(func(key []byte, value []byte) {
-			span.AddAttributes(trace.StringAttribute(string(key), string(value)))
-		})
-	}
-	if includeBody {
-		span.AddAttributes(trace.StringAttribute("data", string(req.Body())))
-	}
+func addAnnotations(req *fasthttp.Request, span *trace.Span) {
+	req.Header.VisitAll(func(key []byte, value []byte) {
+		headerKey := string(key)
+		if strings.HasPrefix(headerKey, headerPrefix) {
+			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
+		}
+	})
 }
 
 // TracingHTTPMiddleware plugs tracer into fasthttp pipeline
@@ -212,7 +207,6 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 	var ctxc context.Context
 	var spanc *trace.Span
 
-	md := metautils.ExtractIncoming(c)
 	headers := extractHeaders(req)
 	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
 	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)
@@ -229,30 +223,9 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(method), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
-	addAnnotationsFromMD(md, span, spec.ExpandParams, spec.IncludeBody)
-
 	context := span.SpanContext()
 	contextc := spanc.SpanContext()
 	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
-}
-
-func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bool, includeBody bool) {
-	if expandParams {
-		for k, vv := range md {
-			// 'grpc-trace-bin' includes non-utf8 characters and ocagent cannot export it.
-			// TODO: Why do we need expandParams option? Remove the option to export grpc metadata.
-			if k == "grpc-trace-bin" {
-				continue
-			}
-
-			for _, v := range vv {
-				span.AddAttributes(trace.StringAttribute(k, v))
-			}
-		}
-	}
-	//TODO: get request body?
-	//if includeBody {
-	//}
 }
 
 func ProjectStatusCode(code int) int32 {
