@@ -47,6 +47,7 @@ import (
 
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
+	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
@@ -183,6 +184,9 @@ func main() {
 			}),
 			pubsub_loader.New("nats", func() pubs.PubSub {
 				return nats.NewNATSPubSub(logContrib)
+			}),
+			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
+				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
 			}),
 			pubsub_loader.New("azure.servicebus", func() pubs.PubSub {
 				return servicebus.NewAzureServiceBus(logContrib)
