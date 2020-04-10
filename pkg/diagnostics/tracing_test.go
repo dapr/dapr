@@ -23,10 +23,8 @@ func TestTraceSpanFromFastHTTPRequest(t *testing.T) {
 func TestTraceSpanFromFastHTTPContext(t *testing.T) {
 	req := getTestHTTPRequest()
 	spec := config.TracingSpec{Enabled: true}
-
-	var r = fasthttp.Request{}
-	req.CopyTo(&r)
-	ctx := &fasthttp.RequestCtx{Request: r}
+	ctx := &fasthttp.RequestCtx{}
+	req.CopyTo(&ctx.Request)
 
 	TraceSpanFromFastHTTPContext(ctx, spec)
 }

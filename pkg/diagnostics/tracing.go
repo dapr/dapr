@@ -21,7 +21,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
-	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -141,7 +140,7 @@ func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler
 }
 
 // TracingGRPCMiddlewareStream plugs tracer into gRPC stream
-func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc_go.StreamServerInterceptor {
+func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		span, spanc := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
@@ -190,7 +189,7 @@ func UpdateSpanPairStatusesFromError(span, spanc TracerSpan, err error, method s
 }
 
 // TracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
-func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInterceptor {
+func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		span, spanc := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
 		defer span.Span.End()
