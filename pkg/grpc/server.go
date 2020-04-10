@@ -49,6 +49,9 @@ type server struct {
 	logger             logger.Logger
 }
 
+var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
+var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
+
 // NewAPIServer returns a new user facing gRPC API server
 func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
 	return &server{
@@ -56,7 +59,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) 
 		config:      config,
 		tracingSpec: tracingSpec,
 		kind:        apiServer,
-		logger:      logger.NewLogger("dapr.runtime.grpc.api"),
+		logger:      apiServerLogger,
 	}
 }
 
@@ -69,7 +72,7 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		authenticator: authenticator,
 		renewMutex:    &sync.Mutex{},
 		kind:          internalServer,
-		logger:        logger.NewLogger("dapr.runtime.grpc.internal"),
+		logger:        internalServerLogger,
 	}
 }
 
