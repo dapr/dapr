@@ -14,6 +14,21 @@ import (
 )
 
 func TestTraceSpanFromFastHTTPRequest(t *testing.T) {
+	req := getTestHTTPRequest()
+	spec := config.TracingSpec{Enabled: true}
+
+	TraceSpanFromFastHTTPRequest(req, spec)
+}
+
+func TestTraceSpanFromFastHTTPContext(t *testing.T) {
+	req := getTestHTTPRequest()
+	spec := config.TracingSpec{Enabled: true}
+	ctx := &fasthttp.RequestCtx{Request: *req}
+
+	TraceSpanFromFastHTTPContext(ctx, spec)
+}
+
+func getTestHTTPRequest() *fasthttp.Request {
 	req := &fasthttp.Request{}
 	req.Header.Set("dapr-testheaderkey", "dapr-testheadervalue")
 	req.Header.Set("x-testheaderkey1", "dapr-testheadervalue")
@@ -33,7 +48,5 @@ func TestTraceSpanFromFastHTTPRequest(t *testing.T) {
 	corID := SerializeSpanContext(sc)
 	req.Header.Set(CorrelationID, corID)
 
-	spec := config.TracingSpec{Enabled: true}
-
-	TraceSpanFromFastHTTPRequest(req, spec)
+	return req
 }
