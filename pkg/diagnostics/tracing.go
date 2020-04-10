@@ -22,6 +22,7 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	grpc_go "google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type key string
@@ -86,7 +87,7 @@ func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) 
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(uriSpanName), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
-	addAnnotations(r, span)
+	addAnnotationsFromHTTPMetadata(r, span)
 
 	context := span.SpanContext()
 	contextc := spanc.SpanContext()
@@ -110,16 +111,17 @@ func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpe
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
-	addAnnotations(&c.Request, span)
+	addAnnotationsFromHTTPMetadata(&c.Request, span)
 
 	context := span.SpanContext()
 	contextc := spanc.SpanContext()
 	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
 }
 
-func addAnnotations(req *fasthttp.Request, span *trace.Span) {
+func addAnnotationsFromHTTPMetadata(req *fasthttp.Request, span *trace.Span) {
 	req.Header.VisitAll(func(key []byte, value []byte) {
 		headerKey := string(key)
+		headerKey = strings.ToLower(headerKey)
 		if strings.HasPrefix(headerKey, headerPrefix) {
 			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
 		}
@@ -207,6 +209,7 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 	var ctxc context.Context
 	var spanc *trace.Span
 
+	md := extractDaprMetadata(c)
 	headers := extractHeaders(req)
 	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
 	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)
@@ -223,9 +226,26 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(method), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
 	}
 
+	addAnnotationsFromGRPCMetadata(md, span)
+
 	context := span.SpanContext()
 	contextc := spanc.SpanContext()
 	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
+}
+
+func addAnnotationsFromGRPCMetadata(md map[string][]string, span *trace.Span) {
+	// md metadata must only have dapr prefixed headers metadata
+	// still extra check for dapr headers to avoid, it might be micro performance hit but that is ok
+	for k, vv := range md {
+
+		if !strings.HasPrefix(strings.ToLower(k), headerPrefix) {
+			continue
+		}
+
+		for _, v := range vv {
+			span.AddAttributes(trace.StringAttribute(k, v))
+		}
+	}
 }
 
 func ProjectStatusCode(code int) int32 {
@@ -272,4 +292,21 @@ func createSpanName(name string) string {
 		}
 	}
 	return name
+}
+
+func extractDaprMetadata(ctx context.Context) map[string][]string {
+	daprMetadata := make(map[string][]string)
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return daprMetadata
+	}
+
+	for k, _ := range md {
+		k = strings.ToLower(k)
+		if strings.HasPrefix(k, headerPrefix) {
+			daprMetadata[k] = md[k]
+		}
+	}
+
+	return daprMetadata
 }
