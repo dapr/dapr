@@ -28,9 +28,9 @@ type key string
 
 const (
 	// CorrelationID is the header key name of correlation id for trace
-	CorrelationID      = "X-Correlation-ID"
-	correlationKey key = CorrelationID
-	headerPrefix       = "dapr-"
+	CorrelationID        = "X-Correlation-ID"
+	correlationKey   key = CorrelationID
+	daprHeaderPrefix     = "dapr-"
 )
 
 // TracerSpan defines a tracing span that a tracer users to keep track of call scopes
@@ -121,7 +121,7 @@ func addAnnotationsFromHTTPMetadata(req *fasthttp.Request, span *trace.Span) {
 	req.Header.VisitAll(func(key []byte, value []byte) {
 		headerKey := string(key)
 		headerKey = strings.ToLower(headerKey)
-		if strings.HasPrefix(headerKey, headerPrefix) {
+		if strings.HasPrefix(headerKey, daprHeaderPrefix) {
 			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
 		}
 	})
@@ -236,7 +236,7 @@ func addAnnotationsFromGRPCMetadata(md map[string][]string, span *trace.Span) {
 	// md metadata must only have dapr prefixed headers metadata
 	// still extra check for dapr headers to avoid, it might be micro performance hit but that is ok
 	for k, vv := range md {
-		if !strings.HasPrefix(strings.ToLower(k), headerPrefix) {
+		if !strings.HasPrefix(strings.ToLower(k), daprHeaderPrefix) {
 			continue
 		}
 
@@ -301,7 +301,7 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 
 	for k, v := range md {
 		k = strings.ToLower(k)
-		if strings.HasPrefix(k, headerPrefix) {
+		if strings.HasPrefix(k, daprHeaderPrefix) {
 			daprMetadata[k] = v
 		}
 	}
