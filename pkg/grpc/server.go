@@ -29,8 +29,6 @@ const (
 	internalServer            = "internalServer"
 )
 
-var log = logger.NewLogger("dapr.runtime.grpc")
-
 // Server is an interface for the dapr gRPC server
 type Server interface {
 	StartNonBlocking() error
@@ -48,7 +46,11 @@ type server struct {
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
 	kind               string
+	logger             logger.Logger
 }
+
+var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
+var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
 
 // NewAPIServer returns a new user facing gRPC API server
 func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
@@ -57,6 +59,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) 
 		config:      config,
 		tracingSpec: tracingSpec,
 		kind:        apiServer,
+		logger:      apiServerLogger,
 	}
 }
 
@@ -69,6 +72,7 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		authenticator: authenticator,
 		renewMutex:    &sync.Mutex{},
 		kind:          internalServer,
+		logger:        internalServerLogger,
 	}
 }
 
@@ -93,19 +97,19 @@ func (s *server) StartNonBlocking() error {
 	}
 	go func() {
 		if err := server.Serve(lis); err != nil {
-			log.Fatalf("gRPC serve error: %v", err)
+			s.logger.Fatalf("gRPC serve error: %v", err)
 		}
 	}()
 	return nil
 }
 
 func (s *server) generateWorkloadCert() error {
-	log.Info("sending workload csr request to sentry")
+	s.logger.Info("sending workload csr request to sentry")
 	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID)
 	if err != nil {
 		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %s", err)
 	}
-	log.Info("certificate signed successfully")
+	s.logger.Info("certificate signed successfully")
 
 	tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 	if err != nil {
@@ -122,14 +126,14 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
 	if s.tracingSpec.Enabled {
-		log.Infof("enabled tracing grpc middleware")
+		s.logger.Infof("enabled tracing grpc middleware")
 		opts = append(
 			opts,
 			grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)),
 			grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
 	}
 
-	log.Infof("enabled metrics grpc middleware")
+	s.logger.Infof("enabled metrics grpc middleware")
 	opts = append(opts, grpc_go.StatsHandler(diag.DefaultGRPCMonitoring.ServerStatsHandler))
 
 	return opts
@@ -161,7 +165,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 }
 
 func (s *server) startWorkloadCertRotation() {
-	log.Infof("starting workload cert expiry watcher. current cert expires on: %s", s.signedCert.Expiry.String())
+	s.logger.Infof("starting workload cert expiry watcher. current cert expires on: %s", s.signedCert.Expiry.String())
 
 	ticker := time.NewTicker(certWatchInterval)
 
@@ -169,11 +173,11 @@ func (s *server) startWorkloadCertRotation() {
 		s.renewMutex.Lock()
 		renew := shouldRenewCert(s.signedCert.Expiry, s.signedCertDuration)
 		if renew {
-			log.Info("renewing certificate: requesting new cert and restarting gRPC server")
+			s.logger.Info("renewing certificate: requesting new cert and restarting gRPC server")
 
 			err := s.generateWorkloadCert()
 			if err != nil {
-				log.Errorf("error starting server: %s", err)
+				s.logger.Errorf("error starting server: %s", err)
 			}
 			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
 		}
