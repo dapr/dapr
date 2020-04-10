@@ -428,8 +428,6 @@ func (a *api) onGetComponent(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 404, msg)
 		return nil
 	}
-
-	return nil
 }
 
 func (a *api) onGetSecret(c *routing.Context) error {
