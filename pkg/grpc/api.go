@@ -7,6 +7,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -47,6 +49,7 @@ type API interface {
 	GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error)
 	SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error)
+	GetComponent(ctx context.Context, in *dapr_pb.GetComponentEnvelope) (*dapr_pb.GetComponentResponseEnvelope, error)
 }
 
 type api struct {
@@ -55,13 +58,19 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
+	components            map[string]components_v1alpha1.Component
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, components []components_v1alpha1.Component) API {
+	componentMap := make(map[string]components_v1alpha1.Component)
+	for _, c := range components {
+		componentMap[c.Name] = c
+	}
+
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -70,6 +79,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]
 		publishFn:             publishFn,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
+		components:            componentMap,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 	}
 }
@@ -377,4 +387,15 @@ func validateDuration(d *durpb.Duration) error {
 		return fmt.Errorf("duration: %v: seconds and nanos have different signs", d)
 	}
 	return nil
+}
+
+func (a *api) GetComponent(ctx context.Context, in *dapr_pb.GetComponentEnvelope) (*dapr_pb.GetComponentResponseEnvelope, error) {
+	componentName := in.ComponentName
+
+	response := &dapr_pb.GetComponentResponseEnvelope{}
+	if component, ok := a.components[componentName]; ok {
+		bytes, _ := json.Marshal(component)
+		response.Data = &any.Any{Value: bytes}
+	}
+	return response, nil
 }

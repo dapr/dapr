@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
@@ -38,6 +39,7 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
+	components            map[string]components_v1alpha1.Component
 	json                  jsoniter.API
 	actor                 actors.Actors
 	publishFn             func(req *pubsub.PublishRequest) error
@@ -63,6 +65,7 @@ const (
 	stateKeyParam        = "key"
 	secretStoreNameParam = "secretStoreName"
 	secretNameParam      = "key"
+	componentNameParam   = "componentName"
 	nameParam            = "name"
 	consistencyParam     = "consistency"
 	retryIntervalParam   = "retryInterval"
@@ -73,12 +76,18 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, components []components_v1alpha1.Component) API {
+	componentMap := make(map[string]components_v1alpha1.Component)
+	for _, c := range components {
+		componentMap[c.Name] = c
+	}
+
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
+		components:            componentMap,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
 		publishFn:             publishFn,
@@ -93,6 +102,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructComponentsEndpoints()...)
 
 	return api
 }
@@ -137,6 +147,17 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 			Route:   "secrets/<secretStoreName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetSecret,
+		},
+	}
+}
+
+func (a *api) constructComponentsEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{http.Get},
+			Route:   "components/<componentName>",
+			Version: apiVersionV1,
+			Handler: a.onGetComponent,
 		},
 	}
 }
@@ -389,6 +410,22 @@ func (a *api) onDeleteState(c *routing.Context) error {
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
 		respondWithError(c.RequestCtx, 500, msg)
+		return nil
+	}
+
+	return nil
+}
+
+func (a *api) onGetComponent(c *routing.Context) error {
+	componentName := c.Param(componentNameParam)
+
+	if component, ok := a.components[componentName]; ok {
+		bytes, _ := a.json.Marshal(component)
+		respondWithJSON(c.RequestCtx, 200, bytes)
+		return nil
+	} else {
+		msg := NewErrorResponse("ERR_COMPONENT_NOT_FOUND", fmt.Sprintf("component name: %s", componentName))
+		respondWithError(c.RequestCtx, 404, msg)
 		return nil
 	}
 
