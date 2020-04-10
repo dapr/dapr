@@ -237,7 +237,6 @@ func addAnnotationsFromGRPCMetadata(md map[string][]string, span *trace.Span) {
 	// md metadata must only have dapr prefixed headers metadata
 	// still extra check for dapr headers to avoid, it might be micro performance hit but that is ok
 	for k, vv := range md {
-
 		if !strings.HasPrefix(strings.ToLower(k), headerPrefix) {
 			continue
 		}
@@ -301,7 +300,7 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 		return daprMetadata
 	}
 
-	for k, _ := range md {
+	for k := range md {
 		k = strings.ToLower(k)
 		if strings.HasPrefix(k, headerPrefix) {
 			daprMetadata[k] = md[k]
