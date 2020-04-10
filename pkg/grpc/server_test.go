@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,6 +37,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 				Enabled: true,
 			},
 			renewMutex: &sync.Mutex{},
+			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
 		}
 
 		serverOption := fakeServer.getMiddlewareOptions()
@@ -50,6 +52,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 				Enabled: false,
 			},
 			renewMutex: &sync.Mutex{},
+			logger:     logger.NewLogger("dapr.runtime.grpc.test"),
 		}
 
 		serverOption := fakeServer.getMiddlewareOptions()
