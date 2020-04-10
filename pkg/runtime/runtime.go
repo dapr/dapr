@@ -123,7 +123,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 func (a *DaprRuntime) Run(opts ...Option) error {
 	start := time.Now().UTC()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
-	log.Infof("dapr id: %s", a.runtimeConfig.ID)
+	log.Infof("app id: %s", a.runtimeConfig.ID)
 
 	var o runtimeOpts
 	for _, opt := range opts {
@@ -278,17 +278,19 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 
 	if a.globalConfig != nil {
 		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-			component := a.getComponent(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type, a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
+			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
+			component := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if component == nil {
-				return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware %s of type %s",
-					a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
-					a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type)
+				return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware component with name %s and type %s",
+					middlewareSpec.Name,
+					middlewareSpec.Type)
 			}
-			handler, err := a.httpMiddlewareRegistry.Create(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type,
+			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type,
 				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
 			if err != nil {
 				return http_middleware.Pipeline{}, err
 			}
+			log.Infof("enabled %s http middleware", middlewareSpec.Type)
 			handlers = append(handlers, handler)
 		}
 	}

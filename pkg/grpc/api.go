@@ -236,6 +236,7 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 			Key:      a.getModifiedStateKey(s.Key),
 			Metadata: s.Metadata,
 			Value:    s.Value.Value,
+			ETag:     s.Etag,
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
