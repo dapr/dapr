@@ -299,10 +299,10 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 		return daprMetadata
 	}
 
-	for k := range md {
+	for k, v := range md {
 		k = strings.ToLower(k)
 		if strings.HasPrefix(k, headerPrefix) {
-			daprMetadata[k] = md[k]
+			daprMetadata[k] = v
 		}
 	}
 
