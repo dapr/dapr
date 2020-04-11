@@ -54,7 +54,7 @@ func (s *server) StartNonBlocking() {
 
 	handler = s.useMetrics(handler)
 
-	if s.tracingSpec.Enabled {
+	if isTracingEnabled(s.tracingSpec.SamplingRate) {
 		handler = s.useTracing(handler)
 	}
 
