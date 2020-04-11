@@ -12,10 +12,7 @@ import (
 // IsTracingEnabled checks for tracing enabled or not based on given sampling rate
 func IsTracingEnabled(rate string) bool {
 	f, _ := strconv.ParseFloat(rate, 64)
-	if f != 0 {
-		return true
-	}
-	return false
+	return f != 0
 }
 
 // GetTraceSamplingRate parses the given rate and returns the parsed rate
