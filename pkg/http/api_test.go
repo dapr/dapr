@@ -39,6 +39,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
+	"go.opencensus.io/trace"
 )
 
 var retryCounter = 0
@@ -105,7 +106,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "0.5"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -114,7 +115,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		},
 	}
 	createExporters(meta)
-
+	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
 		json:                  jsoniter.ConfigFastest,
@@ -256,7 +257,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "0.5"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -645,7 +646,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "0.5"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -956,7 +957,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "0.5"}
 	pipe := http_middleware.Pipeline{}
 
 	meta := exporters.Metadata{
@@ -1038,7 +1039,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "0.5"}
 
 	pipeline := buildHTTPPineline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
