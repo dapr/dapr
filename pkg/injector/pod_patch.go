@@ -281,6 +281,15 @@ func profilingEnabled(annotations map[string]string) bool {
 	}
 }
 
+func appendQuantityToResourceList(quantity string, resourceName v1.ResourceName, resourceList v1.ResourceList) (*v1.ResourceList, error) {
+	q, err := resource.ParseQuantity(quantity)
+	if err != nil {
+		return nil, err
+	}
+	resourceList[resourceName] = q
+	return &resourceList, nil
+}
+
 func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequirements, error) {
 	r := v1.ResourceRequirements{
 		Limits:   v1.ResourceList{},
@@ -288,35 +297,35 @@ func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequire
 	}
 	cpuLimit, ok := annotations[daprCPULimitKey]
 	if ok {
-		cpuLimit, err := resource.ParseQuantity(cpuLimit)
+		list, err := appendQuantityToResourceList(cpuLimit, v1.ResourceCPU, r.Limits)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar cpu limit: %s", err)
 		}
-		r.Limits[v1.ResourceCPU] = cpuLimit
+		r.Limits = *list
 	}
 	memLimit, ok := annotations[daprMemoryLimitKey]
 	if ok {
-		memLimit, err := resource.ParseQuantity(memLimit)
+		list, err := appendQuantityToResourceList(memLimit, v1.ResourceMemory, r.Limits)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar memory limit: %s", err)
 		}
-		r.Limits[v1.ResourceMemory] = memLimit
+		r.Limits = *list
 	}
 	cpuRequest, ok := annotations[daprCPURequestKey]
 	if ok {
-		cpuRequest, err := resource.ParseQuantity(cpuRequest)
+		list, err := appendQuantityToResourceList(cpuRequest, v1.ResourceCPU, r.Requests)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar cpu request: %s", err)
 		}
-		r.Requests[v1.ResourceCPU] = cpuRequest
+		r.Requests = *list
 	}
 	memRequest, ok := annotations[daprMemoryRequestKey]
 	if ok {
-		memRequest, err := resource.ParseQuantity(memRequest)
+		list, err := appendQuantityToResourceList(memRequest, v1.ResourceMemory, r.Requests)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar memory request: %s", err)
 		}
-		r.Requests[v1.ResourceMemory] = memRequest
+		r.Requests = *list
 	}
 
 	if len(r.Limits) > 0 || len(r.Requests) > 0 {
