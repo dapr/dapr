@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -179,9 +181,31 @@ func TestGetMetricsPort(t *testing.T) {
 }
 
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", "", "", false, "", 9090)
+	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", "", "", false, "", 9090, nil)
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
+}
+
+func TestSidecarResourceLimits(t *testing.T) {
+	t.Run("with limits", func(t *testing.T) {
+		r := &v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("100m"),
+				v1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+		}
+
+		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", "", "", false, "", 9090, r)
+		assert.NotNil(t, c)
+		assert.Equal(t, "100m", c.Resources.Limits.Cpu().String())
+		assert.Equal(t, "1Gi", c.Resources.Limits.Memory().String())
+	})
+
+	t.Run("no limits", func(t *testing.T) {
+		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", "", "", false, "", 9090, nil)
+		assert.NotNil(t, c)
+		assert.Len(t, c.Resources.Limits, 0)
+	})
 }
 
 func TestGetAppIDFromRequest(t *testing.T) {
@@ -212,5 +236,35 @@ func TestGetAppIDFromRequest(t *testing.T) {
 		}
 		appID := getAppIDFromRequest(fakeReq)
 		assert.Equal(t, "fakeID", appID)
+	})
+}
+
+func TestGetResourceLimits(t *testing.T) {
+	t.Run("no resource limits", func(t *testing.T) {
+		r, err := getResourceLimits(nil)
+		assert.Nil(t, err)
+		assert.Nil(t, r)
+	})
+
+	t.Run("valid resource limits", func(t *testing.T) {
+		a := map[string]string{daprCPULimitKey: "100m", daprMemoryLimitKey: "1Gi"}
+		r, err := getResourceLimits(a)
+		assert.Nil(t, err)
+		assert.Equal(t, "100m", r.Limits.Cpu().String())
+		assert.Equal(t, "1Gi", r.Limits.Memory().String())
+	})
+
+	t.Run("invalid cpu limit", func(t *testing.T) {
+		a := map[string]string{daprCPULimitKey: "cpu", daprMemoryLimitKey: "1Gi"}
+		r, err := getResourceLimits(a)
+		assert.NotNil(t, err)
+		assert.Nil(t, r)
+	})
+
+	t.Run("invalid memory limit", func(t *testing.T) {
+		a := map[string]string{daprCPULimitKey: "100m", daprMemoryLimitKey: "memory"}
+		r, err := getResourceLimits(a)
+		assert.NotNil(t, err)
+		assert.Nil(t, r)
 	})
 }

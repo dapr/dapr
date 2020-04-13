@@ -17,6 +17,8 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -34,6 +36,8 @@ const (
 	daprLogAsJSON                = "dapr.io/log-as-json"
 	daprMaxConcurrencyKey        = "dapr.io/max-concurrency"
 	daprMetricsPortKey           = "dapr.io/metrics-port"
+	daprCPULimitKey              = "dapr.io/sidecar-cpu-limit"
+	daprMemoryLimitKey           = "dapr.io/sidecar-memory-limit"
 	sidecarHTTPPort              = 3500
 	sidecarAPIGRPCPort           = 50001
 	sidecarInternalGRPCPort      = 50002
@@ -118,7 +122,11 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort)
+	resourceLimits, err := getResourceLimits(pod.Annotations)
+	if err != nil {
+		log.Warnf("couldn't set container resource limits: %s. using defaults", err)
+	}
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort, resourceLimits)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -271,6 +279,33 @@ func profilingEnabled(annotations map[string]string) bool {
 	}
 }
 
+func getResourceLimits(annotations map[string]string) (*v1.ResourceRequirements, error) {
+	r := v1.ResourceRequirements{
+		Limits: v1.ResourceList{},
+	}
+	cpuLimit, ok := annotations[daprCPULimitKey]
+	if ok {
+		cpuLimit, err := resource.ParseQuantity(cpuLimit)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing sidecar cpu limit: %s", err)
+		}
+		r.Limits[v1.ResourceCPU] = cpuLimit
+	}
+	memLimit, ok := annotations[daprMemoryLimitKey]
+	if ok {
+		memLimit, err := resource.ParseQuantity(memLimit)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing sidecar memory limit: %s", err)
+		}
+		r.Limits[v1.ResourceMemory] = memLimit
+	}
+
+	if len(r.Limits) > 0 {
+		return &r, nil
+	}
+	return nil, nil
+}
+
 func isResourceDaprEnabled(annotations map[string]string) bool {
 	enabled, ok := annotations[daprEnabledKey]
 	if !ok {
@@ -288,7 +323,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int, resourceLimits *v1.ResourceRequirements) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -398,6 +433,8 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 				Value: identity,
 			})
 	}
-
+	if resourceLimits != nil {
+		c.Resources = *resourceLimits
+	}
 	return c
 }
