@@ -15,7 +15,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
@@ -75,18 +74,13 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 	var span tracing.TracerSpan
 	var spanc tracing.TracerSpan
 
-	if diag_utils.IsTracingEnabled(g.tracingSpec.SamplingRate) {
-		span, spanc = tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
-
-		defer span.Span.End()
-		defer spanc.Span.End()
-	}
+	span, spanc = tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
+	defer span.Span.End()
+	defer spanc.Span.End()
 
 	resp, err := c.OnInvoke(ctx, &msg)
 
-	if diag_utils.IsTracingEnabled(g.tracingSpec.SamplingRate) {
-		tracing.UpdateSpanPairStatusesFromError(span, spanc, err, req.Method)
-	}
+	tracing.UpdateSpanPairStatusesFromError(span, spanc, err, req.Method)
 
 	if g.ch != nil {
 		<-g.ch

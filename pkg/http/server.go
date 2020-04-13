@@ -14,7 +14,6 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/valyala/fasthttp"
@@ -54,10 +53,7 @@ func (s *server) StartNonBlocking() {
 					s.useRouter())))
 
 	handler = s.useMetrics(handler)
-
-	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
-		handler = s.useTracing(handler)
-	}
+	handler = s.useTracing(handler)
 
 	go func() {
 		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), handler))

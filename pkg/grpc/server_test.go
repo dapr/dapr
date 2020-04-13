@@ -45,7 +45,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 		assert.Equal(t, 3, len(serverOption))
 	})
 
-	t.Run("should disable middlewares", func(t *testing.T) {
+	t.Run("should not disable middlewares even when SamplingRate is 0", func(t *testing.T) {
 		fakeServer := &server{
 			config: ServerConfig{},
 			tracingSpec: config.TracingSpec{
@@ -57,6 +57,6 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 1, len(serverOption))
+		assert.Equal(t, 3, len(serverOption))
 	})
 }

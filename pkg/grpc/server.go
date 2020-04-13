@@ -14,7 +14,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/logger"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
@@ -126,13 +125,11 @@ func (s *server) generateWorkloadCert() error {
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
-	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
-		s.logger.Infof("enabled tracing grpc middleware")
-		opts = append(
-			opts,
-			grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)),
-			grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
-	}
+	s.logger.Infof("enabled tracing grpc middleware")
+	opts = append(
+		opts,
+		grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)),
+		grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
 
 	s.logger.Infof("enabled metrics grpc middleware")
 	opts = append(opts, grpc_go.StatsHandler(diag.DefaultGRPCMonitoring.ServerStatsHandler))

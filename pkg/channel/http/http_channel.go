@@ -16,7 +16,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 )
 
@@ -100,14 +99,11 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	var span diag.TracerSpan
 	var spanc diag.TracerSpan
 
-	if diag_utils.IsTracingEnabled(h.tracingSpec.SamplingRate) {
-		span, spanc = diag.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
+	span, spanc = diag.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
+	defer span.Span.End()
+	defer spanc.Span.End()
 
-		defer span.Span.End()
-		defer spanc.Span.End()
-
-		req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(*spanc.SpanContext))
-	}
+	req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(*spanc.SpanContext))
 
 	resp := fasthttp.AcquireResponse()
 
@@ -158,9 +154,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
 	}
 
-	if diag_utils.IsTracingEnabled(h.tracingSpec.SamplingRate) {
-		diag.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, resp)
-	}
+	diag.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, resp)
 
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
