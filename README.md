@@ -1,4 +1,4 @@
-<div style="text-align: center"><img src="/img/dapr_logo.svg" height="120px">
+e2e test <div style="text-align: center"><img src="/img/dapr_logo.svg" height="120px">
 <h2>Any language, any framework, anywhere</h2>
 </div>
 
