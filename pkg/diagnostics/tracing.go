@@ -69,19 +69,19 @@ func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 	return context
 }
 
-// TraceSpanFromFastHTTPRequest creates a tracing span form a fasthttp request
+// TraceSpanFromFastHTTPRequest creates a tracing span from a fasthttp request
 func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) (TracerSpan, TracerSpan) {
 	uri := string(r.Header.RequestURI())
 	return getTraceSpan(r, uri, spec)
 }
 
-// TraceSpanFromFastHTTPContext creates a tracing span form a fasthttp request context
+// TraceSpanFromFastHTTPContext creates a tracing span from a fasthttp request context
 func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) (TracerSpan, TracerSpan) {
 	uri := string(c.Path())
 	return getTraceSpan(&c.Request, uri, spec)
 }
 
-// getTraceSpan creates a tracing span from a fasthttp request
+// getTraceSpan creates a tracing span from a fasthttp request and given tracing spec
 func getTraceSpan(r *fasthttp.Request, uri string, spec config.TracingSpec) (TracerSpan, TracerSpan) {
 	var ctx context.Context
 	var span *trace.Span
