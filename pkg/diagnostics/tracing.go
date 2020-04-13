@@ -71,62 +71,41 @@ func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
 
 // TraceSpanFromFastHTTPRequest creates a tracing span form a fasthttp request
 func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) (TracerSpan, TracerSpan) {
+	uri := string(r.Header.RequestURI())
+	return getTraceSpan(r, uri, spec)
+}
+
+// TraceSpanFromFastHTTPContext creates a tracing span form a fasthttp request context
+func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) (TracerSpan, TracerSpan) {
+	uri := string(c.Path())
+	return getTraceSpan(&c.Request, uri, spec)
+}
+
+// getTraceSpan creates a tracing span from a fasthttp request
+func getTraceSpan(r *fasthttp.Request, uri string, spec config.TracingSpec) (TracerSpan, TracerSpan) {
 	var ctx context.Context
 	var span *trace.Span
 	var ctxc context.Context
 	var spanc *trace.Span
 
 	corID := string(r.Header.Peek(CorrelationID))
-	uriSpanName := string(r.Header.RequestURI())
 	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
 
 	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
 	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
 	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
 	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
-	spanName := createSpanName(uriSpanName)
+	spanName := createSpanName(uri)
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), uriSpanName, spanContext, serverKindOption, probSamplerOption)
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), uri, spanContext, serverKindOption, probSamplerOption)
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), uriSpanName, serverKindOption, probSamplerOption)
+		ctx, span = trace.StartSpan(context.Background(), uri, serverKindOption, probSamplerOption)
 		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
 	}
 
 	addAnnotationsFromHTTPMetadata(r, span)
-
-	context := span.SpanContext()
-	contextc := spanc.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
-}
-
-// TraceSpanFromFastHTTPContext creates a tracing span form a fasthttp request context
-func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	var ctx context.Context
-	var span *trace.Span
-	var ctxc context.Context
-	var spanc *trace.Span
-
-	corID := string(c.Request.Header.Peek(CorrelationID))
-	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
-
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	path := string(c.Path())
-	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
-	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
-	spanName := createSpanName(path)
-	if corID != "" {
-		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), path, spanContext, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	} else {
-		ctx, span = trace.StartSpan(context.Background(), path, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	}
-
-	addAnnotationsFromHTTPMetadata(&c.Request, span)
 
 	context := span.SpanContext()
 	contextc := spanc.SpanContext()
