@@ -38,6 +38,8 @@ const (
 	daprMetricsPortKey           = "dapr.io/metrics-port"
 	daprCPULimitKey              = "dapr.io/sidecar-cpu-limit"
 	daprMemoryLimitKey           = "dapr.io/sidecar-memory-limit"
+	daprCPURequestKey            = "dapr.io/sidecar-cpu-request"
+	daprMemoryRequestKey         = "dapr.io/sidecar-memory-request"
 	sidecarHTTPPort              = 3500
 	sidecarAPIGRPCPort           = 50001
 	sidecarInternalGRPCPort      = 50002
@@ -122,11 +124,11 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	resourceLimits, err := getResourceLimits(pod.Annotations)
+	resources, err := getResourceRequirements(pod.Annotations)
 	if err != nil {
-		log.Warnf("couldn't set container resource limits: %s. using defaults", err)
+		log.Warnf("couldn't set container resource requirements: %s. using defaults", err)
 	}
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort, resourceLimits)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort, resources)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -279,9 +281,10 @@ func profilingEnabled(annotations map[string]string) bool {
 	}
 }
 
-func getResourceLimits(annotations map[string]string) (*v1.ResourceRequirements, error) {
+func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequirements, error) {
 	r := v1.ResourceRequirements{
-		Limits: v1.ResourceList{},
+		Limits:   v1.ResourceList{},
+		Requests: v1.ResourceList{},
 	}
 	cpuLimit, ok := annotations[daprCPULimitKey]
 	if ok {
@@ -299,8 +302,24 @@ func getResourceLimits(annotations map[string]string) (*v1.ResourceRequirements,
 		}
 		r.Limits[v1.ResourceMemory] = memLimit
 	}
+	cpuRequest, ok := annotations[daprCPURequestKey]
+	if ok {
+		cpuRequest, err := resource.ParseQuantity(cpuRequest)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing sidecar cpu request: %s", err)
+		}
+		r.Requests[v1.ResourceCPU] = cpuRequest
+	}
+	memRequest, ok := annotations[daprMemoryRequestKey]
+	if ok {
+		memRequest, err := resource.ParseQuantity(memRequest)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing sidecar memory request: %s", err)
+		}
+		r.Requests[v1.ResourceMemory] = memRequest
+	}
 
-	if len(r.Limits) > 0 {
+	if len(r.Limits) > 0 || len(r.Requests) > 0 {
 		return &r, nil
 	}
 	return nil, nil
@@ -323,7 +342,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int, resourceLimits *v1.ResourceRequirements) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int, resources *v1.ResourceRequirements) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -433,8 +452,8 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 				Value: identity,
 			})
 	}
-	if resourceLimits != nil {
-		c.Resources = *resourceLimits
+	if resources != nil {
+		c.Resources = *resources
 	}
 	return c
 }
