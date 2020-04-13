@@ -81,13 +81,17 @@ func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) 
 	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
 
 	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
+	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
+	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
+	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
+	spanName := createSpanName(uriSpanName)
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), uriSpanName, spanContext, trace.WithSpanKind(trace.SpanKindServer), trace.WithSampler(trace.ProbabilitySampler(rate)))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(uriSpanName), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient), trace.WithSampler(trace.ProbabilitySampler(rate)))
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), uriSpanName, spanContext, serverKindOption, probSamplerOption)
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), uriSpanName, trace.WithSpanKind(trace.SpanKindServer), trace.WithSampler(trace.ProbabilitySampler(rate)))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(uriSpanName), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient), trace.WithSampler(trace.ProbabilitySampler(rate)))
+		ctx, span = trace.StartSpan(context.Background(), uriSpanName, serverKindOption, probSamplerOption)
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
 	}
 
 	addAnnotationsFromHTTPMetadata(r, span)
@@ -108,13 +112,18 @@ func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpe
 	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
 
 	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
+	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
+	path := string(c.Path())
+	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
+	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
+	spanName := createSpanName(path)
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(c.Path()), spanContext, trace.WithSpanKind(trace.SpanKindServer), trace.WithSampler(trace.ProbabilitySampler(rate)))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient), trace.WithSampler(trace.ProbabilitySampler(rate)))
+		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), path, spanContext, serverKindOption, probSamplerOption)
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), string(c.Path()), trace.WithSpanKind(trace.SpanKindServer), trace.WithSampler(trace.ProbabilitySampler(rate)))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient), trace.WithSampler(trace.ProbabilitySampler(rate)))
+		ctx, span = trace.StartSpan(context.Background(), path, serverKindOption, probSamplerOption)
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
 	}
 
 	addAnnotationsFromHTTPMetadata(&c.Request, span)
@@ -226,13 +235,17 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
 
 	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
+	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
+	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
+	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
+	spanName := createSpanName(method)
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(c, method, spanContext, trace.WithSpanKind(trace.SpanKindServer), trace.WithSampler(trace.ProbabilitySampler(rate)))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(method), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient), trace.WithSampler(trace.ProbabilitySampler(rate)))
+		ctx, span = trace.StartSpanWithRemoteParent(c, method, spanContext, serverKindOption, probSamplerOption)
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), method, trace.WithSpanKind(trace.SpanKindServer), trace.WithSampler(trace.ProbabilitySampler(rate)))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(method), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient), trace.WithSampler(trace.ProbabilitySampler(rate)))
+		ctx, span = trace.StartSpan(context.Background(), method, serverKindOption, probSamplerOption)
+		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
 	}
 
 	addAnnotationsFromGRPCMetadata(md, span)
