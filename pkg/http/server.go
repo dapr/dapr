@@ -53,10 +53,7 @@ func (s *server) StartNonBlocking() {
 					s.useRouter())))
 
 	handler = s.useMetrics(handler)
-
-	if s.tracingSpec.Enabled {
-		handler = s.useTracing(handler)
-	}
+	handler = s.useTracing(handler)
 
 	go func() {
 		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), handler))

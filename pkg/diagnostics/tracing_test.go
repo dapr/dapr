@@ -18,14 +18,14 @@ import (
 
 func TestTraceSpanFromFastHTTPRequest(t *testing.T) {
 	req := getTestHTTPRequest()
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "0.5"}
 
 	TraceSpanFromFastHTTPRequest(req, spec)
 }
 
 func TestTraceSpanFromFastHTTPContext(t *testing.T) {
 	req := getTestHTTPRequest()
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "0.5"}
 	ctx := &fasthttp.RequestCtx{}
 	req.CopyTo(&ctx.Request)
 
@@ -57,7 +57,7 @@ func getTestHTTPRequest() *fasthttp.Request {
 
 func TestTracingSpanFromGRPCContext(t *testing.T) {
 	req := &channel.InvokeRequest{}
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "0.5"}
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.MD{"dapr-headerKey": {"v3", "v4"}})
 

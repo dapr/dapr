@@ -125,13 +125,11 @@ func (s *server) generateWorkloadCert() error {
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
-	if s.tracingSpec.Enabled {
-		s.logger.Infof("enabled tracing grpc middleware")
-		opts = append(
-			opts,
-			grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)),
-			grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
-	}
+	s.logger.Infof("enabled tracing grpc middleware")
+	opts = append(
+		opts,
+		grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)),
+		grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
 
 	s.logger.Infof("enabled metrics grpc middleware")
 	opts = append(opts, grpc_go.StatsHandler(diag.DefaultGRPCMonitoring.ServerStatsHandler))
