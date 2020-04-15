@@ -118,7 +118,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, enableProfiling, logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -288,7 +288,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress string, enableProfiling bool, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -337,7 +337,7 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			"--protocol", applicationProtocol,
 			"--placement-address", placementServiceAddress,
 			"--config", config,
-			"--enable-profiling", enableProfiling,
+			"--enable-profiling", strconv.FormatBool(enableProfiling),
 			"--log-level", logLevel,
 			"--max-concurrency", maxConcurrency,
 			"--sentry-address", sentryAddress,
