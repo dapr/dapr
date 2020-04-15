@@ -181,7 +181,7 @@ func TestGetMetricsPort(t *testing.T) {
 }
 
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", "", "", false, "", 9090, nil)
+	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", false, "info", true, "-1", nil, "", "", "", "", false, "", 9090, nil)
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
 }
@@ -195,7 +195,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 			},
 		}
 
-		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", "", "", false, "", 9090, r)
+		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", false, "info", true, "-1", nil, "", "", "", "", false, "", 9090, r)
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Limits.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Limits.Memory().String())
@@ -209,14 +209,14 @@ func TestSidecarResourceLimits(t *testing.T) {
 			},
 		}
 
-		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", "", "", false, "", 9090, r)
+		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", false, "info", true, "-1", nil, "", "", "", "", false, "", 9090, r)
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Requests.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Requests.Memory().String())
 	})
 
 	t.Run("no limits", func(t *testing.T) {
-		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", "false", "info", true, "-1", nil, "", "", "", "", false, "", 9090, nil)
+		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", false, "info", true, "-1", nil, "", "", "", "", false, "", 9090, nil)
 		assert.NotNil(t, c)
 		assert.Len(t, c.Resources.Limits, 0)
 	})
