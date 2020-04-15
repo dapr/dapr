@@ -74,18 +74,13 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 	var span tracing.TracerSpan
 	var spanc tracing.TracerSpan
 
-	if g.tracingSpec.Enabled {
-		span, spanc = tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
-
-		defer span.Span.End()
-		defer spanc.Span.End()
-	}
+	span, spanc = tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
+	defer span.Span.End()
+	defer spanc.Span.End()
 
 	resp, err := c.OnInvoke(ctx, &msg)
 
-	if g.tracingSpec.Enabled {
-		tracing.UpdateSpanPairStatusesFromError(span, spanc, err, req.Method)
-	}
+	tracing.UpdateSpanPairStatusesFromError(span, spanc, err, req.Method)
 
 	if g.ch != nil {
 		<-g.ch
