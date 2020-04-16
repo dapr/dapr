@@ -20,15 +20,20 @@ option go_package = "github.com/dapr/dapr/pkg/proto/common/v1";
 // 
 // Dapr runtime will parse POST as a verb and extract querystring to quersytring map.
 message HTTPExtensions {
-  // Type of HTTP Verb supported by Dapr.
+  // Type of HTTP 1.1 Verbs
+  // RFC 7231: https://tools.ietf.org/html/rfc7231#page-24
   enum HTTPVerb {
-    POST = 0;
-    GET = 1;
-    PUT = 2;
-    DELETE = 3;
+    GET = 0;
+    HEAD = 1;
+    POST = 2;
+    PUT = 3;
+    DELETE = 4;
+    CONNECT = 5;
+    OPTIONS = 6;
+    TRACE = 7;
   }
 
-  // verb is HTTP verb supported by Dapr.
+  // verb is HTTP verb.
   //
   // This is required.
   HTTPVerb verb = 1;
