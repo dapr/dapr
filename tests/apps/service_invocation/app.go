@@ -24,7 +24,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/dapr/dapr/pkg/proto/dapr"
-	daprsdk "github.com/dapr/go-sdk/dapr"
 
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
@@ -234,7 +233,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Create the client
-	client := daprsdk.NewDaprClient(conn)
+	client := dapr.NewDaprClient(conn)
 
 	testMessage := guuid.New().String()
 	b, err := json.Marshal(testMessage)
@@ -245,7 +244,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Printf("grpcToGrpcTest calling with message %s\n", string(b))
-	resp, err := client.InvokeService(context.Background(), &daprsdk.InvokeServiceEnvelope{
+	resp, err := client.InvokeService(context.Background(), &dapr.InvokeServiceEnvelope{
 		Id:     commandBody.RemoteApp,
 		Data:   &any.Any{Value: b},
 		Method: "grpcToGrpcTest",
