@@ -53,7 +53,7 @@ type SelectorField struct {
 }
 
 type TracingSpec struct {
-	Enabled bool `json:"enabled" yaml:"enabled"`
+	SamplingRate string `json:"samplingRate" yaml:"samplingRate"`
 }
 
 type MTLSSpec struct {
@@ -67,7 +67,7 @@ func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
-				Enabled: false,
+				SamplingRate: "0.0",
 			},
 		},
 	}

@@ -81,7 +81,7 @@ func TestInvokeMethod(t *testing.T) {
 			baseAddress: server.URL,
 			client:      &fasthttp.Client{},
 			tracingSpec: config.TracingSpec{
-				Enabled: false,
+				SamplingRate: "0",
 			},
 		}
 		th.serverURL = server.URL[len("http://"):]
@@ -98,7 +98,7 @@ func TestInvokeMethod(t *testing.T) {
 			baseAddress: server.URL,
 			client:      &fasthttp.Client{},
 			tracingSpec: config.TracingSpec{
-				Enabled: true,
+				SamplingRate: "1",
 			},
 		}
 		th.serverURL = server.URL[len("http://"):]
