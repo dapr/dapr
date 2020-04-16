@@ -26,8 +26,6 @@ message HTTPExtensions {
     GET = 1;
     PUT = 2;
     DELETE = 3;
-    OPTIONS = 4;
-    PATCH = 5;
   }
 
   // verb is HTTP verb supported by Dapr.
