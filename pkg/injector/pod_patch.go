@@ -400,7 +400,6 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			"--protocol", applicationProtocol,
 			"--placement-address", placementServiceAddress,
 			"--config", config,
-			"--enable-profiling", strconv.FormatBool(enableProfiling),
 			"--log-level", logLevel,
 			"--max-concurrency", maxConcurrency,
 			"--sentry-address", sentryAddress,
@@ -440,6 +439,10 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 
 	if logAsJSON {
 		c.Args = append(c.Args, "--log-as-json")
+	}
+
+	if enableProfiling {
+		c.Args = append(c.Args, "--enable-profiling")
 	}
 
 	if mtlsEnabled && trustAnchors != "" {
