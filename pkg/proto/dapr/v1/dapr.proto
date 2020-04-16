@@ -78,19 +78,19 @@ message InvokeServiceResponse {
 }
 
 message DeleteStateEnvelope {
-  string storeName = 1;
+  string state_name = 1;
   string key = 2;
   string etag = 3;
   StateOptions options = 4;
 }
 
 message SaveStateEnvelope {
-  string storeName = 1;
+  string state_name = 1;
   repeated StateRequest requests = 2;
 }
 
 message GetStateEnvelope {
-  string storeName = 1;
+  string state_name = 1;
   string key = 2;
   string consistency = 3;
 }
@@ -101,7 +101,7 @@ message GetStateResponseEnvelope {
 }
 
 message GetSecretEnvelope {
-  string storeName = 1;
+  string state_name = 1;
   string key = 2;
   map<string,string> metadata = 3;
 }
@@ -132,7 +132,7 @@ message State {
 message StateOptions {
   string concurrency = 1;
   string consistency = 2;
-  RetryPolicy retryPolicy = 3;
+  RetryPolicy retry_policy = 3;
 }
 
 message RetryPolicy {
