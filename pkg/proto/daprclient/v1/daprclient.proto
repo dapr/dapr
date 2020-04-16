@@ -75,7 +75,7 @@ message CloudEventEnvelope {
   string source = 2;
   string type = 3;
   string specVersion = 4;
-  string dataContentType = 5;
+  string data_content_type = 5;
   string topic = 6;
   google.protobuf.Any data = 7;
 }
@@ -113,7 +113,7 @@ message State {
 message StateOptions {
   string concurrency = 1;
   string consistency = 2;
-  RetryPolicy retryPolicy = 3;
+  RetryPolicy retry_policy = 3;
 }
 
 message RetryPolicy {

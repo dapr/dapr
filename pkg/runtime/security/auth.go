@@ -12,7 +12,7 @@ import (
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	pb "github.com/dapr/dapr/pkg/proto/sentry"
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/golang/protobuf/ptypes"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/grpc"
@@ -98,8 +98,8 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	}
 	defer conn.Close()
 
-	c := pb.NewCAClient(conn)
-	resp, err := c.SignCertificate(context.Background(), &pb.SignCertificateRequest{
+	c := sentryv1pb.NewCAClient(conn)
+	resp, err := c.SignCertificate(context.Background(), &sentryv1pb.SignCertificateRequest{
 		CertificateSigningRequest: certPem,
 		Id:                        getSentryIdentifier(id),
 		Token:                     getToken(),

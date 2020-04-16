@@ -15,7 +15,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
-	pb "github.com/dapr/dapr/pkg/proto/operator"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
@@ -57,7 +57,7 @@ func (a *apiServer) Run(certChain *dapr_credentials.CertChain) {
 		log.Fatal("error creating gRPC options: %s", err)
 	}
 	s := grpc.NewServer(opts...)
-	pb.RegisterOperatorServer(s, a)
+	operatorv1pb.RegisterOperatorServer(s, a)
 
 	log.Info("starting gRPC server")
 	if err := s.Serve(lis); err != nil {
@@ -70,7 +70,7 @@ func (a *apiServer) OnComponentUpdated(component *v1alpha1.Component) {
 }
 
 // GetConfiguration returns a Dapr configuration
-func (a *apiServer) GetConfiguration(ctx context.Context, in *pb.GetConfigurationRequest) (*pb.GetConfigurationResponse, error) {
+func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
 	config, err := a.Client.ConfigurationV1alpha1().Configurations(in.Namespace).Get(in.Name, meta_v1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error getting configuration: %s", err)
@@ -79,7 +79,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *pb.GetConfiguratio
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling configuration: %s", err)
 	}
-	return &pb.GetConfigurationResponse{
+	return &operatorv1pb.GetConfigurationResponse{
 		Configuration: &any.Any{
 			Value: b,
 		},
@@ -87,12 +87,12 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *pb.GetConfiguratio
 }
 
 // GetComponents returns a list of Dapr components
-func (a *apiServer) GetComponents(ctx context.Context, in *empty.Empty) (*pb.GetComponentResponse, error) {
+func (a *apiServer) GetComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.GetComponentResponse, error) {
 	components, err := a.Client.ComponentsV1alpha1().Components(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error getting components: %s", err)
 	}
-	resp := &pb.GetComponentResponse{
+	resp := &operatorv1pb.GetComponentResponse{
 		Components: []*any.Any{},
 	}
 	for _, c := range components.Items {
@@ -109,7 +109,7 @@ func (a *apiServer) GetComponents(ctx context.Context, in *empty.Empty) (*pb.Get
 }
 
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified
-func (a *apiServer) ComponentUpdate(in *empty.Empty, srv pb.Operator_ComponentUpdateServer) error {
+func (a *apiServer) ComponentUpdate(in *empty.Empty, srv operatorv1pb.Operator_ComponentUpdateServer) error {
 	log.Info("sidecar connected for component updates")
 
 	for c := range a.updateChan {
@@ -119,7 +119,7 @@ func (a *apiServer) ComponentUpdate(in *empty.Empty, srv pb.Operator_ComponentUp
 				log.Warnf("error serializing component %s (%s): %s", c.GetName(), c.Spec.Type, err)
 				return
 			}
-			err = srv.Send(&pb.ComponentUpdateEvent{
+			err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
 				Component: &any.Any{
 					Value: b,
 				},

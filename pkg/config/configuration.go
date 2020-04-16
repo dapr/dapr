@@ -13,7 +13,7 @@ import (
 	"os"
 	"time"
 
-	pb "github.com/dapr/dapr/pkg/proto/operator"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -95,8 +95,8 @@ func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
-func LoadKubernetesConfiguration(config, namespace string, operatorClient pb.OperatorClient) (*Configuration, error) {
-	resp, err := operatorClient.GetConfiguration(context.Background(), &pb.GetConfigurationRequest{
+func LoadKubernetesConfiguration(config, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
 	}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))

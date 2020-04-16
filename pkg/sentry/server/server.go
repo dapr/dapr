@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/logger"
-	pb "github.com/dapr/dapr/pkg/proto/sentry"
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/csr"
@@ -57,7 +57,7 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 
 	tlsOpt := s.tlsServerOption(trustBundler)
 	s.srv = grpc.NewServer(tlsOpt)
-	pb.RegisterCAServer(s.srv, s)
+	sentryv1pb.RegisterCAServer(s.srv, s)
 
 	if err := s.srv.Serve(lis); err != nil {
 		return fmt.Errorf("grpc serve error: %s", err)
@@ -118,7 +118,7 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 // SignCertificate handles CSR requests originating from Dapr sidecars.
 // The method receives a request with an identity and initial cert and returns
 // A signed certificate including the trust chain to the caller along with an expiry date.
-func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateRequest) (*pb.SignCertificateResponse, error) {
+func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
 	monitoring.CertSignRequestRecieved()
 
 	csrPem := req.GetCertificateSigningRequest()
@@ -173,7 +173,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		return nil, fmt.Errorf("could not validate certificate validity: %s", err)
 	}
 
-	resp := &pb.SignCertificateResponse{
+	resp := &sentryv1pb.SignCertificateResponse{
 		WorkloadCertificate:    certPem,
 		TrustChainCertificates: [][]byte{issuerCert, rootCert},
 		ValidUntil:             expiry,
