@@ -96,14 +96,10 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 		}
 	}
 
-	var span diag.TracerSpan
-	var spanc diag.TracerSpan
-
-	span, spanc = diag.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
+	span := diag.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
 	defer span.Span.End()
-	defer spanc.Span.End()
 
-	req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(*spanc.SpanContext))
+	req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(span.Span.SpanContext()))
 
 	resp := fasthttp.AcquireResponse()
 
@@ -154,7 +150,7 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
 	}
 
-	diag.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, resp)
+	diag.UpdateSpanPairStatusesFromHTTPResponse(span, resp)
 
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)

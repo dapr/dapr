@@ -20,13 +20,13 @@ import (
 // TracingGRPCMiddlewareStream plugs tracer into gRPC stream
 func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		span, spanc := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
+		span := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
+		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationKey, SerializeSpanContext(span.Span.SpanContext()))
 		defer span.Span.End()
-		defer spanc.Span.End()
+
 		err := handler(srv, wrappedStream)
-		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
+		UpdateSpanPairStatusesFromError(span, err, info.FullMethod)
 		return err
 	}
 }
@@ -34,22 +34,20 @@ func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInter
 // TracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
 func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		span, spanc := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
+		span := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
 		defer span.Span.End()
-		defer spanc.Span.End()
-		newCtx := context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
+
+		newCtx := context.WithValue(span.Context, correlationKey, SerializeSpanContext(span.Span.SpanContext()))
 		resp, err := handler(newCtx, req)
-		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
+		UpdateSpanPairStatusesFromError(span, err, info.FullMethod)
 		return resp, err
 	}
 }
 
 // TracingSpanFromGRPCContext creates a span from an incoming gRPC method call
-func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	var ctx context.Context
+func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) TracerSpan {
+	var ctx = context.Background()
 	var span *trace.Span
-	var ctxc context.Context
-	var spanc *trace.Span
 
 	md := extractDaprMetadata(c)
 	headers := extractHeaders(req)
@@ -64,22 +62,18 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
 	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
 	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
-	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
+
 	spanName := createSpanName(method)
 	if corID != "" {
 		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(c, method, spanContext, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
+		ctx, span = trace.StartSpanWithRemoteParent(c, spanName, spanContext, serverKindOption, probSamplerOption)
 	} else {
-		ctx, span = trace.StartSpan(context.Background(), method, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
+		ctx, span = trace.StartSpan(ctx, spanName, serverKindOption, probSamplerOption)
 	}
 
 	addAnnotationsFromGRPCMetadata(md, span)
 
-	context := span.SpanContext()
-	contextc := spanc.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
+	return TracerSpan{Context: ctx, Span: span}
 }
 
 func addAnnotationsFromGRPCMetadata(md map[string][]string, span *trace.Span) {
