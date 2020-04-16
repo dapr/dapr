@@ -300,11 +300,11 @@ var fileDescriptor_ae0216eeb0d08e49 = []byte{
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
-var _ grpc.ClientConnInterface
+var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion6
+const _ = grpc.SupportPackageIsVersion4
 
 // PlacementServiceClient is the client API for PlacementService service.
 //
@@ -314,10 +314,10 @@ type PlacementServiceClient interface {
 }
 
 type placementServiceClient struct {
-	cc grpc.ClientConnInterface
+	cc *grpc.ClientConn
 }
 
-func NewPlacementServiceClient(cc grpc.ClientConnInterface) PlacementServiceClient {
+func NewPlacementServiceClient(cc *grpc.ClientConn) PlacementServiceClient {
 	return &placementServiceClient{cc}
 }
 
