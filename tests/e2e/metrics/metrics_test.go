@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/dapr/dapr/pkg/proto/dapr"
+	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -194,13 +194,13 @@ func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	require.NoError(t, err)
 	defer conn.Close()
 
-	client := pb.NewDaprClient(conn)
+	client := daprv1pb.NewDaprClient(conn)
 
 	for i := 0; i < n; i++ {
-		_, err = client.SaveState(context.Background(), &pb.SaveStateEnvelope{
+		_, err = client.SaveState(context.Background(), &daprv1pb.SaveStateEnvelope{
 			StoreName: "statestore",
-			Requests: []*pb.StateRequest{
-				&pb.StateRequest{
+			Requests: []*daprv1pb.StateRequest{
+				&daprv1pb.StateRequest{
 					Key: "myKey",
 					Value: &any.Any{
 						Value: []byte("My State"),
