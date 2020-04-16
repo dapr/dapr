@@ -49,7 +49,6 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--protocol", "http",
 		"--placement-address", "placement:50000",
 		"--config", "config",
-		"--enable-profiling", "false",
 		"--log-level", "info",
 		"--max-concurrency", "-1",
 		"--sentry-address", "sentry:50000",
