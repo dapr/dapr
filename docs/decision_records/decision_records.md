@@ -20,14 +20,15 @@ All decisions are categorized in the following folders:
   - [API-005: State store behavior](./api/API-005-state-store-behavior.md)
   - [API-006: Universal namespace (customer ask)](./api/API-006-universal-namespace.md)
   - [API-007: Tracing Endpoint](./api/API-007-tracing-endpoint.md)
+  - [API-008: Multi State store API design](./api/API-008-multi-state-store-api-design.md)
 
 * **CLI** - Decisions on Dapr CLI architecture and behaviors.
 
-  - [CLI-001: CLI and runtim versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
+  - [CLI-001: CLI and runtime versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
   
 * **SDKs** - Decisions on Dapr SDKs.
-  - [SDK-001: SDK releases.](./sdk/SDK-001-releases.MD)
-  - [SDK-002: Java JDK versions.](./sdk/SDK-002-java-jdk-versions.MD)
+  - [SDK-001: SDK releases](./sdk/SDK-001-releases.MD)
+  - [SDK-002: Java JDK versions](./sdk/SDK-002-java-jdk-versions.MD)
 
 * **Engineering** - Decisions on Engineering practices, including CI/CD, testing and releases.
 
