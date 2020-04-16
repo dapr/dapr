@@ -23,7 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	daprinternalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
@@ -334,9 +334,9 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 }
 
 func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
-	req := daprinternal_pb.CallActorEnvelope{
+	req := daprinternalv1pb.CallActorRequest{
 		ActorType: actorType,
-		ActorID:   actorID,
+		ActorId:   actorID,
 		Method:    actorMethod,
 		Data:      &any.Any{Value: data},
 		Metadata:  map[string]string{},
@@ -351,7 +351,7 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, acto
 		return nil, err
 	}
 
-	client := daprinternal_pb.NewDaprInternalClient(conn)
+	client := daprinternalv1pb.NewDaprInternalClient(conn)
 	resp, err := client.CallActor(context.Background(), &req)
 	if err != nil {
 		return nil, err
