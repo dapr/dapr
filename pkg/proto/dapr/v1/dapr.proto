@@ -78,19 +78,19 @@ message InvokeServiceResponse {
 }
 
 message DeleteStateEnvelope {
-  string state_name = 1;
+  string store_name = 1;
   string key = 2;
   string etag = 3;
   StateOptions options = 4;
 }
 
 message SaveStateEnvelope {
-  string state_name = 1;
+  string store_name = 1;
   repeated StateRequest requests = 2;
 }
 
 message GetStateEnvelope {
-  string state_name = 1;
+  string store_name = 1;
   string key = 2;
   string consistency = 3;
 }
@@ -101,7 +101,7 @@ message GetStateResponseEnvelope {
 }
 
 message GetSecretEnvelope {
-  string state_name = 1;
+  string store_name = 1;
   string key = 2;
   map<string,string> metadata = 3;
 }
