@@ -17,7 +17,7 @@ import (
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 
-	pb "github.com/dapr/go-sdk/daprclient"
+	pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"google.golang.org/grpc"
 )
 
