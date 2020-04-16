@@ -1,6 +1,11 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 syntax = "proto3";
 
-package operator;
+package dapr.pkg.proto.operator.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
@@ -15,7 +20,7 @@ service Operator {
 }
 
 message ComponentUpdateEvent {
-    google.protobuf.Any component = 1;
+  google.protobuf.Any component = 1;
 }
 
 message GetComponentResponse {

@@ -9,19 +9,13 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -59,196 +53,7 @@ func DeserializeSpanContext(ctx string) trace.SpanContext {
 	return ret
 }
 
-// DeserializeSpanContextPointer deserializes a span context from a trace pointer
-func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
-	if ctx == "" {
-		return nil
-	}
-	context := &trace.SpanContext{}
-	*context = DeserializeSpanContext(ctx)
-	return context
-}
-
-// TraceSpanFromFastHTTPRequest creates a tracing span from a fasthttp request
-func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	uri := string(r.Header.RequestURI())
-	return getTraceSpan(r, uri, spec)
-}
-
-// TraceSpanFromFastHTTPContext creates a tracing span from a fasthttp request context
-func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	uri := string(c.Path())
-	return getTraceSpan(&c.Request, uri, spec)
-}
-
-// getTraceSpan creates a tracing span from a fasthttp request and given tracing spec
-func getTraceSpan(r *fasthttp.Request, uri string, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	var ctx context.Context
-	var span *trace.Span
-	var ctxc context.Context
-	var spanc *trace.Span
-
-	corID := string(r.Header.Peek(CorrelationID))
-	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
-
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
-	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
-	spanName := createSpanName(uri)
-	if corID != "" {
-		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), uri, spanContext, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	} else {
-		ctx, span = trace.StartSpan(context.Background(), uri, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	}
-
-	addAnnotationsFromHTTPMetadata(r, span)
-
-	context := span.SpanContext()
-	contextc := spanc.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
-}
-
-func addAnnotationsFromHTTPMetadata(req *fasthttp.Request, span *trace.Span) {
-	req.Header.VisitAll(func(key []byte, value []byte) {
-		headerKey := string(key)
-		headerKey = strings.ToLower(headerKey)
-		if strings.HasPrefix(headerKey, daprHeaderPrefix) {
-			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
-		}
-	})
-}
-
-// TracingHTTPMiddleware plugs tracer into fasthttp pipeline
-func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		span, spanc := TraceSpanFromFastHTTPContext(ctx, spec)
-		defer span.Span.End()
-		defer spanc.Span.End()
-		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(*spanc.SpanContext))
-		next(ctx)
-		UpdateSpanPairStatusesFromHTTPResponse(span, spanc, &ctx.Response)
-	}
-}
-
-// TracingGRPCMiddlewareStream plugs tracer into gRPC stream
-func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
-	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		span, spanc := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
-		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
-		defer span.Span.End()
-		defer spanc.Span.End()
-		err := handler(srv, wrappedStream)
-		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
-		return err
-	}
-}
-
-// UpdateSpanPairStatusesFromHTTPResponse updates tracer span statuses based on HTTP response
-func UpdateSpanPairStatusesFromHTTPResponse(span, spanc TracerSpan, resp *fasthttp.Response) {
-	spanc.Span.SetStatus(trace.Status{
-		Code:    ProjectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
-	})
-	span.Span.SetStatus(trace.Status{
-		Code:    ProjectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
-	})
-}
-
-// UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
-func UpdateSpanPairStatusesFromError(span, spanc TracerSpan, err error, method string) {
-	if err != nil {
-		spanc.Span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeInternal,
-			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
-		})
-		span.Span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeInternal,
-			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
-		})
-	} else {
-		spanc.Span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeOK,
-			Message: fmt.Sprintf("method %s succeeded", method),
-		})
-		span.Span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeOK,
-			Message: fmt.Sprintf("method %s succeeded", method),
-		})
-	}
-}
-
-// TracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
-func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		span, spanc := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
-		defer span.Span.End()
-		defer spanc.Span.End()
-		newCtx := context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
-		resp, err := handler(newCtx, req)
-		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
-		return resp, err
-	}
-}
-
-// TracingSpanFromGRPCContext creates a span from an incoming gRPC method call
-func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	var ctx context.Context
-	var span *trace.Span
-	var ctxc context.Context
-	var spanc *trace.Span
-
-	md := extractDaprMetadata(c)
-	headers := extractHeaders(req)
-	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
-	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)
-	if len(corID) > 35 { //to remove the prefix "X-Correlation-Id&__header_equals__&", which may in different casing
-		corID = corID[35:]
-	}
-
-	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
-
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
-	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
-	spanName := createSpanName(method)
-	if corID != "" {
-		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(c, method, spanContext, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	} else {
-		ctx, span = trace.StartSpan(context.Background(), method, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	}
-
-	addAnnotationsFromGRPCMetadata(md, span)
-
-	context := span.SpanContext()
-	contextc := spanc.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
-}
-
-func addAnnotationsFromGRPCMetadata(md map[string][]string, span *trace.Span) {
-	// md metadata must only have dapr prefixed headers metadata
-	// still extra check for dapr headers to avoid, it might be micro performance hit but that is ok
-	for k, vv := range md {
-		if !strings.HasPrefix(strings.ToLower(k), daprHeaderPrefix) {
-			continue
-		}
-
-		for _, v := range vv {
-			span.AddAttributes(trace.StringAttribute(k, v))
-		}
-	}
-}
-
-func ProjectStatusCode(code int) int32 {
+func projectStatusCode(code int) int32 {
 	switch code {
 	case 200:
 		return trace.StatusCodeOK
@@ -309,4 +114,27 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 	}
 
 	return daprMetadata
+}
+
+// UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
+func UpdateSpanPairStatusesFromError(span, spanc TracerSpan, err error, method string) {
+	if err != nil {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeInternal,
+			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
+		})
+		span.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeInternal,
+			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
+		})
+	} else {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeOK,
+			Message: fmt.Sprintf("method %s succeeded", method),
+		})
+		span.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeOK,
+			Message: fmt.Sprintf("method %s succeeded", method),
+		})
+	}
 }
