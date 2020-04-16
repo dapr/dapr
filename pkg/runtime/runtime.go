@@ -47,7 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
-	"github.com/dapr/dapr/pkg/proto/operator"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/golang/protobuf/ptypes/any"
@@ -95,7 +95,7 @@ type DaprRuntime struct {
 	scopedPublishings        []string
 	allowedTopics            []string
 	daprHTTPAPI              http.API
-	operatorClient           operator.OperatorClient
+	operatorClient           operatorv1pb.OperatorClient
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -155,7 +155,7 @@ func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
-func (a *DaprRuntime) getOperatorClient() (operator.OperatorClient, error) {
+func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
 		if err != nil {
