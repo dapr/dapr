@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
@@ -494,7 +495,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 
 	go func() {
 		for {
-			host := daprinternal_pb.Host{
+			host := placementv1pb.Host{
 				Name:     hostAddress,
 				Load:     1,
 				Entities: a.config.HostedActorTypes,
@@ -539,7 +540,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
-func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) daprinternal_pb.PlacementService_ReportDaprStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.PlacementService_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
@@ -564,7 +565,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
-		client := daprinternal_pb.NewPlacementServiceClient(conn)
+		client := placementv1pb.NewPlacementServiceClient(conn)
 		stream, err := client.ReportDaprStatus(ctx)
 		if err != nil {
 			log.Warnf("error establishing client to placement service: %v", err)
@@ -577,7 +578,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 	}
 }
 
-func (a *actorsRuntime) onPlacementOrder(in *daprinternal_pb.PlacementOrder) {
+func (a *actorsRuntime) onPlacementOrder(in *placementv1pb.PlacementOrder) {
 	log.Infof("placement order received: %s", in.Operation)
 	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
 
@@ -618,7 +619,7 @@ func (a *actorsRuntime) unblockPlacements() {
 	}
 }
 
-func (a *actorsRuntime) updatePlacements(in *daprinternal_pb.PlacementTables) {
+func (a *actorsRuntime) updatePlacements(in *placementv1pb.PlacementTables) {
 	if in.Version != a.placementTables.Version {
 		for k, v := range in.Entries {
 			loadMap := map[string]*placement.Host{}
