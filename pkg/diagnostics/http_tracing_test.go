@@ -6,14 +6,11 @@
 package diagnostics
 
 import (
-	"context"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
-	"google.golang.org/grpc/metadata"
 )
 
 func TestTraceSpanFromFastHTTPRequest(t *testing.T) {
@@ -53,13 +50,4 @@ func getTestHTTPRequest() *fasthttp.Request {
 	req.Header.Set(CorrelationID, corID)
 
 	return req
-}
-
-func TestTracingSpanFromGRPCContext(t *testing.T) {
-	req := &channel.InvokeRequest{}
-	spec := config.TracingSpec{SamplingRate: "0.5"}
-	ctx := context.Background()
-	ctx = metadata.NewIncomingContext(ctx, metadata.MD{"dapr-headerKey": {"v3", "v4"}})
-
-	TracingSpanFromGRPCContext(ctx, req, "invoke", spec)
 }
