@@ -10,6 +10,8 @@ package dapr.pkg.proto.daprinternal.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/struct.proto";
 
+option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
+
 // DaprInternal service is used to exchange the data between 
 // caller dapr runtime and callee dapr runtime.
 //
