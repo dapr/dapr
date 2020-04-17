@@ -943,9 +943,20 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-	statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
+	statusCode := 0
+
+	if resp != nil {
+		statusCode = http.GetStatusCodeFromMetadata(resp.Metadata)
+	}
+
 	if err != nil || statusCode != 200 {
-		err = fmt.Errorf("error from app while processing pub/sub event: %s. status code returned: %v", string(resp.Data), statusCode)
+		var err error
+		if resp == nil {
+			err = fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
+		} else {
+			err = fmt.Errorf("error returned from app while processing pub/sub event: %s. status code returned: %v", string(resp.Data), statusCode)
+		}
+
 		log.Debug(err)
 		return err
 	}
