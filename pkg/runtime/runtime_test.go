@@ -667,7 +667,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			Data:     []byte(clientError.Error()),
 		}
 
-		expectedClientError := fmt.Errorf("error from app while processing pub/sub event: Internal Error. status code returned: 500")
+		expectedClientError := fmt.Errorf("error returned from app while processing pub/sub event: Internal Error. status code returned: 500")
 
 		mockAppChannel.On("InvokeMethod", expectedRequest).Return(fakeHTPResponse, clientError)
 
