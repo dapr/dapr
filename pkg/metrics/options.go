@@ -6,7 +6,6 @@
 package metrics
 
 import (
-	"fmt"
 	"strconv"
 )
 
@@ -49,10 +48,10 @@ func (o *Options) AttachCmdFlags(
 		&o.metricsPort,
 		"metrics-port",
 		defaultMetricsPort,
-		fmt.Sprintf("The port for the metrics server (default: %s)", defaultMetricsPort))
+		"The port for the metrics server")
 	boolVar(
 		&o.MetricsEnabled,
 		"enable-metrics",
 		defaultMetricsEnabled,
-		"Enable prometheus metric (default: true)")
+		"Enable prometheus metric")
 }

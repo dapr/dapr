@@ -128,7 +128,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	if err != nil {
 		log.Warnf("couldn't set container resource requirements: %s. using defaults", err)
 	}
-	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, strconv.FormatBool(enableProfiling), logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort, resources)
+	sidecarContainer := getSidecarContainer(appPortStr, protocol, id, config, image, req.Namespace, apiSrvAddress, placementAddress, enableProfiling, logLevel, logAsJSON, maxConcurrencyStr, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity, metricsPort, resources)
 
 	patchOps := []PatchOperation{}
 	var path string
@@ -351,7 +351,7 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress, enableProfiling, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int, resources *v1.ResourceRequirements) corev1.Container {
+func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress string, enableProfiling bool, logLevel string, logAsJSON bool, maxConcurrency string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string, metricsPort int, resources *v1.ResourceRequirements) corev1.Container {
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -400,7 +400,6 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 			"--protocol", applicationProtocol,
 			"--placement-address", placementServiceAddress,
 			"--config", config,
-			"--enable-profiling", enableProfiling,
 			"--log-level", logLevel,
 			"--max-concurrency", maxConcurrency,
 			"--sentry-address", sentryAddress,
@@ -440,6 +439,10 @@ func getSidecarContainer(applicationPort, applicationProtocol, id, config, daprS
 
 	if logAsJSON {
 		c.Args = append(c.Args, "--log-as-json")
+	}
+
+	if enableProfiling {
+		c.Args = append(c.Args, "--enable-profiling")
 	}
 
 	if mtlsEnabled && trustAnchors != "" {
