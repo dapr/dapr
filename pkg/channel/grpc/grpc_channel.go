@@ -52,8 +52,8 @@ func (g *Channel) GetBaseAddress() string {
 }
 
 // InvokeMethod invokes user code via gRPC
-func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
+func (g *Channel) InvokeMethod(ctx context.Context, req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
 	defer cancel()
 
 	metadata, err := getQueryStringFromMetadata(req)
@@ -71,7 +71,7 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 	}
 	c := daprclient_pb.NewDaprClientClient(g.client)
 
-	_, span := tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
+	ctx, span := tracing.StartTracingClientSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
 	defer span.End()
 
 	resp, err := c.OnInvoke(ctx, &msg)
