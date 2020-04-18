@@ -99,7 +99,7 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *DirectMessageReq
 		Payload:  req.Data,
 	}
 
-	resp, err := d.appChannel.InvokeMethod(&localInvokeReq)
+	resp, err := d.appChannel.InvokeMethod(ctx, &localInvokeReq)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -76,6 +77,8 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func TestInvokeMethod(t *testing.T) {
 	th := &testHandler{t: t, serverURL: ""}
 	server := httptest.NewServer(th)
+	ctx := context.Background()
+
 	t.Run("query string", func(t *testing.T) {
 		c := Channel{
 			baseAddress: server.URL,
@@ -88,7 +91,7 @@ func TestInvokeMethod(t *testing.T) {
 		request := &channel.InvokeRequest{
 			Metadata: map[string]string{QueryString: "param1=val1&param2=val2"},
 		}
-		response, err := c.InvokeMethod(request)
+		response, err := c.InvokeMethod(ctx, request)
 		assert.NoError(t, err)
 		assert.Equal(t, "param1=val1&param2=val2", string(response.Data))
 	})
@@ -105,7 +108,7 @@ func TestInvokeMethod(t *testing.T) {
 		request := &channel.InvokeRequest{
 			Method: "method",
 		}
-		response, err := c.InvokeMethod(request)
+		response, err := c.InvokeMethod(ctx, request)
 		assert.NoError(t, err)
 		assert.Equal(t, "", string(response.Data))
 	})
@@ -114,6 +117,7 @@ func TestInvokeMethod(t *testing.T) {
 }
 
 func TestInvokeMethodMaxConcurrency(t *testing.T) {
+	ctx := context.Background()
 	t.Run("single concurrency", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls: 1,
@@ -130,7 +134,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 				request2 := &channel.InvokeRequest{
 					Payload: []byte(""),
 				}
-				c.InvokeMethod(request2)
+				c.InvokeMethod(ctx, request2)
 				wg.Done()
 			}()
 		}
@@ -155,7 +159,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 				request2 := &channel.InvokeRequest{
 					Payload: []byte(""),
 				}
-				c.InvokeMethod(request2)
+				c.InvokeMethod(ctx, request2)
 				wg.Done()
 			}()
 		}
@@ -166,6 +170,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 }
 
 func TestInvokeWithHeaders(t *testing.T) {
+	ctx := context.Background()
 	server := httptest.NewServer(&testHandlerHeaders{})
 	c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
 	request := &channel.InvokeRequest{
@@ -173,7 +178,7 @@ func TestInvokeWithHeaders(t *testing.T) {
 			"headers": "h1&__header_equals__&v1&__header_delim__&h2&__header_equals__&v2",
 		},
 	}
-	response, err := c.InvokeMethod(request)
+	response, err := c.InvokeMethod(ctx, request)
 	assert.NoError(t, err)
 	assert.Contains(t, string(response.Data), "H1&__header_equals__&v1")
 	assert.Contains(t, string(response.Data), "H2&__header_equals__&v2")
@@ -181,12 +186,13 @@ func TestInvokeWithHeaders(t *testing.T) {
 }
 
 func TestContentType(t *testing.T) {
+	ctx := context.Background()
 	t.Run("default application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		server := httptest.NewServer(handler)
 		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
 		request := &channel.InvokeRequest{}
-		c.InvokeMethod(request)
+		c.InvokeMethod(ctx, request)
 		assert.Equal(t, "application/json", handler.ContentType)
 		server.Close()
 	})
@@ -200,7 +206,7 @@ func TestContentType(t *testing.T) {
 				"headers": "Content-Type&__header_equals__&application/json&__header_delim__&h2&__header_equals__&v2",
 			},
 		}
-		c.InvokeMethod(request)
+		c.InvokeMethod(ctx, request)
 		assert.Equal(t, "application/json", handler.ContentType)
 		server.Close()
 	})
@@ -214,7 +220,7 @@ func TestContentType(t *testing.T) {
 				"headers": "Content-Type&__header_equals__&custom&__header_delim__&h2&__header_equals__&v2",
 			},
 		}
-		c.InvokeMethod(request)
+		c.InvokeMethod(ctx, request)
 		assert.Equal(t, "custom", handler.ContentType)
 		server.Close()
 	})

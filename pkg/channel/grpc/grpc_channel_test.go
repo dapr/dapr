@@ -63,7 +63,7 @@ func TestInvokeMethod(t *testing.T) {
 	request := &channel.InvokeRequest{
 		Metadata: map[string]string{"http.query_string": "param1=val1&param2=val2"},
 	}
-	response, err := c.InvokeMethod(request)
+	response, err := c.InvokeMethod(context.Background(), request)
 	grpcServer.Stop()
 
 	assert.NoError(t, err)

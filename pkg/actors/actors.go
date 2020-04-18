@@ -165,7 +165,9 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 		Metadata: map[string]string{http.HTTPVerb: http.Delete},
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	// TODO Propagate context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, &req)
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
@@ -289,6 +291,9 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	lock.Lock()
 	defer lock.Unlock()
 
+	// TODO Propagate context
+	ctx := context.Background()
+
 	if !exists {
 		err := a.tryActivateActor(actorType, actorID)
 		if err != nil {
@@ -311,7 +316,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		req.Metadata[k] = v
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	resp, err := a.appChannel.InvokeMethod(ctx, &req)
 
 	if act.busy {
 		act.busy = false
@@ -370,7 +375,9 @@ func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
 		Payload:  nil,
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	// TODO Propagate context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, &req)
 	if status := a.getStatusCodeFromMetadata(resp.Metadata); err != nil || status != 200 {
 		diag.DefaultMonitoring.ActorActivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
 		key := a.constructCompositeKey(actorType, actorID)

@@ -6,6 +6,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -504,6 +505,7 @@ func (a *api) setHeaders(c *routing.Context, metadata map[string]string) {
 }
 
 func (a *api) onDirectMessage(c *routing.Context) error {
+	ctx := (context.Context)(c.RequestCtx)
 	targetID := c.Param(idParam)
 	path := string(c.Path())
 	method := path[strings.Index(path, "method/")+7:]
@@ -519,7 +521,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	}
 	a.setHeaders(c, req.Metadata)
 
-	resp, err := a.directMessaging.Invoke(&req)
+	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)

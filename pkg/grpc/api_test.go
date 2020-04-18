@@ -89,8 +89,8 @@ func TestCallActorWithTracing(t *testing.T) {
 	createExporters(meta)
 
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddlewareStream(spec))),
-		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.TracingGRPCMiddlewareUnary(spec))),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.StartTracingGRPCMiddlewareStream(spec))),
+		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.StartTracingGRPCMiddlewareUnary(spec))),
 	)
 
 	go func() {
@@ -136,8 +136,8 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	createExporters(meta)
 
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddlewareStream(spec))),
-		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.TracingGRPCMiddlewareUnary(spec))),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.StartTracingGRPCMiddlewareStream(spec))),
+		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.StartTracingGRPCMiddlewareUnary(spec))),
 	)
 
 	go func() {

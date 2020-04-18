@@ -522,7 +522,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			Payload:  data,
 		}
 
-		resp, err := a.appChannel.InvokeMethod(&req)
+		// TODO Propagate Context
+		ctx := context.Background()
+		resp, err := a.appChannel.InvokeMethod(ctx, &req)
 		if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
@@ -619,7 +621,9 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string, bindingsList []st
 			Method:   binding,
 			Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Options},
 		}
-		resp, err := a.appChannel.InvokeMethod(&req)
+		// TODO Propagate Context
+		ctx := context.Background()
+		resp, err := a.appChannel.InvokeMethod(ctx, &req)
 		if err == nil && resp != nil {
 			statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
 			return statusCode != 404
@@ -752,7 +756,9 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 			Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
 		}
 
-		resp, err := a.appChannel.InvokeMethod(req)
+		// TODO Propagate Context
+		ctx := context.Background()
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
 		if err == nil && statusCode == 200 {
 			err := json.Unmarshal(resp.Data, &topics)
@@ -942,7 +948,9 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 			diag.CorrelationID: subject},
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	// TODO Propagate Context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, &req)
 	statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
 	if err != nil || statusCode != 200 {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s. status code returned: %v", string(resp.Data), statusCode)
@@ -1180,7 +1188,9 @@ func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) 
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	// TODO Propagate context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, &req)
 	if err != nil {
 		return nil, err
 	}

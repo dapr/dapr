@@ -86,7 +86,7 @@ func (a *api) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelo
 		Metadata: in.Metadata,
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	resp, err := a.appChannel.InvokeMethod(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelo
 		req.Data = in.Data.Value
 	}
 
-	resp, err := a.directMessaging.Invoke(&req)
+	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
 		return nil, err
 	}

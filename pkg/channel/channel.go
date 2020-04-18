@@ -5,8 +5,10 @@
 
 package channel
 
+import "context"
+
 // AppChannel is an abstraction over communications with user code
 type AppChannel interface {
 	GetBaseAddress() string
-	InvokeMethod(req *InvokeRequest) (*InvokeResponse, error)
+	InvokeMethod(ctx context.Context, req *InvokeRequest) (*InvokeResponse, error)
 }

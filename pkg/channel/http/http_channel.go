@@ -65,7 +65,7 @@ func (h *Channel) GetBaseAddress() string {
 }
 
 // InvokeMethod invokes user code via HTTP
-func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.InvokeResponse, error) {
+func (h *Channel) InvokeMethod(ctx context.Context, invokeRequest *channel.InvokeRequest) (*channel.InvokeResponse, error) {
 	req := fasthttp.AcquireRequest()
 	uri := fmt.Sprintf("%s/%s", h.baseAddress, invokeRequest.Method)
 	req.SetRequestURI(uri)
@@ -96,7 +96,8 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 		}
 	}
 
-	_, span := diag.StartClientSpanTracing(req, h.tracingSpec)
+	// TODO check here for context propagation logic
+	ctx, span := diag.StartClientSpanTracing(req, h.tracingSpec)
 	defer span.End()
 
 	req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(span.SpanContext()))
@@ -107,8 +108,6 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 		h.ch <- 1
 	}
 
-	// TODO: Use propagated context
-	ctx := context.Background()
 	// Emit metric when request is sent
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(
 		ctx, method, invokeRequest.Method,
