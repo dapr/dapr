@@ -27,7 +27,7 @@ const (
 
 // DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
-	Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error)
+	Invoke(ctx context.Context, req *DirectMessageRequest) (*DirectMessageResponse, error)
 }
 
 type directMessaging struct {
@@ -54,19 +54,19 @@ func NewDirectMessaging(appID, namespace string, port int, mode modes.DaprMode, 
 }
 
 // Invoke takes a message requests and invokes an app, either local or remote
-func (d *directMessaging) Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error) {
+func (d *directMessaging) Invoke(ctx context.Context, req *DirectMessageRequest) (*DirectMessageResponse, error) {
 	if req.Target == d.appID {
-		return d.invokeLocal(req)
+		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(invokeRemoteRetryCount, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, invokeRemoteRetryCount, d.invokeRemote, req)
 }
 
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
 // TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target
 // Server shuts down.
-func (d *directMessaging) invokeWithRetry(numRetries int, fn func(req *DirectMessageRequest) (*DirectMessageResponse, error), req *DirectMessageRequest) (*DirectMessageResponse, error) {
+func (d *directMessaging) invokeWithRetry(ctx context.Context, numRetries int, fn func(ctx context.Context, req *DirectMessageRequest) (*DirectMessageResponse, error), req *DirectMessageRequest) (*DirectMessageResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(req)
+		resp, err := fn(ctx, req)
 		if err == nil {
 			return resp, nil
 		}
@@ -88,7 +88,7 @@ func (d *directMessaging) invokeWithRetry(numRetries int, fn func(req *DirectMes
 	return nil, fmt.Errorf("failed to invoke target %s after %v retries", req.Target, numRetries)
 }
 
-func (d *directMessaging) invokeLocal(req *DirectMessageRequest) (*DirectMessageResponse, error) {
+func (d *directMessaging) invokeLocal(ctx context.Context, req *DirectMessageRequest) (*DirectMessageResponse, error) {
 	if d.appChannel == nil {
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
@@ -119,7 +119,7 @@ func (d *directMessaging) getAddressFromMessageRequest(req *DirectMessageRequest
 	return address, nil
 }
 
-func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessageResponse, error) {
+func (d *directMessaging) invokeRemote(ctx context.Context, req *DirectMessageRequest) (*DirectMessageResponse, error) {
 	address, err := d.getAddressFromMessageRequest(req)
 	if err != nil {
 		return nil, err
