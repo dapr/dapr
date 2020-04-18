@@ -13,20 +13,11 @@ import (
 	"go.opencensus.io/trace"
 )
 
-func TestTraceSpanFromFastHTTPRequest(t *testing.T) {
+func TestStartClientSpanTracing(t *testing.T) {
 	req := getTestHTTPRequest()
 	spec := config.TracingSpec{SamplingRate: "0.5"}
 
-	TraceSpanFromFastHTTPRequest(req, spec)
-}
-
-func TestTraceSpanFromFastHTTPContext(t *testing.T) {
-	req := getTestHTTPRequest()
-	spec := config.TracingSpec{SamplingRate: "0.5"}
-	ctx := &fasthttp.RequestCtx{}
-	req.CopyTo(&ctx.Request)
-
-	TraceSpanFromFastHTTPContext(ctx, spec)
+	StartClientSpanTracing(req, spec)
 }
 
 func getTestHTTPRequest() *fasthttp.Request {

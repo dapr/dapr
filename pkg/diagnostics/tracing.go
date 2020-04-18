@@ -28,12 +28,6 @@ const (
 	daprHeaderPrefix     = "dapr-"
 )
 
-// TracerSpan defines a tracing span that a tracer users to keep track of call scopes
-type TracerSpan struct {
-	Context context.Context
-	Span    *trace.Span
-}
-
 // SerializeSpanContext serializes a span context into a simple string
 func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
@@ -116,14 +110,14 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 }
 
 // UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
-func UpdateSpanPairStatusesFromError(span TracerSpan, err error, method string) {
+func UpdateSpanPairStatusesFromError(span *trace.Span, err error, method string) {
 	if err != nil {
-		span.Span.SetStatus(trace.Status{
+		span.SetStatus(trace.Status{
 			Code:    trace.StatusCodeInternal,
 			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
 		})
 	} else {
-		span.Span.SetStatus(trace.Status{
+		span.SetStatus(trace.Status{
 			Code:    trace.StatusCodeOK,
 			Message: fmt.Sprintf("method %s succeeded", method),
 		})

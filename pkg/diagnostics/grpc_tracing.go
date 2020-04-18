@@ -20,10 +20,10 @@ import (
 // TracingGRPCMiddlewareStream plugs tracer into gRPC stream
 func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		span := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
+		ctx, span := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationKey, SerializeSpanContext(span.Span.SpanContext()))
-		defer span.Span.End()
+		wrappedStream.WrappedContext = context.WithValue(ctx, correlationKey, SerializeSpanContext(span.SpanContext()))
+		defer span.End()
 
 		err := handler(srv, wrappedStream)
 		UpdateSpanPairStatusesFromError(span, err, info.FullMethod)
@@ -34,10 +34,10 @@ func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInter
 // TracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
 func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		span := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
-		defer span.Span.End()
+		ctx, span := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
+		defer span.End()
 
-		newCtx := context.WithValue(span.Context, correlationKey, SerializeSpanContext(span.Span.SpanContext()))
+		newCtx := context.WithValue(ctx, correlationKey, SerializeSpanContext(span.SpanContext()))
 		resp, err := handler(newCtx, req)
 		UpdateSpanPairStatusesFromError(span, err, info.FullMethod)
 		return resp, err
@@ -45,7 +45,7 @@ func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterce
 }
 
 // TracingSpanFromGRPCContext creates a span from an incoming gRPC method call
-func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) TracerSpan {
+func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var ctx = context.Background()
 	var span *trace.Span
 
@@ -73,7 +73,7 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 
 	addAnnotationsFromGRPCMetadata(md, span)
 
-	return TracerSpan{Context: ctx, Span: span}
+	return ctx, span
 }
 
 func addAnnotationsFromGRPCMetadata(md map[string][]string, span *trace.Span) {

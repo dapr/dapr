@@ -16,54 +16,59 @@ import (
 	"go.opencensus.io/trace"
 )
 
-// TraceSpanFromFastHTTPRequest creates a tracing span from a fasthttp request
-func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) TracerSpan {
+// StartClientSpanTracing creates a tracing span from a http request
+func StartClientSpanTracing(r *fasthttp.Request, spec config.TracingSpec) (context.Context, *trace.Span) {
+	corID := string(r.Header.Peek(CorrelationID))
 	uri := string(r.Header.RequestURI())
-	return getTraceSpan(r, uri, spec)
-}
-
-// TraceSpanFromFastHTTPContext creates a tracing span from a fasthttp request context
-func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) TracerSpan {
-	uri := string(c.Path())
-	return getTraceSpan(&c.Request, uri, spec)
-}
-
-// TracingHTTPMiddleware plugs tracer into fasthttp pipeline
-func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		span := TraceSpanFromFastHTTPContext(ctx, spec)
-		defer span.Span.End()
-		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(span.Span.SpanContext()))
-
-		next(ctx)
-		UpdateSpanPairStatusesFromHTTPResponse(span, &ctx.Response)
-	}
-}
-
-func getTraceSpan(r *fasthttp.Request, uri string, spec config.TracingSpec) TracerSpan {
 	var ctx = context.Background()
 	var span *trace.Span
 
-	corID := string(r.Header.Peek(CorrelationID))
-	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
+	ctx, span = startTracingInternal(ctx, corID, uri, spec.SamplingRate, trace.SpanKindClient)
+	addAnnotationsToSpan(r, span)
+
+	return ctx, span
+}
+
+// StartServerSpanTracing plugs tracing into http middleware pipeline
+func StartServerSpanTracing(spec config.TracingSpec, next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		corID := string(ctx.Request.Header.Peek(CorrelationID))
+		uri := string(ctx.Path())
+		_, span := startTracingInternal(ctx, corID, uri, spec.SamplingRate, trace.SpanKindServer)
+
+		addAnnotationsToSpan(&ctx.Request, span)
+		defer span.End()
+
+		// Pass on the correlation id further in the request header
+		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(span.SpanContext()))
+
+		next(ctx)
+		UpdateSpanStatus(span, &ctx.Response)
+	}
+}
+
+func startTracingInternal(ctx context.Context, corID, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {
+	var span *trace.Span
+	name := createSpanName(uri)
+
+	rate := diag_utils.GetTraceSamplingRate(samplingRate)
 
 	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
 	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
-	spanName := createSpanName(uri)
+	kindOption := trace.WithSpanKind(spanKind)
+
 	if corID != "" {
-		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(ctx, spanName, spanContext, serverKindOption, probSamplerOption)
+		sc := DeserializeSpanContext(corID)
+		// Note that if parent span context is provided which is sc in this case then ctx will be ignored
+		ctx, span = trace.StartSpanWithRemoteParent(ctx, name, sc, kindOption, probSamplerOption)
 	} else {
-		ctx, span = trace.StartSpan(ctx, spanName, serverKindOption, probSamplerOption)
+		ctx, span = trace.StartSpan(ctx, name, kindOption, probSamplerOption)
 	}
 
-	addAnnotationsFromHTTPMetadata(r, span)
-
-	return TracerSpan{Context: ctx, Span: span}
+	return ctx, span
 }
 
-func addAnnotationsFromHTTPMetadata(req *fasthttp.Request, span *trace.Span) {
+func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
 	req.Header.VisitAll(func(key []byte, value []byte) {
 		headerKey := string(key)
 		headerKey = strings.ToLower(headerKey)
@@ -73,9 +78,9 @@ func addAnnotationsFromHTTPMetadata(req *fasthttp.Request, span *trace.Span) {
 	})
 }
 
-// UpdateSpanPairStatusesFromHTTPResponse updates tracer span statuses based on HTTP response
-func UpdateSpanPairStatusesFromHTTPResponse(span TracerSpan, resp *fasthttp.Response) {
-	span.Span.SetStatus(trace.Status{
+// UpdateSpanStatus updates trace span status based on HTTP response
+func UpdateSpanStatus(span *trace.Span, resp *fasthttp.Response) {
+	span.SetStatus(trace.Status{
 		Code:    projectStatusCode(resp.StatusCode()),
 		Message: strconv.Itoa(resp.StatusCode()),
 	})
