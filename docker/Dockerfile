@@ -8,7 +8,8 @@ RUN if [ $TARGETPLATFORM = linux/arm/v7 ]; then mkdir -p /dist/linux/arm/v7 && m
 
 FROM scratch
 ARG TARGETPLATFORM
+ARG PKG_FILES
 ENTRYPOINT []
 WORKDIR /
 COPY --from=alpine /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=alpine /dist/$TARGETPLATFORM/release /
+COPY --from=alpine /dist/$TARGETPLATFORM/release/$PKG_FILES /

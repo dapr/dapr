@@ -13,7 +13,7 @@ import (
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/proto/operator"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/golang/protobuf/ptypes/empty"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 )
@@ -28,11 +28,11 @@ const (
 // KubernetesComponents loads components in a kubernetes environment
 type KubernetesComponents struct {
 	config config.KubernetesConfig
-	client operator.OperatorClient
+	client operatorv1pb.OperatorClient
 }
 
 // NewKubernetesComponents returns a new kubernetes loader
-func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClient operator.OperatorClient) *KubernetesComponents {
+func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClient operatorv1pb.OperatorClient) *KubernetesComponents {
 	return &KubernetesComponents{
 		config: configuration,
 		client: operatorClient,

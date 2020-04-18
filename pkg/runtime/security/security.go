@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 )
 
@@ -30,7 +30,7 @@ func CertPool(certPem []byte) (*x509.CertPool, error) {
 	return cp, nil
 }
 
-func GetCertChain() (*certchain.CertChain, error) {
+func GetCertChain() (*credentials.CertChain, error) {
 	trustAnchors := os.Getenv(certs.TrustAnchorsEnvVar)
 	if trustAnchors == "" {
 		return nil, fmt.Errorf("couldn't find trust anchors in environment variable %s", certs.TrustAnchorsEnvVar)
@@ -43,7 +43,7 @@ func GetCertChain() (*certchain.CertChain, error) {
 	if cert == "" {
 		return nil, fmt.Errorf("couldn't find cert key in environment variable %s", certs.CertKeyEnvVar)
 	}
-	return &certchain.CertChain{
+	return &credentials.CertChain{
 		RootCA: []byte(trustAnchors),
 		Cert:   []byte(cert),
 		Key:    []byte(key),
@@ -51,7 +51,7 @@ func GetCertChain() (*certchain.CertChain, error) {
 }
 
 // GetSidecarAuthenticator returns a new authenticator with the extracted trust anchors
-func GetSidecarAuthenticator(sentryAddress string, certChain *certchain.CertChain) (Authenticator, error) {
+func GetSidecarAuthenticator(sentryAddress string, certChain *credentials.CertChain) (Authenticator, error) {
 	trustAnchors, err := CertPool(certChain.RootCA)
 	if err != nil {
 		return nil, err

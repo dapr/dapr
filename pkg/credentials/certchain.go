@@ -1,4 +1,4 @@
-package certchain
+package credentials
 
 import (
 	"io/ioutil"

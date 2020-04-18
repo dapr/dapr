@@ -47,7 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
-	"github.com/dapr/dapr/pkg/proto/operator"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/golang/protobuf/ptypes/any"
@@ -95,7 +95,7 @@ type DaprRuntime struct {
 	scopedPublishings        []string
 	allowedTopics            []string
 	daprHTTPAPI              http.API
-	operatorClient           operator.OperatorClient
+	operatorClient           operatorv1pb.OperatorClient
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -123,7 +123,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 func (a *DaprRuntime) Run(opts ...Option) error {
 	start := time.Now().UTC()
 	log.Infof("%s mode configured", a.runtimeConfig.Mode)
-	log.Infof("dapr id: %s", a.runtimeConfig.ID)
+	log.Infof("app id: %s", a.runtimeConfig.ID)
 
 	var o runtimeOpts
 	for _, opt := range opts {
@@ -155,7 +155,7 @@ func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
-func (a *DaprRuntime) getOperatorClient() (operator.OperatorClient, error) {
+func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
 		if err != nil {
@@ -278,17 +278,19 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 
 	if a.globalConfig != nil {
 		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
-			component := a.getComponent(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type, a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name)
+			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
+			component := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if component == nil {
-				return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware %s of type %s",
-					a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Name,
-					a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type)
+				return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware component with name %s and type %s",
+					middlewareSpec.Name,
+					middlewareSpec.Type)
 			}
-			handler, err := a.httpMiddlewareRegistry.Create(a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i].Type,
+			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type,
 				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
 			if err != nil {
 				return http_middleware.Pipeline{}, err
 			}
+			log.Infof("enabled %s http middleware", middlewareSpec.Type)
 			handlers = append(handlers, handler)
 		}
 	}
@@ -751,11 +753,14 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 		}
 
 		resp, err := a.appChannel.InvokeMethod(req)
-		if err == nil && http.GetStatusCodeFromMetadata(resp.Metadata) == 200 {
+		statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
+		if err == nil && statusCode == 200 {
 			err := json.Unmarshal(resp.Data, &topics)
 			if err != nil {
 				log.Errorf("error getting topics from app: %s", err)
 			}
+		} else if statusCode != 200 && statusCode != 404 {
+			log.Warnf("app returned http status code %v from subscription endpoint", statusCode)
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
@@ -765,7 +770,7 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 		}
 	}
 
-	log.Infof("App is subscribed to the following topics: %v", topics)
+	log.Infof("app is subscribed to the following topics: %v", topics)
 	return topics
 }
 
@@ -867,7 +872,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	return a.pubSub.Publish(req)
 }
 
-func (a *DaprRuntime) isPubSubOperationAllowed(topic string, topicsList []string) bool {
+func (a *DaprRuntime) isPubSubOperationAllowed(topic string, scopedTopics []string) bool {
 	inAllowedTopics := false
 
 	// first check if allowedTopics contain it
@@ -881,20 +886,18 @@ func (a *DaprRuntime) isPubSubOperationAllowed(topic string, topicsList []string
 		if !inAllowedTopics {
 			return false
 		}
-	} else if len(topicsList) == 0 {
+	}
+	if len(scopedTopics) == 0 {
 		return true
 	}
 
 	// check if a granular scope has been applied
 	allowedScope := false
-	for _, t := range topicsList {
+	for _, t := range scopedTopics {
 		if t == topic {
 			allowedScope = true
 			break
 		}
-	}
-	if inAllowedTopics && !allowedScope {
-		return true
 	}
 	return allowedScope
 }
@@ -940,8 +943,20 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-	if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
-		err = fmt.Errorf("error from app consumer: %s", err)
+	statusCode := 0
+
+	if resp != nil {
+		statusCode = http.GetStatusCodeFromMetadata(resp.Metadata)
+	}
+
+	if err != nil || statusCode != 200 {
+		var err error
+		if resp == nil {
+			err = fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
+		} else {
+			err = fmt.Errorf("error returned from app while processing pub/sub event: %s. status code returned: %v", string(resp.Data), statusCode)
+		}
+
 		log.Debug(err)
 		return err
 	}
@@ -980,7 +995,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
 	_, err = client.OnTopicEvent(context.Background(), envelope)
 	if err != nil {
-		err = fmt.Errorf("error from consumer app: %s", err)
+		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
 		log.Debug(err)
 		return err
 	}
@@ -990,7 +1005,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain)
 	err := act.Init()
 	a.actor = act
 	return err
@@ -1128,7 +1143,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		return
 	}
 
-	log.Infof("application protocol: %s. waiting on port %v", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
+	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
 	for {
 		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("localhost", fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)

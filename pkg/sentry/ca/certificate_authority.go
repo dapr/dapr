@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/sentry/certchain"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/csr"
@@ -146,7 +146,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 
 	// certs exist on disk, load them
 	if !shouldCreateCerts(c.config) {
-		certChain, err := certchain.LoadFromDisk(c.config.RootCertPath, c.config.IssuerCertPath, c.config.IssuerKeyPath)
+		certChain, err := credentials.LoadFromDisk(c.config.RootCertPath, c.config.IssuerCertPath, c.config.IssuerKeyPath)
 		if err != nil {
 			return nil, fmt.Errorf("error loading cert chain from disk: %s", err)
 		}

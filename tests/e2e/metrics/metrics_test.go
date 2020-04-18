@@ -17,10 +17,10 @@ import (
 	"strings"
 	"testing"
 
+	pb "github.com/dapr/dapr/pkg/proto/dapr"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	pb "github.com/dapr/go-sdk/dapr"
 	"github.com/golang/protobuf/ptypes/any"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"

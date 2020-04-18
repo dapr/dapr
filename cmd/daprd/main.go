@@ -47,6 +47,7 @@ import (
 
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
+	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
@@ -94,7 +95,9 @@ import (
 
 	// HTTP Middleware
 	middleware "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
+	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/valyala/fasthttp"
@@ -181,6 +184,9 @@ func main() {
 			}),
 			pubsub_loader.New("nats", func() pubs.PubSub {
 				return nats.NewNATSPubSub(logContrib)
+			}),
+			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
+				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
 			}),
 			pubsub_loader.New("azure.servicebus", func() pubs.PubSub {
 				return servicebus.NewAzureServiceBus(logContrib)
@@ -317,6 +323,14 @@ func main() {
 			}),
 			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) http_middleware.Middleware {
 				handler, _ := oauth2.NewOAuth2Middleware().GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := ratelimit.NewRateLimitMiddleware(log).GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("bearer", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := bearer.NewBearerMiddleware(log).GetHandler(metadata)
 				return handler
 			}),
 		),

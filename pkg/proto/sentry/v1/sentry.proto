@@ -1,8 +1,15 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 syntax = "proto3";
 
-package sentry;
+package dapr.pkg.proto.sentry.v1;
 
 import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/sentry/v1";
 
 service CA {
   // A request for a time-bound certificate to be signed.
@@ -13,10 +20,10 @@ service CA {
 }
 
 message SignCertificateRequest {
-    string id = 1;
-    string token = 2;
-    // A PEM-encoded x509 CSR.
-    bytes certificate_signing_request = 3;
+  string id = 1;
+  string token = 2;
+  // A PEM-encoded x509 CSR.
+  bytes certificate_signing_request = 3;
 }
 
 message SignCertificateResponse {

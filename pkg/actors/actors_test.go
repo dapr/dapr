@@ -83,7 +83,7 @@ func newTestActorsRuntime() *actorsRuntime {
 
 	store := fakeStore()
 	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false)
-	a := NewActors(store, mockAppChannel, nil, config)
+	a := NewActors(store, mockAppChannel, nil, config, nil)
 
 	return a.(*actorsRuntime)
 }

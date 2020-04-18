@@ -1,0 +1,123 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.pkg.proto.daprclient.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/duration.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprClientProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/daprclient/v1";
+
+// DaprClient service allows user application to interact with Dapr runtime.
+// User application needs to implement DaprClient service if it needs to
+// receive message from dapr runtime.
+service DaprClient {
+  rpc OnInvoke (InvokeRequest) returns (InvokeResponse) {}
+  rpc GetTopicSubscriptions(google.protobuf.Empty) returns (GetTopicSubscriptionsEnvelope) {}
+  rpc GetBindingsSubscriptions(google.protobuf.Empty) returns (GetBindingsSubscriptionsEnvelope) {}
+  rpc OnBindingEvent(BindingEventEnvelope) returns (BindingResponseEnvelope) {}
+  rpc OnTopicEvent(CloudEventEnvelope) returns (google.protobuf.Empty) {}
+}
+
+message InvokeRequest {
+  // method is a method name which will be invoked by caller.
+  // 
+  // This field is required.
+  string method = 1;
+
+  // data conveys the content body which caller sent.
+  // the type of data is bytes or protobuf message.
+  // `content_type` is required if data is bytes type.
+  //
+  // This field is required.
+  google.protobuf.Any data = 2;
+
+  // content_type is the type of data content. When data includes bytes type data,
+  // content_type is required.
+  //
+  // This field is optional.
+  string content_type = 3;
+
+  // protocol_extension includes protocol specific fields. 
+  // for example, if users set HTTP Verb and HTTP querystring to transfer
+  // HTTP compatible request, they will pack `dapr.pkg.proto.common.v1.HTTPExtensions`
+  // message to protocol_extension.
+  //
+  // This field is optional.
+  google.protobuf.Any protocol_extension = 4;
+}
+
+message InvokeResponse {
+  // data conveys the content body of InvokeService response.
+  // the type of data is bytes or protobuf message.
+  // `content_type` is required if data is bytes type.
+  //
+  // This field is required.
+  google.protobuf.Any data = 1;
+
+  // content_type is the type of data content. When data includes bytes type data,
+  // content_type is required.
+  //
+  // This field is optional.
+  string content_type = 2;
+}
+
+message CloudEventEnvelope {
+  string id = 1;
+  string source = 2;
+  string type = 3;
+  string specVersion = 4;
+  string data_content_type = 5;
+  string topic = 6;
+  google.protobuf.Any data = 7;
+}
+
+message BindingEventEnvelope {
+    string name = 1;
+    google.protobuf.Any data = 2;
+    map<string,string> metadata = 3;
+}
+
+message BindingResponseEnvelope {
+  google.protobuf.Any data = 1;
+  repeated string to = 2;
+  repeated State state = 3;
+  string concurrency = 4;
+}
+
+
+message GetTopicSubscriptionsEnvelope {
+  repeated string topics = 1;
+}
+
+message GetBindingsSubscriptionsEnvelope {
+  repeated string bindings = 1;
+}
+
+message State {
+  string key = 1;
+  google.protobuf.Any value = 2;
+  string etag = 3;
+  map<string,string> metadata = 4;
+  StateOptions options = 5;
+}
+
+message StateOptions {
+  string concurrency = 1;
+  string consistency = 2;
+  RetryPolicy retry_policy = 3;
+}
+
+message RetryPolicy {
+  int32 threshold = 1;
+  string pattern = 2;
+  google.protobuf.Duration interval = 3;
+}

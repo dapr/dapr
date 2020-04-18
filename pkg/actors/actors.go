@@ -18,11 +18,14 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/grpc"
@@ -74,6 +77,7 @@ type actorsRuntime struct {
 	evaluationBusy      bool
 	evaluationChan      chan bool
 	appHealthy          bool
+	certChain           *dapr_credentials.CertChain
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -91,7 +95,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config, certChain *dapr_credentials.CertChain) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -109,6 +113,7 @@ func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnec
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
 		appHealthy:          true,
+		certChain:           certChain,
 	}
 }
 
@@ -490,7 +495,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 
 	go func() {
 		for {
-			host := daprinternal_pb.Host{
+			host := placementv1pb.Host{
 				Name:     hostAddress,
 				Load:     1,
 				Entities: a.config.HostedActorTypes,
@@ -535,24 +540,32 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
-func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) daprinternal_pb.PlacementService_ReportDaprStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.PlacementService_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
+		opts, err := dapr_credentials.GetClientOptions(a.certChain, security.TLSServerName)
+		if err != nil {
+			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
+			return nil
+		}
+		opts = append(opts, grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler))
+
 		conn, err := grpc.Dial(
 			placementAddress,
-			grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
-			grpc.WithInsecure())
+			opts...,
+		)
 		if err != nil {
 			log.Warnf("error connecting to placement service: %v", err)
 			diag.DefaultMonitoring.ActorStatusReportFailed("dial", "placement")
 			time.Sleep(retryInterval)
+			conn.Close()
 			continue
 		}
 
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
-		client := daprinternal_pb.NewPlacementServiceClient(conn)
+		client := placementv1pb.NewPlacementServiceClient(conn)
 		stream, err := client.ReportDaprStatus(ctx)
 		if err != nil {
 			log.Warnf("error establishing client to placement service: %v", err)
@@ -565,7 +578,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 	}
 }
 
-func (a *actorsRuntime) onPlacementOrder(in *daprinternal_pb.PlacementOrder) {
+func (a *actorsRuntime) onPlacementOrder(in *placementv1pb.PlacementOrder) {
 	log.Infof("placement order received: %s", in.Operation)
 	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
 
@@ -606,7 +619,7 @@ func (a *actorsRuntime) unblockPlacements() {
 	}
 }
 
-func (a *actorsRuntime) updatePlacements(in *daprinternal_pb.PlacementTables) {
+func (a *actorsRuntime) updatePlacements(in *placementv1pb.PlacementTables) {
 	if in.Version != a.placementTables.Version {
 		for k, v := range in.Entries {
 			loadMap := map[string]*placement.Host{}
