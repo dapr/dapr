@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 )
@@ -23,7 +22,7 @@ func StartClientSpanTracing(r *fasthttp.Request, spec config.TracingSpec) (conte
 	var ctx = context.Background()
 	var span *trace.Span
 
-	ctx, span = startTracingInternal(ctx, corID, uri, spec.SamplingRate, trace.SpanKindClient)
+	ctx, span = startTracingSpan(ctx, corID, uri, spec.SamplingRate, trace.SpanKindClient)
 	addAnnotationsToSpan(r, span)
 
 	return ctx, span
@@ -34,7 +33,7 @@ func StartServerSpanTracing(spec config.TracingSpec, next fasthttp.RequestHandle
 	return func(ctx *fasthttp.RequestCtx) {
 		corID := string(ctx.Request.Header.Peek(CorrelationID))
 		uri := string(ctx.Path())
-		_, span := startTracingInternal(ctx, corID, uri, spec.SamplingRate, trace.SpanKindServer)
+		_, span := startTracingSpan(ctx, corID, uri, spec.SamplingRate, trace.SpanKindServer)
 
 		addAnnotationsToSpan(&ctx.Request, span)
 		defer span.End()
@@ -45,27 +44,6 @@ func StartServerSpanTracing(spec config.TracingSpec, next fasthttp.RequestHandle
 		next(ctx)
 		UpdateSpanStatus(span, &ctx.Response)
 	}
-}
-
-func startTracingInternal(ctx context.Context, corID, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {
-	var span *trace.Span
-	name := createSpanName(uri)
-
-	rate := diag_utils.GetTraceSamplingRate(samplingRate)
-
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	kindOption := trace.WithSpanKind(spanKind)
-
-	if corID != "" {
-		sc := DeserializeSpanContext(corID)
-		// Note that if parent span context is provided which is sc in this case then ctx will be ignored
-		ctx, span = trace.StartSpanWithRemoteParent(ctx, name, sc, kindOption, probSamplerOption)
-	} else {
-		ctx, span = trace.StartSpan(ctx, name, kindOption, probSamplerOption)
-	}
-
-	return ctx, span
 }
 
 func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {

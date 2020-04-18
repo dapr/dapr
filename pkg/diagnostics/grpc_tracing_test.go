@@ -14,11 +14,11 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-func TestTracingSpanFromGRPCContext(t *testing.T) {
+func TestStartTracingClientSpanFromGRPCContext(t *testing.T) {
 	req := &channel.InvokeRequest{}
 	spec := config.TracingSpec{SamplingRate: "0.5"}
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.MD{"dapr-headerKey": {"v3", "v4"}})
 
-	TracingSpanFromGRPCContext(ctx, req, "invoke", spec)
+	StartTracingClientSpanFromGRPCContext(ctx, req, "invoke", spec)
 }

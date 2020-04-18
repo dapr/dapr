@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
@@ -107,6 +108,27 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 	}
 
 	return daprMetadata
+}
+
+func startTracingSpan(ctx context.Context, corID, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {
+	var span *trace.Span
+	name := createSpanName(uri)
+
+	rate := diag_utils.GetTraceSamplingRate(samplingRate)
+
+	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
+	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
+	kindOption := trace.WithSpanKind(spanKind)
+
+	if corID != "" {
+		sc := DeserializeSpanContext(corID)
+		// Note that if parent span context is provided which is sc in this case then ctx will be ignored
+		ctx, span = trace.StartSpanWithRemoteParent(ctx, name, sc, kindOption, probSamplerOption)
+	} else {
+		ctx, span = trace.StartSpan(ctx, name, kindOption, probSamplerOption)
+	}
+
+	return ctx, span
 }
 
 // UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
