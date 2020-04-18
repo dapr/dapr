@@ -97,7 +97,7 @@ func (h *Channel) InvokeMethod(ctx context.Context, invokeRequest *channel.Invok
 	}
 
 	// TODO check here for context propagation logic
-	ctx, span := diag.StartClientSpanTracing(req, h.tracingSpec)
+	ctx, span := diag.StartClientSpanTracing(ctx, req, h.tracingSpec)
 	defer span.End()
 
 	req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(span.SpanContext()))

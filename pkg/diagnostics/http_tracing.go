@@ -16,10 +16,9 @@ import (
 )
 
 // StartClientSpanTracing creates a tracing span from a http request
-func StartClientSpanTracing(r *fasthttp.Request, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartClientSpanTracing(ctx context.Context, r *fasthttp.Request, spec config.TracingSpec) (context.Context, *trace.Span) {
 	corID := string(r.Header.Peek(CorrelationID))
 	uri := string(r.Header.RequestURI())
-	var ctx = context.Background()
 	var span *trace.Span
 
 	ctx, span = startTracingSpan(ctx, corID, uri, spec.SamplingRate, trace.SpanKindClient)

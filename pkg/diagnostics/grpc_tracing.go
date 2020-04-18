@@ -19,7 +19,7 @@ import (
 // StartTracingGRPCMiddlewareStream plugs tracer into gRPC stream
 func StartTracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		corID := getCorrelationId(nil)
+		corID := getCorrelationID(nil)
 		ctx, span := startTracingSpan(stream.Context(), corID, info.FullMethod, spec.SamplingRate, trace.SpanKindServer)
 
 		addAnnotationsToSpanFromGRPCMetadata(ctx, span)
@@ -37,7 +37,7 @@ func StartTracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServer
 // StartTracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
 func StartTracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		corID := getCorrelationId(req)
+		corID := getCorrelationID(req)
 		ctx, span := startTracingSpan(ctx, corID, info.FullMethod, spec.SamplingRate, trace.SpanKindServer)
 
 		addAnnotationsToSpanFromGRPCMetadata(ctx, span)
@@ -66,7 +66,7 @@ func StartTracingClientSpanFromGRPCContext(ctx context.Context, req interface{},
 	return ctx, span
 }
 
-func getCorrelationId(req interface{}) string {
+func getCorrelationID(req interface{}) string {
 	headers := extractHeaders(req)
 	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
 	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)

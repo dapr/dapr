@@ -20,13 +20,10 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type key string
-
 const (
 	// CorrelationID is the header key name of correlation id for trace
-	CorrelationID        = "X-Correlation-ID"
-	correlationKey   key = CorrelationID
-	daprHeaderPrefix     = "dapr-"
+	CorrelationID    = "X-Correlation-ID"
+	daprHeaderPrefix = "dapr-"
 )
 
 // SerializeSpanContext serializes a span context into a simple string

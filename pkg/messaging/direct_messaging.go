@@ -136,7 +136,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, req *DirectMessageRe
 		Method:   req.Method,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
+	ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
 	defer cancel()
 
 	client := daprinternal_pb.NewDaprInternalClient(conn)

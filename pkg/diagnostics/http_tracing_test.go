@@ -6,6 +6,7 @@
 package diagnostics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -17,7 +18,7 @@ func TestStartClientSpanTracing(t *testing.T) {
 	req := getTestHTTPRequest()
 	spec := config.TracingSpec{SamplingRate: "0.5"}
 
-	StartClientSpanTracing(req, spec)
+	StartClientSpanTracing(context.Background(), req, spec)
 }
 
 func getTestHTTPRequest() *fasthttp.Request {

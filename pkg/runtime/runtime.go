@@ -951,7 +951,12 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	// TODO Propagate Context
 	ctx := context.Background()
 	resp, err := a.appChannel.InvokeMethod(ctx, &req)
-	statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
+	statusCode := 0
+
+	if resp != nil {
+		statusCode = http.GetStatusCodeFromMetadata(resp.Metadata)
+	}
+
 	if err != nil || statusCode != 200 {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s. status code returned: %v", string(resp.Data), statusCode)
 		log.Debug(err)
