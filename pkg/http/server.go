@@ -52,7 +52,9 @@ func (s *server) StartNonBlocking() {
 				s.useComponents(
 					s.useRouter())))
 
-	handler = s.useMetrics(handler)
+	if s.config.EnableMetrics {
+		handler = s.useMetrics(handler)
+	}
 	handler = s.useTracing(handler)
 
 	go func() {
