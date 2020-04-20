@@ -218,7 +218,7 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 	if !ok {
 		corID = ""
 	}
-	ctx, span := diag.StartTracingClientSpanWithCorID(ctx, corID, "GetState", a.tracingSpec)
+	_, span := diag.StartTracingClientSpanWithCorID(ctx, corID, "GetState", a.tracingSpec)
 	defer span.End()
 
 	getResponse, err := a.stateStores[storeName].Get(&req)

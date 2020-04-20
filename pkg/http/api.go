@@ -320,7 +320,7 @@ func (a *api) onGetState(c *routing.Context) error {
 		return nil
 	}
 
-	ctx, span := diag.StartClientSpanTracing(ctx, &c.Request, a.tracingSpec)
+	_, span := diag.StartClientSpanTracing(ctx, &c.Request, a.tracingSpec)
 	defer span.End()
 
 	key := c.Param(stateKeyParam)
