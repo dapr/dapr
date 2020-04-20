@@ -115,7 +115,7 @@ func newServiceMetrics() *serviceMetrics {
 			stats.UnitDimensionless),
 
 		// TODO: use the correct context for each request
-		ctx: context.Background(),
+		ctx:     context.Background(),
 		enabled: false,
 	}
 }
