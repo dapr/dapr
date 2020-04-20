@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/kubernetes"
 	v1 "k8s.io/api/core/v1"
@@ -36,9 +37,9 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 
 	secret := &v1.Secret{
 		Data: map[string][]byte{
-			config.RootCertFilename:   rootCertPem,
-			config.IssuerCertFilename: issuerCertPem,
-			config.IssuerKeyFilename:  issuerCertKey,
+			credentials.RootCertFilename:   rootCertPem,
+			credentials.IssuerCertFilename: issuerCertPem,
+			credentials.IssuerKeyFilename:  issuerCertKey,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KubeScrtName,

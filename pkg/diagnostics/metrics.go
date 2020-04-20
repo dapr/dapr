@@ -1,36 +1,50 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package diagnostics
 
 import (
-	"github.com/dapr/components-contrib/middleware/http/nethttpadaptor"
-	"github.com/dapr/dapr/pkg/logger"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	http_metrics "github.com/improbable-eng/go-httpwares/metrics"
-	http_prometheus "github.com/improbable-eng/go-httpwares/metrics/prometheus"
-	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
-	grpc_go "google.golang.org/grpc"
+	"time"
+
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 )
 
-var log = logger.NewLogger("diagnostics.metrics")
+var (
+	// appIDKey is a tag key for App ID
+	appIDKey = tag.MustNewKey("app_id")
+)
 
-// MetricsGRPCMiddlewareStream gets a metrics enabled GRPC stream middlware
-func MetricsGRPCMiddlewareStream() grpc_go.StreamServerInterceptor {
-	return grpc_prometheus.StreamServerInterceptor
-}
+var (
+	// DefaultReportingPeriod is the default view reporting period
+	DefaultReportingPeriod = 1 * time.Minute
 
-// MetricsGRPCMiddlewareUnary gets a metrics enabled GRPC unary middlware
-func MetricsGRPCMiddlewareUnary() grpc_go.UnaryServerInterceptor {
-	return grpc_prometheus.UnaryServerInterceptor
-}
+	// DefaultMonitoring holds service monitoring metrics definitions
+	DefaultMonitoring = newServiceMetrics()
+	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middleswares
+	DefaultGRPCMonitoring = newGRPCMetrics()
+	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middleswares
+	DefaultHTTPMonitoring = newHTTPMetrics()
+)
 
-// MetricsHTTPMiddleware gets a metrics enabled HTTP middleware
-func MetricsHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	// TODO: support custom labels
-	mw := http_metrics.Middleware(http_prometheus.ServerMetrics(
-		http_prometheus.WithName("daprd"),
-		http_prometheus.WithHostLabel(),
-		http_prometheus.WithLatency(),
-		http_prometheus.WithSizes(),
-		http_prometheus.WithPathLabel()))
-	return fasthttpadaptor.NewFastHTTPHandler(mw(nethttpadaptor.NewNetHTTPHandlerFunc(log, next)))
+// InitMetrics initializes metrics
+func InitMetrics(appID string) error {
+	if err := DefaultMonitoring.Init(appID); err != nil {
+		return err
+	}
+
+	if err := DefaultGRPCMonitoring.Init(appID); err != nil {
+		return err
+	}
+
+	if err := DefaultHTTPMonitoring.Init(appID); err != nil {
+		return err
+	}
+
+	// Set reporting period of views
+	view.SetReportingPeriod(DefaultReportingPeriod)
+
+	return nil
 }

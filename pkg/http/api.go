@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -18,6 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
@@ -27,6 +29,7 @@ import (
 // API returns a list of HTTP endpoints for Dapr
 type API interface {
 	APIEndpoints() []Endpoint
+	MarkStatusAsReady()
 }
 
 type api struct {
@@ -37,14 +40,17 @@ type api struct {
 	secretStores          map[string]secretstores.SecretStore
 	json                  jsoniter.API
 	actor                 actors.Actors
-	pubSub                pubsub.PubSub
+	publishFn             func(req *pubsub.PublishRequest) error
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 	id                    string
+	extendedMetadata      sync.Map
+	readyStatus           bool
 }
 
 type metadata struct {
-	ID                string                     `json:"id"`
-	ActiveActorsCount []actors.ActiveActorsCount `json:"actors"`
+	ID                string                      `json:"id"`
+	ActiveActorsCount []actors.ActiveActorsCount  `json:"actors"`
+	Extended          map[interface{}]interface{} `json:"extended"`
 }
 
 const (
@@ -57,7 +63,6 @@ const (
 	stateKeyParam        = "key"
 	secretStoreNameParam = "secretStoreName"
 	secretNameParam      = "key"
-	topicParam           = "topic"
 	nameParam            = "name"
 	consistencyParam     = "consistency"
 	retryIntervalParam   = "retryInterval"
@@ -68,7 +73,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, pubSub pubsub.PubSub, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -76,7 +81,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 		secretStores:          secretStores,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
-		pubSub:                pubSub,
+		publishFn:             publishFn,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		id:                    appID,
 	}
@@ -87,6 +92,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
 
 	return api
 }
@@ -94,6 +100,11 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 // APIEndpoints returns the list of registered endpoints
 func (a *api) APIEndpoints() []Endpoint {
 	return a.endpoints
+}
+
+// MarkStatusAsReady marks the ready status of dapr
+func (a *api) MarkStatusAsReady() {
+	a.readyStatus = true
 }
 
 func (a *api) constructStateEndpoints() []Endpoint {
@@ -134,7 +145,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{http.Post, http.Put},
-			Route:   "publish/<topic>",
+			Route:   "publish/*",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
 		},
@@ -235,6 +246,23 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Route:   "metadata",
 			Version: apiVersionV1,
 			Handler: a.onGetMetadata,
+		},
+		{
+			Methods: []string{http.Put},
+			Route:   "metadata/<key>",
+			Version: apiVersionV1,
+			Handler: a.onPutMetadata,
+		},
+	}
+}
+
+func (a *api) constructHealthzEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{http.Get},
+			Route:   "healthz",
+			Version: apiVersionV1,
+			Handler: a.onGetHealthz,
 		},
 	}
 }
@@ -480,7 +508,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	path := string(c.Path())
 	method := path[strings.Index(path, "method/")+7:]
 	body := c.PostBody()
-	verb := string(c.Method())
+	verb := strings.ToUpper(string(c.Method()))
 	queryString := string(c.QueryArgs().QueryString())
 
 	req := messaging.DirectMessageRequest{
@@ -872,9 +900,18 @@ func (a *api) onDeleteActorState(c *routing.Context) error {
 }
 
 func (a *api) onGetMetadata(c *routing.Context) error {
+	temp := make(map[interface{}]interface{})
+
+	// Copy synchronously so it can be serialized to JSON.
+	a.extendedMetadata.Range(func(key, value interface{}) bool {
+		temp[key] = value
+		return true
+	})
+
 	mtd := metadata{
 		ID:                a.id,
 		ActiveActorsCount: a.actor.GetActiveActorsCount(),
+		Extended:          temp,
 	}
 
 	mtdBytes, err := a.json.Marshal(mtd)
@@ -888,17 +925,30 @@ func (a *api) onGetMetadata(c *routing.Context) error {
 	return nil
 }
 
+func (a *api) onPutMetadata(c *routing.Context) error {
+	key := c.Param("key")
+	body := c.PostBody()
+	a.extendedMetadata.Store(key, string(body))
+	respondEmpty(c.RequestCtx, 200)
+	return nil
+}
+
 func (a *api) onPublish(c *routing.Context) error {
-	if a.pubSub == nil {
+	if a.publishFn == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
 		return nil
 	}
 
-	topic := c.Param(topicParam)
+	path := string(c.Path())
+	topic := path[strings.Index(path, "publish/")+8:]
+
 	body := c.PostBody()
 
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
+	corID := c.Request.Header.Peek(tracing.CorrelationID)
+
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, string(corID), body)
+
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER", err.Error())
@@ -910,7 +960,7 @@ func (a *api) onPublish(c *routing.Context) error {
 		Topic: topic,
 		Data:  b,
 	}
-	err = a.pubSub.Publish(&req)
+	err = a.publishFn(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
@@ -932,4 +982,15 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	}
 
 	return 200
+}
+
+func (a *api) onGetHealthz(c *routing.Context) error {
+	if !a.readyStatus {
+		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", "dapr is not ready")
+		respondWithError(c.RequestCtx, 500, msg)
+	} else {
+		respondEmpty(c.RequestCtx, 200)
+	}
+
+	return nil
 }

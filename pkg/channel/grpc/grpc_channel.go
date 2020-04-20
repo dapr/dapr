@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
@@ -23,13 +25,15 @@ type Channel struct {
 	client      *grpc.ClientConn
 	baseAddress string
 	ch          chan int
+	tracingSpec config.TracingSpec
 }
 
 // CreateLocalChannel creates a gRPC connection with user code
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
 	c := &Channel{
 		client:      conn,
 		baseAddress: fmt.Sprintf("127.0.0.1:%v", port),
+		tracingSpec: spec,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)
@@ -41,6 +45,11 @@ const (
 	// QueryString is the query string passed by the request
 	QueryString = "http.query_string"
 )
+
+// GetBaseAddress returns the application base address
+func (g *Channel) GetBaseAddress() string {
+	return g.baseAddress
+}
 
 // InvokeMethod invokes user code via gRPC
 func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
@@ -61,7 +70,18 @@ func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeRespo
 		g.ch <- 1
 	}
 	c := daprclient_pb.NewDaprClientClient(g.client)
+
+	var span tracing.TracerSpan
+	var spanc tracing.TracerSpan
+
+	span, spanc = tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
+	defer span.Span.End()
+	defer spanc.Span.End()
+
 	resp, err := c.OnInvoke(ctx, &msg)
+
+	tracing.UpdateSpanPairStatusesFromError(span, spanc, err, req.Method)
+
 	if g.ch != nil {
 		<-g.ch
 	}

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )
@@ -51,9 +52,13 @@ func (t *testContentTypeHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 }
 
 type testHandler struct {
+	serverURL string
+
+	t *testing.T
 }
 
-func (t *testHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (th *testHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	assert.Equal(th.t, th.serverURL, r.Host)
 	io.WriteString(w, r.URL.RawQuery)
 }
 
@@ -69,14 +74,42 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestInvokeMethod(t *testing.T) {
-	server := httptest.NewServer(&testHandler{})
-	c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
-	request := &channel.InvokeRequest{
-		Metadata: map[string]string{QueryString: "param1=val1&param2=val2"},
-	}
-	response, err := c.InvokeMethod(request)
-	assert.NoError(t, err)
-	assert.Equal(t, "param1=val1&param2=val2", string(response.Data))
+	th := &testHandler{t: t, serverURL: ""}
+	server := httptest.NewServer(th)
+	t.Run("query string", func(t *testing.T) {
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "0",
+			},
+		}
+		th.serverURL = server.URL[len("http://"):]
+		request := &channel.InvokeRequest{
+			Metadata: map[string]string{QueryString: "param1=val1&param2=val2"},
+		}
+		response, err := c.InvokeMethod(request)
+		assert.NoError(t, err)
+		assert.Equal(t, "param1=val1&param2=val2", string(response.Data))
+	})
+
+	t.Run("tracing is enabled", func(t *testing.T) {
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "1",
+			},
+		}
+		th.serverURL = server.URL[len("http://"):]
+		request := &channel.InvokeRequest{
+			Method: "method",
+		}
+		response, err := c.InvokeMethod(request)
+		assert.NoError(t, err)
+		assert.Equal(t, "", string(response.Data))
+	})
+
 	server.Close()
 }
 

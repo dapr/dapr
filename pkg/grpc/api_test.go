@@ -39,10 +39,6 @@ func (m *mockGRPCAPI) CallActor(ctx context.Context, in *daprinternal_pb.CallAct
 	return &daprinternal_pb.InvokeResponse{}, nil
 }
 
-func (m *mockGRPCAPI) UpdateComponent(ctx context.Context, in *daprinternal_pb.Component) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
-}
-
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
@@ -82,7 +78,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	assert.NoError(t, err)
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "1"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -129,7 +125,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	assert.NoError(t, err)
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "1"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,

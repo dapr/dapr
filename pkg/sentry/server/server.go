@@ -8,11 +8,12 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/logger"
-	pb "github.com/dapr/dapr/pkg/proto/sentry"
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
+	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/golang/protobuf/ptypes"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -56,7 +57,7 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 
 	tlsOpt := s.tlsServerOption(trustBundler)
 	s.srv = grpc.NewServer(tlsOpt)
-	pb.RegisterCAServer(s.srv, s)
+	sentryv1pb.RegisterCAServer(s.srv, s)
 
 	if err := s.srv.Serve(lis); err != nil {
 		return fmt.Errorf("grpc serve error: %s", err)
@@ -70,11 +71,12 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 	config := &tls.Config{
 		ClientCAs: cp,
 		// Require cert verification
-		ClientAuth: tls.VerifyClientCertIfGiven,
+		ClientAuth: tls.RequireAndVerifyClientCert,
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 			if s.certificate == nil || needsRefresh(s.certificate, serverCertExpiryBuffer) {
 				cert, err := s.getServerCertificate()
 				if err != nil {
+					monitoring.ServerCertIssueFailed("server_cert")
 					log.Error(err)
 					return nil, fmt.Errorf("failed to get TLS server certificate: %s", err)
 				}
@@ -109,18 +111,22 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &cert, nil
 }
 
 // SignCertificate handles CSR requests originating from Dapr sidecars.
 // The method receives a request with an identity and initial cert and returns
 // A signed certificate including the trust chain to the caller along with an expiry date.
-func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateRequest) (*pb.SignCertificateResponse, error) {
+func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
+	monitoring.CertSignRequestRecieved()
+
 	csrPem := req.GetCertificateSigningRequest()
 	csr, err := certs.ParsePemCSR(csrPem)
 	if err != nil {
 		err = fmt.Errorf("cannot parse certificate signing request pem: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed("cert_parse")
 		return nil, err
 	}
 
@@ -128,6 +134,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error validating csr: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed("cert_validation")
 		return nil, err
 	}
 
@@ -135,6 +142,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error validating requester identity: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed("req_id_validation")
 		return nil, err
 	}
 
@@ -142,6 +150,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if err != nil {
 		err = fmt.Errorf("error signing csr: %s", err)
 		log.Error(err)
+		monitoring.CertSignFailed("cert_sign")
 		return nil, err
 	}
 
@@ -155,6 +164,7 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 	if len(certPem) == 0 {
 		err = fmt.Errorf("insufficient data in certificate signing request, no certs signed")
 		log.Error(err)
+		monitoring.CertSignFailed("insufficient_data")
 		return nil, err
 	}
 
@@ -163,11 +173,14 @@ func (s *server) SignCertificate(ctx context.Context, req *pb.SignCertificateReq
 		return nil, fmt.Errorf("could not validate certificate validity: %s", err)
 	}
 
-	resp := &pb.SignCertificateResponse{
+	resp := &sentryv1pb.SignCertificateResponse{
 		WorkloadCertificate:    certPem,
 		TrustChainCertificates: [][]byte{issuerCert, rootCert},
 		ValidUntil:             expiry,
 	}
+
+	monitoring.CertSignSucceed()
+
 	return resp, nil
 }
 

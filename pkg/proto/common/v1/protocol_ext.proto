@@ -1,0 +1,43 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.pkg.proto.common.v1;
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/common/v1";
+
+// HTTPExtensions includes HTTP verb and querystring
+// when Dapr runtime delivers HTTP content.
+// 
+// For example, when callers calls http invoke api
+// POST http://localhost:3500/v1.0/invoke/<app_id>/method/<method>?query1=value1&query2=value2
+// 
+// Dapr runtime will parse POST as a verb and extract querystring to quersytring map.
+message HTTPExtensions {
+  // Type of HTTP 1.1 Verbs
+  // RFC 7231: https://tools.ietf.org/html/rfc7231#page-24
+  enum HTTPVerb {
+    GET = 0;
+    HEAD = 1;
+    POST = 2;
+    PUT = 3;
+    DELETE = 4;
+    CONNECT = 5;
+    OPTIONS = 6;
+    TRACE = 7;
+  }
+
+  // verb is HTTP verb.
+  //
+  // This is required.
+  HTTPVerb verb = 1;
+
+  // querystring includes HTTP querystring.
+  map<string, string> querystring = 2;
+}

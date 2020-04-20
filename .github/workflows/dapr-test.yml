@@ -15,7 +15,7 @@ jobs:
     name: end-to-end tests
     runs-on: ubuntu-latest
     env:
-      GOVER: 1.13.7
+      GOVER: 1.14
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org
@@ -44,12 +44,12 @@ jobs:
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v2-beta
         with:
           go-version: ${{ env.GOVER }}
       - name: Check out code into the Go module directory
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}

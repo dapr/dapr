@@ -18,9 +18,14 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/grpc"
@@ -71,6 +76,8 @@ type actorsRuntime struct {
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
 	evaluationChan      chan bool
+	appHealthy          bool
+	certChain           *dapr_credentials.CertChain
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -88,7 +95,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config, certChain *dapr_credentials.CertChain) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -105,6 +112,8 @@ func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnec
 		evaluationLock:      &sync.RWMutex{},
 		evaluationBusy:      false,
 		evaluationChan:      make(chan bool),
+		appHealthy:          true,
+		certChain:           certChain,
 	}
 }
 
@@ -127,7 +136,20 @@ func (a *actorsRuntime) Init() error {
 	log.Infof("actor runtime started. actor idle timeout: %s. actor scan interval: %s",
 		a.config.ActorIdleTimeout.String(), a.config.ActorDeactivationScanInterval.String())
 
+	go a.startAppHealthCheck()
 	return nil
+}
+
+func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
+	if len(a.config.HostedActorTypes) == 0 {
+		return
+	}
+
+	healthAddress := fmt.Sprintf("%s/healthz", a.appChannel.GetBaseAddress())
+	ch := health.StartEndpointHealthCheck(healthAddress, opts...)
+	for {
+		a.appHealthy = <-ch
+	}
 }
 
 func (a *actorsRuntime) constructCompositeKey(keys ...string) string {
@@ -146,15 +168,18 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 
 	resp, err := a.appChannel.InvokeMethod(&req)
 	if err != nil {
+		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
 	}
 
-	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+	if status := a.getStatusCodeFromMetadata(resp.Metadata); status != 200 {
+		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
 		return fmt.Errorf("error from actor service: %s", string(resp.Data))
 	}
 
 	actorKey := a.constructCompositeKey(actorType, actorID)
 	a.actorsTable.Delete(actorKey)
+	diag.DefaultMonitoring.ActorDeactivated(actorType)
 	return nil
 }
 
@@ -347,11 +372,14 @@ func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
 	}
 
 	resp, err := a.appChannel.InvokeMethod(&req)
-	if err != nil || a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
+	if status := a.getStatusCodeFromMetadata(resp.Metadata); err != nil || status != 200 {
+		diag.DefaultMonitoring.ActorActivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
 		key := a.constructCompositeKey(actorType, actorID)
 		a.actorsTable.Delete(key)
 		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
 	}
+
+	diag.DefaultMonitoring.ActorActivated(actorType)
 
 	return nil
 }
@@ -461,14 +489,13 @@ func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) s
 }
 
 func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
-	log.Infof("actors: starting connection attempt to placement service at %s", placementAddress)
+	log.Infof("starting connection attempt to placement service at %s", placementAddress)
 	stream := a.getPlacementClientPersistently(placementAddress, hostAddress)
-
-	log.Infof("actors: established connection to placement service at %s", placementAddress)
+	log.Infof("established connection to placement service at %s", placementAddress)
 
 	go func() {
 		for {
-			host := daprinternal_pb.Host{
+			host := placementv1pb.Host{
 				Name:     hostAddress,
 				Load:     1,
 				Entities: a.config.HostedActorTypes,
@@ -477,8 +504,18 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 			}
 
 			if stream != nil {
+				if !a.appHealthy {
+					// app is unresponsive, close the stream and disconnect from the placement service
+					err := stream.CloseSend()
+					if err != nil {
+						log.Errorf("error closing stream to placement service: %s", err)
+					}
+					continue
+				}
+
 				if err := stream.Send(&host); err != nil {
-					log.Debug("actors: connection failure to placement service: retrying")
+					diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
+					log.Warnf("failed to report status to placement service : %v", err)
 					stream = a.getPlacementClientPersistently(placementAddress, hostAddress)
 				}
 			}
@@ -490,8 +527,11 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
-				log.Debug("actors: connection failure to placement service: retrying")
+				diag.DefaultMonitoring.ActorStatusReportFailed("recv", "status")
+				log.Warnf("failed to receive the response of status report from placement service: %v", err)
 				stream = a.getPlacementClientPersistently(placementAddress, hostAddress)
+			} else {
+				diag.DefaultMonitoring.ActorStatusReported("recv")
 			}
 			if resp != nil {
 				a.onPlacementOrder(resp)
@@ -500,23 +540,36 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
-func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) daprinternal_pb.PlacementService_ReportDaprStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.PlacementService_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
-		conn, err := grpc.Dial(placementAddress, grpc.WithInsecure())
+		opts, err := dapr_credentials.GetClientOptions(a.certChain, security.TLSServerName)
 		if err != nil {
-			log.Debugf("error connecting to placement service: %s", err)
+			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
+			return nil
+		}
+		opts = append(opts, grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler))
+
+		conn, err := grpc.Dial(
+			placementAddress,
+			opts...,
+		)
+		if err != nil {
+			log.Warnf("error connecting to placement service: %v", err)
+			diag.DefaultMonitoring.ActorStatusReportFailed("dial", "placement")
 			time.Sleep(retryInterval)
+			conn.Close()
 			continue
 		}
 
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
-		client := daprinternal_pb.NewPlacementServiceClient(conn)
+		client := placementv1pb.NewPlacementServiceClient(conn)
 		stream, err := client.ReportDaprStatus(ctx)
 		if err != nil {
-			log.Debugf("error establishing client to placement service: %s", err)
+			log.Warnf("error establishing client to placement service: %v", err)
+			diag.DefaultMonitoring.ActorStatusReportFailed("establish", "status")
 			time.Sleep(retryInterval)
 			conn.Close()
 			continue
@@ -525,8 +578,9 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 	}
 }
 
-func (a *actorsRuntime) onPlacementOrder(in *daprinternal_pb.PlacementOrder) {
-	log.Infof("actors: placement order received: %s", in.Operation)
+func (a *actorsRuntime) onPlacementOrder(in *placementv1pb.PlacementOrder) {
+	log.Infof("placement order received: %s", in.Operation)
+	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
 
 	// lock all incoming calls when an updated table arrives
 	a.operationUpdateLock.Lock()
@@ -565,7 +619,7 @@ func (a *actorsRuntime) unblockPlacements() {
 	}
 }
 
-func (a *actorsRuntime) updatePlacements(in *daprinternal_pb.PlacementTables) {
+func (a *actorsRuntime) updatePlacements(in *placementv1pb.PlacementTables) {
 	if in.Version != a.placementTables.Version {
 		for k, v := range in.Entries {
 			loadMap := map[string]*placement.Host{}
@@ -628,6 +682,8 @@ func (a *actorsRuntime) drainRebalancedActors() {
 
 				// don't allow state changes
 				a.actorsTable.Delete(key)
+
+				diag.DefaultMonitoring.ActorRebalanced(actorType)
 
 				for {
 					// wait until actor is not busy, then deactivate

@@ -8,6 +8,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/operator/monitoring"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,15 +16,17 @@ import (
 )
 
 const (
-	daprEnabledAnnotationKey   = "dapr.io/enabled"
-	appIDAnnotationKey         = "dapr.io/id"
-	daprMetricsPortKey         = "dapr.io/metrics-port"
-	daprSidecarHTTPPortName    = "dapr-http"
-	daprSidecarGRPCPortName    = "dapr-grpc"
-	daprSidecarMetricsPortName = "dapr-metrics"
-	daprSidecarHTTPPort        = 3500
-	daprSidecarGRPCPort        = 50001
-	defaultMetricsPort         = 9090
+	daprEnabledAnnotationKey        = "dapr.io/enabled"
+	appIDAnnotationKey              = "dapr.io/id"
+	daprMetricsPortKey              = "dapr.io/metrics-port"
+	daprSidecarHTTPPortName         = "dapr-http"
+	daprSidecarAPIGRPCPortName      = "dapr-grpc"
+	daprSidecarInternalGRPCPortName = "dapr-internal"
+	daprSidecarMetricsPortName      = "dapr-metrics"
+	daprSidecarHTTPPort             = 3500
+	daprSidecarAPIGRPCPort          = 50001
+	daprSidecarInternalGRPCPort     = 50002
+	defaultMetricsPort              = 9090
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -76,9 +79,14 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(daprSidecarGRPCPort),
-					TargetPort: intstr.FromInt(daprSidecarGRPCPort),
-					Name:       daprSidecarGRPCPortName,
+					Port:       int32(daprSidecarAPIGRPCPort),
+					TargetPort: intstr.FromInt(daprSidecarAPIGRPCPort),
+					Name:       daprSidecarAPIGRPCPortName,
+				}, {
+					Protocol:   corev1.ProtocolTCP,
+					Port:       int32(daprSidecarInternalGRPCPort),
+					TargetPort: intstr.FromInt(daprSidecarInternalGRPCPort),
+					Name:       daprSidecarInternalGRPCPortName,
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
@@ -169,6 +177,8 @@ func (h *DaprHandler) ObjectCreated(obj interface{}) {
 		if err != nil {
 			log.Errorf("failed creating service for deployment %s: %s", deployment.GetName(), err)
 		}
+
+		monitoring.RecordServiceCreatedCount(id)
 	}
 }
 
@@ -194,5 +204,7 @@ func (h *DaprHandler) ObjectDeleted(obj interface{}) {
 		if err != nil {
 			log.Errorf("failed deleting service for deployment %s: %s", deployment.GetName(), err)
 		}
+
+		monitoring.RecordServiceDeletedCount(id)
 	}
 }

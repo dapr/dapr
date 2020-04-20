@@ -105,7 +105,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "1"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -256,7 +256,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "1"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -612,8 +612,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
 
 	expectedBody := map[string]interface{}{
-		"id":     "xyz",
-		"actors": []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
+		"id":       "xyz",
+		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
+		"extended": make(map[string]string),
 	}
 	expectedBodyBytes, _ := json.Marshal(expectedBody)
 
@@ -644,7 +645,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "1"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -955,7 +956,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "1.0"}
 	pipe := http_middleware.Pipeline{}
 
 	meta := exporters.Metadata{
@@ -1037,7 +1038,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	buffer := ""
-	spec := config.TracingSpec{Enabled: true}
+	spec := config.TracingSpec{SamplingRate: "1.0"}
 
 	pipeline := buildHTTPPineline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
@@ -1086,6 +1087,74 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+}
+
+func TestSinglePipelineWithNoTracing(t *testing.T) {
+	fakeHeader := "Host&__header_equals__&localhost&__header_delim__&Content-Length&__header_equals__&8&__header_delim__&Content-Type&__header_equals__&application/json&__header_delim__&User-Agent&__header_equals__&Go-http-client/1.1&__header_delim__&Accept-Encoding&__header_equals__&gzip"
+	fakeDirectMessageResponse := &messaging.DirectMessageResponse{
+		Data: []byte("fakeDirectMessageResponse"),
+		Metadata: map[string]string{
+			"http.status_code": "200",
+			"headers":          fakeHeader,
+		},
+	}
+
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
+
+	fakeServer := newFakeHTTPServer()
+
+	buffer := ""
+	spec := config.TracingSpec{SamplingRate: "0"}
+
+	pipeline := buildHTTPPineline(config.PipelineSpec{
+		Handlers: []config.HandlerSpec{
+			{
+				Type: "middleware.http.uppercase",
+				Name: "middleware.http.uppercase",
+			},
+		},
+	})
+
+	meta := exporters.Metadata{
+		Buffer: &buffer,
+		Properties: map[string]string{
+			"Enabled": "true",
+		},
+	}
+	createExporters(meta)
+
+	testAPI := &api{
+		directMessaging: mockDirectMessaging,
+	}
+	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
+
+	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
+		buffer = ""
+		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging.On(
+			"Invoke",
+			&messaging.DirectMessageRequest{
+				Data:   []byte("FAKEDATA"),
+				Method: "fakeMethod",
+				Metadata: map[string]string{
+					"headers":        fakeHeader,
+					http.HTTPVerb:    "POST",
+					http.QueryString: "", // without query string
+				},
+				Target: "fakeDaprID",
+			}).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, "", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }
@@ -1467,4 +1536,32 @@ func (c fakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 }
 func (c fakeSecretStore) Init(metadata secretstores.Metadata) error {
 	return nil
+}
+
+func TestV1HealthzEndpoint(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	testAPI := &api{
+		actor: nil,
+		json:  jsoniter.ConfigFastest,
+	}
+
+	fakeServer.StartServer(testAPI.constructHealthzEndpoints())
+
+	t.Run("Healthz - 500 ERR_HEALTH_NOT_READY", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 500, resp.StatusCode, "dapr not ready should return 500")
+	})
+
+	t.Run("Healthz - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		testAPI.MarkStatusAsReady()
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	fakeServer.Shutdown()
 }

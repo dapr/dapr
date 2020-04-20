@@ -12,6 +12,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -39,14 +41,14 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 }
 
 // CreateLocalChannel creates a new gRPC AppChannel
-func (g *Manager) CreateLocalChannel(port, maxConcurrency int) (channel.AppChannel, error) {
+func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec) (channel.AppChannel, error) {
 	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port), "", true, false)
 	if err != nil {
 		return nil, fmt.Errorf("error establishing connection to app grpc on port %v: %s", port, err)
 	}
 
 	g.AppClient = conn
-	ch := grpc_channel.CreateLocalChannel(port, maxConcurrency, conn)
+	ch := grpc_channel.CreateLocalChannel(port, maxConcurrency, conn, spec)
 	return ch, nil
 }
 
@@ -64,7 +66,9 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
+		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
 	}
+
 	if !skipTLS && g.auth != nil {
 		signedCert := g.auth.GetCurrentSignedCert()
 		cert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)

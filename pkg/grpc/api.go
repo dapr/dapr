@@ -16,9 +16,8 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/components"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
@@ -27,7 +26,6 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -42,7 +40,6 @@ const (
 type API interface {
 	CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelope) (*daprinternal_pb.InvokeResponse, error)
 	CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelope) (*daprinternal_pb.InvokeResponse, error)
-	UpdateComponent(ctx context.Context, in *daprinternal_pb.Component) (*empty.Empty, error)
 	PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error)
 	InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error)
 	InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelope) (*empty.Empty, error)
@@ -55,24 +52,22 @@ type API interface {
 type api struct {
 	actor                 actors.Actors
 	directMessaging       messaging.DirectMessaging
-	componentsHandler     components.ComponentHandler
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
-	pubSub                pubsub.PubSub
+	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
+func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	return &api{
 		directMessaging:       directMessaging,
-		componentsHandler:     componentHandler,
 		actor:                 actor,
 		id:                    appID,
 		appChannel:            appChannel,
-		pubSub:                pubSub,
+		publishFn:             publishFn,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
 		sendToOutputBindingFn: sendToOutputBindingFn,
@@ -123,34 +118,8 @@ func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelo
 	}, nil
 }
 
-// UpdateComponent is fired by the Dapr control plane when a component state changes
-func (a *api) UpdateComponent(ctx context.Context, in *daprinternal_pb.Component) (*empty.Empty, error) {
-	c := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: in.Metadata.Name,
-		},
-		Auth: components_v1alpha1.Auth{
-			SecretStore: in.Auth.SecretStore,
-		},
-	}
-
-	for _, m := range in.Spec.Metadata {
-		c.Spec.Metadata = append(c.Spec.Metadata, components_v1alpha1.MetadataItem{
-			Name:  m.Name,
-			Value: m.Value,
-			SecretKeyRef: components_v1alpha1.SecretKeyRef{
-				Key:  m.SecretKeyRef.Key,
-				Name: m.SecretKeyRef.Name,
-			},
-		})
-	}
-
-	a.componentsHandler.OnComponentUpdated(c)
-	return &empty.Empty{}, nil
-}
-
 func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
-	if a.pubSub == nil {
+	if a.publishFn == nil {
 		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
 
@@ -161,7 +130,12 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 		body = in.Data.Value
 	}
 
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
+	corID, ok := ctx.Value(tracing.CorrelationID).(string)
+	if !ok {
+		corID = ""
+	}
+
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
@@ -171,7 +145,7 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 		Topic: topic,
 		Data:  b,
 	}
-	err = a.pubSub.Publish(&req)
+	err = a.publishFn(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
 	}
@@ -180,10 +154,13 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 
 func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error) {
 	req := messaging.DirectMessageRequest{
-		Data:     in.Data.Value,
 		Method:   in.Method,
 		Metadata: in.Metadata,
 		Target:   in.Id,
+	}
+
+	if in.Data != nil {
+		req.Data = in.Data.Value
 	}
 
 	resp, err := a.directMessaging.Invoke(&req)
@@ -259,6 +236,7 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 			Key:      a.getModifiedStateKey(s.Key),
 			Metadata: s.Metadata,
 			Value:    s.Value.Value,
+			ETag:     s.Etag,
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
@@ -343,7 +321,7 @@ func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*da
 		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
 	}
 
-	secretStoreName := in.Key
+	secretStoreName := in.StoreName
 
 	if a.secretStores[secretStoreName] == nil {
 		return nil, errors.New("ERR_SECRET_STORE_NOT_FOUND")

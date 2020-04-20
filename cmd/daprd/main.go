@@ -19,7 +19,9 @@ import (
 
 	// Secret stores
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/secretstores/aws/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/azure/keyvault"
+	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
 	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -45,7 +47,10 @@ import (
 
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
+	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
+	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
+	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
 	"github.com/dapr/components-contrib/pubsub/nats"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
@@ -67,6 +72,7 @@ import (
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
+	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
 	"github.com/dapr/components-contrib/bindings/aws/sns"
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
@@ -89,7 +95,9 @@ import (
 
 	// HTTP Middleware
 	middleware "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
+	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/valyala/fasthttp"
@@ -115,6 +123,12 @@ func main() {
 			}),
 			secretstores_loader.New("hashicorp.vault", func() secretstores.SecretStore {
 				return vault.NewHashiCorpVaultSecretStore(logContrib)
+			}),
+			secretstores_loader.New("aws.secretmanager", func() secretstores.SecretStore {
+				return secretmanager.NewSecretManager(logContrib)
+			}),
+			secretstores_loader.New("gcp.secretmanager", func() secretstores.SecretStore {
+				return gcp_secretmanager.NewSecreteManager(logContrib)
 			}),
 		),
 		runtime.WithStates(
@@ -171,11 +185,20 @@ func main() {
 			pubsub_loader.New("nats", func() pubs.PubSub {
 				return nats.NewNATSPubSub(logContrib)
 			}),
+			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
+				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
+			}),
 			pubsub_loader.New("azure.servicebus", func() pubs.PubSub {
 				return servicebus.NewAzureServiceBus(logContrib)
 			}),
 			pubsub_loader.New("rabbitmq", func() pubs.PubSub {
 				return rabbitmq.NewRabbitMQ(logContrib)
+			}),
+			pubsub_loader.New("hazelcast", func() pubs.PubSub {
+				return pubsub_hazelcast.NewHazelcastPubSub(logContrib)
+			}),
+			pubsub_loader.New("gcp.pubsub", func() pubs.PubSub {
+				return pubsub_gcp.NewGCPPubSub(logContrib)
 			}),
 		),
 		runtime.WithExporters(
@@ -200,6 +223,9 @@ func main() {
 		runtime.WithInputBindings(
 			bindings_loader.NewInput("aws.sqs", func() bindings.InputBinding {
 				return sqs.NewAWSSQS(logContrib)
+			}),
+			bindings_loader.NewInput("aws.kinesis", func() bindings.InputBinding {
+				return kinesis.NewAWSKinesis(logContrib)
 			}),
 			bindings_loader.NewInput("azure.eventhubs", func() bindings.InputBinding {
 				return eventhubs.NewAzureEventHubs(logContrib)
@@ -232,6 +258,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("aws.sns", func() bindings.OutputBinding {
 				return sns.NewAWSSNS(logContrib)
+			}),
+			bindings_loader.NewOutput("aws.kinesis", func() bindings.OutputBinding {
+				return kinesis.NewAWSKinesis(logContrib)
 			}),
 			bindings_loader.NewOutput("azure.eventhubs", func() bindings.OutputBinding {
 				return eventhubs.NewAzureEventHubs(logContrib)
@@ -294,6 +323,14 @@ func main() {
 			}),
 			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) http_middleware.Middleware {
 				handler, _ := oauth2.NewOAuth2Middleware().GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := ratelimit.NewRateLimitMiddleware(log).GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("bearer", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := bearer.NewBearerMiddleware(log).GetHandler(metadata)
 				return handler
 			}),
 		),

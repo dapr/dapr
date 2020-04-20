@@ -21,8 +21,8 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.13.7
-      GOLANGCILINT_VER: 1.23.2
+      GOVER: 1.14
+      GOLANGCILINT_VER: 1.23.8
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
@@ -45,19 +45,19 @@ jobs:
             target_arch: arm
     steps:
       - name: Set up Go ${{ env.GOVER }}
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v2-beta
         with:
           go-version: ${{ env.GOVER }}
       - name: Install golangci-lint
-        if: matrix.target_arch != 'arm'
+        if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
         run: |
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v${{ env.GOLANGCILINT_VER }}
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
-        if: matrix.target_arch != 'arm'
+        if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
         run: make lint
       - name: Run make test
         if: matrix.target_arch != 'arm'
@@ -78,10 +78,15 @@ jobs:
     env:
       ARTIFACT_DIR: ./release
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      HELMVER: v3.1.2
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Helm ${{ env.HELMVER }}
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELMVER }}
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
       - name: Install Docker CE for buildx
         run: |
           sudo apt update
@@ -93,6 +98,12 @@ jobs:
           docker -v
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
+      - name: Generate helm chart manifest
+        run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
+      - name: move helm chart manifest to artifact
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}
+          mv ./dist/install/dapr.yaml ${{ env.ARTIFACT_DIR }}/dapr-operator.yaml
       - name: download artifacts - dapr_linux_amd64
         uses: actions/download-artifact@master
         with:

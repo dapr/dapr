@@ -7,6 +7,7 @@ package runtime
 
 import (
 	config "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/modes"
 )
 
@@ -20,8 +21,8 @@ const (
 	HTTPProtocol Protocol = "http"
 	// DefaultDaprHTTPPort is the default http port for Dapr
 	DefaultDaprHTTPPort = 3500
-	// DefaultDaprGRPCPort is the default gRPC port for Dapr
-	DefaultDaprGRPCPort = 50001
+	// DefaultDaprAPIGRPCPort is the default API gRPC port for Dapr
+	DefaultDaprAPIGRPCPort = 50001
 	// DefaultProfilePort is the default port for profiling endpoints
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints
@@ -38,7 +39,8 @@ type Config struct {
 	HTTPPort                int
 	ProfilePort             int
 	EnableProfiling         bool
-	GRPCPort                int
+	APIGRPCPort             int
+	InternalGRPCPort        int
 	ApplicationPort         int
 	ApplicationProtocol     Protocol
 	Mode                    modes.DaprMode
@@ -50,16 +52,18 @@ type Config struct {
 	MaxConcurrency          int
 	mtlsEnabled             bool
 	SentryServiceAddress    string
+	CertChain               *credentials.CertChain
 	EnableMetrics           bool
-	MetricsPort             int
+	MetricsPort             uint64
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, grpcPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, metricsPort int, enableMetrics bool) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, metricsPort uint64, enableMetrics bool) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
-		GRPCPort:                grpcPort,
+		InternalGRPCPort:        internalGRPCPort,
+		APIGRPCPort:             apiGRPCPort,
 		ApplicationPort:         appPort,
 		ProfilePort:             profilePort,
 		ApplicationProtocol:     Protocol(appProtocol),

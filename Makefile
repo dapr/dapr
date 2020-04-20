@@ -172,7 +172,7 @@ dapr.yaml: check-docker-env
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
-		--set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
+		--include-crds=true --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #
@@ -182,7 +182,7 @@ docker-deploy-k8s: check-docker-env
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
 		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) \
-		--set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR)
+		--set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #
@@ -203,7 +203,7 @@ test:
 # Due to https://github.com/golangci/golangci-lint/issues/580, we need to add --fix for windows
 .PHONY: lint
 lint:
-	$(GOLANGCI_LINT) run --fix
+	$(GOLANGCI_LINT) run --timeout=20m
 
 
 ################################################################################

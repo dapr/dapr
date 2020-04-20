@@ -18,8 +18,6 @@ import (
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -27,9 +25,9 @@ import (
 const (
 	certWatchInterval         = time.Second * 3
 	renewWhenPercentagePassed = 70
+	apiServer                 = "apiServer"
+	internalServer            = "internalServer"
 )
-
-var log = logger.NewLogger("dapr.runtime.grpc")
 
 // Server is an interface for the dapr gRPC server
 type Server interface {
@@ -47,16 +45,34 @@ type server struct {
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
+	kind               string
+	logger             logger.Logger
 }
 
-// NewServer returns a new gRPC server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
+var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
+var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
+
+// NewAPIServer returns a new user facing gRPC API server
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
+	return &server{
+		api:         api,
+		config:      config,
+		tracingSpec: tracingSpec,
+		kind:        apiServer,
+		logger:      apiServerLogger,
+	}
+}
+
+// NewInternalServer returns a new gRPC server for Dapr to Dapr communications
+func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
 	return &server{
 		api:           api,
 		config:        config,
 		tracingSpec:   tracingSpec,
 		authenticator: authenticator,
 		renewMutex:    &sync.Mutex{},
+		kind:          internalServer,
+		logger:        internalServerLogger,
 	}
 }
 
@@ -74,28 +90,26 @@ func (s *server) StartNonBlocking() error {
 	}
 	s.srv = server
 
-	daprinternal_pb.RegisterDaprInternalServer(server, s.api)
-	dapr_pb.RegisterDaprServer(server, s.api)
-
-	if s.config.EnableMetrics {
-		grpc_prometheus.Register(s.srv)
+	if s.kind == internalServer {
+		daprinternal_pb.RegisterDaprInternalServer(server, s.api)
+	} else if s.kind == apiServer {
+		dapr_pb.RegisterDaprServer(server, s.api)
 	}
-
 	go func() {
 		if err := server.Serve(lis); err != nil {
-			log.Fatalf("gRPC serve error: %v", err)
+			s.logger.Fatalf("gRPC serve error: %v", err)
 		}
 	}()
 	return nil
 }
 
 func (s *server) generateWorkloadCert() error {
-	log.Info("sending workload csr request to sentry")
+	s.logger.Info("sending workload csr request to sentry")
 	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID)
 	if err != nil {
 		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %s", err)
 	}
-	log.Info("certificate signed successfully")
+	s.logger.Info("certificate signed successfully")
 
 	tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 	if err != nil {
@@ -111,27 +125,14 @@ func (s *server) generateWorkloadCert() error {
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
-	streamServerInterceptorChains := []grpc_go.StreamServerInterceptor{}
-	unaryInterceptorChains := []grpc_go.UnaryServerInterceptor{}
+	s.logger.Infof("enabled tracing grpc middleware")
+	opts = append(
+		opts,
+		grpc_go.StreamInterceptor(diag.TracingGRPCMiddlewareStream(s.tracingSpec)),
+		grpc_go.UnaryInterceptor(diag.TracingGRPCMiddlewareUnary(s.tracingSpec)))
 
-	if s.tracingSpec.Enabled {
-		log.Infof("enabled tracing grpc middleware")
-		streamServerInterceptorChains = append(streamServerInterceptorChains, diag.TracingGRPCMiddlewareStream(s.tracingSpec))
-		unaryInterceptorChains = append(unaryInterceptorChains, diag.TracingGRPCMiddlewareUnary(s.tracingSpec))
-	}
-
-	if s.config.EnableMetrics {
-		log.Infof("enabled metrics grpc middleware")
-		streamServerInterceptorChains = append(streamServerInterceptorChains, diag.MetricsGRPCMiddlewareStream())
-		unaryInterceptorChains = append(unaryInterceptorChains, diag.MetricsGRPCMiddlewareUnary())
-	}
-
-	if s.tracingSpec.Enabled || s.config.EnableMetrics {
-		opts = append(
-			opts,
-			grpc_middleware.WithStreamServerChain(streamServerInterceptorChains...),
-			grpc_middleware.WithUnaryServerChain(unaryInterceptorChains...))
-	}
+	s.logger.Infof("enabled metrics grpc middleware")
+	opts = append(opts, grpc_go.StatsHandler(diag.DefaultGRPCMonitoring.ServerStatsHandler))
 
 	return opts
 }
@@ -147,7 +148,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 
 		tlsConfig := tls.Config{
 			ClientCAs:  s.signedCert.TrustChain,
-			ClientAuth: tls.VerifyClientCertIfGiven,
+			ClientAuth: tls.RequireAndVerifyClientCert,
 			GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 				return &s.tlsCert, nil
 			},
@@ -162,7 +163,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 }
 
 func (s *server) startWorkloadCertRotation() {
-	log.Infof("starting workload cert expiry watcher. current cert expires on: %s", s.signedCert.Expiry.String())
+	s.logger.Infof("starting workload cert expiry watcher. current cert expires on: %s", s.signedCert.Expiry.String())
 
 	ticker := time.NewTicker(certWatchInterval)
 
@@ -170,12 +171,13 @@ func (s *server) startWorkloadCertRotation() {
 		s.renewMutex.Lock()
 		renew := shouldRenewCert(s.signedCert.Expiry, s.signedCertDuration)
 		if renew {
-			log.Info("renewing certificate: requesting new cert and restarting gRPC server")
+			s.logger.Info("renewing certificate: requesting new cert and restarting gRPC server")
 
 			err := s.generateWorkloadCert()
 			if err != nil {
-				log.Errorf("error starting server: %s", err)
+				s.logger.Errorf("error starting server: %s", err)
 			}
+			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
 		}
 		s.renewMutex.Unlock()
 	}

@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -11,17 +10,21 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/dapr/dapr/pkg/proto/sentry"
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/golang/protobuf/ptypes"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
 const (
-	serverName        = "cluster.local"
+	TLSServerName     = "cluster.local"
 	sentrySignTimeout = time.Second * 5
 	certType          = "CERTIFICATE"
 	kubeTknPath       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	sentryMaxRetries  = 100
 )
 
 type Authenticator interface {
@@ -32,6 +35,8 @@ type Authenticator interface {
 
 type authenticator struct {
 	trustAnchors      *x509.CertPool
+	certChainPem      []byte
+	keyPem            []byte
 	genCSRFunc        func(id string) ([]byte, []byte, error)
 	sentryAddress     string
 	currentSignedCert *SignedCertificate
@@ -45,9 +50,11 @@ type SignedCertificate struct {
 	TrustChain    *x509.CertPool
 }
 
-func newAuthenticator(sentryAddress string, trustAnchors *x509.CertPool, genCSRFunc func(id string) ([]byte, []byte, error)) Authenticator {
+func newAuthenticator(sentryAddress string, trustAnchors *x509.CertPool, certChainPem, keyPem []byte, genCSRFunc func(id string) ([]byte, []byte, error)) Authenticator {
 	return &authenticator{
 		trustAnchors:  trustAnchors,
+		certChainPem:  certChainPem,
+		keyPem:        keyPem,
 		genCSRFunc:    genCSRFunc,
 		sentryAddress: sentryAddress,
 		certMutex:     &sync.RWMutex{},
@@ -75,27 +82,30 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	}
 	certPem := pem.EncodeToMemory(&pem.Block{Type: certType, Bytes: csrb})
 
-	config := &tls.Config{
-		InsecureSkipVerify: false,
-		RootCAs:            a.trustAnchors,
-		ServerName:         serverName,
-	}
-	conn, err := grpc.Dial(a.sentryAddress, grpc.WithTransportCredentials(credentials.NewTLS(config)))
+	config, err := dapr_credentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
+		return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
+	}
+
+	conn, err := grpc.Dial(
+		a.sentryAddress,
+		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+		grpc.WithTransportCredentials(credentials.NewTLS(config)),
+		grpc.WithUnaryInterceptor(grpc_retry.UnaryClientInterceptor()))
+	if err != nil {
+		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
 		return nil, fmt.Errorf("error establishing connection to sentry: %s", err)
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), sentrySignTimeout)
-	defer cancel()
-
-	c := pb.NewCAClient(conn)
-	resp, err := c.SignCertificate(ctx, &pb.SignCertificateRequest{
+	c := sentryv1pb.NewCAClient(conn)
+	resp, err := c.SignCertificate(context.Background(), &sentryv1pb.SignCertificateRequest{
 		CertificateSigningRequest: certPem,
 		Id:                        getSentryIdentifier(id),
 		Token:                     getToken(),
-	})
+	}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
 	if err != nil {
+		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %s", err)
 	}
 
@@ -103,6 +113,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	validTimestamp := resp.GetValidUntil()
 	expiry, err := ptypes.Timestamp(validTimestamp)
 	if err != nil {
+		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
 		return nil, fmt.Errorf("error parsing ValidUntil: %s", err)
 	}
 
@@ -110,6 +121,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	for _, c := range resp.GetTrustChainCertificates() {
 		ok := trustChain.AppendCertsFromPEM(c)
 		if !ok {
+			diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("chaining")
 			return nil, fmt.Errorf("failed adding trust chain cert to x509 CertPool: %s", err)
 		}
 	}

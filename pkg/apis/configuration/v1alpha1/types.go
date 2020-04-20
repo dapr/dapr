@@ -64,9 +64,7 @@ type SelectorField struct {
 
 // TracingSpec is the spec object in ConfigurationSpec
 type TracingSpec struct {
-	Enabled      bool `json:"enabled"`
-	IncludeBody  bool `json:"includeBody"`
-	ExpandParams bool `json:"expandParams"`
+	SamplingRate string `json:"samplingRate"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

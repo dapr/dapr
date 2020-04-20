@@ -28,7 +28,7 @@ const (
 	actorIdleTimeout        = "1h"
 	actorScanInterval       = "30s"
 	drainOngoingCallTimeout = "30s"
-	drainBalancedActors     = true
+	drainRebalancedActors   = true
 	secondsToWaitInMethod   = 5
 )
 
@@ -52,7 +52,7 @@ type daprConfig struct {
 	ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
 	ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
-	DrainBalancedActors     bool     `json:"drainBalancedActors,omitempty"`
+	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
 
 var daprConfigResponse = daprConfig{
@@ -60,7 +60,7 @@ var daprConfigResponse = daprConfig{
 	actorIdleTimeout,
 	actorScanInterval,
 	drainOngoingCallTimeout,
-	drainBalancedActors,
+	drainRebalancedActors,
 }
 
 type daprActorResponse struct {
@@ -327,6 +327,11 @@ func httpCall(method string, url string, requestBody interface{}) ([]byte, error
 	return resBody, nil
 }
 
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(""))
+}
+
 // epoch returns the current unix epoch timestamp
 func epoch() int {
 	return (int)(time.Now().UTC().UnixNano() / 1000000)
@@ -345,6 +350,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
 	router.HandleFunc("/test/logs", logsHandler).Methods("DELETE")
+	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
