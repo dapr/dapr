@@ -82,9 +82,10 @@ func InternalMetadataToGrpcMetadata(internalMD map[string]*structpb.ListValue, h
 	return md
 }
 
+// InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers
 func InternalMetadataToHTTPHeader(internalMD map[string]*structpb.ListValue, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
-		if len(listVal.Values) == 0 || strings.HasSuffix(gRPCBinaryMetadata) {
+		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadata) {
 			continue
 		}
 		setHeader(k, listVal.Values[0].GetStringValue())
