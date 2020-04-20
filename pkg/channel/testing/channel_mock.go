@@ -1,7 +1,7 @@
 package testing
 
 import (
-	channel "github.com/dapr/dapr/pkg/channel"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -16,8 +16,8 @@ func (m *MockAppChannel) GetBaseAddress() string {
 }
 
 // InvokeMethod is a mock invocation method
-func (m *MockAppChannel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
+func (m *MockAppChannel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	args := m.Called(req)
 
-	return args.Get(0).(*channel.InvokeResponse), args.Error(1)
+	return args.Get(0).(*invokev1.InvokeMethodResponse), args.Error(1)
 }

@@ -7,6 +7,7 @@
 
 package testing
 
+/*
 import (
 	"regexp"
 
@@ -43,3 +44,4 @@ func (_m *MockDirectMessaging) Invoke(req *messaging.DirectMessageRequest) (*mes
 
 	return r0, r1
 }
+*/

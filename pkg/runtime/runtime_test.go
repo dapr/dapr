@@ -5,6 +5,7 @@
 
 package runtime
 
+/*
 import (
 	"errors"
 	"fmt"
@@ -985,3 +986,4 @@ func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler func(msg *pubsub.NewMessage) error) error {
 	return nil
 }
+*/

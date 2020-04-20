@@ -23,7 +23,7 @@ import (
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"
 
-	"github.com/dapr/dapr/pkg/proto/dapr"
+	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
 
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
@@ -233,7 +233,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Create the client
-	client := dapr.NewDaprClient(conn)
+	client := daprv1pb.NewDaprClient(conn)
 
 	testMessage := guuid.New().String()
 	b, err := json.Marshal(testMessage)
@@ -244,7 +244,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Printf("grpcToGrpcTest calling with message %s\n", string(b))
-	resp, err := client.InvokeService(context.Background(), &dapr.InvokeServiceEnvelope{
+	resp, err := client.InvokeService(context.Background(), &daprv1pb.InvokeServiceEnvelope{
 		Id:     commandBody.RemoteApp,
 		Data:   &any.Any{Value: b},
 		Method: "grpcToGrpcTest",
@@ -514,7 +514,7 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Create the client
-	client := dapr.NewDaprClient(conn)
+	client := daprv1pb.NewDaprClient(conn)
 
 	metadata := make(map[string]string)
 
@@ -531,13 +531,13 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 
 		fmt.Printf("grpcToHTTPTest calling with verb %s, message %s\n", v, testMessage)
 
-		envelope := dapr.InvokeServiceEnvelope{
+		envelope := daprv1pb.InvokeServiceEnvelope{
 			Id:       commandBody.RemoteApp,
 			Data:     &any.Any{Value: b},
 			Metadata: metadata,
 		}
 
-		var resp *dapr.InvokeServiceResponseEnvelope
+		var resp *daprv1pb.InvokeServiceResponseEnvelope
 		var err error
 		switch v {
 		case "POST":

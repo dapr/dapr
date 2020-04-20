@@ -15,8 +15,8 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
-	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -91,9 +91,9 @@ func (s *server) StartNonBlocking() error {
 	s.srv = server
 
 	if s.kind == internalServer {
-		daprinternal_pb.RegisterDaprInternalServer(server, s.api)
+		internalv1pb.RegisterDaprInternalServer(server, s.api)
 	} else if s.kind == apiServer {
-		dapr_pb.RegisterDaprServer(server, s.api)
+		daprv1pb.RegisterDaprServer(server, s.api)
 	}
 	go func() {
 		if err := server.Serve(lis); err != nil {

@@ -5,6 +5,7 @@
 
 package grpc
 
+/*
 import (
 	"context"
 	"fmt"
@@ -18,8 +19,8 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
-	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -31,40 +32,40 @@ import (
 type mockGRPCAPI struct {
 }
 
-func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelope) (*daprinternal_pb.InvokeResponse, error) {
-	return &daprinternal_pb.InvokeResponse{}, nil
+func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.LocalCallEnvelope) (*internalv1pb.InvokeResponse, error) {
+	return &internalv1pb.InvokeResponse{}, nil
 }
 
-func (m *mockGRPCAPI) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelope) (*daprinternal_pb.InvokeResponse, error) {
-	return &daprinternal_pb.InvokeResponse{}, nil
+func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.CallActorEnvelope) (*internalv1pb.InvokeResponse, error) {
+	return &internalv1pb.InvokeResponse{}, nil
 }
 
-func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
+func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error) {
-	return &dapr_pb.InvokeServiceResponseEnvelope{}, nil
+func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceEnvelope) (*daprv1pb.InvokeServiceResponseEnvelope, error) {
+	return &daprv1pb.InvokeServiceResponseEnvelope{}, nil
 }
 
-func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelope) (*empty.Empty, error) {
+func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error) {
-	return &dapr_pb.GetStateResponseEnvelope{}, nil
+func (m *mockGRPCAPI) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*daprv1pb.GetStateResponseEnvelope, error) {
+	return &daprv1pb.GetStateResponseEnvelope{}, nil
 }
 
-func (m *mockGRPCAPI) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error) {
+func (m *mockGRPCAPI) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error) {
+func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error) {
-	return &dapr_pb.GetSecretResponseEnvelope{}, nil
+func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*daprv1pb.GetSecretResponseEnvelope, error) {
+	return &daprv1pb.GetSecretResponseEnvelope{}, nil
 }
 
 func createExporters(meta exporters.Metadata) {
@@ -94,7 +95,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	)
 
 	go func() {
-		daprinternal_pb.RegisterDaprInternalServer(server, &mockGRPCAPI{})
+		internalv1pb.RegisterDaprInternalServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -106,8 +107,8 @@ func TestCallActorWithTracing(t *testing.T) {
 	defer doClose(t, conn)
 	assert.NoError(t, err)
 
-	client := daprinternal_pb.NewDaprInternalClient(conn)
-	request := &daprinternal_pb.CallActorEnvelope{
+	client := internalv1pb.NewDaprInternalClient(conn)
+	request := &internalv1pb.CallActorEnvelope{
 		ActorID:   "actor-1",
 		ActorType: "test-actor",
 		Method:    "what",
@@ -141,7 +142,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	)
 
 	go func() {
-		daprinternal_pb.RegisterDaprInternalServer(server, &mockGRPCAPI{})
+		internalv1pb.RegisterDaprInternalServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -153,8 +154,8 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	defer doClose(t, conn)
 	assert.NoError(t, err)
 
-	client := daprinternal_pb.NewDaprInternalClient(conn)
-	request := &daprinternal_pb.LocalCallEnvelope{
+	client := internalv1pb.NewDaprInternalClient(conn)
+	request := &internalv1pb.LocalCallEnvelope{
 		Method: "what",
 	}
 
@@ -171,7 +172,7 @@ func TestSaveState(t *testing.T) {
 
 	server := grpc_go.NewServer()
 	go func() {
-		dapr_pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		daprv1pb.RegisterDaprServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -183,9 +184,9 @@ func TestSaveState(t *testing.T) {
 	defer doClose(t, conn)
 	assert.NoError(t, err)
 
-	client := dapr_pb.NewDaprClient(conn)
-	request := &dapr_pb.SaveStateEnvelope{
-		Requests: []*dapr_pb.StateRequest{
+	client := daprv1pb.NewDaprClient(conn)
+	request := &daprv1pb.SaveStateEnvelope{
+		Requests: []*daprv1pb.StateRequest{
 			{
 				Key:   "1",
 				Value: &any.Any{Value: []byte("2")},
@@ -205,7 +206,7 @@ func TestGetState(t *testing.T) {
 
 	server := grpc_go.NewServer()
 	go func() {
-		dapr_pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		daprv1pb.RegisterDaprServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -217,8 +218,8 @@ func TestGetState(t *testing.T) {
 	defer doClose(t, conn)
 	assert.NoError(t, err)
 
-	client := dapr_pb.NewDaprClient(conn)
-	_, err = client.GetState(context.Background(), &dapr_pb.GetStateEnvelope{})
+	client := daprv1pb.NewDaprClient(conn)
+	_, err = client.GetState(context.Background(), &daprv1pb.GetStateEnvelope{})
 	server.Stop()
 	assert.Nil(t, err)
 }
@@ -230,7 +231,7 @@ func TestDeleteState(t *testing.T) {
 
 	server := grpc_go.NewServer()
 	go func() {
-		dapr_pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		daprv1pb.RegisterDaprServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -242,8 +243,8 @@ func TestDeleteState(t *testing.T) {
 	defer doClose(t, conn)
 	assert.NoError(t, err)
 
-	client := dapr_pb.NewDaprClient(conn)
-	_, err = client.DeleteState(context.Background(), &dapr_pb.DeleteStateEnvelope{})
+	client := daprv1pb.NewDaprClient(conn)
+	_, err = client.DeleteState(context.Background(), &daprv1pb.DeleteStateEnvelope{})
 	server.Stop()
 	assert.Nil(t, err)
 }
@@ -255,7 +256,7 @@ func TestPublishTopic(t *testing.T) {
 
 	server := grpc_go.NewServer()
 	go func() {
-		dapr_pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		daprv1pb.RegisterDaprServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -267,8 +268,8 @@ func TestPublishTopic(t *testing.T) {
 	defer doClose(t, conn)
 	assert.NoError(t, err)
 
-	client := dapr_pb.NewDaprClient(conn)
-	_, err = client.PublishEvent(context.Background(), &dapr_pb.PublishEventEnvelope{})
+	client := daprv1pb.NewDaprClient(conn)
+	_, err = client.PublishEvent(context.Background(), &daprv1pb.PublishEventEnvelope{})
 	server.Stop()
 	assert.Nil(t, err)
 }
@@ -280,7 +281,7 @@ func TestInvokeBinding(t *testing.T) {
 
 	server := grpc_go.NewServer()
 	go func() {
-		dapr_pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		daprv1pb.RegisterDaprServer(server, &mockGRPCAPI{})
 		server.Serve(lis)
 	}()
 
@@ -292,8 +293,8 @@ func TestInvokeBinding(t *testing.T) {
 	defer doClose(t, conn)
 	assert.NoError(t, err)
 
-	client := dapr_pb.NewDaprClient(conn)
-	_, err = client.InvokeBinding(context.Background(), &dapr_pb.InvokeBindingEnvelope{})
+	client := daprv1pb.NewDaprClient(conn)
+	_, err = client.InvokeBinding(context.Background(), &daprv1pb.InvokeBindingEnvelope{})
 	server.Stop()
 	assert.Nil(t, err)
 }
@@ -304,3 +305,4 @@ func doClose(t *testing.T, c io.Closer) {
 		assert.Fail(t, fmt.Sprintf("unable to close %s", err))
 	}
 }
+*/

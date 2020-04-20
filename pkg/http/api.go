@@ -21,9 +21,17 @@ import (
 	"github.com/dapr/dapr/pkg/channel/http"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	routing "github.com/qiangxue/fasthttp-routing"
+	fhttp "github.com/valyala/fasthttp"
+	"google.golang.org/grpc/codes"
+)
+
+const (
+	invokeMethodParamPath    = "method/"
+	invokeMethodParamPathLen = len(invokeMethodParamPath)
 )
 
 // API returns a list of HTTP endpoints for Dapr
@@ -110,19 +118,19 @@ func (a *api) MarkStatusAsReady() {
 func (a *api) constructStateEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Get},
+			Methods: []string{fhttp.MethodGet},
 			Route:   "state/<storeName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetState,
 		},
 		{
-			Methods: []string{http.Post},
+			Methods: []string{fhttp.MethodPost},
 			Route:   "state/<storeName>",
 			Version: apiVersionV1,
 			Handler: a.onPostState,
 		},
 		{
-			Methods: []string{http.Delete},
+			Methods: []string{fhttp.MethodDelete},
 			Route:   "state/<storeName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
@@ -133,7 +141,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Get},
+			Methods: []string{fhttp.MethodGet},
 			Route:   "secrets/<secretStoreName>/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetSecret,
@@ -144,7 +152,7 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Post, http.Put},
+			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
 			Route:   "publish/*",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
@@ -155,7 +163,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 func (a *api) constructBindingsEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Post, http.Put},
+			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
 			Route:   "bindings/<name>",
 			Version: apiVersionV1,
 			Handler: a.onOutputBindingMessage,
@@ -166,7 +174,7 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Get, http.Post, http.Delete, http.Put},
+			Methods: []string{fhttp.MethodGet, fhttp.MethodPost, fhttp.MethodDelete, fhttp.MethodPut},
 			Route:   "invoke/<id>/method/*",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
@@ -177,61 +185,61 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 func (a *api) constructActorEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Post, http.Put},
+			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
 			Route:   "actors/<actorType>/<actorId>/state",
 			Version: apiVersionV1,
 			Handler: a.onActorStateTransaction,
 		},
 		{
-			Methods: []string{http.Get, http.Post, http.Delete, http.Put},
+			Methods: []string{fhttp.MethodGet, fhttp.MethodPost, fhttp.MethodDelete, fhttp.MethodPut},
 			Route:   "actors/<actorType>/<actorId>/method/<method>",
 			Version: apiVersionV1,
 			Handler: a.onDirectActorMessage,
 		},
 		{
-			Methods: []string{http.Post, http.Put},
+			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
 			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
 			Handler: a.onSaveActorState,
 		},
 		{
-			Methods: []string{http.Get},
+			Methods: []string{fhttp.MethodGet},
 			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
 			Handler: a.onGetActorState,
 		},
 		{
-			Methods: []string{http.Delete},
+			Methods: []string{fhttp.MethodDelete},
 			Route:   "actors/<actorType>/<actorId>/state/<key>",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorState,
 		},
 		{
-			Methods: []string{http.Post, http.Put},
+			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
 			Route:   "actors/<actorType>/<actorId>/reminders/<name>",
 			Version: apiVersionV1,
 			Handler: a.onCreateActorReminder,
 		},
 		{
-			Methods: []string{http.Post, http.Put},
+			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
 			Route:   "actors/<actorType>/<actorId>/timers/<name>",
 			Version: apiVersionV1,
 			Handler: a.onCreateActorTimer,
 		},
 		{
-			Methods: []string{http.Delete},
+			Methods: []string{fhttp.MethodDelete},
 			Route:   "actors/<actorType>/<actorId>/reminders/<name>",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorReminder,
 		},
 		{
-			Methods: []string{http.Delete},
+			Methods: []string{fhttp.MethodDelete},
 			Route:   "actors/<actorType>/<actorId>/timers/<name>",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorTimer,
 		},
 		{
-			Methods: []string{http.Get},
+			Methods: []string{fhttp.MethodGet},
 			Route:   "actors/<actorType>/<actorId>/reminders/<name>",
 			Version: apiVersionV1,
 			Handler: a.onGetActorReminder,
@@ -242,13 +250,13 @@ func (a *api) constructActorEndpoints() []Endpoint {
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Get},
+			Methods: []string{fhttp.MethodGet},
 			Route:   "metadata",
 			Version: apiVersionV1,
 			Handler: a.onGetMetadata,
 		},
 		{
-			Methods: []string{http.Put},
+			Methods: []string{fhttp.MethodPut},
 			Route:   "metadata/<key>",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata,
@@ -259,7 +267,7 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{http.Get},
+			Methods: []string{fhttp.MethodGet},
 			Route:   "healthz",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
@@ -505,29 +513,45 @@ func (a *api) setHeaders(c *routing.Context, metadata map[string]string) {
 
 func (a *api) onDirectMessage(c *routing.Context) error {
 	targetID := c.Param(idParam)
-	path := string(c.Path())
-	method := path[strings.Index(path, "method/")+7:]
-	body := c.PostBody()
 	verb := strings.ToUpper(string(c.Method()))
-	queryString := string(c.QueryArgs().QueryString())
 
-	req := messaging.DirectMessageRequest{
-		Data:     body,
-		Method:   method,
-		Metadata: map[string]string{http.HTTPVerb: verb, http.QueryString: queryString},
-		Target:   targetID,
+	// Parse invoke method name
+	path := string(c.Path())
+	invokeMethodName := path[strings.Index(path, invokeMethodParamPath)+invokeMethodParamPathLen:]
+	if invokeMethodName == "" {
+		msg := NewErrorResponse("ERR_DIRECT_INVOKE", "invalid method name")
+		respondWithError(c.RequestCtx, fhttp.StatusBadRequest, msg)
+		return nil
 	}
-	a.setHeaders(c, req.Metadata)
 
-	resp, err := a.directMessaging.Invoke(&req)
+	// Construct internal invoke method request
+	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, c.QueryArgs().String())
+	req.WithRawData(c.Request.Body(), string(c.Request.Header.ContentType()))
+	// Save headers to metadata
+	var metadata map[string][]string
+	c.Request.Header.VisitAll(func(key []byte, value []byte) {
+		metadata[string(key)] = []string{string(value)}
+	})
+	req.WithMetadata(metadata)
+
+	resp, err := a.directMessaging.Invoke(targetID, req)
+	// err does not represent user application response
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
-		respondWithError(c.RequestCtx, 500, msg)
-	} else {
-		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
-		a.setHeadersOnRequest(resp.Metadata, c)
-		respond(c.RequestCtx, statusCode, resp.Data)
+		respondWithError(c.RequestCtx, fhttp.StatusInternalServerError, msg)
+		return nil
 	}
+
+	// TODO: add trace parent and state
+	invokev1.InternalMetadataToHTTPHeader(*resp.Headers(), c.RequestCtx.Response.Header.Set)
+	c.RequestCtx.Response.Header.SetContentType(resp.Proto().Message.ContentType)
+
+	// Construct response
+	statusCode := int(resp.Status().Code)
+	if !resp.IsHTTPResponse() {
+		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
+	}
+	respond(c.RequestCtx, statusCode, resp.Proto().Message.Data.Value)
 
 	return nil
 }

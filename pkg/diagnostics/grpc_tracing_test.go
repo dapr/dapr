@@ -5,6 +5,7 @@
 
 package diagnostics
 
+/*
 import (
 	"context"
 	"testing"
@@ -22,3 +23,4 @@ func TestTracingSpanFromGRPCContext(t *testing.T) {
 
 	TracingSpanFromGRPCContext(ctx, req, "invoke", spec)
 }
+*/
