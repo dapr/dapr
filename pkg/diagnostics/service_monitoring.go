@@ -116,6 +116,7 @@ func newServiceMetrics() *serviceMetrics {
 
 		// TODO: use the correct context for each request
 		ctx: context.Background(),
+		enabled: false,
 	}
 }
 
