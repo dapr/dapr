@@ -5,7 +5,9 @@
 
 package channel
 
-import "context"
+import (
+	"context"
+)
 
 // AppChannel is an abstraction over communications with user code
 type AppChannel interface {

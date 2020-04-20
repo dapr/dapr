@@ -17,7 +17,8 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
@@ -58,10 +59,11 @@ type api struct {
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
+	tracingSpec           config.TracingSpec
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, tracingSpec config.TracingSpec) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -79,6 +81,9 @@ func (a *api) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelo
 	if a.appChannel == nil {
 		return nil, errors.New("app channel is not initialized")
 	}
+
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, nil, in.Method, a.tracingSpec)
+	defer span.End()
 
 	req := channel.InvokeRequest{
 		Payload:  in.Data.Value,
@@ -130,7 +135,7 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 		body = in.Data.Value
 	}
 
-	corID, ok := ctx.Value(tracing.CorrelationID).(string)
+	corID, ok := ctx.Value(diag.CorrelationID).(string)
 	if !ok {
 		corID = ""
 	}
@@ -162,6 +167,9 @@ func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelo
 	if in.Data != nil {
 		req.Data = in.Data.Value
 	}
+
+	ctx, span := diag.StartTracingClientSpanFromGRPCContext(ctx, req, req.Method, a.tracingSpec)
+	defer span.End()
 
 	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
@@ -205,6 +213,13 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 			Consistency: in.Consistency,
 		},
 	}
+
+	corID, ok := ctx.Value(diag.CorrelationID).(string)
+	if !ok {
+		corID = ""
+	}
+	ctx, span := diag.StartTracingClientSpanWithCorID(ctx, corID, "GetState", a.tracingSpec)
+	defer span.End()
 
 	getResponse, err := a.stateStores[storeName].Get(&req)
 	if err != nil {

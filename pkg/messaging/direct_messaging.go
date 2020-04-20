@@ -99,6 +99,9 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *DirectMessageReq
 		Payload:  req.Data,
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
+	defer cancel()
+
 	resp, err := d.appChannel.InvokeMethod(ctx, &localInvokeReq)
 	if err != nil {
 		return nil, err

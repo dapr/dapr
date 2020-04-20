@@ -21,7 +21,7 @@ import (
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -630,8 +630,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		Method:  testPubSubMessage.Topic,
 		Payload: testPubSubMessage.Data,
 		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post,
-			tracing.CorrelationID: "",
-			"headers":             fmt.Sprintf("%s%s%s", http_channel.ContentType, http_channel.HeaderEquals, pubsub.ContentType),
+			diag.CorrelationID: "",
+			"headers":          fmt.Sprintf("%s%s%s", http_channel.ContentType, http_channel.HeaderEquals, pubsub.ContentType),
 		},
 	}
 

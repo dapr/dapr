@@ -20,7 +20,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
@@ -46,6 +47,7 @@ type api struct {
 	id                    string
 	extendedMetadata      sync.Map
 	readyStatus           bool
+	tracingSpec           config.TracingSpec
 }
 
 type metadata struct {
@@ -74,7 +76,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, tracingSpec config.TracingSpec) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -85,6 +87,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 		publishFn:             publishFn,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		id:                    appID,
+		tracingSpec:           tracingSpec,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
@@ -302,6 +305,7 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 }
 
 func (a *api) onGetState(c *routing.Context) error {
+	ctx := (context.Context)(c.RequestCtx)
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -315,6 +319,9 @@ func (a *api) onGetState(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 401, msg)
 		return nil
 	}
+
+	ctx, span := diag.StartClientSpanTracing(ctx, &c.Request, a.tracingSpec)
+	defer span.End()
 
 	key := c.Param(stateKeyParam)
 	consistency := string(c.QueryArgs().Peek(consistencyParam))
@@ -520,6 +527,9 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 		Target:   targetID,
 	}
 	a.setHeaders(c, req.Metadata)
+
+	ctx, span := diag.StartClientSpanTracing(ctx, &c.Request, a.tracingSpec)
+	defer span.End()
 
 	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
@@ -947,7 +957,7 @@ func (a *api) onPublish(c *routing.Context) error {
 
 	body := c.PostBody()
 
-	corID := c.Request.Header.Peek(tracing.CorrelationID)
+	corID := c.Request.Header.Peek(diag.CorrelationID)
 
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, string(corID), body)
 

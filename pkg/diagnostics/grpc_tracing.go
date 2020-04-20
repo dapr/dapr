@@ -49,17 +49,29 @@ func StartTracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerIn
 	}
 }
 
+// StartTracingServerSpanFromGRPCContext creates a span from an incoming gRPC method call
+func StartTracingServerSpanFromGRPCContext(ctx context.Context, req interface{}, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
+	var span *trace.Span
+	corID := getCorrelationID(req)
+	ctx, span = startTracingSpan(ctx, corID, method, spec.SamplingRate, trace.SpanKindServer)
+	addAnnotationsToSpanFromGRPCMetadata(ctx, span)
+
+	return ctx, span
+}
+
 // StartTracingClientSpanFromGRPCContext creates a span from an incoming gRPC method call
 func StartTracingClientSpanFromGRPCContext(ctx context.Context, req interface{}, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
+	corID := getCorrelationID(req)
+	ctx, span = startTracingSpan(ctx, corID, method, spec.SamplingRate, trace.SpanKindClient)
+	addAnnotationsToSpanFromGRPCMetadata(ctx, span)
 
-	headers := extractHeaders(req)
-	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
-	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)
-	if len(corID) > 35 { //to remove the prefix "X-Correlation-Id&__header_equals__&", which may in different casing
-		corID = corID[35:]
-	}
+	return ctx, span
+}
 
+// StartTracingClientSpanWithCorID creates a span from an incoming gRPC method call
+func StartTracingClientSpanWithCorID(ctx context.Context, corID, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
+	var span *trace.Span
 	ctx, span = startTracingSpan(ctx, corID, method, spec.SamplingRate, trace.SpanKindClient)
 	addAnnotationsToSpanFromGRPCMetadata(ctx, span)
 

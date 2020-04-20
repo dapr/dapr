@@ -96,7 +96,6 @@ func (h *Channel) InvokeMethod(ctx context.Context, invokeRequest *channel.Invok
 		}
 	}
 
-	// TODO check here for context propagation logic
 	ctx, span := diag.StartClientSpanTracing(ctx, req, h.tracingSpec)
 	defer span.End()
 

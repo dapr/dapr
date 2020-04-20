@@ -118,6 +118,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
 		json:                  jsoniter.ConfigFastest,
+		tracingSpec:           spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
 
@@ -268,6 +269,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
@@ -656,8 +658,9 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	createExporters(meta)
 
 	testAPI := &api{
-		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		actor:       nil,
+		json:        jsoniter.ConfigFastest,
+		tracingSpec: spec,
 	}
 
 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
@@ -969,6 +972,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
 
@@ -1059,6 +1063,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
@@ -1127,6 +1132,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
