@@ -52,7 +52,7 @@ type daprConfig struct {
 	ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
 	ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
-	drainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
+	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
 
 var daprConfigResponse = daprConfig{
