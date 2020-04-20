@@ -23,15 +23,6 @@ type TestParameters struct {
 	TestDuration      string `json:"testDuration"`
 }
 
-func NewTestParameters(qps, connections int, endpoint, duration string) TestParameters {
-	return TestParameters{
-		QPS:               qps,
-		ClientConnections: connections,
-		TargetEndpoint:    endpoint,
-		TestDuration:      duration,
-	}
-}
-
 func handler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
