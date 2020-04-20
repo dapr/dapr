@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package v1
 
 import (
@@ -10,10 +15,13 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// InvokeMethodResponse holds InternalInvokeResponse protobuf message
+// and provides the helpers to manage it.
 type InvokeMethodResponse struct {
 	r *internalv1pb.InternalInvokeResponse
 }
 
+// NewInvokeMethodResponse returns new InvokeMethodResponse object with status
 func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetails *[]*any.Any) *InvokeMethodResponse {
 	return &InvokeMethodResponse{
 		r: &internalv1pb.InternalInvokeResponse{
@@ -22,15 +30,18 @@ func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetai
 	}
 }
 
+// FromInternalInvokeResponse returns InvokeMethodResponse for InternalInvokeResponse pb to use the helpers
 func FromInternalInvokeResponse(resp *internalv1pb.InternalInvokeResponse) *InvokeMethodResponse {
 	return &InvokeMethodResponse{r: resp}
 }
 
+// WithInvokeResponseProto sets Message field using InvokeResponse pb object
 func (imr *InvokeMethodResponse) WithInvokeResponseProto(pb *commonv1pb.InvokeResponse) *InvokeMethodResponse {
 	imr.r.Message = pb
 	return imr
 }
 
+// WithRawData sets Message using byte data and content type
 func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *InvokeMethodResponse {
 	imr.r.Message = &commonv1pb.InvokeResponse{}
 	imr.r.Message.Data.Value = data
@@ -39,11 +50,13 @@ func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *I
 	return imr
 }
 
+// WithHeaders sets gRPC repsonse header metadata
 func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodResponse {
 	imr.r.Headers = GrpcMetadataToInternalMetadata(headers)
 	return imr
 }
 
+// WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
 	var md = map[string]*structpb.ListValue{}
 	header.VisitAll(func(key []byte, value []byte) {
@@ -59,31 +72,40 @@ func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHe
 	return imr
 }
 
-func (imr *InvokeMethodResponse) WithTrailers(headers metadata.MD) *InvokeMethodResponse {
-	imr.r.Trailers = GrpcMetadataToInternalMetadata(headers)
+// WithTrailers sets Trailer in internal InvokeMethodResponse
+func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethodResponse {
+	imr.r.Trailers = GrpcMetadataToInternalMetadata(trailer)
 	return imr
 }
 
+// Status gets Response status
 func (imr *InvokeMethodResponse) Status() *commonv1pb.Status {
-	return imr.r.Status
+	return imr.r.GetStatus()
 }
 
+// IsHTTPResponse returns true if response status code is http response status
 func (imr *InvokeMethodResponse) IsHTTPResponse() bool {
-	return imr.r.Status.Code >= 100
+	// gRPC status code <= 15 - https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+	// HTTP status code >= 100 - https://tools.ietf.org/html/rfc2616#section-10
+	return imr.r.GetStatus().Code >= 100
 }
 
+// Proto clones the internal InvokeMethodResponse pb object
 func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 	return proto.Clone(imr.r).(*internalv1pb.InternalInvokeResponse)
 }
 
+// Headers gets Headers metadata
 func (imr *InvokeMethodResponse) Headers() *map[string]*structpb.ListValue {
 	return &(imr.r.Headers)
 }
 
+// Trailers gets Trailers metadata
 func (imr *InvokeMethodResponse) Trailers() *map[string]*structpb.ListValue {
 	return &(imr.r.Trailers)
 }
 
+// Message returns message field in InvokeMethodResponse
 func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
-	return imr.r.Message
+	return imr.r.GetMessage()
 }

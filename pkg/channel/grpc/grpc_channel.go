@@ -51,10 +51,6 @@ func (g *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.Inv
 	var rsp *invokev1.InvokeMethodResponse
 	var err error
 
-	if g.ch != nil {
-		g.ch <- 1
-	}
-
 	switch req.APIVersion() {
 	case commonv1pb.APIVersion_V1:
 		rsp, err = g.invokeMethodV1(req)
@@ -65,15 +61,15 @@ func (g *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.Inv
 		err = status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 	}
 
-	if g.ch != nil {
-		<-g.ch
-	}
-
 	return rsp, err
 }
 
 // invokeMethodV1 calls user applications using daprclient v1
 func (g *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if g.ch != nil {
+		g.ch <- 1
+	}
+
 	clientV1 := clientv1pb.NewDaprClientClient(g.client)
 
 	ctx, cancel := context.WithTimeout(context.Background(), channel.DefaultChannelRequestTimeout)
@@ -85,11 +81,15 @@ func (g *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.I
 	var header, trailer metadata.MD
 	resp, err := clientV1.OnInvoke(ctx, req.Message(), grpc.Header(&header), grpc.Trailer(&trailer))
 
+	if g.ch != nil {
+		<-g.ch
+	}
+
 	// Convert status code
 	respStatus := status.Convert(err)
+	// Prepare response
 	rsp := invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), &(respStatus.Proto().Details))
 	rsp.WithHeaders(header).WithTrailers(trailer).WithInvokeResponseProto(resp)
 
-	// Prepare response
 	return rsp, nil
 }

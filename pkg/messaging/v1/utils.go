@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package v1
 
 import (
@@ -10,9 +15,15 @@ import (
 )
 
 const (
+	// JSONContentType is the MIME media type for JSON
+	JSONContentType = "application/json"
+	// ProtobufContentType is the MIME media type for Protobuf
+	ProtobufContentType = "application/x-protobuf"
+
 	// DaprHeaderPrefix is the prefix if metadata is defined by non user-defined http headers
 	DaprHeaderPrefix = "dapr-"
 
+	// gRPCBinaryMetadata is the suffix of grpc metadata binary value
 	gRPCBinaryMetadata = "-bin"
 )
 
@@ -85,6 +96,7 @@ func InternalMetadataToGrpcMetadata(internalMD map[string]*structpb.ListValue, h
 // InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers
 func InternalMetadataToHTTPHeader(internalMD map[string]*structpb.ListValue, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
+		// Skip if the header key has -bin suffix
 		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadata) {
 			continue
 		}
