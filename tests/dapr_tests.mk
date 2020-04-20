@@ -7,8 +7,14 @@
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
 E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorfeatures
 
+# PERFORMACE test app list
+PERF_TEST_APPS=tester service_invocation_http
+
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
+
+# PERFORMANCE test app root directory
+PERF_TESTAPP_DIR=./tests/apps/perf
 
 KUBECTL=kubectl
 
@@ -58,10 +64,33 @@ endef
 # Generate test app image push targets
 $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImagePush,$(ITEM))))
 
+define genPerfTestAppImageBuild
+.PHONY: build-perf-app-$(1)
+build-perf-app-$(1): check-e2e-env
+	$(DOCKER) build -f $(PERF_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(PERF_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
+endef
+
+# Generate perf app image build targets
+$(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfTestAppImageBuild,$(ITEM))))
+
+define genPerfAppImagePush
+.PHONY: push-perf-app-$(1)
+push-perf-app-$(1): check-e2e-env
+	$(DOCKER) push $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
+endef
+
+# Generate perf app image push targets
+$(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
+
 # Enumerate test app build targets
 BUILD_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),build-e2e-app-$(ITEM))
 # Enumerate test app push targets
 PUSH_E2E_APPS_TARGETS:=$(foreach ITEM,$(E2E_TEST_APPS),push-e2e-app-$(ITEM))
+
+# Enumerate test app build targets
+BUILD_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),build-perf-app-$(ITEM))
+# Enumerate test app push targets
+PUSH_PERF_APPS_TARGETS:=$(foreach ITEM,$(PERF_TEST_APPS),push-perf-app-$(ITEM))
 
 # build test app image
 build-e2e-app-all: $(BUILD_E2E_APPS_TARGETS)
@@ -69,9 +98,19 @@ build-e2e-app-all: $(BUILD_E2E_APPS_TARGETS)
 # push test app image to the registry
 push-e2e-app-all: $(PUSH_E2E_APPS_TARGETS)
 
+# build perf app image
+build-perf-app-all: $(BUILD_PERF_APPS_TARGETS)
+
+# push perf app image to the registry
+push-perf-app-all: $(PUSH_PERF_APPS_TARGETS)
+
 # start all e2e tests
 test-e2e-all: check-e2e-env
 	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=e2e ./tests/e2e/...
+
+# start all perf tests
+test-perf-all: check-e2e-env
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=perf ./tests/perf/...
 
 # add required helm repo
 setup-helm-init:
