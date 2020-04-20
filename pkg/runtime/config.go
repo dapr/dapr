@@ -53,11 +53,10 @@ type Config struct {
 	mtlsEnabled             bool
 	SentryServiceAddress    string
 	CertChain               *credentials.CertChain
-	EnableMetrics           bool
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, metricsEnabled bool) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
@@ -80,6 +79,5 @@ func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedO
 		MaxConcurrency:       maxConcurrency,
 		mtlsEnabled:          mtlsEnabled,
 		SentryServiceAddress: sentryAddress,
-		EnableMetrics:        metricsEnabled,
 	}
 }

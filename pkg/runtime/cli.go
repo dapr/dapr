@@ -66,12 +66,10 @@ func FromFlags() (*DaprRuntime, error) {
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	// Initialize dapr metrics exporter
-	enableMetrics := metricsExporter.Options().MetricsEnabled
-	if enableMetrics {
+	if metricsExporter.Options().MetricsEnabled {
 		if err := metricsExporter.Init(); err != nil {
 			log.Fatal(err)
 		}
-
 		if err := diagnostics.InitMetrics(*appID); err != nil {
 			log.Fatal(err)
 		}
@@ -114,7 +112,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*appID, *placementServiceAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		*appProtocol, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, *maxConcurrency, *enableMTLS, *sentryAddress, enableMetrics)
+		*appProtocol, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, *maxConcurrency, *enableMTLS, *sentryAddress)
 
 	var globalConfig *global_config.Configuration
 	var configErr error

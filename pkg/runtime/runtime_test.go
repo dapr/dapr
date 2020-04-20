@@ -734,7 +734,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		-1,
 		false,
 		"",
-		false)
+	)
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
 	rt.components = []components_v1alpha1.Component{

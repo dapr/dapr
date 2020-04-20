@@ -32,9 +32,7 @@ func TestCertRenewal(t *testing.T) {
 func TestGetMiddlewareOptions(t *testing.T) {
 	t.Run("should enable two interceptors if tracing and metrics are enabled", func(t *testing.T) {
 		fakeServer := &server{
-			config: ServerConfig{
-				EnableMetrics: true,
-			},
+			config: ServerConfig{},
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "1",
 			},
@@ -49,9 +47,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 	t.Run("should not disable middlewares even when SamplingRate is 0", func(t *testing.T) {
 		fakeServer := &server{
-			config: ServerConfig{
-				EnableMetrics: true,
-			},
+			config: ServerConfig{},
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},

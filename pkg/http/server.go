@@ -52,9 +52,7 @@ func (s *server) StartNonBlocking() {
 				s.useComponents(
 					s.useRouter())))
 
-	if s.config.EnableMetrics {
-		handler = s.useMetrics(handler)
-	}
+	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
 
 	go func() {
@@ -75,7 +73,6 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 }
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled metrics http middleware")
 	return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
 }
 
