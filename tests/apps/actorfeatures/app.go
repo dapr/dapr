@@ -28,7 +28,7 @@ const (
 	actorIdleTimeout        = "1h"
 	actorScanInterval       = "30s"
 	drainOngoingCallTimeout = "30s"
-	drainBalancedActors     = true
+	drainRebalancedActors   = true
 	secondsToWaitInMethod   = 5
 )
 
@@ -52,7 +52,7 @@ type daprConfig struct {
 	ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
 	ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
-	DrainBalancedActors     bool     `json:"drainBalancedActors,omitempty"`
+	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
 
 var daprConfigResponse = daprConfig{
@@ -60,7 +60,7 @@ var daprConfigResponse = daprConfig{
 	actorIdleTimeout,
 	actorScanInterval,
 	drainOngoingCallTimeout,
-	drainBalancedActors,
+	drainRebalancedActors,
 }
 
 type daprActorResponse struct {
