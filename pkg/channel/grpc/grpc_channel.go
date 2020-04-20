@@ -8,16 +8,16 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"strings"
-	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
-	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
-	"github.com/golang/protobuf/ptypes/any"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	clientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code
@@ -32,7 +32,7 @@ type Channel struct {
 func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
 	c := &Channel{
 		client:      conn,
-		baseAddress: fmt.Sprintf("127.0.0.1:%v", port),
+		baseAddress: fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
 		tracingSpec: spec,
 	}
 	if maxConcurrency > 0 {
@@ -41,75 +41,55 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 	return c
 }
 
-const (
-	// QueryString is the query string passed by the request
-	QueryString = "http.query_string"
-)
-
 // GetBaseAddress returns the application base address
 func (g *Channel) GetBaseAddress() string {
 	return g.baseAddress
 }
 
 // InvokeMethod invokes user code via gRPC
-func (g *Channel) InvokeMethod(req *channel.InvokeRequest) (*channel.InvokeResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
-	defer cancel()
-
-	metadata, err := getQueryStringFromMetadata(req)
-	if err != nil {
-		return nil, err
-	}
-	msg := daprclient_pb.InvokeEnvelope{
-		Data:     &any.Any{Value: req.Payload},
-		Method:   req.Method,
-		Metadata: metadata,
-	}
+func (g *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	var rsp *invokev1.InvokeMethodResponse
+	var err error
 
 	if g.ch != nil {
 		g.ch <- 1
 	}
-	c := daprclient_pb.NewDaprClientClient(g.client)
 
-	var span tracing.TracerSpan
-	var spanc tracing.TracerSpan
+	switch req.APIVersion() {
+	case commonv1pb.APIVersion_V1:
+		rsp, err = g.invokeMethodV1(req)
 
-	span, spanc = tracing.TracingSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
-	defer span.Span.End()
-	defer spanc.Span.End()
-
-	resp, err := c.OnInvoke(ctx, &msg)
-
-	tracing.UpdateSpanPairStatusesFromError(span, spanc, err, req.Method)
+	default:
+		// Reject unsupported version
+		rsp = nil
+		err = status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
+	}
 
 	if g.ch != nil {
 		<-g.ch
 	}
-	if err != nil {
-		return nil, err
-	}
 
-	return &channel.InvokeResponse{
-		Data:     resp.Value,
-		Metadata: map[string]string{},
-	}, nil
+	return rsp, err
 }
 
-func getQueryStringFromMetadata(req *channel.InvokeRequest) (map[string]string, error) {
-	var metadata map[string]string
-	if val, ok := req.Metadata[QueryString]; ok {
-		metadata = make(map[string]string)
-		params, err := url.ParseQuery(val)
-		if err != nil {
-			return nil, err
-		}
-		for k, v := range params {
-			if len(v) != 1 {
-				metadata[k] = strings.Join(v, ",")
-			} else {
-				metadata[k] = v[0]
-			}
-		}
-	}
-	return metadata, nil
+// invokeMethodV1 calls user applications using daprclient v1
+func (g *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	clientV1 := clientv1pb.NewDaprClientClient(g.client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), channel.DefaultChannelRequestTimeout)
+	defer cancel()
+
+	// Prepare gRPC Metadata
+	ctx = metadata.NewOutgoingContext(ctx, invokev1.InternalMetadataToGrpcMetadata(*req.Metadata(), true))
+
+	var header, trailer metadata.MD
+	resp, err := clientV1.OnInvoke(ctx, req.Message(), grpc.Header(&header), grpc.Trailer(&trailer))
+
+	// Convert status code
+	respStatus := status.Convert(err)
+	rsp := invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), &(respStatus.Proto().Details))
+	rsp.WithHeaders(header).WithTrailers(trailer).WithInvokeResponseProto(resp)
+
+	// Prepare response
+	return rsp, nil
 }
