@@ -36,6 +36,8 @@ var httpMethods []string
 const (
 	appPort  = 3000
 	daprPort = 3500
+
+	jsonContentType = "application/json"
 )
 
 type testCommandRequest struct {
@@ -161,7 +163,7 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 	}
 
 	/* #nosec */
-	resp, err := http.Post(url, "application/json", t)
+	resp, err := http.Post(url, jsonContentType, t)
 
 	if err != nil {
 		return appResponse{}, err
@@ -184,14 +186,12 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 }
 
 func constructRequest(id, method, httpVerb string, body []byte) *daprv1pb.InvokeServiceRequest {
-	d := &commonv1pb.DataWithContentType{ContentType: "application/json", Body: body}
+	d := &commonv1pb.DataWithContentType{ContentType: jsonContentType, Body: body}
 	msg := &commonv1pb.InvokeRequest{Method: method}
 	msg.Data, _ = ptypes.MarshalAny(d)
 	if httpVerb != "" {
-		msg.ProtocolExtension = &commonv1pb.InvokeRequest_Http{
-			Http: &commonv1pb.HTTPExtension{
-				Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
-			},
+		msg.HTTPExtension = &commonv1pb.HTTPExtension{
+			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
 		}
 	}
 
@@ -659,7 +659,7 @@ func newHTTPClient() http.Client {
 // HTTPPost is a helper to make POST request call to url
 func HTTPPost(url string, data []byte) ([]byte, error) {
 	client := newHTTPClient()
-	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
+	resp, err := client.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(data)) //nolint
 
 	if err != nil {
 		return nil, err
