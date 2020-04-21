@@ -43,7 +43,8 @@ type httpMetrics struct {
 	clientReceivedBytes    *stats.Int64Measure
 	clientRoundtripLatency *stats.Float64Measure
 
-	appID string
+	appID   string
+	enabled bool
 }
 
 func newHTTPMetrics() *httpMetrics {
@@ -77,48 +78,59 @@ func newHTTPMetrics() *httpMetrics {
 			"http/client/roundtrip_latency",
 			"Time between first byte of request headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
+
+		enabled: false,
 	}
 }
 
 func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path string, contentSize int64) {
-	stats.RecordWithTags(
-		ctx,
-		diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
-		h.serverRequestCount.M(1))
-	stats.RecordWithTags(
-		ctx, diag_utils.WithTags(appIDKey, h.appID),
-		h.serverRequestBytes.M(contentSize))
+	if h.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
+			h.serverRequestCount.M(1))
+		stats.RecordWithTags(
+			ctx, diag_utils.WithTags(appIDKey, h.appID),
+			h.serverRequestBytes.M(contentSize))
+	}
 }
 
 func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
-	stats.RecordWithTags(
-		ctx,
-		diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
-		h.serverLatency.M(elapsed))
-	stats.RecordWithTags(
-		ctx, diag_utils.WithTags(appIDKey, h.appID),
-		h.serverResponseBytes.M(contentSize))
+	if h.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			h.serverLatency.M(elapsed))
+		stats.RecordWithTags(
+			ctx, diag_utils.WithTags(appIDKey, h.appID),
+			h.serverResponseBytes.M(contentSize))
+	}
 }
 
 func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path string, contentSize int64) {
-	stats.RecordWithTags(
-		ctx,
-		diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
-		h.clientSentBytes.M(contentSize))
+	if h.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
+			h.clientSentBytes.M(contentSize))
+	}
 }
 
 func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
-	stats.RecordWithTags(
-		ctx,
-		diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
-		h.clientRoundtripLatency.M(elapsed))
-	stats.RecordWithTags(
-		ctx, diag_utils.WithTags(appIDKey, h.appID),
-		h.clientReceivedBytes.M(contentSize))
+	if h.enabled {
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			h.clientRoundtripLatency.M(elapsed))
+		stats.RecordWithTags(
+			ctx, diag_utils.WithTags(appIDKey, h.appID),
+			h.clientReceivedBytes.M(contentSize))
+	}
 }
 
 func (h *httpMetrics) Init(appID string) error {
 	h.appID = appID
+	h.enabled = true
 
 	views := []*view.View{
 		{

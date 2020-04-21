@@ -40,8 +40,9 @@ type serviceMetrics struct {
 	actorDeactivationTotal       *stats.Int64Measure
 	actorDeactivationFailedTotal *stats.Int64Measure
 
-	appID string
-	ctx   context.Context
+	appID   string
+	ctx     context.Context
+	enabled bool
 }
 
 // newServiceMetrics returns serviceMetrics instance with default service metric stats
@@ -114,13 +115,15 @@ func newServiceMetrics() *serviceMetrics {
 			stats.UnitDimensionless),
 
 		// TODO: use the correct context for each request
-		ctx: context.Background(),
+		ctx:     context.Background(),
+		enabled: false,
 	}
 }
 
 // Init initialize metrics views for metrics
 func (s *serviceMetrics) Init(appID string) error {
 	s.appID = appID
+	s.enabled = true
 	return view.Register(
 		diag_utils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
 		diag_utils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
@@ -144,106 +147,136 @@ func (s *serviceMetrics) Init(appID string) error {
 
 // ComponentLoaded records metric when component is loaded successfully
 func (s *serviceMetrics) ComponentLoaded() {
-	stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.componentLoaded.M(1))
+	if s.enabled {
+		stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.componentLoaded.M(1))
+	}
 }
 
 // ComponentInitialized records metric when component is initialized
 func (s *serviceMetrics) ComponentInitialized(component string) {
-	stats.RecordWithTags(
-		s.ctx,
-		diag_utils.WithTags(appIDKey, s.appID, componentKey, component),
-		s.componentInitCompleted.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(appIDKey, s.appID, componentKey, component),
+			s.componentInitCompleted.M(1))
+	}
 }
 
 // ComponentInitFailed records metric when component initialization is failed
 func (s *serviceMetrics) ComponentInitFailed(component string, reason string) {
-	stats.RecordWithTags(
-		s.ctx,
-		diag_utils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason),
-		s.componentInitFailed.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(appIDKey, s.appID, componentKey, component, failReasonKey, reason),
+			s.componentInitFailed.M(1))
+	}
 }
 
 // MTLSInitCompleted records metric when component is initialized
 func (s *serviceMetrics) MTLSInitCompleted() {
-	stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.mtlsInitCompleted.M(1))
+	if s.enabled {
+		stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.mtlsInitCompleted.M(1))
+	}
 }
 
 // MTLSInitFailed records metric when component initialization is failed
 func (s *serviceMetrics) MTLSInitFailed(reason string) {
-	stats.RecordWithTags(
-		s.ctx, diag_utils.WithTags(appIDKey, s.appID, failReasonKey, reason),
-		s.mtlsInitFailed.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx, diag_utils.WithTags(appIDKey, s.appID, failReasonKey, reason),
+			s.mtlsInitFailed.M(1))
+	}
 }
 
 // MTLSWorkLoadCertRotationCompleted records metric when workload certificate rotation is succeeded
 func (s *serviceMetrics) MTLSWorkLoadCertRotationCompleted() {
-	stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
+	if s.enabled {
+		stats.RecordWithTags(s.ctx, diag_utils.WithTags(appIDKey, s.appID), s.mtlsWorkloadCertRotated.M(1))
+	}
 }
 
 // MTLSWorkLoadCertRotationFailed records metric when workload certificate rotation is failed
 func (s *serviceMetrics) MTLSWorkLoadCertRotationFailed(reason string) {
-	stats.RecordWithTags(
-		s.ctx, diag_utils.WithTags(appIDKey, s.appID, failReasonKey, reason),
-		s.mtlsWorkloadCertRotatedFailed.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx, diag_utils.WithTags(appIDKey, s.appID, failReasonKey, reason),
+			s.mtlsWorkloadCertRotatedFailed.M(1))
+	}
 }
 
 // ActorStatusReported records metrics when status is reported to placement service.
 func (s *serviceMetrics) ActorStatusReported(operation string) {
-	stats.RecordWithTags(
-		s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation),
-		s.actorStatusReportTotal.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation),
+			s.actorStatusReportTotal.M(1))
+	}
 }
 
 // ActorStatusReportFailed records metrics when status report to placement service is failed.
 func (s *serviceMetrics) ActorStatusReportFailed(operation string, reason string) {
-	stats.RecordWithTags(
-		s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation, failReasonKey, reason),
-		s.actorStatusReportFailedTotal.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation, failReasonKey, reason),
+			s.actorStatusReportFailedTotal.M(1))
+	}
 }
 
 // ActorPlacementTableOperationReceived records metric when runtime receives table operation.
 func (s *serviceMetrics) ActorPlacementTableOperationReceived(operation string) {
-	stats.RecordWithTags(
-		s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation),
-		s.actorTableOperationRecvTotal.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx, diag_utils.WithTags(appIDKey, s.appID, operationKey, operation),
+			s.actorTableOperationRecvTotal.M(1))
+	}
 }
 
 // ActorRebalanced records metric when actors are drained.
 func (s *serviceMetrics) ActorRebalanced(actorType string) {
-	stats.RecordWithTags(
-		s.ctx,
-		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
-		s.actorRebalancedTotal.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
+			s.actorRebalancedTotal.M(1))
+	}
 }
 
 // ActorActivated records metric when actor is activated.
 func (s *serviceMetrics) ActorActivated(actorType string) {
-	stats.RecordWithTags(
-		s.ctx,
-		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
-		s.actorActivatedTotal.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
+			s.actorActivatedTotal.M(1))
+	}
 }
 
 // ActorActivationFailed records metric when actor activation is failed.
 func (s *serviceMetrics) ActorActivationFailed(actorType string, reason string) {
-	stats.RecordWithTags(
-		s.ctx,
-		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
-		s.actorActivatedFailedTotal.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
+			s.actorActivatedFailedTotal.M(1))
+	}
 }
 
 // ActorDeactivated records metric when actor is deactivated.
 func (s *serviceMetrics) ActorDeactivated(actorType string) {
-	stats.RecordWithTags(
-		s.ctx,
-		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
-		s.actorDeactivationTotal.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
+			s.actorDeactivationTotal.M(1))
+	}
 }
 
 // ActorDeactivationFailed records metric when actor deactivation is failed.
 func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
-	stats.RecordWithTags(
-		s.ctx,
-		diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
-		s.actorDeactivationFailedTotal.M(1))
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
+			s.actorDeactivationFailedTotal.M(1))
+	}
 }
