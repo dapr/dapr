@@ -92,6 +92,9 @@ func (a *api) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelo
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, &req)
+
+	diag.UpdateSpanPairStatusesFromError(span, err, in.Method)
+
 	if err != nil {
 		return nil, err
 	}

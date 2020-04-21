@@ -151,6 +151,9 @@ func (d *directMessaging) invokeRemote(ctx context.Context, req *DirectMessageRe
 
 	client := daprinternal_pb.NewDaprInternalClient(conn)
 	resp, err := client.CallLocal(ctx, &msg)
+
+	diag.UpdateSpanPairStatusesFromError(span, err, req.Method)
+
 	if err != nil {
 		return nil, err
 	}
