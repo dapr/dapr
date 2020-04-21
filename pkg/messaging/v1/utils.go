@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"strings"
 
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -87,7 +90,11 @@ func InternalMetadataToGrpcMetadata(internalMD map[string]*structpb.ListValue, h
 			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
 		}
 		for _, v := range listVal.Values {
-			md[keyName] = append(md[keyName], v.GetStringValue())
+			if _, ok := md[keyName]; !ok {
+				md[keyName] = []string{v.GetStringValue()}
+			} else {
+				md[keyName] = append(md[keyName], v.GetStringValue())
+			}
 		}
 	}
 	return md
@@ -180,4 +187,25 @@ func CodeFromHTTPStatus(httpStatusCode int) codes.Code {
 	}
 
 	return codes.Unknown
+}
+
+func isDataWithContentType(data *any.Any) bool {
+	if data == nil {
+		return false
+	}
+
+	return ptypes.Is(data, &commonv1pb.DataWithContentType{})
+}
+
+func extractRawData(data *any.Any) (string, []byte) {
+	if !isDataWithContentType(data) {
+		return "", nil
+	}
+
+	d := &commonv1pb.DataWithContentType{}
+	if err := ptypes.UnmarshalAny(data, d); err != nil {
+		return "", nil
+	}
+
+	return d.GetContentType(), d.GetBody()
 }
