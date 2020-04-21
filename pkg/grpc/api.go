@@ -82,7 +82,7 @@ func (a *api) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelo
 		return nil, errors.New("app channel is not initialized")
 	}
 
-	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, nil, in.Method, a.tracingSpec)
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, in.Method, a.tracingSpec)
 	defer span.End()
 
 	req := channel.InvokeRequest{
@@ -167,9 +167,6 @@ func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelo
 	if in.Data != nil {
 		req.Data = in.Data.Value
 	}
-
-	ctx, span := diag.StartTracingClientSpanFromGRPCContext(ctx, req, req.Method, a.tracingSpec)
-	defer span.End()
 
 	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {

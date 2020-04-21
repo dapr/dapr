@@ -13,6 +13,8 @@ import (
 
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"github.com/golang/protobuf/ptypes/any"
@@ -38,10 +40,11 @@ type directMessaging struct {
 	grpcPort            int
 	namespace           string
 	resolver            servicediscovery.Resolver
+	tracingSpec         config.TracingSpec
 }
 
 // NewDirectMessaging returns a new direct messaging api
-func NewDirectMessaging(appID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), resolver servicediscovery.Resolver) DirectMessaging {
+func NewDirectMessaging(appID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), resolver servicediscovery.Resolver, tracingSpec config.TracingSpec) DirectMessaging {
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: grpcConnectionFn,
@@ -50,6 +53,7 @@ func NewDirectMessaging(appID, namespace string, port int, mode modes.DaprMode, 
 		grpcPort:            port,
 		namespace:           namespace,
 		resolver:            resolver,
+		tracingSpec:         tracingSpec,
 	}
 }
 
@@ -141,6 +145,9 @@ func (d *directMessaging) invokeRemote(ctx context.Context, req *DirectMessageRe
 
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
 	defer cancel()
+
+	ctx, span := diag.StartTracingClientSpanFromGRPCContext(ctx, req.Method, d.tracingSpec)
+	defer span.End()
 
 	client := daprinternal_pb.NewDaprInternalClient(conn)
 	resp, err := client.CallLocal(ctx, &msg)

@@ -528,9 +528,6 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	}
 	a.setHeaders(c, req.Metadata)
 
-	ctx, span := diag.StartClientSpanTracing(ctx, &c.Request, a.tracingSpec)
-	defer span.End()
-
 	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())

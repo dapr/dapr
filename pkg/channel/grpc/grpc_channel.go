@@ -71,12 +71,9 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *channel.InvokeRequest) 
 	}
 	c := daprclient_pb.NewDaprClientClient(g.client)
 
-	ctx, span := tracing.StartTracingClientSpanFromGRPCContext(ctx, nil, req.Method, g.tracingSpec)
-	defer span.End()
+	ctx = tracing.WithGRPCSpanContext(ctx)
 
 	resp, err := c.OnInvoke(ctx, &msg)
-
-	tracing.UpdateSpanPairStatusesFromError(span, err, req.Method)
 
 	if g.ch != nil {
 		<-g.ch

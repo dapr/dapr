@@ -330,7 +330,8 @@ func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
 		a.runtimeConfig.Mode,
 		a.appChannel,
 		a.grpc.GetGRPCConnection,
-		resolver)
+		resolver,
+		a.globalConfig.Spec.TracingSpec)
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {

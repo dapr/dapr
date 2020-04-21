@@ -9,16 +9,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	"google.golang.org/grpc/metadata"
 )
 
 func TestStartTracingClientSpanFromGRPCContext(t *testing.T) {
-	req := &channel.InvokeRequest{}
 	spec := config.TracingSpec{SamplingRate: "0.5"}
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.MD{"dapr-headerKey": {"v3", "v4"}})
 
-	StartTracingClientSpanFromGRPCContext(ctx, req, "invoke", spec)
+	StartTracingClientSpanFromGRPCContext(ctx, "invoke", spec)
 }
