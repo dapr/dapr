@@ -23,8 +23,10 @@ import (
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"
 
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
+	commonv1pb "app/proto/common/v1"
+	daprv1pb "app/proto/dapr/v1"
 
+	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
 )
@@ -181,6 +183,30 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 	return appResp, nil
 }
 
+func constructRequest(id, method, httpVerb string, body []byte) *daprv1pb.InvokeServiceRequest {
+	d := &commonv1pb.DataWithContentType{ContentType: "application/json", Body: body}
+	msg := &commonv1pb.InvokeRequest{Method: method}
+	msg.Data, _ = ptypes.MarshalAny(d)
+	if httpVerb != "" {
+		msg.ProtocolExtension = &commonv1pb.InvokeRequest_Http{
+			Http: &commonv1pb.HTTPExtension{
+				Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
+			},
+		}
+	}
+
+	return &daprv1pb.InvokeServiceRequest{
+		Id:      id,
+		Message: msg,
+	}
+}
+
+func unmarshalData(data *any.Any) (string, []byte) {
+	d := &commonv1pb.DataWithContentType{}
+	ptypes.UnmarshalAny(data, d)
+	return d.ContentType, d.Body
+}
+
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
@@ -244,21 +270,20 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Printf("grpcToGrpcTest calling with message %s\n", string(b))
-	resp, err := client.InvokeService(context.Background(), &daprv1pb.InvokeServiceEnvelope{
-		Id:     commandBody.RemoteApp,
-		Data:   &any.Any{Value: b},
-		Method: "grpcToGrpcTest",
-	})
+
+	var req = constructRequest(commandBody.RemoteApp, "grpcToGrpcTest", "", b)
+	resp, err := client.InvokeService(context.Background(), req)
 
 	if err != nil {
 		logAndSetResponse(w, http.StatusInternalServerError, "grpc call failed with "+err.Error())
 		return
 	}
 
-	fmt.Printf("resp was %s\n", string(resp.Data.Value))
+	_, body := unmarshalData(resp.Data)
+	fmt.Printf("resp was %s\n", string(body))
 
 	var responseMessage appResponse
-	err = json.Unmarshal(resp.Data.Value, &responseMessage)
+	err = json.Unmarshal(body, &responseMessage)
 	if err != nil {
 		onDeserializationFailed(w, err)
 		return
@@ -516,11 +541,8 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 	// Create the client
 	client := daprv1pb.NewDaprClient(conn)
 
-	metadata := make(map[string]string)
-
 	var b []byte
 	for _, v := range httpMethods {
-		metadata["http.verb"] = v
 		testMessage := guuid.New().String()
 		b, err = json.Marshal(testMessage)
 		if err != nil {
@@ -530,24 +552,19 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fmt.Printf("grpcToHTTPTest calling with verb %s, message %s\n", v, testMessage)
+		req := constructRequest(commandBody.RemoteApp, "posthandler", v, b)
 
-		envelope := daprv1pb.InvokeServiceEnvelope{
-			Id:       commandBody.RemoteApp,
-			Data:     &any.Any{Value: b},
-			Metadata: metadata,
-		}
-
-		var resp *daprv1pb.InvokeServiceResponseEnvelope
+		var resp *commonv1pb.InvokeResponse
 		var err error
 		switch v {
 		case "POST":
-			envelope.Method = "posthandler"
+			req.Message.Method = "posthandler"
 		case "GET":
-			envelope.Method = "gethandler"
+			req.Message.Method = "gethandler"
 		case "PUT":
-			envelope.Method = "puthandler"
+			req.Message.Method = "puthandler"
 		case "DELETE":
-			envelope.Method = "deletehandler"
+			req.Message.Method = "deletehandler"
 		default:
 			fmt.Println("Unexpected option")
 			if err != nil {
@@ -556,16 +573,18 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		resp, err = client.InvokeService(context.Background(), &envelope)
+		resp, err = client.InvokeService(context.Background(), req)
 		if err != nil {
 			logAndSetResponse(w, http.StatusInternalServerError, "error returned from grpc client")
 			return
 		}
 
-		fmt.Printf("resp was %s\n", string(resp.Data.Value))
+		_, body := unmarshalData(resp.Data)
+
+		fmt.Printf("resp was %s\n", string(body))
 		//var responseMessage string
 		var appResp appResponse
-		err = json.Unmarshal(resp.Data.Value, &appResp)
+		err = json.Unmarshal(body, &appResp)
 		if err != nil {
 			onDeserializationFailed(w, err)
 			return
@@ -689,7 +708,6 @@ func HTTPDelete(url string, data []byte) ([]byte, error) {
 	return body, nil
 }
 
-// sends put
 func HTTPPut(url string, data []byte) ([]byte, error) {
 	client := newHTTPClient()
 

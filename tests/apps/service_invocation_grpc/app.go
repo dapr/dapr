@@ -14,10 +14,12 @@ import (
 
 	"net"
 
-	"github.com/golang/protobuf/ptypes/any"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/empty"
 
-	pb "github.com/dapr/dapr/pkg/proto/daprclient"
+	commonv1pb "app/proto/common/v1"
+	pb "app/proto/daprclient/v1"
+
 	"google.golang.org/grpc"
 )
 
@@ -68,8 +70,10 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 
 // This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload
-func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any, error) {
-	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.Data.Value))
+func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
+	var d = &commonv1pb.DataWithContentType{}
+	_ = ptypes.UnmarshalAny(in.Data, d)
+	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(d.Body))
 
 	var err error
 	var response []byte
@@ -78,7 +82,7 @@ func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any,
 		// not a typo, the handling is the same as the case below
 		fallthrough
 	case "grpcToGrpcTest":
-		response, err = s.grpcTestHandler(in.Data.Value)
+		response, err = s.grpcTestHandler(d.Body)
 	}
 
 	if err != nil {
@@ -86,9 +90,10 @@ func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any,
 		response, _ = json.Marshal(msg)
 	}
 
-	return &any.Any{
-		Value: response,
-	}, nil
+	resp := &commonv1pb.DataWithContentType{ContentType: "application/json", Body: response}
+	respBody, _ := ptypes.MarshalAny(resp)
+
+	return &commonv1pb.InvokeResponse{Data: respBody}, nil
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
