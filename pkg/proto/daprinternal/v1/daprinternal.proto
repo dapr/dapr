@@ -9,7 +9,8 @@ package pkg.proto.daprinternal.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/struct.proto";
-import "pkg/proto/daprinternal/v1/internal.proto";
+import "pkg/proto/daprinternal/v1/apiversion.proto";
+import "pkg/proto/daprinternal/v1/status.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
 
