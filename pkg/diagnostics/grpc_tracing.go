@@ -143,7 +143,6 @@ func FromGRPCContext(ctx context.Context) trace.SpanContext {
 	if len(traceContext) > 0 {
 		traceContextBinary := []byte(traceContext[0])
 		sc, _ = propagation.FromBinary(traceContextBinary)
-
 	}
 	return sc
 }
