@@ -76,7 +76,7 @@ func (g *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.I
 	defer cancel()
 
 	// Prepare gRPC Metadata
-	ctx = metadata.NewOutgoingContext(ctx, invokev1.InternalMetadataToGrpcMetadata(*req.Metadata(), true))
+	ctx = metadata.NewOutgoingContext(ctx, invokev1.InternalMetadataToGrpcMetadata(req.Metadata(), true))
 
 	var header, trailer metadata.MD
 	resp, err := clientV1.OnInvoke(ctx, req.Message(), grpc.Header(&header), grpc.Trailer(&trailer))
@@ -85,11 +85,17 @@ func (g *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.I
 		<-g.ch
 	}
 
-	// Convert status code
-	respStatus := status.Convert(err)
-	// Prepare response
-	rsp := invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), &(respStatus.Proto().Details))
-	rsp.WithHeaders(header).WithTrailers(trailer).WithInvokeResponseProto(resp)
+	var rsp *invokev1.InvokeMethodResponse
+	if err != nil {
+		// Convert status code
+		respStatus := status.Convert(err)
+		// Prepare response
+		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().Details)
+	} else {
+		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
+	}
 
-	return rsp, nil
+	rsp.WithHeaders(header).WithTrailers(trailer)
+
+	return rsp.WithMessage(resp), nil
 }

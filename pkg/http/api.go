@@ -528,7 +528,7 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, c.QueryArgs().String())
 	req.WithRawData(c.Request.Body(), string(c.Request.Header.ContentType()))
 	// Save headers to metadata
-	var metadata map[string][]string
+	metadata := map[string][]string{}
 	c.Request.Header.VisitAll(func(key []byte, value []byte) {
 		metadata[string(key)] = []string{string(value)}
 	})
@@ -544,14 +544,15 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 
 	// TODO: add trace parent and state
 	invokev1.InternalMetadataToHTTPHeader(*resp.Headers(), c.RequestCtx.Response.Header.Set)
-	c.RequestCtx.Response.Header.SetContentType(resp.Proto().Message.ContentType)
+	contentType, body := resp.RawData()
+	c.RequestCtx.Response.Header.SetContentType(contentType)
 
 	// Construct response
 	statusCode := int(resp.Status().Code)
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
-	respond(c.RequestCtx, statusCode, resp.Proto().Message.Data.Value)
+	respond(c.RequestCtx, statusCode, body)
 
 	return nil
 }

@@ -327,7 +327,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	var rsp = &CallResponse{}
 
 	if resp.Message() != nil {
-		rsp.Data = resp.Message().Data.Value
+		_, rsp.Data = resp.RawData()
 	}
 
 	if resp.Status().Code != nethttp.StatusOK {

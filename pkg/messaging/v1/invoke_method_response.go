@@ -9,6 +9,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes"
 	any "github.com/golang/protobuf/ptypes/any"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/valyala/fasthttp"
@@ -22,30 +23,30 @@ type InvokeMethodResponse struct {
 }
 
 // NewInvokeMethodResponse returns new InvokeMethodResponse object with status
-func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetails *[]*any.Any) *InvokeMethodResponse {
+func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetails []*any.Any) *InvokeMethodResponse {
 	return &InvokeMethodResponse{
 		r: &internalv1pb.InternalInvokeResponse{
-			Status: &commonv1pb.Status{Code: statusCode, Message: statusMessage, Details: *statusDetails},
+			Status: &commonv1pb.Status{Code: statusCode, Message: statusMessage, Details: statusDetails},
 		},
 	}
 }
 
-// FromInternalInvokeResponse returns InvokeMethodResponse for InternalInvokeResponse pb to use the helpers
-func FromInternalInvokeResponse(resp *internalv1pb.InternalInvokeResponse) *InvokeMethodResponse {
+// InternalInvokeResponse returns InvokeMethodResponse for InternalInvokeResponse pb to use the helpers
+func InternalInvokeResponse(resp *internalv1pb.InternalInvokeResponse) *InvokeMethodResponse {
 	return &InvokeMethodResponse{r: resp}
 }
 
-// WithInvokeResponseProto sets Message field using InvokeResponse pb object
-func (imr *InvokeMethodResponse) WithInvokeResponseProto(pb *commonv1pb.InvokeResponse) *InvokeMethodResponse {
+// WithMessage sets InvokeResponse pb object to Message field
+func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *InvokeMethodResponse {
 	imr.r.Message = pb
 	return imr
 }
 
 // WithRawData sets Message using byte data and content type
 func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *InvokeMethodResponse {
+	d := &commonv1pb.DataWithContentType{ContentType: contentType, Body: data}
 	imr.r.Message = &commonv1pb.InvokeResponse{}
-	imr.r.Message.Data.Value = data
-	imr.r.Message.ContentType = contentType
+	imr.r.Message.Data, _ = ptypes.MarshalAny(d)
 
 	return imr
 }
@@ -108,4 +109,13 @@ func (imr *InvokeMethodResponse) Trailers() *map[string]*structpb.ListValue {
 // Message returns message field in InvokeMethodResponse
 func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
 	return imr.r.GetMessage()
+}
+
+// RawData returns content_type and byte array body
+func (imr *InvokeMethodResponse) RawData() (string, []byte) {
+	if imr.r.GetMessage() == nil {
+		return "", nil
+	}
+
+	return extractRawData(imr.r.GetMessage().GetData())
 }

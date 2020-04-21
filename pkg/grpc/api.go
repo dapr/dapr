@@ -99,7 +99,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, errors.New("app channel is not initialized")
 	}
 
-	resp, err := a.appChannel.InvokeMethod(invokev1.FromInvokeMethodRequestProto(in))
+	resp, err := a.appChannel.InvokeMethod(invokev1.InvokeMethodRequestProto(in))
 	return resp.Proto(), err
 }
 

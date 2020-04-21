@@ -128,7 +128,7 @@ func (d *directMessaging) invokeRemote(targetID string, req *invokev1.InvokeMeth
 	clientV1 := internalv1pb.NewDaprInternalClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 
-	return invokev1.FromInternalInvokeResponse(resp), err
+	return invokev1.InternalInvokeResponse(resp), err
 }
 
 func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {

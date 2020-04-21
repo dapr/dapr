@@ -63,16 +63,12 @@ func (h *Channel) GetBaseAddress() string {
 // InvokeMethod invokes user code via HTTP
 func (h *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	// Check if HTTP Extension is given. Otherwise, it will return error.
-	httpExt := req.Message().GetHttp()
+	httpExt := req.Message().GetHttpExtension()
 	if httpExt == nil {
 		return nil, status.Error(codes.InvalidArgument, "missing HTTP extension field")
 	}
 	if httpExt.GetVerb() == commonv1pb.HTTPExtension_NONE {
 		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
-	}
-	// TODO: check allowed content-types
-	if req.Message().GetContentType() == "" {
-		return nil, status.Error(codes.InvalidArgument, "invalid content-type")
 	}
 
 	var rsp *invokev1.InvokeMethodResponse
@@ -117,8 +113,7 @@ func (h *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.I
 	}
 
 	rsp := h.parseChannelResponse(req, resp, err)
-
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, req.Message().Method, req.Message().Method, strconv.Itoa(int(rsp.Status().Code)), int64(len(rsp.Proto().Message.Data.Value)), elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, req.Message().GetMethod(), req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(resp.Header.ContentLength()), elapsedMs)
 
 	return rsp, nil
 }
@@ -127,40 +122,42 @@ func (h *Channel) constructRequest(req *invokev1.InvokeMethodRequest) *fasthttp.
 	var channelReq = fasthttp.AcquireRequest()
 
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
-	uri := fmt.Sprintf("%s/%s", h.baseAddress, req.Message().Method)
+	uri := fmt.Sprintf("%s/%s", h.baseAddress, req.Message().GetMethod())
 	channelReq.SetRequestURI(uri)
 	channelReq.URI().SetQueryString(req.EncodeHTTPQueryString())
-	channelReq.Header.SetMethod(req.Message().GetHttp().GetVerb().String())
+	channelReq.Header.SetMethod(req.Message().HttpExtension.Verb.String())
 
 	// Recover headers
-	invokev1.InternalMetadataToHTTPHeader(*req.Metadata(), channelReq.Header.Set)
+	invokev1.InternalMetadataToHTTPHeader(req.Metadata(), channelReq.Header.Set)
 
 	// TODO: Pass traceparent/tracestate to headers
 
 	// Set Content body and types
-	channelReq.Header.SetContentType(req.Message().GetContentType())
-	channelReq.SetBody(req.Message().Data.GetValue())
+	contentType, body := req.RawData()
+	channelReq.Header.SetContentType(contentType)
+	channelReq.SetBody(body)
 
 	return channelReq
 }
 
 func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *fasthttp.Response, respErr error) *invokev1.InvokeMethodResponse {
-	var msg = commonv1pb.InvokeResponse{}
 	var statusCode int
+	var contentType string
+	var body []byte
 
 	if respErr != nil {
 		statusCode = fasthttp.StatusInternalServerError
-		msg.ContentType = string(invokev1.JSONContentType)
-		msg.Data.Value = []byte(fmt.Sprintf("{\"error\": \"client error: %s\"}", respErr))
+		contentType = string(invokev1.JSONContentType)
+		body = []byte(fmt.Sprintf("{\"error\": \"client error: %s\"}", respErr))
 	} else {
 		statusCode = resp.StatusCode()
-		msg.ContentType = (string)(resp.Header.ContentType())
-		msg.Data.Value = resp.Body()
+		contentType = (string)(resp.Header.ContentType())
+		body = resp.Body()
 	}
 
 	// Convert status code
 	rsp := invokev1.NewInvokeMethodResponse(int32(statusCode), "", nil)
-	rsp.WithFastHTTPHeaders(&resp.Header).WithInvokeResponseProto(&msg)
+	rsp.WithFastHTTPHeaders(&resp.Header).WithRawData(body, contentType)
 
 	return rsp
 }
