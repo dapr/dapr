@@ -9,8 +9,7 @@ package pkg.proto.daprinternal.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/struct.proto";
-import "pkg/proto/common/v1/common.proto";
-import "pkg/proto/common/v1/internal.proto";
+import "pkg/proto/daprinternal/v1/internal.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
 
@@ -47,7 +46,7 @@ message InternalInvokeRequest {
   // ver is the version of Dapr API.
   // 
   // This field is required.
-  pkg.proto.common.v1.APIVersion ver = 1;
+  APIVersion ver = 1;
 
   // metadata holds caller's HTTP headers or gRPC metadata.
   // 
@@ -57,7 +56,7 @@ message InternalInvokeRequest {
   // message includes caller's invocation request message.
   // 
   // This field is required.
-  pkg.proto.common.v1.InvokeRequest message = 3;
+  google.protobuf.Any message = 3;
 }
 
 // InternalInvokeResponse is the message to transfer callee's response to caller
@@ -66,7 +65,7 @@ message InternalInvokeResponse {
   // status is http/grpc status.
   // 
   // This field is required.
-  pkg.proto.common.v1.Status status = 1;
+  Status status = 1;
 
   // headers holds app channel response headers.
   // 
@@ -82,5 +81,5 @@ message InternalInvokeResponse {
   // message includes callee's invocation response message.
   // 
   // This field is required.
-  pkg.proto.common.v1.InvokeResponse message = 4;
+  google.protobuf.Any message = 4;
 }
