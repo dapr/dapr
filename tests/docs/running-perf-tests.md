@@ -74,9 +74,7 @@ make build-perf-app-all
 make push-perf-app-all
 ```
 
-### Run end-to-end test
-
-Run end-to-end tests
+### Run performance tests
 
 ```bash
 # start perf tests
