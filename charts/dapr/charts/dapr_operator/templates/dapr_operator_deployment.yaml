@@ -13,6 +13,12 @@ spec:
     metadata:
       labels:
         app: dapr-operator
+{{- if eq .Values.global.prometheus.enabled true }}
+      annotations:
+        prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
+        prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+        prometheus.io/path: "/"
+{{- end }}
     spec:
       containers:
       - name: dapr-operator
@@ -29,9 +35,36 @@ spec:
               fieldPath: metadata.namespace
         ports:
         - containerPort: 6500
+{{- if eq .Values.global.prometheus.enabled true }}
+        - name: metrics
+          containerPort: {{ .Values.global.prometheus.port }}
+          protocol: TCP
+{{- end }}
+        volumeMounts:
+          - name: credentials
+            mountPath: /var/run/dapr/credentials
+            readOnly: true
         command:
         - "./operator"
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
-      serviceAccountName: dapr-operator            
+{{- if eq .Values.global.logAsJson true }}
+        - "--log-as-json"
+{{- end }}
+{{- if eq .Values.global.prometheus.enabled true }}
+        - "--enable-metrics"
+        - "--metrics-port"
+        - "{{ .Values.global.prometheus.port }}"
+{{- else }}
+        - "--enable-metrics=false"
+{{- end }}
+      serviceAccountName: dapr-operator
+      volumes:
+        - name: credentials
+          secret:
+            secretName: dapr-trust-bundle
+{{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}

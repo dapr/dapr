@@ -1,0 +1,11 @@
+{{- if .Values.dapr_config_chart_included }}
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: default
+spec:
+  mtls:
+    enabled: {{ .Values.global.mtls.enabled }}
+    workloadCertTTL: {{ .Values.global.mtls.workloadCertTTL }}
+    allowedClockSkew: {{ .Values.global.mtls.allowedClockSkew }}
+{{- end }}

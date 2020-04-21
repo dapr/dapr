@@ -6,14 +6,21 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
 
-	"github.com/valyala/fasthttp"
-	"gopkg.in/yaml.v2"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	yaml "gopkg.in/yaml.v2"
+)
+
+const (
+	operatorCallTimeout = time.Second * 5
+	operatorMaxRetries  = 100
 )
 
 type Configuration struct {
@@ -21,15 +28,38 @@ type Configuration struct {
 }
 
 type ConfigurationSpec struct {
-	TracingSpec TracingSpec `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
+}
+
+type PipelineSpec struct {
+	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
+}
+
+type HandlerSpec struct {
+	Name         string       `json:"name" yaml:"name"`
+	Type         string       `json:"type" yaml:"type"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+}
+
+type SelectorSpec struct {
+	Fields []SelectorField `json:"fields" yaml:"fields"`
+}
+
+type SelectorField struct {
+	Field string `json:"field" yaml:"field"`
+	Value string `json:"value" yaml:"value"`
 }
 
 type TracingSpec struct {
-	Enabled         bool   `json:"enabled" yaml:"enabled"`
-	ExporterType    string `json:"exporterType" yaml:"exporterType,omitempty"`
-	ExporterAddress string `json:"exporterAddress" yaml:"exporterAddress,omitempty"`
-	ExpandParams    bool   `json:"expandParams" yaml:"expandParams"`
-	IncludeBody     bool   `json:"includeBody" yaml:"includeBody"`
+	SamplingRate string `json:"samplingRate" yaml:"samplingRate"`
+}
+
+type MTLSSpec struct {
+	Enabled          bool   `json:"enabled"`
+	WorkloadCertTTL  string `json:"workloadCertTTL"`
+	AllowedClockSkew string `json:"allowedClockSkew"`
 }
 
 // LoadDefaultConfiguration returns the default config with tracing disabled
@@ -37,9 +67,7 @@ func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
-				Enabled:      false,
-				ExpandParams: false,
-				IncludeBody:  false,
+				SamplingRate: "0.0",
 			},
 		},
 	}
@@ -67,28 +95,21 @@ func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
-func LoadKubernetesConfiguration(config, controlPlaneAddress string) (*Configuration, error) {
-	url := fmt.Sprintf("%s/configurations/%s", controlPlaneAddress, config)
-	req := fasthttp.AcquireRequest()
-	req.SetRequestURI(url)
-	req.Header.SetContentType("application/json")
-
-	resp := fasthttp.AcquireResponse()
-	client := &fasthttp.Client{
-		ReadTimeout: time.Second * 10,
-	}
-	err := client.Do(req, resp)
+func LoadKubernetesConfiguration(config, namespace string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
+		Name:      config,
+		Namespace: namespace,
+	}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, err
 	}
-
-	body := resp.Body()
-
+	if resp.Configuration == nil {
+		return nil, fmt.Errorf("configuration %s not found", config)
+	}
 	var conf Configuration
-	err = json.Unmarshal(body, &conf)
+	err = json.Unmarshal(resp.Configuration.Value, &conf)
 	if err != nil {
 		return nil, err
 	}
-
 	return &conf, nil
 }

@@ -1,0 +1,29 @@
+# In perf tests, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing the perf test.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perf-tester
+  labels:
+    testapp: perf-tester
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: perf-tester
+  template:
+    metadata:
+      labels:
+        testapp: perf-tester
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/id: "tester"
+        dapr.io/port: "3001"
+    spec:
+      containers:
+      - name: perf-tester
+        image: docker.io/[YOUR ALIAS]/perf-tester:dev
+        ports:
+        - containerPort: 3001
+        imagePullPolicy: Always

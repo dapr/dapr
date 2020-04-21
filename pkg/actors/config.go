@@ -10,7 +10,7 @@ import "time"
 // Config is the actor runtime configuration
 type Config struct {
 	HostAddress                   string
-	DaprID                        string
+	AppID                         string
 	PlacementServiceAddress       string
 	HostedActorTypes              []string
 	Port                          int
@@ -29,11 +29,11 @@ const (
 )
 
 // NewConfig returns the actor runtime configuration
-func NewConfig(hostAddress, daprID, placementAddress string, hostedActors []string, port int,
+func NewConfig(hostAddress, appID, placementAddress string, hostedActors []string, port int,
 	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool) Config {
 	c := Config{
 		HostAddress:                   hostAddress,
-		DaprID:                        daprID,
+		AppID:                         appID,
 		PlacementServiceAddress:       placementAddress,
 		HostedActorTypes:              hostedActors,
 		Port:                          port,

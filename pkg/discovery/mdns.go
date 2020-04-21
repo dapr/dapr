@@ -13,10 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/grandcat/zeroconf"
-
-	log "github.com/Sirupsen/logrus"
 )
+
+var log = logger.NewLogger("dapr.runtime.discovery")
 
 // RegisterMDNS uses mdns to publish an entry of the service to a local network
 func RegisterMDNS(id string, port int) error {
@@ -41,7 +42,7 @@ func RegisterMDNS(id string, port int) error {
 func LookupPortMDNS(id string) (int, error) {
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
-		log.Fatalln("Failed to initialize resolver:", err.Error())
+		log.Fatalf("Failed to initialize resolver: %v", err.Error())
 	}
 
 	port := -1

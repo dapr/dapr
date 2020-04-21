@@ -1,19 +1,16 @@
 dependencies:
-- name: dapr_crd
-  version: "0.1.0"
-  # NOTE: In Helm 2.15 and Helm 3, the repository field will no longer be
-  # necessary to require local charts in the charts/ directory, so this can be
-  # removed as soon as those are released
-  repository: "file://dapr_crd"
 - name: dapr_rbac
-  version: "0.1.0"
+  version: "0.2.0"
   repository: "file://dapr_rbac"
 - name: dapr_operator
-  version: "0.1.0"
+  version: "0.2.2"
   repository: "file://dapr_operator"
 - name: dapr_placement
-  version: "0.1.0"
+  version: "0.2.2"
   repository: "file://dapr_placement"
 - name: dapr_sidecar_injector
-  version: "0.1.0"
+  version: "0.2.2"
   repository: "file://dapr_sidecar_injector"
+- name: dapr_sentry
+  version: "0.2.2"
+  repository: "file://dapr_sentry"

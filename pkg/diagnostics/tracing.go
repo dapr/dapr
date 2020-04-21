@@ -9,27 +9,23 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/config"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-middleware/util/metautils"
-	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
-	"google.golang.org/grpc"
-	grpc_go "google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type key string
 
 const (
-	correlationID      = "X-Correlation-ID"
-	correlationKey key = correlationID
+	// CorrelationID is the header key name of correlation id for trace
+	CorrelationID        = "X-Correlation-ID"
+	correlationKey   key = CorrelationID
+	daprHeaderPrefix     = "dapr-"
 )
 
 // TracerSpan defines a tracing span that a tracer users to keep track of call scopes
@@ -39,12 +35,12 @@ type TracerSpan struct {
 	SpanContext *trace.SpanContext
 }
 
-//SerializeSpanContext serializes a span context into a simple string
+// SerializeSpanContext serializes a span context into a simple string
 func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
 
-//DeserializeSpanContext deserializes a span context from a string
+// DeserializeSpanContext deserializes a span context from a string
 func DeserializeSpanContext(ctx string) trace.SpanContext {
 	parts := strings.Split(ctx, ";")
 	spanID, _ := hex.DecodeString(parts[0])
@@ -55,180 +51,6 @@ func DeserializeSpanContext(ctx string) trace.SpanContext {
 	copy(ret.TraceID[:], traceID)
 	ret.TraceOptions = trace.TraceOptions(traceOptions)
 	return ret
-}
-
-// DeserializeSpanContextPointer deserializes a span context from a trace pointer
-func DeserializeSpanContextPointer(ctx string) *trace.SpanContext {
-	if ctx == "" {
-		return nil
-	}
-	context := &trace.SpanContext{}
-	*context = DeserializeSpanContext(ctx)
-	return context
-}
-
-// TraceSpanFromFastHTTPContext creates a tracing span form a fasthttp request context
-func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	var ctx context.Context
-	var span *trace.Span
-	var ctxc context.Context
-	var spanc *trace.Span
-
-	corID := string(c.Request.Header.Peek(correlationID))
-	if corID != "" {
-		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), string(c.Path()), spanContext, trace.WithSpanKind(trace.SpanKindServer))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
-	} else {
-		ctx, span = trace.StartSpan(context.Background(), string(c.Path()), trace.WithSpanKind(trace.SpanKindServer))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(string(c.Path())), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
-	}
-
-	addAnnotations(c, span, spec.ExpandParams, spec.IncludeBody)
-
-	context := span.SpanContext()
-	contextc := spanc.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
-}
-
-func addAnnotations(ctx *fasthttp.RequestCtx, span *trace.Span, expandParams bool, includeBody bool) {
-	if expandParams {
-		ctx.VisitUserValues(func(key []byte, value interface{}) {
-			span.AddAttributes(trace.StringAttribute(string(key), value.(string)))
-		})
-		ctx.Request.Header.VisitAll(func(key []byte, value []byte) {
-			span.AddAttributes(trace.StringAttribute(string(key), string(value)))
-		})
-	}
-	if includeBody {
-		span.AddAttributes(trace.StringAttribute("data", string(ctx.PostBody())))
-	}
-}
-
-// TracingHTTPMiddleware plugs tracer into fasthttp pipeline
-func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		span, spanc := TraceSpanFromFastHTTPContext(ctx, spec)
-		defer span.Span.End()
-		defer spanc.Span.End()
-		ctx.Request.Header.Set(correlationID, SerializeSpanContext(*spanc.SpanContext))
-		next(ctx)
-		spanc.Span.SetStatus(trace.Status{
-			Code:    projectStatusCode(ctx.Response.StatusCode()),
-			Message: strconv.Itoa(ctx.Response.StatusCode()),
-		})
-		span.Span.SetStatus(trace.Status{
-			Code:    projectStatusCode(ctx.Response.StatusCode()),
-			Message: strconv.Itoa(ctx.Response.StatusCode()),
-		})
-	}
-}
-
-// TracingGRPCMiddleware plugs tracer into gRPC stream
-func TracingGRPCMiddleware(spec config.TracingSpec) grpc_go.StreamServerInterceptor {
-	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		span, spanc := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
-		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
-		defer span.Span.End()
-		defer spanc.Span.End()
-		err := handler(srv, wrappedStream)
-		if err != nil {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-		} else {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-		}
-		return err
-	}
-}
-
-// TracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
-func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc_go.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		span, spanc := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
-		defer span.Span.End()
-		defer spanc.Span.End()
-		newCtx := context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
-		resp, err := handler(newCtx, req)
-		if err != nil {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeInternal,
-				Message: fmt.Sprintf("method %s failed - %s", info.FullMethod, err.Error()),
-			})
-		} else {
-			spanc.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-			span.Span.SetStatus(trace.Status{
-				Code:    trace.StatusCodeOK,
-				Message: fmt.Sprintf("method %s succeeded", info.FullMethod),
-			})
-		}
-		return resp, err
-	}
-}
-
-// TracingSpanFromGRPCContext creates a span from an incoming gRPC method call
-func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	var ctx context.Context
-	var span *trace.Span
-	var ctxc context.Context
-	var spanc *trace.Span
-
-	md := metautils.ExtractIncoming(c)
-	headers := extractHeaders(req)
-	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
-	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)
-	if len(corID) > 35 { //to remove the prefix "X-Correlation-Id&__header_equals__&", which may in different casing
-		corID = corID[35:]
-	}
-
-	if corID != "" {
-		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(c, method, spanContext, trace.WithSpanKind(trace.SpanKindServer))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(method), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
-	} else {
-		ctx, span = trace.StartSpan(context.Background(), method, trace.WithSpanKind(trace.SpanKindServer))
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, createSpanName(method), span.SpanContext(), trace.WithSpanKind(trace.SpanKindClient))
-	}
-
-	addAnnotationsFromMD(md, span, spec.ExpandParams, spec.IncludeBody)
-
-	context := span.SpanContext()
-	contextc := spanc.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
-}
-
-func addAnnotationsFromMD(md metautils.NiceMD, span *trace.Span, expandParams bool, includeBody bool) {
-	if expandParams {
-		for k, vv := range md {
-			for _, v := range vv {
-				span.AddAttributes(trace.StringAttribute(k, v))
-			}
-		}
-	}
-	//TODO: get request body?
-	//if includeBody {
-	//}
 }
 
 func projectStatusCode(code int) int32 {
@@ -275,4 +97,44 @@ func createSpanName(name string) string {
 		}
 	}
 	return name
+}
+
+func extractDaprMetadata(ctx context.Context) map[string][]string {
+	daprMetadata := make(map[string][]string)
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return daprMetadata
+	}
+
+	for k, v := range md {
+		k = strings.ToLower(k)
+		if strings.HasPrefix(k, daprHeaderPrefix) {
+			daprMetadata[k] = v
+		}
+	}
+
+	return daprMetadata
+}
+
+// UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
+func UpdateSpanPairStatusesFromError(span, spanc TracerSpan, err error, method string) {
+	if err != nil {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeInternal,
+			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
+		})
+		span.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeInternal,
+			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
+		})
+	} else {
+		spanc.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeOK,
+			Message: fmt.Sprintf("method %s succeeded", method),
+		})
+		span.Span.SetStatus(trace.Status{
+			Code:    trace.StatusCodeOK,
+			Message: fmt.Sprintf("method %s succeeded", method),
+		})
+	}
 }

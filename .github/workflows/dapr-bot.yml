@@ -1,0 +1,96 @@
+name: dapr-bot
+
+on:
+  issue_comment: {types: created}
+
+jobs:
+  daprbot:
+    name: bot-processor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment analyzer
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            // list of owner who can control dapr-bot workflow
+            // TODO: Read owners from OWNERS file.
+            const owners = [
+              "yaron2",
+              "youngbupark",
+              "Haishi2016",
+              "lukekim",
+              "amanbha",
+              "msfussell",
+              "shalabhms",
+              "LMWF",
+              "artursouza"
+            ];
+
+            const payload = context.payload;
+            const issue = context.issue;
+            const isFromPulls = !!payload.issue.pull_request;
+            const commentBody = payload.comment.body;
+
+            if (isFromPulls && commentBody && commentBody.indexOf("/ok-to-test") == 0) {
+              // Ignore the command unless the actor is in owner list
+              if (owners.indexOf(context.actor) < 0) {
+                const errorMessage = `${context.actor} doesn't have the permission to execute the command`;
+
+                console.log(errorMessage);
+                
+                await github.issues.createComment({
+                  owner: issue.owner,
+                  repo: issue.repo,
+                  issue_number: issue.number,
+                  body: errorMessage
+                });
+
+                return;
+              }
+
+              // Get pull request
+              const pull = await github.pulls.get({
+                owner: issue.owner,
+                repo: issue.repo,
+                pull_number: issue.number
+              });
+
+              if (pull && pull.data) {
+                // Pollyfill: register createDispatchEvent because actions/github-script@0.3.0 
+                // does not have createDispatchEvent.
+                github.registerEndpoints({
+                  repos: {
+                    createDispatchEvent: {
+                      "headers": { "accept": "application/vnd.github.everest-preview+json" },
+                      "method": "POST",
+                      "params": {
+                        "client_payload": { "type": "object" },
+                        "event_type": { "type": "string" },
+                        "owner": { "required": true, "type": "string" },
+                        "repo": { "required": true, "type": "string" }
+                      },
+                      "url": "/repos/:owner/:repo/dispatches"
+                    }
+                  }
+                });
+                
+                // Get commit id and repo from pull head
+                const testPayload = {
+                  pull_head_ref: pull.data.head.sha,
+                  pull_head_repo: pull.data.head.repo.full_name,
+                  command: "ok-to-test",
+                  issue: issue,
+                };
+    
+                // Fire repository_dispatch event to trigger e2e test
+                await github.repos.createDispatchEvent({
+                  owner: issue.owner,
+                  repo: issue.repo,
+                  event_type: "e2e-test",
+                  client_payload: testPayload,
+                });
+                
+                console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
+              }
+            }

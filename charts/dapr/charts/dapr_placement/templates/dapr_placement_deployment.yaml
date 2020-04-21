@@ -14,6 +14,12 @@ spec:
     metadata:
       labels:
         app: dapr-placement
+{{- if eq .Values.global.prometheus.enabled true }}
+      annotations:
+        prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
+        prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+        prometheus.io/path: "/"
+{{- end }}
     spec:
       containers:
       - name: dapr-placement
@@ -23,11 +29,41 @@ spec:
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        volumeMounts:
+          - name: credentials
+            mountPath: /var/run/dapr/credentials
+            readOnly: true
         ports:
           - containerPort: 50005
+{{- if eq .Values.global.prometheus.enabled true }}
+          - name: metrics
+            containerPort: {{ .Values.global.prometheus.port }}
+            protocol: TCP
+{{- end }}
         command:
         - "./placement"
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
+{{- if eq .Values.global.logAsJson true }}
+        - "--log-as-json"
+{{- end }}
+{{- if eq .Values.global.prometheus.enabled true }}
+        - "--enable-metrics"
+        - "--metrics-port"
+        - "{{ .Values.global.prometheus.port }}"
+{{- else }}
+        - "--enable-metrics=false"
+{{- end }}
+{{- if eq .Values.global.mtls.enabled true }}
+        - "--tls-enabled"
+{{- end }}
       serviceAccountName: dapr-operator
+      volumes:
+        - name: credentials
+          secret:
+            secretName: dapr-trust-bundle
+{{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}

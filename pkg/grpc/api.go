@@ -12,43 +12,39 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
-
-	"github.com/google/uuid"
-
-	"github.com/dapr/dapr/pkg/actors"
-
-	"github.com/golang/protobuf/ptypes/any"
-	"github.com/golang/protobuf/ptypes/empty"
-
 	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/components"
+	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	"github.com/golang/protobuf/ptypes/any"
 	durpb "github.com/golang/protobuf/ptypes/duration"
+	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
 	// Range of a durpb.Duration in seconds, as specified in
 	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
-	maxSeconds = int64(10000 * 365.25 * 24 * 60 * 60)
-	minSeconds = -maxSeconds
+	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
+	minSeconds    = -maxSeconds
+	daprSeparator = "||"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
 	CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelope) (*daprinternal_pb.InvokeResponse, error)
 	CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelope) (*daprinternal_pb.InvokeResponse, error)
-	UpdateComponent(ctx context.Context, in *daprinternal_pb.Component) (*empty.Empty, error)
 	PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error)
 	InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error)
 	InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelope) (*empty.Empty, error)
 	GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error)
+	GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error)
 	SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error)
 }
@@ -56,24 +52,24 @@ type API interface {
 type api struct {
 	actor                 actors.Actors
 	directMessaging       messaging.DirectMessaging
-	componentsHandler     components.ComponentHandler
 	appChannel            channel.AppChannel
-	stateStore            state.Store
-	pubSub                pubsub.PubSub
+	stateStores           map[string]state.Store
+	secretStores          map[string]secretstores.SecretStore
+	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(daprID string, appChannel channel.AppChannel, stateStore state.Store, pubSub pubsub.PubSub, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, componentHandler components.ComponentHandler) API {
+func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	return &api{
 		directMessaging:       directMessaging,
-		componentsHandler:     componentHandler,
 		actor:                 actor,
-		id:                    daprID,
+		id:                    appID,
 		appChannel:            appChannel,
-		pubSub:                pubSub,
-		stateStore:            stateStore,
+		publishFn:             publishFn,
+		stateStores:           stateStores,
+		secretStores:          secretStores,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 	}
 }
@@ -108,6 +104,7 @@ func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelo
 		ActorID:   in.ActorID,
 		Data:      in.Data.Value,
 		Method:    in.Method,
+		Metadata:  in.Metadata,
 	}
 
 	resp, err := a.actor.Call(&req)
@@ -121,35 +118,9 @@ func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelo
 	}, nil
 }
 
-// UpdateComponent is fired by the Dapr control plane when a component state changes
-func (a *api) UpdateComponent(ctx context.Context, in *daprinternal_pb.Component) (*empty.Empty, error) {
-	c := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: in.Metadata.Name,
-		},
-		Auth: components_v1alpha1.Auth{
-			SecretStore: in.Auth.SecretStore,
-		},
-	}
-
-	for _, m := range in.Spec.Metadata {
-		c.Spec.Metadata = append(c.Spec.Metadata, components_v1alpha1.MetadataItem{
-			Name:  m.Name,
-			Value: m.Value,
-			SecretKeyRef: components_v1alpha1.SecretKeyRef{
-				Key:  m.SecretKeyRef.Key,
-				Name: m.SecretKeyRef.Name,
-			},
-		})
-	}
-
-	a.componentsHandler.OnComponentUpdated(c)
-	return &empty.Empty{}, nil
-}
-
 func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
-	if a.pubSub == nil {
-		return &empty.Empty{}, errors.New("ERR_PUB_SUB_NOT_FOUND")
+	if a.publishFn == nil {
+		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
 
 	topic := in.Topic
@@ -159,29 +130,37 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 		body = in.Data.Value
 	}
 
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, body)
+	corID, ok := ctx.Value(tracing.CorrelationID).(string)
+	if !ok {
+		corID = ""
+	}
+
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_CLOUD_EVENTS_SER: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
 	}
 
 	req := pubsub.PublishRequest{
 		Topic: topic,
 		Data:  b,
 	}
-	err = a.pubSub.Publish(&req)
+	err = a.publishFn(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_PUBLISH_MESSAGE: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
 	}
 	return &empty.Empty{}, nil
 }
 
 func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error) {
 	req := messaging.DirectMessageRequest{
-		Data:     in.Data.Value,
 		Method:   in.Method,
 		Metadata: in.Metadata,
 		Target:   in.Id,
+	}
+
+	if in.Data != nil {
+		req.Data = in.Data.Value
 	}
 
 	resp, err := a.directMessaging.Invoke(&req)
@@ -210,7 +189,13 @@ func (a *api) InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelo
 }
 
 func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error) {
-	if a.stateStore == nil {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+	}
+
+	storeName := in.StoreName
+
+	if a.stateStores[storeName] == nil {
 		return nil, errors.New("ERR_STATE_STORE_NOT_FOUND")
 	}
 
@@ -221,9 +206,9 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 		},
 	}
 
-	getResponse, err := a.stateStore.Get(&req)
+	getResponse, err := a.stateStores[storeName].Get(&req)
 	if err != nil {
-		return nil, fmt.Errorf("ERR_GET_STATE: %s", err)
+		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
 
 	response := &dapr_pb.GetStateResponseEnvelope{}
@@ -235,7 +220,13 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 }
 
 func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error) {
-	if a.stateStore == nil {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+	}
+
+	storeName := in.StoreName
+
+	if a.stateStores[storeName] == nil {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
 	}
 
@@ -245,6 +236,7 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 			Key:      a.getModifiedStateKey(s.Key),
 			Metadata: s.Metadata,
 			Value:    s.Value.Value,
+			ETag:     s.Etag,
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
@@ -267,15 +259,21 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 		reqs = append(reqs, req)
 	}
 
-	err := a.stateStore.BulkSet(reqs)
+	err := a.stateStores[storeName].BulkSet(reqs)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_SAVE_REQUEST: %s", err)
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
 	}
 	return &empty.Empty{}, nil
 }
 
 func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error) {
-	if a.stateStore == nil {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+	}
+
+	storeName := in.StoreName
+
+	if a.stateStores[storeName] == nil {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
 	}
 
@@ -304,18 +302,47 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 		}
 	}
 
-	err := a.stateStore.Delete(&req)
+	err := a.stateStores[storeName].Delete(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_DELETE_STATE: failed deleting state with key %s: %s", in.Key, err)
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
 	}
 	return &empty.Empty{}, nil
 }
 
 func (a *api) getModifiedStateKey(key string) string {
 	if a.id != "" {
-		return fmt.Sprintf("%s-%s", a.id, key)
+		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
 	}
 	return key
+}
+
+func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error) {
+	if a.secretStores == nil || len(a.secretStores) == 0 {
+		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
+	}
+
+	secretStoreName := in.StoreName
+
+	if a.secretStores[secretStoreName] == nil {
+		return nil, errors.New("ERR_SECRET_STORE_NOT_FOUND")
+	}
+
+	req := secretstores.GetSecretRequest{
+		Name:     in.Key,
+		Metadata: in.Metadata,
+	}
+
+	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
+
+	if err != nil {
+		return nil, fmt.Errorf("ERR_SECRET_GET: %s", err)
+	}
+
+	response := &dapr_pb.GetSecretResponseEnvelope{}
+	if getResponse.Data != nil {
+		response.Data = getResponse.Data
+	}
+	return response, nil
 }
 
 func duration(p *durpb.Duration) (time.Duration, error) {

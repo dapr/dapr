@@ -6,13 +6,14 @@ package dapr
 import (
 	context "context"
 	fmt "fmt"
-	math "math"
-
 	proto "github.com/golang/protobuf/proto"
 	any "github.com/golang/protobuf/ptypes/any"
 	duration "github.com/golang/protobuf/ptypes/duration"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -74,9 +75,10 @@ func (m *InvokeServiceResponseEnvelope) GetMetadata() map[string]string {
 }
 
 type DeleteStateEnvelope struct {
-	Key                  string        `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Etag                 string        `protobuf:"bytes,2,opt,name=etag,proto3" json:"etag,omitempty"`
-	Options              *StateOptions `protobuf:"bytes,3,opt,name=options,proto3" json:"options,omitempty"`
+	StoreName            string        `protobuf:"bytes,1,opt,name=storeName,proto3" json:"storeName,omitempty"`
+	Key                  string        `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Etag                 string        `protobuf:"bytes,3,opt,name=etag,proto3" json:"etag,omitempty"`
+	Options              *StateOptions `protobuf:"bytes,4,opt,name=options,proto3" json:"options,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
 	XXX_unrecognized     []byte        `json:"-"`
 	XXX_sizecache        int32         `json:"-"`
@@ -107,6 +109,13 @@ func (m *DeleteStateEnvelope) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DeleteStateEnvelope proto.InternalMessageInfo
 
+func (m *DeleteStateEnvelope) GetStoreName() string {
+	if m != nil {
+		return m.StoreName
+	}
+	return ""
+}
+
 func (m *DeleteStateEnvelope) GetKey() string {
 	if m != nil {
 		return m.Key
@@ -129,7 +138,8 @@ func (m *DeleteStateEnvelope) GetOptions() *StateOptions {
 }
 
 type SaveStateEnvelope struct {
-	Requests             []*StateRequest `protobuf:"bytes,1,rep,name=requests,proto3" json:"requests,omitempty"`
+	StoreName            string          `protobuf:"bytes,1,opt,name=storeName,proto3" json:"storeName,omitempty"`
+	Requests             []*StateRequest `protobuf:"bytes,2,rep,name=requests,proto3" json:"requests,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
 	XXX_unrecognized     []byte          `json:"-"`
 	XXX_sizecache        int32           `json:"-"`
@@ -160,6 +170,13 @@ func (m *SaveStateEnvelope) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SaveStateEnvelope proto.InternalMessageInfo
 
+func (m *SaveStateEnvelope) GetStoreName() string {
+	if m != nil {
+		return m.StoreName
+	}
+	return ""
+}
+
 func (m *SaveStateEnvelope) GetRequests() []*StateRequest {
 	if m != nil {
 		return m.Requests
@@ -168,8 +185,9 @@ func (m *SaveStateEnvelope) GetRequests() []*StateRequest {
 }
 
 type GetStateEnvelope struct {
-	Key                  string   `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Consistency          string   `protobuf:"bytes,2,opt,name=consistency,proto3" json:"consistency,omitempty"`
+	StoreName            string   `protobuf:"bytes,1,opt,name=storeName,proto3" json:"storeName,omitempty"`
+	Key                  string   `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Consistency          string   `protobuf:"bytes,3,opt,name=consistency,proto3" json:"consistency,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -199,6 +217,13 @@ func (m *GetStateEnvelope) XXX_DiscardUnknown() {
 }
 
 var xxx_messageInfo_GetStateEnvelope proto.InternalMessageInfo
+
+func (m *GetStateEnvelope) GetStoreName() string {
+	if m != nil {
+		return m.StoreName
+	}
+	return ""
+}
 
 func (m *GetStateEnvelope) GetKey() string {
 	if m != nil {
@@ -261,6 +286,100 @@ func (m *GetStateResponseEnvelope) GetEtag() string {
 	return ""
 }
 
+type GetSecretEnvelope struct {
+	StoreName            string            `protobuf:"bytes,1,opt,name=storeName,proto3" json:"storeName,omitempty"`
+	Key                  string            `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Metadata             map[string]string `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *GetSecretEnvelope) Reset()         { *m = GetSecretEnvelope{} }
+func (m *GetSecretEnvelope) String() string { return proto.CompactTextString(m) }
+func (*GetSecretEnvelope) ProtoMessage()    {}
+func (*GetSecretEnvelope) Descriptor() ([]byte, []int) {
+	return fileDescriptor_0b1c5554fb3d73bc, []int{5}
+}
+
+func (m *GetSecretEnvelope) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetSecretEnvelope.Unmarshal(m, b)
+}
+func (m *GetSecretEnvelope) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetSecretEnvelope.Marshal(b, m, deterministic)
+}
+func (m *GetSecretEnvelope) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSecretEnvelope.Merge(m, src)
+}
+func (m *GetSecretEnvelope) XXX_Size() int {
+	return xxx_messageInfo_GetSecretEnvelope.Size(m)
+}
+func (m *GetSecretEnvelope) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSecretEnvelope.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetSecretEnvelope proto.InternalMessageInfo
+
+func (m *GetSecretEnvelope) GetStoreName() string {
+	if m != nil {
+		return m.StoreName
+	}
+	return ""
+}
+
+func (m *GetSecretEnvelope) GetKey() string {
+	if m != nil {
+		return m.Key
+	}
+	return ""
+}
+
+func (m *GetSecretEnvelope) GetMetadata() map[string]string {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
+type GetSecretResponseEnvelope struct {
+	Data                 map[string]string `protobuf:"bytes,1,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *GetSecretResponseEnvelope) Reset()         { *m = GetSecretResponseEnvelope{} }
+func (m *GetSecretResponseEnvelope) String() string { return proto.CompactTextString(m) }
+func (*GetSecretResponseEnvelope) ProtoMessage()    {}
+func (*GetSecretResponseEnvelope) Descriptor() ([]byte, []int) {
+	return fileDescriptor_0b1c5554fb3d73bc, []int{6}
+}
+
+func (m *GetSecretResponseEnvelope) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetSecretResponseEnvelope.Unmarshal(m, b)
+}
+func (m *GetSecretResponseEnvelope) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetSecretResponseEnvelope.Marshal(b, m, deterministic)
+}
+func (m *GetSecretResponseEnvelope) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSecretResponseEnvelope.Merge(m, src)
+}
+func (m *GetSecretResponseEnvelope) XXX_Size() int {
+	return xxx_messageInfo_GetSecretResponseEnvelope.Size(m)
+}
+func (m *GetSecretResponseEnvelope) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSecretResponseEnvelope.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetSecretResponseEnvelope proto.InternalMessageInfo
+
+func (m *GetSecretResponseEnvelope) GetData() map[string]string {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
 type InvokeBindingEnvelope struct {
 	Name                 string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Data                 *any.Any          `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
@@ -274,7 +393,7 @@ func (m *InvokeBindingEnvelope) Reset()         { *m = InvokeBindingEnvelope{} }
 func (m *InvokeBindingEnvelope) String() string { return proto.CompactTextString(m) }
 func (*InvokeBindingEnvelope) ProtoMessage()    {}
 func (*InvokeBindingEnvelope) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{5}
+	return fileDescriptor_0b1c5554fb3d73bc, []int{7}
 }
 
 func (m *InvokeBindingEnvelope) XXX_Unmarshal(b []byte) error {
@@ -330,7 +449,7 @@ func (m *InvokeServiceEnvelope) Reset()         { *m = InvokeServiceEnvelope{} }
 func (m *InvokeServiceEnvelope) String() string { return proto.CompactTextString(m) }
 func (*InvokeServiceEnvelope) ProtoMessage()    {}
 func (*InvokeServiceEnvelope) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{6}
+	return fileDescriptor_0b1c5554fb3d73bc, []int{8}
 }
 
 func (m *InvokeServiceEnvelope) XXX_Unmarshal(b []byte) error {
@@ -391,7 +510,7 @@ func (m *PublishEventEnvelope) Reset()         { *m = PublishEventEnvelope{} }
 func (m *PublishEventEnvelope) String() string { return proto.CompactTextString(m) }
 func (*PublishEventEnvelope) ProtoMessage()    {}
 func (*PublishEventEnvelope) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{7}
+	return fileDescriptor_0b1c5554fb3d73bc, []int{9}
 }
 
 func (m *PublishEventEnvelope) XXX_Unmarshal(b []byte) error {
@@ -441,7 +560,7 @@ func (m *State) Reset()         { *m = State{} }
 func (m *State) String() string { return proto.CompactTextString(m) }
 func (*State) ProtoMessage()    {}
 func (*State) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{8}
+	return fileDescriptor_0b1c5554fb3d73bc, []int{10}
 }
 
 func (m *State) XXX_Unmarshal(b []byte) error {
@@ -510,7 +629,7 @@ func (m *StateOptions) Reset()         { *m = StateOptions{} }
 func (m *StateOptions) String() string { return proto.CompactTextString(m) }
 func (*StateOptions) ProtoMessage()    {}
 func (*StateOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{9}
+	return fileDescriptor_0b1c5554fb3d73bc, []int{11}
 }
 
 func (m *StateOptions) XXX_Unmarshal(b []byte) error {
@@ -565,7 +684,7 @@ func (m *RetryPolicy) Reset()         { *m = RetryPolicy{} }
 func (m *RetryPolicy) String() string { return proto.CompactTextString(m) }
 func (*RetryPolicy) ProtoMessage()    {}
 func (*RetryPolicy) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{10}
+	return fileDescriptor_0b1c5554fb3d73bc, []int{12}
 }
 
 func (m *RetryPolicy) XXX_Unmarshal(b []byte) error {
@@ -608,21 +727,21 @@ func (m *RetryPolicy) GetInterval() *duration.Duration {
 }
 
 type StateRequest struct {
-	Key                  string               `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Value                *any.Any             `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Etag                 string               `protobuf:"bytes,3,opt,name=etag,proto3" json:"etag,omitempty"`
-	Metadata             map[string]string    `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	Options              *StateRequestOptions `protobuf:"bytes,5,opt,name=options,proto3" json:"options,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}             `json:"-"`
-	XXX_unrecognized     []byte               `json:"-"`
-	XXX_sizecache        int32                `json:"-"`
+	Key                  string            `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value                *any.Any          `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Etag                 string            `protobuf:"bytes,3,opt,name=etag,proto3" json:"etag,omitempty"`
+	Metadata             map[string]string `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Options              *StateOptions     `protobuf:"bytes,5,opt,name=options,proto3" json:"options,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
 func (m *StateRequest) Reset()         { *m = StateRequest{} }
 func (m *StateRequest) String() string { return proto.CompactTextString(m) }
 func (*StateRequest) ProtoMessage()    {}
 func (*StateRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{11}
+	return fileDescriptor_0b1c5554fb3d73bc, []int{13}
 }
 
 func (m *StateRequest) XXX_Unmarshal(b []byte) error {
@@ -671,119 +790,9 @@ func (m *StateRequest) GetMetadata() map[string]string {
 	return nil
 }
 
-func (m *StateRequest) GetOptions() *StateRequestOptions {
+func (m *StateRequest) GetOptions() *StateOptions {
 	if m != nil {
 		return m.Options
-	}
-	return nil
-}
-
-type StateRequestOptions struct {
-	Concurrency          string            `protobuf:"bytes,1,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
-	Consistency          string            `protobuf:"bytes,2,opt,name=consistency,proto3" json:"consistency,omitempty"`
-	RetryPolicy          *StateRetryPolicy `protobuf:"bytes,3,opt,name=retryPolicy,proto3" json:"retryPolicy,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
-	XXX_unrecognized     []byte            `json:"-"`
-	XXX_sizecache        int32             `json:"-"`
-}
-
-func (m *StateRequestOptions) Reset()         { *m = StateRequestOptions{} }
-func (m *StateRequestOptions) String() string { return proto.CompactTextString(m) }
-func (*StateRequestOptions) ProtoMessage()    {}
-func (*StateRequestOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{12}
-}
-
-func (m *StateRequestOptions) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_StateRequestOptions.Unmarshal(m, b)
-}
-func (m *StateRequestOptions) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_StateRequestOptions.Marshal(b, m, deterministic)
-}
-func (m *StateRequestOptions) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StateRequestOptions.Merge(m, src)
-}
-func (m *StateRequestOptions) XXX_Size() int {
-	return xxx_messageInfo_StateRequestOptions.Size(m)
-}
-func (m *StateRequestOptions) XXX_DiscardUnknown() {
-	xxx_messageInfo_StateRequestOptions.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_StateRequestOptions proto.InternalMessageInfo
-
-func (m *StateRequestOptions) GetConcurrency() string {
-	if m != nil {
-		return m.Concurrency
-	}
-	return ""
-}
-
-func (m *StateRequestOptions) GetConsistency() string {
-	if m != nil {
-		return m.Consistency
-	}
-	return ""
-}
-
-func (m *StateRequestOptions) GetRetryPolicy() *StateRetryPolicy {
-	if m != nil {
-		return m.RetryPolicy
-	}
-	return nil
-}
-
-type StateRetryPolicy struct {
-	Threshold            int32              `protobuf:"varint,1,opt,name=threshold,proto3" json:"threshold,omitempty"`
-	Pattern              string             `protobuf:"bytes,2,opt,name=pattern,proto3" json:"pattern,omitempty"`
-	Interval             *duration.Duration `protobuf:"bytes,3,opt,name=interval,proto3" json:"interval,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
-	XXX_unrecognized     []byte             `json:"-"`
-	XXX_sizecache        int32              `json:"-"`
-}
-
-func (m *StateRetryPolicy) Reset()         { *m = StateRetryPolicy{} }
-func (m *StateRetryPolicy) String() string { return proto.CompactTextString(m) }
-func (*StateRetryPolicy) ProtoMessage()    {}
-func (*StateRetryPolicy) Descriptor() ([]byte, []int) {
-	return fileDescriptor_0b1c5554fb3d73bc, []int{13}
-}
-
-func (m *StateRetryPolicy) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_StateRetryPolicy.Unmarshal(m, b)
-}
-func (m *StateRetryPolicy) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_StateRetryPolicy.Marshal(b, m, deterministic)
-}
-func (m *StateRetryPolicy) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StateRetryPolicy.Merge(m, src)
-}
-func (m *StateRetryPolicy) XXX_Size() int {
-	return xxx_messageInfo_StateRetryPolicy.Size(m)
-}
-func (m *StateRetryPolicy) XXX_DiscardUnknown() {
-	xxx_messageInfo_StateRetryPolicy.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_StateRetryPolicy proto.InternalMessageInfo
-
-func (m *StateRetryPolicy) GetThreshold() int32 {
-	if m != nil {
-		return m.Threshold
-	}
-	return 0
-}
-
-func (m *StateRetryPolicy) GetPattern() string {
-	if m != nil {
-		return m.Pattern
-	}
-	return ""
-}
-
-func (m *StateRetryPolicy) GetInterval() *duration.Duration {
-	if m != nil {
-		return m.Interval
 	}
 	return nil
 }
@@ -795,6 +804,10 @@ func init() {
 	proto.RegisterType((*SaveStateEnvelope)(nil), "dapr.SaveStateEnvelope")
 	proto.RegisterType((*GetStateEnvelope)(nil), "dapr.GetStateEnvelope")
 	proto.RegisterType((*GetStateResponseEnvelope)(nil), "dapr.GetStateResponseEnvelope")
+	proto.RegisterType((*GetSecretEnvelope)(nil), "dapr.GetSecretEnvelope")
+	proto.RegisterMapType((map[string]string)(nil), "dapr.GetSecretEnvelope.MetadataEntry")
+	proto.RegisterType((*GetSecretResponseEnvelope)(nil), "dapr.GetSecretResponseEnvelope")
+	proto.RegisterMapType((map[string]string)(nil), "dapr.GetSecretResponseEnvelope.DataEntry")
 	proto.RegisterType((*InvokeBindingEnvelope)(nil), "dapr.InvokeBindingEnvelope")
 	proto.RegisterMapType((map[string]string)(nil), "dapr.InvokeBindingEnvelope.MetadataEntry")
 	proto.RegisterType((*InvokeServiceEnvelope)(nil), "dapr.InvokeServiceEnvelope")
@@ -806,62 +819,65 @@ func init() {
 	proto.RegisterType((*RetryPolicy)(nil), "dapr.RetryPolicy")
 	proto.RegisterType((*StateRequest)(nil), "dapr.StateRequest")
 	proto.RegisterMapType((map[string]string)(nil), "dapr.StateRequest.MetadataEntry")
-	proto.RegisterType((*StateRequestOptions)(nil), "dapr.StateRequestOptions")
-	proto.RegisterType((*StateRetryPolicy)(nil), "dapr.StateRetryPolicy")
 }
 
 func init() { proto.RegisterFile("dapr.proto", fileDescriptor_0b1c5554fb3d73bc) }
 
 var fileDescriptor_0b1c5554fb3d73bc = []byte{
-	// 755 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0x4f, 0x6f, 0xd3, 0x4a,
-	0x10, 0xaf, 0xe3, 0xa4, 0x7f, 0x26, 0xed, 0x53, 0xbb, 0xcd, 0xeb, 0x4b, 0xdc, 0xf7, 0xaa, 0xc8,
-	0xef, 0x52, 0x10, 0x72, 0x45, 0x2b, 0xa4, 0x0a, 0x10, 0x12, 0x25, 0x29, 0xe2, 0x50, 0x51, 0x39,
-	0x12, 0xe2, 0xba, 0x8d, 0x97, 0xc4, 0xaa, 0xb3, 0x6b, 0xd6, 0x1b, 0x4b, 0x96, 0xb8, 0x70, 0xe2,
-	0x8a, 0xc4, 0x47, 0xe1, 0xb3, 0x70, 0xe0, 0x43, 0xf0, 0x09, 0xb8, 0xa0, 0xac, 0xd7, 0xae, 0x63,
-	0x3b, 0x49, 0x51, 0x5b, 0x6e, 0xde, 0x99, 0xf1, 0x6f, 0xe6, 0x37, 0xfb, 0x9b, 0xdd, 0x05, 0x70,
-	0xb0, 0xcf, 0x2d, 0x9f, 0x33, 0xc1, 0x50, 0x75, 0xf2, 0x6d, 0xb4, 0x06, 0x8c, 0x0d, 0x3c, 0x72,
-	0x20, 0x6d, 0x17, 0xe3, 0x77, 0x07, 0x98, 0x46, 0x71, 0x80, 0xb1, 0x9b, 0x77, 0x91, 0x91, 0x2f,
-	0x12, 0xe7, 0x5e, 0xde, 0xe9, 0x8c, 0x39, 0x16, 0x2e, 0xa3, 0xb1, 0xdf, 0xfc, 0xa6, 0xc1, 0x7f,
-	0xaf, 0x68, 0xc8, 0x2e, 0x49, 0x8f, 0xf0, 0xd0, 0xed, 0x13, 0x9b, 0x04, 0x3e, 0xa3, 0x01, 0xe9,
-	0xd2, 0x90, 0x78, 0xcc, 0x27, 0x68, 0x1f, 0xaa, 0x0e, 0x16, 0xb8, 0xa9, 0xb5, 0xb5, 0xfd, 0xfa,
-	0x61, 0xc3, 0x8a, 0x01, 0xad, 0x04, 0xd0, 0x7a, 0x4e, 0x23, 0x5b, 0x46, 0xa0, 0x33, 0x58, 0x1d,
-	0x11, 0x81, 0x65, 0x74, 0xa5, 0xad, 0xef, 0xd7, 0x0f, 0x1f, 0x5a, 0x92, 0xc8, 0xdc, 0x04, 0xd6,
-	0x99, 0xfa, 0xa7, 0x4b, 0x05, 0x8f, 0xec, 0x14, 0xc2, 0x78, 0x02, 0x1b, 0x53, 0x2e, 0xb4, 0x09,
-	0xfa, 0x25, 0x89, 0x64, 0x21, 0x6b, 0xf6, 0xe4, 0x13, 0x35, 0xa0, 0x16, 0x62, 0x6f, 0x4c, 0x9a,
-	0x15, 0x69, 0x8b, 0x17, 0x8f, 0x2b, 0xc7, 0x9a, 0xe9, 0xc2, 0x76, 0x87, 0x78, 0x44, 0x90, 0x9e,
-	0xc0, 0xe2, 0x8a, 0x4c, 0x11, 0x02, 0x41, 0x95, 0x08, 0x3c, 0x50, 0x08, 0xf2, 0x1b, 0x3d, 0x80,
-	0x15, 0xe6, 0x4f, 0x9a, 0x14, 0x34, 0x75, 0xc9, 0x1a, 0xc5, 0x3c, 0x24, 0xd6, 0xeb, 0xd8, 0x63,
-	0x27, 0x21, 0xe6, 0x0b, 0xd8, 0xea, 0xe1, 0x30, 0x97, 0xc8, 0x82, 0x55, 0x4e, 0xde, 0x8f, 0x49,
-	0x20, 0x82, 0xa6, 0x26, 0x7b, 0x91, 0xc5, 0xb0, 0x63, 0x97, 0x9d, 0xc6, 0x98, 0xa7, 0xb0, 0xf9,
-	0x92, 0x88, 0x45, 0xc5, 0xb6, 0xa1, 0xde, 0x67, 0x34, 0x70, 0x03, 0x41, 0x68, 0x3f, 0x52, 0x35,
-	0x67, 0x4d, 0xe6, 0x5b, 0x68, 0x26, 0x38, 0x37, 0xd8, 0xc9, 0x92, 0xa6, 0x98, 0xdf, 0x35, 0xf8,
-	0x3b, 0xde, 0xc8, 0x13, 0x97, 0x3a, 0x2e, 0x1d, 0xa4, 0xb8, 0x08, 0xaa, 0x14, 0x8f, 0x88, 0x2a,
-	0x54, 0x7e, 0xa7, 0xb9, 0x2a, 0x0b, 0x73, 0x75, 0x33, 0xaa, 0xd1, 0x65, 0xa7, 0xee, 0x65, 0x55,
-	0x93, 0x4b, 0x76, 0x37, 0x6a, 0xf9, 0x91, 0x72, 0x53, 0x22, 0x4d, 0xb9, 0xfd, 0x05, 0x15, 0xd7,
-	0x51, 0x20, 0x15, 0xd7, 0x41, 0x3b, 0xb0, 0x3c, 0x22, 0x62, 0xc8, 0x1c, 0x05, 0xa2, 0x56, 0x29,
-	0x5f, 0xfd, 0xb7, 0xf8, 0x56, 0x8b, 0x7c, 0x73, 0x05, 0xdc, 0x0d, 0xdf, 0x37, 0xd0, 0x38, 0x1f,
-	0x5f, 0x78, 0x6e, 0x30, 0xec, 0x86, 0x84, 0x8a, 0x94, 0x6d, 0x03, 0x6a, 0x82, 0xf9, 0x6e, 0x5f,
-	0xa1, 0xc4, 0x8b, 0xeb, 0xef, 0xa5, 0xf9, 0x53, 0x83, 0x9a, 0xd4, 0x5e, 0x49, 0x35, 0xf7, 0xb3,
-	0xd5, 0xcc, 0x82, 0x89, 0x43, 0x52, 0xfd, 0xe9, 0x99, 0xa1, 0x7c, 0x54, 0xe8, 0x5b, 0x2b, 0x33,
-	0x51, 0xb3, 0xfa, 0x94, 0x9d, 0xe5, 0xda, 0xc2, 0x59, 0xbe, 0x59, 0x57, 0x3f, 0x69, 0xb0, 0x9e,
-	0x85, 0x55, 0xe3, 0xda, 0x1f, 0x73, 0x2e, 0xc7, 0x55, 0x4b, 0xc7, 0x35, 0x31, 0x2d, 0x1e, 0x68,
-	0x74, 0x04, 0x75, 0x4e, 0x04, 0x8f, 0xce, 0x99, 0xe7, 0xf6, 0x23, 0xa5, 0xaf, 0xad, 0x98, 0x83,
-	0x7d, 0xe5, 0xb0, 0xb3, 0x51, 0xe6, 0x07, 0xa8, 0x67, 0x7c, 0xe8, 0x5f, 0x58, 0x13, 0x43, 0x4e,
-	0x82, 0x21, 0xf3, 0x62, 0x2d, 0xd7, 0xec, 0x2b, 0x03, 0x6a, 0xc2, 0x8a, 0x8f, 0x85, 0x20, 0x9c,
-	0xaa, 0xfc, 0xc9, 0x72, 0xd2, 0x72, 0x97, 0x0a, 0xc2, 0x43, 0xec, 0xa9, 0xc4, 0xad, 0xc2, 0xae,
-	0x75, 0xd4, 0x7d, 0x62, 0xa7, 0xa1, 0xe6, 0xe7, 0x8a, 0xea, 0x83, 0x3a, 0xe6, 0xee, 0x40, 0x0c,
-	0x4f, 0x0b, 0x62, 0x68, 0x17, 0x8f, 0xd7, 0x99, 0x9a, 0x38, 0xca, 0x6b, 0xa2, 0x55, 0xfc, 0xf9,
-	0x76, 0xa5, 0xf1, 0x45, 0x83, 0xed, 0x12, 0xf4, 0x5b, 0x51, 0xc8, 0x71, 0x99, 0x42, 0x76, 0xa6,
-	0x18, 0xcd, 0x90, 0xc9, 0x47, 0x0d, 0x36, 0xf3, 0x11, 0x7f, 0x58, 0x2c, 0x87, 0x5f, 0x75, 0xa8,
-	0x76, 0xb0, 0xcf, 0x51, 0x07, 0xd6, 0xb3, 0x67, 0x12, 0x32, 0x62, 0x06, 0x65, 0xe7, 0x94, 0xb1,
-	0x53, 0x40, 0xee, 0x4e, 0xde, 0x3c, 0xe6, 0x12, 0xea, 0xc1, 0xc6, 0xd4, 0x39, 0x8a, 0x76, 0xe7,
-	0x1c, 0xae, 0xc6, 0xff, 0xd7, 0x78, 0x9f, 0x98, 0x4b, 0xe8, 0x34, 0x01, 0x55, 0x97, 0xd1, 0x34,
-	0x68, 0xee, 0x86, 0x9a, 0x53, 0x5c, 0x07, 0x56, 0x93, 0xcb, 0x19, 0xa9, 0x0d, 0xca, 0x5f, 0xfa,
-	0xc6, 0xde, 0xb4, 0xbd, 0xa4, 0x9a, 0x67, 0xb0, 0x96, 0xbe, 0x37, 0xd0, 0x3f, 0x6a, 0x9f, 0xf3,
-	0x0f, 0x90, 0x39, 0x55, 0x9c, 0x40, 0x3d, 0xf3, 0x34, 0x42, 0x4a, 0xfb, 0x25, 0xaf, 0xa5, 0xd9,
-	0x18, 0x17, 0xcb, 0xd2, 0x72, 0xf4, 0x2b, 0x00, 0x00, 0xff, 0xff, 0x72, 0x4a, 0x56, 0x93, 0xa9,
-	0x0a, 0x00, 0x00,
+	// 841 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0xdd, 0x6e, 0xeb, 0x44,
+	0x10, 0xae, 0x9d, 0xa4, 0x6d, 0x26, 0x2d, 0x6a, 0x97, 0x50, 0x12, 0x17, 0x4a, 0x64, 0x84, 0xd4,
+	0x22, 0xe4, 0x42, 0x2a, 0x04, 0xe2, 0x4f, 0x6a, 0x48, 0xa8, 0xb8, 0x28, 0x54, 0x8e, 0x84, 0xb8,
+	0x75, 0xe3, 0x21, 0xb1, 0xea, 0xec, 0x9a, 0xf5, 0x26, 0x52, 0x24, 0xee, 0x11, 0xd7, 0xbc, 0x05,
+	0xaf, 0xc1, 0x33, 0x70, 0xc1, 0x43, 0x9c, 0x27, 0x38, 0xe7, 0xe2, 0xc8, 0xeb, 0xf5, 0x4f, 0xe2,
+	0x24, 0xfd, 0x53, 0xa4, 0x73, 0xe7, 0xdd, 0x19, 0x7f, 0x33, 0xf3, 0xed, 0xee, 0x37, 0x03, 0xe0,
+	0x3a, 0x01, 0xb7, 0x02, 0xce, 0x04, 0x23, 0xe5, 0xe8, 0xdb, 0x68, 0x0e, 0x19, 0x1b, 0xfa, 0x78,
+	0x2e, 0xf7, 0x6e, 0x27, 0xbf, 0x9d, 0x3b, 0x74, 0x16, 0x3b, 0x18, 0xc7, 0x8b, 0x26, 0x1c, 0x07,
+	0x22, 0x31, 0x9e, 0x2c, 0x1a, 0xdd, 0x09, 0x77, 0x84, 0xc7, 0x68, 0x6c, 0x37, 0xff, 0xd3, 0xe0,
+	0xfd, 0x1f, 0xe9, 0x94, 0xdd, 0x61, 0x1f, 0xf9, 0xd4, 0x1b, 0xa0, 0x8d, 0x61, 0xc0, 0x68, 0x88,
+	0x3d, 0x3a, 0x45, 0x9f, 0x05, 0x48, 0x4e, 0xa1, 0xec, 0x3a, 0xc2, 0x69, 0x68, 0x2d, 0xed, 0xb4,
+	0xd6, 0xae, 0x5b, 0x31, 0xa0, 0x95, 0x00, 0x5a, 0x97, 0x74, 0x66, 0x4b, 0x0f, 0x72, 0x0d, 0xbb,
+	0x63, 0x14, 0x8e, 0xf4, 0xd6, 0x5b, 0xa5, 0xd3, 0x5a, 0xfb, 0x33, 0x4b, 0x16, 0xb2, 0x36, 0x80,
+	0x75, 0xad, 0xfe, 0xe9, 0x51, 0xc1, 0x67, 0x76, 0x0a, 0x61, 0x7c, 0x0d, 0xfb, 0x73, 0x26, 0x72,
+	0x00, 0xa5, 0x3b, 0x9c, 0xc9, 0x44, 0xaa, 0x76, 0xf4, 0x49, 0xea, 0x50, 0x99, 0x3a, 0xfe, 0x04,
+	0x1b, 0xba, 0xdc, 0x8b, 0x17, 0x5f, 0xe9, 0x5f, 0x6a, 0xe6, 0x9f, 0x1a, 0xbc, 0xdd, 0x45, 0x1f,
+	0x05, 0xf6, 0x85, 0x23, 0xb2, 0x6a, 0xde, 0x83, 0x6a, 0x28, 0x18, 0xc7, 0x9f, 0x9c, 0x31, 0x2a,
+	0xa4, 0x6c, 0x23, 0x89, 0xa0, 0x67, 0x11, 0x08, 0x94, 0x51, 0x38, 0xc3, 0x46, 0x49, 0x6e, 0xc9,
+	0x6f, 0xf2, 0x09, 0xec, 0xb0, 0x20, 0xe2, 0x30, 0x6c, 0x94, 0x25, 0x29, 0x24, 0x2e, 0x53, 0x46,
+	0xfa, 0x39, 0xb6, 0xd8, 0x89, 0x8b, 0xe9, 0xc0, 0x61, 0xdf, 0x99, 0x3e, 0x2a, 0x0d, 0x0b, 0x76,
+	0x39, 0xfe, 0x3e, 0xc1, 0x50, 0x84, 0x8a, 0xc8, 0x7c, 0x04, 0x3b, 0x36, 0xd9, 0xa9, 0x8f, 0xe9,
+	0xc2, 0xc1, 0x15, 0x8a, 0xe7, 0x15, 0xda, 0x82, 0xda, 0x80, 0xd1, 0xd0, 0x0b, 0x05, 0xd2, 0xc1,
+	0x4c, 0xd5, 0x9b, 0xdf, 0x32, 0x7f, 0x85, 0x46, 0x12, 0xe5, 0x19, 0x97, 0x24, 0x21, 0x54, 0xcf,
+	0x08, 0x35, 0xff, 0xd5, 0xe0, 0x30, 0x82, 0xc6, 0x01, 0x47, 0xf1, 0xe4, 0x0a, 0x2e, 0x73, 0xd7,
+	0xaf, 0x24, 0x59, 0xfb, 0x28, 0x66, 0xad, 0x00, 0xbd, 0x99, 0x2b, 0xf7, 0xb7, 0x06, 0xcd, 0x34,
+	0x54, 0x81, 0xa1, 0x6f, 0x53, 0x86, 0xa2, 0xcc, 0xce, 0x16, 0x32, 0x2b, 0x3c, 0x8a, 0x6e, 0x9a,
+	0x9d, 0xfc, 0xcd, 0xf8, 0x02, 0xaa, 0xdd, 0x27, 0x65, 0xf5, 0xbf, 0x06, 0xef, 0xc4, 0xef, 0xaf,
+	0xe3, 0x51, 0xd7, 0xa3, 0xc3, 0x34, 0x23, 0x02, 0x65, 0x9a, 0x51, 0x2b, 0xbf, 0xd3, 0x73, 0xd4,
+	0xef, 0x3d, 0xc7, 0x5e, 0x81, 0xed, 0xb3, 0xfc, 0x63, 0x5f, 0x08, 0xb6, 0x19, 0xc6, 0x5f, 0xa4,
+	0xb5, 0x29, 0x6d, 0x49, 0x6b, 0x7b, 0x0b, 0x74, 0xcf, 0x55, 0x20, 0xba, 0xe7, 0x92, 0x23, 0xd8,
+	0x1e, 0xa3, 0x18, 0x31, 0x57, 0x81, 0xa8, 0x55, 0x5a, 0x6f, 0xe9, 0x51, 0xf5, 0x96, 0x8b, 0xf5,
+	0x2e, 0x24, 0xb0, 0x99, 0x7a, 0x7f, 0x81, 0xfa, 0xcd, 0xe4, 0xd6, 0xf7, 0xc2, 0x51, 0x6f, 0x8a,
+	0x34, 0x7b, 0x29, 0x75, 0xa8, 0x08, 0x16, 0x78, 0x03, 0x85, 0x12, 0x2f, 0x1e, 0x7e, 0x96, 0xe6,
+	0x4b, 0x0d, 0x2a, 0xf2, 0x5d, 0x2f, 0xc9, 0xe6, 0xe3, 0x7c, 0x36, 0xab, 0x60, 0x62, 0x97, 0xa5,
+	0x62, 0xf9, 0x79, 0x81, 0xb7, 0x66, 0x4e, 0xcb, 0x56, 0xf1, 0x94, 0xd7, 0xd8, 0xca, 0xbd, 0x1a,
+	0xfb, 0xec, 0x56, 0xb1, 0x97, 0x87, 0x55, 0x52, 0x38, 0x98, 0x70, 0x2e, 0xa5, 0x50, 0x4b, 0xa5,
+	0x30, 0xd9, 0x5a, 0x14, 0x4b, 0xbd, 0x20, 0x96, 0xe4, 0x02, 0x6a, 0x1c, 0x05, 0x9f, 0xdd, 0x30,
+	0xdf, 0x53, 0x72, 0x5a, 0x6b, 0x1f, 0xc6, 0x35, 0xd8, 0x99, 0xc1, 0xce, 0x7b, 0x99, 0x7f, 0x40,
+	0x2d, 0x67, 0x8b, 0x04, 0x50, 0x8c, 0x38, 0x86, 0x23, 0xe6, 0xc7, 0x77, 0xb9, 0x62, 0x67, 0x1b,
+	0xa4, 0x01, 0x3b, 0x81, 0x23, 0x04, 0x72, 0xaa, 0xe2, 0x27, 0xcb, 0x88, 0x72, 0x8f, 0x0a, 0xe4,
+	0x53, 0xc7, 0x57, 0x81, 0x9b, 0x85, 0x53, 0xeb, 0xaa, 0x31, 0xc0, 0x4e, 0x5d, 0xcd, 0xbf, 0x74,
+	0xc5, 0x83, 0x6a, 0x30, 0x1b, 0xb8, 0x0c, 0xdf, 0x14, 0x2e, 0x43, 0xab, 0xd8, 0xd8, 0xde, 0x80,
+	0x3b, 0xd1, 0x7e, 0x55, 0x82, 0x72, 0xd7, 0x09, 0x38, 0xe9, 0xc2, 0x5e, 0xfe, 0xc9, 0x11, 0x23,
+	0x0e, 0xb9, 0xec, 0x19, 0x1a, 0x47, 0x05, 0x3a, 0x7a, 0xd1, 0x24, 0x66, 0x6e, 0x91, 0x3e, 0xec,
+	0xcf, 0xc9, 0x04, 0x39, 0x5e, 0xa3, 0x1d, 0xc6, 0x87, 0x0f, 0x98, 0x9a, 0xcc, 0x2d, 0xf2, 0x43,
+	0x02, 0xaa, 0xb4, 0x76, 0x1e, 0x74, 0x41, 0x80, 0xd7, 0x24, 0xd7, 0x85, 0xdd, 0xa4, 0xaf, 0x93,
+	0xa3, 0xac, 0x2f, 0xe5, 0xa7, 0x09, 0xe3, 0x64, 0x7e, 0x7f, 0x49, 0x36, 0x57, 0x50, 0x4d, 0xbb,
+	0x19, 0x79, 0x77, 0x45, 0xe3, 0x35, 0x3e, 0xb8, 0xa7, 0xef, 0x99, 0x5b, 0xe4, 0x3b, 0xa8, 0xa6,
+	0xf3, 0x52, 0x02, 0x54, 0x18, 0xa0, 0xd6, 0x94, 0xd3, 0x81, 0x5a, 0x6e, 0xf0, 0x23, 0x4a, 0x6d,
+	0x96, 0xcc, 0x82, 0xab, 0x31, 0x3a, 0x9f, 0xc2, 0x8e, 0xc7, 0xe4, 0x8f, 0x1d, 0x88, 0xae, 0xc1,
+	0x4d, 0xe4, 0x10, 0xfe, 0xa3, 0x37, 0xa2, 0x85, 0xf5, 0xbd, 0xef, 0x21, 0x15, 0xd6, 0xe5, 0x44,
+	0xb0, 0x21, 0x52, 0xeb, 0x8a, 0x07, 0x83, 0xdb, 0x6d, 0x89, 0x71, 0xf1, 0x3a, 0x00, 0x00, 0xff,
+	0xff, 0xbb, 0xe9, 0xc4, 0x3c, 0xba, 0x0b, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -880,6 +896,7 @@ type DaprClient interface {
 	InvokeService(ctx context.Context, in *InvokeServiceEnvelope, opts ...grpc.CallOption) (*InvokeServiceResponseEnvelope, error)
 	InvokeBinding(ctx context.Context, in *InvokeBindingEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
 	GetState(ctx context.Context, in *GetStateEnvelope, opts ...grpc.CallOption) (*GetStateResponseEnvelope, error)
+	GetSecret(ctx context.Context, in *GetSecretEnvelope, opts ...grpc.CallOption) (*GetSecretResponseEnvelope, error)
 	SaveState(ctx context.Context, in *SaveStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *DeleteStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -928,6 +945,15 @@ func (c *daprClient) GetState(ctx context.Context, in *GetStateEnvelope, opts ..
 	return out, nil
 }
 
+func (c *daprClient) GetSecret(ctx context.Context, in *GetSecretEnvelope, opts ...grpc.CallOption) (*GetSecretResponseEnvelope, error) {
+	out := new(GetSecretResponseEnvelope)
+	err := c.cc.Invoke(ctx, "/dapr.Dapr/GetSecret", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) SaveState(ctx context.Context, in *SaveStateEnvelope, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.Dapr/SaveState", in, out, opts...)
@@ -952,8 +978,35 @@ type DaprServer interface {
 	InvokeService(context.Context, *InvokeServiceEnvelope) (*InvokeServiceResponseEnvelope, error)
 	InvokeBinding(context.Context, *InvokeBindingEnvelope) (*empty.Empty, error)
 	GetState(context.Context, *GetStateEnvelope) (*GetStateResponseEnvelope, error)
+	GetSecret(context.Context, *GetSecretEnvelope) (*GetSecretResponseEnvelope, error)
 	SaveState(context.Context, *SaveStateEnvelope) (*empty.Empty, error)
 	DeleteState(context.Context, *DeleteStateEnvelope) (*empty.Empty, error)
+}
+
+// UnimplementedDaprServer can be embedded to have forward compatible implementations.
+type UnimplementedDaprServer struct {
+}
+
+func (*UnimplementedDaprServer) PublishEvent(ctx context.Context, req *PublishEventEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
+}
+func (*UnimplementedDaprServer) InvokeService(ctx context.Context, req *InvokeServiceEnvelope) (*InvokeServiceResponseEnvelope, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeService not implemented")
+}
+func (*UnimplementedDaprServer) InvokeBinding(ctx context.Context, req *InvokeBindingEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
+}
+func (*UnimplementedDaprServer) GetState(ctx context.Context, req *GetStateEnvelope) (*GetStateResponseEnvelope, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
+}
+func (*UnimplementedDaprServer) GetSecret(ctx context.Context, req *GetSecretEnvelope) (*GetSecretResponseEnvelope, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSecret not implemented")
+}
+func (*UnimplementedDaprServer) SaveState(ctx context.Context, req *SaveStateEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SaveState not implemented")
+}
+func (*UnimplementedDaprServer) DeleteState(ctx context.Context, req *DeleteStateEnvelope) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteState not implemented")
 }
 
 func RegisterDaprServer(s *grpc.Server, srv DaprServer) {
@@ -1032,6 +1085,24 @@ func _Dapr_GetState_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_GetSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSecretEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.Dapr/GetSecret",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetSecret(ctx, req.(*GetSecretEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_SaveState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SaveStateEnvelope)
 	if err := dec(in); err != nil {
@@ -1087,6 +1158,10 @@ var _Dapr_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetState",
 			Handler:    _Dapr_GetState_Handler,
+		},
+		{
+			MethodName: "GetSecret",
+			Handler:    _Dapr_GetSecret_Handler,
 		},
 		{
 			MethodName: "SaveState",

@@ -13,10 +13,16 @@ spec:
     metadata:
       labels:
          app: dapr-sidecar-injector
+{{- if eq .Values.global.prometheus.enabled true }}
+      annotations:
+        prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
+        prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+        prometheus.io/path: "/"
+{{- end }}
     spec:
       serviceAccountName: dapr-operator
       containers:
-      - name: sidecar-injector
+      - name: dapr-sidecar-injector
 {{- if contains "/" .Values.image.name }}
         image: "{{ .Values.image.name }}"
 {{- else }}
@@ -30,6 +36,16 @@ spec:
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
+{{- if eq .Values.global.logAsJson true }}
+        - "--log-as-json"
+{{- end }}
+{{- if eq .Values.global.prometheus.enabled true }}
+        - "--enable-metrics"
+        - "--metrics-port"
+        - "{{ .Values.global.prometheus.port }}"
+{{- else }}
+        - "--enable-metrics=false"
+{{- end }}
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt
@@ -39,8 +55,8 @@ spec:
 {{- if contains "/" .Values.image.name }}
           value: "{{ .Values.image.name }}"
 {{- else }}
-          value: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
-          {{- end }}
+          value: "{{ .Values.global.registry }}/daprd:{{ .Values.global.tag }}"
+{{- end }}
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -49,6 +65,11 @@ spec:
         - name: https
           containerPort: 4000
           protocol: TCP
+{{- if eq .Values.global.prometheus.enabled true }}
+        - name: metrics
+          containerPort: {{ .Values.global.prometheus.port }}
+          protocol: TCP
+{{- end }}
         volumeMounts:
         - name: cert
           mountPath: /dapr/cert
@@ -57,3 +78,7 @@ spec:
       - name: cert
         secret:
           secretName: dapr-sidecar-injector-cert
+{{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}

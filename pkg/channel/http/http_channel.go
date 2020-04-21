@@ -6,12 +6,16 @@
 package http
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/valyala/fasthttp"
 )
 
@@ -35,6 +39,10 @@ const (
 	// ContentType is the header for Content-Type
 	ContentType        = "Content-Type"
 	defaultContentType = "application/json"
+
+	httpInternalErrorCode = "500"
+	HeaderDelim           = "&__header_delim__&"
+	HeaderEquals          = "&__header_equals__&"
 )
 
 // Channel is an HTTP implementation of an AppChannel
@@ -42,15 +50,18 @@ type Channel struct {
 	client      *fasthttp.Client
 	baseAddress string
 	ch          chan int
+	tracingSpec config.TracingSpec
 }
 
-func getContentType(metadata map[string]string) string {
-	if metadata != nil {
-		if val, ok := metadata[ContentType]; ok && val != "" {
-			return val
-		}
+func applyContentTypeIfNotPresent(req *fasthttp.Request) {
+	if len(req.Header.ContentType()) == 0 {
+		req.Header.SetContentType(defaultContentType)
 	}
-	return defaultContentType
+}
+
+// GetBaseAddress returns the application base address
+func (h *Channel) GetBaseAddress() string {
+	return h.baseAddress
 }
 
 // InvokeMethod invokes user code via HTTP
@@ -64,15 +75,14 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 	if invokeRequest.Metadata != nil {
 		if val, ok := invokeRequest.Metadata["headers"]; ok {
-			headers := strings.Split(val, "&__header_delim__&")
+			headers := strings.Split(val, HeaderDelim)
 			for _, h := range headers {
-				kv := strings.Split(h, "&__header_equals__&")
+				kv := strings.Split(h, HeaderEquals)
 				req.Header.Set(kv[0], kv[1])
 			}
 		}
 	}
-	contentType := getContentType(invokeRequest.Metadata)
-	req.Header.SetContentType(contentType)
+	applyContentTypeIfNotPresent(req)
 
 	method := invokeRequest.Metadata[HTTPVerb]
 	if method == "" {
@@ -80,16 +90,46 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	}
 	req.Header.SetMethod(method)
 
+	if invokeRequest.Metadata != nil {
+		if corID, ok := invokeRequest.Metadata[diag.CorrelationID]; ok {
+			req.Header.Set(diag.CorrelationID, corID)
+		}
+	}
+
+	var span diag.TracerSpan
+	var spanc diag.TracerSpan
+
+	span, spanc = diag.TraceSpanFromFastHTTPRequest(req, h.tracingSpec)
+	defer span.Span.End()
+	defer spanc.Span.End()
+
+	req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(*spanc.SpanContext))
+
 	resp := fasthttp.AcquireResponse()
 
 	if h.ch != nil {
 		h.ch <- 1
 	}
+
+	// TODO: Use propagated context
+	ctx := context.Background()
+	// Emit metric when request is sent
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(
+		ctx, method, invokeRequest.Method,
+		int64(len(invokeRequest.Payload)))
+
+	startRequest := time.Now()
 	err := h.client.Do(req, resp)
+	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
+
 	if h.ch != nil {
 		<-h.ch
 	}
 	if err != nil {
+		// Track failure request
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(
+			ctx, method, invokeRequest.Method,
+			httpInternalErrorCode, 0, elapsedMs)
 		return nil, err
 	}
 
@@ -98,6 +138,12 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	copy(arr, body)
 
 	statusCode := resp.StatusCode()
+
+	// Emit metric when requst is completed
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(
+		ctx, method, invokeRequest.Method,
+		strconv.Itoa(statusCode), int64(len(body)), elapsedMs)
+
 	headers := []string{}
 	resp.Header.VisitAll(func(key []byte, value []byte) {
 		headers = append(headers, fmt.Sprintf("%s&__header_equals__&%s", string(key), string(value)))
@@ -107,6 +153,9 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 	if len(headers) > 0 {
 		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
 	}
+
+	diag.UpdateSpanPairStatusesFromHTTPResponse(span, spanc, resp)
+
 	fasthttp.ReleaseRequest(req)
 	fasthttp.ReleaseResponse(resp)
 
@@ -118,10 +167,11 @@ func (h *Channel) InvokeMethod(invokeRequest *channel.InvokeRequest) (*channel.I
 
 // CreateLocalChannel creates an HTTP AppChannel
 // nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec) (channel.AppChannel, error) {
 	c := &Channel{
 		client:      &fasthttp.Client{MaxConnsPerHost: 1000000, TLSConfig: &tls.Config{InsecureSkipVerify: true}, ReadTimeout: time.Second * 60, MaxIdemponentCallAttempts: 0},
 		baseAddress: fmt.Sprintf("http://127.0.0.1:%v", port),
+		tracingSpec: spec,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)

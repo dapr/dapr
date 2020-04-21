@@ -7,11 +7,12 @@ package utils
 
 import (
 	"flag"
+	"fmt"
 	"path/filepath"
-
-	"k8s.io/client-go/rest"
+	"time"
 
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 )
@@ -61,4 +62,18 @@ func GetKubeClient() *kubernetes.Clientset {
 	}
 
 	return clientSet
+}
+
+// ToISO8601DateTimeString converts dateTime to ISO8601 Format
+// ISO8601 Format: 2020-01-01T01:01:01.10101Z
+func ToISO8601DateTimeString(dateTime time.Time) string {
+	t := dateTime.UTC()
+
+	year, month, day := t.Date()
+	hour, minute, second := t.Clock()
+	micros := t.Nanosecond() / 1000
+
+	return fmt.Sprintf(
+		"%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+		year, month, day, hour, minute, second, micros)
 }

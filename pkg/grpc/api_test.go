@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/logger"
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"github.com/golang/protobuf/ptypes/any"
@@ -36,10 +37,6 @@ func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCa
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelope) (*daprinternal_pb.InvokeResponse, error) {
 	return &daprinternal_pb.InvokeResponse{}, nil
-}
-
-func (m *mockGRPCAPI) UpdateComponent(ctx context.Context, in *daprinternal_pb.Component) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
@@ -66,8 +63,12 @@ func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEn
 	return &empty.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error) {
+	return &dapr_pb.GetSecretResponseEnvelope{}, nil
+}
+
 func createExporters(meta exporters.Metadata) {
-	exporter := stringexporter.NewStringExporter()
+	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
 	exporter.Init("fakeID", "fakeAddress", meta)
 }
 
@@ -77,7 +78,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	assert.NoError(t, err)
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{SamplingRate: "1"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -88,7 +89,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	createExporters(meta)
 
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddleware(spec))),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddlewareStream(spec))),
 		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.TracingGRPCMiddlewareUnary(spec))),
 	)
 
@@ -102,7 +103,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer close(t, conn)
+	defer doClose(t, conn)
 	assert.NoError(t, err)
 
 	client := daprinternal_pb.NewDaprInternalClient(conn)
@@ -124,7 +125,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	assert.NoError(t, err)
 
 	buffer := ""
-	spec := config.TracingSpec{ExporterType: "string"}
+	spec := config.TracingSpec{SamplingRate: "1"}
 
 	meta := exporters.Metadata{
 		Buffer: &buffer,
@@ -135,7 +136,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	createExporters(meta)
 
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddleware(spec))),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddlewareStream(spec))),
 		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.TracingGRPCMiddlewareUnary(spec))),
 	)
 
@@ -149,7 +150,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer close(t, conn)
+	defer doClose(t, conn)
 	assert.NoError(t, err)
 
 	client := daprinternal_pb.NewDaprInternalClient(conn)
@@ -179,7 +180,7 @@ func TestSaveState(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer close(t, conn)
+	defer doClose(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
@@ -213,7 +214,7 @@ func TestGetState(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer close(t, conn)
+	defer doClose(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
@@ -238,7 +239,7 @@ func TestDeleteState(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer close(t, conn)
+	defer doClose(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
@@ -263,7 +264,7 @@ func TestPublishTopic(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer close(t, conn)
+	defer doClose(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
@@ -288,7 +289,7 @@ func TestInvokeBinding(t *testing.T) {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
 	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer close(t, conn)
+	defer doClose(t, conn)
 	assert.NoError(t, err)
 
 	client := dapr_pb.NewDaprClient(conn)
@@ -297,7 +298,7 @@ func TestInvokeBinding(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func close(t *testing.T, c io.Closer) {
+func doClose(t *testing.T, c io.Closer) {
 	err := c.Close()
 	if err != nil {
 		assert.Fail(t, fmt.Sprintf("unable to close %s", err))
