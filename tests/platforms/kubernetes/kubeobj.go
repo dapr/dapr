@@ -107,6 +107,11 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 		serviceType = apiv1.ServiceTypeLoadBalancer
 	}
 
+	targetPort := DefaultContainerPort
+	if appDesc.AppPort > 0 {
+		targetPort = appDesc.AppPort
+	}
+
 	return &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appDesc.AppName,
@@ -123,7 +128,7 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 				{
 					Protocol:   apiv1.ProtocolTCP,
 					Port:       DefaultExternalPort,
-					TargetPort: intstr.IntOrString{IntVal: DefaultContainerPort},
+					TargetPort: intstr.IntOrString{IntVal: int32(targetPort)},
 				},
 			},
 			Type: serviceType,
