@@ -753,13 +753,14 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 
 		switch resp.Status().Code {
 		case nethttp.StatusOK:
-			if resp.Message().ContentType == invokev1.JSONContentType {
+			contentType, _ := resp.RawData()
+			if contentType == invokev1.JSONContentType {
 				err := json.Unmarshal(resp.Message().Data.Value, &topics)
 				if err != nil {
 					log.Errorf("error getting topics from app: %s", err)
 				}
 			} else {
-				log.Errorf("unsupported content_type: %s", resp.Message().ContentType)
+				log.Errorf("unsupported content_type: %s", contentType)
 			}
 
 		case nethttp.StatusNotFound:
@@ -1187,12 +1188,12 @@ func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) 
 		return &config, nil
 	}
 
-	// TODO: Use constant for json content_type
-	if resp.Message().ContentType != invokev1.JSONContentType {
-		return nil, fmt.Errorf("invalid content_type: %s", resp.Message().ContentType)
+	contentType, body := resp.RawData()
+	if contentType != invokev1.JSONContentType {
+		return nil, fmt.Errorf("invalid content_type: %s", contentType)
 	}
 
-	if err = a.json.Unmarshal(resp.Message().Data.Value, &config); err != nil {
+	if err = a.json.Unmarshal(body, &config); err != nil {
 		return nil, err
 	}
 

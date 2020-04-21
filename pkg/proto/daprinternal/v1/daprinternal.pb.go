@@ -194,7 +194,7 @@ func (m *InternalInvokeRequest) GetVer() v1.APIVersion {
 	if m != nil {
 		return m.Ver
 	}
-	return v1.APIVersion_V0
+	return v1.APIVersion_UNKNOWN
 }
 
 func (m *InternalInvokeRequest) GetMetadata() map[string]*_struct.ListValue {

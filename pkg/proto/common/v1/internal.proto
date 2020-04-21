@@ -15,7 +15,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/common/v1";
 // Dapr and DaprClient service versions follows Dapr API version.
 // DaprInternal service version is maintained separately.
 enum APIVersion {
-  V0 = 0;
+  UNKNOWN = 0;
   V1 = 1;
 }
 
