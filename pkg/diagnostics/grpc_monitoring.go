@@ -27,6 +27,7 @@ import (
 type gRPCServerHandler struct {
 	ocHandler *ocgrpc.ServerHandler
 	appID     string
+	enabled   bool
 }
 
 func (s *gRPCServerHandler) HandleConn(ctx context.Context, cs stats.ConnStats) {
@@ -37,11 +38,16 @@ func (s *gRPCServerHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo)
 }
 
 func (s *gRPCServerHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
-	s.ocHandler.HandleRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rs)
+	if s.enabled {
+		s.ocHandler.HandleRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rs)
+	}
 }
 
 func (s *gRPCServerHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) context.Context {
-	return s.ocHandler.TagRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rti)
+	if s.enabled {
+		return s.ocHandler.TagRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, s.appID), rti)
+	}
+	return ctx
 }
 
 // gRPCClientHandler is the wrapper of grpc client plugin of opencensus
@@ -49,6 +55,7 @@ func (s *gRPCServerHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) c
 type gRPCClientHandler struct {
 	ocHandler *ocgrpc.ClientHandler
 	appID     string
+	enabled   bool
 }
 
 func (c *gRPCClientHandler) HandleConn(ctx context.Context, cs stats.ConnStats) {}
@@ -58,11 +65,16 @@ func (c *gRPCClientHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo)
 }
 
 func (c *gRPCClientHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
-	c.ocHandler.HandleRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rs)
+	if c.enabled {
+		c.ocHandler.HandleRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rs)
+	}
 }
 
 func (c *gRPCClientHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) context.Context {
-	return c.ocHandler.TagRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rti)
+	if c.enabled {
+		return c.ocHandler.TagRPC(diag_utils.AddTagKeyToCtx(ctx, appIDKey, c.appID), rti)
+	}
+	return ctx
 }
 
 // grpcMetrics holds gRPC server and client stats handlers
@@ -87,10 +99,12 @@ func (g *grpcMetrics) Init(appID string) error {
 	g.ServerStatsHandler = &gRPCServerHandler{
 		ocHandler: &ocgrpc.ServerHandler{StartOptions: noTracing},
 		appID:     appID,
+		enabled:   true,
 	}
 	g.ClientStatsHandler = &gRPCClientHandler{
 		ocHandler: &ocgrpc.ClientHandler{StartOptions: noTracing},
 		appID:     appID,
+		enabled:   true,
 	}
 
 	return nil
