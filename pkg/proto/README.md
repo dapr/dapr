@@ -14,6 +14,7 @@ Because of [etcd dependency issue](https://github.com/etcd-io/etcd/issues/11563)
 protoc -I . ./pkg/proto/operator/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./pkg/proto/placement/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./pkg/proto/sentry/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./pkg/proto/common/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./pkg/proto/dapr/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./pkg/proto/daprclient/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./pkg/proto/daprinternal/v1/*.proto --go_out=plugins=grpc:../../../

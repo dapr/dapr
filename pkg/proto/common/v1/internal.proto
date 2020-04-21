@@ -21,12 +21,18 @@ enum APIVersion {
 
 // Status represents the response status for HTTP and gRPC app channel.
 message Status {
-  // The status code (required)
+  // The status code
+  // 
+  // This field is required.
   int32 code = 1;
 
-  // Error message (optional)
+  // Error message
+  //
+  // This field is optional.
   string message = 2;
 
-  // A list of messages that carry the error details (optional)
+  // A list of messages that carry the error details
+  //
+  // This field is optional.
   repeated google.protobuf.Any details = 3;
 }

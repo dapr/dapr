@@ -51,11 +51,17 @@ func (APIVersion) EnumDescriptor() ([]byte, []int) {
 
 // Status represents the response status for HTTP and gRPC app channel.
 type Status struct {
-	// The status code (required)
+	// The status code
+	//
+	// This field is required.
 	Code int32 `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
-	// Error message (optional)
+	// Error message
+	//
+	// This field is optional.
 	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	// A list of messages that carry the error details (optional)
+	// A list of messages that carry the error details
+	//
+	// This field is optional.
 	Details              []*any.Any `protobuf:"bytes,3,rep,name=details,proto3" json:"details,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
 	XXX_unrecognized     []byte     `json:"-"`

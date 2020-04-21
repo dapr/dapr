@@ -45,6 +45,19 @@ message HTTPExtension {
   map<string, string> querystring = 2;
 }
 
+// DataWithContentType represents bytearray body and its content type
+message DataWithContentType {
+  // content_type is the type of data content.
+  //
+  // This field is required.
+  string content_type = 1;
+
+  // body conveys the content body.
+  //
+  // This field is required.
+  bytes body = 2;
+}
+
 message InvokeRequest {
   // method is a method name which will be invoked by caller.
   // 
@@ -52,41 +65,21 @@ message InvokeRequest {
   string method = 1;
 
   // data conveys the content body which caller sent.
-  // the type of data is bytes or protobuf message.
-  // `content_type` is required if data is bytes type.
   //
   // This field is required.
   google.protobuf.Any data = 2;
 
-  // content_type is the type of data content. When data includes bytes type data,
-  // content_type is required.
+  // http_extension includes http specific fields if request conveys 
+  // http-compatible request.
   //
   // This field is optional.
-  string content_type = 3;
-
-  // protocol_extension includes protocol specific fields. 
-  // for example, if users set HTTP Verb and HTTP querystring to transfer
-  // HTTP compatible request, they will pack `HTTPExtension`
-  // message to protocol_extension.
-  //
-  // This field is optional.
-  oneof protocol_extension {
-    HTTPExtension http = 4;
-  }
+  HTTPExtension http_extension = 3;
 }
 
 message InvokeResponse {
   // data conveys the content body of InvokeService response.
-  // the type of data is bytes or protobuf message.
-  // `content_type` is required if data is bytes type.
   //
   // This field is required.
   google.protobuf.Any data = 1;
-
-  // content_type is the type of data content. When data includes bytes type data,
-  // content_type is required.
-  //
-  // This field is optional.
-  string content_type = 2;
 }
 
