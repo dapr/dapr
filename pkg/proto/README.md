@@ -11,11 +11,11 @@ Because of [etcd dependency issue](https://github.com/etcd-io/etcd/issues/11563)
 > Note: TODO - move commands to makefile
 
 ```bash
-protoc -I ./common/v1/ ./common/v1/*.proto --go_out=plugins=grpc:../../../../../
-protoc -I ./dapr/v1/ ./dapr/v1/*.proto --go_out=plugins=grpc:../../../../../
-protoc -I ./daprclient/v1/ ./daprclient/v1/*.proto --go_out=plugins=grpc:../../../../../
-protoc -I ./daprinternal/v1/ ./daprinternal/v1/*.proto --go_out=plugins=grpc:../../../../../
-protoc -I ./operator/v1/ ./operator/v1/*.proto --go_out=plugins=grpc:../../../../../
-protoc -I ./placement/v1/ ./placement/v1/*.proto --go_out=plugins=grpc:../../../../../
-protoc -I ./sentry/v1/ ./sentry/v1/*.proto --go_out=plugins=grpc:../../../../../
+protoc -I . ./pkg/proto/operator/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./pkg/proto/placement/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./pkg/proto/sentry/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./pkg/proto/common/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./pkg/proto/dapr/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./pkg/proto/daprclient/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./pkg/proto/daprinternal/v1/*.proto --go_out=plugins=grpc:../../../
 ```

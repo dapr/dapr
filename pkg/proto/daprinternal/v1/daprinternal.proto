@@ -5,10 +5,12 @@
 
 syntax = "proto3";
 
-package dapr.pkg.proto.daprinternal.v1;
+package pkg.proto.daprinternal.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/struct.proto";
+import "pkg/proto/daprinternal/v1/apiversion.proto";
+import "pkg/proto/daprinternal/v1/status.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
 
@@ -23,7 +25,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
 // regardless of callee's response.
 service DaprInternal {
   rpc CallActor (CallActorRequest) returns (CallActorResponse) {}
-  rpc CallLocal (CallLocalRequest) returns (CallLocalResponse) {}
+  rpc CallLocal (InternalInvokeRequest) returns (InternalInvokeResponse) {}
 }
 
 message CallActorRequest {
@@ -39,53 +41,32 @@ message CallActorResponse {
   map<string,string> metadata = 2;
 }
 
-// CallLocalRequest is the message to transfer caller's data to callee
+// InternalInvokeRequest is the message to transfer caller's data to callee
 // for service invocaton. This includes callee's app id and caller's request data.
-message CallLocalRequest {
-  // ver is the version of service invocation specification.
+message InternalInvokeRequest {
+  // ver is the version of Dapr API.
   // 
   // This field is required.
-  int32 ver = 1;
-
-  // method is a method name which will be invoked by caller.
-  // 
-  // This field is required.
-  string method = 2;
+  APIVersion ver = 1;
 
   // metadata holds caller's HTTP headers or gRPC metadata.
   // 
   // This field is required.
-  map<string, google.protobuf.ListValue> metadata = 3;
+  map<string, google.protobuf.ListValue> metadata = 2;
 
-  // data conveys the content body which caller sent.
-  // the type of data is bytes or protobuf message.
-  // `content_type` is required if data is bytes type.
-  //
-  // This field is required.
-  google.protobuf.Any data = 4;
-
-  // content_type is the type of data content. When data includes bytes type data,
-  // content_type is required.
-  //
-  // This field is optional.
-  string content_type = 5;
-
-  // protocol_extension includes protocol specific fields. 
-  // for example, if users set HTTP Verb and HTTP querystring to transfer
-  // HTTP compatible request, they will pack `dapr.pkg.proto.common.v1.HTTPExtensions`
-  // message to protocol_extension.
-  //
-  // This field is optional.
-  google.protobuf.Any protocol_extension = 6;
-}
-
-// CallLocalResponse is the message to transfer callee's response to caller
-// for service invocaton.
-message CallLocalResponse {
-  // status_code can be http status code or grpc status code.
+  // message includes caller's invocation request message.
   // 
   // This field is required.
-  int32 status_code = 1;
+  google.protobuf.Any message = 3;
+}
+
+// InternalInvokeResponse is the message to transfer callee's response to caller
+// for service invocaton.
+message InternalInvokeResponse {
+  // status is http/grpc status.
+  // 
+  // This field is required.
+  Status status = 1;
 
   // headers holds app channel response headers.
   // 
@@ -98,16 +79,8 @@ message CallLocalResponse {
   // This field is optional.
   map<string, google.protobuf.ListValue> trailers = 3;
 
-  // data conveys the content body which callee returns.
-  // the type of data is bytes or protobuf message.
-  // `content_type` is required if data is bytes type.
-  //
+  // message includes callee's invocation response message.
+  // 
   // This field is required.
-  google.protobuf.Any data = 4;
-
-  // content_type is the type of data content. When data
-  // includes bytes type data, content_type is required.
-  //
-  // This field is optional.
-  string content_type = 5;
+  google.protobuf.Any message = 4;
 }
