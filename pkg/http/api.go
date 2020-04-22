@@ -528,6 +528,9 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	}
 	a.setHeaders(c, req.Metadata)
 
+	sc := diag.GetSpanContextFromRequestContext(c.RequestCtx)
+	ctx = diag.AppendToOutgoingContext(ctx, sc)
+
 	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
