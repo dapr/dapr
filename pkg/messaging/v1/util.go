@@ -47,7 +47,7 @@ func GrpcMetadataToInternalMetadata(md metadata.MD) map[string]*structpb.ListVal
 }
 
 // isPermanentHTTPHeader checks whether hdr belongs to the list of
-// permenant request headers maintained by IANA.
+// permanent request headers maintained by IANA.
 // http://www.iana.org/assignments/message-headers/message-headers.xml
 func isPermanentHTTPHeader(hdr string) bool {
 	switch hdr {

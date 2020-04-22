@@ -104,9 +104,11 @@ func TestProto(t *testing.T) {
 
 	m2 := commonv1pb.InvokeRequest{}
 	err = ptypes.UnmarshalAny(req2.GetMessage(), &m2)
+	assert.NoError(t, err)
 
 	d2 := commonv1pb.DataWithContentType{}
 	err = ptypes.UnmarshalAny(m2.Data, &d2)
+	assert.NoError(t, err)
 
 	assert.Equal(t, "application/json", d2.GetContentType())
 	assert.Equal(t, []byte("test"), d2.GetBody())

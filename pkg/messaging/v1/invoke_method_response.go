@@ -61,7 +61,7 @@ func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *I
 	return imr
 }
 
-// WithHeaders sets gRPC repsonse header metadata
+// WithHeaders sets gRPC response header metadata
 func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodResponse {
 	imr.r.Headers = GrpcMetadataToInternalMetadata(headers)
 	return imr

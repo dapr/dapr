@@ -38,7 +38,6 @@ func NewInvokeMethodRequest(method string) *InvokeMethodRequest {
 			Method: method,
 		},
 	}
-
 }
 
 // FromInvokeRequestMessage creates InvokeMethodRequest object from InvokeRequest pb object
