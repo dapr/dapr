@@ -31,7 +31,7 @@ func RegisterMDNS(id string, internalGrpcPort int, grpcPort int, httpPort int, m
 		}
 		defer server.Shutdown()
 
-		generalInfo := []string {
+		generalInfo := []string{
 			fmt.Sprintf("appId=%s", id),
 			fmt.Sprintf("grpcPort=%d", grpcPort),
 			fmt.Sprintf("httpPort=%d", httpPort),
