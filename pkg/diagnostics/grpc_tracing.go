@@ -40,7 +40,7 @@ func StartTracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServer
 // SetTracingSpanContextGRPCMiddlewareStream sets the trace spancontext into gRPC stream
 func SetTracingSpanContextGRPCMiddlewareStream() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		ctx := WithSpanContext(stream.Context())
+		ctx := WithGRPCSpanContext(stream.Context())
 
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
 		wrappedStream.WrappedContext = ctx
@@ -68,7 +68,7 @@ func StartTracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerIn
 // SetTracingSpanContextGRPCMiddlewareUnary sets the trace spancontext into gRPC unary calls
 func SetTracingSpanContextGRPCMiddlewareUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		ctx = WithSpanContext(ctx)
+		ctx = WithGRPCSpanContext(ctx)
 
 		resp, err := handler(ctx, req)
 
