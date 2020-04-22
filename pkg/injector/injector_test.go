@@ -12,10 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+)
+
+const (
+	appPort = "5000"
 )
 
 func TestConfigCorrectValues(t *testing.T) {
@@ -181,42 +183,52 @@ func TestGetMetricsPort(t *testing.T) {
 }
 
 func TestGetContainer(t *testing.T) {
-	c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", false, "info", true, "-1", nil, "", "", "", "", false, "", 9090, nil)
+	annotations := map[string]string{}
+	annotations[daprConfigKey] = "config"
+	annotations[daprPortKey] = appPort
+
+	c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
 }
 
 func TestSidecarResourceLimits(t *testing.T) {
 	t.Run("with limits", func(t *testing.T) {
-		r := &v1.ResourceRequirements{
-			Limits: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("100m"),
-				v1.ResourceMemory: resource.MustParse("1Gi"),
-			},
-		}
+		annotations := map[string]string{}
+		annotations[daprConfigKey] = "config1"
+		annotations[daprPortKey] = appPort
+		annotations[daprLogAsJSON] = "true"
+		annotations[daprCPULimitKey] = "100m"
+		annotations[daprMemoryLimitKey] = "1Gi"
 
-		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", false, "info", true, "-1", nil, "", "", "", "", false, "", 9090, r)
+		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Limits.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Limits.Memory().String())
 	})
 
 	t.Run("with requests", func(t *testing.T) {
-		r := &v1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("100m"),
-				v1.ResourceMemory: resource.MustParse("1Gi"),
-			},
-		}
+		annotations := map[string]string{}
+		annotations[daprConfigKey] = "config1"
+		annotations[daprPortKey] = appPort
+		annotations[daprLogAsJSON] = "true"
+		annotations[daprCPURequestKey] = "100m"
+		annotations[daprMemoryRequestKey] = "1Gi"
 
-		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", false, "info", true, "-1", nil, "", "", "", "", false, "", 9090, r)
+		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Requests.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Requests.Memory().String())
 	})
 
 	t.Run("no limits", func(t *testing.T) {
-		c := getSidecarContainer("5000", "http", "app", "config1", "image", "ns", "a", "b", false, "info", true, "-1", nil, "", "", "", "", false, "", 9090, nil)
+		annotations := map[string]string{}
+		annotations[daprConfigKey] = "config1"
+		annotations[daprPortKey] = appPort
+		annotations[daprLogAsJSON] = "true"
+
+		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Len(t, c.Resources.Limits, 0)
 	})
