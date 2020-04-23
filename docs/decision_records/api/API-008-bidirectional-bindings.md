@@ -24,13 +24,13 @@ In addition, there was no feedback from community or prospecive users that input
 ### API structure
 
 It was decided that the API url will be kept as: `http://localhost:<port>/v1.0/bindings/<name>`.
-The verb for the HTTP API will remain POST/PUT, and the type of operation will be part of a verdion, structured schema for bindings.
+The verb for the HTTP API will remain POST/PUT, and the type of operation will be part of a versioned, structured schema for bindings.
 
 This is not a breaking change.
 
 ### Schema and versioning
 
-In accordance with our decision to work towards enterprise versioning, it was accepted that schemas will inblude a `version` field in
+In accordance with our decision to work towards enterprise versioning, it was accepted that schemas will include a `version` field in
 The payload to specify which version of given component needs to be used that corresponds to the given payload.
 
 In addition, an extra field will be added to denote the type of operation that binding supports, for example: `get`, `list`, `create` etc.
