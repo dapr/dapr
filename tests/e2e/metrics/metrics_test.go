@@ -1,5 +1,3 @@
-// +build e2e
-
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -17,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/dapr/dapr/pkg/proto/dapr"
+	pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
