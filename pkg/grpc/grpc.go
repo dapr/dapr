@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 )
 
