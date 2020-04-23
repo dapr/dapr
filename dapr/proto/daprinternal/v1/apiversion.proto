@@ -1,0 +1,18 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.daprinternal.v1;
+
+option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
+
+// APIVersion represents the version of Dapr API.
+// Dapr and DaprClient service versions follows Dapr API version.
+// DaprInternal service version is maintained separately.
+enum APIVersion {
+  UNKNOWN = 0;
+  V1 = 1;
+}
