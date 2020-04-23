@@ -37,6 +37,11 @@ import (
 const (
 	daprSeparator             = "||"
 	callRemoteActorRetryCount = 3
+
+	// TODO: Remove them once we apply service invocation spec v1 to actor invocation.
+	HTTPStatusCode = "http.status_code"
+	HeaderDelim    = "&__header_delim__&"
+	HeaderEquals   = "&__header_equals__&"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -296,8 +301,12 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	req.WithHTTPExtension(nethttp.MethodPut, "").WithRawData(data, invokev1.JSONContentType)
 	// TODO: Use helper once actor service invocation uses service invocation v1
 	var md = map[string][]string{}
-	for k, v := range metadata {
-		md[k] = []string{v}
+	if val, ok := metadata["headers"]; ok {
+		headers := strings.Split(val, HeaderDelim)
+		for _, h := range headers {
+			kv := strings.Split(h, HeaderEquals)
+			md[kv[0]] = []string{kv[1]}
+		}
 	}
 	req.WithMetadata(md)
 
@@ -313,7 +322,6 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 
 	var rsp = &CallResponse{}
-
 	if resp.Message() != nil {
 		_, rsp.Data = resp.RawData()
 	}
@@ -322,8 +330,14 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		return nil, fmt.Errorf("error from actor service: %s", string(rsp.Data))
 	}
 
+	headers := []string{}
 	for k, v := range resp.Headers() {
-		rsp.Metadata[k] = v.Values[0].GetStringValue()
+		headers = append(headers, fmt.Sprintf("%s%s%s", k, HeaderEquals, v.Values[0].GetStringValue()))
+	}
+
+	rsp.Metadata = map[string]string{HTTPStatusCode: fmt.Sprintf("%v", resp.Status().Code)}
+	if len(headers) > 0 {
+		rsp.Metadata["headers"] = strings.Join(headers, HeaderDelim)
 	}
 
 	return rsp, nil
