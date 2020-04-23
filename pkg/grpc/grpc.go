@@ -92,7 +92,7 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	conn, err := grpc.Dial(address, opts...)
+	conn, err := grpc.Dial("dns:///"+address, opts...)
 	if err != nil {
 		g.lock.Unlock()
 		return nil, err
