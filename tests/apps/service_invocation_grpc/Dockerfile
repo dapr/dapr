@@ -6,7 +6,7 @@
 FROM golang:1.14
 
 WORKDIR /app
-COPY app.go .
+COPY . .
 RUN go get -d -v
 RUN go build -o app .
 

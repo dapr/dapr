@@ -190,7 +190,7 @@ func constructRequest(id, method, httpVerb string, body []byte) *daprv1pb.Invoke
 	msg := &commonv1pb.InvokeRequest{Method: method}
 	msg.Data, _ = ptypes.MarshalAny(d)
 	if httpVerb != "" {
-		msg.HTTPExtension = &commonv1pb.HTTPExtension{
+		msg.HttpExtension = &commonv1pb.HTTPExtension{
 			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
 		}
 	}
