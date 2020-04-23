@@ -12,9 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
-	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
 )
@@ -70,22 +67,6 @@ func projectStatusCode(code int) int32 {
 	default:
 		return int32(code)
 	}
-}
-
-func extractHeaders(req interface{}) string {
-	if req == nil {
-		return ""
-	}
-	if s, ok := req.(*daprinternal_pb.LocalCallEnvelope); ok {
-		return s.Metadata["headers"]
-	}
-	if s, ok := req.(*daprclient_pb.InvokeEnvelope); ok {
-		return s.Metadata["headers"]
-	}
-	if s, ok := req.(*dapr_pb.InvokeServiceEnvelope); ok {
-		return s.Metadata["headers"]
-	}
-	return ""
 }
 
 func createSpanName(name string) string {

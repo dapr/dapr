@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	nethttp "net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,8 +23,9 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/placement"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
@@ -161,20 +163,20 @@ func (a *actorsRuntime) decomposeCompositeKey(compositeKey string) []string {
 }
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
-	req := channel.InvokeRequest{
-		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
-		Metadata: map[string]string{http.HTTPVerb: http.Delete},
-	}
+	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
+	req.WithHTTPExtension(nethttp.MethodDelete, "")
+	req.WithRawData([]byte(""), invokev1.JSONContentType)
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	resp, err := a.appChannel.InvokeMethod(req)
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
 	}
 
-	if status := a.getStatusCodeFromMetadata(resp.Metadata); status != 200 {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
-		return fmt.Errorf("error from actor service: %s", string(resp.Data))
+	if resp.Status().Code != nethttp.StatusOK {
+		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
+		_, body := resp.RawData()
+		return fmt.Errorf("error from actor service: %s", string(body))
 	}
 
 	actorKey := a.constructCompositeKey(actorType, actorID)
@@ -192,7 +194,7 @@ func (a *actorsRuntime) getStatusCodeFromMetadata(metadata map[string]string) in
 		}
 	}
 
-	return 200
+	return nethttp.StatusOK
 }
 
 func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
@@ -303,16 +305,16 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 
 	method := fmt.Sprintf("actors/%s/%s/method/%s", actorType, actorID, actorMethod)
-	req := channel.InvokeRequest{
-		Method:   method,
-		Payload:  data,
-		Metadata: map[string]string{http.HTTPVerb: http.Put},
-	}
-	for k, v := range metadata {
-		req.Metadata[k] = v
-	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	req := invokev1.NewInvokeMethodRequest(method)
+	req.WithHTTPExtension(nethttp.MethodPut, "").WithRawData(data, invokev1.JSONContentType)
+	var md map[string][]string
+	for k, v := range metadata {
+		md[k] = []string{v}
+	}
+	req.WithMetadata(md)
+
+	resp, err := a.appChannel.InvokeMethod(req)
 
 	if act.busy {
 		act.busy = false
@@ -323,20 +325,27 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 		return nil, err
 	}
 
-	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
-		return nil, fmt.Errorf("error from actor service: %s", string(resp.Data))
+	var rsp = &CallResponse{}
+
+	if resp.Message() != nil {
+		_, rsp.Data = resp.RawData()
 	}
 
-	return &CallResponse{
-		Data:     resp.Data,
-		Metadata: resp.Metadata,
-	}, nil
+	if resp.Status().Code != nethttp.StatusOK {
+		return nil, fmt.Errorf("error from actor service: %s", string(rsp.Data))
+	}
+
+	for k, v := range resp.Headers() {
+		rsp.Metadata[k] = v.Values[0].GetStringValue()
+	}
+
+	return rsp, nil
 }
 
 func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
-	req := daprinternal_pb.CallActorEnvelope{
+	req := internalv1pb.CallActorRequest{
 		ActorType: actorType,
-		ActorID:   actorID,
+		ActorId:   actorID,
 		Method:    actorMethod,
 		Data:      &any.Any{Value: data},
 		Metadata:  map[string]string{},
@@ -351,7 +360,7 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, acto
 		return nil, err
 	}
 
-	client := daprinternal_pb.NewDaprInternalClient(conn)
+	client := internalv1pb.NewDaprInternalClient(conn)
 	resp, err := client.CallActor(context.Background(), &req)
 	if err != nil {
 		return nil, err
@@ -365,15 +374,17 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, acto
 
 func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
 	// Send the activation signal to the app
-	req := channel.InvokeRequest{
-		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
-		Metadata: map[string]string{http.HTTPVerb: http.Post},
-		Payload:  nil,
+	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
+	req.WithHTTPExtension(nethttp.MethodPost, "")
+	req.WithRawData([]byte(""), invokev1.JSONContentType)
+
+	resp, err := a.appChannel.InvokeMethod(req)
+	if err != nil {
+		return err
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
-	if status := a.getStatusCodeFromMetadata(resp.Metadata); err != nil || status != 200 {
-		diag.DefaultMonitoring.ActorActivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
+	if resp.Status().Code != nethttp.StatusOK {
+		diag.DefaultMonitoring.ActorActivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
 		key := a.constructCompositeKey(actorType, actorID)
 		a.actorsTable.Delete(key)
 		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)

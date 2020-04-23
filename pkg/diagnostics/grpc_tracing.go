@@ -52,7 +52,7 @@ func TracingSpanFromGRPCContext(c context.Context, req interface{}, method strin
 	var spanc *trace.Span
 
 	md := extractDaprMetadata(c)
-	headers := extractHeaders(req)
+	headers := ""
 	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
 	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)
 	if len(corID) > 35 { //to remove the prefix "X-Correlation-Id&__header_equals__&", which may in different casing
