@@ -16,16 +16,14 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/balancer/roundrobin"
 	"google.golang.org/grpc/credentials"
 )
 
 const (
- gRPCServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
+	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 )
 
-// Mana
-ger is a wrapper around gRPC connection pooling
+// Manager is a wrapper around gRPC connection pooling
 type Manager struct {
 	AppClient      *grpc.ClientConn
 	lock           *sync.Mutex
@@ -73,7 +71,7 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
 		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
-		grpc.WithDefaultServiceConfig(gRPCServiceConfig),
+		grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 
 	if !skipTLS && g.auth != nil {
