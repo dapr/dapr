@@ -168,11 +168,11 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 func TestV1DirectMessagingEndpoints(t *testing.T) {
 	headerMetadata := map[string][]string{
-		"Accept-Encoding": []string{"gzip"},
-		"Content-Length":  []string{"8"},
-		"Content-Type":    []string{"application/json"},
-		"Host":            []string{"localhost"},
-		"User-Agent":      []string{"Go-http-client/1.1"},
+		"Accept-Encoding": {"gzip"},
+		"Content-Length":  {"8"},
+		"Content-Type":    {"application/json"},
+		"Host":            {"localhost"},
+		"User-Agent":      {"Go-http-client/1.1"},
 	}
 	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 	fakeDirectMessageResponse.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
@@ -231,12 +231,12 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	headerMetadata := map[string][]string{
-		"Accept-Encoding":  []string{"gzip"},
-		"Content-Length":   []string{"8"},
-		"Content-Type":     []string{"application/json"},
-		"Host":             []string{"localhost"},
-		"User-Agent":       []string{"Go-http-client/1.1"},
-		"X-Correlation-Id": []string{"fake-correlation-id"},
+		"Accept-Encoding":  {"gzip"},
+		"Content-Length":   {"8"},
+		"Content-Type":     {"application/json"},
+		"Host":             {"localhost"},
+		"User-Agent":       {"Go-http-client/1.1"},
+		"X-Correlation-Id": {"fake-correlation-id"},
 	}
 	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 	fakeDirectMessageResponse.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
@@ -923,12 +923,12 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 func TestEmptyPipelineWithTracer(t *testing.T) {
 	fakeHeaderMetadata := map[string][]string{
-		"Accept-Encoding":  []string{"gzip"},
-		"Content-Length":   []string{"8"},
-		"Content-Type":     []string{"application/json"},
-		"Host":             []string{"localhost"},
-		"User-Agent":       []string{"Go-http-client/1.1"},
-		"X-Correlation-Id": []string{"fake-correlation-id"},
+		"Accept-Encoding":  {"gzip"},
+		"Content-Length":   {"8"},
+		"Content-Type":     {"application/json"},
+		"Host":             {"localhost"},
+		"User-Agent":       {"Go-http-client/1.1"},
+		"X-Correlation-Id": {"fake-correlation-id"},
 	}
 
 	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -1002,12 +1002,12 @@ func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 
 func TestSinglePipelineWithTracer(t *testing.T) {
 	fakeHeaderMetadata := map[string][]string{
-		"Accept-Encoding":  []string{"gzip"},
-		"Content-Length":   []string{"8"},
-		"Content-Type":     []string{"application/json"},
-		"Host":             []string{"localhost"},
-		"User-Agent":       []string{"Go-http-client/1.1"},
-		"X-Correlation-Id": []string{"fake-correlation-id"},
+		"Accept-Encoding":  {"gzip"},
+		"Content-Length":   {"8"},
+		"Content-Type":     {"application/json"},
+		"Host":             {"localhost"},
+		"User-Agent":       {"Go-http-client/1.1"},
+		"X-Correlation-Id": {"fake-correlation-id"},
 	}
 
 	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -1067,12 +1067,12 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 func TestSinglePipelineWithNoTracing(t *testing.T) {
 	fakeHeaderMetadata := map[string][]string{
-		"Accept-Encoding":  []string{"gzip"},
-		"Content-Length":   []string{"8"},
-		"Content-Type":     []string{"application/json"},
-		"Host":             []string{"localhost"},
-		"User-Agent":       []string{"Go-http-client/1.1"},
-		"X-Correlation-Id": []string{"fake-correlation-id"},
+		"Accept-Encoding":  {"gzip"},
+		"Content-Length":   {"8"},
+		"Content-Type":     {"application/json"},
+		"Host":             {"localhost"},
+		"User-Agent":       {"Go-http-client/1.1"},
+		"X-Correlation-Id": {"fake-correlation-id"},
 	}
 
 	fakeDirectMessageResponse := invokev1.NewInvokeMethodResponse(200, "OK", nil)

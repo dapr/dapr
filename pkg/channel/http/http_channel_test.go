@@ -184,8 +184,8 @@ func TestInvokeWithHeaders(t *testing.T) {
 
 	req := invokev1.NewInvokeMethodRequest("method")
 	md := map[string][]string{
-		"H1": []string{"v1"},
-		"H2": []string{"v2"},
+		"H1": {"v1"},
+		"H2": {"v2"},
 	}
 	req.WithMetadata(md)
 	req.WithHTTPExtension(http.MethodPost, "")

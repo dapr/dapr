@@ -40,8 +40,6 @@ const (
 	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
 	minSeconds    = -maxSeconds
 	daprSeparator = "||"
-
-	apiVersionV1 = 1
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -80,7 +78,6 @@ func NewAPI(
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
-
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,

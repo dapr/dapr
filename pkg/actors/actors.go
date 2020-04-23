@@ -11,14 +11,12 @@ import (
 	"errors"
 	"fmt"
 	nethttp "net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/channel/http"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
@@ -185,18 +183,6 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	return nil
 }
 
-func (a *actorsRuntime) getStatusCodeFromMetadata(metadata map[string]string) int {
-	code := metadata[http.HTTPStatusCode]
-	if code != "" {
-		statusCode, err := strconv.Atoi(code)
-		if err == nil {
-			return statusCode
-		}
-	}
-
-	return nethttp.StatusOK
-}
-
 func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
 	arr := a.decomposeCompositeKey(key)
 	return arr[0], arr[1]
@@ -308,7 +294,8 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 
 	req := invokev1.NewInvokeMethodRequest(method)
 	req.WithHTTPExtension(nethttp.MethodPut, "").WithRawData(data, invokev1.JSONContentType)
-	var md map[string][]string
+	// TODO: Use helper once actor service invocation uses service invocation v1
+	var md = map[string][]string{}
 	for k, v := range metadata {
 		md[k] = []string{v}
 	}
