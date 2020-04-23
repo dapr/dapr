@@ -16,6 +16,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/balancer/roundrobin"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -67,6 +68,7 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
 		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+		grpc.WithBalancerName(roundrobin.Name),
 	}
 
 	if !skipTLS && g.auth != nil {
