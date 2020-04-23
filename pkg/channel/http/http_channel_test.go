@@ -137,7 +137,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			go func() {
 				request2 := invokev1.NewInvokeMethodRequest("method")
-				request2.WithRawData([]byte(""), "")
+				request2.WithRawData(nil, "")
 
 				c.InvokeMethod(request2)
 				wg.Done()
@@ -165,7 +165,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		for i := 0; i < 20; i++ {
 			go func() {
 				request2 := invokev1.NewInvokeMethodRequest("method")
-				request2.WithRawData([]byte(""), "")
+				request2.WithRawData(nil, "")
 				c.InvokeMethod(request2)
 				wg.Done()
 			}()
@@ -212,7 +212,7 @@ func TestContentType(t *testing.T) {
 		testServer := httptest.NewServer(handler)
 		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
 		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithRawData([]byte(""), "")
+		req.WithRawData(nil, "")
 		req.WithHTTPExtension(http.MethodPost, "")
 
 		// act
@@ -231,7 +231,7 @@ func TestContentType(t *testing.T) {
 		testServer := httptest.NewServer(handler)
 		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
 		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithRawData([]byte(""), "application/json")
+		req.WithRawData(nil, "application/json")
 		req.WithHTTPExtension(http.MethodPost, "")
 
 		// act
@@ -250,7 +250,7 @@ func TestContentType(t *testing.T) {
 		testServer := httptest.NewServer(handler)
 		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
 		req := invokev1.NewInvokeMethodRequest("method")
-		req.WithRawData([]byte(""), "text/plain")
+		req.WithRawData(nil, "text/plain")
 		req.WithHTTPExtension(http.MethodPost, "")
 
 		// act

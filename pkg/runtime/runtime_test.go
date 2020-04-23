@@ -112,7 +112,7 @@ func TestInitPubSub(t *testing.T) {
 		// User App subscribes 2 topics via http app channel
 		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData([]byte(""), "application/json")
+		fakeReq.WithRawData(nil, "application/json")
 
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("[ \"topic0\", \"topic1\" ]"), "application/json")
@@ -137,7 +137,7 @@ func TestInitPubSub(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData([]byte(""), "application/json")
+		fakeReq.WithRawData(nil, "application/json")
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "Not Found", nil)
 
 		mockAppChannel.On("InvokeMethod", fakeReq).Return(fakeResp, nil)
@@ -173,7 +173,7 @@ func TestInitPubSub(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData([]byte(""), "application/json")
+		fakeReq.WithRawData(nil, "application/json")
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -198,7 +198,7 @@ func TestInitPubSub(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData([]byte(""), "application/json")
+		fakeReq.WithRawData(nil, "application/json")
 
 		// User App subscribes 2 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -223,7 +223,7 @@ func TestInitPubSub(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData([]byte(""), "application/json")
+		fakeReq.WithRawData(nil, "application/json")
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -248,7 +248,7 @@ func TestInitPubSub(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData([]byte(""), "application/json")
+		fakeReq.WithRawData(nil, "application/json")
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -273,7 +273,7 @@ func TestInitPubSub(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData([]byte(""), "application/json")
+		fakeReq.WithRawData(nil, "application/json")
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -300,7 +300,7 @@ func TestInitPubSub(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		fakeReq.WithHTTPExtension(http.MethodGet, "")
-		fakeReq.WithRawData([]byte(""), "application/json")
+		fakeReq.WithRawData(nil, "application/json")
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)

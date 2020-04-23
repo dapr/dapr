@@ -615,7 +615,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string, bindingsList []st
 		// if HTTP, check if there's an endpoint listening for that binding
 		req := invokev1.NewInvokeMethodRequest(binding)
 		req.WithHTTPExtension(nethttp.MethodOptions, "")
-		req.WithRawData([]byte(""), invokev1.JSONContentType)
+		req.WithRawData(nil, invokev1.JSONContentType)
 
 		resp, err := a.appChannel.InvokeMethod(req)
 		return err == nil && resp.Status().Code != nethttp.StatusNotFound
@@ -744,7 +744,7 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 		req.WithHTTPExtension(nethttp.MethodGet, "")
-		req.WithRawData([]byte(""), invokev1.JSONContentType)
+		req.WithRawData(nil, invokev1.JSONContentType)
 
 		resp, err := a.appChannel.InvokeMethod(req)
 		if err != nil {
@@ -1179,7 +1179,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
 	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint)
 	req.WithHTTPExtension(nethttp.MethodGet, "")
-	req.WithRawData([]byte(""), invokev1.JSONContentType)
+	req.WithRawData(nil, invokev1.JSONContentType)
 
 	resp, err := a.appChannel.InvokeMethod(req)
 	if err != nil {

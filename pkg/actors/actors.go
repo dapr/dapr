@@ -168,7 +168,7 @@ func (a *actorsRuntime) decomposeCompositeKey(compositeKey string) []string {
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
 	req.WithHTTPExtension(nethttp.MethodDelete, "")
-	req.WithRawData([]byte(""), invokev1.JSONContentType)
+	req.WithRawData(nil, invokev1.JSONContentType)
 
 	resp, err := a.appChannel.InvokeMethod(req)
 	if err != nil {
@@ -377,7 +377,7 @@ func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
 	// Send the activation signal to the app
 	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
 	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData([]byte(""), invokev1.JSONContentType)
+	req.WithRawData(nil, invokev1.JSONContentType)
 
 	resp, err := a.appChannel.InvokeMethod(req)
 	if err != nil {
