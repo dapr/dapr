@@ -90,7 +90,8 @@ import (
 	"github.com/dapr/components-contrib/bindings/mqtt"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
-	"github.com/dapr/components-contrib/bindings/twilio"
+	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
+	"github.com/dapr/components-contrib/bindings/twilio/sms"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware
@@ -308,7 +309,10 @@ func main() {
 				return signalr.NewSignalR(logContrib)
 			}),
 			bindings_loader.NewOutput("twilio.sms", func() bindings.OutputBinding {
-				return twilio.NewSMS(logContrib)
+				return sms.NewSMS(logContrib)
+			}),
+			bindings_loader.NewOutput("twilio.sendgrid", func() bindings.OutputBinding {
+				return sendgrid.NewSendGrid(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
