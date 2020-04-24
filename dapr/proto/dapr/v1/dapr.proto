@@ -1,0 +1,114 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.dapr.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/duration.proto";
+import "dapr/proto/common/v1/common.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/dapr/v1";
+
+// Dapr service provides APIs to user application to access Dapr building blocks.
+service Dapr {
+  rpc PublishEvent(PublishEventEnvelope) returns (google.protobuf.Empty) {}
+  rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
+  rpc InvokeBinding(InvokeBindingEnvelope) returns (google.protobuf.Empty) {}
+  rpc GetState(GetStateEnvelope) returns (GetStateResponseEnvelope) {}
+  rpc GetSecret(GetSecretEnvelope) returns (GetSecretResponseEnvelope) {}
+  rpc SaveState(SaveStateEnvelope) returns (google.protobuf.Empty) {}
+  rpc DeleteState(DeleteStateEnvelope) returns (google.protobuf.Empty) {}
+}
+
+// InvokeServiceRequest represents the request message for Service invocation.
+message InvokeServiceRequest {
+  // id specifies callee's app id.
+  //
+  // This field is required.
+  string id = 1;
+
+  // message which will be delivered to callee.
+  // 
+  // This field is required.
+  common.v1.InvokeRequest message = 3;
+}
+
+message DeleteStateEnvelope {
+  string store_name = 1;
+  string key = 2;
+  string etag = 3;
+  StateOptions options = 4;
+}
+
+message SaveStateEnvelope {
+  string store_name = 1;
+  repeated StateRequest requests = 2;
+}
+
+message GetStateEnvelope {
+  string store_name = 1;
+  string key = 2;
+  string consistency = 3;
+}
+
+message GetStateResponseEnvelope {
+  google.protobuf.Any data = 1;
+  string etag = 2;
+}
+
+message GetSecretEnvelope {
+  string store_name = 1;
+  string key = 2;
+  map<string,string> metadata = 3;
+}
+
+message GetSecretResponseEnvelope {
+  map<string,string> data = 1;
+}
+
+message InvokeBindingEnvelope {
+  string name = 1;
+  google.protobuf.Any data = 2;
+  map<string,string> metadata = 3;
+}
+
+message PublishEventEnvelope {
+  string topic = 1;
+  google.protobuf.Any data = 2;
+}
+
+message State {
+  string key = 1;
+  google.protobuf.Any value = 2;
+  string etag = 3;
+  map<string,string> metadata = 4;
+  StateOptions options = 5;
+}
+
+message StateOptions {
+  string concurrency = 1;
+  string consistency = 2;
+  RetryPolicy retry_policy = 3;
+}
+
+message RetryPolicy {
+  int32 threshold = 1;
+  string pattern = 2;
+  google.protobuf.Duration interval = 3;
+}
+
+message StateRequest {
+  string key = 1;
+  google.protobuf.Any value = 2;
+  string etag = 3;
+  map<string,string> metadata = 4;
+  StateOptions options = 5;
+}

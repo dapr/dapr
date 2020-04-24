@@ -1,0 +1,86 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.daprinternal.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/struct.proto";
+import "dapr/proto/daprinternal/v1/apiversion.proto";
+import "dapr/proto/daprinternal/v1/status.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
+
+// DaprInternal service is used to exchange the data between 
+// caller dapr runtime and callee dapr runtime.
+//
+// The request message includes caller's HTTP/gRPC request
+// and deliver callee's response including status code.
+// The response status of rpc methods represents of internal gRPC
+// connection status, not callee's response status.
+// Thus, DaprInternal gRPC response returns OK in most cases
+// regardless of callee's response.
+service DaprInternal {
+  rpc CallActor (CallActorRequest) returns (CallActorResponse) {}
+  rpc CallLocal (InternalInvokeRequest) returns (InternalInvokeResponse) {}
+}
+
+message CallActorRequest {
+  string actor_id = 1;
+  string actor_type = 2;
+  string method = 3;
+  google.protobuf.Any data = 4;
+  map<string,string> metadata = 5;
+}
+
+message CallActorResponse {
+  google.protobuf.Any data = 1;
+  map<string,string> metadata = 2;
+}
+
+// InternalInvokeRequest is the message to transfer caller's data to callee
+// for service invocaton. This includes callee's app id and caller's request data.
+message InternalInvokeRequest {
+  // ver is the version of Dapr API.
+  // 
+  // This field is required.
+  APIVersion ver = 1;
+
+  // metadata holds caller's HTTP headers or gRPC metadata.
+  // 
+  // This field is required.
+  map<string, google.protobuf.ListValue> metadata = 2;
+
+  // message includes caller's invocation request message.
+  // 
+  // This field is required.
+  google.protobuf.Any message = 3;
+}
+
+// InternalInvokeResponse is the message to transfer callee's response to caller
+// for service invocaton.
+message InternalInvokeResponse {
+  // status is http/grpc status.
+  // 
+  // This field is required.
+  Status status = 1;
+
+  // headers holds app channel response headers.
+  // 
+  // This field is required. 
+  map<string, google.protobuf.ListValue> headers = 2;
+
+  // trailer holds app channel response trailers.
+  // this will be used only for gRPC app channel
+  // 
+  // This field is optional.
+  map<string, google.protobuf.ListValue> trailers = 3;
+
+  // message includes callee's invocation response message.
+  // 
+  // This field is required.
+  google.protobuf.Any message = 4;
+}
