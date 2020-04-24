@@ -17,8 +17,8 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/empty"
 
-	commonv1pb "app/proto/common/v1"
-	pb "app/proto/daprclient/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
 
 	"google.golang.org/grpc"
 )
