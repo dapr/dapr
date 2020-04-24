@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -133,6 +134,10 @@ func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL st
 	require.NoError(t, err)
 
 	log.Printf("subscriber receieved %d messages on pubsub-a-topic and %d on pubsub-b-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB))
+
+	sort.Strings(appResp.ReceivedByTopicA)
+	sort.Strings(appResp.ReceivedByTopicB)
+
 	if !reflect.DeepEqual(sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA) {
 		for i := 0; i < len(sentMessages.ReceivedByTopicA); i++ {
 			log.Printf("%s, %s", sentMessages.ReceivedByTopicA[i], appResp.ReceivedByTopicA[i])
