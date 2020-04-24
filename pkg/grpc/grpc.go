@@ -19,6 +19,11 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+const (
+	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances
+	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
+)
+
 // Manager is a wrapper around gRPC connection pooling
 type Manager struct {
 	AppClient      *grpc.ClientConn
@@ -67,6 +72,7 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
 		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+		grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 
 	if !skipTLS && g.auth != nil {
@@ -86,7 +92,7 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	conn, err := grpc.Dial(address, opts...)
+	conn, err := grpc.Dial("dns:///"+address, opts...)
 	if err != nil {
 		g.lock.Unlock()
 		return nil, err
