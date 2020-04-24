@@ -23,8 +23,8 @@ import (
 	guuid "github.com/google/uuid"
 	"github.com/gorilla/mux"
 
-	commonv1pb "app/proto/common/v1"
-	daprv1pb "app/proto/dapr/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
