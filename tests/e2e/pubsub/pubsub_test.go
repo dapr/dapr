@@ -135,7 +135,10 @@ func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL st
 
 	log.Printf("subscriber receieved %d messages on pubsub-a-topic and %d on pubsub-b-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB))
 
+	// Sort messages first because the delivered messages cannot be ordered.
+	sort.Strings(sentMessages.ReceivedByTopicA)
 	sort.Strings(appResp.ReceivedByTopicA)
+	sort.Strings(sentMessages.ReceivedByTopicB)
 	sort.Strings(appResp.ReceivedByTopicB)
 
 	if !reflect.DeepEqual(sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA) {
