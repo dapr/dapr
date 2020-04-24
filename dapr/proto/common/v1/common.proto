@@ -1,0 +1,84 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.common.v1;
+
+import "google/protobuf/any.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/common/v1";
+
+// HTTPExtension includes HTTP verb and querystring
+// when Dapr runtime delivers HTTP content.
+// 
+// For example, when callers calls http invoke api
+// POST http://localhost:3500/v1.0/invoke/<app_id>/method/<method>?query1=value1&query2=value2
+// 
+// Dapr runtime will parse POST as a verb and extract querystring to quersytring map.
+message HTTPExtension {
+  // Type of HTTP 1.1 Methods
+  // RFC 7231: https://tools.ietf.org/html/rfc7231#page-24
+  enum Verb {
+    NONE = 0;
+    GET = 1;
+    HEAD = 2;
+    POST = 3;
+    PUT = 4;
+    DELETE = 5;
+    CONNECT = 6;
+    OPTIONS = 7;
+    TRACE = 8;
+  }
+
+  // verb is HTTP verb.
+  //
+  // This is required.
+  Verb verb = 1;
+
+  // querystring includes HTTP querystring.
+  map<string, string> querystring = 2;
+}
+
+// DataWithContentType represents bytearray body and its content type
+message DataWithContentType {
+  // content_type is the type of data content.
+  //
+  // This field is required.
+  string content_type = 1;
+
+  // body conveys the content body.
+  //
+  // This field is required.
+  bytes body = 2;
+}
+
+message InvokeRequest {
+  // method is a method name which will be invoked by caller.
+  // 
+  // This field is required.
+  string method = 1;
+
+  // data conveys the content body which caller sent.
+  //
+  // This field is required.
+  google.protobuf.Any data = 2;
+
+  // http_extension includes http specific fields if request conveys 
+  // http-compatible request.
+  //
+  // This field is optional.
+  HTTPExtension http_extension = 3;
+}
+
+message InvokeResponse {
+  // data conveys the content body of InvokeService response.
+  //
+  // This field is required.
+  google.protobuf.Any data = 1;
+}
