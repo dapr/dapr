@@ -18,15 +18,18 @@ import (
 	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"google.golang.org/grpc"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
-	certWatchInterval         = time.Second * 3
-	renewWhenPercentagePassed = 70
-	apiServer                 = "apiServer"
-	internalServer            = "internalServer"
+	certWatchInterval              = time.Second * 3
+	renewWhenPercentagePassed      = 70
+	apiServer                      = "apiServer"
+	internalServer                 = "internalServer"
+	defaultMaxConnectionAgeSeconds = 30
 )
 
 // Server is an interface for the dapr gRPC server
@@ -47,6 +50,7 @@ type server struct {
 	signedCertDuration time.Duration
 	kind               string
 	logger             logger.Logger
+	maxConnectionAge   *time.Duration
 }
 
 var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
@@ -66,14 +70,20 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) 
 // NewInternalServer returns a new gRPC server for Dapr to Dapr communications
 func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
 	return &server{
-		api:           api,
-		config:        config,
-		tracingSpec:   tracingSpec,
-		authenticator: authenticator,
-		renewMutex:    &sync.Mutex{},
-		kind:          internalServer,
-		logger:        internalServerLogger,
+		api:              api,
+		config:           config,
+		tracingSpec:      tracingSpec,
+		authenticator:    authenticator,
+		renewMutex:       &sync.Mutex{},
+		kind:             internalServer,
+		logger:           internalServerLogger,
+		maxConnectionAge: getDefaultMaxAgeDuration(),
 	}
+}
+
+func getDefaultMaxAgeDuration() *time.Duration {
+	d := time.Second * defaultMaxConnectionAgeSeconds
+	return &d
 }
 
 // StartNonBlocking starts a new server in a goroutine
@@ -137,6 +147,9 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 
 func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	opts := s.getMiddlewareOptions()
+	if s.maxConnectionAge != nil {
+		opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
+	}
 
 	if s.authenticator != nil {
 		err := s.generateWorkloadCert()
