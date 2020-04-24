@@ -19,13 +19,19 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	tracing "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
-	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/ptypes/any"
 	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -38,15 +44,18 @@ const (
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
-	CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelope) (*daprinternal_pb.InvokeResponse, error)
-	CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelope) (*daprinternal_pb.InvokeResponse, error)
-	PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error)
-	InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error)
-	InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelope) (*empty.Empty, error)
-	GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error)
-	GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error)
-	SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error)
-	DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error)
+	// DaprInternal Service methods
+	CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) (*internalv1pb.CallActorResponse, error)
+	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+
+	// Dapr Service methods
+	PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error)
+	InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
+	InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error)
+	GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*daprv1pb.GetStateResponseEnvelope, error)
+	GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*daprv1pb.GetSecretResponseEnvelope, error)
+	SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*empty.Empty, error)
+	DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope) (*empty.Empty, error)
 }
 
 type api struct {
@@ -61,7 +70,14 @@ type api struct {
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(
+	appID string, appChannel channel.AppChannel,
+	stateStores map[string]state.Store,
+	secretStores map[string]secretstores.SecretStore,
+	publishFn func(req *pubsub.PublishRequest) error,
+	directMessaging messaging.DirectMessaging,
+	actor actors.Actors,
+	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -75,33 +91,23 @@ func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]
 }
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
-func (a *api) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelope) (*daprinternal_pb.InvokeResponse, error) {
+func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	if a.appChannel == nil {
-		return nil, errors.New("app channel is not initialized")
+		return nil, status.Error(codes.Internal, "app channel is not initialized")
 	}
-
-	req := channel.InvokeRequest{
-		Payload:  in.Data.Value,
-		Method:   in.Method,
-		Metadata: in.Metadata,
-	}
-
-	resp, err := a.appChannel.InvokeMethod(&req)
+	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
-
-	return &daprinternal_pb.InvokeResponse{
-		Data:     &any.Any{Value: resp.Data},
-		Metadata: resp.Metadata,
-	}, nil
+	resp, err := a.appChannel.InvokeMethod(req)
+	return resp.Proto(), err
 }
 
 // CallActor invokes a virtual actor
-func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelope) (*daprinternal_pb.InvokeResponse, error) {
+func (a *api) CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) (*internalv1pb.CallActorResponse, error) {
 	req := actors.CallRequest{
 		ActorType: in.ActorType,
-		ActorID:   in.ActorID,
+		ActorID:   in.ActorId,
 		Data:      in.Data.Value,
 		Method:    in.Method,
 		Metadata:  in.Metadata,
@@ -112,13 +118,13 @@ func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelo
 		return nil, err
 	}
 
-	return &daprinternal_pb.InvokeResponse{
+	return &internalv1pb.CallActorResponse{
 		Data:     &any.Any{Value: resp.Data},
 		Metadata: map[string]string{},
 	}, nil
 }
 
-func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
+func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
 	if a.publishFn == nil {
 		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
@@ -152,28 +158,33 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 	return &empty.Empty{}, nil
 }
 
-func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error) {
-	req := messaging.DirectMessageRequest{
-		Method:   in.Method,
-		Metadata: in.Metadata,
-		Target:   in.Id,
+func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
+
+	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		req.WithMetadata(incomingMD)
 	}
 
-	if in.Data != nil {
-		req.Data = in.Data.Value
-	}
-
-	resp, err := a.directMessaging.Invoke(&req)
+	resp, err := a.directMessaging.Invoke(in.Id, req)
 	if err != nil {
 		return nil, err
 	}
-	return &dapr_pb.InvokeServiceResponseEnvelope{
-		Data:     &any.Any{Value: resp.Data},
-		Metadata: resp.Metadata,
-	}, nil
+
+	// TODO: Add trace headers
+	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Headers(), true))
+
+	statusCode := int(resp.Status().Code)
+	if resp.IsHTTPResponse() {
+		statusCode = int(invokev1.CodeFromHTTPStatus(statusCode))
+	} else {
+		// ignore if appchannel uses HTTP
+		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Trailers(), false))
+	}
+
+	return resp.Message(), status.Error(codes.Code(statusCode), resp.Status().Message)
 }
 
-func (a *api) InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelope) (*empty.Empty, error) {
+func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error) {
 	req := &bindings.WriteRequest{
 		Metadata: in.Metadata,
 	}
@@ -188,7 +199,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelo
 	return &empty.Empty{}, nil
 }
 
-func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error) {
+func (a *api) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*daprv1pb.GetStateResponseEnvelope, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -211,7 +222,7 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
 
-	response := &dapr_pb.GetStateResponseEnvelope{}
+	response := &daprv1pb.GetStateResponseEnvelope{}
 	if getResponse != nil {
 		response.Etag = getResponse.ETag
 		response.Data = &any.Any{Value: getResponse.Data}
@@ -219,7 +230,7 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 	return response, nil
 }
 
-func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error) {
+func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -266,7 +277,7 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 	return &empty.Empty{}, nil
 }
 
-func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error) {
+func (a *api) DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -316,7 +327,7 @@ func (a *api) getModifiedStateKey(key string) string {
 	return key
 }
 
-func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error) {
+func (a *api) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*daprv1pb.GetSecretResponseEnvelope, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
 	}
@@ -338,7 +349,7 @@ func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*da
 		return nil, fmt.Errorf("ERR_SECRET_GET: %s", err)
 	}
 
-	response := &dapr_pb.GetSecretResponseEnvelope{}
+	response := &daprv1pb.GetSecretResponseEnvelope{}
 	if getResponse.Data != nil {
 		response.Data = getResponse.Data
 	}

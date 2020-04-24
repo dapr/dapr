@@ -27,7 +27,7 @@ const (
 	DaprHeaderPrefix = "dapr-"
 
 	// gRPCBinaryMetadata is the suffix of grpc metadata binary value
-	gRPCBinaryMetadata = "-bin"
+	gRPCBinaryMetadataSuffix = "-bin"
 )
 
 // GrpcMetadataToInternalMetadata converts gRPC metadata to dapr internal metadata map
@@ -104,7 +104,7 @@ func InternalMetadataToGrpcMetadata(internalMD map[string]*structpb.ListValue, h
 func InternalMetadataToHTTPHeader(internalMD map[string]*structpb.ListValue, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
 		// Skip if the header key has -bin suffix
-		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadata) {
+		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
 			continue
 		}
 		setHeader(k, listVal.Values[0].GetStringValue())

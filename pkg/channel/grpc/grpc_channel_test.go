@@ -7,41 +7,61 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/channel"
-	pb "github.com/dapr/dapr/pkg/proto/daprclient"
-	any "github.com/golang/protobuf/ptypes/any"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	daprclientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
+	"github.com/golang/protobuf/ptypes"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
+// The Implementation of fake user app server
 type mockServer struct {
 }
 
-func (m *mockServer) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any, error) {
-	ret := ""
-	for k, v := range in.Metadata {
-		ret += k + "=" + v + "&"
+func (m *mockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	dt := map[string]string{
+		"method": in.Method,
 	}
-	return &any.Any{Value: []byte(ret)}, nil
+
+	for k, v := range md {
+		dt[k] = v[0]
+	}
+
+	dt["httpverb"] = in.HttpExtension.GetVerb().String()
+	serialized, _ := json.Marshal(in.HttpExtension.Querystring)
+	dt["querystring"] = string(serialized)
+
+	ds, _ := json.Marshal(dt)
+	d := &commonv1pb.DataWithContentType{ContentType: "application/json", Body: ds}
+	val, _ := ptypes.MarshalAny(d)
+
+	return &commonv1pb.InvokeResponse{Data: val}, nil
 }
-func (m *mockServer) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetTopicSubscriptionsEnvelope, error) {
-	return &pb.GetTopicSubscriptionsEnvelope{}, nil
+func (m *mockServer) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*daprclientv1pb.GetTopicSubscriptionsEnvelope, error) {
+	return &daprclientv1pb.GetTopicSubscriptionsEnvelope{}, nil
 }
-func (m *mockServer) GetBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetBindingsSubscriptionsEnvelope, error) {
-	return &pb.GetBindingsSubscriptionsEnvelope{}, nil
+func (m *mockServer) GetBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*daprclientv1pb.GetBindingsSubscriptionsEnvelope, error) {
+	return &daprclientv1pb.GetBindingsSubscriptionsEnvelope{}, nil
 }
-func (m *mockServer) OnBindingEvent(ctx context.Context, in *pb.BindingEventEnvelope) (*pb.BindingResponseEnvelope, error) {
-	return &pb.BindingResponseEnvelope{}, nil
+func (m *mockServer) OnBindingEvent(ctx context.Context, in *daprclientv1pb.BindingEventEnvelope) (*daprclientv1pb.BindingResponseEnvelope, error) {
+	return &daprclientv1pb.BindingResponseEnvelope{}, nil
 }
-func (m *mockServer) OnTopicEvent(ctx context.Context, in *pb.CloudEventEnvelope) (*empty.Empty, error) {
+func (m *mockServer) OnTopicEvent(ctx context.Context, in *daprclientv1pb.CloudEventEnvelope) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
+
+// TODO: Add APIVersion testing
 
 func TestInvokeMethod(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:9998")
@@ -49,7 +69,7 @@ func TestInvokeMethod(t *testing.T) {
 
 	grpcServer := grpc.NewServer()
 	go func() {
-		pb.RegisterDaprClientServer(grpcServer, &mockServer{})
+		daprclientv1pb.RegisterDaprClientServer(grpcServer, &mockServer{})
 		grpcServer.Serve(lis)
 	}()
 
@@ -60,15 +80,21 @@ func TestInvokeMethod(t *testing.T) {
 	assert.NoError(t, err)
 
 	c := Channel{baseAddress: "localhost:9998", client: conn}
-	request := &channel.InvokeRequest{
-		Metadata: map[string]string{"http.query_string": "param1=val1&param2=val2"},
-	}
-	response, err := c.InvokeMethod(request)
+	req := invokev1.NewInvokeMethodRequest("method")
+	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+	response, err := c.InvokeMethod(req)
+	assert.NoError(t, err)
+	contentType, body := response.RawData()
 	grpcServer.Stop()
 
-	assert.NoError(t, err)
-	assert.True(t, string(response.Data) == "param1=val1&param2=val2&" ||
-		string(response.Data) == "param2=val2&param1=val1&")
+	assert.Equal(t, "application/json", contentType)
+
+	actual := map[string]string{}
+	json.Unmarshal(body, &actual)
+
+	assert.Equal(t, "POST", actual["httpverb"])
+	assert.Equal(t, "method", actual["method"])
+	assert.Equal(t, "{\"param1\":\"val1\",\"param2\":\"val2\"}", actual["querystring"])
 }
 
 func close(t *testing.T, c io.Closer) {

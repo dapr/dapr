@@ -14,10 +14,9 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/channel/http"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/health"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -73,12 +72,11 @@ func (f *fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
 
 func newTestActorsRuntime() *actorsRuntime {
 	mockAppChannel := new(channelt.MockAppChannel)
-	fakeHTTPResponse := &channel.InvokeResponse{
-		Metadata: map[string]string{http.HTTPStatusCode: "200"},
-	}
+	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+	mockAppChannel.On("GetBaseAddress").Return("http://127.0.0.1", nil)
 	mockAppChannel.On(
 		"InvokeMethod",
-		mock.AnythingOfType("*channel.InvokeRequest")).Return(fakeHTTPResponse, nil)
+		mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
 
 	store := fakeStore()
 	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false)
