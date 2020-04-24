@@ -27,6 +27,7 @@ const (
 	daprSidecarAPIGRPCPort          = 50001
 	daprSidecarInternalGRPCPort     = 50002
 	defaultMetricsPort              = 9090
+	clusterIPNone                   = "None"
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -69,7 +70,8 @@ func (h *DaprHandler) createDaprService(name string, deployment *appsv1.Deployme
 			},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: deployment.Spec.Selector.MatchLabels,
+			Selector:  deployment.Spec.Selector.MatchLabels,
+			ClusterIP: clusterIPNone,
 			Ports: []corev1.ServicePort{
 				{
 					Protocol:   corev1.ProtocolTCP,
