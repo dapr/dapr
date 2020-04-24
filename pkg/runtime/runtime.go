@@ -753,14 +753,9 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 
 		switch resp.Status().Code {
 		case nethttp.StatusOK:
-			contentType, body := resp.RawData()
-			if contentType == invokev1.JSONContentType {
-				err := json.Unmarshal(body, &topics)
-				if err != nil {
-					log.Errorf("error getting topics from app: %s", err)
-				}
-			} else {
-				log.Errorf("unsupported content_type: %s", contentType)
+			_, body := resp.RawData()
+			if err := json.Unmarshal(body, &topics); err != nil {
+				log.Errorf("error getting topics from app: %s", err)
 			}
 
 		case nethttp.StatusNotFound:
