@@ -21,7 +21,7 @@ type TestParameters struct {
 	ClientConnections int    `json:"clientConnections"`
 	TargetEndpoint    string `json:"targetEndpoint"`
 	TestDuration      string `json:"testDuration"`
-	PayloadSizeKB     int    `json:"payloadSizeKB`
+	PayloadSizeKB     int    `json:"payloadSizeKB"`
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
