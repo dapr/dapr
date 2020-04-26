@@ -21,7 +21,7 @@ type TestParameters struct {
 	ClientConnections int    `json:"clientConnections"`
 	TargetEndpoint    string `json:"targetEndpoint"`
 	TestDuration      string `json:"testDuration"`
-	PayloadSizeInKB   int    `json:"payloadSizeInKB`
+	PayloadSizeKB     int    `json:"payloadSizeKB`
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +69,7 @@ func main() {
 // the test results in json format.
 func runTest(params TestParameters) ([]byte, error) {
 	args := []string{"load", "-json", "result.json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
-		"-t", params.TestDuration, "-payload-size", fmt.Sprint(params.PayloadSizeInKB), params.TargetEndpoint}
+		"-t", params.TestDuration, "-payload-size", fmt.Sprint(params.PayloadSizeKB), params.TargetEndpoint}
 	fmt.Println(fmt.Sprintf("running test with params: %s", args))
 
 	cmd := exec.Command("fortio", args...)

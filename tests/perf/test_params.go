@@ -15,7 +15,7 @@ type TestParameters struct {
 	ClientConnections int    `json:"clientConnections"`
 	TargetEndpoint    string `json:"targetEndpoint"`
 	TestDuration      string `json:"testDuration"`
-	PayloadSizeInKB   int    `json:"payloadSizeInKB"`
+	PayloadSizeKB     int    `json:"payloadSizeKB"`
 }
 
 func ParamsFromDefaults() TestParameters {
