@@ -7,6 +7,7 @@ const (
 	QPSEnvVar                = "DAPR_PERF_QPS"
 	ClientConnectionsEnvVar  = "DAPR_PERF_CONNECTIONS"
 	TestDurationEnvVar       = "DAPR_TEST_DURATION"
+	PayloadSizeEnvVar        = "DAPR_PAYLOAD_SIZE_KB"
 )
 
 type TestParameters struct {
@@ -14,6 +15,7 @@ type TestParameters struct {
 	ClientConnections int    `json:"clientConnections"`
 	TargetEndpoint    string `json:"targetEndpoint"`
 	TestDuration      string `json:"testDuration"`
+	PayloadSizeInKB   int    `json:"payloadSizeInKB"`
 }
 
 func ParamsFromDefaults() TestParameters {
