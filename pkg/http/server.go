@@ -69,7 +69,7 @@ func (s *server) StartNonBlocking() {
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	log.Infof("enabled tracing http middleware")
-	return diag.SetTracingSpanContext(next)
+	return diag.SetTracingSpanContextFromHTTPContext(next)
 }
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {

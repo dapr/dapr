@@ -71,7 +71,8 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *channel.InvokeRequest) 
 	}
 	c := daprclient_pb.NewDaprClientClient(g.client)
 
-	ctx = tracing.WithGRPCSpanContext(ctx)
+	sc := tracing.FromContext(ctx)
+	ctx = tracing.AppendToOutgoingGRPCContext(ctx, sc)
 
 	resp, err := c.OnInvoke(ctx, &msg)
 

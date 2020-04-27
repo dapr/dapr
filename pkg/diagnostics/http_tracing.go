@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
@@ -32,40 +31,10 @@ const (
 
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
-type contextKey struct{}
+type httpContextKey struct{}
 
-// StartClientSpanTracing creates a tracing span from a http request
-func StartClientSpanTracing(ctx context.Context, r *fasthttp.Request, spec config.TracingSpec) (context.Context, *trace.Span) {
-	corID := string(r.Header.Peek(CorrelationID))
-	uri := string(r.Header.RequestURI())
-	var span *trace.Span
-
-	ctx, span = startTracingSpan(ctx, corID, uri, spec.SamplingRate, trace.SpanKindClient)
-	addAnnotationsToSpan(r, span)
-
-	return ctx, span
-}
-
-// StartServerSpanTracing plugs tracing into http middleware pipeline
-func StartServerSpanTracing(spec config.TracingSpec, next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		corID := string(ctx.Request.Header.Peek(CorrelationID))
-		uri := string(ctx.Path())
-		_, span := startTracingSpan(ctx, corID, uri, spec.SamplingRate, trace.SpanKindServer)
-
-		addAnnotationsToSpan(&ctx.Request, span)
-		defer span.End()
-
-		// Pass on the correlation id further in the request header
-		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(span.SpanContext()))
-
-		next(ctx)
-		UpdateSpanStatus(span, &ctx.Response)
-	}
-}
-
-// SetTracingSpanContext sets the trace spancontext in the request context
-func SetTracingSpanContext(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+// SetTracingSpanContextFromHTTPContext sets the trace SpanContext in the request context
+func SetTracingSpanContextFromHTTPContext(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		sc := GetSpanContextFromRequestContext(ctx)
 		SpanContextToRequest(sc, &ctx.Request)
@@ -73,38 +42,14 @@ func SetTracingSpanContext(next fasthttp.RequestHandler) fasthttp.RequestHandler
 	}
 }
 
-func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
-	req.Header.VisitAll(func(key []byte, value []byte) {
-		headerKey := string(key)
-		headerKey = strings.ToLower(headerKey)
-		if strings.HasPrefix(headerKey, daprHeaderPrefix) {
-			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
-		}
-	})
-}
+// StartTracingClientSpanFromHTTPContext creates a client span before invoking http method call
+func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Request, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
+	var span *trace.Span
+	ctx, span = startTracingSpanInternal(ctx, method, spec.SamplingRate, trace.SpanKindClient)
 
-// UpdateSpanStatus updates trace span status based on HTTP response
-func UpdateSpanStatus(span *trace.Span, resp *fasthttp.Response) {
-	span.SetStatus(trace.Status{
-		Code:    projectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
-	})
-}
+	addAnnotationsToSpan(req, span)
 
-func WithSpanContext(ctx context.Context) context.Context {
-	spanContext := FromContext(ctx)
-
-	gen := tracingConfig.Load().(*traceIDGenerator)
-
-	if (spanContext == trace.SpanContext{}) {
-		spanContext = trace.SpanContext{}
-		spanContext.TraceID = gen.NewTraceID()
-		spanContext.SpanID = gen.NewSpanID()
-	} else {
-		spanContext.SpanID = gen.NewSpanID()
-	}
-
-	return NewContext(ctx, spanContext)
+	return ctx, span
 }
 
 func GetSpanContextFromRequestContext(ctx *fasthttp.RequestCtx) trace.SpanContext {
@@ -114,45 +59,14 @@ func GetSpanContextFromRequestContext(ctx *fasthttp.RequestCtx) trace.SpanContex
 
 	if !ok {
 		spanContext = trace.SpanContext{}
+		// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
 		spanContext.TraceID = gen.NewTraceID()
-		spanContext.SpanID = gen.NewSpanID()
-	} else {
-		spanContext.SpanID = gen.NewSpanID()
+
+		// Default sampling rate is non zero in Dapr, so that means , sampling is enabled by default
+		spanContext.TraceOptions = trace.TraceOptions(1)
 	}
 
 	return spanContext
-}
-
-// FromContext returns the SpanContext stored in a context, or empty if there isn't one.
-func FromContext(ctx context.Context) trace.SpanContext {
-	s, _ := ctx.Value(contextKey{}).(string)
-	return DeserializeSpanContext(s)
-}
-
-// NewContext returns a new context with the given SpanContext attached in serialized value
-func NewContext(parent context.Context, spanContext trace.SpanContext) context.Context {
-	return context.WithValue(parent, contextKey{}, SerializeSpanContext(spanContext))
-}
-
-func startTracingSpan(ctx context.Context, corID, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {
-	var span *trace.Span
-	name := createSpanName(uri)
-
-	rate := diag_utils.GetTraceSamplingRate(samplingRate)
-
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	kindOption := trace.WithSpanKind(spanKind)
-
-	if corID != "" {
-		sc := DeserializeSpanContext(corID)
-		// Note that if parent span context is provided which is sc in this case then ctx will be ignored
-		ctx, span = trace.StartSpanWithRemoteParent(ctx, name, sc, kindOption, probSamplerOption)
-	} else {
-		ctx, span = trace.StartSpan(ctx, name, kindOption, probSamplerOption)
-	}
-
-	return ctx, span
 }
 
 // SpanContextFromRequest extracts a span context from incoming requests.
@@ -215,6 +129,46 @@ func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok boo
 	return sc, true
 }
 
+// SpanContextToRequest modifies the given request to include traceparent and tracestate headers.
+func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
+	h := fmt.Sprintf("%x-%x-%x-%x",
+		[]byte{supportedVersion},
+		sc.TraceID[:],
+		sc.SpanID[:],
+		[]byte{byte(sc.TraceOptions)})
+	req.Header.Set(traceparentHeader, h)
+	tracestateToRequest(sc, req)
+}
+
+func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
+	req.Header.VisitAll(func(key []byte, value []byte) {
+		headerKey := string(key)
+		headerKey = strings.ToLower(headerKey)
+		if strings.HasPrefix(headerKey, daprHeaderPrefix) {
+			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
+		}
+	})
+}
+
+// UpdateSpanStatus updates trace span status based on HTTP response
+func UpdateSpanStatus(span *trace.Span, resp *fasthttp.Response) {
+	span.SetStatus(trace.Status{
+		Code:    projectStatusCode(resp.StatusCode()),
+		Message: strconv.Itoa(resp.StatusCode()),
+	})
+}
+
+// FromRequestContext returns the SpanContext stored in a context, or empty if there isn't one.
+func FromRequestContext(ctx context.Context) trace.SpanContext {
+	s, _ := ctx.Value(httpContextKey{}).(string)
+	return DeserializeSpanContext(s)
+}
+
+// NewRequestContext returns a new context with the given SpanContext attached in serialized value
+func NewRequestContext(parent context.Context, spanContext trace.SpanContext) context.Context {
+	return context.WithValue(parent, httpContextKey{}, SerializeSpanContext(spanContext))
+}
+
 func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
 	s := string(req.Header.Peek(textproto.CanonicalMIMEHeaderKey(name)))
 	if s == "" {
@@ -269,15 +223,4 @@ func tracestateToRequest(sc trace.SpanContext, req *fasthttp.Request) {
 			req.Header.Set(tracestateHeader, h)
 		}
 	}
-}
-
-// SpanContextToRequest modifies the given request to include traceparent and tracestate headers.
-func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
-	h := fmt.Sprintf("%x-%x-%x-%x",
-		[]byte{supportedVersion},
-		sc.TraceID[:],
-		sc.SpanID[:],
-		[]byte{byte(sc.TraceOptions)})
-	req.Header.Set(traceparentHeader, h)
-	tracestateToRequest(sc, req)
 }

@@ -320,7 +320,10 @@ func (a *api) onGetState(c *routing.Context) error {
 		return nil
 	}
 
-	_, span := diag.StartClientSpanTracing(ctx, &c.Request, a.tracingSpec)
+	sc := diag.GetSpanContextFromRequestContext(c.RequestCtx)
+	ctx = diag.NewContext(ctx, sc)
+	ctx, span := diag.StartTracingClientSpanFromHTTPContext(ctx, &c.Request, "GetState", a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &c.Request)
 	defer span.End()
 
 	key := c.Param(stateKeyParam)
@@ -529,7 +532,8 @@ func (a *api) onDirectMessage(c *routing.Context) error {
 	a.setHeaders(c, req.Metadata)
 
 	sc := diag.GetSpanContextFromRequestContext(c.RequestCtx)
-	ctx = diag.AppendToOutgoingContext(ctx, sc)
+
+	ctx = diag.NewContext(ctx, sc)
 
 	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {

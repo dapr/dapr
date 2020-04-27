@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
 	"github.com/golang/protobuf/ptypes/any"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -146,8 +147,11 @@ func (d *directMessaging) invokeRemote(ctx context.Context, req *DirectMessageRe
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
 	defer cancel()
 
-	ctx, span := diag.StartTracingClientSpanFromGRPCContext(ctx, req.Method, d.tracingSpec)
+	var span *trace.Span
+	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, req.Method, d.tracingSpec)
 	defer span.End()
+
+	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 
 	client := daprinternal_pb.NewDaprInternalClient(conn)
 	resp, err := client.CallLocal(ctx, &msg)

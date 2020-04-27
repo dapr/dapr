@@ -96,9 +96,10 @@ func (h *Channel) InvokeMethod(ctx context.Context, invokeRequest *channel.Invok
 		}
 	}
 
-	spanContext := diag.FromContext(ctx)
+	// TODO : the above setting of req header for correlation is not needed - lines 93-97
+	sc := diag.FromContext(ctx)
 
-	req.Header.Set(diag.CorrelationID, diag.SerializeSpanContext(spanContext))
+	diag.SpanContextToRequest(sc, req)
 
 	resp := fasthttp.AcquireResponse()
 

@@ -27,6 +27,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"go.opencensus.io/trace"
 )
 
 const (
@@ -84,6 +85,8 @@ func (a *api) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelo
 
 	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, in.Method, a.tracingSpec)
 	defer span.End()
+
+	ctx = diag.NewContext(ctx, span.SpanContext())
 
 	req := channel.InvokeRequest{
 		Payload:  in.Data.Value,
@@ -171,6 +174,9 @@ func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelo
 		req.Data = in.Data.Value
 	}
 
+	sc := diag.GetSpanContextFromGRPC(ctx)
+	ctx = diag.NewContext(ctx, sc)
+
 	resp, err := a.directMessaging.Invoke(ctx, &req)
 	if err != nil {
 		return nil, err
@@ -214,11 +220,8 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 		},
 	}
 
-	corID, ok := ctx.Value(diag.CorrelationID).(string)
-	if !ok {
-		corID = ""
-	}
-	_, span := diag.StartTracingClientSpanWithCorID(ctx, corID, "GetState", a.tracingSpec)
+	var span *trace.Span
+	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "GetState", a.tracingSpec)
 	defer span.End()
 
 	getResponse, err := a.stateStores[storeName].Get(&req)

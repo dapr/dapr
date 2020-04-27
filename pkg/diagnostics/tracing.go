@@ -17,15 +17,29 @@ import (
 	"sync"
 	"sync/atomic"
 
+	trace_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
 )
+
+type daprTraceContextKey struct{}
 
 const (
 	// CorrelationID is the header key name of correlation id for trace
 	CorrelationID    = "X-Correlation-ID"
 	daprHeaderPrefix = "dapr-"
 )
+
+// NewContext returns a new context with the given SpanContext attached.
+func NewContext(ctx context.Context, spanContext trace.SpanContext) context.Context {
+	return context.WithValue(ctx, daprTraceContextKey{}, spanContext)
+}
+
+// FromContext returns the SpanContext stored in a context, or nil if there isn't one.
+func FromContext(ctx context.Context) trace.SpanContext {
+	sc, _ := ctx.Value(daprTraceContextKey{}).(trace.SpanContext)
+	return sc
+}
 
 // SerializeSpanContext serializes a span context into a simple string
 func SerializeSpanContext(ctx trace.SpanContext) string {
@@ -47,6 +61,28 @@ func DeserializeSpanContext(ctx string) trace.SpanContext {
 	copy(ret.TraceID[:], traceID)
 	ret.TraceOptions = trace.TraceOptions(traceOptions)
 	return ret
+}
+
+func startTracingSpanInternal(ctx context.Context, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {
+	var span *trace.Span
+	name := createSpanName(uri)
+
+	rate := trace_utils.GetTraceSamplingRate(samplingRate)
+
+	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
+	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
+	kindOption := trace.WithSpanKind(spanKind)
+
+	sc := FromContext(ctx)
+
+	if (sc != trace.SpanContext{}) {
+		// Note that if parent span context is provided which is sc in this case then ctx will be ignored
+		ctx, span = trace.StartSpanWithRemoteParent(ctx, name, sc, kindOption, probSamplerOption)
+	} else {
+		ctx, span = trace.StartSpan(ctx, name, kindOption, probSamplerOption)
+	}
+
+	return ctx, span
 }
 
 func projectStatusCode(code int) int32 {

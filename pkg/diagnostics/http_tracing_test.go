@@ -26,7 +26,7 @@ func TestStartClientSpanTracing(t *testing.T) {
 	req := getTestHTTPRequest()
 	spec := config.TracingSpec{SamplingRate: "0.5"}
 
-	StartClientSpanTracing(context.Background(), req, spec)
+	StartTracingClientSpanFromHTTPContext(context.Background(), req, "test", spec)
 }
 
 func TestSpanContextFromRequest(t *testing.T) {

@@ -7,9 +7,12 @@ package diagnostics
 
 import (
 	"context"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/pkg/config"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -19,4 +22,25 @@ func TestStartTracingClientSpanFromGRPCContext(t *testing.T) {
 	ctx = metadata.NewIncomingContext(ctx, metadata.MD{"dapr-headerKey": {"v3", "v4"}})
 
 	StartTracingClientSpanFromGRPCContext(ctx, "invoke", spec)
+}
+
+func TestWithGRPCSpanContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
+	defer cancel()
+	wantSc := trace.SpanContext{
+		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+		SpanID:       trace.SpanID{0, 0, 0, 0, 0, 0, 0, 0},
+		TraceOptions: trace.TraceOptions(1),
+	}
+	wantOk := true
+	ctx = AppendToOutgoingGRPCContext(ctx, wantSc)
+
+	gotSc, gotOk := FromOutgoingGRPCContext(ctx)
+
+	if !reflect.DeepEqual(gotSc, wantSc) {
+		t.Errorf("WithGRPCSpanContext gotSc = %v, want %v", gotSc, wantSc)
+	}
+	if gotOk != wantOk {
+		t.Errorf("WithGRPCSpanContext gotOk = %v, want %v", gotOk, wantSc)
+	}
 }
