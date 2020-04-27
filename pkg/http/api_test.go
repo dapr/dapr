@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	gohttp "net/http"
 	"strings"
 	"testing"
@@ -33,8 +34,8 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
-	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
@@ -44,8 +45,7 @@ var retryCounter = 0
 
 func TestSetHeaders(t *testing.T) {
 	testAPI := &api{}
-	c := &routing.Context{}
-	c.RequestCtx = &fasthttp.RequestCtx{Request: fasthttp.Request{}}
+	c := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 	c.Request.Header.Set("H1", "v1")
 	c.Request.Header.Set("H2", "v2")
 	m := map[string]string{}
@@ -1153,7 +1153,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, router.HandleRequest); err != nil {
+		if err := fasthttp.Serve(f.ln, router.Handler); err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
 	}()
@@ -1171,7 +1171,7 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, router.HandleRequest)); err != nil {
+		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, router.Handler)); err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
 	}()
@@ -1189,7 +1189,7 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		handler := pipeline.Apply(router.HandleRequest)
+		handler := pipeline.Apply(router.Handler)
 		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, handler)); err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
@@ -1208,12 +1208,25 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 	router := routing.New()
 
 	for _, e := range endpoints {
-		methods := strings.Join(e.Methods, ",")
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-
-		router.To(methods, path, e.Handler)
+		for _, m := range e.Methods {
+			if m == http.MethodGet {
+				router.GET(path, e.Handler)
+			} else if m == http.MethodDelete {
+				router.DELETE(path, e.Handler)
+			} else if m == http.MethodPut {
+				router.PUT(path, e.Handler)
+			} else if m == http.MethodPost {
+				router.POST(path, e.Handler)
+			} else if m == http.MethodOptions {
+				router.OPTIONS(path, e.Handler)
+			} else if m == http.MethodPatch {
+				router.PATCH(path, e.Handler)
+			} else if m == http.MethodHead {
+				router.HEAD(path, e.Handler)
+			}
+		}
 	}
-
 	return router
 }
 
