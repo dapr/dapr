@@ -33,9 +33,11 @@ Performance tests are designed to let you evaluate the latency and processing ti
     # DAPR_PERF_QPS sets the desired number of requests per second. Default is 1.
     # DAPR_PERF_CONNECTIONS sets the number of client connections used to send requests to Dapr. Default is 1.
     # DAPR_TEST_DURATION sets the duration of the test. Default is "1m".
+    # DAPR_PAYLOAD_SIZE_KB sets a payload size in kb to test with. default is 0.
     export DAPR_PERF_QPS
     export DAPR_PERF_CONNECTIONS
     export DAPR_TEST_DURATION
+    export DAPR_PAYLOAD_SIZE_KB
     ```
 
 ### Deploy your dapr runtime change
