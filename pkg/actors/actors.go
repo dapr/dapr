@@ -42,7 +42,7 @@ var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
-	Call(req *CallRequest) (*CallResponse, error)
+	Call(ctx context.Context, req *CallRequest) (*CallResponse, error)
 	Init() error
 	GetState(req *GetStateRequest) (*StateResponse, error)
 	SaveState(req *SaveStateRequest) error
@@ -229,7 +229,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 	}()
 }
 
-func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
+func (a *actorsRuntime) Call(ctx context.Context, req *CallRequest) (*CallResponse, error) {
 	targetActorAddress, appID := a.lookupActorAddress(req.ActorType, req.ActorID)
 	if targetActorAddress == "" {
 		return nil, fmt.Errorf("error finding address for actor type %s with id %s", req.ActorType, req.ActorID)

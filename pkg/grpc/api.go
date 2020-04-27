@@ -118,7 +118,10 @@ func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelo
 		Metadata:  in.Metadata,
 	}
 
-	resp, err := a.actor.Call(&req)
+	sc := diag.GetSpanContextFromGRPC(ctx)
+	ctx = diag.NewContext(ctx, sc)
+
+	resp, err := a.actor.Call(ctx, &req)
 	if err != nil {
 		return nil, err
 	}

@@ -750,6 +750,7 @@ func (a *api) onDeleteActorTimer(c *routing.Context) error {
 }
 
 func (a *api) onDirectActorMessage(c *routing.Context) error {
+	ctx := (context.Context)(c.RequestCtx)
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(c.RequestCtx, 400, msg)
@@ -770,7 +771,11 @@ func (a *api) onDirectActorMessage(c *routing.Context) error {
 	}
 	a.setHeaders(c, req.Metadata)
 
-	resp, err := a.actor.Call(&req)
+	sc := diag.GetSpanContextFromRequestContext(c.RequestCtx)
+
+	ctx = diag.NewContext(ctx, sc)
+
+	resp, err := a.actor.Call(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
 		respondWithError(c.RequestCtx, 500, msg)
