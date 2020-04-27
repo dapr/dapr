@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/health"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
@@ -73,6 +74,7 @@ func (f *fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
 
 func newTestActorsRuntime() *actorsRuntime {
 	mockAppChannel := new(channelt.MockAppChannel)
+	spec := config.TracingSpec{SamplingRate: "1"}
 	fakeHTTPResponse := &channel.InvokeResponse{
 		Metadata: map[string]string{http.HTTPStatusCode: "200"},
 	}
@@ -82,7 +84,7 @@ func newTestActorsRuntime() *actorsRuntime {
 
 	store := fakeStore()
 	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false)
-	a := NewActors(store, mockAppChannel, nil, config, nil)
+	a := NewActors(store, mockAppChannel, nil, config, nil, spec)
 
 	return a.(*actorsRuntime)
 }

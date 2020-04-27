@@ -137,7 +137,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -161,7 +160,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
 			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "13", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -297,7 +295,6 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
@@ -326,7 +323,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
+
 	})
 
 	fakeServer.Shutdown()
@@ -682,7 +679,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
 			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "3", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -713,7 +709,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -755,7 +750,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -806,7 +800,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -840,7 +833,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "3", buffer, "failed to generate proper traces for saving actor state")
 			mockActors.AssertNumberOfCalls(t, "SaveState", 0)
 		}
 	})
@@ -864,7 +856,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for getting actor state")
 		assert.Equal(t, fakeData, resp.RawBody)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
@@ -891,7 +882,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for deleting actor state")
 		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})
 
@@ -937,7 +927,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for transaction")
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 	})
 
@@ -1091,7 +1080,6 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }

@@ -22,7 +22,7 @@ type MockDirectMessaging struct {
 
 // Invoke provides a mock function with given fields: req
 func (_m *MockDirectMessaging) Invoke(ctx context.Context, req *messaging.DirectMessageRequest) (*messaging.DirectMessageResponse, error) {
-	re := regexp.MustCompile(`&__header_delim__&X-Correlation-Id&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
+	re := regexp.MustCompile(`&__header_delim__&Traceparent&__header_equals___&[0-9a-fA-F]-[0-9a-fA-F]-[0-9a-fA-F]-[0-9a-fA-F]+`)
 	req.Metadata["headers"] = re.ReplaceAllString(req.Metadata["headers"], "")
 	ret := _m.Called(req)
 

@@ -272,6 +272,7 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 }
 
 func (a *api) onOutputBindingMessage(c *routing.Context) error {
+	ctx := (context.Context)(c.RequestCtx)
 	name := c.Param(nameParam)
 	body := c.PostBody()
 
@@ -289,6 +290,14 @@ func (a *api) onOutputBindingMessage(c *routing.Context) error {
 		respondWithError(c.RequestCtx, 500, msg)
 		return nil
 	}
+
+	spanName := fmt.Sprintf("OutputBindingMessage: %s", name)
+	sc := diag.GetSpanContextFromRequestContext(c.RequestCtx)
+	ctx = diag.NewContext(ctx, sc)
+	ctx, span := diag.StartTracingClientSpanFromHTTPContext(ctx, &c.Request, spanName, a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &c.Request)
+	defer span.End()
+
 	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
 		Metadata: req.Metadata,
 		Data:     b,
@@ -320,9 +329,10 @@ func (a *api) onGetState(c *routing.Context) error {
 		return nil
 	}
 
+	spanName := fmt.Sprintf("GetState: %s", storeName)
 	sc := diag.GetSpanContextFromRequestContext(c.RequestCtx)
 	ctx = diag.NewContext(ctx, sc)
-	ctx, span := diag.StartTracingClientSpanFromHTTPContext(ctx, &c.Request, "GetState", a.tracingSpec)
+	ctx, span := diag.StartTracingClientSpanFromHTTPContext(ctx, &c.Request, spanName, a.tracingSpec)
 	diag.SpanContextToRequest(span.SpanContext(), &c.Request)
 	defer span.End()
 

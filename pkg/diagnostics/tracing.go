@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type daprTraceContextKey struct{}
+type DaprTraceContextKey struct{}
 
 const (
 	// CorrelationID is the header key name of correlation id for trace
@@ -32,12 +32,12 @@ const (
 
 // NewContext returns a new context with the given SpanContext attached.
 func NewContext(ctx context.Context, spanContext trace.SpanContext) context.Context {
-	return context.WithValue(ctx, daprTraceContextKey{}, spanContext)
+	return context.WithValue(ctx, DaprTraceContextKey{}, spanContext)
 }
 
 // FromContext returns the SpanContext stored in a context, or nil if there isn't one.
 func FromContext(ctx context.Context) trace.SpanContext {
-	sc, _ := ctx.Value(daprTraceContextKey{}).(trace.SpanContext)
+	sc, _ := ctx.Value(DaprTraceContextKey{}).(trace.SpanContext)
 	return sc
 }
 
