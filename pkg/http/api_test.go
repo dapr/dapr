@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/http"
 	gohttp "net/http"
 	"strings"
 	"testing"
@@ -1210,21 +1209,7 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		for _, m := range e.Methods {
-			if m == http.MethodGet {
-				router.GET(path, e.Handler)
-			} else if m == http.MethodDelete {
-				router.DELETE(path, e.Handler)
-			} else if m == http.MethodPut {
-				router.PUT(path, e.Handler)
-			} else if m == http.MethodPost {
-				router.POST(path, e.Handler)
-			} else if m == http.MethodOptions {
-				router.OPTIONS(path, e.Handler)
-			} else if m == http.MethodPatch {
-				router.PATCH(path, e.Handler)
-			} else if m == http.MethodHead {
-				router.HEAD(path, e.Handler)
-			}
+			router.Handle(m, path, e.Handler)
 		}
 	}
 	return router
