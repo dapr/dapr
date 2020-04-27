@@ -299,7 +299,6 @@ func (a *api) onOutputBindingMessage(ctx *fasthttp.RequestCtx) {
 		respondWithError(ctx, 500, msg)
 		return
 	}
-
 	respondEmpty(ctx, 200)
 }
 
@@ -393,6 +392,7 @@ func (a *api) onDeleteState(ctx *fasthttp.RequestCtx) {
 		respondWithError(ctx, 500, msg)
 		return
 	}
+	respondEmpty(ctx, 200)
 }
 
 func (a *api) onGetSecret(ctx *fasthttp.RequestCtx) {
@@ -477,8 +477,6 @@ func (a *api) onPostState(ctx *fasthttp.RequestCtx) {
 	}
 
 	respondEmpty(ctx, 201)
-
-	return
 }
 
 func (a *api) getModifiedStateKey(key string) string {
@@ -541,8 +539,6 @@ func (a *api) onDirectMessage(ctx *fasthttp.RequestCtx) {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
 	respond(ctx, statusCode, body)
-
-	return
 }
 
 func (a *api) onCreateActorReminder(ctx *fasthttp.RequestCtx) {
@@ -575,8 +571,6 @@ func (a *api) onCreateActorReminder(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 200)
 	}
-
-	return
 }
 
 func (a *api) onCreateActorTimer(ctx *fasthttp.RequestCtx) {
@@ -609,8 +603,6 @@ func (a *api) onCreateActorTimer(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 200)
 	}
-
-	return
 }
 
 func (a *api) onDeleteActorReminder(ctx *fasthttp.RequestCtx) {
@@ -637,8 +629,6 @@ func (a *api) onDeleteActorReminder(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 200)
 	}
-
-	return
 }
 
 func (a *api) onActorStateTransaction(ctx *fasthttp.RequestCtx) {
@@ -684,8 +674,6 @@ func (a *api) onActorStateTransaction(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 201)
 	}
-
-	return
 }
 
 func (a *api) onGetActorReminder(ctx *fasthttp.RequestCtx) {
@@ -715,7 +703,6 @@ func (a *api) onGetActorReminder(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondWithJSON(ctx, 200, b)
 	}
-	return
 }
 
 func (a *api) onDeleteActorTimer(ctx *fasthttp.RequestCtx) {
@@ -742,8 +729,6 @@ func (a *api) onDeleteActorTimer(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 200)
 	}
-
-	return
 }
 
 func (a *api) onDirectActorMessage(ctx *fasthttp.RequestCtx) {
@@ -776,8 +761,6 @@ func (a *api) onDirectActorMessage(ctx *fasthttp.RequestCtx) {
 		a.setHeadersOnRequest(resp.Metadata, ctx)
 		respondWithJSON(ctx, statusCode, resp.Data)
 	}
-
-	return
 }
 
 func (a *api) setHeadersOnRequest(metadata map[string]string, ctx *fasthttp.RequestCtx) {
@@ -841,8 +824,6 @@ func (a *api) onSaveActorState(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 201)
 	}
-
-	return
 }
 
 func (a *api) onGetActorState(ctx *fasthttp.RequestCtx) {
@@ -869,8 +850,6 @@ func (a *api) onGetActorState(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondWithJSON(ctx, 200, resp.Data)
 	}
-
-	return
 }
 
 func (a *api) onDeleteActorState(ctx *fasthttp.RequestCtx) {
@@ -908,8 +887,6 @@ func (a *api) onDeleteActorState(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 200)
 	}
-
-	return
 }
 
 func (a *api) onGetMetadata(ctx *fasthttp.RequestCtx) {
@@ -934,8 +911,6 @@ func (a *api) onGetMetadata(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondWithJSON(ctx, 200, mtdBytes)
 	}
-
-	return
 }
 
 func (a *api) onPutMetadata(ctx *fasthttp.RequestCtx) {
@@ -943,7 +918,6 @@ func (a *api) onPutMetadata(ctx *fasthttp.RequestCtx) {
 	body := ctx.PostBody()
 	a.extendedMetadata.Store(key, string(body))
 	respondEmpty(ctx, 200)
-	return
 }
 
 func (a *api) onPublish(ctx *fasthttp.RequestCtx) {
@@ -976,8 +950,6 @@ func (a *api) onPublish(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 200)
 	}
-
-	return
 }
 
 // GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists
@@ -989,7 +961,6 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 			return statusCode
 		}
 	}
-
 	return 200
 }
 
@@ -1000,6 +971,4 @@ func (a *api) onGetHealthz(ctx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(ctx, 200)
 	}
-
-	return
 }
