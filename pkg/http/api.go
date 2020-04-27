@@ -301,7 +301,6 @@ func (a *api) onOutputBindingMessage(ctx *fasthttp.RequestCtx) {
 	}
 
 	respondEmpty(ctx, 200)
-	return
 }
 
 func (a *api) onGetState(ctx *fasthttp.RequestCtx) {
@@ -394,8 +393,6 @@ func (a *api) onDeleteState(ctx *fasthttp.RequestCtx) {
 		respondWithError(ctx, 500, msg)
 		return
 	}
-
-	return
 }
 
 func (a *api) onGetSecret(ctx *fasthttp.RequestCtx) {
@@ -443,7 +440,6 @@ func (a *api) onGetSecret(ctx *fasthttp.RequestCtx) {
 
 	respBytes, _ := a.json.Marshal(resp.Data)
 	respondWithJSON(ctx, 200, respBytes)
-	return
 }
 
 func (a *api) onPostState(ctx *fasthttp.RequestCtx) {
