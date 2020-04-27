@@ -60,7 +60,7 @@ const (
 	apiVersionV1         = "v1.0"
 	idParam              = "id"
 	methodParam          = "method"
-	publishParam         = "publish"
+	topicParam           = "topic"
 	actorTypeParam       = "actorType"
 	actorIDParam         = "actorId"
 	storeNameParam       = "storeName"
@@ -927,7 +927,7 @@ func (a *api) onPublish(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	topic := ctx.UserValue(publishParam).(string)
+	topic := ctx.UserValue(topicParam).(string)
 	body := ctx.PostBody()
 	corID := ctx.Request.Header.Peek(tracing.CorrelationID)
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, string(corID), body)
