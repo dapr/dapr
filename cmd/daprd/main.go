@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
+	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	"github.com/dapr/components-contrib/pubsub/nats"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
@@ -200,6 +201,9 @@ func main() {
 			}),
 			pubsub_loader.New("gcp.pubsub", func() pubs.PubSub {
 				return pubsub_gcp.NewGCPPubSub(logContrib)
+			}),
+			pubsub_loader.New("kafka", func() pubs.PubSub {
+				return pubsub_kafka.NewKafka(logContrib)
 			}),
 		),
 		runtime.WithExporters(
