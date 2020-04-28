@@ -47,13 +47,13 @@ func (g *Channel) GetBaseAddress() string {
 }
 
 // InvokeMethod invokes user code via gRPC
-func (g *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	var rsp *invokev1.InvokeMethodResponse
 	var err error
 
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1:
-		rsp, err = g.invokeMethodV1(req)
+		rsp, err = g.invokeMethodV1(ctx, req)
 
 	default:
 		// Reject unsupported version
@@ -65,12 +65,16 @@ func (g *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.Inv
 }
 
 // invokeMethodV1 calls user applications using daprclient v1
-func (g *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
 		g.ch <- 1
 	}
 
 	clientV1 := clientv1pb.NewDaprClientClient(g.client)
+
+	// TODO: new context
+	sc := tracing.FromContext(ctx)
+	ctx = tracing.AppendToOutgoingGRPCContext(ctx, sc)
 
 	ctx, cancel := context.WithTimeout(context.Background(), channel.DefaultChannelRequestTimeout)
 	defer cancel()

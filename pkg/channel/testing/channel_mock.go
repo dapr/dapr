@@ -3,6 +3,8 @@
 package testing
 
 import (
+	context "context"
+
 	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -26,13 +28,13 @@ func (_m *MockAppChannel) GetBaseAddress() string {
 	return r0
 }
 
-// InvokeMethod provides a mock function with given fields: req
-func (_m *MockAppChannel) InvokeMethod(req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
-	ret := _m.Called(req)
+// InvokeMethod provides a mock function with given fields: ctx, req
+func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
+	ret := _m.Called(ctx, req)
 
 	var r0 *v1.InvokeMethodResponse
-	if rf, ok := ret.Get(0).(func(*v1.InvokeMethodRequest) *v1.InvokeMethodResponse); ok {
-		r0 = rf(req)
+	if rf, ok := ret.Get(0).(func(context.Context, *v1.InvokeMethodRequest) *v1.InvokeMethodResponse); ok {
+		r0 = rf(ctx, req)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*v1.InvokeMethodResponse)
@@ -40,8 +42,8 @@ func (_m *MockAppChannel) InvokeMethod(req *v1.InvokeMethodRequest) (*v1.InvokeM
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*v1.InvokeMethodRequest) error); ok {
-		r1 = rf(req)
+	if rf, ok := ret.Get(1).(func(context.Context, *v1.InvokeMethodRequest) error); ok {
+		r1 = rf(ctx, req)
 	} else {
 		r1 = ret.Error(1)
 	}

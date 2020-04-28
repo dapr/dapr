@@ -26,6 +26,7 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"go.opencensus.io/trace"
 	grpc_go "google.golang.org/grpc"
 )
 
@@ -35,11 +36,16 @@ type mockGRPCAPI struct {
 }
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	return &internalv1pb.InternalInvokeResponse{}, nil
+	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
+	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
+	return resp.Proto(), nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) (*internalv1pb.CallActorResponse, error) {
-	return &internalv1pb.CallActorResponse{}, nil
+	return &internalv1pb.CallActorResponse{
+		Data:     &any.Any{Value: ExtractSpanContext(ctx)},
+		Metadata: nil,
+	}, nil
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
@@ -70,6 +76,11 @@ func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvel
 	return &daprv1pb.GetSecretResponseEnvelope{}, nil
 }
 
+func ExtractSpanContext(ctx context.Context) []byte {
+	sc, _ := ctx.Value(diag.DaprTraceContextKey{}).(trace.SpanContext)
+	return []byte(diag.SerializeSpanContext(sc))
+}
+
 func configureTestTraceExporter(meta exporters.Metadata) {
 	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
 	exporter.Init("fakeID", "fakeAddress", meta)
@@ -89,8 +100,8 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 	// sampling is always turn on for testing
 	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddlewareStream(spec))),
-		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.TracingGRPCMiddlewareUnary(spec))),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.SetTracingSpanContextGRPCMiddlewareStream())),
+		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.SetTracingSpanContextGRPCMiddlewareUnary())),
 	)
 
 	go func() {

@@ -116,6 +116,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
 		json:                  jsoniter.ConfigFastest,
+		tracingSpec:           spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
 
@@ -134,7 +135,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -158,7 +158,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
 			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "13", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -257,6 +256,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
@@ -278,7 +278,6 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
@@ -301,7 +300,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
+
 	})
 
 	fakeServer.Shutdown()
@@ -635,8 +634,9 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	createExporters(meta)
 
 	testAPI := &api{
-		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		actor:       nil,
+		json:        jsoniter.ConfigFastest,
+		tracingSpec: spec,
 	}
 
 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
@@ -658,7 +658,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
 			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "3", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -689,7 +688,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -731,7 +729,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -782,7 +779,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -816,7 +812,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "3", buffer, "failed to generate proper traces for saving actor state")
 			mockActors.AssertNumberOfCalls(t, "SaveState", 0)
 		}
 	})
@@ -840,7 +835,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for getting actor state")
 		assert.Equal(t, fakeData, resp.RawBody)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
@@ -867,7 +861,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for deleting actor state")
 		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})
 
@@ -913,7 +906,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for transaction")
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 	})
 
@@ -951,6 +943,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
 
@@ -1038,6 +1031,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
@@ -1059,7 +1053,6 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }
@@ -1103,6 +1096,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
@@ -1170,8 +1164,8 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, router.Handler)); err != nil {
-			panic(fmt.Errorf("failed to serve: %v", err))
+		if err := fasthttp.Serve(f.ln, diag.SetTracingSpanContextFromHTTPContext(router.HandleRequest)); err != nil {
+			panic(fmt.Errorf("failed to set tracing span context: %v", err))
 		}
 	}()
 
@@ -1189,8 +1183,8 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
 		handler := pipeline.Apply(router.Handler)
-		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, handler)); err != nil {
-			panic(fmt.Errorf("failed to serve: %v", err))
+		if err := fasthttp.Serve(f.ln, diag.SetTracingSpanContextFromHTTPContext(handler)); err != nil {
+			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
 	}()
 

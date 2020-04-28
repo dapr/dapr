@@ -6,6 +6,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -19,7 +20,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/google/uuid"
@@ -48,6 +50,7 @@ type api struct {
 	id                    string
 	extendedMetadata      sync.Map
 	readyStatus           bool
+	tracingSpec           config.TracingSpec
 }
 
 type metadata struct {
@@ -77,7 +80,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, tracingSpec config.TracingSpec) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -88,6 +91,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 		publishFn:             publishFn,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		id:                    appID,
+		tracingSpec:           tracingSpec,
 	}
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
@@ -271,24 +275,32 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) onOutputBindingMessage(ctx *fasthttp.RequestCtx) {
-	name := ctx.UserValue(nameParam).(string)
-	body := ctx.PostBody()
+func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
+	name := reqCtx.UserValue(nameParam).(string)
+	body := reqCtx.PostBody()
 
 	var req OutputBindingRequest
 	err := a.json.Unmarshal(body, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request: %s", err))
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 		return
 	}
 
 	b, err := a.json.Marshal(req.Data)
 	if err != nil {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request data field: %s", err))
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 		return
 	}
+
+	spanName := fmt.Sprintf("OutputBindingMessage: %s", name)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	ctx, span := diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
+	defer span.End()
+
 	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
 		Metadata: req.Metadata,
 		Data:     b,
@@ -296,29 +308,36 @@ func (a *api) onOutputBindingMessage(ctx *fasthttp.RequestCtx) {
 	if err != nil {
 		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", errMsg)
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 		return
 	}
-	respondEmpty(ctx, 200)
+	respondEmpty(reqCtx, 200)
 }
 
-func (a *api) onGetState(ctx *fasthttp.RequestCtx) {
+func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	storeName := ctx.UserValue(storeNameParam).(string)
+	storeName := reqCtx.UserValue(storeNameParam).(string)
 
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(ctx, 401, msg)
+		respondWithError(reqCtx, 401, msg)
 		return
 	}
 
-	key := ctx.UserValue(stateKeyParam).(string)
-	consistency := string(ctx.QueryArgs().Peek(consistencyParam))
+	spanName := fmt.Sprintf("GetState: %s", storeName)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	ctx, span := diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
+	defer span.End()
+
+	key := reqCtx.UserValue(stateKeyParam).(string)
+	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	req := state.GetRequest{
 		Key: a.getModifiedStateKey(key),
 		Options: state.GetStateOption{
@@ -329,14 +348,14 @@ func (a *api) onGetState(ctx *fasthttp.RequestCtx) {
 	resp, err := a.stateStores[storeName].Get(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 		return
 	}
 	if resp == nil || resp.Data == nil {
-		respondEmpty(ctx, 204)
+		respondEmpty(reqCtx, 204)
 		return
 	}
-	respondWithETaggedJSON(ctx, 200, resp.Data, resp.ETag)
+	respondWithETaggedJSON(reqCtx, 200, resp.Data, resp.ETag)
 }
 
 func (a *api) onDeleteState(ctx *fasthttp.RequestCtx) {
@@ -500,45 +519,47 @@ func (a *api) setHeaders(ctx *fasthttp.RequestCtx, metadata map[string]string) {
 	}
 }
 
-func (a *api) onDirectMessage(ctx *fasthttp.RequestCtx) {
-	targetID := ctx.UserValue(idParam).(string)
-	verb := strings.ToUpper(string(ctx.Method()))
-	invokeMethodName := ctx.UserValue(methodParam).(string)
+func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
+	targetID := reqCtx.UserValue(idParam).(string)
+	verb := strings.ToUpper(string(reqCtx.Method()))
+	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 	if invokeMethodName == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", "invalid method name")
-		respondWithError(ctx, fhttp.StatusBadRequest, msg)
+		respondWithError(reqCtx, fhttp.StatusBadRequest, msg)
 		return
 	}
 
 	// Construct internal invoke method request
-	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, ctx.QueryArgs().String())
-	req.WithRawData(ctx.Request.Body(), string(ctx.Request.Header.ContentType()))
+	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
+	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
 	// Save headers to metadata
 	metadata := map[string][]string{}
-	ctx.Request.Header.VisitAll(func(key []byte, value []byte) {
+	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
 		metadata[string(key)] = []string{string(value)}
 	})
 	req.WithMetadata(metadata)
 
-	resp, err := a.directMessaging.Invoke(targetID, req)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	resp, err := a.directMessaging.Invoke(ctx, targetID, req)
 	// err does not represent user application response
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
-		respondWithError(ctx, fhttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, fhttp.StatusInternalServerError, msg)
 		return
 	}
 
 	// TODO: add trace parent and state
-	invokev1.InternalMetadataToHTTPHeader(resp.Headers(), ctx.Response.Header.Set)
+	invokev1.InternalMetadataToHTTPHeader(resp.Headers(), reqCtx.Response.Header.Set)
 	contentType, body := resp.RawData()
-	ctx.Response.Header.SetContentType(contentType)
+	reqCtx.Response.Header.SetContentType(contentType)
 
 	// Construct response
 	statusCode := int(resp.Status().Code)
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
-	respond(ctx, statusCode, body)
+	respond(reqCtx, statusCode, body)
 }
 
 func (a *api) onCreateActorReminder(ctx *fasthttp.RequestCtx) {
@@ -731,17 +752,17 @@ func (a *api) onDeleteActorTimer(ctx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) onDirectActorMessage(ctx *fasthttp.RequestCtx) {
+func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	method := ctx.UserValue(methodParam).(string)
-	body := ctx.PostBody()
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	method := reqCtx.UserValue(methodParam).(string)
+	body := reqCtx.PostBody()
 
 	req := actors.CallRequest{
 		ActorID:   actorID,
@@ -750,19 +771,24 @@ func (a *api) onDirectActorMessage(ctx *fasthttp.RequestCtx) {
 		Metadata:  map[string]string{},
 		Data:      body,
 	}
-	a.setHeaders(ctx, req.Metadata)
+	a.setHeaders(reqCtx, req.Metadata)
 
-	resp, err := a.actor.Call(&req)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	resp, err := a.actor.Call(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
 		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
-		a.setHeadersOnRequest(resp.Metadata, ctx)
-		respondWithJSON(ctx, statusCode, resp.Data)
+		a.setHeadersOnRequest(resp.Metadata, reqCtx)
+		respondWithJSON(reqCtx, statusCode, resp.Data)
 	}
 }
 
+// TODO: setHeadersOnRequest is used by actor service invocation only.
+// We will remove it in 0.8.0
 func (a *api) setHeadersOnRequest(metadata map[string]string, ctx *fasthttp.RequestCtx) {
 	if metadata == nil {
 		return
@@ -929,6 +955,8 @@ func (a *api) onPublish(ctx *fasthttp.RequestCtx) {
 
 	topic := ctx.UserValue(topicParam).(string)
 	body := ctx.PostBody()
+
+	// TODO: Migrate to traceparent and tracestate headers
 	corID := ctx.Request.Header.Peek(tracing.CorrelationID)
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, string(corID), body)
 

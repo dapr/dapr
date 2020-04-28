@@ -17,6 +17,7 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
@@ -28,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -48,7 +50,7 @@ var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
-	Call(req *CallRequest) (*CallResponse, error)
+	Call(ctx context.Context, req *CallRequest) (*CallResponse, error)
 	Init() error
 	GetState(req *GetStateRequest) (*StateResponse, error)
 	SaveState(req *SaveStateRequest) error
@@ -83,6 +85,7 @@ type actorsRuntime struct {
 	evaluationChan      chan bool
 	appHealthy          bool
 	certChain           *dapr_credentials.CertChain
+	tracingSpec         config.TracingSpec
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -100,7 +103,7 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config, certChain *dapr_credentials.CertChain) Actors {
+func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config, certChain *dapr_credentials.CertChain, tracingSpec config.TracingSpec) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -119,6 +122,7 @@ func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnec
 		evaluationChan:      make(chan bool),
 		appHealthy:          true,
 		certChain:           certChain,
+		tracingSpec:         tracingSpec,
 	}
 }
 
@@ -170,7 +174,9 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	req.WithHTTPExtension(nethttp.MethodDelete, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 
-	resp, err := a.appChannel.InvokeMethod(req)
+	// TODO Propagate context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
@@ -221,7 +227,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 	}()
 }
 
-func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
+func (a *actorsRuntime) Call(ctx context.Context, req *CallRequest) (*CallResponse, error) {
 	targetActorAddress, appID := a.lookupActorAddress(req.ActorType, req.ActorID)
 	if targetActorAddress == "" {
 		return nil, fmt.Errorf("error finding address for actor type %s with id %s", req.ActorType, req.ActorID)
@@ -235,9 +241,9 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callLocalActor(ctx, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	} else {
-		resp, err = a.callRemoteActorWithRetry(callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, appID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callRemoteActorWithRetry(ctx, callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, appID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
 	}
 
 	if err != nil {
@@ -247,10 +253,10 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 }
 
 // callRemoteActorWithRetry will call a remote actor for the specified number of retries and will only retry in the case of transient failures
-func (a *actorsRuntime) callRemoteActorWithRetry(numRetries int, fn func(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error),
+func (a *actorsRuntime) callRemoteActorWithRetry(ctx context.Context, numRetries int, fn func(ctx context.Context, targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error),
 	targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(targetAddress, targetID, actorType, actorID, actorMethod, data, metadata)
+		resp, err := fn(ctx, targetAddress, targetID, actorType, actorID, actorMethod, data, metadata)
 		if err == nil {
 			return resp, nil
 		}
@@ -268,7 +274,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(numRetries int, fn func(targetA
 	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
 }
 
-func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
+func (a *actorsRuntime) callLocalActor(ctx context.Context, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	key := a.constructCompositeKey(actorType, actorID)
 
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
@@ -310,7 +316,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	}
 	req.WithMetadata(md)
 
-	resp, err := a.appChannel.InvokeMethod(req)
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
 	if act.busy {
 		act.busy = false
@@ -343,7 +349,7 @@ func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, d
 	return rsp, nil
 }
 
-func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
+func (a *actorsRuntime) callRemoteActor(ctx context.Context, targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
 	req := internalv1pb.CallActorRequest{
 		ActorType: actorType,
 		ActorId:   actorID,
@@ -361,8 +367,17 @@ func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, acto
 		return nil, err
 	}
 
+	// ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
+	// defer cancel()
+
+	var span *trace.Span
+	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, req.Method, a.tracingSpec)
+	defer span.End()
+
+	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 	client := internalv1pb.NewDaprInternalClient(conn)
-	resp, err := client.CallActor(context.Background(), &req)
+	resp, err := client.CallActor(ctx, &req)
+	diag.UpdateSpanPairStatusesFromError(span, err, req.Method)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +394,9 @@ func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 
-	resp, err := a.appChannel.InvokeMethod(req)
+	// TODO Propagate context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -919,7 +936,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	}
 
 	log.Debugf("executing reminder %s for actor type %s with id %s", reminder, actorType, actorID)
-	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b, nil)
+	_, err = a.callLocalActor(context.Background(), actorType, actorID, fmt.Sprintf("remind/%s", reminder), b, nil)
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
 		a.updateReminderTrack(key, reminder)
@@ -1095,7 +1112,7 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	}
 
 	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
-	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b, nil)
+	_, err = a.callLocalActor(context.Background(), actorType, actorID, fmt.Sprintf("timer/%s", name), b, nil)
 	if err != nil {
 		log.Debugf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
 	}

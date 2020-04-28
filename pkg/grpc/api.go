@@ -17,7 +17,8 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -28,6 +29,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -67,6 +69,7 @@ type api struct {
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
+	tracingSpec           config.TracingSpec
 }
 
 // NewAPI returns a new gRPC API
@@ -77,7 +80,8 @@ func NewAPI(
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error,
+	tracingSpec config.TracingSpec) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -87,6 +91,7 @@ func NewAPI(
 		stateStores:           stateStores,
 		secretStores:          secretStores,
 		sendToOutputBindingFn: sendToOutputBindingFn,
+		tracingSpec:           tracingSpec,
 	}
 }
 
@@ -95,11 +100,20 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if a.appChannel == nil {
 		return nil, status.Error(codes.Internal, "app channel is not initialized")
 	}
+
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, in.Method, a.tracingSpec)
+	defer span.End()
+
+	ctx = diag.NewContext(ctx, span.SpanContext())
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
-	resp, err := a.appChannel.InvokeMethod(req)
+
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
+
+	diag.UpdateSpanPairStatusesFromError(span, err, in.Method)
+
 	return resp.Proto(), err
 }
 
@@ -113,7 +127,10 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) 
 		Metadata:  in.Metadata,
 	}
 
-	resp, err := a.actor.Call(&req)
+	sc := diag.GetSpanContextFromGRPC(ctx)
+	ctx = diag.NewContext(ctx, sc)
+
+	resp, err := a.actor.Call(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +153,7 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 		body = in.Data.Value
 	}
 
-	corID, ok := ctx.Value(tracing.CorrelationID).(string)
+	corID, ok := ctx.Value(diag.CorrelationID).(string)
 	if !ok {
 		corID = ""
 	}
@@ -164,8 +181,9 @@ func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceReque
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
 	}
-
-	resp, err := a.directMessaging.Invoke(in.Id, req)
+	sc := diag.GetSpanContextFromGRPC(ctx)
+	ctx = diag.NewContext(ctx, sc)
+	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +234,10 @@ func (a *api) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*dap
 			Consistency: in.Consistency,
 		},
 	}
+
+	var span *trace.Span
+	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "GetState", a.tracingSpec)
+	defer span.End()
 
 	getResponse, err := a.stateStores[storeName].Get(&req)
 	if err != nil {
