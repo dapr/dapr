@@ -14,7 +14,6 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -26,6 +25,7 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"go.opencensus.io/trace"
 	grpc_go "google.golang.org/grpc"
 )
 
@@ -35,11 +35,16 @@ type mockGRPCAPI struct {
 }
 
 func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	return &internalv1pb.InternalInvokeResponse{}, nil
+	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
+	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
+	return resp.Proto(), nil
 }
 
 func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) (*internalv1pb.CallActorResponse, error) {
-	return &internalv1pb.CallActorResponse{}, nil
+	return &internalv1pb.CallActorResponse{
+		Data:     &any.Any{Value: ExtractSpanContext(ctx)},
+		Metadata: nil,
+	}, nil
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
@@ -70,6 +75,16 @@ func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvel
 	return &daprv1pb.GetSecretResponseEnvelope{}, nil
 }
 
+func ExtractSpanContext(ctx context.Context) []byte {
+	sc, _ := ctx.Value(diag.DaprTraceContextKey{}).(trace.SpanContext)
+	return []byte(SerializeSpanContext(sc))
+}
+
+// SerializeSpanContext serializes a span context into a simple string
+func SerializeSpanContext(ctx trace.SpanContext) string {
+	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
+}
+
 func configureTestTraceExporter(meta exporters.Metadata) {
 	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
 	exporter.Init("fakeID", "fakeAddress", meta)
@@ -86,11 +101,9 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 		},
 	})
 
-	// sampling is always turn on for testing
-	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.TracingGRPCMiddlewareStream(spec))),
-		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.TracingGRPCMiddlewareUnary(spec))),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.SetTracingSpanContextGRPCMiddlewareStream())),
+		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.SetTracingSpanContextGRPCMiddlewareUnary())),
 	)
 
 	go func() {
@@ -136,7 +149,7 @@ func createTestClient(port int) *grpc_go.ClientConn {
 func TestCallActorWithTracing(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	server, buffer := startTestServerWithTracing(port)
+	server, _ := startTestServerWithTracing(port)
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -149,15 +162,15 @@ func TestCallActorWithTracing(t *testing.T) {
 		Method:    "what",
 	}
 
-	_, err := client.CallActor(context.Background(), request)
+	resp, err := client.CallActor(context.Background(), request)
 	assert.NoError(t, err)
-	assert.Equal(t, "0", *buffer, "failed to generate proper traces with actor call")
+	assert.NotEmpty(t, resp.Data, "failed to generate trace context with actor call")
 }
 
 func TestCallRemoteAppWithTracing(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	server, buffer := startTestServerWithTracing(port)
+	server, _ := startTestServerWithTracing(port)
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -166,9 +179,9 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	client := internalv1pb.NewDaprInternalClient(clientConn)
 	request := invokev1.NewInvokeMethodRequest("method").Proto()
 
-	_, err := client.CallLocal(context.Background(), request)
+	resp, err := client.CallLocal(context.Background(), request)
 	assert.NoError(t, err)
-	assert.Equal(t, "0", *buffer, "failed to generate proper traces with app call")
+	assert.NotEmpty(t, resp, "failed to generate trace context with app call")
 }
 
 func TestSaveState(t *testing.T) {

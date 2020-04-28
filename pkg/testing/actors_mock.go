@@ -8,6 +8,8 @@
 package testing
 
 import (
+	"context"
+
 	actors "github.com/dapr/dapr/pkg/actors"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -18,7 +20,7 @@ type MockActors struct {
 }
 
 // Call provides a mock function with given fields: req
-func (_m *MockActors) Call(req *actors.CallRequest) (*actors.CallResponse, error) {
+func (_m *MockActors) Call(ctx context.Context, req *actors.CallRequest) (*actors.CallResponse, error) {
 	ret := _m.Called(req)
 
 	var r0 *actors.CallResponse

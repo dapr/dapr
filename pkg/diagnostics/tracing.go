@@ -7,47 +7,57 @@ package diagnostics
 
 import (
 	"context"
-	"encoding/hex"
+	crand "crypto/rand"
+	"encoding/binary"
 	"fmt"
-	"strconv"
+	"math/rand"
 	"strings"
+	"sync"
+	"sync/atomic"
+
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
 )
 
-type key string
+type DaprTraceContextKey struct{}
 
 const (
-	// CorrelationID is the header key name of correlation id for trace
-	CorrelationID        = "X-Correlation-ID"
-	correlationKey   key = CorrelationID
-	daprHeaderPrefix     = "dapr-"
+	daprHeaderPrefix = "dapr-"
 )
 
-// TracerSpan defines a tracing span that a tracer users to keep track of call scopes
-type TracerSpan struct {
-	Context     context.Context
-	Span        *trace.Span
-	SpanContext *trace.SpanContext
+// NewContext returns a new context with the given SpanContext attached.
+func NewContext(ctx context.Context, spanContext trace.SpanContext) context.Context {
+	return context.WithValue(ctx, DaprTraceContextKey{}, spanContext)
 }
 
-// SerializeSpanContext serializes a span context into a simple string
-func SerializeSpanContext(ctx trace.SpanContext) string {
-	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
+// FromContext returns the SpanContext stored in a context, or nil if there isn't one.
+func FromContext(ctx context.Context) trace.SpanContext {
+	sc, _ := ctx.Value(DaprTraceContextKey{}).(trace.SpanContext)
+	return sc
 }
 
-// DeserializeSpanContext deserializes a span context from a string
-func DeserializeSpanContext(ctx string) trace.SpanContext {
-	parts := strings.Split(ctx, ";")
-	spanID, _ := hex.DecodeString(parts[0])
-	traceID, _ := hex.DecodeString(parts[1])
-	traceOptions, _ := strconv.ParseUint(parts[2], 10, 32)
-	ret := trace.SpanContext{}
-	copy(ret.SpanID[:], spanID)
-	copy(ret.TraceID[:], traceID)
-	ret.TraceOptions = trace.TraceOptions(traceOptions)
-	return ret
+func startTracingSpanInternal(ctx context.Context, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {
+	var span *trace.Span
+	name := createSpanName(uri)
+
+	rate := diag_utils.GetTraceSamplingRate(samplingRate)
+
+	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
+	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
+	kindOption := trace.WithSpanKind(spanKind)
+
+	sc := FromContext(ctx)
+
+	if (sc != trace.SpanContext{}) {
+		// Note that if parent span context is provided which is sc in this case then ctx will be ignored
+		ctx, span = trace.StartSpanWithRemoteParent(ctx, name, sc, kindOption, probSamplerOption)
+	} else {
+		ctx, span = trace.StartSpan(ctx, name, kindOption, probSamplerOption)
+	}
+
+	return ctx, span
 }
 
 func projectStatusCode(code int) int32 {
@@ -98,24 +108,75 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 }
 
 // UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
-func UpdateSpanPairStatusesFromError(span, spanc TracerSpan, err error, method string) {
+func UpdateSpanPairStatusesFromError(span *trace.Span, err error, method string) {
 	if err != nil {
-		spanc.Span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeInternal,
-			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
-		})
-		span.Span.SetStatus(trace.Status{
+		span.SetStatus(trace.Status{
 			Code:    trace.StatusCodeInternal,
 			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
 		})
 	} else {
-		spanc.Span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeOK,
-			Message: fmt.Sprintf("method %s succeeded", method),
-		})
-		span.Span.SetStatus(trace.Status{
+		span.SetStatus(trace.Status{
 			Code:    trace.StatusCodeOK,
 			Message: fmt.Sprintf("method %s succeeded", method),
 		})
 	}
+}
+
+var tracingConfig atomic.Value // access atomically
+
+func init() {
+	gen := &traceIDGenerator{}
+	// initialize traceID and spanID generators.
+	var rngSeed int64
+	for _, p := range []interface{}{
+		&rngSeed, &gen.traceIDAdd, &gen.nextSpanID, &gen.spanIDInc,
+	} {
+		binary.Read(crand.Reader, binary.LittleEndian, p)
+	}
+	gen.traceIDRand = rand.New(rand.NewSource(rngSeed))
+	gen.spanIDInc |= 1
+
+	tracingConfig.Store(gen)
+}
+
+type traceIDGenerator struct {
+	sync.Mutex
+
+	// Please keep these as the first fields
+	// so that these 8 byte fields will be aligned on addresses
+	// divisible by 8, on both 32-bit and 64-bit machines when
+	// performing atomic increments and accesses.
+	// See:
+	// * https://github.com/census-instrumentation/opencensus-go/issues/587
+	// * https://github.com/census-instrumentation/opencensus-go/issues/865
+	// * https://golang.org/pkg/sync/atomic/#pkg-note-BUG
+	nextSpanID uint64
+	spanIDInc  uint64
+
+	traceIDAdd  [2]uint64
+	traceIDRand *rand.Rand
+}
+
+// NewSpanID returns a non-zero span ID from a randomly-chosen sequence.
+func (gen *traceIDGenerator) NewSpanID() [8]byte {
+	var id uint64
+	for id == 0 {
+		id = atomic.AddUint64(&gen.nextSpanID, gen.spanIDInc)
+	}
+	var sid [8]byte
+	binary.LittleEndian.PutUint64(sid[:], id)
+	return sid
+}
+
+// NewTraceID returns a non-zero trace ID from a randomly-chosen sequence.
+// mu should be held while this function is called.
+func (gen *traceIDGenerator) NewTraceID() [16]byte {
+	var tid [16]byte
+	// Construct the trace ID from two outputs of traceIDRand, with a constant
+	// added to each half for additional entropy.
+	gen.Lock()
+	binary.LittleEndian.PutUint64(tid[0:8], gen.traceIDRand.Uint64()+gen.traceIDAdd[0])
+	binary.LittleEndian.PutUint64(tid[8:16], gen.traceIDRand.Uint64()+gen.traceIDAdd[1])
+	gen.Unlock()
+	return tid
 }
