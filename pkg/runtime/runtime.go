@@ -106,7 +106,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 	return &DaprRuntime{
 		runtimeConfig:            runtimeConfig,
 		globalConfig:             globalConfig,
-		grpc:                     grpc.NewGRPCManager(),
+		grpc:                     grpc.NewGRPCManager(runtimeConfig.Mode),
 		json:                     jsoniter.ConfigFastest,
 		inputBindings:            map[string]bindings.InputBinding{},
 		outputBindings:           map[string]bindings.OutputBinding{},
