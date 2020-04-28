@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
 )
@@ -66,7 +68,7 @@ func startTracingSpanInternal(ctx context.Context, uri, samplingRate string, spa
 	var span *trace.Span
 	name := createSpanName(uri)
 
-	rate := trace_utils.GetTraceSamplingRate(samplingRate)
+	rate := diag_utils.GetTraceSamplingRate(samplingRate)
 
 	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
 	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))

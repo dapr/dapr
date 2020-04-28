@@ -129,9 +129,8 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(req.Metadata(), channelReq.Header.Set)
 
-	// TODO: the above setting of req header for correlation is not needed - lines 93-97
 	sc := diag.FromContext(ctx)
-	diag.SpanContextToRequest(sc, req)
+	diag.SpanContextToRequest(sc, channelReq)
 
 	// Set Content body and types
 	contentType, body := req.RawData()

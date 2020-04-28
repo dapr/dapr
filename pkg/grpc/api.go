@@ -101,18 +101,19 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Error(codes.Internal, "app channel is not initialized")
 	}
 
-	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, in.Method, a.tracingSpec)
-	defer span.End()
-
-	ctx = diag.NewContext(ctx, span.SpanContext())
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, req.Message().Method, a.tracingSpec)
+	defer span.End()
+
+	ctx = diag.NewContext(ctx, span.SpanContext())
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
-	diag.UpdateSpanPairStatusesFromError(span, err, in.Method)
+	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
 
 	return resp.Proto(), err
 }

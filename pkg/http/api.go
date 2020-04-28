@@ -957,7 +957,7 @@ func (a *api) onPublish(ctx *fasthttp.RequestCtx) {
 	body := ctx.PostBody()
 
 	// TODO: Migrate to traceparent and tracestate headers
-	corID := ctx.Request.Header.Peek(tracing.CorrelationID)
+	corID := ctx.Request.Header.Peek(diag.CorrelationID)
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, string(corID), body)
 
 	b, err := a.json.Marshal(envelope)

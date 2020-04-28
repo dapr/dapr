@@ -11,6 +11,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	clientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
@@ -72,12 +73,12 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	clientV1 := clientv1pb.NewDaprClientClient(g.client)
 
-	// TODO: new context
-	sc := tracing.FromContext(ctx)
-	ctx = tracing.AppendToOutgoingGRPCContext(ctx, sc)
+	sc := diag.FromContext(ctx)
 
 	ctx, cancel := context.WithTimeout(context.Background(), channel.DefaultChannelRequestTimeout)
 	defer cancel()
+
+	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
 
 	// Prepare gRPC Metadata
 	ctx = metadata.NewOutgoingContext(ctx, invokev1.InternalMetadataToGrpcMetadata(req.Metadata(), true))
