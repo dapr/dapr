@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 
-package pkg.proto.daprinternal.v1;
+package dapr.proto.daprinternal.v1;
 
 import "google/protobuf/any.proto";
 

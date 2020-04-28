@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 
-package pkg.proto.common.v1;
+package dapr.proto.common.v1;
 
 import "google/protobuf/any.proto";
 
@@ -82,4 +82,3 @@ message InvokeResponse {
   // This field is required.
   google.protobuf.Any data = 1;
 }
-

@@ -5,12 +5,12 @@
 
 syntax = "proto3";
 
-package pkg.proto.dapr.v1;
+package dapr.proto.dapr.v1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
-import "pkg/proto/common/v1/common.proto";
+import "dapr/proto/common/v1/common.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -20,7 +20,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/dapr/v1";
 // Dapr service provides APIs to user application to access Dapr building blocks.
 service Dapr {
   rpc PublishEvent(PublishEventEnvelope) returns (google.protobuf.Empty) {}
-  rpc InvokeService(InvokeServiceRequest) returns (pkg.proto.common.v1.InvokeResponse) {}
+  rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
   rpc InvokeBinding(InvokeBindingEnvelope) returns (google.protobuf.Empty) {}
   rpc GetState(GetStateEnvelope) returns (GetStateResponseEnvelope) {}
   rpc GetSecret(GetSecretEnvelope) returns (GetSecretResponseEnvelope) {}
@@ -38,7 +38,7 @@ message InvokeServiceRequest {
   // message which will be delivered to callee.
   // 
   // This field is required.
-  pkg.proto.common.v1.InvokeRequest message = 3;
+  common.v1.InvokeRequest message = 3;
 }
 
 message DeleteStateEnvelope {

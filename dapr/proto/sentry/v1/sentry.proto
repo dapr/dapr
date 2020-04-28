@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 
-package pkg.proto.sentry.v1;
+package dapr.proto.sentry.v1;
 
 import "google/protobuf/timestamp.proto";
 

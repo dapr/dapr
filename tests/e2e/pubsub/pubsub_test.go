@@ -16,20 +16,21 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
-	
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
 )
 
-const numHealthChecks = 60      // Number of get calls before starting tests.
+const numHealthChecks = 60 // Number of get calls before starting tests.
 
 // used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
 // This is random so the first message name is not the same every time.
-const randomOffsetMax = 99     
+const randomOffsetMax = 99
 const numberOfMessagesToPublish = 100
 
 var tr *runner.TestRunner
@@ -82,7 +83,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 		sentMessages = append(sentMessages, commandBody.Data)
 		jsonValue, err := json.Marshal(commandBody)
 		require.NoError(t, err)
-	
+
 		// this is the publish app's endpoint, not a dapr endpoint
 		url := fmt.Sprintf("http://%s/tests/publish", publisherExternalURL)
 
@@ -120,7 +121,7 @@ func sendToPublishApp(t *testing.T, publisherExternalURL string) receivedMessage
 		ReceivedByTopicB: sentTopicBMessages}
 }
 
-func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {	
+func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {
 	// this is the publish app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/get", subscriberExternalURL)
 	log.Printf("Publishing using url %s", url)
@@ -133,14 +134,20 @@ func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL st
 	require.NoError(t, err)
 
 	log.Printf("subscriber receieved %d messages on pubsub-a-topic and %d on pubsub-b-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB))
-	require.True(t, reflect.DeepEqual(sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA))
+
+	// Sort messages first because the delivered messages cannot be ordered.
+	sort.Strings(sentMessages.ReceivedByTopicA)
+	sort.Strings(appResp.ReceivedByTopicA)
+	sort.Strings(sentMessages.ReceivedByTopicB)
+	sort.Strings(appResp.ReceivedByTopicB)
+
 	if !reflect.DeepEqual(sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA) {
 		for i := 0; i < len(sentMessages.ReceivedByTopicA); i++ {
 			log.Printf("%s, %s", sentMessages.ReceivedByTopicA[i], appResp.ReceivedByTopicA[i])
 		}
 	}
-
-	require.True(t, reflect.DeepEqual(sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB))
+	require.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA)
+	require.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB)
 }
 
 func TestMain(m *testing.M) {
@@ -170,7 +177,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestPubSub(t *testing.T) {	
+func TestPubSub(t *testing.T) {
 	t.Log("Enter TestPubSub")
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
@@ -185,7 +192,7 @@ func TestPubSub(t *testing.T) {
 
 	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
 	require.NoError(t, err)
-	
+
 	t.Run("pubsubtest1", func(t *testing.T) {
 		sentMessages := sendToPublishApp(t, publisherExternalURL)
 

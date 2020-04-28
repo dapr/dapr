@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 
-package pkg.proto.placement.v1;
+package dapr.proto.placement.v1;
 
 option go_package = "github.com/dapr/dapr/pkg/proto/placement/v1";
 

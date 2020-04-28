@@ -6,27 +6,109 @@
 package diagnostics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 )
 
-func TestTraceSpanFromFastHTTPRequest(t *testing.T) {
+func TestStartClientSpanTracing(t *testing.T) {
 	req := getTestHTTPRequest()
 	spec := config.TracingSpec{SamplingRate: "0.5"}
 
-	TraceSpanFromFastHTTPRequest(req, spec)
+	StartTracingClientSpanFromHTTPContext(context.Background(), req, "test", spec)
 }
 
-func TestTraceSpanFromFastHTTPContext(t *testing.T) {
-	req := getTestHTTPRequest()
-	spec := config.TracingSpec{SamplingRate: "0.5"}
-	ctx := &fasthttp.RequestCtx{}
-	req.CopyTo(&ctx.Request)
+func TestTracingClientSpanFromHTTPContext(t *testing.T) {
+	reqCtx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
+	sc := GetSpanContextFromRequestContext(reqCtx)
+	ctx := NewContext((context.Context)(reqCtx), sc)
+	StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, "spanName", config.TracingSpec{SamplingRate: "1"})
+}
 
-	TraceSpanFromFastHTTPContext(ctx, spec)
+func TestSpanContextFromRequest(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		wantSc trace.SpanContext
+		wantOk bool
+	}{
+		{
+			name:   "future version",
+			header: "02-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+			wantSc: trace.SpanContext{
+				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceOptions: trace.TraceOptions(1),
+			},
+			wantOk: true,
+		},
+		{
+			name:   "zero trace ID and span ID",
+			header: "00-00000000000000000000000000000000-0000000000000000-01",
+			wantSc: trace.SpanContext{},
+			wantOk: false,
+		},
+		{
+			name:   "valid header",
+			header: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+			wantSc: trace.SpanContext{
+				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceOptions: trace.TraceOptions(1),
+			},
+			wantOk: true,
+		},
+		{
+			name:   "missing options",
+			header: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
+			wantSc: trace.SpanContext{},
+			wantOk: false,
+		},
+		{
+			name:   "empty options",
+			header: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-",
+			wantSc: trace.SpanContext{},
+			wantOk: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &fasthttp.Request{}
+			req.Header.Add("traceparent", tt.header)
+
+			gotSc, _ := SpanContextFromRequest(req)
+			assert.Equalf(t, gotSc, tt.wantSc, "SpanContextFromRequest gotSc = %v, want %v", gotSc, tt.wantSc)
+		})
+	}
+}
+
+func TestSpanContextToRequest(t *testing.T) {
+	tests := []struct {
+		sc trace.SpanContext
+	}{
+		{
+			sc: trace.SpanContext{
+				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceOptions: trace.TraceOptions(1),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run("SpanContextToRequest", func(t *testing.T) {
+			req := &fasthttp.Request{}
+			SpanContextToRequest(tt.sc, req)
+
+			got, _ := SpanContextFromRequest(req)
+
+			assert.Equalf(t, got, tt.sc, "SpanContextToRequest() got = %v, want %v", got, tt.sc)
+		})
+	}
 }
 
 func getTestHTTPRequest() *fasthttp.Request {
@@ -46,8 +128,6 @@ func getTestHTTPRequest() *fasthttp.Request {
 		TraceOptions: 0x0,
 	}
 
-	corID := SerializeSpanContext(sc)
-	req.Header.Set(CorrelationID, corID)
-
+	SpanContextToRequest(sc, req)
 	return req
 }

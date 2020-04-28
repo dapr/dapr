@@ -7,70 +7,140 @@ package diagnostics
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
+	"net/textproto"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/tracestate"
 )
 
-// TraceSpanFromFastHTTPRequest creates a tracing span from a fasthttp request
-func TraceSpanFromFastHTTPRequest(r *fasthttp.Request, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	uri := string(r.Header.RequestURI())
-	return getTraceSpan(r, uri, spec)
-}
+// We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
+// Reference : https://github.com/census-instrumentation/opencensus-go/blob/master/plugin/ochttp/propagation/tracecontext/propagation.go
+const (
+	supportedVersion  = 0
+	maxVersion        = 254
+	maxTracestateLen  = 512
+	traceparentHeader = "traceparent"
+	tracestateHeader  = "tracestate"
+	trimOWSRegexFmt   = `^[\x09\x20]*(.*[^\x20\x09])[\x09\x20]*$`
+)
 
-// TraceSpanFromFastHTTPContext creates a tracing span from a fasthttp request context
-func TraceSpanFromFastHTTPContext(c *fasthttp.RequestCtx, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	uri := string(c.Path())
-	return getTraceSpan(&c.Request, uri, spec)
-}
+var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
-// TracingHTTPMiddleware plugs tracer into fasthttp pipeline
-func TracingHTTPMiddleware(spec config.TracingSpec, next fasthttp.RequestHandler) fasthttp.RequestHandler {
+// SetTracingSpanContextFromHTTPContext sets the trace SpanContext in the request context
+func SetTracingSpanContextFromHTTPContext(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		span, spanc := TraceSpanFromFastHTTPContext(ctx, spec)
-		defer span.Span.End()
-		defer spanc.Span.End()
-		ctx.Request.Header.Set(CorrelationID, SerializeSpanContext(*spanc.SpanContext))
+		sc := GetSpanContextFromRequestContext(ctx)
+		SpanContextToRequest(sc, &ctx.Request)
 		next(ctx)
-		UpdateSpanPairStatusesFromHTTPResponse(span, spanc, &ctx.Response)
 	}
 }
 
-func getTraceSpan(r *fasthttp.Request, uri string, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	var ctx context.Context
+// StartTracingClientSpanFromHTTPContext creates a client span before invoking http method call
+func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Request, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
-	var ctxc context.Context
-	var spanc *trace.Span
+	ctx, span = startTracingSpanInternal(ctx, method, spec.SamplingRate, trace.SpanKindClient)
 
-	corID := string(r.Header.Peek(CorrelationID))
-	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
+	addAnnotationsToSpan(req, span)
 
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
-	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
-	spanName := createSpanName(uri)
-	if corID != "" {
-		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(context.Background(), uri, spanContext, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	} else {
-		ctx, span = trace.StartSpan(context.Background(), uri, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	}
-
-	addAnnotationsFromHTTPMetadata(r, span)
-
-	context := span.SpanContext()
-	contextc := spanc.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
+	return ctx, span
 }
 
-func addAnnotationsFromHTTPMetadata(req *fasthttp.Request, span *trace.Span) {
+func GetSpanContextFromRequestContext(ctx *fasthttp.RequestCtx) trace.SpanContext {
+	spanContext, ok := SpanContextFromRequest(&ctx.Request)
+
+	gen := tracingConfig.Load().(*traceIDGenerator)
+
+	if !ok {
+		spanContext = trace.SpanContext{}
+		// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
+		spanContext.TraceID = gen.NewTraceID()
+
+		// Default sampling rate is non zero in Dapr, so that means , sampling is enabled by default
+		spanContext.TraceOptions = trace.TraceOptions(1)
+	}
+
+	return spanContext
+}
+
+// SpanContextFromRequest extracts a span context from incoming requests.
+func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok bool) {
+	h, ok := getRequestHeader(req, traceparentHeader)
+	if !ok {
+		return trace.SpanContext{}, false
+	}
+	sections := strings.Split(h, "-")
+	if len(sections) < 4 {
+		return trace.SpanContext{}, false
+	}
+
+	if len(sections[0]) != 2 {
+		return trace.SpanContext{}, false
+	}
+	ver, err := hex.DecodeString(sections[0])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	version := int(ver[0])
+	if version > maxVersion {
+		return trace.SpanContext{}, false
+	}
+
+	if version == 0 && len(sections) != 4 {
+		return trace.SpanContext{}, false
+	}
+
+	if len(sections[1]) != 32 {
+		return trace.SpanContext{}, false
+	}
+	tid, err := hex.DecodeString(sections[1])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	copy(sc.TraceID[:], tid)
+
+	if len(sections[2]) != 16 {
+		return trace.SpanContext{}, false
+	}
+	sid, err := hex.DecodeString(sections[2])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	copy(sc.SpanID[:], sid)
+
+	opts, err := hex.DecodeString(sections[3])
+	if err != nil || len(opts) < 1 {
+		return trace.SpanContext{}, false
+	}
+	sc.TraceOptions = trace.TraceOptions(opts[0])
+
+	// Don't allow all zero trace or span ID.
+	if sc.TraceID == [16]byte{} || sc.SpanID == [8]byte{} {
+		return trace.SpanContext{}, false
+	}
+
+	sc.Tracestate = tracestateFromRequest(req)
+	return sc, true
+}
+
+// SpanContextToRequest modifies the given request to include traceparent and tracestate headers.
+func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
+	h := fmt.Sprintf("%x-%x-%x-%x",
+		[]byte{supportedVersion},
+		sc.TraceID[:],
+		sc.SpanID[:],
+		[]byte{byte(sc.TraceOptions)})
+	req.Header.Set(traceparentHeader, h)
+	tracestateToRequest(sc, req)
+}
+
+func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
 	req.Header.VisitAll(func(key []byte, value []byte) {
 		headerKey := string(key)
 		headerKey = strings.ToLower(headerKey)
@@ -80,14 +150,66 @@ func addAnnotationsFromHTTPMetadata(req *fasthttp.Request, span *trace.Span) {
 	})
 }
 
-// UpdateSpanPairStatusesFromHTTPResponse updates tracer span statuses based on HTTP response
-func UpdateSpanPairStatusesFromHTTPResponse(span, spanc TracerSpan, resp *fasthttp.Response) {
-	spanc.Span.SetStatus(trace.Status{
+// UpdateSpanStatus updates trace span status based on HTTP response
+func UpdateSpanStatus(span *trace.Span, resp *fasthttp.Response) {
+	span.SetStatus(trace.Status{
 		Code:    projectStatusCode(resp.StatusCode()),
 		Message: strconv.Itoa(resp.StatusCode()),
 	})
-	span.Span.SetStatus(trace.Status{
-		Code:    projectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
-	})
+}
+
+func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
+	s := string(req.Header.Peek(textproto.CanonicalMIMEHeaderKey(name)))
+	if s == "" {
+		return "", false
+	}
+
+	return s, true
+}
+
+func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
+	h, _ := getRequestHeader(req, tracestateHeader)
+	if h == "" {
+		return nil
+	}
+
+	entries := make([]tracestate.Entry, 0, len(h))
+	pairs := strings.Split(h, ",")
+	hdrLenWithoutOWS := len(pairs) - 1 // Number of commas
+	for _, pair := range pairs {
+		matches := trimOWSRegExp.FindStringSubmatch(pair)
+		if matches == nil {
+			return nil
+		}
+		pair = matches[1]
+		hdrLenWithoutOWS += len(pair)
+		if hdrLenWithoutOWS > maxTracestateLen {
+			return nil
+		}
+		kv := strings.Split(pair, "=")
+		if len(kv) != 2 {
+			return nil
+		}
+		entries = append(entries, tracestate.Entry{Key: kv[0], Value: kv[1]})
+	}
+	ts, err := tracestate.New(nil, entries...)
+	if err != nil {
+		return nil
+	}
+
+	return ts
+}
+
+func tracestateToRequest(sc trace.SpanContext, req *fasthttp.Request) {
+	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
+	if sc.Tracestate != nil {
+		for _, entry := range sc.Tracestate.Entries() {
+			pairs = append(pairs, strings.Join([]string{entry.Key, entry.Value}, "="))
+		}
+		h := strings.Join(pairs, ",")
+
+		if h != "" && len(h) <= maxTracestateLen {
+			req.Header.Set(tracestateHeader, h)
+		}
+	}
 }

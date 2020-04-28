@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
+	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	"github.com/dapr/components-contrib/pubsub/nats"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
@@ -78,6 +79,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
 	bindings_cosmosdb "github.com/dapr/components-contrib/bindings/azure/cosmosdb"
+	"github.com/dapr/components-contrib/bindings/azure/eventgrid"
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
@@ -90,7 +92,8 @@ import (
 	"github.com/dapr/components-contrib/bindings/mqtt"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
-	"github.com/dapr/components-contrib/bindings/twilio"
+	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
+	"github.com/dapr/components-contrib/bindings/twilio/sms"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware
@@ -200,6 +203,9 @@ func main() {
 			pubsub_loader.New("gcp.pubsub", func() pubs.PubSub {
 				return pubsub_gcp.NewGCPPubSub(logContrib)
 			}),
+			pubsub_loader.New("kafka", func() pubs.PubSub {
+				return pubsub_kafka.NewKafka(logContrib)
+			}),
 		),
 		runtime.WithExporters(
 			exporters_loader.New("zipkin", func() exporters.Exporter {
@@ -250,6 +256,9 @@ func main() {
 			}),
 			bindings_loader.NewInput("kubernetes", func() bindings.InputBinding {
 				return kubernetes.NewKubernetes(logContrib)
+			}),
+			bindings_loader.NewInput("azure.eventgrid", func() bindings.InputBinding {
+				return eventgrid.NewAzureEventGrid(logContrib)
 			}),
 		),
 		runtime.WithOutputBindings(
@@ -308,7 +317,13 @@ func main() {
 				return signalr.NewSignalR(logContrib)
 			}),
 			bindings_loader.NewOutput("twilio.sms", func() bindings.OutputBinding {
-				return twilio.NewSMS(logContrib)
+				return sms.NewSMS(logContrib)
+			}),
+			bindings_loader.NewOutput("twilio.sendgrid", func() bindings.OutputBinding {
+				return sendgrid.NewSendGrid(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
+				return eventgrid.NewAzureEventGrid(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
