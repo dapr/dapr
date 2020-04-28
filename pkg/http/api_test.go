@@ -31,11 +31,13 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
 )
@@ -194,7 +196,15 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeAppID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -214,7 +224,15 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeAppID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -271,7 +289,14 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeAppID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -292,7 +317,14 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeAppID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -948,7 +980,6 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		buffer = ""
 		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -958,14 +989,22 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 		fakeReq.WithMetadata(fakeHeaderMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeDaprID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeDaprID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
+		// TODO Check back as how to assert on generated span ID
+		// assert.NotEmpty(t, resp.JSONBody, "failed to generate trace context with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }
@@ -1037,7 +1076,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
@@ -1046,7 +1085,14 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 		fakeReq.WithMetadata(fakeHeaderMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeDaprID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1102,7 +1148,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
@@ -1111,7 +1157,14 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 		fakeReq.WithMetadata(fakeHeaderMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeDaprID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1164,7 +1217,7 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, diag.SetTracingSpanContextFromHTTPContext(router.HandleRequest)); err != nil {
+		if err := fasthttp.Serve(f.ln, diag.SetTracingSpanContextFromHTTPContext(router.Handler)); err != nil {
 			panic(fmt.Errorf("failed to set tracing span context: %v", err))
 		}
 	}()

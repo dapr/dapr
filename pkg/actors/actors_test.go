@@ -78,6 +78,7 @@ func newTestActorsRuntime() *actorsRuntime {
 	mockAppChannel.On("GetBaseAddress").Return("http://127.0.0.1", nil)
 	mockAppChannel.On(
 		"InvokeMethod",
+		mock.AnythingOfType("*context.emptyCtx"),
 		mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
 
 	store := fakeStore()

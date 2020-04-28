@@ -14,7 +14,6 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -97,8 +96,6 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 		},
 	})
 
-	// sampling is always turn on for testing
-	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc_go.NewServer(
 		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.SetTracingSpanContextGRPCMiddlewareStream())),
 		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.SetTracingSpanContextGRPCMiddlewareUnary())),
@@ -147,7 +144,7 @@ func createTestClient(port int) *grpc_go.ClientConn {
 func TestCallActorWithTracing(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	server, buffer := startTestServerWithTracing(port)
+	server, _ := startTestServerWithTracing(port)
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -160,15 +157,15 @@ func TestCallActorWithTracing(t *testing.T) {
 		Method:    "what",
 	}
 
-	_, err := client.CallActor(context.Background(), request)
+	resp, err := client.CallActor(context.Background(), request)
 	assert.NoError(t, err)
-	assert.Equal(t, "0", *buffer, "failed to generate proper traces with actor call")
+	assert.NotEmpty(t, resp.Data, "failed to generate trace context with actor call")
 }
 
 func TestCallRemoteAppWithTracing(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	server, buffer := startTestServerWithTracing(port)
+	server, _ := startTestServerWithTracing(port)
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
@@ -177,9 +174,9 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	client := internalv1pb.NewDaprInternalClient(clientConn)
 	request := invokev1.NewInvokeMethodRequest("method").Proto()
 
-	_, err := client.CallLocal(context.Background(), request)
+	resp, err := client.CallLocal(context.Background(), request)
 	assert.NoError(t, err)
-	assert.Equal(t, "0", *buffer, "failed to generate proper traces with app call")
+	assert.NotEmpty(t, resp, "failed to generate trace context with app call")
 }
 
 func TestSaveState(t *testing.T) {
