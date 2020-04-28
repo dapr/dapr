@@ -79,6 +79,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
 	bindings_cosmosdb "github.com/dapr/components-contrib/bindings/azure/cosmosdb"
+	"github.com/dapr/components-contrib/bindings/azure/eventgrid"
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
@@ -256,6 +257,9 @@ func main() {
 			bindings_loader.NewInput("kubernetes", func() bindings.InputBinding {
 				return kubernetes.NewKubernetes(logContrib)
 			}),
+			bindings_loader.NewInput("azure.eventgrid", func() bindings.InputBinding {
+				return eventgrid.NewAzureEventGrid(logContrib)
+			}),
 		),
 		runtime.WithOutputBindings(
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
@@ -317,6 +321,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("twilio.sendgrid", func() bindings.OutputBinding {
 				return sendgrid.NewSendGrid(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
+				return eventgrid.NewAzureEventGrid(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
