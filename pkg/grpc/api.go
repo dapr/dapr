@@ -237,7 +237,7 @@ func (a *api) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*dap
 	}
 
 	var span *trace.Span
-	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "GetState", a.tracingSpec)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "GetState", a.tracingSpec)
 	defer span.End()
 
 	getResponse, err := a.stateStores[storeName].Get(&req)

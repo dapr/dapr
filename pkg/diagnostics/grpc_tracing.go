@@ -45,7 +45,7 @@ func SetTracingSpanContextGRPCMiddlewareUnary() grpc.UnaryServerInterceptor {
 	}
 }
 
-// StartTracingServerSpanFromGRPCContext creates a span on recieving an incoming gRPC method call from remote client
+// StartTracingServerSpanFromGRPCContext creates a span on receiving an incoming gRPC method call from remote client
 func StartTracingServerSpanFromGRPCContext(ctx context.Context, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
 	ctx, span = startTracingSpanInternal(ctx, method, spec.SamplingRate, trace.SpanKindServer)

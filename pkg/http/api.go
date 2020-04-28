@@ -28,6 +28,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp"
 	fhttp "github.com/valyala/fasthttp"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 )
 
@@ -294,10 +295,11 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	var span *trace.Span
 	spanName := fmt.Sprintf("OutputBindingMessage: %s", name)
 	sc := diag.GetSpanContextFromRequestContext(reqCtx)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	ctx, span := diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
 	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
 	defer span.End()
 
@@ -329,10 +331,11 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	var span *trace.Span
 	spanName := fmt.Sprintf("GetState: %s", storeName)
 	sc := diag.GetSpanContextFromRequestContext(reqCtx)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	ctx, span := diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
 	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
 	defer span.End()
 

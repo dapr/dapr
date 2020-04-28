@@ -184,7 +184,7 @@ func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
 		return nil
 	}
 
-	var entries []tracestate.Entry
+	entries := make([]tracestate.Entry, 0, len(h))
 	pairs := strings.Split(h, ",")
 	hdrLenWithoutOWS := len(pairs) - 1 // Number of commas
 	for _, pair := range pairs {

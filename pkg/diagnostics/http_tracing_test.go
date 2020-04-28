@@ -15,18 +15,18 @@ import (
 	"go.opencensus.io/trace"
 )
 
-var (
-	tpHeader = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-	traceID  = trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54}
-	spanID   = trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183}
-	traceOpt = trace.TraceOptions(1)
-)
-
 func TestStartClientSpanTracing(t *testing.T) {
 	req := getTestHTTPRequest()
 	spec := config.TracingSpec{SamplingRate: "0.5"}
 
 	StartTracingClientSpanFromHTTPContext(context.Background(), req, "test", spec)
+}
+
+func TestTracingClientSpanFromHTTPContext(t *testing.T) {
+	reqCtx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
+	sc := GetSpanContextFromRequestContext(reqCtx)
+	ctx := NewContext((context.Context)(reqCtx), sc)
+	StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, "spanName", config.TracingSpec{SamplingRate: "1"})
 }
 
 func TestSpanContextFromRequest(t *testing.T) {
