@@ -100,7 +100,10 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 	resp, err := a.appChannel.InvokeMethod(req)
-	return resp.Proto(), err
+	if err != nil {
+		return nil, err
+	}
+	return resp.Proto(), nil
 }
 
 // CallActor invokes a virtual actor
