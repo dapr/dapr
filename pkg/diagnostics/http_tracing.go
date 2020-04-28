@@ -20,6 +20,8 @@ import (
 	"go.opencensus.io/trace/tracestate"
 )
 
+// We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
+// Reference : https://github.com/census-instrumentation/opencensus-go/blob/master/plugin/ochttp/propagation/tracecontext/propagation.go
 const (
 	supportedVersion  = 0
 	maxVersion        = 254
@@ -30,8 +32,6 @@ const (
 )
 
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
-
-type httpContextKey struct{}
 
 // SetTracingSpanContextFromHTTPContext sets the trace SpanContext in the request context
 func SetTracingSpanContextFromHTTPContext(next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -156,17 +156,6 @@ func UpdateSpanStatus(span *trace.Span, resp *fasthttp.Response) {
 		Code:    projectStatusCode(resp.StatusCode()),
 		Message: strconv.Itoa(resp.StatusCode()),
 	})
-}
-
-// FromRequestContext returns the SpanContext stored in a context, or empty if there isn't one.
-func FromRequestContext(ctx context.Context) trace.SpanContext {
-	s, _ := ctx.Value(httpContextKey{}).(string)
-	return DeserializeSpanContext(s)
-}
-
-// NewRequestContext returns a new context with the given SpanContext attached in serialized value
-func NewRequestContext(parent context.Context, spanContext trace.SpanContext) context.Context {
-	return context.WithValue(parent, httpContextKey{}, SerializeSpanContext(spanContext))
 }
 
 func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {

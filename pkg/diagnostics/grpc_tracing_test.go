@@ -7,11 +7,11 @@ package diagnostics
 
 import (
 	"context"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
 )
@@ -32,15 +32,9 @@ func TestWithGRPCSpanContext(t *testing.T) {
 		SpanID:       trace.SpanID{0, 0, 0, 0, 0, 0, 0, 0},
 		TraceOptions: trace.TraceOptions(1),
 	}
-	wantOk := true
 	ctx = AppendToOutgoingGRPCContext(ctx, wantSc)
 
-	gotSc, gotOk := FromOutgoingGRPCContext(ctx)
+	gotSc, _ := FromOutgoingGRPCContext(ctx)
 
-	if !reflect.DeepEqual(gotSc, wantSc) {
-		t.Errorf("WithGRPCSpanContext gotSc = %v, want %v", gotSc, wantSc)
-	}
-	if gotOk != wantOk {
-		t.Errorf("WithGRPCSpanContext gotOk = %v, want %v", gotOk, wantSc)
-	}
+	assert.Equalf(t, gotSc, wantSc, "WithGRPCSpanContext gotSc = %v, want %v", gotSc, wantSc)
 }

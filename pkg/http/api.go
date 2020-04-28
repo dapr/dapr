@@ -361,29 +361,29 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	respondWithETaggedJSON(reqCtx, 200, resp.Data, resp.ETag)
 }
 
-func (a *api) onDeleteState(ctx *fasthttp.RequestCtx) {
+func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	storeName := ctx.UserValue(storeNameParam).(string)
+	storeName := reqCtx.UserValue(storeNameParam).(string)
 
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(ctx, 401, msg)
+		respondWithError(reqCtx, 401, msg)
 		return
 	}
 
-	key := ctx.UserValue(stateKeyParam).(string)
-	etag := string(ctx.Request.Header.Peek("If-Match"))
+	key := reqCtx.UserValue(stateKeyParam).(string)
+	etag := string(reqCtx.Request.Header.Peek("If-Match"))
 
-	concurrency := string(ctx.QueryArgs().Peek(concurrencyParam))
-	consistency := string(ctx.QueryArgs().Peek(consistencyParam))
-	retryInterval := string(ctx.QueryArgs().Peek(retryIntervalParam))
-	retryPattern := string(ctx.QueryArgs().Peek(retryPatternParam))
-	retryThredhold := string(ctx.QueryArgs().Peek(retryThresholdParam))
+	concurrency := string(reqCtx.QueryArgs().Peek(concurrencyParam))
+	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
+	retryInterval := string(reqCtx.QueryArgs().Peek(retryIntervalParam))
+	retryPattern := string(reqCtx.QueryArgs().Peek(retryPatternParam))
+	retryThredhold := string(reqCtx.QueryArgs().Peek(retryThresholdParam))
 	iRetryInterval := 0
 	iRetryThreshold := 0
 
@@ -408,33 +408,41 @@ func (a *api) onDeleteState(ctx *fasthttp.RequestCtx) {
 		},
 	}
 
+	var span *trace.Span
+	spanName := fmt.Sprintf("DeleteState: %s", storeName)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
+	defer span.End()
+
 	err := a.stateStores[storeName].Delete(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 		return
 	}
-	respondEmpty(ctx, 200)
+	respondEmpty(reqCtx, 200)
 }
 
-func (a *api) onGetSecret(ctx *fasthttp.RequestCtx) {
+func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_CONFIGURED", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	secretStoreName := ctx.UserValue(secretStoreNameParam).(string)
+	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
 
 	if a.secretStores[secretStoreName] == nil {
 		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf("secret store name: %s", secretStoreName))
-		respondWithError(ctx, 401, msg)
+		respondWithError(reqCtx, 401, msg)
 		return
 	}
 
 	metadata := map[string]string{}
 	const metadataPrefix string = "metadata."
-	ctx.QueryArgs().VisitAll(func(key []byte, value []byte) {
+	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
 		queryKey := string(key)
 		if strings.HasPrefix(queryKey, metadataPrefix) {
 			k := strings.TrimPrefix(queryKey, metadataPrefix)
@@ -442,48 +450,56 @@ func (a *api) onGetSecret(ctx *fasthttp.RequestCtx) {
 		}
 	})
 
-	key := ctx.UserValue(secretNameParam).(string)
+	key := reqCtx.UserValue(secretNameParam).(string)
 	req := secretstores.GetSecretRequest{
 		Name:     key,
 		Metadata: metadata,
 	}
 
+	var span *trace.Span
+	spanName := fmt.Sprintf("GetSecret: %s", secretStoreName)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
+	defer span.End()
+
 	resp, err := a.secretStores[secretStoreName].GetSecret(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 		return
 	}
 
 	if resp.Data == nil {
-		respondEmpty(ctx, 204)
+		respondEmpty(reqCtx, 204)
 		return
 	}
 
 	respBytes, _ := a.json.Marshal(resp.Data)
-	respondWithJSON(ctx, 200, respBytes)
+	respondWithJSON(reqCtx, 200, respBytes)
 }
 
-func (a *api) onPostState(ctx *fasthttp.RequestCtx) {
+func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	storeName := ctx.UserValue(storeNameParam).(string)
+	storeName := reqCtx.UserValue(storeNameParam).(string)
 
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(ctx, 401, msg)
+		respondWithError(reqCtx, 401, msg)
 		return
 	}
 
 	reqs := []state.SetRequest{}
-	err := a.json.Unmarshal(ctx.PostBody(), &reqs)
+	err := a.json.Unmarshal(reqCtx.PostBody(), &reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(ctx, 402, msg)
+		respondWithError(reqCtx, 402, msg)
 		return
 	}
 
@@ -491,14 +507,22 @@ func (a *api) onPostState(ctx *fasthttp.RequestCtx) {
 		reqs[i].Key = a.getModifiedStateKey(r.Key)
 	}
 
+	var span *trace.Span
+	spanName := fmt.Sprintf("SaveState: %s", storeName)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
+	defer span.End()
+
 	err = a.stateStores[storeName].BulkSet(reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_SAVE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 		return
 	}
 
-	respondEmpty(ctx, 201)
+	respondEmpty(reqCtx, 201)
 }
 
 func (a *api) getModifiedStateKey(key string) string {
@@ -949,24 +973,25 @@ func (a *api) onPutMetadata(ctx *fasthttp.RequestCtx) {
 	respondEmpty(ctx, 200)
 }
 
-func (a *api) onPublish(ctx *fasthttp.RequestCtx) {
+func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	if a.publishFn == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	topic := ctx.UserValue(topicParam).(string)
-	body := ctx.PostBody()
+	topic := reqCtx.UserValue(topicParam).(string)
+	body := reqCtx.PostBody()
 
-	// TODO: Migrate to traceparent and tracestate headers
-	corID := ctx.Request.Header.Peek(diag.CorrelationID)
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, string(corID), body)
+	// TODO : Remove passing corID in NewCloudEventsEnvelope through arguments as it can be passed through context
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	corID := sc.TraceID.String()
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 		return
 	}
 
@@ -974,12 +999,20 @@ func (a *api) onPublish(ctx *fasthttp.RequestCtx) {
 		Topic: topic,
 		Data:  b,
 	}
+
+	var span *trace.Span
+	spanName := fmt.Sprintf("PublishEvent: %s", topic)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
+	defer span.End()
+
 	err = a.publishFn(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 200)
+		respondEmpty(reqCtx, 200)
 	}
 }
 

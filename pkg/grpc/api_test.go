@@ -77,7 +77,12 @@ func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvel
 
 func ExtractSpanContext(ctx context.Context) []byte {
 	sc, _ := ctx.Value(diag.DaprTraceContextKey{}).(trace.SpanContext)
-	return []byte(diag.SerializeSpanContext(sc))
+	return []byte(SerializeSpanContext(sc))
+}
+
+// SerializeSpanContext serializes a span context into a simple string
+func SerializeSpanContext(ctx trace.SpanContext) string {
+	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
 
 func configureTestTraceExporter(meta exporters.Metadata) {

@@ -9,10 +9,8 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,8 +24,6 @@ import (
 type DaprTraceContextKey struct{}
 
 const (
-	// CorrelationID is the header key name of correlation id for trace
-	CorrelationID    = "X-Correlation-ID"
 	daprHeaderPrefix = "dapr-"
 )
 
@@ -40,28 +36,6 @@ func NewContext(ctx context.Context, spanContext trace.SpanContext) context.Cont
 func FromContext(ctx context.Context) trace.SpanContext {
 	sc, _ := ctx.Value(DaprTraceContextKey{}).(trace.SpanContext)
 	return sc
-}
-
-// SerializeSpanContext serializes a span context into a simple string
-func SerializeSpanContext(ctx trace.SpanContext) string {
-	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
-}
-
-// DeserializeSpanContext deserializes a span context from a string
-func DeserializeSpanContext(ctx string) trace.SpanContext {
-	var ret trace.SpanContext
-	if ctx == "" {
-		return ret
-	}
-	parts := strings.Split(ctx, ";")
-	spanID, _ := hex.DecodeString(parts[0])
-	traceID, _ := hex.DecodeString(parts[1])
-	traceOptions, _ := strconv.ParseUint(parts[2], 10, 32)
-	ret = trace.SpanContext{}
-	copy(ret.SpanID[:], spanID)
-	copy(ret.TraceID[:], traceID)
-	ret.TraceOptions = trace.TraceOptions(traceOptions)
-	return ret
 }
 
 func startTracingSpanInternal(ctx context.Context, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {

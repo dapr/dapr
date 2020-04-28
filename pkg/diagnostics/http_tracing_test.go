@@ -7,10 +7,10 @@ package diagnostics
 
 import (
 	"context"
-	"reflect"
 	"testing"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 )
@@ -81,21 +81,15 @@ func TestSpanContextFromRequest(t *testing.T) {
 			req := &fasthttp.Request{}
 			req.Header.Add("traceparent", tt.header)
 
-			gotSc, gotOk := SpanContextFromRequest(req)
-			if !reflect.DeepEqual(gotSc, tt.wantSc) {
-				t.Errorf("SpanContextFromRequest() gotSc = %v, want %v", gotSc, tt.wantSc)
-			}
-			if gotOk != tt.wantOk {
-				t.Errorf("SpanContextFromRequest gotOk = %v, want %v", gotOk, tt.wantOk)
-			}
+			gotSc, _ := SpanContextFromRequest(req)
+			assert.Equalf(t, gotSc, tt.wantSc, "SpanContextFromRequest gotSc = %v, want %v", gotSc, tt.wantSc)
 		})
 	}
 }
 
 func TestSpanContextToRequest(t *testing.T) {
 	tests := []struct {
-		sc         trace.SpanContext
-		wantHeader string
+		sc trace.SpanContext
 	}{
 		{
 			sc: trace.SpanContext{
@@ -103,18 +97,16 @@ func TestSpanContextToRequest(t *testing.T) {
 				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
 				TraceOptions: trace.TraceOptions(1),
 			},
-			wantHeader: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.wantHeader, func(t *testing.T) {
+		t.Run("SpanContextToRequest", func(t *testing.T) {
 			req := &fasthttp.Request{}
 			SpanContextToRequest(tt.sc, req)
 
-			h := string(req.Header.Peek("traceparent"))
-			if got, want := h, tt.wantHeader; got != want {
-				t.Errorf("SpanContextToRequest() header = %v, want %v", got, want)
-			}
+			got, _ := SpanContextFromRequest(req)
+
+			assert.Equalf(t, got, tt.sc, "SpanContextToRequest() got = %v, want %v", got, tt.sc)
 		})
 	}
 }
@@ -136,8 +128,6 @@ func getTestHTTPRequest() *fasthttp.Request {
 		TraceOptions: 0x0,
 	}
 
-	corID := SerializeSpanContext(sc)
-	req.Header.Set(CorrelationID, corID)
-
+	SpanContextToRequest(sc, req)
 	return req
 }
