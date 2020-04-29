@@ -18,24 +18,33 @@ import (
 )
 
 const (
+	// GRPCContentType is the MIME media type for grpc
+	GRPCContentType = "application/grpc"
 	// JSONContentType is the MIME media type for JSON
 	JSONContentType = "application/json"
 	// ProtobufContentType is the MIME media type for Protobuf
 	ProtobufContentType = "application/x-protobuf"
+
 	// ContentTypeHeader is the header key of content-type
 	ContentTypeHeader = "content-type"
-
 	// DaprHeaderPrefix is the prefix if metadata is defined by non user-defined http headers
 	DaprHeaderPrefix = "dapr-"
-
 	// gRPCBinaryMetadata is the suffix of grpc metadata binary value
 	gRPCBinaryMetadataSuffix = "-bin"
-	gRPCContentType          = "application/grpc"
 )
 
+// DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
+// from user app to Dapr.
+type DaprInternalMetadata map[string]*structpb.ListValue
+
+// IsJSONContentType returns true if contentType is the mime media type for JSON
+func IsJSONContentType(contentType string) bool {
+	return strings.HasPrefix(strings.ToLower(contentType), JSONContentType)
+}
+
 // GrpcMetadataToInternalMetadata converts gRPC metadata to dapr internal metadata map
-func GrpcMetadataToInternalMetadata(md metadata.MD) map[string]*structpb.ListValue {
-	var internalMD = map[string]*structpb.ListValue{}
+func GrpcMetadataToInternalMetadata(md metadata.MD) DaprInternalMetadata {
+	var internalMD = DaprInternalMetadata{}
 	for k, values := range md {
 		var listValue = structpb.ListValue{}
 		for _, v := range values {
@@ -76,7 +85,7 @@ func isPermanentHTTPHeader(hdr string) bool {
 		"Origin",
 		"Pragma",
 		"Referer",
-		"User-Agent",
+		// "User-Agent",
 		"Via",
 		"Warning":
 		return true
@@ -85,7 +94,7 @@ func isPermanentHTTPHeader(hdr string) bool {
 }
 
 // InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata
-func InternalMetadataToGrpcMetadata(internalMD map[string]*structpb.ListValue, httpHeaderConversion bool) metadata.MD {
+func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
 	var md = metadata.MD{}
 	for k, listVal := range internalMD {
 		keyName := strings.ToLower(k)
@@ -93,23 +102,19 @@ func InternalMetadataToGrpcMetadata(internalMD map[string]*structpb.ListValue, h
 			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
 		}
 		for _, v := range listVal.Values {
-			if _, ok := md[keyName]; !ok {
-				md[keyName] = []string{v.GetStringValue()}
-			} else {
-				md[keyName] = append(md[keyName], v.GetStringValue())
-			}
+			md.Append(keyName, v.GetStringValue())
 		}
 	}
 	return md
 }
 
 // IsGRPCProtocol checks if metadata is originated from gRPC API
-func IsGRPCProtocol(internalMD map[string]*structpb.ListValue) bool {
+func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
 	var originContentType = ""
 	if val, ok := internalMD[ContentTypeHeader]; ok {
 		originContentType = val.Values[0].GetStringValue()
 	}
-	return strings.HasPrefix(originContentType, gRPCContentType)
+	return strings.HasPrefix(originContentType, GRPCContentType)
 }
 
 func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
@@ -122,7 +127,7 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 }
 
 // InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers
-func InternalMetadataToHTTPHeader(internalMD map[string]*structpb.ListValue, setHeader func(string, string)) {
+func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
 		// Skip if the header key has -bin suffix
 		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader {
