@@ -145,15 +145,25 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 				{Kind: &structpb.Value_StringValue{StringValue: string([]byte{10, 30, 50, 60})}},
 			},
 		},
+		"my-metadata": {
+			Values: []*structpb.Value{
+				{Kind: &structpb.Value_StringValue{StringValue: "value1"}},
+				{Kind: &structpb.Value_StringValue{StringValue: "value2"}},
+				{Kind: &structpb.Value_StringValue{StringValue: "value3"}},
+			},
+		},
 	}
 
 	t.Run("with http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(grpcMetadata, true)
-		assert.Equal(t, 5, convertedMD.Len())
+		assert.Equal(t, 6, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD[":authority"][0])
 		assert.Equal(t, "1S", convertedMD["grpc-timeout"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["grpc-encoding"][0])
 		assert.Equal(t, "bearer token", convertedMD["authorization"][0])
 		assert.Equal(t, string([]byte{10, 30, 50, 60}), convertedMD["grpc-trace-bin"][0])
+		assert.Equal(t, "value1", convertedMD["my-metadata"][0])
+		assert.Equal(t, "value2", convertedMD["my-metadata"][1])
+		assert.Equal(t, "value3", convertedMD["my-metadata"][2])
 	})
 }

@@ -13,7 +13,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
-	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
 const (
@@ -128,7 +127,7 @@ func (imr *InvokeMethodRequest) APIVersion() internalv1pb.APIVersion {
 }
 
 // Metadata gets Metadata of InvokeMethodRequest
-func (imr *InvokeMethodRequest) Metadata() map[string]*structpb.ListValue {
+func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
 	return imr.r.GetMetadata()
 }
 

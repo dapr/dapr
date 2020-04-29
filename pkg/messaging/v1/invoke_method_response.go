@@ -69,7 +69,7 @@ func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodR
 
 // WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
-	var md = map[string]*structpb.ListValue{}
+	var md = DaprInternalMetadata{}
 	header.VisitAll(func(key []byte, value []byte) {
 		md[string(key)] = &structpb.ListValue{
 			Values: []*structpb.Value{
@@ -111,12 +111,12 @@ func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 }
 
 // Headers gets Headers metadata
-func (imr *InvokeMethodResponse) Headers() map[string]*structpb.ListValue {
+func (imr *InvokeMethodResponse) Headers() DaprInternalMetadata {
 	return imr.r.Headers
 }
 
 // Trailers gets Trailers metadata
-func (imr *InvokeMethodResponse) Trailers() map[string]*structpb.ListValue {
+func (imr *InvokeMethodResponse) Trailers() DaprInternalMetadata {
 	return imr.r.Trailers
 }
 
