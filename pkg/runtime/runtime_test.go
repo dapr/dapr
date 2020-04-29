@@ -603,7 +603,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.Data, "application/json")
+	fakeReq.WithRawData(testPubSubMessage.Data, pubsub.ContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
