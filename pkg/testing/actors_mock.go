@@ -44,7 +44,7 @@ func (_m *MockActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (*v
 }
 
 // CreateReminder provides a mock function with given fields: req
-func (_m *MockActors) CreateReminder(req *actors.CreateReminderRequest) error {
+func (_m *MockActors) CreateReminder(ctx context.Context, req *actors.CreateReminderRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -58,7 +58,7 @@ func (_m *MockActors) CreateReminder(req *actors.CreateReminderRequest) error {
 }
 
 // IsActorHosted provides a mock function with given fields: req
-func (_m *MockActors) IsActorHosted(req *actors.ActorHostedRequest) bool {
+func (_m *MockActors) IsActorHosted(ctx context.Context, req *actors.ActorHostedRequest) bool {
 	ret := _m.Called(req)
 
 	var r0 bool
@@ -72,7 +72,7 @@ func (_m *MockActors) IsActorHosted(req *actors.ActorHostedRequest) bool {
 }
 
 // CreateTimer provides a mock function with given fields: req
-func (_m *MockActors) CreateTimer(req *actors.CreateTimerRequest) error {
+func (_m *MockActors) CreateTimer(ctx context.Context, req *actors.CreateTimerRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -86,7 +86,7 @@ func (_m *MockActors) CreateTimer(req *actors.CreateTimerRequest) error {
 }
 
 // DeleteReminder provides a mock function with given fields: req
-func (_m *MockActors) DeleteReminder(req *actors.DeleteReminderRequest) error {
+func (_m *MockActors) DeleteReminder(ctx context.Context, req *actors.DeleteReminderRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -100,7 +100,7 @@ func (_m *MockActors) DeleteReminder(req *actors.DeleteReminderRequest) error {
 }
 
 // DeleteTimer provides a mock function with given fields: req
-func (_m *MockActors) DeleteTimer(req *actors.DeleteTimerRequest) error {
+func (_m *MockActors) DeleteTimer(ctx context.Context, req *actors.DeleteTimerRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -114,7 +114,7 @@ func (_m *MockActors) DeleteTimer(req *actors.DeleteTimerRequest) error {
 }
 
 // GetState provides a mock function with given fields: req
-func (_m *MockActors) GetState(req *actors.GetStateRequest) (*actors.StateResponse, error) {
+func (_m *MockActors) GetState(ctx context.Context, req *actors.GetStateRequest) (*actors.StateResponse, error) {
 	ret := _m.Called(req)
 
 	var r0 *actors.StateResponse
@@ -151,7 +151,7 @@ func (_m *MockActors) Init() error {
 }
 
 // SaveState provides a mock function with given fields: req
-func (_m *MockActors) SaveState(req *actors.SaveStateRequest) error {
+func (_m *MockActors) SaveState(ctx context.Context, req *actors.SaveStateRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -165,7 +165,7 @@ func (_m *MockActors) SaveState(req *actors.SaveStateRequest) error {
 }
 
 // DeleteState provides a mock function with given fields: req
-func (_m *MockActors) DeleteState(req *actors.DeleteStateRequest) error {
+func (_m *MockActors) DeleteState(ctx context.Context, req *actors.DeleteStateRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -179,7 +179,7 @@ func (_m *MockActors) DeleteState(req *actors.DeleteStateRequest) error {
 }
 
 // TransactionalStateOperation provides a mock function with given fields: req
-func (_m *MockActors) TransactionalStateOperation(req *actors.TransactionalRequest) error {
+func (_m *MockActors) TransactionalStateOperation(ctx context.Context, req *actors.TransactionalRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -193,7 +193,7 @@ func (_m *MockActors) TransactionalStateOperation(req *actors.TransactionalReque
 }
 
 // GetReminder provides a mock function with given fields: req
-func (_m *MockActors) GetReminder(req *actors.GetReminderRequest) (*actors.Reminder, error) {
+func (_m *MockActors) GetReminder(ctx context.Context, req *actors.GetReminderRequest) (*actors.Reminder, error) {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -207,7 +207,7 @@ func (_m *MockActors) GetReminder(req *actors.GetReminderRequest) (*actors.Remin
 }
 
 // GetActiveActorsCount provides a mock function
-func (_m *MockActors) GetActiveActorsCount() []actors.ActiveActorsCount {
+func (_m *MockActors) GetActiveActorsCount(ctx context.Context) []actors.ActiveActorsCount {
 	_m.Called()
 	return []actors.ActiveActorsCount{
 		{

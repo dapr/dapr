@@ -47,17 +47,17 @@ var log = logger.NewLogger("dapr.runtime.actor")
 type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
-	GetState(req *GetStateRequest) (*StateResponse, error)
-	SaveState(req *SaveStateRequest) error
-	DeleteState(req *DeleteStateRequest) error
-	TransactionalStateOperation(req *TransactionalRequest) error
-	GetReminder(req *GetReminderRequest) (*Reminder, error)
-	CreateReminder(req *CreateReminderRequest) error
-	DeleteReminder(req *DeleteReminderRequest) error
-	CreateTimer(req *CreateTimerRequest) error
-	DeleteTimer(req *DeleteTimerRequest) error
-	IsActorHosted(req *ActorHostedRequest) bool
-	GetActiveActorsCount() []ActiveActorsCount
+	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
+	SaveState(ctx context.Context, req *SaveStateRequest) error
+	DeleteState(ctx context.Context, req *DeleteStateRequest) error
+	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
+	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
+	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
+	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
+	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
+	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
+	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
+	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
 }
 
 type actorsRuntime struct {
@@ -392,7 +392,7 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 		targetActorAddress == fmt.Sprintf("%s:%v", hostAddress, grpcPort)
 }
 
-func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
+func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
 	if a.store == nil {
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -409,7 +409,7 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 	}, nil
 }
 
-func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) error {
+func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -458,13 +458,13 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 	return err
 }
 
-func (a *actorsRuntime) IsActorHosted(req *ActorHostedRequest) bool {
+func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
 	key := a.constructCompositeKey(req.ActorType, req.ActorID)
 	_, exists := a.actorsTable.Load(key)
 	return exists
 }
 
-func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
+func (a *actorsRuntime) SaveState(ctx context.Context, req *SaveStateRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -476,7 +476,7 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	return err
 }
 
-func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
+func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -884,7 +884,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 				}
 			}(t, stop, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
 		} else {
-			err := a.DeleteReminder(&DeleteReminderRequest{
+			err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 				Name:      reminder.Name,
 				ActorID:   reminder.ActorID,
 				ActorType: reminder.ActorType,
@@ -947,11 +947,11 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 	return nil, false
 }
 
-func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
+func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
 	r, exists := a.getReminder(req)
 	if exists {
 		if a.reminderRequiresUpdate(req, r) {
-			err := a.DeleteReminder(&DeleteReminderRequest{
+			err := a.DeleteReminder(ctx, &DeleteReminderRequest{
 				ActorID:   req.ActorID,
 				ActorType: req.ActorType,
 				Name:      req.Name,
@@ -1009,7 +1009,7 @@ func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
 	return nil
 }
 
-func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
+func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := a.constructCompositeKey(actorKey, req.Name)
 
@@ -1052,7 +1052,7 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 						log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
 					}
 				} else {
-					a.DeleteTimer(&DeleteTimerRequest{
+					a.DeleteTimer(ctx, &DeleteTimerRequest{
 						Name:      name,
 						ActorID:   actorID,
 						ActorType: actorType,
@@ -1114,7 +1114,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 	return reminders, nil
 }
 
-func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
+func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
 	if a.evaluationBusy {
 		select {
 		case <-time.After(time.Second * 5):
@@ -1167,7 +1167,7 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	return nil
 }
 
-func (a *actorsRuntime) GetReminder(req *GetReminderRequest) (*Reminder, error) {
+func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
 	reminders, err := a.getRemindersForActorType(req.ActorType)
 	if err != nil {
 		return nil, err
@@ -1185,7 +1185,7 @@ func (a *actorsRuntime) GetReminder(req *GetReminderRequest) (*Reminder, error) 
 	return nil, nil
 }
 
-func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
+func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error {
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := a.constructCompositeKey(actorKey, req.Name)
 
@@ -1198,7 +1198,7 @@ func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
 	return nil
 }
 
-func (a *actorsRuntime) GetActiveActorsCount() []ActiveActorsCount {
+func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
 	var actorCountMap = map[string]int{}
 	a.actorsTable.Range(func(key, value interface{}) bool {
 		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))

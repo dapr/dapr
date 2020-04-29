@@ -576,22 +576,22 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, statusCode, body)
 }
 
-func (a *api) onCreateActorReminder(ctx *fasthttp.RequestCtx) {
+func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	name := ctx.UserValue(nameParam).(string)
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
 
 	var req actors.CreateReminderRequest
-	err := a.json.Unmarshal(ctx.PostBody(), &req)
+	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
@@ -599,31 +599,34 @@ func (a *api) onCreateActorReminder(ctx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.actor.CreateReminder(&req)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	err = a.actor.CreateReminder(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 200)
+		respondEmpty(reqCtx, 200)
 	}
 }
 
-func (a *api) onCreateActorTimer(ctx *fasthttp.RequestCtx) {
+func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	name := ctx.UserValue(nameParam).(string)
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
 
 	var req actors.CreateTimerRequest
-	err := a.json.Unmarshal(ctx.PostBody(), &req)
+	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
@@ -631,25 +634,28 @@ func (a *api) onCreateActorTimer(ctx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.actor.CreateTimer(&req)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	err = a.actor.CreateTimer(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 200)
+		respondEmpty(reqCtx, 200)
 	}
 }
 
-func (a *api) onDeleteActorReminder(ctx *fasthttp.RequestCtx) {
+func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	name := ctx.UserValue(nameParam).(string)
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
 
 	req := actors.DeleteReminderRequest{
 		Name:      name,
@@ -657,34 +663,40 @@ func (a *api) onDeleteActorReminder(ctx *fasthttp.RequestCtx) {
 		ActorType: actorType,
 	}
 
-	err := a.actor.DeleteReminder(&req)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	err := a.actor.DeleteReminder(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 200)
+		respondEmpty(reqCtx, 200)
 	}
 }
 
-func (a *api) onActorStateTransaction(ctx *fasthttp.RequestCtx) {
+func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	body := ctx.PostBody()
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	body := reqCtx.PostBody()
 
-	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
@@ -692,7 +704,7 @@ func (a *api) onActorStateTransaction(ctx *fasthttp.RequestCtx) {
 	err := a.json.Unmarshal(body, &ops)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
@@ -702,54 +714,57 @@ func (a *api) onActorStateTransaction(ctx *fasthttp.RequestCtx) {
 		Operations: ops,
 	}
 
-	err = a.actor.TransactionalStateOperation(&req)
+	err = a.actor.TransactionalStateOperation(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 201)
+		respondEmpty(reqCtx, 201)
 	}
 }
 
-func (a *api) onGetActorReminder(ctx *fasthttp.RequestCtx) {
+func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	name := ctx.UserValue(nameParam).(string)
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
 
-	resp, err := a.actor.GetReminder(&actors.GetReminderRequest{
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	resp, err := a.actor.GetReminder(ctx, &actors.GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Name:      name,
 	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	}
 	b, err := a.json.Marshal(resp)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondWithJSON(ctx, 200, b)
+		respondWithJSON(reqCtx, 200, b)
 	}
 }
 
-func (a *api) onDeleteActorTimer(ctx *fasthttp.RequestCtx) {
+func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	name := ctx.UserValue(nameParam).(string)
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
 
 	req := actors.DeleteTimerRequest{
 		Name:      name,
@@ -757,12 +772,15 @@ func (a *api) onDeleteActorTimer(ctx *fasthttp.RequestCtx) {
 		ActorType: actorType,
 	}
 
-	err := a.actor.DeleteTimer(&req)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	err := a.actor.DeleteTimer(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 200)
+		respondEmpty(reqCtx, 200)
 	}
 }
 
@@ -814,26 +832,29 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, statusCode, body)
 }
 
-func (a *api) onSaveActorState(ctx *fasthttp.RequestCtx) {
+func (a *api) onSaveActorState(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	key := ctx.UserValue(stateKeyParam).(string)
-	body := ctx.PostBody()
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	key := reqCtx.UserValue(stateKeyParam).(string)
+	body := reqCtx.PostBody()
 
-	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
@@ -843,7 +864,7 @@ func (a *api) onSaveActorState(ctx *fasthttp.RequestCtx) {
 	err := a.json.Unmarshal(body, &val)
 	if err != nil {
 		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
@@ -854,25 +875,25 @@ func (a *api) onSaveActorState(ctx *fasthttp.RequestCtx) {
 		Value:     val,
 	}
 
-	err = a.actor.SaveState(&req)
+	err = a.actor.SaveState(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_SAVE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 201)
+		respondEmpty(reqCtx, 201)
 	}
 }
 
-func (a *api) onGetActorState(ctx *fasthttp.RequestCtx) {
+func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	key := ctx.UserValue(stateKeyParam).(string)
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	key := reqCtx.UserValue(stateKeyParam).(string)
 
 	req := actors.GetStateRequest{
 		ActorType: actorType,
@@ -880,34 +901,40 @@ func (a *api) onGetActorState(ctx *fasthttp.RequestCtx) {
 		Key:       key,
 	}
 
-	resp, err := a.actor.GetState(&req)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	resp, err := a.actor.GetState(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_GET", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondWithJSON(ctx, 200, resp.Data)
+		respondWithJSON(reqCtx, 200, resp.Data)
 	}
 }
 
-func (a *api) onDeleteActorState(ctx *fasthttp.RequestCtx) {
+func (a *api) onDeleteActorState(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	actorType := ctx.UserValue(actorTypeParam).(string)
-	actorID := ctx.UserValue(actorIDParam).(string)
-	key := ctx.UserValue(stateKeyParam).(string)
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	key := reqCtx.UserValue(stateKeyParam).(string)
 
-	hosted := a.actor.IsActorHosted(&actors.ActorHostedRequest{
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(ctx, 400, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
@@ -917,16 +944,16 @@ func (a *api) onDeleteActorState(ctx *fasthttp.RequestCtx) {
 		Key:       key,
 	}
 
-	err := a.actor.DeleteState(&req)
+	err := a.actor.DeleteState(ctx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_DELETE", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 200)
+		respondEmpty(reqCtx, 200)
 	}
 }
 
-func (a *api) onGetMetadata(ctx *fasthttp.RequestCtx) {
+func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	temp := make(map[interface{}]interface{})
 
 	// Copy synchronously so it can be serialized to JSON.
@@ -935,26 +962,29 @@ func (a *api) onGetMetadata(ctx *fasthttp.RequestCtx) {
 		return true
 	})
 
+	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+
 	mtd := metadata{
 		ID:                a.id,
-		ActiveActorsCount: a.actor.GetActiveActorsCount(),
+		ActiveActorsCount: a.actor.GetActiveActorsCount(ctx),
 		Extended:          temp,
 	}
 
 	mtdBytes, err := a.json.Marshal(mtd)
 	if err != nil {
 		msg := NewErrorResponse("ERR_METADATA_GET", err.Error())
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondWithJSON(ctx, 200, mtdBytes)
+		respondWithJSON(reqCtx, 200, mtdBytes)
 	}
 }
 
-func (a *api) onPutMetadata(ctx *fasthttp.RequestCtx) {
-	key := ctx.UserValue("key")
-	body := ctx.PostBody()
+func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
+	key := reqCtx.UserValue("key")
+	body := reqCtx.PostBody()
 	a.extendedMetadata.Store(key, string(body))
-	respondEmpty(ctx, 200)
+	respondEmpty(reqCtx, 200)
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
@@ -1012,11 +1042,11 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	return 200
 }
 
-func (a *api) onGetHealthz(ctx *fasthttp.RequestCtx) {
+func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.readyStatus {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", "dapr is not ready")
-		respondWithError(ctx, 500, msg)
+		respondWithError(reqCtx, 500, msg)
 	} else {
-		respondEmpty(ctx, 200)
+		respondEmpty(reqCtx, 200)
 	}
 }
