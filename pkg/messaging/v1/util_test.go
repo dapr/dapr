@@ -6,6 +6,7 @@
 package v1
 
 import (
+	"sort"
 	"testing"
 
 	structpb "github.com/golang/protobuf/ptypes/struct"
@@ -37,6 +38,9 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 	InternalMetadataToHTTPHeader(fakeMetadata, func(k, v string) {
 		savedHeaderKeyNames = append(savedHeaderKeyNames, k)
 	})
+
+	sort.Strings(expectedKeyNames)
+	sort.Strings(savedHeaderKeyNames)
 
 	assert.Equal(t, expectedKeyNames, savedHeaderKeyNames)
 }
