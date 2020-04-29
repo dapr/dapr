@@ -1197,7 +1197,7 @@ func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) 
 
 	contentType, body := resp.RawData()
 	if contentType != invokev1.JSONContentType {
-		return nil, fmt.Errorf("invalid content_type: %s", contentType)
+		log.Debugf("dapr/config returns invalid content_type: %s", contentType)
 	}
 
 	if err = a.json.Unmarshal(body, &config); err != nil {
