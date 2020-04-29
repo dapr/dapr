@@ -539,10 +539,12 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		defer span.End()
 		ctx = diag.NewContext(ctx, span.SpanContext())
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
-		diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
+
+		diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
 
 		if resp.Status().Code != nethttp.StatusOK {
 			return fmt.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
@@ -961,10 +963,11 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	defer span.End()
 	ctx = diag.NewContext(ctx, span.SpanContext())
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	diag.UpdateSpanPairStatusesFromError(span, err, spanName)
 	if err != nil {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
+
+	diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
 
 	if resp.Status().Code != nethttp.StatusOK {
 		_, errorMsg := resp.RawData()
