@@ -957,7 +957,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	req.WithRawData(msg.Data, pubsub.ContentType)
 
 	ctx := context.Background()
-	spanName := fmt.Sprintf("SubscribedMessage: %s", msg.Topic)
+	spanName := fmt.Sprintf("PublishMessage: %s", msg.Topic)
 	// context.Background() can be considered as GRPC and so using StartTracingServerSpanFromGRPCContext to generate span
 	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
 	defer span.End()
@@ -1007,7 +1007,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	}
 
 	ctx := context.Background()
-	spanName := fmt.Sprintf("SubscribedMessage: %s", msg.Topic)
+	spanName := fmt.Sprintf("PublishMessage: %s", msg.Topic)
 	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
 	defer span.End()
 	ctx = diag.NewContext(ctx, span.SpanContext())
