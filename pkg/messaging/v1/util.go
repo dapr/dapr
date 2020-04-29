@@ -22,12 +22,15 @@ const (
 	JSONContentType = "application/json"
 	// ProtobufContentType is the MIME media type for Protobuf
 	ProtobufContentType = "application/x-protobuf"
+	// ContentTypeHeader is the header key of content-type
+	ContentTypeHeader = "content-type"
 
 	// DaprHeaderPrefix is the prefix if metadata is defined by non user-defined http headers
 	DaprHeaderPrefix = "dapr-"
 
 	// gRPCBinaryMetadata is the suffix of grpc metadata binary value
 	gRPCBinaryMetadataSuffix = "-bin"
+	gRPCContentType          = "application/grpc"
 )
 
 // GrpcMetadataToInternalMetadata converts gRPC metadata to dapr internal metadata map
@@ -100,14 +103,32 @@ func InternalMetadataToGrpcMetadata(internalMD map[string]*structpb.ListValue, h
 	return md
 }
 
+// IsGRPCProtocol checks if metadata is originated from gRPC API
+func IsGRPCProtocol(internalMD map[string]*structpb.ListValue) bool {
+	var originContentType = ""
+	if val, ok := internalMD[ContentTypeHeader]; ok {
+		originContentType = val.Values[0].GetStringValue()
+	}
+	return strings.HasPrefix(originContentType, gRPCContentType)
+}
+
+func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
+	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
+	if key == ":method" || key == ":scheme" || key == ":path" || key == ":authority" || strings.HasPrefix(key, "grpc-") {
+		return DaprHeaderPrefix + key
+	}
+
+	return key
+}
+
 // InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers
 func InternalMetadataToHTTPHeader(internalMD map[string]*structpb.ListValue, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
 		// Skip if the header key has -bin suffix
-		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
+		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader {
 			continue
 		}
-		setHeader(k, listVal.Values[0].GetStringValue())
+		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0].GetStringValue())
 	}
 }
 
