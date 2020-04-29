@@ -485,14 +485,23 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	var response bindings.AppResponse
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+		ctx := context.Background()
+		spanName := fmt.Sprintf("SendBindingEventToApp: %s", bindingName)
+		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+		defer span.End()
+		ctx = diag.NewContext(ctx, span.SpanContext())
+
 		client := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-		resp, err := client.OnBindingEvent(context.Background(), &daprclientv1pb.BindingEventEnvelope{
+		resp, err := client.OnBindingEvent(ctx, &daprclientv1pb.BindingEventEnvelope{
 			Name: bindingName,
 			Data: &any.Any{
 				Value: data,
 			},
 			Metadata: metadata,
 		})
+
+		diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
@@ -522,9 +531,15 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req := invokev1.NewInvokeMethodRequest(bindingName)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
-		// TODO: Propagate Context
+
 		ctx := context.Background()
+		spanName := fmt.Sprintf("SendBindingEventToApp: %s", bindingName)
+		// context.Background() can be considered as GRPC and so using StartTracingServerSpanFromGRPCContext to generate span
+		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+		defer span.End()
+		ctx = diag.NewContext(ctx, span.SpanContext())
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
+		diag.UpdateSpanPairStatusesFromError(span, err, spanName)
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
@@ -939,9 +954,14 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
 
-	// TODO Propagate Context
 	ctx := context.Background()
+	spanName := fmt.Sprintf("SubscribedMessage: %s", msg.Topic)
+	// context.Background() can be considered as GRPC and so using StartTracingServerSpanFromGRPCContext to generate span
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+	defer span.End()
+	ctx = diag.NewContext(ctx, span.SpanContext())
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	diag.UpdateSpanPairStatusesFromError(span, err, spanName)
 	if err != nil {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
@@ -983,12 +1003,23 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		}
 	}
 
+	ctx := context.Background()
+	spanName := fmt.Sprintf("SubscribedMessage: %s", msg.Topic)
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+	defer span.End()
+	ctx = diag.NewContext(ctx, span.SpanContext())
+
 	clientV1 := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-	if _, err = clientV1.OnTopicEvent(context.Background(), envelope); err != nil {
+	_, err = clientV1.OnTopicEvent(ctx, envelope)
+
+	diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+
+	if err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
 		log.Debug(err)
 		return err
 	}
+
 	return nil
 }
 
