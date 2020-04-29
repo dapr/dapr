@@ -1,4 +1,4 @@
-# API-008: Bi-Directional Bindings
+# API-009: Bi-Directional Bindings
 
 ## Status
 Accepted

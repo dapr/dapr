@@ -6,6 +6,7 @@
 package channel
 
 import (
+	"context"
 	"time"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -22,5 +23,5 @@ const (
 // AppChannel is an abstraction over communications with user code
 type AppChannel interface {
 	GetBaseAddress() string
-	InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
+	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	jsoniter "github.com/json-iterator/go"
@@ -72,15 +73,17 @@ func (f *fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
 
 func newTestActorsRuntime() *actorsRuntime {
 	mockAppChannel := new(channelt.MockAppChannel)
+	spec := config.TracingSpec{SamplingRate: "1"}
 	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 	mockAppChannel.On("GetBaseAddress").Return("http://127.0.0.1", nil)
 	mockAppChannel.On(
 		"InvokeMethod",
+		mock.AnythingOfType("*context.emptyCtx"),
 		mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
 
 	store := fakeStore()
 	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false)
-	a := NewActors(store, mockAppChannel, nil, config, nil)
+	a := NewActors(store, mockAppChannel, nil, config, nil, spec)
 
 	return a.(*actorsRuntime)
 }

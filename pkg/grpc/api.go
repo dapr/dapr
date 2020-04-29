@@ -17,7 +17,8 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -28,6 +29,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -67,6 +69,7 @@ type api struct {
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
+	tracingSpec           config.TracingSpec
 }
 
 // NewAPI returns a new gRPC API
@@ -77,7 +80,8 @@ func NewAPI(
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error,
+	tracingSpec config.TracingSpec) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -87,6 +91,7 @@ func NewAPI(
 		stateStores:           stateStores,
 		secretStores:          secretStores,
 		sendToOutputBindingFn: sendToOutputBindingFn,
+		tracingSpec:           tracingSpec,
 	}
 }
 
@@ -95,15 +100,22 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if a.appChannel == nil {
 		return nil, status.Error(codes.Internal, "app channel is not initialized")
 	}
+
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
-	resp, err := a.appChannel.InvokeMethod(req)
+
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, req.Message().Method, a.tracingSpec)
+	defer span.End()
+	ctx = diag.NewContext(ctx, span.SpanContext())
+
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Proto(), nil
+	return resp.Proto(), err
 }
 
 // CallActor invokes a virtual actor
@@ -116,7 +128,10 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) 
 		Metadata:  in.Metadata,
 	}
 
-	resp, err := a.actor.Call(&req)
+	sc := diag.GetSpanContextFromGRPC(ctx)
+	ctx = diag.NewContext(ctx, sc)
+
+	resp, err := a.actor.Call(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
@@ -139,10 +154,9 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 		body = in.Data.Value
 	}
 
-	corID, ok := ctx.Value(tracing.CorrelationID).(string)
-	if !ok {
-		corID = ""
-	}
+	// TODO : Remove passing corID in NewCloudEventsEnvelope through arguments as it can be passed through context
+	sc := diag.FromContext(ctx)
+	corID := sc.TraceID.String()
 
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
@@ -154,6 +168,12 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 		Topic: topic,
 		Data:  b,
 	}
+
+	var span *trace.Span
+	spanName := fmt.Sprintf("PublishEvent: %s", topic)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
+	defer span.End()
+
 	err = a.publishFn(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
@@ -167,13 +187,13 @@ func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceReque
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
 	}
-
-	resp, err := a.directMessaging.Invoke(in.Id, req)
+	sc := diag.GetSpanContextFromGRPC(ctx)
+	ctx = diag.NewContext(ctx, sc)
+	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: Add trace headers
 	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Headers(), true))
 
 	statusCode := int(resp.Status().Code)
@@ -194,6 +214,10 @@ func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvel
 	if in.Data != nil {
 		req.Data = in.Data.Value
 	}
+
+	var span *trace.Span
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "InvokeBinding", a.tracingSpec)
+	defer span.End()
 
 	err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
@@ -219,6 +243,11 @@ func (a *api) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*dap
 			Consistency: in.Consistency,
 		},
 	}
+
+	var span *trace.Span
+	spanName := fmt.Sprintf("GetState: %s", storeName)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
+	defer span.End()
 
 	getResponse, err := a.stateStores[storeName].Get(&req)
 	if err != nil {
@@ -273,6 +302,11 @@ func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*e
 		reqs = append(reqs, req)
 	}
 
+	var span *trace.Span
+	spanName := fmt.Sprintf("SaveState: %s", storeName)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
+	defer span.End()
+
 	err := a.stateStores[storeName].BulkSet(reqs)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
@@ -316,6 +350,11 @@ func (a *api) DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope)
 		}
 	}
 
+	var span *trace.Span
+	spanName := fmt.Sprintf("DeleteState: %s", storeName)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
+	defer span.End()
+
 	err := a.stateStores[storeName].Delete(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
@@ -345,6 +384,11 @@ func (a *api) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*d
 		Name:     in.Key,
 		Metadata: in.Metadata,
 	}
+
+	var span *trace.Span
+	spanName := fmt.Sprintf("GetSecret: %s", secretStoreName)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
+	defer span.End()
 
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 

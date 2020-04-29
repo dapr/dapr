@@ -6,6 +6,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -75,6 +76,7 @@ func (th *testHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func TestInvokeMethod(t *testing.T) {
 	th := &testHTTPHandler{t: t, serverURL: ""}
 	server := httptest.NewServer(th)
+	ctx := context.Background()
 
 	t.Run("query string", func(t *testing.T) {
 		c := Channel{
@@ -89,7 +91,7 @@ func TestInvokeMethod(t *testing.T) {
 		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 
 		// act
-		response, err := c.InvokeMethod(fakeReq)
+		response, err := c.InvokeMethod(ctx, fakeReq)
 
 		// assert
 		assert.NoError(t, err)
@@ -110,7 +112,7 @@ func TestInvokeMethod(t *testing.T) {
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 
 		// act
-		response, err := c.InvokeMethod(fakeReq)
+		response, err := c.InvokeMethod(ctx, fakeReq)
 
 		// assert
 		assert.NoError(t, err)
@@ -122,6 +124,7 @@ func TestInvokeMethod(t *testing.T) {
 }
 
 func TestInvokeMethodMaxConcurrency(t *testing.T) {
+	ctx := context.Background()
 	t.Run("single concurrency", func(t *testing.T) {
 		handler := testConcurrencyHandler{
 			maxCalls: 1,
@@ -139,7 +142,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 				request2 := invokev1.NewInvokeMethodRequest("method")
 				request2.WithRawData(nil, "")
 
-				c.InvokeMethod(request2)
+				c.InvokeMethod(ctx, request2)
 				wg.Done()
 			}()
 		}
@@ -166,7 +169,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			go func() {
 				request2 := invokev1.NewInvokeMethodRequest("method")
 				request2.WithRawData(nil, "")
-				c.InvokeMethod(request2)
+				c.InvokeMethod(ctx, request2)
 				wg.Done()
 			}()
 		}
@@ -179,6 +182,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 }
 
 func TestInvokeWithHeaders(t *testing.T) {
+	ctx := context.Background()
 	testServer := httptest.NewServer(&testHandlerHeaders{})
 	c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
 
@@ -191,7 +195,7 @@ func TestInvokeWithHeaders(t *testing.T) {
 	req.WithHTTPExtension(http.MethodPost, "")
 
 	// act
-	response, err := c.InvokeMethod(req)
+	response, err := c.InvokeMethod(ctx, req)
 
 	// assert
 	assert.NoError(t, err)
@@ -207,6 +211,7 @@ func TestInvokeWithHeaders(t *testing.T) {
 }
 
 func TestContentType(t *testing.T) {
+	ctx := context.Background()
 	t.Run("default application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
@@ -216,7 +221,7 @@ func TestContentType(t *testing.T) {
 		req.WithHTTPExtension(http.MethodPost, "")
 
 		// act
-		resp, err := c.InvokeMethod(req)
+		resp, err := c.InvokeMethod(ctx, req)
 
 		// assert
 		assert.NoError(t, err)
@@ -235,7 +240,7 @@ func TestContentType(t *testing.T) {
 		req.WithHTTPExtension(http.MethodPost, "")
 
 		// act
-		resp, err := c.InvokeMethod(req)
+		resp, err := c.InvokeMethod(ctx, req)
 
 		// assert
 		assert.NoError(t, err)
@@ -254,7 +259,7 @@ func TestContentType(t *testing.T) {
 		req.WithHTTPExtension(http.MethodPost, "")
 
 		// act
-		resp, err := c.InvokeMethod(req)
+		resp, err := c.InvokeMethod(ctx, req)
 
 		// assert
 		assert.NoError(t, err)

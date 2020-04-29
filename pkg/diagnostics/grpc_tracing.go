@@ -7,82 +7,114 @@ package diagnostics
 
 import (
 	"context"
-	"regexp"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
-// TracingGRPCMiddlewareStream plugs tracer into gRPC stream
-func TracingGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
+const grpcTraceContextKey = "grpc-trace-bin"
+
+// SetTracingSpanContextGRPCMiddlewareStream sets the trace spancontext into gRPC stream
+func SetTracingSpanContextGRPCMiddlewareStream() grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		span, spanc := TracingSpanFromGRPCContext(stream.Context(), nil, info.FullMethod, spec)
+		ctx := stream.Context()
+		sc := GetSpanContextFromGRPC(ctx)
+		ctx = NewContext(ctx, sc)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
-		defer span.Span.End()
-		defer spanc.Span.End()
+		wrappedStream.WrappedContext = ctx
+
 		err := handler(srv, wrappedStream)
-		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
+
 		return err
 	}
 }
 
-// TracingGRPCMiddlewareUnary plugs tracer into gRPC unary calls
-func TracingGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
+// SetTracingSpanContextGRPCMiddlewareUnary sets the trace spancontext into gRPC unary calls
+func SetTracingSpanContextGRPCMiddlewareUnary() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		span, spanc := TracingSpanFromGRPCContext(ctx, req, info.FullMethod, spec)
-		defer span.Span.End()
-		defer spanc.Span.End()
-		newCtx := context.WithValue(span.Context, correlationKey, SerializeSpanContext(*spanc.SpanContext))
-		resp, err := handler(newCtx, req)
-		UpdateSpanPairStatusesFromError(span, spanc, err, info.FullMethod)
+		sc := GetSpanContextFromGRPC(ctx)
+		ctx = NewContext(ctx, sc)
+		resp, err := handler(ctx, req)
+
 		return resp, err
 	}
 }
 
-// TracingSpanFromGRPCContext creates a span from an incoming gRPC method call
-func TracingSpanFromGRPCContext(c context.Context, req interface{}, method string, spec config.TracingSpec) (TracerSpan, TracerSpan) {
-	var ctx context.Context
+// StartTracingServerSpanFromGRPCContext creates a span on receiving an incoming gRPC method call from remote client
+func StartTracingServerSpanFromGRPCContext(ctx context.Context, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
-	var ctxc context.Context
-	var spanc *trace.Span
+	ctx, span = startTracingSpanInternal(ctx, method, spec.SamplingRate, trace.SpanKindServer)
+	addAnnotationsToSpanFromGRPCMetadata(ctx, span)
 
-	md := extractDaprMetadata(c)
-	headers := ""
-	re := regexp.MustCompile(`(?i)(&__header_delim__&)?X-Correlation-ID&__header_equals__&[0-9a-fA-F]+;[0-9a-fA-F]+;[0-9a-fA-F]+`)
-	corID := strings.Replace(re.FindString(headers), "&__header_delim__&", "", 1)
-	if len(corID) > 35 { //to remove the prefix "X-Correlation-Id&__header_equals__&", which may in different casing
-		corID = corID[35:]
-	}
-
-	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
-
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	serverKindOption := trace.WithSpanKind(trace.SpanKindServer)
-	clientKindOption := trace.WithSpanKind(trace.SpanKindClient)
-	spanName := createSpanName(method)
-	if corID != "" {
-		spanContext := DeserializeSpanContext(corID)
-		ctx, span = trace.StartSpanWithRemoteParent(c, method, spanContext, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	} else {
-		ctx, span = trace.StartSpan(context.Background(), method, serverKindOption, probSamplerOption)
-		ctxc, spanc = trace.StartSpanWithRemoteParent(ctx, spanName, span.SpanContext(), clientKindOption, probSamplerOption)
-	}
-
-	addAnnotationsFromGRPCMetadata(md, span)
-
-	context := span.SpanContext()
-	contextc := spanc.SpanContext()
-	return TracerSpan{Context: ctx, Span: span, SpanContext: &context}, TracerSpan{Context: ctxc, Span: spanc, SpanContext: &contextc}
+	return ctx, span
 }
 
-func addAnnotationsFromGRPCMetadata(md map[string][]string, span *trace.Span) {
+// StartTracingClientSpanFromGRPCContext creates a client span before invoking gRPC method call
+func StartTracingClientSpanFromGRPCContext(ctx context.Context, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
+	var span *trace.Span
+	ctx, span = startTracingSpanInternal(ctx, method, spec.SamplingRate, trace.SpanKindClient)
+	addAnnotationsToSpanFromGRPCMetadata(ctx, span)
+
+	return ctx, span
+}
+
+func GetSpanContextFromGRPC(ctx context.Context) trace.SpanContext {
+	spanContext, ok := FromGRPCContext(ctx)
+
+	gen := tracingConfig.Load().(*traceIDGenerator)
+
+	if !ok {
+		spanContext = trace.SpanContext{}
+		// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
+		spanContext.TraceID = gen.NewTraceID()
+
+		// Default sampling rate is non zero in Dapr, so that means , sampling is enabled by default
+		spanContext.TraceOptions = trace.TraceOptions(1)
+	}
+
+	return spanContext
+}
+
+// FromGRPCContext returns the SpanContext stored in a context, or empty if there isn't one.
+func FromGRPCContext(ctx context.Context) (trace.SpanContext, bool) {
+	var sc trace.SpanContext
+	var ok bool
+	md, _ := metadata.FromIncomingContext(ctx)
+	traceContext := md[grpcTraceContextKey]
+	if len(traceContext) > 0 {
+		traceContextBinary := []byte(traceContext[0])
+		sc, ok = propagation.FromBinary(traceContextBinary)
+	}
+	return sc, ok
+}
+
+// AppendToOutgoingGRPCContext appends binary serialized SpanContext to the outgoing GRPC context
+func AppendToOutgoingGRPCContext(ctx context.Context, spanContext trace.SpanContext) context.Context {
+	traceContextBinary := propagation.Binary(spanContext)
+	return metadata.AppendToOutgoingContext(ctx, grpcTraceContextKey, string(traceContextBinary))
+}
+
+// FromOutgoingGRPCContext returns the SpanContext stored in a context, or empty if there isn't one.
+func FromOutgoingGRPCContext(ctx context.Context) (trace.SpanContext, bool) {
+	var sc trace.SpanContext
+	var ok bool
+	md, _ := metadata.FromOutgoingContext(ctx)
+	traceContext := md[grpcTraceContextKey]
+	if len(traceContext) > 0 {
+		traceContextBinary := []byte(traceContext[0])
+		sc, ok = propagation.FromBinary(traceContextBinary)
+	}
+	return sc, ok
+}
+
+func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span) {
+	md := extractDaprMetadata(ctx)
+
 	// md metadata must only have dapr prefixed headers metadata
 	// still extra check for dapr headers to avoid, it might be micro performance hit but that is ok
 	for k, vv := range md {
