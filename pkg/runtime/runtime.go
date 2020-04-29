@@ -937,7 +937,7 @@ func (a *DaprRuntime) initServiceDiscovery() error {
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	req := invokev1.NewInvokeMethodRequest(msg.Topic)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.Data, invokev1.JSONContentType)
+	req.WithRawData(msg.Data, pubsub.ContentType)
 
 	// TODO Propagate Context
 	ctx := context.Background()

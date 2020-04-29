@@ -14,6 +14,7 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -25,8 +26,11 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"go.opencensus.io/trace"
 	grpc_go "google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const maxGRPCServerUptime = 100 * time.Millisecond
@@ -136,6 +140,23 @@ func startTestServer(port int) *grpc_go.Server {
 	return server
 }
 
+func startGRPCApiServer(port int, testAPIServer *api) *grpc_go.Server {
+	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
+
+	server := grpc_go.NewServer()
+	go func() {
+		internalv1pb.RegisterDaprInternalServer(server, testAPIServer)
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	// wait until server starts
+	time.Sleep(maxGRPCServerUptime)
+
+	return server
+}
+
 func createTestClient(port int) *grpc_go.ClientConn {
 	var opts []grpc_go.DialOption
 	opts = append(opts, grpc_go.WithInsecure())
@@ -165,6 +186,70 @@ func TestCallActorWithTracing(t *testing.T) {
 	resp, err := client.CallActor(context.Background(), request)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resp.Data, "failed to generate trace context with actor call")
+}
+
+func TestCallLocal(t *testing.T) {
+	t.Run("appchannel is not ready", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: nil,
+		}
+		server := startGRPCApiServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := internalv1pb.NewDaprInternalClient(clientConn)
+		request := invokev1.NewInvokeMethodRequest("method").Proto()
+
+		_, err := client.CallLocal(context.Background(), request)
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: mockAppChannel,
+		}
+		server := startGRPCApiServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := internalv1pb.NewDaprInternalClient(clientConn)
+		request := &internalv1pb.InternalInvokeRequest{
+			Message: &any.Any{Value: []byte("fake")},
+		}
+
+		_, err := client.CallLocal(context.Background(), request)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("invokemethod returns error", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(nil, status.Error(codes.Unknown, "unknown error"))
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: mockAppChannel,
+		}
+		server := startGRPCApiServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := internalv1pb.NewDaprInternalClient(clientConn)
+		request := invokev1.NewInvokeMethodRequest("method").Proto()
+
+		_, err := client.CallLocal(context.Background(), request)
+		assert.Equal(t, codes.Unknown, status.Code(err))
+	})
 }
 
 func TestCallRemoteAppWithTracing(t *testing.T) {
