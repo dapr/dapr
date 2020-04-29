@@ -782,36 +782,49 @@ func (a *api) onDeleteActorTimer(ctx *fasthttp.RequestCtx) {
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, fhttp.StatusBadRequest, msg)
 		return
 	}
 
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
+	verb := strings.ToUpper(string(reqCtx.Method()))
 	method := reqCtx.UserValue(methodParam).(string)
 	body := reqCtx.PostBody()
 
-	req := actors.CallRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Method:    method,
-		Metadata:  map[string]string{},
-		Data:      body,
-	}
-	a.setHeaders(reqCtx, req.Metadata)
+	req := invokev1.NewInvokeMethodRequest(method)
+	req.WithActor(actorType, actorID)
+	req.WithHTTPExtension(verb, reqCtx.QueryArgs().String())
+	req.WithRawData(body, string(reqCtx.Request.Header.ContentType()))
+
+	// Save headers to metadata
+	metadata := map[string][]string{}
+	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
+		metadata[string(key)] = []string{string(value)}
+	})
+	req.WithMetadata(metadata)
 
 	sc := diag.GetSpanContextFromRequestContext(reqCtx)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
-	resp, err := a.actor.Call(ctx, &req)
+	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
-		respondWithError(reqCtx, 500, msg)
-	} else {
-		statusCode := GetStatusCodeFromMetadata(resp.Metadata)
-		a.setHeadersOnRequest(resp.Metadata, reqCtx)
-		respondWithJSON(reqCtx, statusCode, resp.Data)
+		respondWithError(reqCtx, fhttp.StatusInternalServerError, msg)
+		return
 	}
+
+	// TODO: add trace parent and state
+	invokev1.InternalMetadataToHTTPHeader(resp.Headers(), reqCtx.Response.Header.Set)
+	contentType, body := resp.RawData()
+	reqCtx.Response.Header.SetContentType(contentType)
+
+	// Construct response
+	statusCode := int(resp.Status().Code)
+	if !resp.IsHTTPResponse() {
+		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
+	}
+	respond(reqCtx, statusCode, body)
 }
 
 // TODO: setHeadersOnRequest is used by actor service invocation only.

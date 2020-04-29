@@ -27,7 +27,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
@@ -50,7 +49,7 @@ var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
-	Call(ctx context.Context, req *CallRequest) (*CallResponse, error)
+	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
 	GetState(req *GetStateRequest) (*StateResponse, error)
 	SaveState(req *SaveStateRequest) error
@@ -103,7 +102,13 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config, certChain *dapr_credentials.CertChain, tracingSpec config.TracingSpec) Actors {
+func NewActors(
+	stateStore state.Store,
+	appChannel channel.AppChannel,
+	grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error),
+	config Config,
+	certChain *dapr_credentials.CertChain,
+	tracingSpec config.TracingSpec) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -227,10 +232,11 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 	}()
 }
 
-func (a *actorsRuntime) Call(ctx context.Context, req *CallRequest) (*CallResponse, error) {
-	targetActorAddress, appID := a.lookupActorAddress(req.ActorType, req.ActorID)
+func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InternalInvokeResponse, error) {
+	actor := req.Actor()
+	targetActorAddress, appID := a.lookupActorAddress(actor.GetActorType(), actor.GetActorId())
 	if targetActorAddress == "" {
-		return nil, fmt.Errorf("error finding address for actor type %s with id %s", req.ActorType, req.ActorID)
+		return nil, fmt.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
 	}
 
 	if a.placementBlock {
@@ -241,9 +247,9 @@ func (a *actorsRuntime) Call(ctx context.Context, req *CallRequest) (*CallRespon
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-		resp, err = a.callLocalActor(ctx, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callLocalActor(ctx, req)
 	} else {
-		resp, err = a.callRemoteActorWithRetry(ctx, callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, appID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callRemoteActorWithRetry(ctx, callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, appID, req)
 	}
 
 	if err != nil {
@@ -253,8 +259,11 @@ func (a *actorsRuntime) Call(ctx context.Context, req *CallRequest) (*CallRespon
 }
 
 // callRemoteActorWithRetry will call a remote actor for the specified number of retries and will only retry in the case of transient failures
-func (a *actorsRuntime) callRemoteActorWithRetry(ctx context.Context, numRetries int, fn func(ctx context.Context, targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error),
-	targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
+func (a *actorsRuntime) callRemoteActorWithRetry(
+	ctx context.Context,
+	numRetries int,
+	fn func(ctx context.Context, targetAddress, targetID, req *invokev1.InvokeMethodRequest) (*invokev1.InternalInvokeResponse, error),
+	targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InternalInvokeResponse, error) {
 	for i := 0; i < numRetries; i++ {
 		resp, err := fn(ctx, targetAddress, targetID, actorType, actorID, actorMethod, data, metadata)
 		if err == nil {
@@ -274,7 +283,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(ctx context.Context, numRetries
 	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
 }
 
-func (a *actorsRuntime) callLocalActor(ctx context.Context, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
+func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InternalInvokeResponse, error) {
 	key := a.constructCompositeKey(actorType, actorID)
 
 	val, exists := a.actorsTable.LoadOrStore(key, &actor{
@@ -349,19 +358,10 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, actorType, actorID, 
 	return rsp, nil
 }
 
-func (a *actorsRuntime) callRemoteActor(ctx context.Context, targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
-	req := internalv1pb.CallActorRequest{
-		ActorType: actorType,
-		ActorId:   actorID,
-		Method:    actorMethod,
-		Data:      &any.Any{Value: data},
-		Metadata:  map[string]string{},
-	}
-
-	for k, v := range metadata {
-		req.Metadata[k] = v
-	}
-
+func (a *actorsRuntime) callRemoteActor(
+	ctx context.Context,
+	targetAddress, targetID string,
+	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	conn, err := a.grpcConnectionFn(targetAddress, targetID, false, false)
 	if err != nil {
 		return nil, err
@@ -376,16 +376,13 @@ func (a *actorsRuntime) callRemoteActor(ctx context.Context, targetAddress, targ
 
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 	client := internalv1pb.NewDaprInternalClient(conn)
-	resp, err := client.CallActor(ctx, &req)
-	diag.UpdateSpanPairStatusesFromError(span, err, req.Method)
+	resp, err := client.CallActor(ctx, req.Proto())
+	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
 	if err != nil {
 		return nil, err
 	}
 
-	return &CallResponse{
-		Data:     resp.Data.Value,
-		Metadata: resp.Metadata,
-	}, nil
+	return invokev1.InternalInvokeResponse(resp)
 }
 
 func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
