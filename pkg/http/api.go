@@ -533,19 +533,6 @@ func (a *api) getModifiedStateKey(key string) string {
 	return key
 }
 
-func (a *api) setHeaders(ctx *fasthttp.RequestCtx, metadata map[string]string) {
-	headers := []string{}
-	ctx.Request.Header.VisitAll(func(key, value []byte) {
-		k := string(key)
-		v := string(value)
-
-		headers = append(headers, fmt.Sprintf("%s&__header_equals__&%s", k, v))
-	})
-	if len(headers) > 0 {
-		metadata["headers"] = strings.Join(headers, "&__header_delim__&")
-	}
-}
-
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	targetID := reqCtx.UserValue(idParam).(string)
 	verb := strings.ToUpper(string(reqCtx.Method()))
@@ -825,22 +812,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
 	respond(reqCtx, statusCode, body)
-}
-
-// TODO: setHeadersOnRequest is used by actor service invocation only.
-// We will remove it in 0.8.0
-func (a *api) setHeadersOnRequest(metadata map[string]string, ctx *fasthttp.RequestCtx) {
-	if metadata == nil {
-		return
-	}
-
-	if val, ok := metadata["headers"]; ok {
-		headers := strings.Split(val, "&__header_delim__&")
-		for _, h := range headers {
-			kv := strings.Split(h, "&__header_equals__&")
-			ctx.Response.Header.Set(kv[0], kv[1])
-		}
-	}
 }
 
 func (a *api) onSaveActorState(ctx *fasthttp.RequestCtx) {
