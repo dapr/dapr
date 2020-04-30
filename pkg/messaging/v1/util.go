@@ -28,6 +28,11 @@ const (
 	DaprHeaderPrefix = "dapr-"
 	// gRPCBinaryMetadata is the suffix of grpc metadata binary value
 	gRPCBinaryMetadataSuffix = "-bin"
+
+	// W3C trace correlation headers
+	traceparentHeader = "traceparent"
+	tracestateHeader  = "tracestate"
+	tracebinMetadata  = "grpc-trace-bin"
 )
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
@@ -90,10 +95,19 @@ func isPermanentHTTPHeader(hdr string) bool {
 	return false
 }
 
+func isTraceCorrleationHeaderKey(key string) bool {
+	k := strings.ToLower(key)
+	return k == tracestateHeader || k == traceparentHeader || k == tracebinMetadata
+}
+
 // InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata
 func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
 	var md = metadata.MD{}
 	for k, listVal := range internalMD {
+		if isTraceCorrleationHeaderKey(k) {
+			continue
+		}
+
 		keyName := strings.ToLower(k)
 		if httpHeaderConversion && isPermanentHTTPHeader(k) {
 			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
@@ -116,7 +130,10 @@ func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
 
 func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
-	if key == ":method" || key == ":scheme" || key == ":path" || key == ":authority" || strings.HasPrefix(key, "grpc-") {
+	if key == ":method" || key == ":scheme" || key == ":path" || key == ":authority" {
+		return DaprHeaderPrefix + key[1:]
+	}
+	if strings.HasPrefix(key, "grpc-") {
 		return DaprHeaderPrefix + key
 	}
 
@@ -127,7 +144,7 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
 		// Skip if the header key has -bin suffix
-		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader {
+		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader || isTraceCorrleationHeaderKey(k) {
 			continue
 		}
 		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0].GetStringValue())

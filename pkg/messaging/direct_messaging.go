@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/dapr/pkg/channel"
@@ -129,7 +128,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	}
 
 	// TODO: Use built-in grpc client timeout instead of using context timeout
-	ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
+	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
 	defer cancel()
 
 	var span *trace.Span
