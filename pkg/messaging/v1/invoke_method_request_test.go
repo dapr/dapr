@@ -97,6 +97,13 @@ func TestHTTPExtension(t *testing.T) {
 	assert.Equal(t, "query1=value1&query2=value2", req.EncodeHTTPQueryString())
 }
 
+func TestActor(t *testing.T) {
+	req := NewInvokeMethodRequest("test_method")
+	req.WithActor("testActor", "1")
+	assert.Equal(t, "testActor", req.Actor().GetActorType())
+	assert.Equal(t, "1", req.Actor().GetActorId())
+}
+
 func TestProto(t *testing.T) {
 	m := commonv1pb.InvokeRequest{
 		Method:      "invoketest",

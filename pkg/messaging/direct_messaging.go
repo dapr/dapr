@@ -144,9 +144,8 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	}
 
 	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
-	rsp, err := invokev1.InternalInvokeResponse(resp)
 
-	return rsp, err
+	return invokev1.InternalInvokeResponse(resp)
 }
 
 func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {

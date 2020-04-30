@@ -65,6 +65,12 @@ func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMetho
 	return req, nil
 }
 
+// WithActor sets actor type and id
+func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMethodRequest {
+	imr.r.Actor = &internalv1pb.Actor{ActorType: actorType, ActorId: actorID}
+	return imr
+}
+
 // WithMetadata sets metadata
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
 	imr.r.Metadata = GrpcMetadataToInternalMetadata(md)
@@ -140,6 +146,11 @@ func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
 		p.Message, _ = ptypes.MarshalAny(imr.m)
 	}
 	return p
+}
+
+// Actor returns actor type and id
+func (imr *InvokeMethodRequest) Actor() *internalv1pb.Actor {
+	return imr.r.GetActor()
 }
 
 // Message gets InvokeRequest Message object
