@@ -12,6 +12,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
@@ -26,13 +27,9 @@ func TestInvocationResponse(t *testing.T) {
 }
 
 func TestInternalInvocationResponse(t *testing.T) {
-	d := commonv1pb.DataWithContentType{
-		ContentType: "application/json",
-		Body:        []byte("response"),
-	}
-	ds, _ := ptypes.MarshalAny(&d)
 	m := commonv1pb.InvokeResponse{
-		Data: ds,
+		Data:        &any.Any{Value: []byte("response")},
+		ContentType: "application/json",
 	}
 	ms, _ := ptypes.MarshalAny(&m)
 	pb := internalv1pb.InternalInvokeResponse{

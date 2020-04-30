@@ -13,6 +13,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
@@ -72,11 +73,11 @@ func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMeth
 
 // WithRawData sets message data and content_type
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
-	d := &commonv1pb.DataWithContentType{ContentType: contentType, Body: data}
 	if contentType == "" {
-		d.ContentType = JSONContentType
+		contentType = JSONContentType
 	}
-	imr.m.Data, _ = ptypes.MarshalAny(d)
+	imr.m.ContentType = contentType
+	imr.m.Data = &any.Any{Value: data}
 	return imr
 }
 
@@ -148,8 +149,9 @@ func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
 
 // RawData returns content_type and byte array body
 func (imr *InvokeMethodRequest) RawData() (string, []byte) {
-	if imr.m == nil {
+	if imr.m == nil || imr.m.Data == nil {
 		return "", nil
 	}
-	return extractRawData(imr.m.GetData())
+
+	return imr.m.GetContentType(), imr.m.GetData().Value
 }
