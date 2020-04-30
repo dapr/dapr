@@ -14,7 +14,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
-	structpb "github.com/golang/protobuf/ptypes/struct"
 )
 
 const (
@@ -135,7 +134,7 @@ func (imr *InvokeMethodRequest) APIVersion() internalv1pb.APIVersion {
 }
 
 // Metadata gets Metadata of InvokeMethodRequest
-func (imr *InvokeMethodRequest) Metadata() map[string]*structpb.ListValue {
+func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
 	return imr.r.GetMetadata()
 }
 
