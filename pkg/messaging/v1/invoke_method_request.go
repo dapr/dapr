@@ -13,6 +13,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 )
 
 const (
@@ -71,11 +72,11 @@ func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMeth
 
 // WithRawData sets message data and content_type
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
-	d := &commonv1pb.DataWithContentType{ContentType: contentType, Body: data}
 	if contentType == "" {
-		d.ContentType = JSONContentType
+		contentType = JSONContentType
 	}
-	imr.m.Data, _ = ptypes.MarshalAny(d)
+	imr.m.ContentType = contentType
+	imr.m.Data = &any.Any{Value: data}
 	return imr
 }
 
@@ -147,8 +148,18 @@ func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
 
 // RawData returns content_type and byte array body
 func (imr *InvokeMethodRequest) RawData() (string, []byte) {
-	if imr.m == nil {
+	if imr.m == nil || imr.m.Data == nil {
 		return "", nil
 	}
-	return extractRawData(imr.m.GetData())
+
+	contentType := imr.m.GetContentType()
+	dataTypeURL := imr.m.GetData().GetTypeUrl()
+	dataValue := imr.m.GetData().GetValue()
+
+	// set content_type to application/json only if typeurl is unset and data is given
+	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
+		contentType = JSONContentType
+	}
+
+	return contentType, dataValue
 }
