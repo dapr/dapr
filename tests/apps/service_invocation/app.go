@@ -510,7 +510,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 			Data:        &any.Any{Value: []byte("GRPCToHTTPTest")},
 			ContentType: "text/plain; utf-8",
 			HttpExtension: &commonv1pb.HTTPExtension{
-				Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_POST),
+				Verb: commonv1pb.HTTPExtension_POST,
 			},
 		},
 	}
