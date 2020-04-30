@@ -981,7 +981,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
-	key := reqCtx.UserValue("key")
+	key := fmt.Sprintf("%v", reqCtx.UserValue("key"))
 	body := reqCtx.PostBody()
 	a.extendedMetadata.Store(key, string(body))
 	respondEmpty(reqCtx, 200)
