@@ -131,9 +131,18 @@ func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
 
 // RawData returns content_type and byte array body
 func (imr *InvokeMethodResponse) RawData() (string, []byte) {
-	if imr.m == nil || imr.m.Data == nil {
+	if imr.m == nil || imr.m.GetData() == nil {
 		return "", nil
 	}
 
-	return imr.m.GetContentType(), imr.m.GetData().Value
+	contentType := imr.m.GetContentType()
+	dataTypeURL := imr.m.GetData().GetTypeUrl()
+	dataValue := imr.m.GetData().GetValue()
+
+	// set content_type to application/json only if typeurl is unset and data is given
+	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
+		contentType = JSONContentType
+	}
+
+	return contentType, dataValue
 }

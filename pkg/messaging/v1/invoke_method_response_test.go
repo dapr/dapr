@@ -44,11 +44,29 @@ func TestInternalInvocationResponse(t *testing.T) {
 }
 
 func TestResponseData(t *testing.T) {
-	resp := NewInvokeMethodResponse(0, "OK", nil)
-	resp.WithRawData([]byte("test"), "application/json")
-	contentType, bData := resp.RawData()
-	assert.Equal(t, "application/json", contentType)
-	assert.Equal(t, []byte("test"), bData)
+	t.Run("contenttype is set", func(t *testing.T) {
+		resp := NewInvokeMethodResponse(0, "OK", nil)
+		resp.WithRawData([]byte("test"), "application/json")
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	t.Run("contenttype is unset", func(t *testing.T) {
+		resp := NewInvokeMethodResponse(0, "OK", nil)
+		resp.WithRawData([]byte("test"), "")
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
+		resp := NewInvokeMethodResponse(0, "OK", nil)
+		resp.m.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("fake"), bData)
+	})
 }
 
 func TestResponseHeader(t *testing.T) {
