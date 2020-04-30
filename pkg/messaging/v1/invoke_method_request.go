@@ -13,7 +13,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
-	structpb "github.com/golang/protobuf/ptypes/struct"
+	"github.com/golang/protobuf/ptypes/any"
 )
 
 const (
@@ -64,6 +64,12 @@ func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMetho
 	return req, nil
 }
 
+// WithActor sets actor type and id
+func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMethodRequest {
+	imr.r.Actor = &internalv1pb.Actor{ActorType: actorType, ActorId: actorID}
+	return imr
+}
+
 // WithMetadata sets metadata
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
 	imr.r.Metadata = GrpcMetadataToInternalMetadata(md)
@@ -72,11 +78,11 @@ func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMeth
 
 // WithRawData sets message data and content_type
 func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *InvokeMethodRequest {
-	d := &commonv1pb.DataWithContentType{ContentType: contentType, Body: data}
 	if contentType == "" {
-		d.ContentType = JSONContentType
+		contentType = JSONContentType
 	}
-	imr.m.Data, _ = ptypes.MarshalAny(d)
+	imr.m.ContentType = contentType
+	imr.m.Data = &any.Any{Value: data}
 	return imr
 }
 
@@ -128,7 +134,7 @@ func (imr *InvokeMethodRequest) APIVersion() internalv1pb.APIVersion {
 }
 
 // Metadata gets Metadata of InvokeMethodRequest
-func (imr *InvokeMethodRequest) Metadata() map[string]*structpb.ListValue {
+func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
 	return imr.r.GetMetadata()
 }
 
@@ -141,6 +147,11 @@ func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
 	return p
 }
 
+// Actor returns actor type and id
+func (imr *InvokeMethodRequest) Actor() *internalv1pb.Actor {
+	return imr.r.GetActor()
+}
+
 // Message gets InvokeRequest Message object
 func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
 	return imr.m
@@ -148,8 +159,18 @@ func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
 
 // RawData returns content_type and byte array body
 func (imr *InvokeMethodRequest) RawData() (string, []byte) {
-	if imr.m == nil {
+	if imr.m == nil || imr.m.Data == nil {
 		return "", nil
 	}
-	return extractRawData(imr.m.GetData())
+
+	contentType := imr.m.GetContentType()
+	dataTypeURL := imr.m.GetData().GetTypeUrl()
+	dataValue := imr.m.GetData().GetValue()
+
+	// set content_type to application/json only if typeurl is unset and data is given
+	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
+		contentType = JSONContentType
+	}
+
+	return contentType, dataValue
 }

@@ -11,6 +11,7 @@ import (
 	"context"
 
 	actors "github.com/dapr/dapr/pkg/actors"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -20,20 +21,20 @@ type MockActors struct {
 }
 
 // Call provides a mock function with given fields: req
-func (_m *MockActors) Call(ctx context.Context, req *actors.CallRequest) (*actors.CallResponse, error) {
+func (_m *MockActors) Call(ctx context.Context, req *v1.InvokeMethodRequest) (*v1.InvokeMethodResponse, error) {
 	ret := _m.Called(req)
 
-	var r0 *actors.CallResponse
-	if rf, ok := ret.Get(0).(func(*actors.CallRequest) *actors.CallResponse); ok {
+	var r0 *v1.InvokeMethodResponse
+	if rf, ok := ret.Get(0).(func(*v1.InvokeMethodRequest) *v1.InvokeMethodResponse); ok {
 		r0 = rf(req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*actors.CallResponse)
+			r0 = ret.Get(0).(*v1.InvokeMethodResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*actors.CallRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*v1.InvokeMethodRequest) error); ok {
 		r1 = rf(req)
 	} else {
 		r1 = ret.Error(1)

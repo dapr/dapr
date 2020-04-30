@@ -26,7 +26,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
 )
@@ -186,9 +185,9 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 }
 
 func constructRequest(id, method, httpVerb string, body []byte) *daprv1pb.InvokeServiceRequest {
-	d := &commonv1pb.DataWithContentType{ContentType: jsonContentType, Body: body}
 	msg := &commonv1pb.InvokeRequest{Method: method}
-	msg.Data, _ = ptypes.MarshalAny(d)
+	msg.ContentType = jsonContentType
+	msg.Data = &any.Any{Value: body}
 	if httpVerb != "" {
 		msg.HttpExtension = &commonv1pb.HTTPExtension{
 			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
@@ -199,12 +198,6 @@ func constructRequest(id, method, httpVerb string, body []byte) *daprv1pb.Invoke
 		Id:      id,
 		Message: msg,
 	}
-}
-
-func unmarshalData(data *any.Any) (string, []byte) {
-	d := &commonv1pb.DataWithContentType{}
-	ptypes.UnmarshalAny(data, d)
-	return d.ContentType, d.Body
 }
 
 // appRouter initializes restful api router
@@ -279,7 +272,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, body := unmarshalData(resp.Data)
+	body := resp.Data.GetValue()
 	fmt.Printf("resp was %s\n", string(body))
 
 	var responseMessage appResponse
@@ -579,7 +572,7 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, body := unmarshalData(resp.Data)
+		body := resp.Data.GetValue()
 
 		fmt.Printf("resp was %s\n", string(body))
 		//var responseMessage string
