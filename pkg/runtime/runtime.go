@@ -106,7 +106,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 	return &DaprRuntime{
 		runtimeConfig:            runtimeConfig,
 		globalConfig:             globalConfig,
-		grpc:                     grpc.NewGRPCManager(),
+		grpc:                     grpc.NewGRPCManager(runtimeConfig.Mode),
 		json:                     jsoniter.ConfigFastest,
 		inputBindings:            map[string]bindings.InputBinding{},
 		outputBindings:           map[string]bindings.OutputBinding{},
@@ -333,7 +333,8 @@ func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
 		a.runtimeConfig.Mode,
 		a.appChannel,
 		a.grpc.GetGRPCConnection,
-		resolver)
+		resolver,
+		a.globalConfig.Spec.TracingSpec)
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {
@@ -521,8 +522,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req := invokev1.NewInvokeMethodRequest(bindingName)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
-
-		resp, err := a.appChannel.InvokeMethod(req)
+		// TODO: Propagate Context
+		ctx := context.Background()
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
@@ -560,7 +562,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
@@ -582,7 +584,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding)
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
@@ -617,7 +619,9 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string, bindingsList []st
 		req.WithHTTPExtension(nethttp.MethodOptions, "")
 		req.WithRawData(nil, invokev1.JSONContentType)
 
-		resp, err := a.appChannel.InvokeMethod(req)
+		// TODO: Propagate Context
+		ctx := context.Background()
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		return err == nil && resp.Status().Code != nethttp.StatusNotFound
 	}
 	return false
@@ -746,7 +750,9 @@ func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
 		req.WithHTTPExtension(nethttp.MethodGet, "")
 		req.WithRawData(nil, invokev1.JSONContentType)
 
-		resp, err := a.appChannel.InvokeMethod(req)
+		// TODO Propagate Context
+		ctx := context.Background()
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
 			log.Errorf("error getting topic list from app: %v", err)
 		}
@@ -931,11 +937,11 @@ func (a *DaprRuntime) initServiceDiscovery() error {
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	req := invokev1.NewInvokeMethodRequest(msg.Topic)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.Data, invokev1.JSONContentType)
+	req.WithRawData(msg.Data, pubsub.ContentType)
 
-	// TODO: Pass trace headers
-	resp, err := a.appChannel.InvokeMethod(req)
-
+	// TODO Propagate Context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
@@ -989,7 +995,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec)
 	err := act.Init()
 	a.actor = act
 	return err
@@ -1176,7 +1182,9 @@ func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) 
 	req.WithHTTPExtension(nethttp.MethodGet, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
 
-	resp, err := a.appChannel.InvokeMethod(req)
+	// TODO Propagate context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -1189,7 +1197,7 @@ func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) 
 
 	contentType, body := resp.RawData()
 	if contentType != invokev1.JSONContentType {
-		return nil, fmt.Errorf("invalid content_type: %s", contentType)
+		log.Debugf("dapr/config returns invalid content_type: %s", contentType)
 	}
 
 	if err = a.json.Unmarshal(body, &config); err != nil {

@@ -14,6 +14,7 @@ import (
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -30,13 +31,15 @@ type Manager struct {
 	lock           *sync.Mutex
 	connectionPool map[string]*grpc.ClientConn
 	auth           security.Authenticator
+	mode           modes.DaprMode
 }
 
 // NewGRPCManager returns a new grpc manager
-func NewGRPCManager() *Manager {
+func NewGRPCManager(mode modes.DaprMode) *Manager {
 	return &Manager{
 		lock:           &sync.Mutex{},
 		connectionPool: map[string]*grpc.ClientConn{},
+		mode:           mode,
 	}
 }
 
@@ -71,7 +74,7 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
-		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+		grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
 		grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 
@@ -92,7 +95,8 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	conn, err := grpc.Dial("dns:///"+address, opts...)
+	dialPrefix := GetDialAddressPrefix(g.mode)
+	conn, err := grpc.Dial(dialPrefix+address, opts...)
 	if err != nil {
 		g.lock.Unlock()
 		return nil, err

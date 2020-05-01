@@ -248,7 +248,7 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 					}
 
 					if strings.EqualFold(l.GetName(), "grpc_server_method") {
-						if strings.EqualFold(l.GetValue(), "dapr.proto.dapr.v1.Dapr/SaveState") {
+						if strings.EqualFold(l.GetValue(), "/dapr.proto.dapr.v1.Dapr/SaveState") {
 							foundMethod = true
 
 							// Check value is as expected

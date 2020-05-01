@@ -17,7 +17,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	daprclientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
-	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -43,10 +43,7 @@ func (m *mockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest)
 	dt["querystring"] = string(serialized)
 
 	ds, _ := json.Marshal(dt)
-	d := &commonv1pb.DataWithContentType{ContentType: "application/json", Body: ds}
-	val, _ := ptypes.MarshalAny(d)
-
-	return &commonv1pb.InvokeResponse{Data: val}, nil
+	return &commonv1pb.InvokeResponse{Data: &any.Any{Value: ds}, ContentType: "application/json"}, nil
 }
 func (m *mockServer) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*daprclientv1pb.GetTopicSubscriptionsEnvelope, error) {
 	return &daprclientv1pb.GetTopicSubscriptionsEnvelope{}, nil
@@ -82,7 +79,7 @@ func TestInvokeMethod(t *testing.T) {
 	c := Channel{baseAddress: "localhost:9998", client: conn}
 	req := invokev1.NewInvokeMethodRequest("method")
 	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
-	response, err := c.InvokeMethod(req)
+	response, err := c.InvokeMethod(context.Background(), req)
 	assert.NoError(t, err)
 	contentType, body := response.RawData()
 	grpcServer.Stop()

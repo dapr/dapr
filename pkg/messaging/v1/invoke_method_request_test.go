@@ -11,6 +11,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -30,14 +31,10 @@ func TestFromInvokeRequestMessage(t *testing.T) {
 }
 
 func TestInternalInvokeRequest(t *testing.T) {
-	d := commonv1pb.DataWithContentType{
-		ContentType: "application/json",
-		Body:        []byte("test"),
-	}
-	ds, _ := ptypes.MarshalAny(&d)
 	m := commonv1pb.InvokeRequest{
-		Method: "invoketest",
-		Data:   ds,
+		Method:      "invoketest",
+		ContentType: "application/json",
+		Data:        &any.Any{Value: []byte("test")},
 	}
 	ms, _ := ptypes.MarshalAny(&m)
 	pb := internalv1pb.InternalInvokeRequest{
@@ -68,11 +65,29 @@ func TestMetadata(t *testing.T) {
 }
 
 func TestData(t *testing.T) {
-	req := NewInvokeMethodRequest("test_method")
-	req.WithRawData([]byte("test"), "application/json")
-	contentType, bData := req.RawData()
-	assert.Equal(t, "application/json", contentType)
-	assert.Equal(t, []byte("test"), bData)
+	t.Run("contenttype is set", func(t *testing.T) {
+		resp := NewInvokeMethodRequest("test_method")
+		resp.WithRawData([]byte("test"), "application/json")
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	t.Run("contenttype is unset", func(t *testing.T) {
+		resp := NewInvokeMethodRequest("test_method")
+		resp.WithRawData([]byte("test"), "")
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
+		resp := NewInvokeMethodRequest("test_method")
+		resp.m.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("fake"), bData)
+	})
 }
 
 func TestHTTPExtension(t *testing.T) {
@@ -82,15 +97,18 @@ func TestHTTPExtension(t *testing.T) {
 	assert.Equal(t, "query1=value1&query2=value2", req.EncodeHTTPQueryString())
 }
 
+func TestActor(t *testing.T) {
+	req := NewInvokeMethodRequest("test_method")
+	req.WithActor("testActor", "1")
+	assert.Equal(t, "testActor", req.Actor().GetActorType())
+	assert.Equal(t, "1", req.Actor().GetActorId())
+}
+
 func TestProto(t *testing.T) {
-	d := commonv1pb.DataWithContentType{
-		ContentType: "application/json",
-		Body:        []byte("test"),
-	}
-	ds, _ := ptypes.MarshalAny(&d)
 	m := commonv1pb.InvokeRequest{
-		Method: "invoketest",
-		Data:   ds,
+		Method:      "invoketest",
+		ContentType: "application/json",
+		Data:        &any.Any{Value: []byte("test")},
 	}
 	ms, _ := ptypes.MarshalAny(&m)
 	pb := internalv1pb.InternalInvokeRequest{
@@ -106,10 +124,6 @@ func TestProto(t *testing.T) {
 	err = ptypes.UnmarshalAny(req2.GetMessage(), &m2)
 	assert.NoError(t, err)
 
-	d2 := commonv1pb.DataWithContentType{}
-	err = ptypes.UnmarshalAny(m2.Data, &d2)
-	assert.NoError(t, err)
-
-	assert.Equal(t, "application/json", d2.GetContentType())
-	assert.Equal(t, []byte("test"), d2.GetBody())
+	assert.Equal(t, "application/json", m2.GetContentType())
+	assert.Equal(t, []byte("test"), m2.Data.GetValue())
 }

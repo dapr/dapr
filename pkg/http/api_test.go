@@ -31,27 +31,18 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
-	routing "github.com/qiangxue/fasthttp-routing"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
 )
 
 var retryCounter = 0
-
-func TestSetHeaders(t *testing.T) {
-	testAPI := &api{}
-	c := &routing.Context{}
-	c.RequestCtx = &fasthttp.RequestCtx{Request: fasthttp.Request{}}
-	c.Request.Header.Set("H1", "v1")
-	c.Request.Header.Set("H2", "v2")
-	m := map[string]string{}
-	testAPI.setHeaders(c, m)
-	assert.Equal(t, "H1&__header_equals__&v1&__header_delim__&H2&__header_equals__&v2", m["headers"])
-}
 
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
@@ -117,6 +108,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
 		json:                  jsoniter.ConfigFastest,
+		tracingSpec:           spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
 
@@ -135,7 +127,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -159,7 +150,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
 			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "13", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -196,7 +186,15 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeAppID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -216,7 +214,15 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeAppID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -258,6 +264,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructDirectMessagingEndpoints())
 
@@ -272,14 +279,20 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeAppID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
@@ -294,7 +307,14 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeAppID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -302,7 +322,6 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 	})
 
 	fakeServer.Shutdown()
@@ -636,8 +655,9 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	createExporters(meta)
 
 	testAPI := &api{
-		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		actor:       nil,
+		json:        jsoniter.ConfigFastest,
+		tracingSpec: spec,
 	}
 
 	fakeServer.StartServerWithTracing(spec, testAPI.constructActorEndpoints())
@@ -659,7 +679,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
 			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "3", buffer, "failed to generate proper traces with %s", method)
 		}
 	})
 
@@ -690,7 +709,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -732,7 +750,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -783,7 +800,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			assert.Equal(t, "0", buffer, "failed to generate proper traces with %s", method)
 			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
 		}
 	})
@@ -817,7 +833,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "3", buffer, "failed to generate proper traces for saving actor state")
 			mockActors.AssertNumberOfCalls(t, "SaveState", 0)
 		}
 	})
@@ -841,7 +856,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for getting actor state")
 		assert.Equal(t, fakeData, resp.RawBody)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
@@ -868,7 +882,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for deleting actor state")
 		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})
 
@@ -914,7 +927,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces for transaction")
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 	})
 
@@ -952,11 +964,11 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipe, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		buffer = ""
 		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
@@ -966,14 +978,22 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 		fakeReq.WithMetadata(fakeHeaderMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeDaprID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeDaprID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
+		// TODO Check back as how to assert on generated span ID
+		// assert.NotEmpty(t, resp.JSONBody, "failed to generate trace context with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }
@@ -1039,12 +1059,13 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
@@ -1053,14 +1074,20 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 		fakeReq.WithMetadata(fakeHeaderMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeDaprID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, "0", buffer, "failed to generate proper traces with invoke")
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 }
@@ -1104,12 +1131,13 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
+		tracingSpec:     spec,
 	}
 	fakeServer.StartServerWithTracingAndPipeline(spec, pipeline, testAPI.constructDirectMessagingEndpoints())
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
 		buffer = ""
-		apiPath := "v1.0/invoke/fakeDaprID/method/fakeMethod"
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
 		fakeData := []byte("fakeData")
 
 		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
@@ -1118,7 +1146,14 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 		fakeReq.WithMetadata(fakeHeaderMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke", "fakeDaprID", fakeReq).Return(fakeDirectMessageResponse, nil).Once()
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1153,7 +1188,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, router.HandleRequest); err != nil {
+		if err := fasthttp.Serve(f.ln, router.Handler); err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
 	}()
@@ -1171,8 +1206,8 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, router.HandleRequest)); err != nil {
-			panic(fmt.Errorf("failed to serve: %v", err))
+		if err := fasthttp.Serve(f.ln, diag.SetTracingSpanContextFromHTTPContext(router.Handler, spec)); err != nil {
+			panic(fmt.Errorf("failed to set tracing span context: %v", err))
 		}
 	}()
 
@@ -1189,9 +1224,10 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		handler := pipeline.Apply(router.HandleRequest)
-		if err := fasthttp.Serve(f.ln, diag.TracingHTTPMiddleware(spec, handler)); err != nil {
-			panic(fmt.Errorf("failed to serve: %v", err))
+		handler := pipeline.Apply(router.Handler)
+		spec := config.TracingSpec{SamplingRate: "1"}
+		if err := fasthttp.Serve(f.ln, diag.SetTracingSpanContextFromHTTPContext(handler, spec)); err != nil {
+			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
 	}()
 
@@ -1208,12 +1244,11 @@ func (f *fakeHTTPServer) getRouter(endpoints []Endpoint) *routing.Router {
 	router := routing.New()
 
 	for _, e := range endpoints {
-		methods := strings.Join(e.Methods, ",")
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-
-		router.To(methods, path, e.Handler)
+		for _, m := range e.Methods {
+			router.Handle(m, path, e.Handler)
+		}
 	}
-
 	return router
 }
 

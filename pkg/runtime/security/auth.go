@@ -14,6 +14,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/golang/protobuf/ptypes"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -87,11 +88,15 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
 	}
 
+	unaryChain := grpc_middleware.ChainUnaryClient(
+		grpc_retry.UnaryClientInterceptor(),
+		diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
+	)
+
 	conn, err := grpc.Dial(
 		a.sentryAddress,
-		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
 		grpc.WithTransportCredentials(credentials.NewTLS(config)),
-		grpc.WithUnaryInterceptor(grpc_retry.UnaryClientInterceptor()))
+		grpc.WithUnaryInterceptor(unaryChain))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
 		return nil, fmt.Errorf("error establishing connection to sentry: %s", err)

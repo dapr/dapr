@@ -9,11 +9,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,7 +34,7 @@ type messageClientConnection func(address, id string, skipTLS, recreateIfExists 
 
 // DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
-	Invoke(targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
+	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 }
 
 type directMessaging struct {
@@ -43,6 +45,7 @@ type directMessaging struct {
 	grpcPort            int
 	namespace           string
 	resolver            servicediscovery.Resolver
+	tracingSpec         config.TracingSpec
 }
 
 // NewDirectMessaging returns a new direct messaging api
@@ -51,7 +54,8 @@ func NewDirectMessaging(
 	port int, mode modes.DaprMode,
 	appChannel channel.AppChannel,
 	clientConnFn messageClientConnection,
-	resolver servicediscovery.Resolver) DirectMessaging {
+	resolver servicediscovery.Resolver,
+	tracingSpec config.TracingSpec) DirectMessaging {
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: clientConnFn,
@@ -60,27 +64,29 @@ func NewDirectMessaging(
 		grpcPort:            port,
 		namespace:           namespace,
 		resolver:            resolver,
+		tracingSpec:         tracingSpec,
 	}
 }
 
 // Invoke takes a message requests and invokes an app, either local or remote
-func (d *directMessaging) Invoke(targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if targetAppID == d.appID {
-		return d.invokeLocal(req)
+		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(invokeRemoteRetryCount, targetAppID, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, invokeRemoteRetryCount, targetAppID, d.invokeRemote, req)
 }
 
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
 // TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target
 // Server shuts down.
 func (d *directMessaging) invokeWithRetry(
+	ctx context.Context,
 	numRetries int,
 	targetID string,
-	fn func(targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
+	fn func(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(targetID, req)
+		resp, err := fn(ctx, targetID, req)
 		if err == nil {
 			return resp, nil
 		}
@@ -102,15 +108,15 @@ func (d *directMessaging) invokeWithRetry(
 	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetID, numRetries)
 }
 
-func (d *directMessaging) invokeLocal(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if d.appChannel == nil {
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
 
-	return d.appChannel.InvokeMethod(req)
+	return d.appChannel.InvokeMethod(ctx, req)
 }
 
-func (d *directMessaging) invokeRemote(targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	address, err := d.getAddressFromMessageRequest(targetID)
 	if err != nil {
 		return nil, err
@@ -122,18 +128,23 @@ func (d *directMessaging) invokeRemote(targetID string, req *invokev1.InvokeMeth
 	}
 
 	// TODO: Use built-in grpc client timeout instead of using context timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
+	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
 	defer cancel()
 
+	var span *trace.Span
+	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, req.Message().Method, d.tracingSpec)
+	defer span.End()
+
+	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 	clientV1 := internalv1pb.NewDaprInternalClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {
 		return nil, err
 	}
 
-	rsp, err := invokev1.InternalInvokeResponse(resp)
+	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
 
-	return rsp, err
+	return invokev1.InternalInvokeResponse(resp)
 }
 
 func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {

@@ -62,7 +62,7 @@ func (h *Channel) GetBaseAddress() string {
 }
 
 // InvokeMethod invokes user code via HTTP
-func (h *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	// Check if HTTP Extension is given. Otherwise, it will return error.
 	httpExt := req.Message().GetHttpExtension()
 	if httpExt == nil {
@@ -76,7 +76,7 @@ func (h *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.Inv
 	var err error
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1:
-		rsp, err = h.invokeMethodV1(req)
+		rsp, err = h.invokeMethodV1(ctx, req)
 
 	default:
 		// Reject unsupported version
@@ -86,16 +86,14 @@ func (h *Channel) InvokeMethod(req *invokev1.InvokeMethodRequest) (*invokev1.Inv
 	return rsp, err
 }
 
-func (h *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	channelReq := h.constructRequest(req)
+func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	channelReq := h.constructRequest(ctx, req)
 
 	if h.ch != nil {
 		h.ch <- 1
 	}
 
 	// Emit metric when request is sent
-	// TODO: Use propagated context
-	ctx := context.Background()
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, req.Message().Method, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
@@ -119,7 +117,7 @@ func (h *Channel) invokeMethodV1(req *invokev1.InvokeMethodRequest) (*invokev1.I
 	return rsp, nil
 }
 
-func (h *Channel) constructRequest(req *invokev1.InvokeMethodRequest) *fasthttp.Request {
+func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) *fasthttp.Request {
 	var channelReq = fasthttp.AcquireRequest()
 
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
@@ -131,7 +129,8 @@ func (h *Channel) constructRequest(req *invokev1.InvokeMethodRequest) *fasthttp.
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(req.Metadata(), channelReq.Header.Set)
 
-	// TODO: Pass traceparent/tracestate to headers
+	sc := diag.FromContext(ctx)
+	diag.SpanContextToRequest(sc, channelReq)
 
 	// Set Content body and types
 	contentType, body := req.RawData()
