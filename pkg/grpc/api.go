@@ -181,6 +181,7 @@ func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceReque
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
 	}
+
 	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
 	if err != nil {
 		return nil, err

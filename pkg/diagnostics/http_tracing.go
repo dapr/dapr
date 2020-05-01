@@ -34,9 +34,9 @@ const (
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
 // SetTracingSpanContextFromHTTPContext sets the trace SpanContext in the request context
-func SetTracingSpanContextFromHTTPContext(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func SetTracingSpanContextFromHTTPContext(next fasthttp.RequestHandler, spec config.TracingSpec) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		sc := GetSpanContextFromRequestContext(ctx)
+		sc := GetSpanContextFromRequestContext(ctx, spec)
 		SpanContextToRequest(sc, &ctx.Request)
 		next(ctx)
 	}
@@ -52,18 +52,11 @@ func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Re
 	return ctx, span
 }
 
-func GetSpanContextFromRequestContext(ctx *fasthttp.RequestCtx) trace.SpanContext {
+func GetSpanContextFromRequestContext(ctx *fasthttp.RequestCtx, spec config.TracingSpec) trace.SpanContext {
 	spanContext, ok := SpanContextFromRequest(&ctx.Request)
 
-	gen := tracingConfig.Load().(*traceIDGenerator)
-
 	if !ok {
-		spanContext = trace.SpanContext{}
-		// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
-		spanContext.TraceID = gen.NewTraceID()
-
-		// Default sampling rate is non zero in Dapr, so that means , sampling is enabled by default
-		spanContext.TraceOptions = trace.TraceOptions(1)
+		spanContext = GetDefaultSpanContext(spec)
 	}
 
 	return spanContext
