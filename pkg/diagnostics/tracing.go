@@ -72,15 +72,14 @@ func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
 
 	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
 
-	if rate <= 0 {
-		rate = 0
-	} else if rate >= 1 {
-		rate = 1
-	}
+	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
+	sampler := trace.ProbabilitySampler(rate)
+	sampled := sampler(trace.SamplingParameters{
+		ParentContext:   trace.SpanContext{},
+		TraceID:         spanContext.TraceID,
+		SpanID:          spanContext.SpanID,
+		HasRemoteParent: false}).Sample
 
-	traceIDUpperBound := uint64(rate * (1 << 63))
-	x := binary.BigEndian.Uint64(spanContext.TraceID[0:8]) >> 1
-	sampled := x < traceIDUpperBound
 	if sampled {
 		spanContext.TraceOptions |= 1
 	} else {

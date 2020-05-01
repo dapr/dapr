@@ -113,12 +113,19 @@ func TestSpanContextToRequest(t *testing.T) {
 }
 
 func TestWithNoSpanContext(t *testing.T) {
-	t.Run("No SpanContext with non-zero sampling rate", func(t *testing.T) {
+	t.Run("No SpanContext with always sampling rate", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 		spec := config.TracingSpec{SamplingRate: "1"}
 		sc := GetSpanContextFromRequestContext(ctx, spec)
 		assert.NotEmpty(t, sc, "Should get default span context")
 		assert.Equal(t, 1, int(sc.TraceOptions), "Should be sampled")
+	})
+
+	t.Run("No SpanContext with non-zero sampling rate", func(t *testing.T) {
+		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
+		spec := config.TracingSpec{SamplingRate: "0.5"}
+		sc := GetSpanContextFromRequestContext(ctx, spec)
+		assert.NotEmpty(t, sc, "Should get default span context")
 	})
 
 	t.Run("No SpanContext with zero sampling rate", func(t *testing.T) {
