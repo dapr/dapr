@@ -20,10 +20,10 @@ import (
 const grpcTraceContextKey = "grpc-trace-bin"
 
 // SetTracingSpanContextGRPCMiddlewareStream sets the trace spancontext into gRPC stream
-func SetTracingSpanContextGRPCMiddlewareStream() grpc.StreamServerInterceptor {
+func SetTracingSpanContextGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := stream.Context()
-		sc := GetSpanContextFromGRPC(ctx)
+		sc := GetSpanContextFromGRPC(ctx, spec)
 		ctx = NewContext(ctx, sc)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
 		wrappedStream.WrappedContext = ctx
@@ -35,9 +35,9 @@ func SetTracingSpanContextGRPCMiddlewareStream() grpc.StreamServerInterceptor {
 }
 
 // SetTracingSpanContextGRPCMiddlewareUnary sets the trace spancontext into gRPC unary calls
-func SetTracingSpanContextGRPCMiddlewareUnary() grpc.UnaryServerInterceptor {
+func SetTracingSpanContextGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		sc := GetSpanContextFromGRPC(ctx)
+		sc := GetSpanContextFromGRPC(ctx, spec)
 		ctx = NewContext(ctx, sc)
 		resp, err := handler(ctx, req)
 
@@ -63,18 +63,11 @@ func StartTracingClientSpanFromGRPCContext(ctx context.Context, method string, s
 	return ctx, span
 }
 
-func GetSpanContextFromGRPC(ctx context.Context) trace.SpanContext {
+func GetSpanContextFromGRPC(ctx context.Context, spec config.TracingSpec) trace.SpanContext {
 	spanContext, ok := FromGRPCContext(ctx)
 
-	gen := tracingConfig.Load().(*traceIDGenerator)
-
 	if !ok {
-		spanContext = trace.SpanContext{}
-		// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
-		spanContext.TraceID = gen.NewTraceID()
-
-		// Default sampling rate is non zero in Dapr, so that means , sampling is enabled by default
-		spanContext.TraceOptions = trace.TraceOptions(1)
+		spanContext = GetDefaultSpanContext(spec)
 	}
 
 	return spanContext

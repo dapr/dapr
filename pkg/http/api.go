@@ -297,7 +297,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 
 	var span *trace.Span
 	spanName := fmt.Sprintf("OutputBindingMessage: %s", name)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
 	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
@@ -333,7 +333,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	var span *trace.Span
 	spanName := fmt.Sprintf("GetState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
 	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
@@ -410,7 +410,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	var span *trace.Span
 	spanName := fmt.Sprintf("DeleteState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
 	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
@@ -458,7 +458,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 
 	var span *trace.Span
 	spanName := fmt.Sprintf("GetSecret: %s", secretStoreName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
 	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
@@ -509,7 +509,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	var span *trace.Span
 	spanName := fmt.Sprintf("SaveState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
 	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
@@ -553,7 +553,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	})
 	req.WithMetadata(metadata)
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 	resp, err := a.directMessaging.Invoke(ctx, targetID, req)
 	// err does not represent user application response
@@ -599,7 +599,7 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	err = a.actor.CreateReminder(ctx, &req)
@@ -634,7 +634,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	err = a.actor.CreateTimer(ctx, &req)
@@ -663,7 +663,7 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 		ActorType: actorType,
 	}
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	err := a.actor.DeleteReminder(ctx, &req)
@@ -686,7 +686,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	body := reqCtx.PostBody()
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
@@ -734,7 +734,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	resp, err := a.actor.GetReminder(ctx, &actors.GetReminderRequest{
@@ -772,7 +772,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 		ActorType: actorType,
 	}
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	err := a.actor.DeleteTimer(ctx, &req)
@@ -809,7 +809,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	})
 	req.WithMetadata(metadata)
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	resp, err := a.actor.Call(ctx, req)
@@ -844,7 +844,7 @@ func (a *api) onSaveActorState(reqCtx *fasthttp.RequestCtx) {
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	body := reqCtx.PostBody()
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
@@ -901,7 +901,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		Key:       key,
 	}
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	resp, err := a.actor.GetState(ctx, &req)
@@ -924,7 +924,7 @@ func (a *api) onDeleteActorState(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
@@ -962,7 +962,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		return true
 	})
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 
 	mtd := metadata{
@@ -998,7 +998,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 
 	// TODO : Remove passing corID in NewCloudEventsEnvelope through arguments as it can be passed through context
-	sc := diag.GetSpanContextFromRequestContext(reqCtx)
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	corID := sc.TraceID.String()
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 

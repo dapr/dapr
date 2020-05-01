@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 
 	"go.opencensus.io/trace"
@@ -58,6 +59,35 @@ func startTracingSpanInternal(ctx context.Context, uri, samplingRate string, spa
 	}
 
 	return ctx, span
+}
+
+// GetDefaultSpanContext returns default span context when not provided by the client
+func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
+	spanContext := trace.SpanContext{}
+
+	gen := tracingConfig.Load().(*traceIDGenerator)
+
+	// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
+	spanContext.TraceID = gen.NewTraceID()
+
+	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
+
+	if rate <= 0 {
+		rate = 0
+	} else if rate >= 1 {
+		rate = 1
+	}
+
+	traceIDUpperBound := uint64(rate * (1 << 63))
+	x := binary.BigEndian.Uint64(spanContext.TraceID[0:8]) >> 1
+	sampled := x < traceIDUpperBound
+	if sampled {
+		spanContext.TraceOptions |= 1
+	} else {
+		spanContext.TraceOptions &= ^trace.TraceOptions(1)
+	}
+
+	return spanContext
 }
 
 func projectStatusCode(code int) int32 {
