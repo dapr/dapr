@@ -275,8 +275,7 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
 		assert.NotNil(t, requestHeaders["user-agent"][0])
 		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		// TODO: When we fix double grpc-trace-bin
-		// assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
 
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
@@ -358,8 +357,7 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
 		assert.NotNil(t, requestHeaders["user-agent"][0])
 		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		// TODO: When we fix double grpc-trace-bin
-		// assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
 		assert.NotNil(t, requestHeaders["x-forwarded-host"][0])
 		assert.Equal(t, "http", requestHeaders["x-forwarded-proto"][0])
 		assert.NotNil(t, requestHeaders["forwarded"][0])
