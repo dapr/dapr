@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 
 	"go.opencensus.io/trace"
@@ -58,6 +59,32 @@ func startTracingSpanInternal(ctx context.Context, uri, samplingRate string, spa
 	}
 
 	return ctx, span
+}
+
+// GetDefaultSpanContext returns default span context when not provided by the client
+func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
+	spanContext := trace.SpanContext{}
+
+	gen := tracingConfig.Load().(*traceIDGenerator)
+
+	// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
+	spanContext.TraceID = gen.NewTraceID()
+
+	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
+
+	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
+	sampler := trace.ProbabilitySampler(rate)
+	sampled := sampler(trace.SamplingParameters{
+		ParentContext:   trace.SpanContext{},
+		TraceID:         spanContext.TraceID,
+		SpanID:          spanContext.SpanID,
+		HasRemoteParent: false}).Sample
+
+	if sampled {
+		spanContext.TraceOptions = 1
+	}
+
+	return spanContext
 }
 
 func projectStatusCode(code int) int32 {
