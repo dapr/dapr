@@ -8,6 +8,7 @@ import (
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -16,10 +17,13 @@ import (
 // GetOperatorClient returns a new k8s operator client and the underlying connection.
 // If a cert chain is given, a TLS connection will be established.
 func GetOperatorClient(address, serverName string, certChain *dapr_credentials.CertChain) (operatorv1pb.OperatorClient, *grpc.ClientConn, error) {
-	opts := []grpc.DialOption{
-		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
-		grpc.WithUnaryInterceptor(grpc_retry.UnaryClientInterceptor()),
-	}
+	unaryChain := grpc_middleware.ChainUnaryClient(
+		grpc_retry.UnaryClientInterceptor(),
+		diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
+	)
+
+	opts := []grpc.DialOption{grpc.WithUnaryInterceptor(unaryChain)}
+
 	if certChain != nil {
 		cp := x509.NewCertPool()
 		ok := cp.AppendCertsFromPEM(certChain.RootCA)
