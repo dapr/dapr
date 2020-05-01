@@ -81,9 +81,7 @@ func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
 		HasRemoteParent: false}).Sample
 
 	if sampled {
-		spanContext.TraceOptions |= 1
-	} else {
-		spanContext.TraceOptions &= ^trace.TraceOptions(1)
+		spanContext.TraceOptions = 1
 	}
 
 	return spanContext
