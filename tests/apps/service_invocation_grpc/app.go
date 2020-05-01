@@ -21,6 +21,7 @@ import (
 	pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // server is our user app
@@ -68,6 +69,26 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 	return resp, err
 }
 
+func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	var requestMD = map[string][]string{}
+	for k, vals := range md {
+		requestMD[k] = vals
+		fmt.Printf("incoming md: %s %q", k, vals)
+	}
+
+	header := metadata.Pairs(
+		"DaprTest-Response-1", "DaprTest-Response-Value-1",
+		"DaprTest-Response-2", "DaprTest-Response-Value-2")
+	grpc.SendHeader(ctx, header)
+	trailer := metadata.Pairs(
+		"DaprTest-Trailer-1", "DaprTest-Trailer-Value-1",
+		"DaprTest-Trailer-2", "DaprTest-Trailer-Value-2")
+	grpc.SetTrailer(ctx, trailer)
+
+	return json.Marshal(requestMD)
+}
+
 // This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
@@ -81,6 +102,8 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 		fallthrough
 	case "grpcToGrpcTest":
 		response, err = s.grpcTestHandler(in.GetData().Value)
+	case "retrieve_request_object":
+		response, err = s.retrieveRequestObject(ctx)
 	}
 
 	if err != nil {
