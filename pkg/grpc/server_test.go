@@ -42,7 +42,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 3, len(serverOption))
+		assert.Equal(t, 2, len(serverOption))
 	})
 
 	t.Run("should not disable middlewares even when SamplingRate is 0", func(t *testing.T) {
@@ -57,6 +57,6 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 3, len(serverOption))
+		assert.Equal(t, 2, len(serverOption))
 	})
 }
