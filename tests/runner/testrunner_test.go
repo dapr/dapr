@@ -60,8 +60,8 @@ func (m *MockPlatform) Restart(name string) error {
 	return args.Error(0)
 }
 
-func (m *MockPlatform) OpenConnection(name string, targetPort ...int) ([]int, error) {
-	args := m.Called(name)
+func (m *MockPlatform) PortForwardToApp(appName string, targetPort ...int) ([]int, error) {
+	args := m.Called(appName)
 	return []int{}, args.Error(0)
 }
 

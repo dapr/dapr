@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("metrics", testApps, nil)
+	tr = runner.NewTestRunner("metrics", testApps, nil, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
@@ -102,7 +102,7 @@ func TestMetrics(t *testing.T) {
 		} else if tt.protocol == "grpc" {
 			targetDaprPort = 50001
 		}
-		localPorts, err := tr.Platform.OpenConnection(tt.app, targetDaprPort, 9090)
+		localPorts, err := tr.Platform.PortForwardToApp(tt.app, targetDaprPort, 9090)
 		require.NoError(t, err)
 
 		// Port order is maintained when opening connection

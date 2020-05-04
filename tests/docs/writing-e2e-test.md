@@ -90,7 +90,7 @@ func TestMain(m *testing.M) {
         },
     }
 
-    tr = runner.NewTestRunner("hellodapr", testApps, nil)
+    tr = runner.NewTestRunner("hellodapr", testApps, nil, nil, nil)
     os.Exit(tr.Start(m))
 }
 
@@ -126,7 +126,7 @@ testApps := []kube.AppDescription{
 }
 
 // Create test runner instance with 'hellodapr' runner id
-tr = runner.NewTestRunner("hellodapr", testApps, nil)
+tr = runner.NewTestRunner("hellodapr", testApps, nil, nil, nil)
 
 // Start the test
 os.Exit(tr.Start(m))

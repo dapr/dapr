@@ -144,7 +144,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner(appName, testApps, nil)
+	tr = runner.NewTestRunner(appName, testApps, nil, nil, nil)
 	os.Exit(tr.Start(m))
 }
 

@@ -1,0 +1,45 @@
+# In e2e test, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing e2e test.
+kind: Service
+apiVersion: v1
+metadata:
+  name: runtime-subscriber
+  labels:
+    testapp: runtime-subscriber
+spec:
+  selector:
+    testapp: runtime-subscriber
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-subscriber
+  labels:
+    testapp: runtime-subscriber
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: runtime-subscriber
+  template:
+    metadata:
+      labels:
+        testapp: runtime-subscriber
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/id: "runtime-subscriber"
+        dapr.io/port: "3000"
+    spec:
+      containers:
+      - name: runtime-subscriber
+        image: docker.io/dotjson/e2e-runtime-subscriber:dev
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always

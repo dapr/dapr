@@ -149,9 +149,9 @@ func (c *KubeTestPlatform) Restart(name string) error {
 	return c.Scale(name, originalReplicas)
 }
 
-// OpenConnection opens a new connection to the app on a the target port and returns the local port or error
-func (c *KubeTestPlatform) OpenConnection(name string, targetPorts ...int) ([]int, error) {
-	app := c.AppResources.FindActiveResource(name)
+// PortForwardToApp opens a new connection to the app on a the target port and returns the local port or error
+func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) ([]int, error) {
+	app := c.AppResources.FindActiveResource(appName)
 	appManager := app.(*kube.AppManager)
 
 	_, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
@@ -163,4 +163,9 @@ func (c *KubeTestPlatform) OpenConnection(name string, targetPorts ...int) ([]in
 		return nil, fmt.Errorf("cannot open connection with no target ports")
 	}
 	return appManager.DoPortForwarding("", targetPorts...)
+}
+
+// GetPortForwarder returns a PortForwarder for the Kubernetes platform
+func (c *KubeTestPlatform) GetPortForwarder() PortForwarder {
+	return kube.NewPodPortForwarder(c.kubeClient, kube.DaprTestNamespace)
 }
