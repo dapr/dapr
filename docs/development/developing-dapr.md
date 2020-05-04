@@ -33,8 +33,8 @@ This document helps you get started developing Dapr. If you find any problem whi
 1. The Go language environment [(instructions)](https://golang.org/doc/install#windows).
    Make sure that your GOPATH and PATH are configured correctly - You may set environment variables through the "Environment Variables" button on the "Advanced" tab of the "System" control panel. Some versions of Windows provide this control panel through the "Advanced System Settings" option inside the "System" control panel.
    ```
-   GOPATH=c:\go
-   PATH=%GOPATH%\bin;...
+   set GOPATH=c:\go
+   set PATH=%PATH%;%GOPATH%\bin
    ```
 2. [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Debugging
 3. [Git for Windows](https://gitforwindows.org)
@@ -222,6 +222,12 @@ mingw32-make.exe docker-push
 ## Deploy Dapr With Your Changes
 
 Now we'll deploy Dapr with your changes.
+
+Create the dapr-system namespace
+
+```
+kubectl create namespace dapr-system
+```
 
 If you deployed Dapr to your cluster before, delete it now using:
 
