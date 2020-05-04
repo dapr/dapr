@@ -92,7 +92,7 @@ endif
 ################################################################################
 
 # Update whenever you upgrade dev container image
-DEV_CONTAINER_VERSION_TAG?=0.1.1
+DEV_CONTAINER_VERSION_TAG?=0.1.2
 
 # Dapr container image name
 DEV_CONTAINER_IMAGE_NAME=dapr-dev
