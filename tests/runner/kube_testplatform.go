@@ -100,33 +100,6 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	return nil
 }
 
-// addInitApps adds init apps to disposable App Resource queues
-func (c *KubeTestPlatform) addInitApps(apps []kube.AppDescription) error {
-	if c.kubeClient == nil {
-		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
-	}
-
-	for _, app := range apps {
-		if app.RegistryName == "" {
-			app.RegistryName = c.imageRegistry()
-		}
-		if app.ImageName == "" {
-			return fmt.Errorf("%s app doesn't have imagename property", app.AppName)
-		}
-		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
-
-		log.Printf("Adding app %v", app)
-		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestNamespace, app))
-	}
-
-	// installApps installs the apps in AppResource queue sequentially
-	if err := c.AppResources.setup(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (c *KubeTestPlatform) imageRegistry() string {
 	reg := os.Getenv("DAPR_TEST_REGISTRY")
 	if reg == "" {

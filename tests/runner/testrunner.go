@@ -25,7 +25,6 @@ type runnable interface {
 type PlatformInterface interface {
 	setup() error
 	tearDown() error
-	addInitApps(apps []kube.AppDescription) error
 	addComponents(comps []kube.ComponentDescription) error
 	addApps(apps []kube.AppDescription) error
 
@@ -71,10 +70,10 @@ func (tr *TestRunner) Start(m runnable) int {
 	// TODO: Add logging and reporting initialization
 
 	// Setup testing platform
-	log.Println("Running setup")
+	log.Println("Running setup...")
 	err := tr.Platform.setup()
 	defer func() {
-		log.Println("Running teardown")
+		log.Println("Running teardown...")
 		tr.tearDown()
 	}()
 	if err != nil {
@@ -82,22 +81,26 @@ func (tr *TestRunner) Start(m runnable) int {
 		return runnerFailExitCode
 	}
 
-	// Install init apps
-	log.Println("Installing init apps")
-	if err := tr.Platform.addInitApps(tr.initApps); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed Platform.addInitApps(), %s", err.Error())
-		return runnerFailExitCode
-	}
-
-	// Install components
-	log.Println("Installing components")
+	// Install components.
+	log.Println("Installing components...")
 	if err := tr.Platform.addComponents(tr.components); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.addComponents(), %s", err.Error())
 		return runnerFailExitCode
 	}
 
-	// Install apps
-	log.Println("Installing test apps")
+	// Install init apps. Init apps will be deployed before the main
+	// test apps and can be used to initialize components and perform
+	// other setup work.
+	if tr.initApps != nil && len(tr.initApps) > 0 {
+		log.Println("Installing init apps...")
+		if err := tr.Platform.addApps(tr.initApps); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed Platform.addInitApps(), %s", err.Error())
+			return runnerFailExitCode
+		}
+	}
+
+	// Install test apps. These are the main apps that provide the actual testing.
+	log.Println("Installing test apps...")
 	if err := tr.Platform.addApps(tr.testApps); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
 		return runnerFailExitCode

@@ -71,6 +71,19 @@ func TestMain(m *testing.M) {
 	fmt.Println("Enter TestMain")
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
+	comps := []kube.ComponentDescription{
+		{
+			Name:     "runtime-bindings-http",
+			TypeName: "bindings.kafka",
+			MetaData: map[string]string{
+				"brokers":       "dapr-kafka:9092",
+				"topics":        "runtime-bindings-http",
+				"consumerGroup": "group1",
+				"authRequired":  "false",
+			},
+		},
+	}
+
 	initApps := []kube.AppDescription{
 		{
 			AppName:        runtimeInitAppName,
@@ -93,7 +106,7 @@ func TestMain(m *testing.M) {
 	}
 
 	log.Printf("Creating TestRunner\n")
-	tr = runner.NewTestRunner("runtimetest", testApps, nil, initApps)
+	tr = runner.NewTestRunner("runtimetest", testApps, comps, initApps)
 	log.Printf("Starting TestRunner\n")
 	os.Exit(tr.Start(m))
 }
