@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("metrics", testApps, nil, nil, nil)
+	tr = runner.NewTestRunner("metrics", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 

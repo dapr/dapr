@@ -56,7 +56,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil, nil)
+	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
