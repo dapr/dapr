@@ -63,15 +63,15 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 // onPubsub handles messages published to "pubsub-http-server" and
 // validates dapr's HTTP API is healthy.
 func onPubsub(w http.ResponseWriter, r *http.Request) {
-	log.Printf("onPubsub is called %s\n", r.URL)
+	log.Printf("onPubsub(): called %s\n", r.URL)
 
 	_, err := http.Get(healthURL)
 	if err != nil {
-		log.Printf("onPubsub(): Error calling Dapr HTTP API")
+		log.Printf("onPubsub(): error calling Dapr HTTP API")
 		pubsubDaprHTTPError++
 		// Track the error but return success as we want to release the message
 	} else {
-		log.Printf("onPubsub(): Success calling Dapr HTTP API")
+		log.Printf("onPubsub(): success calling Dapr HTTP API")
 		pubsubDaprHTTPSuccess++
 	}
 
@@ -84,23 +84,23 @@ func onPubsub(w http.ResponseWriter, r *http.Request) {
 // onInputBinding handles incoming request from an input binding and
 // validates dapr's HTTP API is healthy.
 func onInputBinding(w http.ResponseWriter, r *http.Request) {
-	log.Printf("onInputBinding is called %s\n", r.URL)
+	log.Printf("onInputBinding(): called %s\n", r.URL)
+
+	_, err := http.Get(healthURL)
+	if err != nil {
+		log.Printf("onInputBinding(): error calling Dapr HTTP API")
+		bindingsDaprHTTPError++
+		// Track the error but return success as we want to release the message
+	} else {
+		log.Printf("onInputBinding(): success calling Dapr HTTP API")
+		bindingsDaprHTTPSuccess++
+	}
 
 	if r.Method == http.MethodOptions {
 		log.Printf("%s binding input has been accepted", bindingsTopic)
 		// Sending StatusOK back to the topic, so it will not attempt to redeliver.
 		w.WriteHeader(http.StatusOK)
 		return
-	}
-
-	_, err := http.Get(healthURL)
-	if err != nil {
-		log.Printf("onInputBinding(): Error calling Dapr HTTP API")
-		bindingsDaprHTTPError++
-		// Track the error but return success as we want to release the message
-	} else {
-		log.Printf("onInputBinding(): Success calling Dapr HTTP API")
-		bindingsDaprHTTPSuccess++
 	}
 
 	w.WriteHeader(http.StatusOK)

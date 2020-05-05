@@ -21,15 +21,11 @@ type runnable interface {
 	Run() int
 }
 
-type PortForwarder interface {
-	Connect(name string, targetPorts ...int) ([]int, error)
-	Close() error
-}
-
 // PlatformInterface defines the testing platform for test runner
 type PlatformInterface interface {
 	setup() error
 	tearDown() error
+	addInitApps(apps []kube.AppDescription) error
 	addComponents(comps []kube.ComponentDescription) error
 	addApps(apps []kube.AppDescription) error
 
@@ -37,10 +33,7 @@ type PlatformInterface interface {
 	Restart(name string) error
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)
-	GetPortForwarder() PortForwarder
 }
-
-type DeploymentFunc func(platform PlatformInterface) error
 
 // TestRunner holds initial test apps and testing platform instance
 // maintains apps and platform for e2e test
@@ -50,14 +43,11 @@ type TestRunner struct {
 
 	components []kube.ComponentDescription
 
-	// Functions to be invoked before the test app/component deployments
-	preDeployFunc DeploymentFunc
-
-	// Functions to be invoked after the test app/component deployments
-	postDeployFunc DeploymentFunc
+	// Initialization apps to be deployed before the test apps
+	initApps []kube.AppDescription
 
 	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
-	initialApps []kube.AppDescription
+	testApps []kube.AppDescription
 
 	// Platform is the testing platform instances
 	Platform PlatformInterface
@@ -66,15 +56,13 @@ type TestRunner struct {
 // NewTestRunner returns TestRunner instance for e2e test
 func NewTestRunner(id string, apps []kube.AppDescription,
 	comps []kube.ComponentDescription,
-	preDeployFunc DeploymentFunc,
-	postDeployFunc DeploymentFunc) *TestRunner {
+	initApps []kube.AppDescription) *TestRunner {
 	return &TestRunner{
-		id:             id,
-		components:     comps,
-		preDeployFunc:  preDeployFunc,
-		postDeployFunc: postDeployFunc,
-		initialApps:    apps,
-		Platform:       NewKubeTestPlatform(),
+		id:         id,
+		components: comps,
+		initApps:   initApps,
+		testApps:   apps,
+		Platform:   NewKubeTestPlatform(),
 	}
 }
 
@@ -94,14 +82,11 @@ func (tr *TestRunner) Start(m runnable) int {
 		return runnerFailExitCode
 	}
 
-	// Run optional pre-deployment function
-	if tr.preDeployFunc != nil {
-		log.Println("Running pre-deployment function")
-		err := tr.preDeployFunc(tr.Platform)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed preDeployFunc(), %s", err.Error())
-			return runnerFailExitCode
-		}
+	// Install init apps
+	log.Println("Installing init apps")
+	if err := tr.Platform.addInitApps(tr.initApps); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed Platform.addInitApps(), %s", err.Error())
+		return runnerFailExitCode
 	}
 
 	// Install components
@@ -112,20 +97,10 @@ func (tr *TestRunner) Start(m runnable) int {
 	}
 
 	// Install apps
-	log.Println("Installing apps")
-	if err := tr.Platform.addApps(tr.initialApps); err != nil {
+	log.Println("Installing test apps")
+	if err := tr.Platform.addApps(tr.testApps); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
 		return runnerFailExitCode
-	}
-
-	// Run optional post-deployment function
-	if tr.postDeployFunc != nil {
-		log.Println("Running post-deployment function")
-		err := tr.postDeployFunc(tr.Platform)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed postDeployFunc(), %s", err.Error())
-			return runnerFailExitCode
-		}
 	}
 
 	// Executes Test* methods in *_test.go
