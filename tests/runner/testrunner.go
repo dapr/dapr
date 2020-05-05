@@ -7,6 +7,7 @@ package runner
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -82,8 +83,12 @@ func (tr *TestRunner) Start(m runnable) int {
 	// TODO: Add logging and reporting initialization
 
 	// Setup testing platform
+	log.Println("Running setup")
 	err := tr.Platform.setup()
-	defer tr.tearDown()
+	defer func() {
+		log.Println("Running teardown")
+		tr.tearDown()
+	}()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.setup(), %s", err.Error())
 		return runnerFailExitCode
@@ -91,6 +96,7 @@ func (tr *TestRunner) Start(m runnable) int {
 
 	// Run optional pre-deployment function
 	if tr.preDeployFunc != nil {
+		log.Println("Running pre-deployment function")
 		err := tr.preDeployFunc(tr.Platform)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed preDeployFunc(), %s", err.Error())
@@ -99,12 +105,14 @@ func (tr *TestRunner) Start(m runnable) int {
 	}
 
 	// Install components
+	log.Println("Installing components")
 	if err := tr.Platform.addComponents(tr.components); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.addComponents(), %s", err.Error())
 		return runnerFailExitCode
 	}
 
 	// Install apps
+	log.Println("Installing apps")
 	if err := tr.Platform.addApps(tr.initialApps); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
 		return runnerFailExitCode
@@ -112,6 +120,7 @@ func (tr *TestRunner) Start(m runnable) int {
 
 	// Run optional post-deployment function
 	if tr.postDeployFunc != nil {
+		log.Println("Running post-deployment function")
 		err := tr.postDeployFunc(tr.Platform)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed postDeployFunc(), %s", err.Error())
@@ -120,6 +129,7 @@ func (tr *TestRunner) Start(m runnable) int {
 	}
 
 	// Executes Test* methods in *_test.go
+	log.Println("Running tests...")
 	return m.Run()
 }
 

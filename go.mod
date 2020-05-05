@@ -5,12 +5,15 @@ go 1.14
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
+	github.com/Shopify/sarama v1.23.1
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
+	github.com/coreos/go-iptables v0.4.5
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/dapr/components-contrib v0.0.0-20200430212123-b647397b2c81
 	github.com/fasthttp/router v1.0.4
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
+	github.com/go-redis/redis/v7 v7.0.1
 	github.com/golang/mock v1.4.0
 	github.com/golang/protobuf v1.3.3
 	github.com/google/uuid v1.1.1

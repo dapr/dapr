@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	appPort       = 3000
-	pubsubHTTPAPI = "runtime-http-api"
-	healthURL     = "http://localhost:3500/v1.0/healthz"
+	appPort         = 3000
+	pubsubHTTPTopic = "runtime-pubsub-http"
+	bindingsTopic   = "runtime-bindings-http"
+	healthURL       = "http://localhost:3500/v1.0/healthz"
 )
 
 type topicsList struct {
@@ -36,7 +37,7 @@ type daprAPIResponse struct {
 	// TODO: gRPC API
 }
 
-var daprHTTPError, daprHTTPSuccess int
+var pubsubDaprHTTPError, pubsubDaprHTTPSuccess, bindingsDaprHTTPError, bindingsDaprHTTPSuccess int
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -52,42 +53,79 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("configureSubscribeHandler called\n")
 
 	var t topicsList
-	t.Topic = append(t.Topic, pubsubHTTPAPI)
+	t.Topic = append(t.Topic, pubsubHTTPTopic)
 	log.Printf("configureSubscribeHandler subscribing to:%v\n", t.Topic)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(t.Topic)
 }
 
-// this handles messages published to "pubsub-http-server" and
+// onPubsub handles messages published to "pubsub-http-server" and
 // validates dapr's HTTP API is healthy.
-func subscribeHTTPHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("subscribeHTTPHandler is called %s\n", r.URL)
+func onPubsub(w http.ResponseWriter, r *http.Request) {
+	log.Printf("onPubsub is called %s\n", r.URL)
 
 	_, err := http.Get(healthURL)
 	if err != nil {
-		log.Printf("Error calling Dapr HTTP API")
-		daprHTTPError++
+		log.Printf("onPubsub(): Error calling Dapr HTTP API")
+		pubsubDaprHTTPError++
 		// Track the error but return success as we want to release the message
 	} else {
-		log.Printf("Success calling Dapr HTTP API")
-		daprHTTPSuccess++
+		log.Printf("onPubsub(): Success calling Dapr HTTP API")
+		pubsubDaprHTTPSuccess++
 	}
 
 	w.WriteHeader(http.StatusOK)
-	defer r.Body.Close()
-
 	json.NewEncoder(w).Encode(appResponse{
 		Message: "success",
 	})
 }
 
-func getDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
+// onInputBinding handles incoming request from an input binding and
+// validates dapr's HTTP API is healthy.
+func onInputBinding(w http.ResponseWriter, r *http.Request) {
+	log.Printf("onInputBinding is called %s\n", r.URL)
+
+	if r.Method == http.MethodOptions {
+		log.Printf("%s binding input has been accepted", bindingsTopic)
+		// Sending StatusOK back to the topic, so it will not attempt to redeliver.
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	_, err := http.Get(healthURL)
+	if err != nil {
+		log.Printf("onInputBinding(): Error calling Dapr HTTP API")
+		bindingsDaprHTTPError++
+		// Track the error but return success as we want to release the message
+	} else {
+		log.Printf("onInputBinding(): Success calling Dapr HTTP API")
+		bindingsDaprHTTPSuccess++
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func getPubsubDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 	log.Println("Enter getDaprAPIResponse")
 
 	response := daprAPIResponse{
-		DaprHTTPError:   daprHTTPError,
-		DaprHTTPSuccess: daprHTTPSuccess,
+		DaprHTTPError:   pubsubDaprHTTPError,
+		DaprHTTPSuccess: pubsubDaprHTTPSuccess,
+	}
+
+	log.Printf("DaprAPIResponse=%+v", response)
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func getBindingsDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
+	log.Println("Enter getDaprAPIResponse")
+
+	response := daprAPIResponse{
+		DaprHTTPError:   bindingsDaprHTTPError,
+		DaprHTTPSuccess: bindingsDaprHTTPSuccess,
 	}
 
 	log.Printf("DaprAPIResponse=%+v", response)
@@ -103,11 +141,15 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 
-	router.HandleFunc("/tests/response", getDaprAPIResponse).Methods("GET")
+	router.HandleFunc("/tests/pubsub", getPubsubDaprAPIResponse).Methods("GET")
+
+	router.HandleFunc("/tests/bindings", getBindingsDaprAPIResponse).Methods("GET")
 
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
 
-	router.HandleFunc("/"+pubsubHTTPAPI, subscribeHTTPHandler).Methods("POST")
+	router.HandleFunc("/"+bindingsTopic, onInputBinding).Methods("POST", "OPTIONS")
+
+	router.HandleFunc("/"+pubsubHTTPTopic, onPubsub).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 

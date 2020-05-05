@@ -4,12 +4,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: runtime-subscriber
+  name: runtime
   labels:
-    testapp: runtime-subscriber
+    testapp: runtime
 spec:
   selector:
-    testapp: runtime-subscriber
+    testapp: runtime
   ports:
   - protocol: TCP
     port: 80
@@ -20,26 +20,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: runtime-subscriber
+  name: runtime
   labels:
-    testapp: runtime-subscriber
+    testapp: runtime
 spec:
   replicas: 1
   selector:
     matchLabels:
-      testapp: runtime-subscriber
+      testapp: runtime
   template:
     metadata:
       labels:
-        testapp: runtime-subscriber
+        testapp: runtime
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "runtime-subscriber"
+        dapr.io/id: "runtime"
         dapr.io/port: "3000"
     spec:
       containers:
-      - name: runtime-subscriber
-        image: docker.io/dotjson/e2e-runtime-subscriber:dev
+      - name: runtime
+        image: docker.io/dotjson/e2e-runtime:dev
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
