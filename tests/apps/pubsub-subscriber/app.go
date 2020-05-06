@@ -59,11 +59,11 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("configureSubscribeHandler called\n")
 
 	t := []subscription{
-		subscription{
+		{
 			Topic: pubsubA,
 			Route: pubsubA,
 		},
-		subscription{
+		{
 			Topic: pubsubB,
 			Route: pubsubB,
 		},
