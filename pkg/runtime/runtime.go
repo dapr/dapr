@@ -95,6 +95,7 @@ type DaprRuntime struct {
 	actorStateStoreCount     int
 	authenticator            security.Authenticator
 	namespace                string
+	scopedSubscriptions      []string
 	scopedPublishings        []string
 	allowedTopics            []string
 	daprHTTPAPI              http.API
@@ -136,6 +137,11 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	err := a.initRuntime(&o)
 	if err != nil {
 		return err
+	}
+
+	err = a.beginPubSub()
+	if err != nil {
+		log.Warn(err)
 	}
 
 	err = a.beginReadInputBindings()
@@ -320,6 +326,36 @@ func (a *DaprRuntime) beginReadInputBindings() error {
 				log.Errorf("error reading from input binding %s: %s", name, err)
 			}
 		}(key, b)
+	}
+
+	return nil
+}
+
+func (a *DaprRuntime) beginPubSub() error {
+	var publishFunc func(msg *pubsub.NewMessage) error
+	switch a.runtimeConfig.ApplicationProtocol {
+	case HTTPProtocol:
+		publishFunc = a.publishMessageHTTP
+	case GRPCProtocol:
+		publishFunc = a.publishMessageGRPC
+	}
+
+	if a.pubSub != nil && a.appChannel != nil {
+		topics := a.getSubscribedTopicsFromApp()
+		for _, t := range topics {
+			allowed := a.isPubSubOperationAllowed(t, a.scopedSubscriptions)
+			if !allowed {
+				log.Warnf("subscription to topic %s is not allowed", t)
+				continue
+			}
+
+			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
+				Topic: t,
+			}, publishFunc)
+			if err != nil {
+				log.Warnf("failed to subscribe to topic %s: %s", t, err)
+			}
+		}
 	}
 
 	return nil
@@ -809,8 +845,6 @@ func (a *DaprRuntime) initExporters() error {
 }
 
 func (a *DaprRuntime) initPubSub() error {
-	var scopedSubscriptions []string
-
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
 			pubSub, err := a.pubSubRegistry.Create(c.Spec.Type)
@@ -832,7 +866,7 @@ func (a *DaprRuntime) initPubSub() error {
 				continue
 			}
 
-			scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
+			a.scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
 			a.scopedPublishings = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
 			a.allowedTopics = scopes.GetAllowedTopics(properties)
 
@@ -842,31 +876,6 @@ func (a *DaprRuntime) initPubSub() error {
 		}
 	}
 
-	var publishFunc func(msg *pubsub.NewMessage) error
-	switch a.runtimeConfig.ApplicationProtocol {
-	case HTTPProtocol:
-		publishFunc = a.publishMessageHTTP
-	case GRPCProtocol:
-		publishFunc = a.publishMessageGRPC
-	}
-
-	if a.pubSub != nil && a.appChannel != nil {
-		topics := a.getSubscribedTopicsFromApp()
-		for _, t := range topics {
-			allowed := a.isPubSubOperationAllowed(t, scopedSubscriptions)
-			if !allowed {
-				log.Warnf("subscription to topic %s is not allowed", t)
-				continue
-			}
-
-			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
-				Topic: t,
-			}, publishFunc)
-			if err != nil {
-				log.Warnf("failed to subscribe to topic %s: %s", t, err)
-			}
-		}
-	}
 	return nil
 }
 

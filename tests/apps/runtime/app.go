@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -21,7 +22,8 @@ const (
 	appPort         = 3000
 	pubsubHTTPTopic = "runtime-pubsub-http"
 	bindingsTopic   = "runtime-bindings-http"
-	daprAddr        = "localhost:3500"
+	daprHTTPAddr    = "localhost:3500"
+	daprGRPCAddr    = "localhost:50001"
 )
 
 type topicsList struct {
@@ -42,11 +44,11 @@ type daprAPIResponse struct {
 }
 
 var (
-	pubsubDaprHTTPError, pubsubDaprHTTPSuccess int
-	pubsubDaprGRPCError, pubsubDaprGRPCSuccess int
+	pubsubDaprHTTPError, pubsubDaprHTTPSuccess uint32
+	pubsubDaprGRPCError, pubsubDaprGRPCSuccess uint32
 
-	bindingsDaprHTTPError, bindingsDaprHTTPSuccess int
-	bindingsDaprGRPCError, bindingsDaprGRPCSuccess int
+	bindingsDaprHTTPError, bindingsDaprHTTPSuccess uint32
+	bindingsDaprGRPCError, bindingsDaprGRPCSuccess uint32
 )
 
 // indexHandler is the handler for root path
@@ -71,7 +73,7 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func invokeDaprHTTPAPI() error {
-	healthURL := fmt.Sprintf("http://%s/v1.0/healthz", daprAddr)
+	healthURL := fmt.Sprintf("http://%s/v1.0/healthz", daprHTTPAddr)
 	_, err := http.Get(healthURL)
 	if err != nil {
 		return err
@@ -80,11 +82,11 @@ func invokeDaprHTTPAPI() error {
 }
 
 func invokeDaprGRPCAPI() error {
-	// Dial the gRPC endpoint and fail if cannot connect in 5 seconds.
-	conn, err := grpc.Dial(daprAddr,
+	// Dial the gRPC endpoint and fail if cannot connect in 10 seconds.
+	conn, err := grpc.Dial(daprGRPCAddr,
 		grpc.WithInsecure(),
 		grpc.WithBlock(),
-		grpc.WithTimeout(5*time.Second))
+		grpc.WithTimeout(10*time.Second))
 	if err != nil {
 		return err
 	}
@@ -92,25 +94,25 @@ func invokeDaprGRPCAPI() error {
 	return nil
 }
 
-func testAPI(wg *sync.WaitGroup, successCount, errorCount *int, invoke func() error, id string) {
+func testAPI(wg *sync.WaitGroup, successCount, errorCount *uint32, invoke func() error, id string) {
 	defer wg.Done()
 
 	err := invoke()
 	if err != nil {
-		log.Printf("Error calling Dapr %s API", id)
-		*errorCount++
+		log.Printf("Error calling Dapr %s API: %+v", id, err)
+		atomic.AddUint32(errorCount, 1)
 		// Track the error but return success as we want to release the message
 	} else {
 		log.Printf("Success calling Dapr %s API", id)
-		*successCount++
+		atomic.AddUint32(successCount, 1)
 	}
 }
 
-func testHTTPAPI(wg *sync.WaitGroup, successCount, errorCount *int) {
+func testHTTPAPI(wg *sync.WaitGroup, successCount, errorCount *uint32) {
 	testAPI(wg, successCount, errorCount, invokeDaprHTTPAPI, "HTTP")
 }
 
-func testGRPCAPI(wg *sync.WaitGroup, successCount, errorCount *int) {
+func testGRPCAPI(wg *sync.WaitGroup, successCount, errorCount *uint32) {
 	testAPI(wg, successCount, errorCount, invokeDaprGRPCAPI, "gRPC")
 }
 
@@ -139,6 +141,13 @@ func onPubsub(w http.ResponseWriter, r *http.Request) {
 func onInputBinding(w http.ResponseWriter, r *http.Request) {
 	log.Printf("onInputBinding(): called %s\n", r.URL)
 
+	if r.Method == http.MethodOptions {
+		log.Printf("%s binding input has been accepted", bindingsTopic)
+		// Sending StatusOK back to the topic, so it will not attempt to redeliver.
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -148,13 +157,6 @@ func onInputBinding(w http.ResponseWriter, r *http.Request) {
 
 	wg.Wait()
 
-	if r.Method == http.MethodOptions {
-		log.Printf("%s binding input has been accepted", bindingsTopic)
-		// Sending StatusOK back to the topic, so it will not attempt to redeliver.
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -162,10 +164,10 @@ func getPubsubDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 	log.Println("Enter getDaprAPIResponse")
 
 	response := daprAPIResponse{
-		DaprHTTPError:   pubsubDaprHTTPError,
-		DaprHTTPSuccess: pubsubDaprHTTPSuccess,
-		DaprGRPCError:   pubsubDaprGRPCError,
-		DaprGRPCSuccess: pubsubDaprGRPCSuccess,
+		DaprHTTPError:   int(pubsubDaprHTTPError),
+		DaprHTTPSuccess: int(pubsubDaprHTTPSuccess),
+		DaprGRPCError:   int(pubsubDaprGRPCError),
+		DaprGRPCSuccess: int(pubsubDaprGRPCSuccess),
 	}
 
 	log.Printf("DaprAPIResponse=%+v", response)
@@ -178,10 +180,10 @@ func getBindingsDaprAPIResponse(w http.ResponseWriter, r *http.Request) {
 	log.Println("Enter getDaprAPIResponse")
 
 	response := daprAPIResponse{
-		DaprHTTPError:   bindingsDaprHTTPError,
-		DaprHTTPSuccess: bindingsDaprHTTPSuccess,
-		DaprGRPCError:   bindingsDaprGRPCError,
-		DaprGRPCSuccess: bindingsDaprGRPCSuccess,
+		DaprHTTPError:   int(bindingsDaprHTTPError),
+		DaprHTTPSuccess: int(bindingsDaprHTTPSuccess),
+		DaprGRPCError:   int(bindingsDaprGRPCError),
+		DaprGRPCSuccess: int(bindingsDaprGRPCSuccess),
 	}
 
 	log.Printf("DaprAPIResponse=%+v", response)

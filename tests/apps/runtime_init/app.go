@@ -22,10 +22,7 @@ const (
 	pubsubTopic       = "runtime-pubsub-http"
 	numPubsubMessages = 10
 	bindingTopic      = "runtime-bindings-http"
-	// Bindings only trigger after the app has accepted
-	// the binding. For now we just test on the OPTIONS
-	// call.
-	numBindingMessage = 0
+	numBindingMessage = 10
 )
 
 func publishMessagesToPubsub(wg *sync.WaitGroup) {
