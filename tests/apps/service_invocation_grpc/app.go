@@ -121,7 +121,7 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 func (s *server) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetTopicSubscriptionsEnvelope, error) {
 	return &pb.GetTopicSubscriptionsEnvelope{
 		Subscriptions: []*pb.TopicSubscriptionEnvelope{
-			&pb.TopicSubscriptionEnvelope{
+			{
 				Topic: "TopicA",
 			},
 		},

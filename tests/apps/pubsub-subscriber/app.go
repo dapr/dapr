@@ -30,10 +30,6 @@ type appResponse struct {
 	EndTime   int    `json:"end_time,omitempty"`
 }
 
-type topicsList struct {
-	Topic []string
-}
-
 type receivedMessagesResponse struct {
 	ReceivedByTopicA []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB []string `json:"pubsub-b-topic"`

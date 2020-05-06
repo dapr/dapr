@@ -762,7 +762,7 @@ func (a *DaprRuntime) getTopicRoutes() map[string]string {
 
 	if len(topicRoutes) > 0 {
 		topics := []string{}
-		for t, _ := range topicRoutes {
+		for t := range topicRoutes {
 			topics = append(topics, t)
 		}
 		log.Infof("app is subscribed to the following topics: %v", topics)
@@ -841,7 +841,7 @@ func (a *DaprRuntime) initPubSub() error {
 	if a.pubSub != nil && a.appChannel != nil {
 		a.topicRoutes = a.getTopicRoutes()
 
-		for t, _ := range a.topicRoutes {
+		for t := range a.topicRoutes {
 			allowed := a.isPubSubOperationAllowed(t, scopedSubscriptions)
 			if !allowed {
 				log.Warnf("subscription to topic %s is not allowed", t)
