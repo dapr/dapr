@@ -160,6 +160,7 @@ func TestInitPubSub(t *testing.T) {
 		err = rt.beginPubSub()
 
 		// assert
+		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})

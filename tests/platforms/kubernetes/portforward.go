@@ -62,7 +62,7 @@ func (p *PodPortForwarder) Connect(name string, targetPorts ...int) ([]int, erro
 	if name == "" {
 		return nil, fmt.Errorf("name must be set to establish connection")
 	}
-	if len(targetPorts) <= 0 {
+	if len(targetPorts) == 0 {
 		return nil, fmt.Errorf("cannot establish connection without target ports")
 	}
 	if p.namespace == "" {
