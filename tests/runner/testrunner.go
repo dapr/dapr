@@ -82,10 +82,12 @@ func (tr *TestRunner) Start(m runnable) int {
 	}
 
 	// Install components.
-	log.Println("Installing components...")
-	if err := tr.Platform.addComponents(tr.components); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed Platform.addComponents(), %s", err.Error())
-		return runnerFailExitCode
+	if tr.components != nil && len(tr.components) > 0 {
+		log.Println("Installing components...")
+		if err := tr.Platform.addComponents(tr.components); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed Platform.addComponents(), %s", err.Error())
+			return runnerFailExitCode
+		}
 	}
 
 	// Install init apps. Init apps will be deployed before the main
@@ -100,10 +102,12 @@ func (tr *TestRunner) Start(m runnable) int {
 	}
 
 	// Install test apps. These are the main apps that provide the actual testing.
-	log.Println("Installing test apps...")
-	if err := tr.Platform.addApps(tr.testApps); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
-		return runnerFailExitCode
+	if tr.testApps != nil && len(tr.testApps) > 0 {
+		log.Println("Installing test apps...")
+		if err := tr.Platform.addApps(tr.testApps); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
+			return runnerFailExitCode
+		}
 	}
 
 	// Executes Test* methods in *_test.go

@@ -28,8 +28,8 @@ var tr *runner.TestRunner
 const (
 	runtimeAppName     = "runtime"
 	runtimeInitAppName = "runtime-init"
-	numRedisMessages   = 10
-	numKafkaMessages   = 1
+	numPubsubMessages  = 10
+	numBindingMessages = 1
 )
 
 type appResponse struct {
@@ -41,7 +41,8 @@ type appResponse struct {
 type daprAPIResponse struct {
 	DaprHTTPSuccess int `json:"dapr_http_success"`
 	DaprHTTPError   int `json:"dapr_http_error"`
-	// TODO: gRPC API
+	DaprGRPCSuccess int `json:"dapr_grpc_success"`
+	DaprGRPCError   int `json:"dapr_grpc_error"`
 }
 
 var kafkaPort int
@@ -90,7 +91,7 @@ func TestMain(m *testing.M) {
 			DaprEnabled:    true,
 			ImageName:      "e2e-runtime_init",
 			Replicas:       1,
-			IngressEnabled: true,
+			IngressEnabled: false,
 			AppPort:        -1,
 		},
 	}
@@ -129,7 +130,9 @@ func TestRuntimeInitPubsub(t *testing.T) {
 
 	// Assert
 	require.Equal(t, 0, apiResponse.DaprHTTPError)
-	require.Equal(t, numRedisMessages, apiResponse.DaprHTTPSuccess)
+	require.Equal(t, numPubsubMessages, apiResponse.DaprHTTPSuccess)
+	require.Equal(t, 0, apiResponse.DaprGRPCError)
+	require.Equal(t, numPubsubMessages, apiResponse.DaprGRPCSuccess)
 }
 
 func TestRuntimeInitBindings(t *testing.T) {
@@ -150,5 +153,7 @@ func TestRuntimeInitBindings(t *testing.T) {
 
 	// Assert
 	require.Equal(t, 0, apiResponse.DaprHTTPError)
-	require.Equal(t, numKafkaMessages, apiResponse.DaprHTTPSuccess)
+	require.Equal(t, numBindingMessages, apiResponse.DaprHTTPSuccess)
+	require.Equal(t, 0, apiResponse.DaprGRPCError)
+	require.Equal(t, numBindingMessages, apiResponse.DaprGRPCSuccess)
 }
