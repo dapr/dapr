@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
       - name: runtime
-        image: docker.io/dotjson/e2e-runtime:dev
+        image: docker.io/YOUR ID/e2e-runtime:dev
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
