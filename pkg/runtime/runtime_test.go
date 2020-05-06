@@ -6,6 +6,7 @@
 package runtime
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
@@ -76,6 +78,18 @@ func TestNewRuntime(t *testing.T) {
 	assert.NotNil(t, r, "runtime must be initiated")
 }
 
+func getSubscriptionsJSONString(topics []string) string {
+	s := []runtime_pubsub.Subscription{}
+	for _, t := range topics {
+		s = append(s, runtime_pubsub.Subscription{
+			Topic: t,
+			Route: t,
+		})
+	}
+	b, _ := json.Marshal(&s)
+	return string(b)
+}
+
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
@@ -115,7 +129,8 @@ func TestInitPubSub(t *testing.T) {
 		fakeReq.WithRawData(nil, "application/json")
 
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\", \"topic1\" ]"), "application/json")
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
@@ -177,8 +192,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -202,8 +217,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 2 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\", \"topic1\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -227,8 +242,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic3\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic3"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -252,8 +267,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\", \"topic3\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic3"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -277,8 +292,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -304,8 +319,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -701,6 +716,8 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		"")
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
+	rt.topicRoutes["topic1"] = "topic1"
+
 	rt.components = []components_v1alpha1.Component{
 		{
 			ObjectMeta: meta_v1.ObjectMeta{

@@ -53,7 +53,12 @@ message BindingResponseEnvelope {
 
 
 message GetTopicSubscriptionsEnvelope {
-  repeated string topics = 1;
+  repeated TopicSubscriptionEnvelope subscriptions = 1;
+}
+
+message TopicSubscriptionEnvelope {
+  string topic = 1;
+  map<string,string> metadata = 2;
 }
 
 message GetBindingsSubscriptionsEnvelope {
