@@ -51,7 +51,6 @@ RUN mkdir -p /tmp/gotools \
         github.com/sqs/goreturns@latest \
         github.com/josharian/impl@latest \
         github.com/davidrjenni/reftools/cmd/fillstruct@latest \
-        github.com/uudashr/gopkgs/cmd/gopkgs@latest  \
         github.com/ramya-rao-a/go-outline@latest  \
         github.com/acroca/go-symbols@latest  \
         github.com/godoctor/godoctor@latest  \
@@ -60,6 +59,9 @@ RUN mkdir -p /tmp/gotools \
         github.com/fatih/gomodifytags@latest  \
         github.com/mgechev/revive@latest  \
         github.com/go-delve/delve/cmd/dlv@latest 2>&1 \
+    && GO111MODULE=off go get -v github.com/uudashr/gopkgs/cmd/gopkgs \
+    # Install Go protoc gen
+    && go get github.com/golang/protobuf/protoc-gen-go \
     #
     # Install Go tools w/o module support
     && go get -v github.com/alecthomas/gometalinter 2>&1 \
@@ -71,6 +73,19 @@ RUN mkdir -p /tmp/gotools \
     #
     # Install golangci-lint
     && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin 2>&1
+
+# Install protobuf
+RUN apt-get install autoconf automake libtool curl make g++ unzip -y \
+    && git clone https://github.com/google/protobuf.git \
+    && cd protobuf \
+    && git checkout v3.11.0 \
+    && git submodule update --init --recursive \
+    && ./autogen.sh \
+    && ./configure \
+    && make \
+    && make check \
+    && make install \
+    && ldconfig
 
 # Create a non-root user to use if preferred - see https://aka.ms/vscode-remote/containers/non-root-user.
 RUN groupadd --gid $USER_GID $USERNAME \
@@ -85,7 +100,8 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* /go/src
 
-RUN chmod 777 -R /go
+RUN chmod 777 -R /go \
+    && mkdir -p /go/src/github.com/dapr
 
 # switch to USERNAME
 USER $USERNAME

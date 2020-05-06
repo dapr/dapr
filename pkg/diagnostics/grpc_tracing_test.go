@@ -38,3 +38,28 @@ func TestWithGRPCSpanContext(t *testing.T) {
 
 	assert.Equalf(t, gotSc, wantSc, "WithGRPCSpanContext gotSc = %v, want %v", gotSc, wantSc)
 }
+
+func TestWithGRPCWithNoSpanContext(t *testing.T) {
+	t.Run("No SpanContext with always sampling rate", func(t *testing.T) {
+		ctx := context.Background()
+		spec := config.TracingSpec{SamplingRate: "1"}
+		sc := GetSpanContextFromGRPC(ctx, spec)
+		assert.NotEmpty(t, sc, "Should get default span context")
+		assert.Equal(t, 1, int(sc.TraceOptions), "Should be sampled")
+	})
+
+	t.Run("No SpanContext with non-zero sampling rate", func(t *testing.T) {
+		ctx := context.Background()
+		spec := config.TracingSpec{SamplingRate: "0.5"}
+		sc := GetSpanContextFromGRPC(ctx, spec)
+		assert.NotEmpty(t, sc, "Should get default span context")
+	})
+
+	t.Run("No SpanContext with zero sampling rate", func(t *testing.T) {
+		ctx := context.Background()
+		spec := config.TracingSpec{SamplingRate: "0"}
+		sc := GetSpanContextFromGRPC(ctx, spec)
+		assert.NotEmpty(t, sc, "Should get default span context")
+		assert.Equal(t, 0, int(sc.TraceOptions), "Should not be sampled")
+	})
+}

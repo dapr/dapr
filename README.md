@@ -35,7 +35,7 @@ Dapr injects a side-car (container or process) to each compute unit. The side-ca
 
 Dapr offers built-in state management, reliable messaging (at least once delivery), triggers and bindings through standard HTTP verbs or gRPC interfaces. This allows you to write stateless, stateful and actor-like services following the same programming paradigm. You can freely choose consistency model, threading model and message delivery patterns.
 
-Dapr runs natively on Kubernetes, as as self hosted binary on your machine, on an IoT device, or as a container that can be injected into any system, in the cloud or on-premises.
+Dapr runs natively on Kubernetes, as a self hosted binary on your machine, on an IoT device, or as a container that can be injected into any system, in the cloud or on-premises.
 
 Dapr uses pluggable component state stores and message buses such as Redis as well as gRPC to offer a wide range of communication methods, including direct dapr-to-dapr using gRPC and async Pub-Sub with guaranteed delivery and at-least-once semantics.
 

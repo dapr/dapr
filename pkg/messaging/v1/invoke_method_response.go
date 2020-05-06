@@ -55,8 +55,12 @@ func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *Inv
 
 // WithRawData sets Message using byte data and content type
 func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *InvokeMethodResponse {
-	d := &commonv1pb.DataWithContentType{ContentType: contentType, Body: data}
-	imr.m.Data, _ = ptypes.MarshalAny(d)
+	if contentType == "" {
+		contentType = JSONContentType
+	}
+
+	imr.m.ContentType = contentType
+	imr.m.Data = &any.Any{Value: data}
 
 	return imr
 }
@@ -69,7 +73,7 @@ func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodR
 
 // WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
-	var md = map[string]*structpb.ListValue{}
+	var md = DaprInternalMetadata{}
 	header.VisitAll(func(key []byte, value []byte) {
 		md[string(key)] = &structpb.ListValue{
 			Values: []*structpb.Value{
@@ -111,12 +115,12 @@ func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
 }
 
 // Headers gets Headers metadata
-func (imr *InvokeMethodResponse) Headers() map[string]*structpb.ListValue {
+func (imr *InvokeMethodResponse) Headers() DaprInternalMetadata {
 	return imr.r.Headers
 }
 
 // Trailers gets Trailers metadata
-func (imr *InvokeMethodResponse) Trailers() map[string]*structpb.ListValue {
+func (imr *InvokeMethodResponse) Trailers() DaprInternalMetadata {
 	return imr.r.Trailers
 }
 
@@ -127,9 +131,18 @@ func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
 
 // RawData returns content_type and byte array body
 func (imr *InvokeMethodResponse) RawData() (string, []byte) {
-	if imr.m == nil {
+	if imr.m == nil || imr.m.GetData() == nil {
 		return "", nil
 	}
 
-	return extractRawData(imr.m.GetData())
+	contentType := imr.m.GetContentType()
+	dataTypeURL := imr.m.GetData().GetTypeUrl()
+	dataValue := imr.m.GetData().GetValue()
+
+	// set content_type to application/json only if typeurl is unset and data is given
+	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
+		contentType = JSONContentType
+	}
+
+	return contentType, dataValue
 }

@@ -70,19 +70,17 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	if g.ch != nil {
 		g.ch <- 1
 	}
-
-	clientV1 := clientv1pb.NewDaprClientClient(g.client)
-
 	sc := diag.FromContext(ctx)
 
-	ctx, cancel := context.WithTimeout(context.Background(), channel.DefaultChannelRequestTimeout)
-	defer cancel()
-
+	clientV1 := clientv1pb.NewDaprClientClient(g.client)
+	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(req.Metadata(), true)
+	// Prepare gRPC Metadata
+	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
+	// populate span context
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
 
-	// Prepare gRPC Metadata
-	ctx = metadata.NewOutgoingContext(ctx, invokev1.InternalMetadataToGrpcMetadata(req.Metadata(), true))
-
+	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
+	defer cancel()
 	var header, trailer metadata.MD
 	resp, err := clientV1.OnInvoke(ctx, req.Message(), grpc.Header(&header), grpc.Trailer(&trailer))
 

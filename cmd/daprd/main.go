@@ -94,6 +94,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/redis"
 	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
 	"github.com/dapr/components-contrib/bindings/twilio/sms"
+	"github.com/dapr/components-contrib/bindings/twitter"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware
@@ -259,6 +260,9 @@ func main() {
 			}),
 			bindings_loader.NewInput("azure.eventgrid", func() bindings.InputBinding {
 				return eventgrid.NewAzureEventGrid(logContrib)
+			}),
+			bindings_loader.NewInput("twitter", func() bindings.InputBinding {
+				return twitter.NewTwitter(logContrib)
 			}),
 		),
 		runtime.WithOutputBindings(

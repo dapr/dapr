@@ -24,21 +24,20 @@ option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
 // Thus, DaprInternal gRPC response returns OK in most cases
 // regardless of callee's response.
 service DaprInternal {
-  rpc CallActor (CallActorRequest) returns (CallActorResponse) {}
+  rpc CallActor (InternalInvokeRequest) returns (InternalInvokeResponse) {}
   rpc CallLocal (InternalInvokeRequest) returns (InternalInvokeResponse) {}
 }
 
-message CallActorRequest {
-  string actor_id = 1;
-  string actor_type = 2;
-  string method = 3;
-  google.protobuf.Any data = 4;
-  map<string,string> metadata = 5;
-}
-
-message CallActorResponse {
-  google.protobuf.Any data = 1;
-  map<string,string> metadata = 2;
+// Actor represents actor using actor_type and actor_id
+message Actor {
+  // actor_type is the type of actor.
+  //
+  // This field is required.
+  string actor_type = 1;
+  // actor_id is the id of actor type (actor_type)
+  //
+  // This field is required.
+  string actor_id = 2;
 }
 
 // InternalInvokeRequest is the message to transfer caller's data to callee
@@ -58,6 +57,12 @@ message InternalInvokeRequest {
   // 
   // This field is required.
   google.protobuf.Any message = 3;
+
+  // actor includes actor type and id. This field is used only for
+  // actor service invocation.
+  //
+  // This field is optional.
+  Actor actor = 4;
 }
 
 // InternalInvokeResponse is the message to transfer callee's response to caller

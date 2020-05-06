@@ -223,6 +223,12 @@ mingw32-make.exe docker-push
 
 Now we'll deploy Dapr with your changes.
 
+Create the dapr-system namespace
+
+```
+kubectl create namespace dapr-system
+```
+
 If you deployed Dapr to your cluster before, delete it now using:
 
 ```

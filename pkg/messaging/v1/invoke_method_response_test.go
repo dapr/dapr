@@ -12,6 +12,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
@@ -26,13 +27,9 @@ func TestInvocationResponse(t *testing.T) {
 }
 
 func TestInternalInvocationResponse(t *testing.T) {
-	d := commonv1pb.DataWithContentType{
-		ContentType: "application/json",
-		Body:        []byte("response"),
-	}
-	ds, _ := ptypes.MarshalAny(&d)
 	m := commonv1pb.InvokeResponse{
-		Data: ds,
+		Data:        &any.Any{Value: []byte("response")},
+		ContentType: "application/json",
 	}
 	ms, _ := ptypes.MarshalAny(&m)
 	pb := internalv1pb.InternalInvokeResponse{
@@ -47,11 +44,29 @@ func TestInternalInvocationResponse(t *testing.T) {
 }
 
 func TestResponseData(t *testing.T) {
-	resp := NewInvokeMethodResponse(0, "OK", nil)
-	resp.WithRawData([]byte("test"), "application/json")
-	contentType, bData := resp.RawData()
-	assert.Equal(t, "application/json", contentType)
-	assert.Equal(t, []byte("test"), bData)
+	t.Run("contenttype is set", func(t *testing.T) {
+		resp := NewInvokeMethodResponse(0, "OK", nil)
+		resp.WithRawData([]byte("test"), "application/json")
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	t.Run("contenttype is unset", func(t *testing.T) {
+		resp := NewInvokeMethodResponse(0, "OK", nil)
+		resp.WithRawData([]byte("test"), "")
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, []byte("test"), bData)
+	})
+
+	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
+		resp := NewInvokeMethodResponse(0, "OK", nil)
+		resp.m.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
+		contentType, bData := resp.RawData()
+		assert.Equal(t, "", contentType)
+		assert.Equal(t, []byte("fake"), bData)
+	})
 }
 
 func TestResponseHeader(t *testing.T) {

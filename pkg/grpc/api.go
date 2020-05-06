@@ -47,7 +47,7 @@ const (
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
 	// DaprInternal Service methods
-	CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) (*internalv1pb.CallActorResponse, error)
+	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 
 	// Dapr Service methods
@@ -119,27 +119,21 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 }
 
 // CallActor invokes a virtual actor
-func (a *api) CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) (*internalv1pb.CallActorResponse, error) {
-	req := actors.CallRequest{
-		ActorType: in.ActorType,
-		ActorID:   in.ActorId,
-		Data:      in.Data.Value,
-		Method:    in.Method,
-		Metadata:  in.Metadata,
+func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	req, err := invokev1.InternalInvokeRequest(in)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
-	sc := diag.GetSpanContextFromGRPC(ctx)
-	ctx = diag.NewContext(ctx, sc)
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, req.Message().Method, a.tracingSpec)
+	defer span.End()
+	ctx = diag.NewContext(ctx, span.SpanContext())
 
-	resp, err := a.actor.Call(ctx, &req)
+	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-
-	return &internalv1pb.CallActorResponse{
-		Data:     &any.Any{Value: resp.Data},
-		Metadata: map[string]string{},
-	}, nil
+	return resp.Proto(), nil
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
@@ -187,8 +181,7 @@ func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceReque
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
 	}
-	sc := diag.GetSpanContextFromGRPC(ctx)
-	ctx = diag.NewContext(ctx, sc)
+
 	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
 	if err != nil {
 		return nil, err

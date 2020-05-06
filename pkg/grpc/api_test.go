@@ -15,6 +15,7 @@ import (
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -44,11 +45,10 @@ func (m *mockGRPCAPI) CallLocal(ctx context.Context, in *internalv1pb.InternalIn
 	return resp.Proto(), nil
 }
 
-func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.CallActorRequest) (*internalv1pb.CallActorResponse, error) {
-	return &internalv1pb.CallActorResponse{
-		Data:     &any.Any{Value: ExtractSpanContext(ctx)},
-		Metadata: nil,
-	}, nil
+func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
+	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
+	return resp.Proto(), nil
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
@@ -105,9 +105,10 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 		},
 	})
 
+	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc_go.NewServer(
-		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.SetTracingSpanContextGRPCMiddlewareStream())),
-		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.SetTracingSpanContextGRPCMiddlewareUnary())),
+		grpc_go.StreamInterceptor(grpc_middleware.ChainStreamServer(diag.SetTracingSpanContextGRPCMiddlewareStream(spec))),
+		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.SetTracingSpanContextGRPCMiddlewareUnary(spec))),
 	)
 
 	go func() {
@@ -177,15 +178,30 @@ func TestCallActorWithTracing(t *testing.T) {
 	defer clientConn.Close()
 
 	client := internalv1pb.NewDaprInternalClient(clientConn)
-	request := &internalv1pb.CallActorRequest{
-		ActorId:   "actor-1",
-		ActorType: "test-actor",
-		Method:    "what",
-	}
 
-	resp, err := client.CallActor(context.Background(), request)
+	request := invokev1.NewInvokeMethodRequest("method")
+	request.WithActor("test-actor", "actor-1")
+
+	resp, err := client.CallActor(context.Background(), request.Proto())
 	assert.NoError(t, err)
-	assert.NotEmpty(t, resp.Data, "failed to generate trace context with actor call")
+	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with actor call")
+}
+
+func TestCallRemoteAppWithTracing(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	server, _ := startTestServerWithTracing(port)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := internalv1pb.NewDaprInternalClient(clientConn)
+	request := invokev1.NewInvokeMethodRequest("method").Proto()
+
+	resp, err := client.CallLocal(context.Background(), request)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with app call")
 }
 
 func TestCallLocal(t *testing.T) {
@@ -250,23 +266,6 @@ func TestCallLocal(t *testing.T) {
 		_, err := client.CallLocal(context.Background(), request)
 		assert.Equal(t, codes.Unknown, status.Code(err))
 	})
-}
-
-func TestCallRemoteAppWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
-	defer server.Stop()
-
-	clientConn := createTestClient(port)
-	defer clientConn.Close()
-
-	client := internalv1pb.NewDaprInternalClient(clientConn)
-	request := invokev1.NewInvokeMethodRequest("method").Proto()
-
-	resp, err := client.CallLocal(context.Background(), request)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, resp, "failed to generate trace context with app call")
 }
 
 func TestSaveState(t *testing.T) {

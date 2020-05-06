@@ -74,7 +74,7 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
-		grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler),
+		grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
 		grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 

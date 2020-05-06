@@ -14,13 +14,14 @@ import (
 
 	"net"
 
-	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // server is our user app
@@ -68,12 +69,30 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 	return resp, err
 }
 
+func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	var requestMD = map[string][]string{}
+	for k, vals := range md {
+		requestMD[k] = vals
+		fmt.Printf("incoming md: %s %q", k, vals)
+	}
+
+	header := metadata.Pairs(
+		"DaprTest-Response-1", "DaprTest-Response-Value-1",
+		"DaprTest-Response-2", "DaprTest-Response-Value-2")
+	grpc.SendHeader(ctx, header)
+	trailer := metadata.Pairs(
+		"DaprTest-Trailer-1", "DaprTest-Trailer-Value-1",
+		"DaprTest-Trailer-2", "DaprTest-Trailer-Value-2")
+	grpc.SetTrailer(ctx, trailer)
+
+	return json.Marshal(requestMD)
+}
+
 // This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	var d = &commonv1pb.DataWithContentType{}
-	_ = ptypes.UnmarshalAny(in.Data, d)
-	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(d.Body))
+	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.GetData().Value))
 
 	var err error
 	var response []byte
@@ -82,7 +101,9 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 		// not a typo, the handling is the same as the case below
 		fallthrough
 	case "grpcToGrpcTest":
-		response, err = s.grpcTestHandler(d.Body)
+		response, err = s.grpcTestHandler(in.GetData().Value)
+	case "retrieve_request_object":
+		response, err = s.retrieveRequestObject(ctx)
 	}
 
 	if err != nil {
@@ -90,10 +111,9 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 		response, _ = json.Marshal(msg)
 	}
 
-	resp := &commonv1pb.DataWithContentType{ContentType: "application/json", Body: response}
-	respBody, _ := ptypes.MarshalAny(resp)
+	respBody := &any.Any{Value: response}
 
-	return &commonv1pb.InvokeResponse{Data: respBody}, nil
+	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
