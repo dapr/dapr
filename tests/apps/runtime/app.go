@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -74,19 +75,23 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 func invokeDaprHTTPAPI() error {
 	healthURL := fmt.Sprintf("http://%s/v1.0/healthz", daprHTTPAddr)
-	_, err := http.Get(healthURL)
+	// nolint: gosec
+	r, err := http.Get(healthURL)
 	if err != nil {
 		return err
 	}
+	defer r.Body.Close()
 	return nil
 }
 
 func invokeDaprGRPCAPI() error {
 	// Dial the gRPC endpoint and fail if cannot connect in 10 seconds.
-	conn, err := grpc.Dial(daprGRPCAddr,
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx,
+		daprGRPCAddr,
 		grpc.WithInsecure(),
-		grpc.WithBlock(),
-		grpc.WithTimeout(10*time.Second))
+		grpc.WithBlock())
 	if err != nil {
 		return err
 	}
@@ -101,7 +106,6 @@ func testAPI(wg *sync.WaitGroup, successCount, errorCount *uint32, invoke func()
 	if err != nil {
 		log.Printf("Error calling Dapr %s API: %+v", id, err)
 		atomic.AddUint32(errorCount, 1)
-		// Track the error but return success as we want to release the message
 	} else {
 		log.Printf("Success calling Dapr %s API", id)
 		atomic.AddUint32(successCount, 1)
@@ -130,6 +134,7 @@ func onPubsub(w http.ResponseWriter, r *http.Request) {
 
 	wg.Wait()
 
+	// Always return success as we want to release the messages
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{
 		Message: "success",

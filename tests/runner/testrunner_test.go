@@ -104,10 +104,10 @@ func TestStartRunner(t *testing.T) {
 		mockPlatform.On("addComponents", fakeComps).Return(nil)
 
 		fakeRunner := &TestRunner{
-			id:          "fakeRunner",
-			components:  fakeComps,
-			initialApps: fakeTestApps,
-			Platform:    mockPlatform,
+			id:         "fakeRunner",
+			components: fakeComps,
+			testApps:   fakeTestApps,
+			Platform:   mockPlatform,
 		}
 
 		ret := fakeRunner.Start(&fakeTestingM{})
@@ -127,10 +127,10 @@ func TestStartRunner(t *testing.T) {
 		mockPlatform.On("addComponents", fakeComps).Return(nil)
 
 		fakeRunner := &TestRunner{
-			id:          "fakeRunner",
-			components:  fakeComps,
-			initialApps: fakeTestApps,
-			Platform:    mockPlatform,
+			id:         "fakeRunner",
+			components: fakeComps,
+			testApps:   fakeTestApps,
+			Platform:   mockPlatform,
 		}
 
 		ret := fakeRunner.Start(&fakeTestingM{})

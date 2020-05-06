@@ -68,7 +68,7 @@ func getAPIResponse(t *testing.T, testName, runtimeExternalURL string) (*daprAPI
 
 func TestMain(m *testing.M) {
 	fmt.Println("Enter TestMain")
-	// These apps will be deployed before starting actual test
+	// These apps and components will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	comps := []kube.ComponentDescription{
 		{

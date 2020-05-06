@@ -3,7 +3,7 @@
 	// Update container version when you update dev-container
 	"image": "docker.io/daprio/dapr-dev:0.1.2",
 	// Uncomment if you want to use your local docker image
-	//"dockerFile": "../docker/Dockerfile-dev",
+	// "dockerFile": "../docker/Dockerfile-dev",
 	"runArgs": [
 		// On Linux, this will prevent new files getting created as root, but you 
 		// may need to update the USER_UID and USER_GID in docker/Dockerfile-dev
@@ -26,8 +26,8 @@
 		"terminal.integrated.shell.linux": "/bin/bash",
 		"go.gopath": "/go"
 	},
-	"workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/go/src/github.com/dapr",
-	"workspaceFolder": "/go/src/github.com/dapr",
+	"workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/go/src/github.com/dapr/dapr",
+	"workspaceFolder": "/go/src/github.com/dapr/dapr",
 	"extensions": [
 		"ms-vscode.go",
 		"ms-azuretools.vscode-docker",
