@@ -43,6 +43,12 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) []Subsc
 	default:
 		log.Warnf("app returned http status code %v from subscription endpoint", resp.Status().Code)
 	}
+	for i := len(subscriptions) - 1; i >= 0; i-- {
+		if subscriptions[i].Route == "" {
+			subscriptions = append(subscriptions[:i], subscriptions[i+1:]...)
+			log.Warnf("topic %s has an empty route. removing from subscriptions list", subscriptions[i].Topic)
+		}
+	}
 	return subscriptions
 }
 

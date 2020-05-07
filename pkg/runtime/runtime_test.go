@@ -90,6 +90,17 @@ func getSubscriptionsJSONString(topics []string) string {
 	return string(b)
 }
 
+func getSubscriptionCustom(topic, route string) string {
+	s := []runtime_pubsub.Subscription{
+		{
+			Topic: topic,
+			Route: route,
+		},
+	}
+	b, _ := json.Marshal(&s)
+	return string(b)
+}
+
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
@@ -141,6 +152,33 @@ func TestInitPubSub(t *testing.T) {
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("subscribe to topic with custom route", func(t *testing.T) {
+		mockPubSub := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes to a topic via http app channel
+		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		fakeReq.WithHTTPExtension(http.MethodGet, "")
+		fakeReq.WithRawData(nil, "application/json")
+
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		sub := getSubscriptionCustom("topic0", "customroute/topic0")
+		fakeResp.WithRawData([]byte(sub), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.initPubSub()
+
+		// assert
+		assert.Nil(t, err)
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
