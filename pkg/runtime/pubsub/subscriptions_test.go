@@ -29,5 +29,4 @@ func TestFilterSubscriptions(t *testing.T) {
 	assert.Equal(t, "topic0", subs[0].Topic)
 	assert.Equal(t, "topic1", subs[1].Topic)
 	assert.Equal(t, "custom/topic1", subs[1].Route)
-
 }
