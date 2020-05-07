@@ -7,11 +7,16 @@ package v1
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/stretchr/testify/assert"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func TestInternalMetadataToHTTPHeader(t *testing.T) {
@@ -167,4 +172,94 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		assert.Equal(t, "value2", convertedMD["my-metadata"][1])
 		assert.Equal(t, "value3", convertedMD["my-metadata"][2])
 	})
+}
+
+func TestErrorFromHTTPResponseCode(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(200, "OK")
+
+		// assert
+		assert.NoError(t, err)
+	})
+
+	t.Run("NotFound", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(404, "Not Found")
+
+		// assert
+		s, ok := status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.NotFound, s.Code())
+		assert.Equal(t, "Not Found", s.Message())
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, "404", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
+		assert.Equal(t, "Not Found", errInfo.GetMetadata()[errorInfoHTTPErrorMetadata])
+	})
+
+	t.Run("Unknown", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(201, "Created")
+
+		// assert
+		s, ok := status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.Unknown, s.Code())
+		assert.Equal(t, "Created", s.Message())
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, "201", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
+		assert.Equal(t, "Created", errInfo.GetMetadata()[errorInfoHTTPErrorMetadata])
+	})
+
+	t.Run("Internal Server Error", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(500, "HTTPExtensions is not given")
+
+		// assert
+		s, ok := status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.Unknown, s.Code())
+		assert.Equal(t, "Internal Server Error", s.Message())
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, "500", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
+		assert.Equal(t, "HTTPExtensions is not given", errInfo.GetMetadata()[errorInfoHTTPErrorMetadata])
+	})
+
+	t.Run("Truncate error message", func(t *testing.T) {
+		longMessage := strings.Repeat("test", 30)
+
+		// act
+		err := ErrorFromHTTPResponseCode(500, longMessage)
+
+		// assert
+		s, _ := status.FromError(err)
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, 64, len(errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]))
+	})
+}
+
+func TestErrorFromInternalStatus(t *testing.T) {
+	expected := status.New(codes.Internal, "Internal Service Error")
+	expected.WithDetails(
+		&epb.DebugInfo{
+			StackEntries: []string{
+				"first stack",
+				"second stack",
+			},
+		},
+	)
+
+	internal := &internalv1pb.Status{
+		Code:    expected.Proto().Code,
+		Message: expected.Proto().Message,
+		Details: expected.Proto().Details,
+	}
+
+	// act
+	statusError := ErrorFromInternalStatus(internal)
+
+	// assert
+	actual, ok := status.FromError(statusError)
+	assert.True(t, ok)
+	assert.Equal(t, expected, actual)
 }

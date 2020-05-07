@@ -7,11 +7,16 @@ package v1
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	structpb "github.com/golang/protobuf/ptypes/struct"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	grpc_status "google.golang.org/grpc/status"
 )
 
 const (
@@ -33,6 +38,15 @@ const (
 	traceparentHeader = "traceparent"
 	tracestateHeader  = "tracestate"
 	tracebinMetadata  = "grpc-trace-bin"
+
+	// ErrorInfo metadata value is limited to 64 chars
+	// https://github.com/googleapis/go-genproto/blob/b979b6f78d84775ef7a93ffc8034924947960f29/googleapis/rpc/errdetails/error_details.pb.go#L274
+	maxMetadataValueLen = 64
+
+	// ErrorInfo metadata for HTTP response
+	errorInfoDomain            = "dapr.io"
+	errorInfoHTTPCodeMetadata  = "http.code"
+	errorInfoHTTPErrorMetadata = "http.error_message"
 )
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
@@ -227,4 +241,46 @@ func CodeFromHTTPStatus(httpStatusCode int) codes.Code {
 	}
 
 	return codes.Unknown
+}
+
+// ErrorFromHTTPResponseCode converts http response code to gRPC status error
+func ErrorFromHTTPResponseCode(code int, detail string) error {
+	grpcCode := CodeFromHTTPStatus(code)
+	if grpcCode == codes.OK {
+		return nil
+	}
+	httpStatusText := http.StatusText(code)
+	respStatus := grpc_status.New(grpcCode, httpStatusText)
+
+	// Trim the data longer than 64 characters
+	if len(detail) >= maxMetadataValueLen {
+		detail = detail[:maxMetadataValueLen]
+	}
+
+	resps, err := respStatus.WithDetails(
+		&epb.ErrorInfo{
+			Type:   httpStatusText,
+			Domain: errorInfoDomain,
+			Metadata: map[string]string{
+				errorInfoHTTPCodeMetadata:  strconv.Itoa(code),
+				errorInfoHTTPErrorMetadata: detail,
+			},
+		},
+	)
+	if err != nil {
+		resps = respStatus
+	}
+
+	return resps.Err()
+}
+
+// ErrorFromInternalStatus converts internal status to gRPC status error
+func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
+	respStatus := &spb.Status{
+		Code:    internalStatus.GetCode(),
+		Message: internalStatus.GetMessage(),
+		Details: internalStatus.GetDetails(),
+	}
+
+	return grpc_status.ErrorProto(respStatus)
 }
