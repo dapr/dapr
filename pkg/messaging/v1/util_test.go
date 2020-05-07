@@ -234,7 +234,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		// assert
 		s, _ := status.FromError(err)
 		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
-		assert.Equal(t, 64, len(errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]))
+		assert.Equal(t, 63, len(errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]))
 	})
 }
 

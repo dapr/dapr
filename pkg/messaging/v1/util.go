@@ -40,8 +40,8 @@ const (
 	tracebinMetadata  = "grpc-trace-bin"
 
 	// ErrorInfo metadata value is limited to 64 chars
-	// https://github.com/googleapis/go-genproto/blob/b979b6f78d84775ef7a93ffc8034924947960f29/googleapis/rpc/errdetails/error_details.pb.go#L274
-	maxMetadataValueLen = 64
+	// https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L126
+	maxMetadataValueLen = 63
 
 	// ErrorInfo metadata for HTTP response
 	errorInfoDomain            = "dapr.io"
@@ -252,7 +252,7 @@ func ErrorFromHTTPResponseCode(code int, detail string) error {
 	httpStatusText := http.StatusText(code)
 	respStatus := grpc_status.New(grpcCode, httpStatusText)
 
-	// Trim the data longer than 64 characters
+	// Truncate detail string longer than 64 characters
 	if len(detail) >= maxMetadataValueLen {
 		detail = detail[:maxMetadataValueLen]
 	}
