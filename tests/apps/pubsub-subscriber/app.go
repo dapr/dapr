@@ -30,13 +30,14 @@ type appResponse struct {
 	EndTime   int    `json:"end_time,omitempty"`
 }
 
-type topicsList struct {
-	Topic []string
-}
-
 type receivedMessagesResponse struct {
 	ReceivedByTopicA []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB []string `json:"pubsub-b-topic"`
+}
+
+type subscription struct {
+	Topic string `json:"topic"`
+	Route string `json:"route"`
 }
 
 var receivedMessagesA []string
@@ -57,12 +58,20 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("configureSubscribeHandler called\n")
 
-	var t topicsList
-	t.Topic = append(t.Topic, pubsubA, pubsubB)
-	log.Printf("configureSubscribeHandler subscribing to:%v\n", t.Topic)
+	t := []subscription{
+		{
+			Topic: pubsubA,
+			Route: pubsubA,
+		},
+		{
+			Topic: pubsubB,
+			Route: pubsubB,
+		},
+	}
+	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(t.Topic)
+	json.NewEncoder(w).Encode(t)
 }
 
 // this handles messages published to "pubsub-a-topic"
