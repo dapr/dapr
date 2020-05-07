@@ -298,22 +298,24 @@ func mustMarshalAny(msg proto.Message) *any.Any {
 }
 
 func TestInvokeService(t *testing.T) {
+	mockDirectMessaging := new(daprt.MockDirectMessaging)
+
+	// Setup Dapr API server
+	fakeAPI := &api{
+		id:              "fakeAPI",
+		directMessaging: mockDirectMessaging,
+	}
+
 	t.Run("handle http response code", func(t *testing.T) {
-		// Set up direct messaging mock
-		mockDirectMessaging := new(daprt.MockDirectMessaging)
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "NotFound", nil)
 		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+
+		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
 			mock.AnythingOfType("*context.valueCtx"),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
-
-		// Setup Dapr API server
-		fakeAPI := &api{
-			id:              "fakeAPI",
-			directMessaging: mockDirectMessaging,
-		}
 
 		// Run test server
 		port, _ := freeport.GetFreePort()
@@ -349,8 +351,6 @@ func TestInvokeService(t *testing.T) {
 	})
 
 	t.Run("handle grpc response code", func(t *testing.T) {
-		// Set up direct messaging mock
-		mockDirectMessaging := new(daprt.MockDirectMessaging)
 		fakeResp := invokev1.NewInvokeMethodResponse(
 			int32(codes.Unimplemented), "Unimplemented",
 			[]*any.Any{
@@ -361,19 +361,14 @@ func TestInvokeService(t *testing.T) {
 				}),
 			},
 		)
-
 		fakeResp.WithRawData([]byte("fakeDirectMessageResponse"), "application/json")
+
+		// Set up direct messaging mock
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On("Invoke",
 			mock.AnythingOfType("*context.valueCtx"),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
-
-		// Setup Dapr API server
-		fakeAPI := &api{
-			id:              "fakeAPI",
-			directMessaging: mockDirectMessaging,
-		}
 
 		// Run test server
 		port, _ := freeport.GetFreePort()
