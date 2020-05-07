@@ -184,6 +184,11 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+
+		// act
+		err = rt.beginPubSub()
+
+		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -209,7 +214,6 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 
 		// act
-		assert.Nil(t, err)
 		err = rt.beginPubSub()
 
 		// assert
@@ -287,6 +291,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		err = rt.beginPubSub()
+
+		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
 	})
