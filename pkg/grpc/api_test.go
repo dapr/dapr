@@ -145,7 +145,7 @@ func startTestServer(port int) *grpc_go.Server {
 	return server
 }
 
-func startGRPCApiServer(port int, testAPIServer *api) *grpc_go.Server {
+func startInternalServer(port int, testAPIServer *api) *grpc_go.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	server := grpc_go.NewServer()
@@ -162,7 +162,7 @@ func startGRPCApiServer(port int, testAPIServer *api) *grpc_go.Server {
 	return server
 }
 
-func startDaprApiServer(port int, testAPIServer *api) *grpc_go.Server {
+func startDaprAPIServer(port int, testAPIServer *api) *grpc_go.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	server := grpc_go.NewServer()
@@ -233,7 +233,7 @@ func TestCallLocal(t *testing.T) {
 			id:         "fakeAPI",
 			appChannel: nil,
 		}
-		server := startGRPCApiServer(port, fakeAPI)
+		server := startInternalServer(port, fakeAPI)
 		defer server.Stop()
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
@@ -253,7 +253,7 @@ func TestCallLocal(t *testing.T) {
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
 		}
-		server := startGRPCApiServer(port, fakeAPI)
+		server := startInternalServer(port, fakeAPI)
 		defer server.Stop()
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
@@ -276,7 +276,7 @@ func TestCallLocal(t *testing.T) {
 			id:         "fakeAPI",
 			appChannel: mockAppChannel,
 		}
-		server := startGRPCApiServer(port, fakeAPI)
+		server := startInternalServer(port, fakeAPI)
 		defer server.Stop()
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
@@ -319,7 +319,7 @@ func TestInvokeService(t *testing.T) {
 
 		// Run test server
 		port, _ := freeport.GetFreePort()
-		server := startDaprApiServer(port, fakeAPI)
+		server := startDaprAPIServer(port, fakeAPI)
 		defer server.Stop()
 
 		// Create gRPC test client
@@ -372,7 +372,7 @@ func TestInvokeService(t *testing.T) {
 
 		// Run test server
 		port, _ := freeport.GetFreePort()
-		server := startDaprApiServer(port, fakeAPI)
+		server := startDaprAPIServer(port, fakeAPI)
 		defer server.Stop()
 
 		// Create gRPC test client
