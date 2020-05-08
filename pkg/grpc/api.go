@@ -186,15 +186,20 @@ func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceReque
 
 	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Headers(), true))
 
-	statusCode := int(resp.Status().Code)
+	var respError error
 	if resp.IsHTTPResponse() {
-		statusCode = int(invokev1.CodeFromHTTPStatus(statusCode))
+		var errorMessage = []byte("")
+		if resp != nil {
+			_, errorMessage = resp.RawData()
+		}
+		respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
 	} else {
-		// ignore if appchannel uses HTTP
+		respError = invokev1.ErrorFromInternalStatus(resp.Status())
+		// ignore trailer if appchannel uses HTTP
 		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Trailers(), false))
 	}
 
-	return resp.Message(), status.Error(codes.Code(statusCode), resp.Status().Message)
+	return resp.Message(), respError
 }
 
 func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error) {
