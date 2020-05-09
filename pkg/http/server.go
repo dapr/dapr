@@ -73,7 +73,10 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 }
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
+	if diag.DefaultHTTPMonitoring.IsEnabled() {
+		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
+	}
+	return next
 }
 
 func (s *server) useRouter() fasthttp.RequestHandler {

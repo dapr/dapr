@@ -135,6 +135,10 @@ func (g *grpcMetrics) Init(appID string) error {
 	return view.Register(views...)
 }
 
+func (g *grpcMetrics) IsEnabled() bool {
+	return g.enabled
+}
+
 func (g *grpcMetrics) ServerRequestReceived(ctx context.Context, method string, contentSize int64) time.Time {
 	if g.enabled {
 		stats.RecordWithTags(
