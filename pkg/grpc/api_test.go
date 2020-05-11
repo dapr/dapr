@@ -260,7 +260,7 @@ func TestCallLocal(t *testing.T) {
 
 		client := internalv1pb.NewDaprInternalClient(clientConn)
 		request := &internalv1pb.InternalInvokeRequest{
-			Message: &any.Any{Value: []byte("fake")},
+			Message: nil,
 		}
 
 		_, err := client.CallLocal(context.Background(), request)

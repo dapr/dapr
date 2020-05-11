@@ -6,13 +6,12 @@
 package v1
 
 import (
+	"errors"
 	"net/url"
 	"strings"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 )
 
@@ -25,7 +24,6 @@ const (
 // and provides the helpers to manage it.
 type InvokeMethodRequest struct {
 	r *internalv1pb.InternalInvokeRequest
-	m *commonv1pb.InvokeRequest
 }
 
 // NewInvokeMethodRequest creates InvokeMethodRequest object for method
@@ -33,9 +31,9 @@ func NewInvokeMethodRequest(method string) *InvokeMethodRequest {
 	return &InvokeMethodRequest{
 		r: &internalv1pb.InternalInvokeRequest{
 			Ver: DefaultAPIVersion,
-		},
-		m: &commonv1pb.InvokeRequest{
-			Method: method,
+			Message: &commonv1pb.InvokeRequest{
+				Method: method,
+			},
 		},
 	}
 }
@@ -44,21 +42,17 @@ func NewInvokeMethodRequest(method string) *InvokeMethodRequest {
 func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest {
 	return &InvokeMethodRequest{
 		r: &internalv1pb.InternalInvokeRequest{
-			Ver: DefaultAPIVersion,
+			Ver:     DefaultAPIVersion,
+			Message: pb,
 		},
-		m: pb,
 	}
 }
 
 // InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object
 func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
 	req := &InvokeMethodRequest{r: pb}
-	req.m = &commonv1pb.InvokeRequest{}
-	if pb.Message != nil {
-		if err := ptypes.UnmarshalAny(pb.Message, req.m); err != nil {
-			return nil, err
-		}
-		pb.Message = nil
+	if pb.Message == nil {
+		return nil, errors.New("Message field is nil")
 	}
 
 	return req, nil
@@ -81,8 +75,8 @@ func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *In
 	if contentType == "" {
 		contentType = JSONContentType
 	}
-	imr.m.ContentType = contentType
-	imr.m.Data = &any.Any{Value: data}
+	imr.r.Message.ContentType = contentType
+	imr.r.Message.Data = &any.Any{Value: data}
 	return imr
 }
 
@@ -102,7 +96,7 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 		}
 	}
 
-	imr.m.HttpExtension = &commonv1pb.HTTPExtension{
+	imr.r.Message.HttpExtension = &commonv1pb.HTTPExtension{
 		Verb:        commonv1pb.HTTPExtension_Verb(httpMethod),
 		Querystring: metadata,
 	}
@@ -112,11 +106,12 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 
 // EncodeHTTPQueryString generates querystring for http using http extension object
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
-	if imr.m.GetHttpExtension() == nil {
+	m := imr.r.Message
+	if m == nil || m.GetHttpExtension() == nil {
 		return ""
 	}
 
-	qs := imr.m.GetHttpExtension().Querystring
+	qs := m.GetHttpExtension().Querystring
 	if len(qs) == 0 {
 		return ""
 	}
@@ -140,11 +135,7 @@ func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
 
 // Proto returns InternalInvokeRequest Proto object
 func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
-	p := proto.Clone(imr.r).(*internalv1pb.InternalInvokeRequest)
-	if imr.m != nil {
-		p.Message, _ = ptypes.MarshalAny(imr.m)
-	}
-	return p
+	return imr.r
 }
 
 // Actor returns actor type and id
@@ -154,18 +145,19 @@ func (imr *InvokeMethodRequest) Actor() *internalv1pb.Actor {
 
 // Message gets InvokeRequest Message object
 func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
-	return imr.m
+	return imr.r.Message
 }
 
 // RawData returns content_type and byte array body
 func (imr *InvokeMethodRequest) RawData() (string, []byte) {
-	if imr.m == nil || imr.m.Data == nil {
+	m := imr.r.Message
+	if m == nil || m.Data == nil {
 		return "", nil
 	}
 
-	contentType := imr.m.GetContentType()
-	dataTypeURL := imr.m.GetData().GetTypeUrl()
-	dataValue := imr.m.GetData().GetValue()
+	contentType := m.GetContentType()
+	dataTypeURL := m.GetData().GetTypeUrl()
+	dataValue := m.GetData().GetValue()
 
 	// set content_type to application/json only if typeurl is unset and data is given
 	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
