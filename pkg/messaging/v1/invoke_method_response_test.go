@@ -11,7 +11,6 @@ import (
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
-	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
@@ -23,23 +22,22 @@ func TestInvocationResponse(t *testing.T) {
 
 	assert.Equal(t, int32(0), req.r.GetStatus().Code)
 	assert.Equal(t, "OK", req.r.GetStatus().Message)
-	assert.NotNil(t, req.m)
+	assert.NotNil(t, req.r.Message)
 }
 
 func TestInternalInvocationResponse(t *testing.T) {
-	m := commonv1pb.InvokeResponse{
+	m := &commonv1pb.InvokeResponse{
 		Data:        &any.Any{Value: []byte("response")},
 		ContentType: "application/json",
 	}
-	ms, _ := ptypes.MarshalAny(&m)
 	pb := internalv1pb.InternalInvokeResponse{
 		Status:  &internalv1pb.Status{Code: 0},
-		Message: ms,
+		Message: m,
 	}
 
 	ir, err := InternalInvokeResponse(&pb)
 	assert.NoError(t, err)
-	assert.NotNil(t, ir.m)
+	assert.NotNil(t, ir.r.Message)
 	assert.Equal(t, int32(0), ir.r.GetStatus().GetCode())
 }
 
@@ -62,7 +60,7 @@ func TestResponseData(t *testing.T) {
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
 		resp := NewInvokeMethodResponse(0, "OK", nil)
-		resp.m.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
+		resp.r.Message.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
 		contentType, bData := resp.RawData()
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("fake"), bData)
