@@ -935,12 +935,20 @@ func (a *DaprRuntime) initServiceDiscovery() error {
 }
 
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
+	subject := ""
+	var cloudEvent pubsub.CloudEventsEnvelope
+	err := a.json.Unmarshal(msg.Data, &cloudEvent)
+	if err == nil {
+		subject = cloudEvent.Subject
+	}
+
 	req := invokev1.NewInvokeMethodRequest(msg.Topic)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
 
-	// TODO Propagate Context
-	ctx := context.Background()
+	// subject contains the correlationID which is passed span context
+	sc, _ := diag.SpanContextFromString(subject)
+	ctx := diag.NewContext(context.Background(), sc)
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
@@ -982,9 +990,12 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 			Value: b,
 		}
 	}
-
+	// subject contains the correlationID which is passed span context
+	subject := cloudEvent.Subject
+	sc, _ := diag.SpanContextFromString(subject)
+	ctx := diag.NewContext(context.Background(), sc)
 	clientV1 := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-	if _, err = clientV1.OnTopicEvent(context.Background(), envelope); err != nil {
+	if _, err = clientV1.OnTopicEvent(ctx, envelope); err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
 		log.Debug(err)
 		return err
