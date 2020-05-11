@@ -6,6 +6,7 @@
 package v1
 
 import (
+	"errors"
 	"net/url"
 	"strings"
 
@@ -51,7 +52,7 @@ func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest
 func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
 	req := &InvokeMethodRequest{r: pb}
 	if pb.Message == nil {
-		pb.Message = &commonv1pb.InvokeRequest{}
+		return nil, errors.New("Message field is nil")
 	}
 
 	return req, nil

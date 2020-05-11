@@ -26,19 +26,31 @@ func TestInvocationResponse(t *testing.T) {
 }
 
 func TestInternalInvocationResponse(t *testing.T) {
-	m := &commonv1pb.InvokeResponse{
-		Data:        &any.Any{Value: []byte("response")},
-		ContentType: "application/json",
-	}
-	pb := internalv1pb.InternalInvokeResponse{
-		Status:  &internalv1pb.Status{Code: 0},
-		Message: m,
-	}
+	t.Run("valid internal invoke response", func(t *testing.T) {
+		m := &commonv1pb.InvokeResponse{
+			Data:        &any.Any{Value: []byte("response")},
+			ContentType: "application/json",
+		}
+		pb := internalv1pb.InternalInvokeResponse{
+			Status:  &internalv1pb.Status{Code: 0},
+			Message: m,
+		}
 
-	ir, err := InternalInvokeResponse(&pb)
-	assert.NoError(t, err)
-	assert.NotNil(t, ir.r.Message)
-	assert.Equal(t, int32(0), ir.r.GetStatus().GetCode())
+		ir, err := InternalInvokeResponse(&pb)
+		assert.NoError(t, err)
+		assert.NotNil(t, ir.r.Message)
+		assert.Equal(t, int32(0), ir.r.GetStatus().GetCode())
+	})
+
+	t.Run("Message is nil", func(t *testing.T) {
+		pb := internalv1pb.InternalInvokeResponse{
+			Status:  &internalv1pb.Status{Code: 0},
+			Message: nil,
+		}
+
+		_, err := InternalInvokeResponse(&pb)
+		assert.Error(t, err)
+	})
 }
 
 func TestResponseData(t *testing.T) {

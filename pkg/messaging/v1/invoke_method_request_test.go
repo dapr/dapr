@@ -30,21 +30,33 @@ func TestFromInvokeRequestMessage(t *testing.T) {
 }
 
 func TestInternalInvokeRequest(t *testing.T) {
-	m := &commonv1pb.InvokeRequest{
-		Method:      "invoketest",
-		ContentType: "application/json",
-		Data:        &any.Any{Value: []byte("test")},
-	}
-	pb := internalv1pb.InternalInvokeRequest{
-		Ver:     internalv1pb.APIVersion_V1,
-		Message: m,
-	}
+	t.Run("valid internal invoke request", func(t *testing.T) {
+		m := &commonv1pb.InvokeRequest{
+			Method:      "invoketest",
+			ContentType: "application/json",
+			Data:        &any.Any{Value: []byte("test")},
+		}
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: m,
+		}
 
-	ir, err := InternalInvokeRequest(&pb)
-	assert.NoError(t, err)
-	assert.NotNil(t, ir.r.Message)
-	assert.Equal(t, "invoketest", ir.r.Message.GetMethod())
-	assert.NotNil(t, ir.r.Message.GetData())
+		ir, err := InternalInvokeRequest(&pb)
+		assert.NoError(t, err)
+		assert.NotNil(t, ir.r.Message)
+		assert.Equal(t, "invoketest", ir.r.Message.GetMethod())
+		assert.NotNil(t, ir.r.Message.GetData())
+	})
+
+	t.Run("nil message field", func(t *testing.T) {
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: nil,
+		}
+
+		_, err := InternalInvokeRequest(&pb)
+		assert.Error(t, err)
+	})
 }
 
 func TestMetadata(t *testing.T) {
