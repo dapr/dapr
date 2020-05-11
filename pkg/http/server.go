@@ -52,8 +52,8 @@ func (s *server) StartNonBlocking() {
 				s.useComponents(
 					s.useRouter())))
 
-	handler = s.useMetrics(handler)
-	handler = s.useTracing(handler)
+	//handler = s.useMetrics(handler)
+	//handler = s.useTracing(handler)
 
 	go func() {
 		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), handler))

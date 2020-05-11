@@ -18,7 +18,6 @@ import (
 	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -137,14 +136,14 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
 	s.logger.Infof("enabled monitoring middleware.")
-	unaryChains := grpc_middleware.ChainUnaryServer(
-		diag.SetTracingSpanContextGRPCMiddlewareUnary(s.tracingSpec),
-		diag.DefaultGRPCMonitoring.UnaryServerInterceptor(),
-	)
-	opts = append(
-		opts,
-		grpc_go.StreamInterceptor(diag.SetTracingSpanContextGRPCMiddlewareStream(s.tracingSpec)),
-		grpc_go.UnaryInterceptor(unaryChains))
+	//	unaryChains := grpc_middleware.ChainUnaryServer(
+	//		diag.SetTracingSpanContextGRPCMiddlewareUnary(s.tracingSpec),
+	//		diag.DefaultGRPCMonitoring.UnaryServerInterceptor(),
+	//	)
+	//opts = append(
+	//	opts,
+	//grpc_go.StreamInterceptor(diag.SetTracingSpanContextGRPCMiddlewareStream(s.tracingSpec)),
+	//grpc_go.UnaryInterceptor(unaryChains))
 
 	return opts
 }

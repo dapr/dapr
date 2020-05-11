@@ -13,9 +13,7 @@ import (
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
-	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -131,18 +129,18 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
 	defer cancel()
 
-	var span *trace.Span
-	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, req.Message().Method, d.tracingSpec)
-	defer span.End()
+	//var span *trace.Span
+	//ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, req.Message().Method, d.tracingSpec)
+	//defer span.End()
 
-	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
+	//ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 	clientV1 := internalv1pb.NewDaprInternalClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {
 		return nil, err
 	}
 
-	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
+	//diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
 
 	return invokev1.InternalInvokeResponse(resp)
 }

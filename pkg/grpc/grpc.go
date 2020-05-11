@@ -13,7 +13,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
 	"github.com/dapr/dapr/pkg/config"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
@@ -74,8 +73,8 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 
 	opts := []grpc.DialOption{
 		grpc.WithBlock(),
-		grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
-		grpc.WithDefaultServiceConfig(grpcServiceConfig),
+		//grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+		//grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 
 	if !skipTLS && g.auth != nil {

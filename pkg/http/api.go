@@ -555,9 +555,9 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// Get trace headers from request context header because middleware sets traceparent.
 	// Then populate trace headers to context.
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	resp, err := a.directMessaging.Invoke(ctx, targetID, req)
+	//sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
+	//ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	resp, err := a.directMessaging.Invoke(context.Background(), targetID, req)
 	// err does not represent user application response
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
