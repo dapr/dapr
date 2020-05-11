@@ -23,9 +23,9 @@ var (
 
 	// DefaultMonitoring holds service monitoring metrics definitions
 	DefaultMonitoring = newServiceMetrics()
-	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middleswares
+	// DefaultGRPCMonitoring holds default gRPC monitoring handlers and middlewares
 	DefaultGRPCMonitoring = newGRPCMetrics()
-	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middleswares
+	// DefaultHTTPMonitoring holds default HTTP monitoring handlers and middlewares
 	DefaultHTTPMonitoring = newHTTPMetrics()
 )
 
