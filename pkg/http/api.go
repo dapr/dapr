@@ -999,9 +999,15 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	topic := reqCtx.UserValue(topicParam).(string)
 	body := reqCtx.PostBody()
 
-	// TODO : Remove passing corID in NewCloudEventsEnvelope through arguments as it can be passed through context
 	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	corID := sc.TraceID.String()
+	var span *trace.Span
+	spanName := fmt.Sprintf("PublishEvent: %s", topic)
+	ctx := diag.NewContext((context.Context)(reqCtx), sc)
+	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
+	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
+	defer span.End()
+
+	corID := diag.SpanContextToString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 
 	b, err := a.json.Marshal(envelope)
@@ -1015,13 +1021,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		Topic: topic,
 		Data:  b,
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("PublishEvent: %s", topic)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
 
 	err = a.publishFn(&req)
 	if err != nil {

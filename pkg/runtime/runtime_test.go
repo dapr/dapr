@@ -615,7 +615,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
 		err := rt.publishMessageHTTP(testPubSubMessage)
@@ -633,7 +633,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
 		fakeResp.WithRawData([]byte(clientError.Error()), "application/json")
 
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
 		err := rt.publishMessageHTTP(testPubSubMessage)
