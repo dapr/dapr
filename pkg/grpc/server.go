@@ -15,8 +15,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -28,56 +26,40 @@ import (
 const (
 	certWatchInterval              = time.Second * 3
 	renewWhenPercentagePassed      = 70
-	apiServer                      = "apiServer"
-	internalServer                 = "internalServer"
 	defaultMaxConnectionAgeSeconds = 30
 )
 
-// Server is an interface for the dapr gRPC server
-type Server interface {
-	StartNonBlocking() error
-}
-
-type server struct {
-	api                API
+// Server implements the gRPC transport for a Dapr server.
+type Server struct {
+	logger             logger.Logger
+	register           RegisterServerFn
 	config             ServerConfig
-	tracingSpec        config.TracingSpec
-	authenticator      auth.Authenticator
 	listener           net.Listener
 	srv                *grpc_go.Server
-	renewMutex         *sync.Mutex
+	tracingSpec        config.TracingSpec
+	authenticator      auth.Authenticator
+	renewMutex         sync.Mutex
 	signedCert         *auth.SignedCertificate
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
-	kind               string
-	logger             logger.Logger
 	maxConnectionAge   *time.Duration
 }
 
-var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
-var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
+// RegisterServerFn is the function to register gRPC services.
+type RegisterServerFn func(server *grpc_go.Server) error
 
-// NewAPIServer returns a new user facing gRPC API server
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
-	return &server{
-		api:         api,
-		config:      config,
-		tracingSpec: tracingSpec,
-		kind:        apiServer,
-		logger:      apiServerLogger,
-	}
-}
-
-// NewInternalServer returns a new gRPC server for Dapr to Dapr communications
-func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
-	return &server{
-		api:              api,
+// NewServer creates a new `Server` which delegates service registration to `register`.
+func NewServer(logger logger.Logger,
+	register RegisterServerFn,
+	config ServerConfig,
+	tracingSpec config.TracingSpec,
+	authenticator auth.Authenticator) *Server {
+	return &Server{
+		logger:           logger,
+		register:         register,
 		config:           config,
 		tracingSpec:      tracingSpec,
 		authenticator:    authenticator,
-		renewMutex:       &sync.Mutex{},
-		kind:             internalServer,
-		logger:           internalServerLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
 	}
 }
@@ -88,7 +70,7 @@ func getDefaultMaxAgeDuration() *time.Duration {
 }
 
 // StartNonBlocking starts a new server in a goroutine
-func (s *server) StartNonBlocking() error {
+func (s *Server) StartNonBlocking() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", s.config.Port))
 	if err != nil {
 		return err
@@ -99,13 +81,13 @@ func (s *server) StartNonBlocking() error {
 	if err != nil {
 		return err
 	}
-	s.srv = server
 
-	if s.kind == internalServer {
-		internalv1pb.RegisterDaprInternalServer(server, s.api)
-	} else if s.kind == apiServer {
-		daprv1pb.RegisterDaprServer(server, s.api)
+	s.srv = server
+	err = s.register(server)
+	if err != nil {
+		return err
 	}
+
 	go func() {
 		if err := server.Serve(lis); err != nil {
 			s.logger.Fatalf("gRPC serve error: %v", err)
@@ -114,7 +96,7 @@ func (s *server) StartNonBlocking() error {
 	return nil
 }
 
-func (s *server) generateWorkloadCert() error {
+func (s *Server) generateWorkloadCert() error {
 	s.logger.Info("sending workload csr request to sentry")
 	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID)
 	if err != nil {
@@ -133,7 +115,7 @@ func (s *server) generateWorkloadCert() error {
 	return nil
 }
 
-func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
+func (s *Server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
 	s.logger.Infof("enabled monitoring middleware.")
@@ -154,7 +136,7 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	return opts
 }
 
-func (s *server) getGRPCServer() (*grpc_go.Server, error) {
+func (s *Server) getGRPCServer() (*grpc_go.Server, error) {
 	opts := s.getMiddlewareOptions()
 	if s.maxConnectionAge != nil {
 		opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
@@ -182,7 +164,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	return grpc_go.NewServer(opts...), nil
 }
 
-func (s *server) startWorkloadCertRotation() {
+func (s *Server) startWorkloadCertRotation() {
 	s.logger.Infof("starting workload cert expiry watcher. current cert expires on: %s", s.signedCert.Expiry.String())
 
 	ticker := time.NewTicker(certWatchInterval)
