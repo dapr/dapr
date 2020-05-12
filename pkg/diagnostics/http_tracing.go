@@ -7,6 +7,7 @@ package diagnostics
 
 import (
 	"context"
+	"fmt"
 	"net/textproto"
 	"regexp"
 	"strconv"
@@ -92,11 +93,11 @@ func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
 	})
 }
 
-// UpdateSpanStatus updates trace span status based on HTTP response
-func UpdateSpanStatus(span *trace.Span, resp *fasthttp.Response) {
+// UpdateSpanStatus updates trace span status based on response code
+func UpdateSpanStatus(span *trace.Span, spanName string, code int) {
 	span.SetStatus(trace.Status{
-		Code:    projectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
+		Code:    projectStatusCode(code),
+		Message: fmt.Sprintf("method %s status - %s", spanName, strconv.Itoa(code)),
 	})
 }
 
