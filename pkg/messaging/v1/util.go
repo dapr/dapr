@@ -62,9 +62,7 @@ func GrpcMetadataToInternalMetadata(md metadata.MD) DaprInternalMetadata {
 	var internalMD = DaprInternalMetadata{}
 	for k, values := range md {
 		var listValue = internalv1pb.ListStringValue{}
-		for _, v := range values {
-			listValue.Values = append(listValue.Values, v)
-		}
+		listValue.Values = append(listValue.Values, values...)
 		internalMD[k] = &listValue
 	}
 
@@ -123,9 +121,7 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 		if httpHeaderConversion && isPermanentHTTPHeader(k) {
 			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
 		}
-		for _, v := range listVal.Values {
-			md.Append(keyName, v)
-		}
+		md.Append(keyName, listVal.Values...)
 	}
 	return md
 }
