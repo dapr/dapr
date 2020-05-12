@@ -949,10 +949,17 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	// subject contains the correlationID which is passed span context
 	sc, _ := diag.SpanContextFromString(subject)
 	ctx := diag.NewContext(context.Background(), sc)
+	spanName := fmt.Sprintf("PublishMessage: %s", msg.Topic)
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+	defer span.End()
+
+	ctx = diag.NewContext(ctx, span.SpanContext())
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
+
+	diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
 
 	if resp.Status().Code != nethttp.StatusOK {
 		_, errorMsg := resp.RawData()
@@ -994,8 +1001,18 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	subject := cloudEvent.Subject
 	sc, _ := diag.SpanContextFromString(subject)
 	ctx := diag.NewContext(context.Background(), sc)
+	spanName := fmt.Sprintf("PublishMessage: %s", msg.Topic)
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+	defer span.End()
+
+	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
+
 	clientV1 := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-	if _, err = clientV1.OnTopicEvent(ctx, envelope); err != nil {
+	_, err = clientV1.OnTopicEvent(ctx, envelope)
+
+	diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+
+	if err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
 		log.Debug(err)
 		return err
