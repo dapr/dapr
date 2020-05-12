@@ -7,7 +7,6 @@ package diagnostics
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"net/textproto"
 	"regexp"
@@ -68,67 +67,18 @@ func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok boo
 	if !ok {
 		return trace.SpanContext{}, false
 	}
-	sections := strings.Split(h, "-")
-	if len(sections) < 4 {
-		return trace.SpanContext{}, false
-	}
 
-	if len(sections[0]) != 2 {
-		return trace.SpanContext{}, false
-	}
-	ver, err := hex.DecodeString(sections[0])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	version := int(ver[0])
-	if version > maxVersion {
-		return trace.SpanContext{}, false
-	}
+	sc, ok = SpanContextFromString(h)
 
-	if version == 0 && len(sections) != 4 {
-		return trace.SpanContext{}, false
+	if ok {
+		sc.Tracestate = tracestateFromRequest(req)
 	}
-
-	if len(sections[1]) != 32 {
-		return trace.SpanContext{}, false
-	}
-	tid, err := hex.DecodeString(sections[1])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	copy(sc.TraceID[:], tid)
-
-	if len(sections[2]) != 16 {
-		return trace.SpanContext{}, false
-	}
-	sid, err := hex.DecodeString(sections[2])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	copy(sc.SpanID[:], sid)
-
-	opts, err := hex.DecodeString(sections[3])
-	if err != nil || len(opts) < 1 {
-		return trace.SpanContext{}, false
-	}
-	sc.TraceOptions = trace.TraceOptions(opts[0])
-
-	// Don't allow all zero trace or span ID.
-	if sc.TraceID == [16]byte{} || sc.SpanID == [8]byte{} {
-		return trace.SpanContext{}, false
-	}
-
-	sc.Tracestate = tracestateFromRequest(req)
-	return sc, true
+	return sc, ok
 }
 
 // SpanContextToRequest modifies the given request to include traceparent and tracestate headers.
 func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
-	h := fmt.Sprintf("%x-%x-%x-%x",
-		[]byte{supportedVersion},
-		sc.TraceID[:],
-		sc.SpanID[:],
-		[]byte{byte(sc.TraceOptions)})
+	h := SpanContextToString(sc)
 	req.Header.Set(traceparentHeader, h)
 	tracestateToRequest(sc, req)
 }
@@ -143,11 +93,11 @@ func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
 	})
 }
 
-// UpdateSpanStatus updates trace span status based on HTTP response
-func UpdateSpanStatus(span *trace.Span, resp *fasthttp.Response) {
+// UpdateSpanStatus updates trace span status based on response code
+func UpdateSpanStatus(span *trace.Span, spanName string, code int) {
 	span.SetStatus(trace.Status{
-		Code:    projectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
+		Code:    projectStatusCode(code),
+		Message: fmt.Sprintf("method %s status - %s", spanName, strconv.Itoa(code)),
 	})
 }
 
