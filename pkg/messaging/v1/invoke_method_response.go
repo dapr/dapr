@@ -11,7 +11,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	any "github.com/golang/protobuf/ptypes/any"
-	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/metadata"
 )
@@ -70,10 +69,8 @@ func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodR
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
 	var md = DaprInternalMetadata{}
 	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = &structpb.ListValue{
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: string(value)}},
-			},
+		md[string(key)] = &internalv1pb.ListStringValue{
+			Values: []string{string(value)},
 		}
 	})
 	if len(md) > 0 {
