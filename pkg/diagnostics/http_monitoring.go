@@ -83,6 +83,10 @@ func newHTTPMetrics() *httpMetrics {
 	}
 }
 
+func (h *httpMetrics) IsEnabled() bool {
+	return h.enabled
+}
+
 func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path string, contentSize int64) {
 	if h.enabled {
 		stats.RecordWithTags(
