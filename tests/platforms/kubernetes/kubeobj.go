@@ -41,7 +41,7 @@ var DaprTestNamespace = "dapr-tests"
 func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
 	annotationObject := map[string]string{}
 
-	if appDesc.AppPort <= 0 {
+	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
 		appDesc.AppPort = DefaultContainerPort
 	}
 

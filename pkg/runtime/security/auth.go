@@ -88,15 +88,19 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
 	}
 
-	unaryChain := grpc_middleware.ChainUnaryClient(
-		grpc_retry.UnaryClientInterceptor(),
-		diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
-	)
+	unaryClientInterceptor := grpc_retry.UnaryClientInterceptor()
+
+	if diag.DefaultGRPCMonitoring.IsEnabled() {
+		unaryClientInterceptor = grpc_middleware.ChainUnaryClient(
+			unaryClientInterceptor,
+			diag.DefaultGRPCMonitoring.UnaryClientInterceptor(),
+		)
+	}
 
 	conn, err := grpc.Dial(
 		a.sentryAddress,
 		grpc.WithTransportCredentials(credentials.NewTLS(config)),
-		grpc.WithUnaryInterceptor(unaryChain))
+		grpc.WithUnaryInterceptor(unaryClientInterceptor))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
 		return nil, fmt.Errorf("error establishing connection to sentry: %s", err)

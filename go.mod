@@ -32,6 +32,7 @@ require (
 	github.com/valyala/fasthttp v1.12.0
 	go.opencensus.io v0.22.3
 	go.uber.org/zap v1.13.0 // indirect
+	google.golang.org/genproto v0.0.0-20200122232147-0452cf42e150
 	google.golang.org/grpc v1.26.0
 	gopkg.in/square/go-jose.v2 v2.5.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8

@@ -7,6 +7,7 @@ package runner
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -30,7 +31,7 @@ type PlatformInterface interface {
 	AcquireAppExternalURL(name string) string
 	Restart(name string) error
 	Scale(name string, replicas int32) error
-	OpenConnection(name string, targetPort ...int) ([]int, error)
+	PortForwardToApp(appName string, targetPort ...int) ([]int, error)
 }
 
 // TestRunner holds initial test apps and testing platform instance
@@ -40,20 +41,27 @@ type TestRunner struct {
 	id string
 
 	components []kube.ComponentDescription
+
+	// Initialization apps to be deployed before the test apps
+	initApps []kube.AppDescription
+
 	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
-	initialApps []kube.AppDescription
+	testApps []kube.AppDescription
 
 	// Platform is the testing platform instances
 	Platform PlatformInterface
 }
 
 // NewTestRunner returns TestRunner instance for e2e test
-func NewTestRunner(id string, apps []kube.AppDescription, comps []kube.ComponentDescription) *TestRunner {
+func NewTestRunner(id string, apps []kube.AppDescription,
+	comps []kube.ComponentDescription,
+	initApps []kube.AppDescription) *TestRunner {
 	return &TestRunner{
-		id:          id,
-		components:  comps,
-		initialApps: apps,
-		Platform:    NewKubeTestPlatform(),
+		id:         id,
+		components: comps,
+		initApps:   initApps,
+		testApps:   apps,
+		Platform:   NewKubeTestPlatform(),
 	}
 }
 
@@ -62,26 +70,48 @@ func (tr *TestRunner) Start(m runnable) int {
 	// TODO: Add logging and reporting initialization
 
 	// Setup testing platform
+	log.Println("Running setup...")
 	err := tr.Platform.setup()
-	defer tr.tearDown()
+	defer func() {
+		log.Println("Running teardown...")
+		tr.tearDown()
+	}()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.setup(), %s", err.Error())
 		return runnerFailExitCode
 	}
 
-	// install components
-	if err := tr.Platform.addComponents(tr.components); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed Platform.addComponents(), %s", err.Error())
-		return runnerFailExitCode
+	// Install components.
+	if tr.components != nil && len(tr.components) > 0 {
+		log.Println("Installing components...")
+		if err := tr.Platform.addComponents(tr.components); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed Platform.addComponents(), %s", err.Error())
+			return runnerFailExitCode
+		}
 	}
 
-	// Install apps
-	if err := tr.Platform.addApps(tr.initialApps); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
-		return runnerFailExitCode
+	// Install init apps. Init apps will be deployed before the main
+	// test apps and can be used to initialize components and perform
+	// other setup work.
+	if tr.initApps != nil && len(tr.initApps) > 0 {
+		log.Println("Installing init apps...")
+		if err := tr.Platform.addApps(tr.initApps); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed Platform.addInitApps(), %s", err.Error())
+			return runnerFailExitCode
+		}
+	}
+
+	// Install test apps. These are the main apps that provide the actual testing.
+	if tr.testApps != nil && len(tr.testApps) > 0 {
+		log.Println("Installing test apps...")
+		if err := tr.Platform.addApps(tr.testApps); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
+			return runnerFailExitCode
+		}
 	}
 
 	// Executes Test* methods in *_test.go
+	log.Println("Running tests...")
 	return m.Run()
 }
 
