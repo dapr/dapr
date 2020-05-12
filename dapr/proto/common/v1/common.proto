@@ -82,8 +82,3 @@ message InvokeResponse {
   // This field is required.
   string content_type = 2;
 }
-
-// ListStringValues represents string value array
-message ListStringValues {
-  repeated string value = 1;
-}

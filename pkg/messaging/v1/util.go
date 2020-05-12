@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
-	structpb "github.com/golang/protobuf/ptypes/struct"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -51,7 +50,7 @@ const (
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
 // from user app to Dapr.
-type DaprInternalMetadata map[string]*structpb.ListValue
+type DaprInternalMetadata map[string]*internalv1pb.ListStringValue
 
 // IsJSONContentType returns true if contentType is the mime media type for JSON
 func IsJSONContentType(contentType string) bool {
@@ -62,11 +61,9 @@ func IsJSONContentType(contentType string) bool {
 func GrpcMetadataToInternalMetadata(md metadata.MD) DaprInternalMetadata {
 	var internalMD = DaprInternalMetadata{}
 	for k, values := range md {
-		var listValue = structpb.ListValue{}
+		var listValue = internalv1pb.ListStringValue{}
 		for _, v := range values {
-			listValue.Values = append(listValue.Values, &structpb.Value{
-				Kind: &structpb.Value_StringValue{StringValue: v},
-			})
+			listValue.Values = append(listValue.Values, v)
 		}
 		internalMD[k] = &listValue
 	}
@@ -127,7 +124,7 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
 		}
 		for _, v := range listVal.Values {
-			md.Append(keyName, v.GetStringValue())
+			md.Append(keyName, v)
 		}
 	}
 	return md
@@ -137,7 +134,7 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
 	var originContentType = ""
 	if val, ok := internalMD[ContentTypeHeader]; ok {
-		originContentType = val.Values[0].GetStringValue()
+		originContentType = val.Values[0]
 	}
 	return strings.HasPrefix(originContentType, GRPCContentType)
 }
@@ -161,7 +158,7 @@ func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader fun
 		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader || isTraceCorrleationHeaderKey(k) {
 			continue
 		}
-		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0].GetStringValue())
+		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0])
 	}
 }
 
