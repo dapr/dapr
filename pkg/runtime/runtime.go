@@ -968,7 +968,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	// subject contains the correlationID which is passed span context
 	sc, _ := diag.SpanContextFromString(subject)
 	ctx := diag.NewContext(context.Background(), sc)
-	spanName := fmt.Sprintf("PublishMessage: %s", msg.Topic)
+	spanName := fmt.Sprintf("DeliveredEvent: %s", msg.Topic)
 	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
 	defer span.End()
 
@@ -1020,7 +1020,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	subject := cloudEvent.Subject
 	sc, _ := diag.SpanContextFromString(subject)
 	ctx := diag.NewContext(context.Background(), sc)
-	spanName := fmt.Sprintf("PublishMessage: %s", msg.Topic)
+	spanName := fmt.Sprintf("DeliveredEvent: %s", msg.Topic)
 	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
 	defer span.End()
 
