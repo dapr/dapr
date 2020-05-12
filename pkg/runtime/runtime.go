@@ -486,7 +486,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx := context.Background()
-		spanName := fmt.Sprintf("SendBindingEventToApp: %s", bindingName)
+		spanName := fmt.Sprintf("Binding: %s", bindingName)
 		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
 		defer span.End()
 
@@ -534,7 +534,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req.WithRawData(data, invokev1.JSONContentType)
 
 		ctx := context.Background()
-		spanName := fmt.Sprintf("SendBindingEventToApp: %s", bindingName)
+		spanName := fmt.Sprintf("Binding: %s", bindingName)
 		// context.Background() can be considered as GRPC context and so using StartTracingServerSpanFromGRPCContext to generate span
 		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
 		defer span.End()

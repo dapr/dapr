@@ -296,7 +296,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	var span *trace.Span
-	spanName := fmt.Sprintf("OutputBindingMessage: %s", name)
+	spanName := fmt.Sprintf("Binding: %s", name)
 	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
 	ctx := diag.NewContext((context.Context)(reqCtx), sc)
 	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)

@@ -206,7 +206,8 @@ func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvel
 	}
 
 	var span *trace.Span
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "InvokeBinding", a.tracingSpec)
+	spanName := fmt.Sprintf("Binding: %s", in.Name)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
 	defer span.End()
 
 	err := a.sendToOutputBindingFn(in.Name, req)
