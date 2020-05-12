@@ -145,7 +145,8 @@ type InvokeRequest struct {
 	// http_extension includes http specific fields if request conveys
 	// http-compatible request.
 	//
-	// This field is optional.
+	// This field is required for http-compatible request. Otherwise,
+	// this field is optional.
 	HttpExtension        *HTTPExtension `protobuf:"bytes,4,opt,name=http_extension,json=httpExtension,proto3" json:"http_extension,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
 	XXX_unrecognized     []byte         `json:"-"`
