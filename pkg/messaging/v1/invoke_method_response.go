@@ -6,10 +6,10 @@
 package v1
 
 import (
+	"errors"
+
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
 	any "github.com/golang/protobuf/ptypes/any"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/valyala/fasthttp"
@@ -20,28 +20,23 @@ import (
 // and provides the helpers to manage it.
 type InvokeMethodResponse struct {
 	r *internalv1pb.InternalInvokeResponse
-	m *commonv1pb.InvokeResponse
 }
 
 // NewInvokeMethodResponse returns new InvokeMethodResponse object with status
 func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetails []*any.Any) *InvokeMethodResponse {
 	return &InvokeMethodResponse{
 		r: &internalv1pb.InternalInvokeResponse{
-			Status: &internalv1pb.Status{Code: statusCode, Message: statusMessage, Details: statusDetails},
+			Status:  &internalv1pb.Status{Code: statusCode, Message: statusMessage, Details: statusDetails},
+			Message: &commonv1pb.InvokeResponse{},
 		},
-		m: &commonv1pb.InvokeResponse{},
 	}
 }
 
 // InternalInvokeResponse returns InvokeMethodResponse for InternalInvokeResponse pb to use the helpers
 func InternalInvokeResponse(resp *internalv1pb.InternalInvokeResponse) (*InvokeMethodResponse, error) {
 	rsp := &InvokeMethodResponse{r: resp}
-	rsp.m = &commonv1pb.InvokeResponse{}
-	if resp.Message != nil {
-		if err := ptypes.UnmarshalAny(resp.Message, rsp.m); err != nil {
-			return nil, err
-		}
-		resp.Message = nil
+	if resp.Message == nil {
+		return nil, errors.New("Message field is nil")
 	}
 
 	return rsp, nil
@@ -49,7 +44,7 @@ func InternalInvokeResponse(resp *internalv1pb.InternalInvokeResponse) (*InvokeM
 
 // WithMessage sets InvokeResponse pb object to Message field
 func (imr *InvokeMethodResponse) WithMessage(pb *commonv1pb.InvokeResponse) *InvokeMethodResponse {
-	imr.m = pb
+	imr.r.Message = pb
 	return imr
 }
 
@@ -59,8 +54,8 @@ func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *I
 		contentType = JSONContentType
 	}
 
-	imr.m.ContentType = contentType
-	imr.m.Data = &any.Any{Value: data}
+	imr.r.Message.ContentType = contentType
+	imr.r.Message.Data = &any.Any{Value: data}
 
 	return imr
 }
@@ -107,11 +102,7 @@ func (imr *InvokeMethodResponse) IsHTTPResponse() bool {
 
 // Proto clones the internal InvokeMethodResponse pb object
 func (imr *InvokeMethodResponse) Proto() *internalv1pb.InternalInvokeResponse {
-	p := proto.Clone(imr.r).(*internalv1pb.InternalInvokeResponse)
-	if imr.m != nil {
-		p.Message, _ = ptypes.MarshalAny(imr.m)
-	}
-	return p
+	return imr.r
 }
 
 // Headers gets Headers metadata
@@ -126,18 +117,19 @@ func (imr *InvokeMethodResponse) Trailers() DaprInternalMetadata {
 
 // Message returns message field in InvokeMethodResponse
 func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
-	return imr.m
+	return imr.r.Message
 }
 
 // RawData returns content_type and byte array body
 func (imr *InvokeMethodResponse) RawData() (string, []byte) {
-	if imr.m == nil || imr.m.GetData() == nil {
+	m := imr.r.Message
+	if m == nil || m.GetData() == nil {
 		return "", nil
 	}
 
-	contentType := imr.m.GetContentType()
-	dataTypeURL := imr.m.GetData().GetTypeUrl()
-	dataValue := imr.m.GetData().GetValue()
+	contentType := m.GetContentType()
+	dataTypeURL := m.GetData().GetTypeUrl()
+	dataValue := m.GetData().GetValue()
 
 	// set content_type to application/json only if typeurl is unset and data is given
 	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
