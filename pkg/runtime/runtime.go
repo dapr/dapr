@@ -485,14 +485,24 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	var response bindings.AppResponse
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+		ctx := context.Background()
+		spanName := fmt.Sprintf("SendBindingEventToApp: %s", bindingName)
+		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+		defer span.End()
+
+		ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
+
 		client := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-		resp, err := client.OnBindingEvent(context.Background(), &daprclientv1pb.BindingEventEnvelope{
+		resp, err := client.OnBindingEvent(ctx, &daprclientv1pb.BindingEventEnvelope{
 			Name: bindingName,
 			Data: &any.Any{
 				Value: data,
 			},
 			Metadata: metadata,
 		})
+
+		diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
@@ -522,12 +532,21 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req := invokev1.NewInvokeMethodRequest(bindingName)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
-		// TODO: Propagate Context
+
 		ctx := context.Background()
+		spanName := fmt.Sprintf("SendBindingEventToApp: %s", bindingName)
+		// context.Background() can be considered as GRPC context and so using StartTracingServerSpanFromGRPCContext to generate span
+		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+		defer span.End()
+
+		ctx = diag.NewContext(ctx, span.SpanContext())
+
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
+
+		diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
 
 		if resp.Status().Code != nethttp.StatusOK {
 			return fmt.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
