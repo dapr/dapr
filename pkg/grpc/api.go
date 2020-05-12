@@ -148,10 +148,12 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 		body = in.Data.Value
 	}
 
-	// TODO : Remove passing corID in NewCloudEventsEnvelope through arguments as it can be passed through context
-	sc := diag.FromContext(ctx)
-	corID := sc.TraceID.String()
+	var span *trace.Span
+	spanName := fmt.Sprintf("PublishEvent: %s", topic)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
+	defer span.End()
 
+	corID := diag.SpanContextToString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
@@ -162,11 +164,6 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 		Topic: topic,
 		Data:  b,
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("PublishEvent: %s", topic)
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
-	defer span.End()
 
 	err = a.publishFn(&req)
 	if err != nil {
@@ -214,7 +211,8 @@ func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvel
 	}
 
 	var span *trace.Span
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "InvokeBinding", a.tracingSpec)
+	spanName := fmt.Sprintf("Binding: %s", in.Name)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
 	defer span.End()
 
 	err := a.sendToOutputBindingFn(in.Name, req)
