@@ -140,7 +140,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if configErr != nil {
-		log.Warnf("error loading configuration: %s", err)
+		log.Warnf("error loading configuration: %s", configErr)
 	}
 	if globalConfig == nil {
 		log.Info("loading default configuration")
