@@ -68,10 +68,10 @@ func TestMetadata(t *testing.T) {
 	req.WithMetadata(md)
 	mdata := req.Metadata()
 
-	assert.Equal(t, "val1", mdata["test1"].GetValues()[0].GetStringValue())
-	assert.Equal(t, "val2", mdata["test1"].GetValues()[1].GetStringValue())
-	assert.Equal(t, "val3", mdata["test2"].GetValues()[0].GetStringValue())
-	assert.Equal(t, "val4", mdata["test2"].GetValues()[1].GetStringValue())
+	assert.Equal(t, "val1", mdata["test1"].GetValues()[0])
+	assert.Equal(t, "val2", mdata["test1"].GetValues()[1])
+	assert.Equal(t, "val3", mdata["test2"].GetValues()[0])
+	assert.Equal(t, "val4", mdata["test2"].GetValues()[1])
 }
 
 func TestData(t *testing.T) {
