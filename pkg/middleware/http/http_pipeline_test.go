@@ -232,6 +232,30 @@ func TestMatchSelector(t *testing.T) {
 			},
 			match: true,
 		},
+		{
+			path:    "",
+			version: "",
+			method:  "",
+			selector: nil,
+			match: true,
+		},
+		{
+			path:    "test1/test2/test3",
+			version: "",
+			method:  "",
+			selector: map[string]string{
+				"testRule1": "path=test1",
+			},
+			match: true,
+		},
+		{
+			path:    "test1/test2/test3",
+			version: "v1.0",
+			method:  "patch",
+			selector: map[string]string{
+			},
+			match: true,
+		},
 	}
 
 	for i, tt := range testCases {
