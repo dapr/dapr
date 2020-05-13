@@ -113,6 +113,29 @@ func TestNewSelectorRule(t *testing.T) {
 				Versions: nil,
 			},
 		},
+		{
+			expression: "path= test1;method=get, post",
+		  rule: selectorRule{
+				Paths: []string{
+					"test1",
+				},
+				Methods: []string{
+					"get",
+					"post",
+				},
+				Versions: nil,
+			},
+		},
+		{
+			expression: "path= ;method=, post",
+		  rule: selectorRule{
+				Paths: nil,
+				Methods: []string{
+					"post",
+				},
+				Versions: nil,
+			},
+		},
 	}
 
 	for _, tt := range testCases {

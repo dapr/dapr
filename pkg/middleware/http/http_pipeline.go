@@ -62,15 +62,39 @@ func newSelectorRule(ruleSpec string) *selectorRule {
 
 		if strings.EqualFold(lhs, pathKey) {
 			// TODO: Sanitize paths
-			rule.Paths = strings.Split(rhs, ",")
+			paths := strings.ReplaceAll(rhs, " ", "")
+			if len(paths) != 0 {
+				ps := strings.Split(paths, ",")
+				for _, p := range ps {
+					if p != "" {
+						rule.Paths = append(rule.Paths, p)
+					}
+				}
+			}
 		}
 		if strings.EqualFold(lhs, methodKey) {
 			// TODO: Sanitize method verbs
-			rule.Methods = strings.Split(rhs, ",")
+			methods := strings.ReplaceAll(rhs, " ", "")
+			if len(methods) != 0 {
+				ms := strings.Split(methods, ",")
+				for _, m := range ms {
+					if m != "" {
+						rule.Methods = append(rule.Methods, m)
+					}
+				}
+			}
 		}
 		if strings.EqualFold(lhs, versionKey) {
 			// TODO: Sanitize versions
-			rule.Versions = strings.Split(rhs, ",")
+			versions := strings.ReplaceAll(rhs, " ", "")
+			if len(versions) != 0 {
+				vs := strings.Split(versions, ",")
+				for _, v := range vs {
+					if v != "" {
+						rule.Versions = append(rule.Versions, v)
+					}
+				}
+			}
 		}
 	}
 
