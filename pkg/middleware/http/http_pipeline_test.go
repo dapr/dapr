@@ -233,11 +233,11 @@ func TestMatchSelector(t *testing.T) {
 			match: true,
 		},
 		{
-			path:    "",
-			version: "",
-			method:  "",
+			path:     "",
+			version:  "",
+			method:   "",
 			selector: nil,
-			match: true,
+			match:    true,
 		},
 		{
 			path:    "test1/test2/test3",
@@ -249,12 +249,11 @@ func TestMatchSelector(t *testing.T) {
 			match: true,
 		},
 		{
-			path:    "test1/test2/test3",
-			version: "v1.0",
-			method:  "patch",
-			selector: map[string]string{
-			},
-			match: true,
+			path:     "test1/test2/test3",
+			version:  "v1.0",
+			method:   "patch",
+			selector: map[string]string{},
+			match:    true,
 		},
 	}
 
