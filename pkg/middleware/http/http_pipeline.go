@@ -61,12 +61,15 @@ func newSelectorRule(ruleSpec string) *selectorRule {
 		rhs := exp[1]
 
 		if strings.EqualFold(lhs, pathKey) {
+			// TODO: Sanitize paths
 			rule.Paths = strings.Split(rhs, ",")
 		}
 		if strings.EqualFold(lhs, methodKey) {
+			// TODO: Sanitize method verbs
 			rule.Methods = strings.Split(rhs, ",")
 		}
 		if strings.EqualFold(lhs, versionKey) {
+			// TODO: Sanitize versions
 			rule.Versions = strings.Split(rhs, ",")
 		}
 	}
