@@ -11,11 +11,11 @@ import (
 func TestNewSelectorRule(t *testing.T) {
 	testCases := []struct {
 		expression string
-		rule selectorRule
+		rule       selectorRule
 	}{
 		{
 			expression: "path=test,test1,test2;method=get,post,delete;version=v1.0",
-		  rule: selectorRule{
+			rule: selectorRule{
 				Paths: []string{
 					"test",
 					"test1",
@@ -33,7 +33,7 @@ func TestNewSelectorRule(t *testing.T) {
 		},
 		{
 			expression: "method=get;path=test,test1;",
-		  rule: selectorRule{
+			rule: selectorRule{
 				Paths: []string{
 					"test",
 					"test1",
@@ -46,7 +46,7 @@ func TestNewSelectorRule(t *testing.T) {
 		},
 		{
 			expression: "version=v1.0,v2.0;method=get,post,options;",
-		  rule: selectorRule{
+			rule: selectorRule{
 				Paths: nil,
 				Methods: []string{
 					"get",
@@ -61,7 +61,7 @@ func TestNewSelectorRule(t *testing.T) {
 		},
 		{
 			expression: "method=get;path=test,test1;",
-		  rule: selectorRule{
+			rule: selectorRule{
 				Paths: []string{
 					"test",
 					"test1",
@@ -74,49 +74,49 @@ func TestNewSelectorRule(t *testing.T) {
 		},
 		{
 			expression: "path=test1",
-		  rule: selectorRule{
+			rule: selectorRule{
 				Paths: []string{
 					"test1",
 				},
-				Methods: nil,
+				Methods:  nil,
 				Versions: nil,
 			},
 		},
 		{
 			expression: "method=get,post,path=badexp",
-		  rule: selectorRule{
-				Paths: nil,
-				Methods: nil,
+			rule: selectorRule{
+				Paths:    nil,
+				Methods:  nil,
 				Versions: nil,
 			},
 		},
 		{
 			expression: "path;=method=version;=get",
-		  rule: selectorRule{
-				Paths: nil,
-				Methods: nil,
+			rule: selectorRule{
+				Paths:    nil,
+				Methods:  nil,
 				Versions: nil,
 			},
 		},
 		{
 			expression: "",
-		  rule: selectorRule{
-				Paths: nil,
-				Methods: nil,
+			rule: selectorRule{
+				Paths:    nil,
+				Methods:  nil,
 				Versions: nil,
 			},
 		},
 		{
 			expression: "12345",
-		  rule: selectorRule{
-				Paths: nil,
-				Methods: nil,
+			rule: selectorRule{
+				Paths:    nil,
+				Methods:  nil,
 				Versions: nil,
 			},
 		},
 		{
 			expression: "path= test1;method=get, post",
-		  rule: selectorRule{
+			rule: selectorRule{
 				Paths: []string{
 					"test1",
 				},
@@ -129,7 +129,7 @@ func TestNewSelectorRule(t *testing.T) {
 		},
 		{
 			expression: "path= ;method=, post",
-		  rule: selectorRule{
+			rule: selectorRule{
 				Paths: nil,
 				Methods: []string{
 					"post",
@@ -150,61 +150,61 @@ func TestNewSelectorRule(t *testing.T) {
 
 func TestMatchSelector(t *testing.T) {
 	testCases := []struct {
-		path string
-		version string
-		method string
+		path     string
+		version  string
+		method   string
 		selector map[string]string
-		match bool
+		match    bool
 	}{
 		{
-			path: "test1",
+			path:    "test1",
 			version: "v1.0",
-			method: "get",
+			method:  "get",
 			selector: map[string]string{
 				"testRule1": "path=test1;version=v1.0;method=get",
 			},
 			match: true,
 		},
 		{
-			path: "test1/test2/test3",
+			path:    "test1/test2/test3",
 			version: "v1.0",
-			method: "get",
+			method:  "get",
 			selector: map[string]string{
 				"testRule1": "path=test1;version=v1.0;method=get",
 			},
 			match: true,
 		},
 		{
-			path: "test1/test2/test3",
+			path:    "test1/test2/test3",
 			version: "v1.0",
-			method: "get",
+			method:  "get",
 			selector: map[string]string{
 				"testRule1": "path=test1/test2;version=v1.0;method=get",
 			},
 			match: true,
 		},
 		{
-			path: "test1/myapp",
+			path:    "test1/myapp",
 			version: "v1.0",
-			method: "post",
+			method:  "post",
 			selector: map[string]string{
 				"testRule1": "path=test1/myapp;version=v1.0;method=get,post",
 			},
 			match: true,
 		},
 		{
-			path: "test1/myapp",
+			path:    "test1/myapp",
 			version: "v1.0",
-			method: "post",
+			method:  "post",
 			selector: map[string]string{
 				"testRule1": "path=test1/myapp;version=v2.0;method=get,post",
 			},
 			match: false,
 		},
 		{
-			path: "test1/myapp",
+			path:    "test1/myapp",
 			version: "v1.0",
-			method: "post",
+			method:  "post",
 			selector: map[string]string{
 				"testRule1": "path=test1/myapp;version=v2.0;method=get,post",
 				"testRule2": "path=test1;version=v1.0;method=post",
@@ -212,9 +212,9 @@ func TestMatchSelector(t *testing.T) {
 			match: true,
 		},
 		{
-			path: "test1/myapp",
+			path:    "test1/myapp",
 			version: "v1.0",
-			method: "delete",
+			method:  "delete",
 			selector: map[string]string{
 				"testRule1": "path=test2;version=v1.0;method=options,get,post,delete",
 				"testRule2": "path=test3;version=v1.0;method=delete",
@@ -222,9 +222,9 @@ func TestMatchSelector(t *testing.T) {
 			match: false,
 		},
 		{
-			path: "test1/myapp",
+			path:    "test1/myapp",
 			version: "v1.0",
-			method: "delete",
+			method:  "delete",
 			selector: map[string]string{
 				"testRule1": "path=test2;version=v1.0;method=options,get,post,delete",
 				"testRule2": "path=test3;version=v1.0;method=delete",

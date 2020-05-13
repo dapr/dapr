@@ -100,7 +100,7 @@ func matchSelector(path, version string, method string, selector map[string]stri
 		return true
 	}
 
-	var rules []*selectorRule
+	rules := []*selectorRule{}
 	for _, ruleSpec := range selector {
 		r := newSelectorRule(ruleSpec)
 		rules = append(rules, r)
@@ -112,7 +112,6 @@ func matchSelector(path, version string, method string, selector map[string]stri
 	}
 
 	for _, rule := range rules {
-
 		// Path prefix matching
 		matchedPath := false
 		if len(rule.Paths) < 1 {
