@@ -6,7 +6,7 @@ Proposed
 
 ## Context
 
-We have defined gRPC services and protobuf messages without convention, which results in the duplicated protobuf definitions and inconsistent names of services and mesages. Thus, this record defines the minimum-level coding convention for Protobuf message to improve the quality of grpc/protobuf message definitions.
+We have defined gRPC services and protobuf messages without convention, which results in the duplicated protobuf definitions and inconsistent names of services and messages. Thus, this record defines the minimum-level coding convention for Protobuf message to improve the quality of grpc/protobuf message definitions.
 
 ## Decisions
 
