@@ -1,0 +1,63 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.appcallback.v1;
+
+import "google/protobuf/empty.proto";
+import "dapr/proto/common/v1/common.proto";
+
+option csharp_namespace = "Dapr.AppCallback.Autogen.Grpc.v1";
+option java_outer_classname = "DaprAppCallbackProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/appcallback/v1";
+
+// AppCallback service allows user application to interact with Dapr runtime.
+// User application needs to implement DaprClient service if it needs to
+// receive message from dapr runtime.
+service AppCallback {
+  rpc OnInvoke (common.v1.InvokeRequest) returns (common.v1.InvokeResponse) {}
+  rpc GetTopicSubscriptions(google.protobuf.Empty) returns (GetTopicSubscriptionsResponse) {}
+  rpc GetBindingsSubscriptions(google.protobuf.Empty) returns (GetBindingsSubscriptionsResponse) {}
+  rpc OnBindingEvent(BindingEventRequest) returns (BindingResponse) {}
+  rpc OnTopicEvent(CloudEventEnvelope) returns (google.protobuf.Empty) {}
+}
+
+message CloudEventEnvelope {
+  string id = 1;
+  string source = 2;
+  string type = 3;
+  string spec_version = 4;
+  string data_content_type = 5;
+  string topic = 6;
+  bytes data = 7;
+}
+
+message BindingEventRequest {
+  string name = 1;
+  bytes data = 2;
+  map<string,string> metadata = 3;
+}
+
+message BindingResponse {
+  bytes data = 1;
+  repeated string to = 2;
+  repeated common.v1.StateRequest state = 3;
+  string concurrency = 4;
+}
+
+message GetTopicSubscriptionsResponse {
+  repeated TopicSubscriptionEnvelope subscriptions = 1;
+}
+
+message TopicSubscriptionEnvelope {
+  string topic = 1;
+  map<string,string> metadata = 2;
+}
+
+message GetBindingsSubscriptionsResponse {
+  repeated string bindings = 1;
+}

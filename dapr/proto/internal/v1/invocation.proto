@@ -5,24 +5,24 @@
 
 syntax = "proto3";
 
-package dapr.proto.daprinternal.v1;
+package dapr.proto.internal.v1;
 
 import "dapr/proto/common/v1/common.proto";
-import "dapr/proto/daprinternal/v1/apiversion.proto";
-import "dapr/proto/daprinternal/v1/status.proto";
+import "dapr/proto/internal/v1/apiversion.proto";
+import "dapr/proto/internal/v1/status.proto";
 
-option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/internal/v1";
 
-// DaprInternal service is used to exchange the data between 
+// Invocation service is used to exchange the data between 
 // caller dapr runtime and callee dapr runtime.
 //
 // The request message includes caller's HTTP/gRPC request
 // and deliver callee's response including status code.
 // The response status of rpc methods represents of internal gRPC
 // connection status, not callee's response status.
-// Thus, DaprInternal gRPC response returns OK in most cases
+// Thus, Invocation gRPC response returns OK in most cases
 // regardless of callee's response.
-service DaprInternal {
+service Invocation {
   rpc CallActor (InternalInvokeRequest) returns (InternalInvokeResponse) {}
   rpc CallLocal (InternalInvokeRequest) returns (InternalInvokeResponse) {}
 }

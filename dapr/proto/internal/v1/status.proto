@@ -5,11 +5,11 @@
 
 syntax = "proto3";
 
-package dapr.proto.daprinternal.v1;
+package dapr.proto.internal.v1;
 
 import "google/protobuf/any.proto";
 
-option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/internal/v1";
 
 // Status represents the response status for HTTP and gRPC app channel.
 message Status {
