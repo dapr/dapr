@@ -286,7 +286,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
-	var handlers []http_middleware.Middleware
+	var handlers []*http_middleware.Middleware
 
 	if a.globalConfig != nil {
 		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
@@ -302,6 +302,12 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 			if err != nil {
 				return http_middleware.Pipeline{}, err
 			}
+
+			selector := make(map[string][]string)
+			for _, field := range middlewareSpec.SelectorSpec.Fields {
+				selector[field.Field] = append(selector[field.Field], field.Value)
+			}
+			handler.Selector = selector
 			log.Infof("enabled %s http middleware", middlewareSpec.Type)
 			handlers = append(handlers, handler)
 		}

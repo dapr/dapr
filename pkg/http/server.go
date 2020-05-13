@@ -49,8 +49,7 @@ func (s *server) StartNonBlocking() {
 	handler :=
 		s.useProxy(
 			s.useCors(
-				s.useComponents(
-					s.useRouter())))
+				s.useRouter()))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
@@ -83,10 +82,6 @@ func (s *server) useRouter() fasthttp.RequestHandler {
 	endpoints := s.api.APIEndpoints()
 	router := s.getRouter(endpoints)
 	return router.Handler
-}
-
-func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return s.pipeline.Apply(next)
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -135,7 +130,8 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		for _, m := range e.Methods {
-			router.Handle(m, path, e.Handler)
+			handler := s.pipeline.Apply(e.Route, e.Version, m, e.Handler)
+			router.Handle(m, path, handler)
 		}
 	}
 	return router

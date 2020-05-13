@@ -332,26 +332,27 @@ func main() {
 			}),
 		),
 		runtime.WithHTTPMiddleware(
-			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
-				return func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
-					return func(ctx *fasthttp.RequestCtx) {
-						body := string(ctx.PostBody())
-						ctx.Request.SetBody([]byte(strings.ToUpper(body)))
-						h(ctx)
-					}
-				}
+			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) *http_middleware.Middleware {
+				return http_middleware.NewMiddleware(
+					func(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+						return func(ctx *fasthttp.RequestCtx) {
+							body := string(ctx.PostBody())
+							ctx.Request.SetBody([]byte(strings.ToUpper(body)))
+							h(ctx)
+						}
+					})
 			}),
-			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) http_middleware.Middleware {
+			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) *http_middleware.Middleware {
 				handler, _ := oauth2.NewOAuth2Middleware().GetHandler(metadata)
-				return handler
+				return http_middleware.NewMiddleware(handler)
 			}),
-			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) http_middleware.Middleware {
+			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) *http_middleware.Middleware {
 				handler, _ := ratelimit.NewRateLimitMiddleware(log).GetHandler(metadata)
-				return handler
+				return http_middleware.NewMiddleware(handler)
 			}),
-			http_middleware_loader.New("bearer", func(metadata middleware.Metadata) http_middleware.Middleware {
+			http_middleware_loader.New("bearer", func(metadata middleware.Metadata) *http_middleware.Middleware {
 				handler, _ := bearer.NewBearerMiddleware(log).GetHandler(metadata)
-				return handler
+				return http_middleware.NewMiddleware(handler)
 			}),
 		),
 	)
