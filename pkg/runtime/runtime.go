@@ -303,9 +303,9 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 				return http_middleware.Pipeline{}, err
 			}
 
-			selector := make(map[string][]string)
+			selector := make(map[string]string)
 			for _, field := range middlewareSpec.SelectorSpec.Fields {
-				selector[field.Field] = append(selector[field.Field], field.Value)
+				selector[field.Field] = field.Value
 			}
 			handler.Selector = selector
 			log.Infof("enabled %s http middleware", middlewareSpec.Type)
