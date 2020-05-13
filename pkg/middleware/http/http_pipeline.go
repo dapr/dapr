@@ -47,6 +47,9 @@ type selectorRule struct {
 }
 
 func newSelectorRule(ruleSpec string) *selectorRule {
+	// Expected rule spec schema:
+	// path=path1,path2...;method=method1,method2...;version=version1,version2...;
+	// Bad rules are ignored rather than error.
 	rule := selectorRule{}
 	parts := strings.Split(ruleSpec, ";")
 	for _, part := range parts {
