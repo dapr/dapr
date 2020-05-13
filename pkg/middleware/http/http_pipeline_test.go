@@ -120,3 +120,95 @@ func TestNewSelectorRule(t *testing.T) {
 		assert.True(t, reflect.DeepEqual(tt.rule, *newRule))
 	}
 }
+
+func TestMatchSelector(t *testing.T) {
+	testCases := []struct {
+		path string
+		version string
+		method string
+		selector map[string]string
+		match bool
+	}{
+		{
+			path: "test1",
+			version: "v1.0",
+			method: "get",
+			selector: map[string]string{
+				"testRule1": "path=test1;version=v1.0;method=get",
+			},
+			match: true,
+		},
+		{
+			path: "test1/test2/test3",
+			version: "v1.0",
+			method: "get",
+			selector: map[string]string{
+				"testRule1": "path=test1;version=v1.0;method=get",
+			},
+			match: true,
+		},
+		{
+			path: "test1/test2/test3",
+			version: "v1.0",
+			method: "get",
+			selector: map[string]string{
+				"testRule1": "path=test1/test2;version=v1.0;method=get",
+			},
+			match: true,
+		},
+		{
+			path: "test1/myapp",
+			version: "v1.0",
+			method: "post",
+			selector: map[string]string{
+				"testRule1": "path=test1/myapp;version=v1.0;method=get,post",
+			},
+			match: true,
+		},
+		{
+			path: "test1/myapp",
+			version: "v1.0",
+			method: "post",
+			selector: map[string]string{
+				"testRule1": "path=test1/myapp;version=v2.0;method=get,post",
+			},
+			match: false,
+		},
+		{
+			path: "test1/myapp",
+			version: "v1.0",
+			method: "post",
+			selector: map[string]string{
+				"testRule1": "path=test1/myapp;version=v2.0;method=get,post",
+				"testRule2": "path=test1;version=v1.0;method=post",
+			},
+			match: true,
+		},
+		{
+			path: "test1/myapp",
+			version: "v1.0",
+			method: "delete",
+			selector: map[string]string{
+				"testRule1": "path=test2;version=v1.0;method=options,get,post,delete",
+				"testRule2": "path=test3;version=v1.0;method=delete",
+			},
+			match: false,
+		},
+		{
+			path: "test1/myapp",
+			version: "v1.0",
+			method: "delete",
+			selector: map[string]string{
+				"testRule1": "path=test2;version=v1.0;method=options,get,post,delete",
+				"testRule2": "path=test3;version=v1.0;method=delete",
+				"testRule3": "path=test1;version=v1.0;method=delete",
+			},
+			match: true,
+		},
+	}
+
+	for _, tt := range testCases {
+		matched := matchSelector(tt.path, tt.version, tt.method, tt.selector)
+		assert.Equal(t, tt.match, matched)
+	}
+}
