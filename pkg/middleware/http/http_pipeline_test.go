@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -138,9 +139,12 @@ func TestNewSelectorRule(t *testing.T) {
 		},
 	}
 
-	for _, tt := range testCases {
-		newRule := newSelectorRule(tt.expression)
-		assert.True(t, reflect.DeepEqual(tt.rule, *newRule))
+	for i, tt := range testCases {
+		testName := fmt.Sprintf("test%d", i)
+		t.Run(testName, func(t *testing.T) {
+			newRule := newSelectorRule(tt.expression)
+			assert.True(t, reflect.DeepEqual(tt.rule, *newRule))
+		})
 	}
 }
 
@@ -230,8 +234,11 @@ func TestMatchSelector(t *testing.T) {
 		},
 	}
 
-	for _, tt := range testCases {
-		matched := matchSelector(tt.path, tt.version, tt.method, tt.selector)
-		assert.Equal(t, tt.match, matched)
+	for i, tt := range testCases {
+		testName := fmt.Sprintf("test%d", i)
+		t.Run(testName, func(t *testing.T) {
+			matched := matchSelector(tt.path, tt.version, tt.method, tt.selector)
+			assert.Equal(t, tt.match, matched)
+		})
 	}
 }

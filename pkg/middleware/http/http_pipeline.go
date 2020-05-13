@@ -46,6 +46,23 @@ type selectorRule struct {
 	Versions []string
 }
 
+func cleanAndSplit(csv string) []string {
+	var parts []string
+	clean := strings.ReplaceAll(csv, " ", "")
+	if len(clean) != 0 {
+		split := strings.Split(clean, ",")
+		for _, part := range split {
+			if part != "" {
+				if parts == nil {
+					parts = []string{}
+				}
+				parts = append(parts, part)
+			}
+		}
+	}
+	return parts
+}
+
 func newSelectorRule(ruleSpec string) *selectorRule {
 	// Expected rule spec schema:
 	// path=path1,path2...;method=method1,method2...;version=version1,version2...;
@@ -62,39 +79,15 @@ func newSelectorRule(ruleSpec string) *selectorRule {
 
 		if strings.EqualFold(lhs, pathKey) {
 			// TODO: Sanitize paths
-			paths := strings.ReplaceAll(rhs, " ", "")
-			if len(paths) != 0 {
-				ps := strings.Split(paths, ",")
-				for _, p := range ps {
-					if p != "" {
-						rule.Paths = append(rule.Paths, p)
-					}
-				}
-			}
+			rule.Paths = cleanAndSplit(rhs)
 		}
 		if strings.EqualFold(lhs, methodKey) {
 			// TODO: Sanitize method verbs
-			methods := strings.ReplaceAll(rhs, " ", "")
-			if len(methods) != 0 {
-				ms := strings.Split(methods, ",")
-				for _, m := range ms {
-					if m != "" {
-						rule.Methods = append(rule.Methods, m)
-					}
-				}
-			}
+			rule.Methods = cleanAndSplit(rhs)
 		}
 		if strings.EqualFold(lhs, versionKey) {
 			// TODO: Sanitize versions
-			versions := strings.ReplaceAll(rhs, " ", "")
-			if len(versions) != 0 {
-				vs := strings.Split(versions, ",")
-				for _, v := range vs {
-					if v != "" {
-						rule.Versions = append(rule.Versions, v)
-					}
-				}
-			}
+			rule.Versions = cleanAndSplit(rhs)
 		}
 	}
 
