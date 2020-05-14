@@ -6,11 +6,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/health"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -28,6 +30,7 @@ var certChainPath string
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
+	healthzPort            = 8081
 )
 
 func main() {
@@ -50,6 +53,16 @@ func main() {
 		log.Fatal(err)
 	}
 	config.Credentials = credentials.NewTLSCredentials(certChainPath)
+
+	go func() {
+		healthzServer := health.NewServer(log)
+		healthzServer.Ready()
+
+		err := healthzServer.Run(context.Background(), healthzPort)
+		if err != nil {
+			log.Fatalf("failed to start healhz server: %s", err)
+		}
+	}()
 
 	operator.NewOperator(kubeAPI, config).Run(ctx)
 

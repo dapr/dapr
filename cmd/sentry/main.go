@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
+	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
@@ -28,6 +30,7 @@ var log = logger.NewLogger("dapr.sentry")
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
+	healthzPort            = 8080
 )
 
 func main() {
@@ -96,6 +99,16 @@ func main() {
 			monitoring.IssuerCertChanged()
 			log.Warn("issuer credentials changed. reloading")
 			ca.Restart(ctx, config)
+		}
+	}()
+
+	go func() {
+		healthzServer := health.NewServer(log)
+		healthzServer.Ready()
+
+		err := healthzServer.Run(context.Background(), healthzPort)
+		if err != nil {
+			log.Fatalf("failed to start healhz server: %s", err)
 		}
 	}()
 
