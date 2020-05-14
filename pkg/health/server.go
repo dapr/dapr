@@ -18,7 +18,7 @@ import (
 type Server interface {
 	Run(context.Context, int) error
 	Ready()
-	Unready()
+	NotReady()
 }
 
 type server struct {
@@ -38,8 +38,8 @@ func (s *server) Ready() {
 	s.ready = true
 }
 
-// Unready sets unready state for the endpoint handlers
-func (s *server) Unready() {
+// NotReady sets a not ready state for the endpoint handlers
+func (s *server) NotReady() {
 	s.ready = false
 }
 
