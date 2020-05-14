@@ -77,6 +77,13 @@ HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 
+# Upload Helm charts to ACR
+ACR_NAME:=vinayaacr001.azurecr.io
+SP_APP_ID:=31450916-f863-4c27-88ac-501d63de1a36
+SP_TENANT_ID:=72f988bf-86f1-41af-91ab-2d7cd011db47
+SP_CERT_PATH:=/Users/vinayada/tmpq2oqe366.pem
+export HELM_EXPERIMENTAL_OCI:=1
+
 ################################################################################
 # Go build details                                                             #
 ################################################################################
@@ -89,7 +96,7 @@ ifeq ($(origin DEBUG), undefined)
   LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
 else ifeq ($(DEBUG),0)
   BUILDTYPE_DIR:=release
-  LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
+  LDFLAGS:="$/(DEFAULT_LDFLAGS) -s -w"
 else
   BUILDTYPE_DIR:=debug
   GCFLAGS:=-gcflags="all=-N -l"
@@ -173,6 +180,16 @@ dapr.yaml: check-docker-env
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
 		--include-crds=true --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
+
+################################################################################
+# Target: upload-helmchart-acr                                                 #
+################################################################################
+upload-helmchart-acr:
+# Upload helm charts to Azure Container Registry
+	$(info Logging in into ${ACR_NAME} using Service Principal: ${SP_APP_ID} and TenantId: ${SP_TENANT_ID})
+	$(echo ${value SP_PASSWD} | helm registry login ${ACR_NAME} --username ${SP_APP_ID} --password-stdin)
+	helm chart save ./charts/dapr ${ACR_NAME}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}
+	helm chart push ${ACR_NAME}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION} 
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #
