@@ -6,9 +6,9 @@
 name: dapr-test
 
 on:
-  schedule:
-    - cron: '0 */2 * * *'
-  repository_dispatch:
+  push:
+    branches:
+      - master
 
 jobs:
   test-e2e:
