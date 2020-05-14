@@ -48,11 +48,11 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			newCtx := NewContext((context.Context)(ctx), sc)
 			_, span := StartTracingClientSpanFromHTTPContext(newCtx, &ctx.Request, spanName, spec)
 			SpanContextToRequest(span.SpanContext(), &ctx.Request)
-			defer span.End()
 
 			next(ctx)
 
 			UpdateSpanStatus(span, spanName, ctx.Response.StatusCode())
+			defer span.End()
 		}
 	}
 }

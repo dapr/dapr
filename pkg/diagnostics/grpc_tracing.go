@@ -33,13 +33,14 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 			resp, err = handler(newCtx, req)
 		} else {
 			_, span := StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
-			defer span.End()
 
 			// build new context now on top of passed root context with started span context
 			newCtx = NewContext(ctx, span.SpanContext())
 			resp, err = handler(newCtx, req)
 
 			UpdateSpanStatusFromError(span, err, method)
+
+			defer span.End()
 		}
 
 		return resp, err
