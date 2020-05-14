@@ -13,6 +13,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
+	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement"
@@ -26,6 +27,7 @@ var tlsEnabled bool
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
+	healthzPort            = 8080
 )
 
 func main() {
@@ -95,5 +97,16 @@ func main() {
 	go p.Run(*port, certChain)
 
 	log.Infof("placement Service started on port %s", *port)
+
+	go func() {
+		healthzServer := health.NewServer(log)
+		healthzServer.Ready()
+
+		err := healthzServer.Run(context.Background(), healthzPort)
+		if err != nil {
+			log.Fatalf("failed to start healthz server: %s", err)
+		}
+	}()
+
 	<-stop
 }
