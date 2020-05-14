@@ -7,8 +7,7 @@ syntax = "proto3";
 
 package dapr.proto.daprinternal.v1;
 
-import "google/protobuf/any.proto";
-import "google/protobuf/struct.proto";
+import "dapr/proto/common/v1/common.proto";
 import "dapr/proto/daprinternal/v1/apiversion.proto";
 import "dapr/proto/daprinternal/v1/status.proto";
 
@@ -51,12 +50,12 @@ message InternalInvokeRequest {
   // metadata holds caller's HTTP headers or gRPC metadata.
   // 
   // This field is required.
-  map<string, google.protobuf.ListValue> metadata = 2;
+  map<string, ListStringValue> metadata = 2;
 
   // message includes caller's invocation request message.
   // 
   // This field is required.
-  google.protobuf.Any message = 3;
+  common.v1.InvokeRequest message = 3;
 
   // actor includes actor type and id. This field is used only for
   // actor service invocation.
@@ -76,16 +75,21 @@ message InternalInvokeResponse {
   // headers holds app channel response headers.
   // 
   // This field is required. 
-  map<string, google.protobuf.ListValue> headers = 2;
+  map<string, ListStringValue> headers = 2;
 
   // trailer holds app channel response trailers.
   // this will be used only for gRPC app channel
   // 
   // This field is optional.
-  map<string, google.protobuf.ListValue> trailers = 3;
+  map<string, ListStringValue> trailers = 3;
 
   // message includes callee's invocation response message.
   // 
   // This field is required.
-  google.protobuf.Any message = 4;
+  common.v1.InvokeResponse message = 4;
+}
+
+// ListStringValue represents string value array
+message ListStringValue {
+  repeated string values = 1;
 }

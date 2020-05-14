@@ -137,14 +137,19 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
 	s.logger.Infof("enabled monitoring middleware.")
-	unaryChains := grpc_middleware.ChainUnaryServer(
-		diag.SetTracingSpanContextGRPCMiddlewareUnary(s.tracingSpec),
-		diag.DefaultGRPCMonitoring.UnaryServerInterceptor(),
-	)
+	unaryServerInterceptor := diag.SetTracingSpanContextGRPCMiddlewareUnary(s.tracingSpec)
+
+	if diag.DefaultGRPCMonitoring.IsEnabled() {
+		unaryServerInterceptor = grpc_middleware.ChainUnaryServer(
+			unaryServerInterceptor,
+			diag.DefaultGRPCMonitoring.UnaryServerInterceptor(),
+		)
+	}
+
 	opts = append(
 		opts,
 		grpc_go.StreamInterceptor(diag.SetTracingSpanContextGRPCMiddlewareStream(s.tracingSpec)),
-		grpc_go.UnaryInterceptor(unaryChains))
+		grpc_go.UnaryInterceptor(unaryServerInterceptor))
 
 	return opts
 }

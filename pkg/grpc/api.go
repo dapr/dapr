@@ -148,10 +148,12 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 		body = in.Data.Value
 	}
 
-	// TODO : Remove passing corID in NewCloudEventsEnvelope through arguments as it can be passed through context
-	sc := diag.FromContext(ctx)
-	corID := sc.TraceID.String()
+	var span *trace.Span
+	spanName := fmt.Sprintf("PublishEvent: %s", topic)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
+	defer span.End()
 
+	corID := diag.SpanContextToString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
@@ -162,11 +164,6 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 		Topic: topic,
 		Data:  b,
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("PublishEvent: %s", topic)
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
-	defer span.End()
 
 	err = a.publishFn(&req)
 	if err != nil {
@@ -189,15 +186,20 @@ func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceReque
 
 	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Headers(), true))
 
-	statusCode := int(resp.Status().Code)
+	var respError error
 	if resp.IsHTTPResponse() {
-		statusCode = int(invokev1.CodeFromHTTPStatus(statusCode))
+		var errorMessage = []byte("")
+		if resp != nil {
+			_, errorMessage = resp.RawData()
+		}
+		respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
 	} else {
-		// ignore if appchannel uses HTTP
+		respError = invokev1.ErrorFromInternalStatus(resp.Status())
+		// ignore trailer if appchannel uses HTTP
 		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Trailers(), false))
 	}
 
-	return resp.Message(), status.Error(codes.Code(statusCode), resp.Status().Message)
+	return resp.Message(), respError
 }
 
 func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error) {
@@ -209,7 +211,8 @@ func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvel
 	}
 
 	var span *trace.Span
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "InvokeBinding", a.tracingSpec)
+	spanName := fmt.Sprintf("Binding: %s", in.Name)
+	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
 	defer span.End()
 
 	err := a.sendToOutputBindingFn(in.Name, req)

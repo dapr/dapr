@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/client"
 	daprclientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/golang/protobuf/ptypes/any"
@@ -95,10 +96,12 @@ type DaprRuntime struct {
 	actorStateStoreCount     int
 	authenticator            security.Authenticator
 	namespace                string
+	scopedSubscriptions      []string
 	scopedPublishings        []string
 	allowedTopics            []string
 	daprHTTPAPI              http.API
 	operatorClient           operatorv1pb.OperatorClient
+	topicRoutes              map[string]string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -119,6 +122,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		exporterRegistry:         exporter_loader.NewRegistry(),
 		serviceDiscoveryRegistry: servicediscovery_loader.NewRegistry(),
 		httpMiddlewareRegistry:   http_middleware_loader.NewRegistry(),
+		topicRoutes:              map[string]string{},
 	}
 }
 
@@ -136,6 +140,11 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	err := a.initRuntime(&o)
 	if err != nil {
 		return err
+	}
+
+	err = a.beginPubSub()
+	if err != nil {
+		log.Warn(err)
 	}
 
 	err = a.beginReadInputBindings()
@@ -325,6 +334,37 @@ func (a *DaprRuntime) beginReadInputBindings() error {
 	return nil
 }
 
+func (a *DaprRuntime) beginPubSub() error {
+	var publishFunc func(msg *pubsub.NewMessage) error
+	switch a.runtimeConfig.ApplicationProtocol {
+	case HTTPProtocol:
+		publishFunc = a.publishMessageHTTP
+	case GRPCProtocol:
+		publishFunc = a.publishMessageGRPC
+	}
+
+	if a.pubSub != nil && a.appChannel != nil {
+		a.topicRoutes = a.getTopicRoutes()
+
+		for t := range a.topicRoutes {
+			allowed := a.isPubSubOperationAllowed(t, a.scopedSubscriptions)
+			if !allowed {
+				log.Warnf("subscription to topic %s is not allowed", t)
+				continue
+			}
+
+			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
+				Topic: t,
+			}, publishFunc)
+			if err != nil {
+				log.Warnf("failed to subscribe to topic %s: %s", t, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(
 		a.runtimeConfig.ID,
@@ -485,14 +525,24 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	var response bindings.AppResponse
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+		ctx := context.Background()
+		spanName := fmt.Sprintf("Binding: %s", bindingName)
+		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+		defer span.End()
+
+		ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
+
 		client := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-		resp, err := client.OnBindingEvent(context.Background(), &daprclientv1pb.BindingEventEnvelope{
+		resp, err := client.OnBindingEvent(ctx, &daprclientv1pb.BindingEventEnvelope{
 			Name: bindingName,
 			Data: &any.Any{
 				Value: data,
 			},
 			Metadata: metadata,
 		})
+
+		diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
@@ -522,12 +572,21 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req := invokev1.NewInvokeMethodRequest(bindingName)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
-		// TODO: Propagate Context
+
 		ctx := context.Background()
+		spanName := fmt.Sprintf("Binding: %s", bindingName)
+		// context.Background() can be considered as GRPC context and so using StartTracingServerSpanFromGRPCContext to generate span
+		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+		defer span.End()
+
+		ctx = diag.NewContext(ctx, span.SpanContext())
+
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
+
+		diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
 
 		if resp.Status().Code != nethttp.StatusOK {
 			return fmt.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
@@ -739,47 +798,32 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 	return nil
 }
 
-func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
-	topics := []string{}
+func (a *DaprRuntime) getTopicRoutes() map[string]string {
+	topicRoutes := map[string]string{}
 	if a.appChannel == nil {
-		return topics
+		return topicRoutes
 	}
 
+	var subscriptions []runtime_pubsub.Subscription
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
-		req.WithHTTPExtension(nethttp.MethodGet, "")
-		req.WithRawData(nil, invokev1.JSONContentType)
-
-		// TODO Propagate Context
-		ctx := context.Background()
-		resp, err := a.appChannel.InvokeMethod(ctx, req)
-		if err != nil {
-			log.Errorf("error getting topic list from app: %v", err)
-		}
-
-		switch resp.Status().Code {
-		case nethttp.StatusOK:
-			_, body := resp.RawData()
-			if err := json.Unmarshal(body, &topics); err != nil {
-				log.Errorf("error getting topics from app: %s", err)
-			}
-
-		case nethttp.StatusNotFound:
-			log.Debug("user app subscribes no topics.")
-
-		default:
-			log.Warnf("app returned http status code %v from subscription endpoint", resp.Status().Code)
-		}
+		subscriptions = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-		resp, err := client.GetTopicSubscriptions(context.Background(), &empty.Empty{})
-		if err == nil && resp != nil {
-			topics = resp.Topics
-		}
+		subscriptions = runtime_pubsub.GetSubscriptionsGRPC(client, log)
 	}
 
-	log.Infof("app is subscribed to the following topics: %v", topics)
-	return topics
+	for _, s := range subscriptions {
+		topicRoutes[s.Topic] = s.Route
+	}
+
+	if len(topicRoutes) > 0 {
+		topics := []string{}
+		for t := range topicRoutes {
+			topics = append(topics, t)
+		}
+		log.Infof("app is subscribed to the following topics: %v", topics)
+	}
+	return topicRoutes
 }
 
 func (a *DaprRuntime) initExporters() error {
@@ -809,8 +853,6 @@ func (a *DaprRuntime) initExporters() error {
 }
 
 func (a *DaprRuntime) initPubSub() error {
-	var scopedSubscriptions []string
-
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
 			pubSub, err := a.pubSubRegistry.Create(c.Spec.Type)
@@ -832,7 +874,7 @@ func (a *DaprRuntime) initPubSub() error {
 				continue
 			}
 
-			scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
+			a.scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
 			a.scopedPublishings = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
 			a.allowedTopics = scopes.GetAllowedTopics(properties)
 
@@ -842,31 +884,6 @@ func (a *DaprRuntime) initPubSub() error {
 		}
 	}
 
-	var publishFunc func(msg *pubsub.NewMessage) error
-	switch a.runtimeConfig.ApplicationProtocol {
-	case HTTPProtocol:
-		publishFunc = a.publishMessageHTTP
-	case GRPCProtocol:
-		publishFunc = a.publishMessageGRPC
-	}
-
-	if a.pubSub != nil && a.appChannel != nil {
-		topics := a.getSubscribedTopicsFromApp()
-		for _, t := range topics {
-			allowed := a.isPubSubOperationAllowed(t, scopedSubscriptions)
-			if !allowed {
-				log.Warnf("subscription to topic %s is not allowed", t)
-				continue
-			}
-
-			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
-				Topic: t,
-			}, publishFunc)
-			if err != nil {
-				log.Warnf("failed to subscribe to topic %s: %s", t, err)
-			}
-		}
-	}
 	return nil
 }
 
@@ -935,16 +952,32 @@ func (a *DaprRuntime) initServiceDiscovery() error {
 }
 
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
-	req := invokev1.NewInvokeMethodRequest(msg.Topic)
+	subject := ""
+	var cloudEvent pubsub.CloudEventsEnvelope
+	err := a.json.Unmarshal(msg.Data, &cloudEvent)
+	if err == nil {
+		subject = cloudEvent.Subject
+	}
+
+	route := a.topicRoutes[msg.Topic]
+	req := invokev1.NewInvokeMethodRequest(route)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
 
-	// TODO Propagate Context
-	ctx := context.Background()
+	// subject contains the correlationID which is passed span context
+	sc, _ := diag.SpanContextFromString(subject)
+	ctx := diag.NewContext(context.Background(), sc)
+	spanName := fmt.Sprintf("DeliveredEvent: %s", msg.Topic)
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+	defer span.End()
+
+	ctx = diag.NewContext(ctx, span.SpanContext())
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
+
+	diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
 
 	if resp.Status().Code != nethttp.StatusOK {
 		_, errorMsg := resp.RawData()
@@ -982,9 +1015,22 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 			Value: b,
 		}
 	}
+	// subject contains the correlationID which is passed span context
+	subject := cloudEvent.Subject
+	sc, _ := diag.SpanContextFromString(subject)
+	ctx := diag.NewContext(context.Background(), sc)
+	spanName := fmt.Sprintf("DeliveredEvent: %s", msg.Topic)
+	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+	defer span.End()
+
+	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 
 	clientV1 := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-	if _, err = clientV1.OnTopicEvent(context.Background(), envelope); err != nil {
+	_, err = clientV1.OnTopicEvent(ctx, envelope)
+
+	diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+
+	if err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
 		log.Debug(err)
 		return err

@@ -10,7 +10,6 @@ import (
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
-	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 )
@@ -19,7 +18,7 @@ func TestInvokeRequest(t *testing.T) {
 	req := NewInvokeMethodRequest("test_method")
 
 	assert.Equal(t, internalv1pb.APIVersion_V1, req.r.GetVer())
-	assert.Equal(t, "test_method", req.m.GetMethod())
+	assert.Equal(t, "test_method", req.r.Message.GetMethod())
 }
 
 func TestFromInvokeRequestMessage(t *testing.T) {
@@ -27,26 +26,37 @@ func TestFromInvokeRequestMessage(t *testing.T) {
 	req := FromInvokeRequestMessage(pb)
 
 	assert.Equal(t, internalv1pb.APIVersion_V1, req.r.GetVer())
-	assert.Equal(t, "frominvokerequestmessage", req.m.GetMethod())
+	assert.Equal(t, "frominvokerequestmessage", req.r.Message.GetMethod())
 }
 
 func TestInternalInvokeRequest(t *testing.T) {
-	m := commonv1pb.InvokeRequest{
-		Method:      "invoketest",
-		ContentType: "application/json",
-		Data:        &any.Any{Value: []byte("test")},
-	}
-	ms, _ := ptypes.MarshalAny(&m)
-	pb := internalv1pb.InternalInvokeRequest{
-		Ver:     internalv1pb.APIVersion_V1,
-		Message: ms,
-	}
+	t.Run("valid internal invoke request", func(t *testing.T) {
+		m := &commonv1pb.InvokeRequest{
+			Method:      "invoketest",
+			ContentType: "application/json",
+			Data:        &any.Any{Value: []byte("test")},
+		}
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: m,
+		}
 
-	ir, err := InternalInvokeRequest(&pb)
-	assert.NoError(t, err)
-	assert.NotNil(t, ir.m)
-	assert.Equal(t, "invoketest", ir.m.GetMethod())
-	assert.NotNil(t, ir.m.GetData())
+		ir, err := InternalInvokeRequest(&pb)
+		assert.NoError(t, err)
+		assert.NotNil(t, ir.r.Message)
+		assert.Equal(t, "invoketest", ir.r.Message.GetMethod())
+		assert.NotNil(t, ir.r.Message.GetData())
+	})
+
+	t.Run("nil message field", func(t *testing.T) {
+		pb := internalv1pb.InternalInvokeRequest{
+			Ver:     internalv1pb.APIVersion_V1,
+			Message: nil,
+		}
+
+		_, err := InternalInvokeRequest(&pb)
+		assert.Error(t, err)
+	})
 }
 
 func TestMetadata(t *testing.T) {
@@ -58,10 +68,10 @@ func TestMetadata(t *testing.T) {
 	req.WithMetadata(md)
 	mdata := req.Metadata()
 
-	assert.Equal(t, "val1", mdata["test1"].GetValues()[0].GetStringValue())
-	assert.Equal(t, "val2", mdata["test1"].GetValues()[1].GetStringValue())
-	assert.Equal(t, "val3", mdata["test2"].GetValues()[0].GetStringValue())
-	assert.Equal(t, "val4", mdata["test2"].GetValues()[1].GetStringValue())
+	assert.Equal(t, "val1", mdata["test1"].GetValues()[0])
+	assert.Equal(t, "val2", mdata["test1"].GetValues()[1])
+	assert.Equal(t, "val3", mdata["test2"].GetValues()[0])
+	assert.Equal(t, "val4", mdata["test2"].GetValues()[1])
 }
 
 func TestData(t *testing.T) {
@@ -83,7 +93,7 @@ func TestData(t *testing.T) {
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
 		resp := NewInvokeMethodRequest("test_method")
-		resp.m.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
+		resp.r.Message.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
 		contentType, bData := resp.RawData()
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("fake"), bData)
@@ -105,25 +115,20 @@ func TestActor(t *testing.T) {
 }
 
 func TestProto(t *testing.T) {
-	m := commonv1pb.InvokeRequest{
+	m := &commonv1pb.InvokeRequest{
 		Method:      "invoketest",
 		ContentType: "application/json",
 		Data:        &any.Any{Value: []byte("test")},
 	}
-	ms, _ := ptypes.MarshalAny(&m)
 	pb := internalv1pb.InternalInvokeRequest{
 		Ver:     internalv1pb.APIVersion_V1,
-		Message: ms,
+		Message: m,
 	}
 
 	ir, err := InternalInvokeRequest(&pb)
 	assert.NoError(t, err)
 	req2 := ir.Proto()
 
-	m2 := commonv1pb.InvokeRequest{}
-	err = ptypes.UnmarshalAny(req2.GetMessage(), &m2)
-	assert.NoError(t, err)
-
-	assert.Equal(t, "application/json", m2.GetContentType())
-	assert.Equal(t, []byte("test"), m2.Data.GetValue())
+	assert.Equal(t, "application/json", req2.GetMessage().ContentType)
+	assert.Equal(t, []byte("test"), req2.GetMessage().Data.Value)
 }
