@@ -109,6 +109,14 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 	method := mux.Vars(r)["method"]
 
+	actorID := createActorID(actorType, id)
+	log.Printf("Storing actorID %s\n", actorID)
+
+	actors.Store(actorID, daprActor{
+		actorType: actorType,
+		id:        actorID,
+		value:     nil,
+	})
 	appendActorLog(actorLogEntry{
 		Action:    method,
 		ActorType: actorType,
@@ -119,7 +127,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func activateDeactivateActorHandler(w http.ResponseWriter, r *http.Request) {
+func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
 
 	actorType := mux.Vars(r)["actorType"]
@@ -132,17 +140,11 @@ func activateDeactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID := createActorID(actorType, id)
+	fmt.Printf("actorID is %s\n", actorID)
 
 	action := ""
 	_, ok := actors.Load(actorID)
-	if !ok && r.Method == "POST" {
-		action = "activation"
-		actors.Store(actorID, daprActor{
-			actorType: actorType,
-			id:        actorID,
-			value:     nil,
-		})
-	}
+	log.Printf("loading returned:%t\n", ok)
 
 	if ok && r.Method == "DELETE" {
 		action = "deactivation"
@@ -206,7 +208,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
-	router.HandleFunc("/actors/{actorType}/{id}", activateDeactivateActorHandler).Methods("POST", "DELETE")
+	router.HandleFunc("/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/{actorType}/{id}/method/{method}", testCallActorHandler).Methods("POST")
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 	router.HandleFunc("/healthz", healthzHandler).Methods("GET")

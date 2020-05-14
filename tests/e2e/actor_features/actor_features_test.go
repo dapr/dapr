@@ -241,7 +241,7 @@ func TestActorFeatures(t *testing.T) {
 		require.True(t, (logOne.StartTimestamp <= logTwo.EndTimestamp) && (logTwo.StartTimestamp <= logOne.EndTimestamp))
 	})
 
-	t.Run("Actor failsover to another hostname.", func(t *testing.T) {
+	t.Run("Actor fails over to another hostname.", func(t *testing.T) {
 		// Each test needs to have a different actorID
 		actorID := "1005"
 
