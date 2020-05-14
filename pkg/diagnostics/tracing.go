@@ -173,7 +173,7 @@ func projectStatusCode(code int) int32 {
 	}
 }
 
-func createSpanName(name string) string {
+func extractAppID(name string) string {
 	i := strings.Index(name, "/invoke/")
 	if i > 0 {
 		j := strings.Index(name[i+8:], "/")

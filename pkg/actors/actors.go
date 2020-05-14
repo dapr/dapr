@@ -29,7 +29,6 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/mitchellh/mapstructure"
-	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -347,14 +346,10 @@ func (a *actorsRuntime) callRemoteActor(
 	// ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
 	// defer cancel()
 
-	var span *trace.Span
-	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, req.Message().Method, a.tracingSpec)
-	defer span.End()
-
-	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
+	sc := diag.FromContext(ctx)
+	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
 	client := internalv1pb.NewDaprInternalClient(conn)
 	resp, err := client.CallActor(ctx, req.Proto())
-	diag.UpdateSpanStatusFromError(span, err, req.Message().Method)
 	if err != nil {
 		return nil, err
 	}

@@ -33,13 +33,13 @@ const (
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
 // SetTracingInHTTPMiddleware sets the trace context or starts the trace client span based on request
-func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, spec config.TracingSpec) fasthttp.RequestHandler {
+func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		sc := GetSpanContextFromRequestContext(ctx, spec)
 		path := string(ctx.Request.URI().Path())
 		method := ctx.Request.Header.Method()
 
-		if isServiceInvocationRequest(path) || isHealthzRequest(path) {
+		if isAppChannelServiceInvocationRequest(ctx, appID, path) || isHealthzRequest(path) {
 			SpanContextToRequest(sc, &ctx.Request)
 			next(ctx)
 		} else {
@@ -109,8 +109,14 @@ func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
 	})
 }
 
-func isServiceInvocationRequest(name string) bool {
-	return strings.Contains(name, "/invoke/")
+func isAppChannelServiceInvocationRequest(ctx *fasthttp.RequestCtx, appID, name string) bool {
+	if strings.Contains(name, "/invoke/") {
+		targetAppID := extractAppID(name)
+		if targetAppID == appID {
+			return true
+		}
+	}
+	return false
 }
 
 func isHealthzRequest(name string) bool {
