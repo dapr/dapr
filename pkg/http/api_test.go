@@ -1206,7 +1206,7 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, diag.SetTracingSpanContextFromHTTPContext(router.Handler, spec)); err != nil {
+		if err := fasthttp.Serve(f.ln, diag.SetTracingInHTTPMiddleware(router.Handler, spec)); err != nil {
 			panic(fmt.Errorf("failed to set tracing span context: %v", err))
 		}
 	}()
@@ -1226,7 +1226,7 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 	go func() {
 		handler := pipeline.Apply(router.Handler)
 		spec := config.TracingSpec{SamplingRate: "1"}
-		if err := fasthttp.Serve(f.ln, diag.SetTracingSpanContextFromHTTPContext(handler, spec)); err != nil {
+		if err := fasthttp.Serve(f.ln, diag.SetTracingInHTTPMiddleware(handler, spec)); err != nil {
 			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
 	}()

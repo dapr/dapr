@@ -354,7 +354,7 @@ func (a *actorsRuntime) callRemoteActor(
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 	client := internalv1pb.NewDaprInternalClient(conn)
 	resp, err := client.CallActor(ctx, req.Proto())
-	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
+	diag.UpdateSpanStatusFromError(span, err, req.Message().Method)
 	if err != nil {
 		return nil, err
 	}

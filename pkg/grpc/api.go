@@ -111,7 +111,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	ctx = diag.NewContext(ctx, span.SpanContext())
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
+	diag.UpdateSpanStatusFromError(span, err, req.Message().Method)
 	if err != nil {
 		return nil, err
 	}

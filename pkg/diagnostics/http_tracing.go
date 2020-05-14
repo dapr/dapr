@@ -32,12 +32,28 @@ const (
 
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
-// SetTracingSpanContextFromHTTPContext sets the trace SpanContext in the request context
-func SetTracingSpanContextFromHTTPContext(next fasthttp.RequestHandler, spec config.TracingSpec) fasthttp.RequestHandler {
+// SetTracingInHTTPMiddleware sets the trace context or starts the trace client span based on request
+func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, spec config.TracingSpec) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		sc := GetSpanContextFromRequestContext(ctx, spec)
-		SpanContextToRequest(sc, &ctx.Request)
-		next(ctx)
+		path := string(ctx.Request.URI().Path())
+		method := ctx.Request.Header.Method()
+
+		if isServiceInvocationRequest(path) || isHealthzRequest(path) || isActorsRequest(path) {
+			SpanContextToRequest(sc, &ctx.Request)
+			next(ctx)
+		} else {
+			spanName := fmt.Sprintf("%s:%s", method, path)
+
+			newCtx := NewContext((context.Context)(ctx), sc)
+			_, span := StartTracingClientSpanFromHTTPContext(newCtx, &ctx.Request, spanName, spec)
+			SpanContextToRequest(span.SpanContext(), &ctx.Request)
+			defer span.End()
+
+			next(ctx)
+
+			UpdateSpanStatus(span, spanName, ctx.Response.StatusCode())
+		}
 	}
 }
 
@@ -93,12 +109,26 @@ func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
 	})
 }
 
+func isServiceInvocationRequest(name string) bool {
+	return strings.Contains(name, "/invoke/")
+}
+
+func isHealthzRequest(name string) bool {
+	return strings.Contains(name, "/healthz")
+}
+
+func isActorsRequest(name string) bool {
+	return strings.Contains(name, "/actors/")
+}
+
 // UpdateSpanStatus updates trace span status based on response code
 func UpdateSpanStatus(span *trace.Span, spanName string, code int) {
-	span.SetStatus(trace.Status{
-		Code:    projectStatusCode(code),
-		Message: fmt.Sprintf("method %s status - %s", spanName, strconv.Itoa(code)),
-	})
+	if span != nil {
+		span.SetStatus(trace.Status{
+			Code:    projectStatusCode(code),
+			Message: fmt.Sprintf("method %s status - %s", spanName, strconv.Itoa(code)),
+		})
+	}
 }
 
 func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {

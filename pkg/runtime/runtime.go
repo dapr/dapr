@@ -541,7 +541,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			Metadata: metadata,
 		})
 
-		diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+		diag.UpdateSpanStatusFromError(span, err, spanName)
 
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
@@ -1028,7 +1028,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	clientV1 := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
 	_, err = clientV1.OnTopicEvent(ctx, envelope)
 
-	diag.UpdateSpanPairStatusesFromError(span, err, spanName)
+	diag.UpdateSpanStatusFromError(span, err, spanName)
 
 	if err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)

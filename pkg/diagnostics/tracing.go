@@ -107,9 +107,8 @@ func FromContext(ctx context.Context) trace.SpanContext {
 	return sc
 }
 
-func startTracingSpanInternal(ctx context.Context, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {
+func startTracingSpanInternal(ctx context.Context, name, samplingRate string, spanKind int) (context.Context, *trace.Span) {
 	var span *trace.Span
-	name := createSpanName(uri)
 
 	rate := diag_utils.GetTraceSamplingRate(samplingRate)
 
@@ -202,8 +201,8 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 	return daprMetadata
 }
 
-// UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
-func UpdateSpanPairStatusesFromError(span *trace.Span, err error, method string) {
+// UpdateSpanStatusFromError updates tracer span status based on error object
+func UpdateSpanStatusFromError(span *trace.Span, err error, method string) {
 	if err != nil {
 		span.SetStatus(trace.Status{
 			Code:    trace.StatusCodeInternal,

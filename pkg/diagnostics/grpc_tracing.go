@@ -19,27 +19,58 @@ import (
 
 const grpcTraceContextKey = "grpc-trace-bin"
 
-// SetTracingSpanContextGRPCMiddlewareStream sets the trace spancontext into gRPC stream
-func SetTracingSpanContextGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
+// SetTracingInGRPCMiddlewareStream sets the trace context or starts the trace client span based on request
+func SetTracingInGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := stream.Context()
 		sc := GetSpanContextFromGRPC(ctx, spec)
-		ctx = NewContext(ctx, sc)
+		method := info.FullMethod
+		newCtx := NewContext(ctx, sc)
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = ctx
+		wrappedStream.WrappedContext = newCtx
+		var err error
 
-		err := handler(srv, wrappedStream)
+		// do not start the client span if the request is service invocation or actors call
+		if isServiceInvocationMethod(method) || isActorsMethod(method) {
+			err = handler(srv, wrappedStream)
+		} else {
+			_, span := StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
+			defer span.End()
+
+			// build new context now on top of passed root context with started span context
+			newCtx = NewContext(ctx, span.SpanContext())
+			wrappedStream.WrappedContext = newCtx
+			err = handler(srv, wrappedStream)
+
+			UpdateSpanStatusFromError(span, err, method)
+		}
 
 		return err
 	}
 }
 
-// SetTracingSpanContextGRPCMiddlewareUnary sets the trace spancontext into gRPC unary calls
-func SetTracingSpanContextGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
+// SetTracingInGRPCMiddlewareUnary sets the trace context or starts the trace client span based on request
+func SetTracingInGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		sc := GetSpanContextFromGRPC(ctx, spec)
-		ctx = NewContext(ctx, sc)
-		resp, err := handler(ctx, req)
+		method := info.FullMethod
+		newCtx := NewContext(ctx, sc)
+		var err error
+		var resp interface{}
+
+		// do not start the client span if the request is service invocation or actors call
+		if isServiceInvocationMethod(method) || isActorsMethod(method) {
+			resp, err = handler(newCtx, req)
+		} else {
+			_, span := StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
+			defer span.End()
+
+			// build new context now on top of passed root context with started span context
+			newCtx = NewContext(ctx, span.SpanContext())
+			resp, err = handler(newCtx, req)
+
+			UpdateSpanStatusFromError(span, err, method)
+		}
 
 		return resp, err
 	}
@@ -119,4 +150,12 @@ func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span)
 			span.AddAttributes(trace.StringAttribute(k, v))
 		}
 	}
+}
+
+func isServiceInvocationMethod(method string) bool {
+	return strings.Contains(method, "InvokeService")
+}
+
+func isActorsMethod(method string) bool {
+	return strings.Contains(method, "CallActor")
 }

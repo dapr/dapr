@@ -21,3 +21,13 @@ func GetTraceSamplingRate(rate string) float64 {
 	}
 	return f
 }
+
+// IsTracingEnabled parses the given rate and returns false if sampling rate is explicitly set 0
+func IsTracingEnabled(rate string) bool {
+	f, err := strconv.ParseFloat(rate, 64)
+	if err != nil {
+		// tracing will be considered enabled with default sampling rate even if there is error in parsing
+		return true
+	}
+	return f != 0
+}
