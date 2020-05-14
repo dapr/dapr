@@ -6,7 +6,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"time"
 
@@ -30,7 +29,7 @@ var certChainPath string
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
-	healthzPort            = 8081
+	healthzPort            = 8080
 )
 
 func main() {
@@ -58,7 +57,7 @@ func main() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		err := healthzServer.Run(context.Background(), healthzPort)
+		err := healthzServer.Run(ctx, healthzPort)
 		if err != nil {
 			log.Fatalf("failed to start healhz server: %s", err)
 		}

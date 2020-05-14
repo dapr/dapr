@@ -6,7 +6,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"time"
 
@@ -44,7 +43,7 @@ func main() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		err := healthzServer.Run(context.Background(), healthzPort)
+		err := healthzServer.Run(ctx, healthzPort)
 		if err != nil {
 			log.Fatalf("failed to start healhz server: %s", err)
 		}
