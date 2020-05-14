@@ -39,7 +39,7 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, spec config.Tracin
 		path := string(ctx.Request.URI().Path())
 		method := ctx.Request.Header.Method()
 
-		if isServiceInvocationRequest(path) || isHealthzRequest(path) || isActorsRequest(path) {
+		if isServiceInvocationRequest(path) || isHealthzRequest(path) {
 			SpanContextToRequest(sc, &ctx.Request)
 			next(ctx)
 		} else {

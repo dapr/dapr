@@ -31,7 +31,7 @@ func SetTracingInGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServer
 		var err error
 
 		// do not start the client span if the request is service invocation or actors call
-		if isServiceInvocationMethod(method) || isActorsMethod(method) {
+		if isServiceInvocationMethod(method) {
 			err = handler(srv, wrappedStream)
 		} else {
 			_, span := StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
