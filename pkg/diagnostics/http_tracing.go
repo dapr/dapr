@@ -123,10 +123,6 @@ func isHealthzRequest(name string) bool {
 	return strings.Contains(name, "/healthz")
 }
 
-func isActorsRequest(name string) bool {
-	return strings.Contains(name, "/actors/")
-}
-
 // UpdateSpanStatus updates trace span status based on response code
 func UpdateSpanStatus(span *trace.Span, spanName string, code int) {
 	if span != nil {

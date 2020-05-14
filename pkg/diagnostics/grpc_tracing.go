@@ -134,7 +134,3 @@ func isLocalServiceInvocationMethod(req interface{}, method, appID string) bool 
 
 	return appID == msg.Id
 }
-
-func isActorsMethod(method string) bool {
-	return strings.Contains(method, "CallActor")
-}
