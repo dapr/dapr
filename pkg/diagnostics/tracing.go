@@ -9,6 +9,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -31,6 +32,73 @@ const (
 // NewContext returns a new context with the given SpanContext attached.
 func NewContext(ctx context.Context, spanContext trace.SpanContext) context.Context {
 	return context.WithValue(ctx, DaprTraceContextKey{}, spanContext)
+}
+
+// SpanContextToString returns the SpanContext string representation
+func SpanContextToString(sc trace.SpanContext) string {
+	return fmt.Sprintf("%x-%x-%x-%x",
+		[]byte{supportedVersion},
+		sc.TraceID[:],
+		sc.SpanID[:],
+		[]byte{byte(sc.TraceOptions)})
+}
+
+// SpanContextFromString extracts a span context from given string which got earlier from SpanContextToString format
+func SpanContextFromString(h string) (sc trace.SpanContext, ok bool) {
+	if h == "" {
+		return trace.SpanContext{}, false
+	}
+	sections := strings.Split(h, "-")
+	if len(sections) < 4 {
+		return trace.SpanContext{}, false
+	}
+
+	if len(sections[0]) != 2 {
+		return trace.SpanContext{}, false
+	}
+	ver, err := hex.DecodeString(sections[0])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	version := int(ver[0])
+	if version > maxVersion {
+		return trace.SpanContext{}, false
+	}
+
+	if version == 0 && len(sections) != 4 {
+		return trace.SpanContext{}, false
+	}
+
+	if len(sections[1]) != 32 {
+		return trace.SpanContext{}, false
+	}
+	tid, err := hex.DecodeString(sections[1])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	copy(sc.TraceID[:], tid)
+
+	if len(sections[2]) != 16 {
+		return trace.SpanContext{}, false
+	}
+	sid, err := hex.DecodeString(sections[2])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	copy(sc.SpanID[:], sid)
+
+	opts, err := hex.DecodeString(sections[3])
+	if err != nil || len(opts) < 1 {
+		return trace.SpanContext{}, false
+	}
+	sc.TraceOptions = trace.TraceOptions(opts[0])
+
+	// Don't allow all zero trace or span ID.
+	if sc.TraceID == [16]byte{} || sc.SpanID == [8]byte{} {
+		return trace.SpanContext{}, false
+	}
+
+	return sc, true
 }
 
 // FromContext returns the SpanContext stored in a context, or nil if there isn't one.

@@ -74,7 +74,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("bindings", testApps, nil)
+	tr = runner.NewTestRunner("bindings", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 

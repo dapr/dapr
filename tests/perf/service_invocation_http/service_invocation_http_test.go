@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("serviceinvocationhttp", testApps, nil)
+	tr = runner.NewTestRunner("serviceinvocationhttp", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
