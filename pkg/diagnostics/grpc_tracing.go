@@ -35,10 +35,8 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 				method = m.Message.Method
 			}
 			_, span = StartTracingServerSpanFromGRPCContext(newCtx, method, spec)
-
 		} else {
 			_, span = StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
-
 		}
 
 		// build new context now on top of passed root context with started span context

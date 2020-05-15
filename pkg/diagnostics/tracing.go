@@ -173,17 +173,6 @@ func projectStatusCode(code int) int32 {
 	}
 }
 
-func extractAppID(name string) string {
-	i := strings.Index(name, "/invoke/")
-	if i > 0 {
-		j := strings.Index(name[i+8:], "/")
-		if j > 0 {
-			return name[i+8 : i+8+j]
-		}
-	}
-	return name
-}
-
 func extractDaprMetadata(ctx context.Context) map[string][]string {
 	daprMetadata := make(map[string][]string)
 	md, ok := metadata.FromIncomingContext(ctx)
