@@ -89,10 +89,10 @@ func TestResponseHeader(t *testing.T) {
 		resp.WithHeaders(md)
 		mheader := resp.Headers()
 
-		assert.Equal(t, "val1", mheader["test1"].GetValues()[0].GetStringValue())
-		assert.Equal(t, "val2", mheader["test1"].GetValues()[1].GetStringValue())
-		assert.Equal(t, "val3", mheader["test2"].GetValues()[0].GetStringValue())
-		assert.Equal(t, "val4", mheader["test2"].GetValues()[1].GetStringValue())
+		assert.Equal(t, "val1", mheader["test1"].GetValues()[0])
+		assert.Equal(t, "val2", mheader["test1"].GetValues()[1])
+		assert.Equal(t, "val3", mheader["test2"].GetValues()[0])
+		assert.Equal(t, "val4", mheader["test2"].GetValues()[1])
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
@@ -105,9 +105,9 @@ func TestResponseHeader(t *testing.T) {
 		re.WithFastHTTPHeaders(&resp.Header)
 		mheader := re.Headers()
 
-		assert.Equal(t, "Value1", mheader["Header1"].GetValues()[0].GetStringValue())
-		assert.Equal(t, "Value2", mheader["Header2"].GetValues()[0].GetStringValue())
-		assert.Equal(t, "Value3", mheader["Header3"].GetValues()[0].GetStringValue())
+		assert.Equal(t, "Value1", mheader["Header1"].GetValues()[0])
+		assert.Equal(t, "Value2", mheader["Header2"].GetValues()[0])
+		assert.Equal(t, "Value3", mheader["Header3"].GetValues()[0])
 	})
 }
 
@@ -120,10 +120,10 @@ func TestResponseTrailer(t *testing.T) {
 	resp.WithTrailers(md)
 	mheader := resp.Trailers()
 
-	assert.Equal(t, "val1", mheader["test1"].GetValues()[0].GetStringValue())
-	assert.Equal(t, "val2", mheader["test1"].GetValues()[1].GetStringValue())
-	assert.Equal(t, "val3", mheader["test2"].GetValues()[0].GetStringValue())
-	assert.Equal(t, "val4", mheader["test2"].GetValues()[1].GetStringValue())
+	assert.Equal(t, "val1", mheader["test1"].GetValues()[0])
+	assert.Equal(t, "val2", mheader["test1"].GetValues()[1])
+	assert.Equal(t, "val3", mheader["test2"].GetValues()[0])
+	assert.Equal(t, "val4", mheader["test2"].GetValues()[1])
 }
 
 func TestIsHTTPResponse(t *testing.T) {

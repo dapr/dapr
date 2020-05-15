@@ -8,22 +8,14 @@ package kubernetes
 import (
 	"fmt"
 	"log"
-	"net/http"
-	"net/url"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/phayes/freeport"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/portforward"
-	"k8s.io/client-go/transport/spdy"
 )
 
 const (
@@ -46,27 +38,7 @@ type AppManager struct {
 	namespace string
 	app       AppDescription
 
-	// stopChannel is the channel used to manage the port forward lifecycle
-	stopChannel chan struct{}
-	// readyChannel communicates when the tunnel is ready to receive traffic
-	readyChannel chan struct{}
-}
-
-type PortForwardRequest struct {
-	// restConfig is the kubernetes config
-	restConfig *rest.Config
-	// pod is the selected pod for this port forwarding
-	pod apiv1.Pod
-	// localPort is the local port that will be selected to forward the PodPort
-	localPorts []int
-	// podPort is the target port for the pod
-	podPorts []int
-	// streams configures where to write or read input from
-	streams genericclioptions.IOStreams
-	// stopChannel is the channel used to manage the port forward lifecycle
-	stopChannel chan struct{}
-	// stopChannel communicates when the tunnel is ready to receive traffic
-	readyChannel chan struct{}
+	forwarder *PodPortForwarder
 }
 
 // NewAppManager creates AppManager instance
@@ -120,8 +92,7 @@ func (m *AppManager) Init() error {
 		return err
 	}
 
-	m.readyChannel = make(chan struct{})
-	m.stopChannel = make(chan struct{})
+	m.forwarder = NewPodPortForwarder(m.client, m.namespace)
 
 	return nil
 }
@@ -144,8 +115,8 @@ func (m *AppManager) Dispose() error {
 		return err
 	}
 
-	if m.stopChannel != nil {
-		close(m.stopChannel)
+	if m.forwarder != nil {
+		m.forwarder.Close()
 	}
 
 	return nil
@@ -255,77 +226,7 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 		}
 	}
 
-	config := m.client.GetClientConfig()
-
-	var ports []int
-	for i := 0; i < len(targetPorts); i++ {
-		p, perr := freeport.GetFreePort()
-		if perr != nil {
-			return nil, perr
-		}
-		ports = append(ports, p)
-	}
-
-	streams := genericclioptions.IOStreams{
-		In:     os.Stdin,
-		Out:    os.Stdout,
-		ErrOut: os.Stderr,
-	}
-
-	err = startPortForwarding(PortForwardRequest{
-		restConfig: config,
-		pod: apiv1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: m.namespace,
-			},
-		},
-		localPorts:   ports,
-		podPorts:     targetPorts,
-		streams:      streams,
-		stopChannel:  m.stopChannel,
-		readyChannel: m.readyChannel,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	<-m.readyChannel
-
-	return ports, nil
-}
-
-func startPortForwarding(req PortForwardRequest) error {
-	// create spdy roundtripper
-	roundTripper, upgrader, err := spdy.RoundTripperFor(req.restConfig)
-	if err != nil {
-		return err
-	}
-
-	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", req.pod.Namespace, req.pod.Name)
-	hostIP := strings.TrimLeft(req.restConfig.Host, "htps:/")
-	serverURL := url.URL{Scheme: "https", Path: path, Host: hostIP}
-
-	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)
-
-	var ports []string //nolint: prealloc
-	for i, p := range req.podPorts {
-		ports = append(ports, fmt.Sprintf("%d:%d", req.localPorts[i], p))
-	}
-	fw, err := portforward.New(dialer, ports, req.stopChannel, req.readyChannel, req.streams.Out, req.streams.ErrOut)
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		if err = fw.ForwardPorts(); err != nil {
-			log.Printf("Error closing port fowarding: %+v", err)
-			// TODO: How to handle error?
-		}
-		log.Println("Closed port fowarding")
-	}()
-	return nil
+	return m.forwarder.Connect(name, targetPorts...)
 }
 
 // ScaleDeploymentReplica scales the deployment
