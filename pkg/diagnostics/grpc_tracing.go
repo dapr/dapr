@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc"
@@ -124,14 +123,8 @@ func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span)
 }
 
 func isLocalServiceInvocationMethod(req interface{}, method, appID string) bool {
-	if !strings.Contains(method, "InvokeService") {
+	if !strings.Contains(method, "/CallLocal") {
 		return false
 	}
-
-	msg, ok := req.(daprv1pb.InvokeServiceRequest)
-	if !ok {
-		return false
-	}
-
-	return appID == msg.Id
+	return true
 }
