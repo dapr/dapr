@@ -16,6 +16,6 @@ protoc -I . ./dapr/proto/placement/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./dapr/proto/sentry/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./dapr/proto/common/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./dapr/proto/dapr/v1/*.proto --go_out=plugins=grpc:../../../
-protoc -I . ./dapr/proto/daprclient/v1/*.proto --go_out=plugins=grpc:../../../
-protoc -I . ./dapr/proto/daprinternal/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./dapr/proto/appcallback/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./dapr/proto/internal/v1/*.proto --go_out=plugins=grpc:../../../
 ```
