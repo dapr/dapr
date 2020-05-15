@@ -192,7 +192,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	actorKey := a.constructCompositeKey(actorType, actorID)
 	a.actorsTable.Delete(actorKey)
 	diag.DefaultMonitoring.ActorDeactivated(actorType)
-	log.Debugf("Deactivated actor type=%s, id=%s\n", actorType, actorID)
+	log.Debugf("deactivated actor type=%s, id=%s\n", actorType, actorID)
 
 	return nil
 }

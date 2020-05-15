@@ -110,7 +110,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	method := mux.Vars(r)["method"]
 
 	actorID := createActorID(actorType, id)
-	log.Printf("Storing actorID %s\n", actorID)
+	log.Printf("storing actorID %s\n", actorID)
 
 	actors.Store(actorID, daprActor{
 		actorType: actorType,
