@@ -7,7 +7,6 @@ import (
 	context "context"
 	fmt "fmt"
 	proto "github.com/golang/protobuf/proto"
-	any "github.com/golang/protobuf/ptypes/any"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -26,8 +25,9 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
+// ComponentUpdateEvent includes the updated component event.
 type ComponentUpdateEvent struct {
-	Component            *any.Any `protobuf:"bytes,1,opt,name=component,proto3" json:"component,omitempty"`
+	Component            []byte   `protobuf:"bytes,1,opt,name=component,proto3" json:"component,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -58,52 +58,54 @@ func (m *ComponentUpdateEvent) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ComponentUpdateEvent proto.InternalMessageInfo
 
-func (m *ComponentUpdateEvent) GetComponent() *any.Any {
+func (m *ComponentUpdateEvent) GetComponent() []byte {
 	if m != nil {
 		return m.Component
 	}
 	return nil
 }
 
-type GetComponentResponse struct {
-	Components           []*any.Any `protobuf:"bytes,1,rep,name=components,proto3" json:"components,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
-	XXX_unrecognized     []byte     `json:"-"`
-	XXX_sizecache        int32      `json:"-"`
+// ListComponentResponse includes the list of available components
+type ListComponentResponse struct {
+	Components           [][]byte `protobuf:"bytes,1,rep,name=components,proto3" json:"components,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *GetComponentResponse) Reset()         { *m = GetComponentResponse{} }
-func (m *GetComponentResponse) String() string { return proto.CompactTextString(m) }
-func (*GetComponentResponse) ProtoMessage()    {}
-func (*GetComponentResponse) Descriptor() ([]byte, []int) {
+func (m *ListComponentResponse) Reset()         { *m = ListComponentResponse{} }
+func (m *ListComponentResponse) String() string { return proto.CompactTextString(m) }
+func (*ListComponentResponse) ProtoMessage()    {}
+func (*ListComponentResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_4e6e6e3126ef3d27, []int{1}
 }
 
-func (m *GetComponentResponse) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_GetComponentResponse.Unmarshal(m, b)
+func (m *ListComponentResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ListComponentResponse.Unmarshal(m, b)
 }
-func (m *GetComponentResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_GetComponentResponse.Marshal(b, m, deterministic)
+func (m *ListComponentResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ListComponentResponse.Marshal(b, m, deterministic)
 }
-func (m *GetComponentResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetComponentResponse.Merge(m, src)
+func (m *ListComponentResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListComponentResponse.Merge(m, src)
 }
-func (m *GetComponentResponse) XXX_Size() int {
-	return xxx_messageInfo_GetComponentResponse.Size(m)
+func (m *ListComponentResponse) XXX_Size() int {
+	return xxx_messageInfo_ListComponentResponse.Size(m)
 }
-func (m *GetComponentResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetComponentResponse.DiscardUnknown(m)
+func (m *ListComponentResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListComponentResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_GetComponentResponse proto.InternalMessageInfo
+var xxx_messageInfo_ListComponentResponse proto.InternalMessageInfo
 
-func (m *GetComponentResponse) GetComponents() []*any.Any {
+func (m *ListComponentResponse) GetComponents() [][]byte {
 	if m != nil {
 		return m.Components
 	}
 	return nil
 }
 
+// GetConfigurationRequest is the request message to get the configuration.
 type GetConfigurationRequest struct {
 	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Namespace            string   `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
@@ -151,8 +153,9 @@ func (m *GetConfigurationRequest) GetNamespace() string {
 	return ""
 }
 
+// GetConfigurationResponse includes the requested configuration.
 type GetConfigurationResponse struct {
-	Configuration        *any.Any `protobuf:"bytes,1,opt,name=configuration,proto3" json:"configuration,omitempty"`
+	Configuration        []byte   `protobuf:"bytes,1,opt,name=configuration,proto3" json:"configuration,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -183,7 +186,7 @@ func (m *GetConfigurationResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetConfigurationResponse proto.InternalMessageInfo
 
-func (m *GetConfigurationResponse) GetConfiguration() *any.Any {
+func (m *GetConfigurationResponse) GetConfiguration() []byte {
 	if m != nil {
 		return m.Configuration
 	}
@@ -192,7 +195,7 @@ func (m *GetConfigurationResponse) GetConfiguration() *any.Any {
 
 func init() {
 	proto.RegisterType((*ComponentUpdateEvent)(nil), "dapr.proto.operator.v1.ComponentUpdateEvent")
-	proto.RegisterType((*GetComponentResponse)(nil), "dapr.proto.operator.v1.GetComponentResponse")
+	proto.RegisterType((*ListComponentResponse)(nil), "dapr.proto.operator.v1.ListComponentResponse")
 	proto.RegisterType((*GetConfigurationRequest)(nil), "dapr.proto.operator.v1.GetConfigurationRequest")
 	proto.RegisterType((*GetConfigurationResponse)(nil), "dapr.proto.operator.v1.GetConfigurationResponse")
 }
@@ -202,29 +205,28 @@ func init() {
 }
 
 var fileDescriptor_4e6e6e3126ef3d27 = []byte{
-	// 343 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x93, 0x51, 0x4b, 0xfb, 0x30,
-	0x14, 0xc5, 0xd7, 0xfd, 0xff, 0x88, 0xbb, 0x32, 0x94, 0x30, 0x66, 0xad, 0x3e, 0x8c, 0x82, 0x20,
-	0x32, 0x92, 0x6d, 0xfa, 0xe4, 0x9b, 0xca, 0x10, 0x54, 0x10, 0x0a, 0x2a, 0xe8, 0x53, 0xd6, 0xdd,
-	0xd5, 0xa1, 0x4d, 0x62, 0x93, 0x4e, 0xf6, 0xd1, 0xfc, 0x76, 0xb2, 0x74, 0xeb, 0xe6, 0x3a, 0x87,
-	0x3e, 0xf5, 0x72, 0xcf, 0xe9, 0xaf, 0xe9, 0x3d, 0xb9, 0x70, 0xd8, 0xe7, 0x2a, 0x61, 0x2a, 0x91,
-	0x46, 0x32, 0xa9, 0x30, 0xe1, 0x46, 0x26, 0x6c, 0xd4, 0xce, 0x6b, 0x6a, 0x25, 0x52, 0x9f, 0xd8,
-	0xb2, 0x9a, 0xe6, 0xd2, 0xa8, 0xed, 0xed, 0x45, 0x52, 0x46, 0x6f, 0x98, 0x01, 0x7a, 0xe9, 0x80,
-	0x71, 0x31, 0xce, 0x6c, 0xde, 0xfe, 0xb2, 0x84, 0xb1, 0x32, 0x53, 0xd1, 0xbf, 0x86, 0xda, 0xa5,
-	0x8c, 0x95, 0x14, 0x28, 0xcc, 0xbd, 0xea, 0x73, 0x83, 0xdd, 0x11, 0x0a, 0x43, 0x3a, 0x50, 0x09,
-	0x67, 0x7d, 0xd7, 0x69, 0x38, 0x47, 0x5b, 0x9d, 0x1a, 0xcd, 0x40, 0x74, 0x06, 0xa2, 0xe7, 0x62,
-	0x1c, 0xcc, 0x6d, 0xfe, 0x2d, 0xd4, 0xae, 0xd0, 0xe4, 0xb8, 0x00, 0xb5, 0x92, 0x42, 0x23, 0x39,
-	0x05, 0xc8, 0x4d, 0xda, 0x75, 0x1a, 0xff, 0x7e, 0x84, 0x2d, 0xf8, 0xfc, 0x1b, 0xd8, 0xb5, 0x34,
-	0x31, 0x18, 0x46, 0x69, 0xc2, 0xcd, 0x50, 0x8a, 0x00, 0xdf, 0x53, 0xd4, 0x86, 0x10, 0xf8, 0x2f,
-	0x78, 0x8c, 0xf6, 0x5c, 0x95, 0xc0, 0xd6, 0xe4, 0x00, 0x2a, 0x93, 0xa7, 0x56, 0x3c, 0x44, 0xb7,
-	0x6c, 0x85, 0x79, 0xc3, 0x7f, 0x00, 0xb7, 0x08, 0x9b, 0x1e, 0xef, 0x0c, 0xaa, 0xe1, 0xa2, 0xb0,
-	0xf6, 0x77, 0xbf, 0x5b, 0x3b, 0x9f, 0x65, 0xd8, 0xbc, 0x9b, 0xc6, 0x40, 0x9e, 0x61, 0x7b, 0x69,
-	0x96, 0xa4, 0x5e, 0x80, 0x74, 0x27, 0xc3, 0xf7, 0x9a, 0x74, 0x75, 0x8e, 0x74, 0x55, 0x18, 0x7e,
-	0xa9, 0xe5, 0x90, 0x47, 0xa8, 0x2e, 0x0e, 0x57, 0xff, 0x1d, 0xbd, 0x2a, 0x1b, 0xbf, 0x44, 0x3e,
-	0x60, 0x67, 0x79, 0x34, 0x84, 0xad, 0x65, 0x14, 0x13, 0xf1, 0x5a, 0xbf, 0x7f, 0x61, 0xf6, 0xe1,
-	0x8b, 0xe6, 0xd3, 0x71, 0x34, 0x34, 0x2f, 0x69, 0x8f, 0x86, 0x32, 0x66, 0xf6, 0xfa, 0x67, 0x3b,
-	0xf0, 0x1a, 0x15, 0xf7, 0xa0, 0xb7, 0x61, 0x5b, 0x27, 0x5f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xea,
-	0xf2, 0xe0, 0x80, 0x28, 0x03, 0x00, 0x00,
+	// 333 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x5d, 0x4b, 0xf3, 0x40,
+	0x10, 0x85, 0x9b, 0xbe, 0x2f, 0x62, 0x87, 0xfa, 0xc1, 0xa2, 0x35, 0x54, 0x91, 0x12, 0x14, 0x8a,
+	0xd4, 0x4d, 0xab, 0x82, 0xb7, 0x62, 0x29, 0x5e, 0x28, 0x08, 0x01, 0x2f, 0xd4, 0xab, 0x34, 0x9d,
+	0xc6, 0xa0, 0xd9, 0x59, 0xb3, 0x9b, 0x8a, 0xbf, 0xcd, 0x3f, 0x27, 0x49, 0xda, 0xf4, 0x2b, 0x01,
+	0xaf, 0x32, 0x9c, 0x33, 0x7b, 0x66, 0xf2, 0x30, 0x70, 0x3a, 0x72, 0x65, 0x64, 0xcb, 0x88, 0x34,
+	0xd9, 0x24, 0x31, 0x72, 0x35, 0x45, 0xf6, 0xa4, 0x97, 0xd7, 0x3c, 0xb5, 0x58, 0x23, 0x69, 0xcb,
+	0x6a, 0x9e, 0x5b, 0x93, 0x5e, 0xf3, 0xd0, 0x27, 0xf2, 0x3f, 0x30, 0x0b, 0x18, 0xc6, 0x63, 0x1b,
+	0x43, 0xa9, 0xbf, 0xb3, 0x46, 0xeb, 0x0a, 0xf6, 0xfa, 0x14, 0x4a, 0x12, 0x28, 0xf4, 0x93, 0x1c,
+	0xb9, 0x1a, 0x07, 0x13, 0x14, 0x9a, 0x1d, 0x41, 0xcd, 0x9b, 0xe9, 0xa6, 0xd1, 0x32, 0xda, 0x75,
+	0x67, 0x2e, 0x58, 0xd7, 0xb0, 0xff, 0x10, 0x28, 0x9d, 0xbf, 0x74, 0x50, 0x49, 0x12, 0x0a, 0xd9,
+	0x31, 0x40, 0xde, 0xa5, 0x4c, 0xa3, 0xf5, 0xaf, 0x5d, 0x77, 0x16, 0x14, 0xeb, 0x1e, 0x0e, 0xee,
+	0x50, 0xf7, 0x49, 0x8c, 0x03, 0x3f, 0x8e, 0x5c, 0x1d, 0x90, 0x70, 0xf0, 0x33, 0x46, 0xa5, 0x19,
+	0x83, 0xff, 0xc2, 0x0d, 0x31, 0x1d, 0x56, 0x73, 0xd2, 0x3a, 0xd9, 0x22, 0xf9, 0x2a, 0xe9, 0x7a,
+	0x68, 0x56, 0x53, 0x63, 0x2e, 0x58, 0x37, 0x60, 0xae, 0x87, 0x4d, 0x17, 0x39, 0x81, 0x2d, 0x6f,
+	0xd1, 0x98, 0xfe, 0xc3, 0xb2, 0x78, 0xf1, 0x53, 0x85, 0xcd, 0xc7, 0x29, 0x2a, 0xf6, 0x0a, 0x3b,
+	0x2b, 0x28, 0x58, 0x83, 0x67, 0xec, 0xf8, 0x8c, 0x1d, 0x1f, 0x24, 0xec, 0x9a, 0x1d, 0x5e, 0xcc,
+	0x9a, 0x17, 0xb1, 0xb4, 0x2a, 0x5d, 0x83, 0x3d, 0xc3, 0xf6, 0x12, 0x31, 0x55, 0x9a, 0x7d, 0x5e,
+	0x96, 0x5d, 0x48, 0xdc, 0xaa, 0xb0, 0x2f, 0xd8, 0x5d, 0xc5, 0xc0, 0xec, 0xb2, 0x90, 0x12, 0xfa,
+	0xcd, 0xee, 0xdf, 0x1f, 0xcc, 0x06, 0xdf, 0x76, 0x5e, 0xce, 0xfc, 0x40, 0xbf, 0xc5, 0x43, 0xee,
+	0x51, 0x68, 0xa7, 0x47, 0x9a, 0x5d, 0xea, 0xbb, 0xbf, 0x7e, 0xad, 0xc3, 0x8d, 0x54, 0xba, 0xfc,
+	0x0d, 0x00, 0x00, 0xff, 0xff, 0x86, 0xd1, 0xf6, 0xd2, 0xce, 0x02, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -239,11 +241,11 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type OperatorClient interface {
-	// ComponentUpdate sends events to Dapr sidecars upon component changes.
+	// Sends events to Dapr sidecars upon component changes.
 	ComponentUpdate(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Operator_ComponentUpdateClient, error)
-	// GetComponents returns a list of available components
-	GetComponents(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetComponentResponse, error)
-	// GetConfiguration returns a given configuration by name
+	// Returns a list of available components
+	ListComponents(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListComponentResponse, error)
+	// Returns a given configuration by name
 	GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error)
 }
 
@@ -287,9 +289,9 @@ func (x *operatorComponentUpdateClient) Recv() (*ComponentUpdateEvent, error) {
 	return m, nil
 }
 
-func (c *operatorClient) GetComponents(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetComponentResponse, error) {
-	out := new(GetComponentResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/GetComponents", in, out, opts...)
+func (c *operatorClient) ListComponents(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListComponentResponse, error) {
+	out := new(ListComponentResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListComponents", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -307,11 +309,11 @@ func (c *operatorClient) GetConfiguration(ctx context.Context, in *GetConfigurat
 
 // OperatorServer is the server API for Operator service.
 type OperatorServer interface {
-	// ComponentUpdate sends events to Dapr sidecars upon component changes.
+	// Sends events to Dapr sidecars upon component changes.
 	ComponentUpdate(*empty.Empty, Operator_ComponentUpdateServer) error
-	// GetComponents returns a list of available components
-	GetComponents(context.Context, *empty.Empty) (*GetComponentResponse, error)
-	// GetConfiguration returns a given configuration by name
+	// Returns a list of available components
+	ListComponents(context.Context, *empty.Empty) (*ListComponentResponse, error)
+	// Returns a given configuration by name
 	GetConfiguration(context.Context, *GetConfigurationRequest) (*GetConfigurationResponse, error)
 }
 
@@ -322,8 +324,8 @@ type UnimplementedOperatorServer struct {
 func (*UnimplementedOperatorServer) ComponentUpdate(req *empty.Empty, srv Operator_ComponentUpdateServer) error {
 	return status.Errorf(codes.Unimplemented, "method ComponentUpdate not implemented")
 }
-func (*UnimplementedOperatorServer) GetComponents(ctx context.Context, req *empty.Empty) (*GetComponentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetComponents not implemented")
+func (*UnimplementedOperatorServer) ListComponents(ctx context.Context, req *empty.Empty) (*ListComponentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListComponents not implemented")
 }
 func (*UnimplementedOperatorServer) GetConfiguration(ctx context.Context, req *GetConfigurationRequest) (*GetConfigurationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfiguration not implemented")
@@ -354,20 +356,20 @@ func (x *operatorComponentUpdateServer) Send(m *ComponentUpdateEvent) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Operator_GetComponents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Operator_ListComponents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(OperatorServer).GetComponents(ctx, in)
+		return srv.(OperatorServer).ListComponents(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/GetComponents",
+		FullMethod: "/dapr.proto.operator.v1.Operator/ListComponents",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(OperatorServer).GetComponents(ctx, req.(*empty.Empty))
+		return srv.(OperatorServer).ListComponents(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -395,8 +397,8 @@ var _Operator_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*OperatorServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetComponents",
-			Handler:    _Operator_GetComponents_Handler,
+			MethodName: "ListComponents",
+			Handler:    _Operator_ListComponents_Handler,
 		},
 		{
 			MethodName: "GetConfiguration",
