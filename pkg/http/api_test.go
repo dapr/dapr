@@ -1225,7 +1225,6 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
 		handler := pipeline.Apply(router.Handler)
-		spec := config.TracingSpec{SamplingRate: "1"}
 		if err := fasthttp.Serve(f.ln, diag.SetTracingInHTTPMiddleware(handler, "fakeAppID", spec)); err != nil {
 			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
