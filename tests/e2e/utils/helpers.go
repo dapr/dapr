@@ -156,6 +156,7 @@ func HTTPDelete(url string) ([]byte, error) {
 	}
 
 	body, err := extractBody(res.Body)
+	defer res.Body.Close()
 	if err != nil {
 		return nil, err
 	}
