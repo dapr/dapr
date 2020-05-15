@@ -865,6 +865,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("test")
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -888,6 +889,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("test")
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
@@ -911,6 +913,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("test")
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)

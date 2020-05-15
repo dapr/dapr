@@ -573,6 +573,12 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
 
+		reqMetadata := map[string][]string{}
+		for k, v := range metadata {
+			reqMetadata[k] = []string{v}
+		}
+		req.WithMetadata(reqMetadata)
+
 		ctx := context.Background()
 		spanName := fmt.Sprintf("Binding: %s", bindingName)
 		// context.Background() can be considered as GRPC context and so using StartTracingServerSpanFromGRPCContext to generate span
