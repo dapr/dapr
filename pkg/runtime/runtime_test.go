@@ -839,6 +839,7 @@ func TestMTLS(t *testing.T) {
 type mockBinding struct {
 	hasError bool
 	data     string
+	metadata map[string]string
 }
 
 func (b *mockBinding) Init(metadata bindings.Metadata) error {
@@ -847,9 +848,13 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 
 func (b *mockBinding) Read(handler func(*bindings.ReadResponse) error) error {
 	b.data = "test"
+	metadata := map[string]string{}
+	if b.metadata != nil {
+		metadata = b.metadata
+	}
 
 	err := handler(&bindings.ReadResponse{
-		Metadata: map[string]string{},
+		Metadata: metadata,
 		Data:     []byte(b.data),
 	})
 	b.hasError = err != nil
@@ -905,7 +910,7 @@ func TestReadInputBindings(t *testing.T) {
 		assert.True(t, b.hasError)
 	})
 
-	t.Run("binding has data", func(t *testing.T) {
+	t.Run("binding has data and metadata", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -913,7 +918,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("test")
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData([]byte("test"), "application/json")
-		fakeReq.WithMetadata(map[string][]string{})
+		fakeReq.WithMetadata(map[string][]string{"bindings": {"input"}})
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
@@ -922,7 +927,7 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 		rt.appChannel = mockAppChannel
 
-		b := mockBinding{}
+		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
 		rt.readFromBinding("test", &b)
 
 		assert.Equal(t, "test", b.data)
