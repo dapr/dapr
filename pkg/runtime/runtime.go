@@ -397,7 +397,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			log.Debug("received component update")
 
 			var component components_v1alpha1.Component
-			err = json.Unmarshal(c.Component.Value, &component)
+			err = json.Unmarshal(c.GetComponent(), &component)
 			if err != nil {
 				log.Warnf("error deserializing component: %s", err)
 				continue

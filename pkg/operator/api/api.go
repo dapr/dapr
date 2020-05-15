@@ -16,7 +16,6 @@ import (
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,20 +79,18 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 		return nil, fmt.Errorf("error marshalling configuration: %s", err)
 	}
 	return &operatorv1pb.GetConfigurationResponse{
-		Configuration: &any.Any{
-			Value: b,
-		},
+		Configuration: b,
 	}, nil
 }
 
 // GetComponents returns a list of Dapr components
-func (a *apiServer) GetComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.GetComponentResponse, error) {
+func (a *apiServer) ListComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	components, err := a.Client.ComponentsV1alpha1().Components(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error getting components: %s", err)
 	}
-	resp := &operatorv1pb.GetComponentResponse{
-		Components: []*any.Any{},
+	resp := &operatorv1pb.ListComponentResponse{
+		Components: [][]byte{},
 	}
 	for _, c := range components.Items {
 		b, err := json.Marshal(&c)
@@ -101,9 +98,7 @@ func (a *apiServer) GetComponents(ctx context.Context, in *empty.Empty) (*operat
 			log.Warnf("error marshalling component: %s", err)
 			continue
 		}
-		resp.Components = append(resp.Components, &any.Any{
-			Value: b,
-		})
+		resp.Components = append(resp.Components, b)
 	}
 	return resp, nil
 }
@@ -120,9 +115,7 @@ func (a *apiServer) ComponentUpdate(in *empty.Empty, srv operatorv1pb.Operator_C
 				return
 			}
 			err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
-				Component: &any.Any{
-					Value: b,
-				},
+				Component: b,
 			})
 			if err != nil {
 				log.Warnf("error updating sidecar with component %s (%s): %s", c.GetName(), c.Spec.Type, err)
