@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc"
@@ -26,21 +27,27 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		newCtx := NewContext(ctx, sc)
 		var err error
 		var resp interface{}
+		var span *trace.Span
 
 		// do not start the client span if the request is local service invocation call
-		if isLocalServiceInvocationMethod(req, method, appID) {
-			resp, err = handler(newCtx, req)
+		if isLocalServiceInvocationMethod(method) {
+			if m, ok := req.(*internalv1pb.InternalInvokeRequest); ok {
+				method = m.Message.Method
+			}
+			_, span = StartTracingServerSpanFromGRPCContext(newCtx, method, spec)
+
 		} else {
-			_, span := StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
+			_, span = StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
 
-			// build new context now on top of passed root context with started span context
-			newCtx = NewContext(ctx, span.SpanContext())
-			resp, err = handler(newCtx, req)
-
-			UpdateSpanStatusFromError(span, err, method)
-
-			defer span.End()
 		}
+
+		// build new context now on top of passed root context with started span context
+		newCtx = NewContext(ctx, span.SpanContext())
+		resp, err = handler(newCtx, req)
+
+		UpdateSpanStatusFromError(span, err, method)
+
+		defer span.End()
 
 		return resp, err
 	}
@@ -122,9 +129,6 @@ func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span)
 	}
 }
 
-func isLocalServiceInvocationMethod(req interface{}, method, appID string) bool {
-	if !strings.Contains(method, "/CallLocal") {
-		return false
-	}
-	return true
+func isLocalServiceInvocationMethod(method string) bool {
+	return strings.Contains(method, "/CallLocal")
 }

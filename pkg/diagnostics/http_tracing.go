@@ -39,7 +39,7 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 		path := string(ctx.Request.URI().Path())
 		method := ctx.Request.Header.Method()
 
-		if isLocalServiceInvocationRequest(appID, path) || isHealthzRequest(path) {
+		if isHealthzRequest(path) {
 			SpanContextToRequest(sc, &ctx.Request)
 			next(ctx)
 		} else {
@@ -107,16 +107,6 @@ func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
 			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
 		}
 	})
-}
-
-func isLocalServiceInvocationRequest(appID, name string) bool {
-	if strings.Contains(name, "/invoke/") {
-		targetAppID := extractAppID(name)
-		if targetAppID == appID {
-			return true
-		}
-	}
-	return false
 }
 
 func isHealthzRequest(name string) bool {
