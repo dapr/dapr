@@ -7,33 +7,36 @@ syntax = "proto3";
 
 package dapr.proto.operator.v1;
 
-import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/operator/v1";
 
 service Operator {
-  // ComponentUpdate sends events to Dapr sidecars upon component changes.
+  // Sends events to Dapr sidecars upon component changes.
   rpc ComponentUpdate (google.protobuf.Empty) returns (stream ComponentUpdateEvent) {}
-  // GetComponents returns a list of available components
-  rpc GetComponents (google.protobuf.Empty) returns (GetComponentResponse) {}
-  // GetConfiguration returns a given configuration by name
+  // Returns a list of available components
+  rpc ListComponents (google.protobuf.Empty) returns (ListComponentResponse) {}
+  // Returns a given configuration by name
   rpc GetConfiguration (GetConfigurationRequest) returns (GetConfigurationResponse) {}
 }
 
+// ComponentUpdateEvent includes the updated component event.
 message ComponentUpdateEvent {
-  google.protobuf.Any component = 1;
+  bytes component = 1;
 }
 
-message GetComponentResponse {
-  repeated google.protobuf.Any components = 1;
+// ListComponentResponse includes the list of available components 
+message ListComponentResponse {
+  repeated bytes components = 1;
 }
 
+// GetConfigurationRequest is the request message to get the configuration.
 message GetConfigurationRequest {
   string name = 1;
   string namespace = 2;
 }
 
+// GetConfigurationResponse includes the requested configuration.
 message GetConfigurationResponse {
-  google.protobuf.Any configuration = 1;
+  bytes configuration = 1;
 }
