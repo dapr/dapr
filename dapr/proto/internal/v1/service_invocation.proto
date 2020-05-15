@@ -5,91 +5,77 @@
 
 syntax = "proto3";
 
-package dapr.proto.daprinternal.v1;
+package dapr.proto.internal.v1;
 
 import "dapr/proto/common/v1/common.proto";
-import "dapr/proto/daprinternal/v1/apiversion.proto";
-import "dapr/proto/daprinternal/v1/status.proto";
+import "dapr/proto/internal/v1/apiversion.proto";
+import "dapr/proto/internal/v1/status.proto";
 
-option go_package = "github.com/dapr/dapr/pkg/proto/daprinternal/v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/internal/v1";
 
-// DaprInternal service is used to exchange the data between 
+// ServiceInvocation service is used to exchange the data between 
 // caller dapr runtime and callee dapr runtime.
 //
 // The request message includes caller's HTTP/gRPC request
 // and deliver callee's response including status code.
 // The response status of rpc methods represents of internal gRPC
 // connection status, not callee's response status.
-// Thus, DaprInternal gRPC response returns OK in most cases
+//
+// Thus, ServiceInvocation gRPC response returns OK in most cases
 // regardless of callee's response.
-service DaprInternal {
+service ServiceInvocation {
+  // Invokes a method of the specific actor.
   rpc CallActor (InternalInvokeRequest) returns (InternalInvokeResponse) {}
+
+  // Invokes a method of the specific service.
   rpc CallLocal (InternalInvokeRequest) returns (InternalInvokeResponse) {}
 }
 
 // Actor represents actor using actor_type and actor_id
 message Actor {
-  // actor_type is the type of actor.
-  //
-  // This field is required.
+  // Required. The type of actor.
   string actor_type = 1;
-  // actor_id is the id of actor type (actor_type)
-  //
-  // This field is required.
+
+  // Required. The ID of actor type (actor_type)
   string actor_id = 2;
 }
 
 // InternalInvokeRequest is the message to transfer caller's data to callee
 // for service invocaton. This includes callee's app id and caller's request data.
 message InternalInvokeRequest {
-  // ver is the version of Dapr API.
-  // 
-  // This field is required.
+  // Required. The version of Dapr runtime API.
   APIVersion ver = 1;
 
-  // metadata holds caller's HTTP headers or gRPC metadata.
-  // 
-  // This field is required.
+  // Required. metadata holds caller's HTTP headers or gRPC metadata.
   map<string, ListStringValue> metadata = 2;
 
-  // message includes caller's invocation request message.
-  // 
-  // This field is required.
+  // Required. message including caller's invocation request.
   common.v1.InvokeRequest message = 3;
 
-  // actor includes actor type and id. This field is used only for
+  // Actor type and id. This field is used only for
   // actor service invocation.
-  //
-  // This field is optional.
   Actor actor = 4;
 }
 
 // InternalInvokeResponse is the message to transfer callee's response to caller
 // for service invocaton.
 message InternalInvokeResponse {
-  // status is http/grpc status.
-  // 
-  // This field is required.
+  // Required. HTTP/gRPC status.
   Status status = 1;
 
-  // headers holds app channel response headers.
-  // 
-  // This field is required. 
+  // Required. The app callback response headers.
   map<string, ListStringValue> headers = 2;
 
-  // trailer holds app channel response trailers.
-  // this will be used only for gRPC app channel
-  // 
-  // This field is optional.
+  // App callback response trailers.
+  // This will be used only for gRPC app callback
   map<string, ListStringValue> trailers = 3;
 
-  // message includes callee's invocation response message.
-  // 
-  // This field is required.
+  // Callee's invocation response message.
   common.v1.InvokeResponse message = 4;
 }
 
 // ListStringValue represents string value array
 message ListStringValue {
+  // The array of string.
   repeated string values = 1;
 }

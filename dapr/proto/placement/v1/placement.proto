@@ -9,8 +9,8 @@ package dapr.proto.placement.v1;
 
 option go_package = "github.com/dapr/dapr/pkg/proto/placement/v1";
 
-// PlacementService service is used to report Dapr runtime host status.
-service PlacementService {
+// Placement service is used to report Dapr runtime host status.
+service Placement {
   rpc ReportDaprStatus(stream Host) returns (stream PlacementOrder) {}
 }
 
