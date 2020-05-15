@@ -326,8 +326,6 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}
 
-	diag.DefaultMonitoring.ActorActivated(actorTypeID.GetActorType())
-
 	return resp, nil
 }
 
