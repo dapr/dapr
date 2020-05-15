@@ -10,8 +10,7 @@ package dapr.proto.internal.v1;
 option go_package = "github.com/dapr/dapr/pkg/proto/internal/v1";
 
 // APIVersion represents the version of Dapr API.
-// Dapr and DaprClient service versions follows Dapr API version.
-// InternalInvoke service version is maintained separately.
+// Dapr and AppCallback service versions follows Dapr API version.
 enum APIVersion {
   // unspecified apiversion
   APIVERSION_UNSPECIFIED = 0;
