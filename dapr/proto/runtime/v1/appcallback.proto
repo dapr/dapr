@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 
-package dapr.proto.appcallback.v1;
+package dapr.proto.dapr.v1;
 
 import "google/protobuf/empty.proto";
 import "dapr/proto/common/v1/common.proto";
@@ -13,7 +13,7 @@ import "dapr/proto/common/v1/common.proto";
 option csharp_namespace = "Dapr.AppCallback.Autogen.Grpc.v1";
 option java_outer_classname = "DaprAppCallbackProtos";
 option java_package = "io.dapr.v1";
-option go_package = "github.com/dapr/dapr/pkg/proto/appcallback/v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1";
 
 // AppCallback V1 allows user application to interact with Dapr runtime.
 // User application needs to implement AppCallback service if it needs to
@@ -108,7 +108,7 @@ message BindingEventResponse {
   bytes data = 4;
 
   // The concurrency of output bindings to send data to
-  // 'to' output bindings list. The default is SEQUENTIAL.
+  // "to" output bindings list. The default is SEQUENTIAL.
   BindingEventConcurrency concurrency = 5;
 }
 
