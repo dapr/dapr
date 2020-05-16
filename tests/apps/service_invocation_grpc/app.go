@@ -18,7 +18,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
+	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -43,7 +43,7 @@ func main() {
 
 	/* #nosec */
 	s := grpc.NewServer()
-	pb.RegisterDaprClientServer(s, &server{})
+	pb.RegisterAppCallbackServer(s, &server{})
 
 	fmt.Println("Client starting...")
 
@@ -118,9 +118,9 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*c
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
 // To subscribe to a topic named TopicA
-func (s *server) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetTopicSubscriptionsEnvelope, error) {
-	return &pb.GetTopicSubscriptionsEnvelope{
-		Subscriptions: []*pb.TopicSubscriptionEnvelope{
+func (s *server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
+	return &pb.ListTopicSubscriptionsResponse{
+		Subscriptions: []*pb.TopicSubscription{
 			{
 				Topic: "TopicA",
 			},
@@ -130,20 +130,20 @@ func (s *server) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*p
 
 // Dapper will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
 // To invoke our app with a binding named storage
-func (s *server) GetBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetBindingsSubscriptionsEnvelope, error) {
-	return &pb.GetBindingsSubscriptionsEnvelope{
+func (s *server) ListBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*pb.ListBindingsSubscriptionsResponse, error) {
+	return &pb.ListBindingsSubscriptionsResponse{
 		Bindings: []string{"storage"},
 	}, nil
 }
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata
-func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventEnvelope) (*pb.BindingResponseEnvelope, error) {
+func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
 	fmt.Println("Invoked from binding")
-	return &pb.BindingResponseEnvelope{}, nil
+	return &pb.BindingEventResponse{}, nil
 }
 
 // This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 0.3 envelope.
-func (s *server) OnTopicEvent(ctx context.Context, in *pb.CloudEventEnvelope) (*empty.Empty, error) {
+func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*empty.Empty, error) {
 	fmt.Println("Topic message arrived")
 	return &empty.Empty{}, nil
 }

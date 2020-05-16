@@ -22,9 +22,8 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
-	"github.com/golang/protobuf/ptypes/any"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
@@ -51,13 +50,13 @@ type API interface {
 	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 
 	// Dapr Service methods
-	PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error)
-	InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
-	InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error)
-	GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*daprv1pb.GetStateResponseEnvelope, error)
-	GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*daprv1pb.GetSecretResponseEnvelope, error)
-	SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*empty.Empty, error)
-	DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope) (*empty.Empty, error)
+	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error)
+	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
+	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*empty.Empty, error)
+	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
+	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
+	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
+	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -136,7 +135,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), nil
 }
 
-func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
+func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
 		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
@@ -145,7 +144,7 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 	body := []byte{}
 
 	if in.Data != nil {
-		body = in.Data.Value
+		body = in.Data
 	}
 
 	var span *trace.Span
@@ -172,7 +171,7 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 	return &empty.Empty{}, nil
 }
 
-func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
+func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
@@ -202,12 +201,12 @@ func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceReque
 	return resp.Message(), respError
 }
 
-func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error) {
+func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*empty.Empty, error) {
 	req := &bindings.WriteRequest{
 		Metadata: in.Metadata,
 	}
 	if in.Data != nil {
-		req.Data = in.Data.Value
+		req.Data = in.Data
 	}
 
 	var span *trace.Span
@@ -222,7 +221,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvel
 	return &empty.Empty{}, nil
 }
 
-func (a *api) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*daprv1pb.GetStateResponseEnvelope, error) {
+func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -250,15 +249,15 @@ func (a *api) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*dap
 		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
 
-	response := &daprv1pb.GetStateResponseEnvelope{}
+	response := &runtimev1pb.GetStateResponse{}
 	if getResponse != nil {
 		response.Etag = getResponse.ETag
-		response.Data = &any.Any{Value: getResponse.Data}
+		response.Data = getResponse.Data
 	}
 	return response, nil
 }
 
-func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*empty.Empty, error) {
+func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -274,7 +273,7 @@ func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*e
 		req := state.SetRequest{
 			Key:      a.getModifiedStateKey(s.Key),
 			Metadata: s.Metadata,
-			Value:    s.Value.Value,
+			Value:    s.Value,
 			ETag:     s.Etag,
 		}
 		if s.Options != nil {
@@ -310,7 +309,7 @@ func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*e
 	return &empty.Empty{}, nil
 }
 
-func (a *api) DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope) (*empty.Empty, error) {
+func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -365,7 +364,7 @@ func (a *api) getModifiedStateKey(key string) string {
 	return key
 }
 
-func (a *api) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*daprv1pb.GetSecretResponseEnvelope, error) {
+func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
 	}
@@ -392,7 +391,7 @@ func (a *api) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*d
 		return nil, fmt.Errorf("ERR_SECRET_GET: %s", err)
 	}
 
-	response := &daprv1pb.GetSecretResponseEnvelope{}
+	response := &runtimev1pb.GetSecretResponse{}
 	if getResponse.Data != nil {
 		response.Data = getResponse.Data
 	}

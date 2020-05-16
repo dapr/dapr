@@ -20,8 +20,8 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
@@ -55,32 +55,32 @@ func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalIn
 	return resp.Proto(), nil
 }
 
-func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
+func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
+func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	return &commonv1pb.InvokeResponse{}, nil
 }
 
-func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error) {
+func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*daprv1pb.GetStateResponseEnvelope, error) {
-	return &daprv1pb.GetStateResponseEnvelope{}, nil
+func (m *mockGRPCAPI) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
+	return &runtimev1pb.GetStateResponse{}, nil
 }
 
-func (m *mockGRPCAPI) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*empty.Empty, error) {
+func (m *mockGRPCAPI) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope) (*empty.Empty, error) {
+func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*daprv1pb.GetSecretResponseEnvelope, error) {
-	return &daprv1pb.GetSecretResponseEnvelope{}, nil
+func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
+	return &runtimev1pb.GetSecretResponse{}, nil
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
@@ -133,7 +133,7 @@ func startTestServer(port int) *grpc_go.Server {
 
 	server := grpc_go.NewServer()
 	go func() {
-		daprv1pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		runtimev1pb.RegisterDaprServer(server, &mockGRPCAPI{})
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -167,7 +167,7 @@ func startDaprAPIServer(port int, testAPIServer *api) *grpc_go.Server {
 
 	server := grpc_go.NewServer()
 	go func() {
-		daprv1pb.RegisterDaprServer(server, testAPIServer)
+		runtimev1pb.RegisterDaprServer(server, testAPIServer)
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -327,8 +327,8 @@ func TestInvokeService(t *testing.T) {
 		defer clientConn.Close()
 
 		// act
-		client := daprv1pb.NewDaprClient(clientConn)
-		req := &daprv1pb.InvokeServiceRequest{
+		client := runtimev1pb.NewDaprClient(clientConn)
+		req := &runtimev1pb.InvokeServiceRequest{
 			Id: "fakeAppID",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "fakeMethod",
@@ -380,8 +380,8 @@ func TestInvokeService(t *testing.T) {
 		defer clientConn.Close()
 
 		// act
-		client := daprv1pb.NewDaprClient(clientConn)
-		req := &daprv1pb.InvokeServiceRequest{
+		client := runtimev1pb.NewDaprClient(clientConn)
+		req := &runtimev1pb.InvokeServiceRequest{
 			Id: "fakeAppID",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "fakeMethod",
@@ -414,12 +414,12 @@ func TestSaveState(t *testing.T) {
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	client := daprv1pb.NewDaprClient(clientConn)
-	request := &daprv1pb.SaveStateEnvelope{
-		Requests: []*daprv1pb.StateRequest{
+	client := runtimev1pb.NewDaprClient(clientConn)
+	request := &runtimev1pb.SaveStateRequest{
+		Requests: []*commonv1pb.StateSaveRequest{
 			{
 				Key:   "1",
-				Value: &any.Any{Value: []byte("2")},
+				Value: []byte("2"),
 			},
 		},
 	}
@@ -437,8 +437,8 @@ func TestGetState(t *testing.T) {
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	client := daprv1pb.NewDaprClient(clientConn)
-	_, err := client.GetState(context.Background(), &daprv1pb.GetStateEnvelope{})
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.GetState(context.Background(), &runtimev1pb.GetStateRequest{})
 	assert.Nil(t, err)
 }
 
@@ -451,8 +451,8 @@ func TestDeleteState(t *testing.T) {
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	client := daprv1pb.NewDaprClient(clientConn)
-	_, err := client.DeleteState(context.Background(), &daprv1pb.DeleteStateEnvelope{})
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{})
 	assert.Nil(t, err)
 }
 
@@ -465,8 +465,8 @@ func TestPublishTopic(t *testing.T) {
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	client := daprv1pb.NewDaprClient(clientConn)
-	_, err := client.PublishEvent(context.Background(), &daprv1pb.PublishEventEnvelope{})
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
 	assert.Nil(t, err)
 }
 
@@ -479,7 +479,7 @@ func TestInvokeBinding(t *testing.T) {
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	client := daprv1pb.NewDaprClient(clientConn)
-	_, err := client.InvokeBinding(context.Background(), &daprv1pb.InvokeBindingEnvelope{})
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{})
 	assert.Nil(t, err)
 }

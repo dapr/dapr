@@ -25,7 +25,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/placement"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/mitchellh/mapstructure"

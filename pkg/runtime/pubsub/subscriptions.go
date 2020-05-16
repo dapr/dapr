@@ -8,7 +8,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	daprclientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/golang/protobuf/ptypes/empty"
 )
 
@@ -56,10 +56,10 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 	return subscriptions
 }
 
-func GetSubscriptionsGRPC(channel daprclientv1pb.DaprClientClient, log logger.Logger) []Subscription {
+func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger) []Subscription {
 	var subscriptions []Subscription
 
-	resp, err := channel.GetTopicSubscriptions(context.Background(), &empty.Empty{})
+	resp, err := channel.ListTopicSubscriptions(context.Background(), &empty.Empty{})
 	if err != nil {
 		log.Errorf(getTopicsError, err)
 	} else {
