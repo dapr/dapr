@@ -35,15 +35,9 @@ service AppCallback {
   rpc OnBindingEvent(BindingEventRequest) returns (BindingEventResponse) {}
 }
 
-// TopicEventRequest conveys the event which publisher sends.
-message TopicEventRequest {
-  // The message compatible with CloudEvent spec V1.
-  CloudEventV1 event = 1;
-}
-
-// CloudEventV1 message is compatiable with CloudEvent spec v1.0
+// TopicEventRequest message is compatiable with CloudEvent spec v1.0
 // https://github.com/cloudevents/spec/blob/v1.0/spec.md
-message CloudEventV1 {
+message TopicEventRequest {
   // id identifies the event. Producers MUST ensure that source + id 
   // is unique for each distinct event. If a duplicate event is re-sent
   // (e.g. due to a network error) it MAY have the same id. 
