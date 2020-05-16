@@ -128,10 +128,10 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*
 	}, nil
 }
 
-// Dapper will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
+// Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
 // To invoke our app with a binding named storage
-func (s *server) ListBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*pb.ListBindingsSubscriptionsResponse, error) {
-	return &pb.ListBindingsSubscriptionsResponse{
+func (s *server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.ListInputBindingsResponse, error) {
+	return &pb.ListInputBindingsResponse{
 		Bindings: []string{"storage"},
 	}, nil
 }

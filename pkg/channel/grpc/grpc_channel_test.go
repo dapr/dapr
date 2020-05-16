@@ -50,8 +50,8 @@ func (m *mockServer) ListTopicSubscriptions(ctx context.Context, in *empty.Empty
 	return &runtimev1pb.ListTopicSubscriptionsResponse{}, nil
 }
 
-func (m *mockServer) ListBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*runtimev1pb.ListBindingsSubscriptionsResponse, error) {
-	return &runtimev1pb.ListBindingsSubscriptionsResponse{}, nil
+func (m *mockServer) ListInputBindings(ctx context.Context, in *empty.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
+	return &runtimev1pb.ListInputBindingsResponse{}, nil
 }
 
 func (m *mockServer) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
