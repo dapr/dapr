@@ -135,7 +135,6 @@ message GetSecretRequest {
   map<string,string> metadata = 3;
 }
 
-
 // GetSecretResponse is the response mesage to convey the requested secret.
 message GetSecretResponse {
   // data is the secret value. Some secret store, such as kubernetes secret
