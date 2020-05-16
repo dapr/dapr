@@ -9,9 +9,9 @@ import commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 
 func stateConsistencyToString(c commonv1pb.StateOptions_StateConsistency) string {
 	switch c {
-	case commonv1pb.StateOptions_EVENTUAL:
+	case commonv1pb.StateOptions_CONSISTENCY_EVENTUAL:
 		return "eventual"
-	case commonv1pb.StateOptions_STRONG:
+	case commonv1pb.StateOptions_CONSISTENCY_STRONG:
 		return "strong"
 	}
 
@@ -20,9 +20,9 @@ func stateConsistencyToString(c commonv1pb.StateOptions_StateConsistency) string
 
 func stateConcurrencyToString(c commonv1pb.StateOptions_StateConcurrency) string {
 	switch c {
-	case commonv1pb.StateOptions_FIRST_WRITE:
+	case commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE:
 		return "first-write"
-	case commonv1pb.StateOptions_LAST_WRITE:
+	case commonv1pb.StateOptions_CONCURRENCY_LAST_WRITE:
 		return "last-write"
 	}
 
@@ -31,9 +31,9 @@ func stateConcurrencyToString(c commonv1pb.StateOptions_StateConcurrency) string
 
 func retryPatternToString(r commonv1pb.StateRetryPolicy_RetryPattern) string {
 	switch r {
-	case commonv1pb.StateRetryPolicy_LINEAR:
+	case commonv1pb.StateRetryPolicy_RETRY_LINEAR:
 		return "linear"
-	case commonv1pb.StateRetryPolicy_EXPONENTIAL:
+	case commonv1pb.StateRetryPolicy_RETRY_EXPONENTIAL:
 		return "exponential"
 	}
 

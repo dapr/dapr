@@ -59,9 +59,12 @@ import (
 )
 
 const (
-	appConfigEndpoint   = "dapr/config"
-	parallelConcurrency = "parallel"
-	actorStateStore     = "actorStateStore"
+	appConfigEndpoint = "dapr/config"
+	actorStateStore   = "actorStateStore"
+
+	// output bindings concurrency
+	bindingsConcurrnecyParallel   = "parallel"
+	bindingsConcurrnecySequential = "sequential"
 )
 
 var log = logger.NewLogger("dapr.runtime")
@@ -510,7 +513,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 			return err
 		}
 
-		if response.Concurrency == parallelConcurrency {
+		if response.Concurrency == bindingsConcurrnecyParallel {
 			a.sendBatchOutputBindingsParallel(response.To, b)
 		} else {
 			return a.sendBatchOutputBindingsSequential(response.To, b)
@@ -544,12 +547,12 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 		if resp != nil {
-			switch resp.Concurrency {
-			case runtimev1pb.BindingEventResponse_SEQUENTIAL:
-				response.Concurrency = "sequential"
-			case runtimev1pb.BindingEventResponse_PARALLEL:
-				response.Concurrency = "parallel"
+			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
+				response.Concurrency = bindingsConcurrnecyParallel
+			} else {
+				response.Concurrency = bindingsConcurrnecySequential
 			}
+
 			response.To = resp.To
 
 			if resp.Data != nil {
