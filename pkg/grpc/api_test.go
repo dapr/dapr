@@ -20,7 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/golang/protobuf/proto"
@@ -116,7 +116,7 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 	)
 
 	go func() {
-		internalv1pb.RegisterDaprInternalServer(server, &mockGRPCAPI{})
+		internalv1pb.RegisterServiceInvocationServer(server, &mockGRPCAPI{})
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -150,7 +150,7 @@ func startInternalServer(port int, testAPIServer *api) *grpc_go.Server {
 
 	server := grpc_go.NewServer()
 	go func() {
-		internalv1pb.RegisterDaprInternalServer(server, testAPIServer)
+		internalv1pb.RegisterServiceInvocationServer(server, testAPIServer)
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -198,7 +198,7 @@ func TestCallActorWithTracing(t *testing.T) {
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	client := internalv1pb.NewDaprInternalClient(clientConn)
+	client := internalv1pb.NewServiceInvocationClient(clientConn)
 
 	request := invokev1.NewInvokeMethodRequest("method")
 	request.WithActor("test-actor", "actor-1")
@@ -217,7 +217,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
-	client := internalv1pb.NewDaprInternalClient(clientConn)
+	client := internalv1pb.NewServiceInvocationClient(clientConn)
 	request := invokev1.NewInvokeMethodRequest("method").Proto()
 
 	resp, err := client.CallLocal(context.Background(), request)
@@ -238,7 +238,7 @@ func TestCallLocal(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		client := internalv1pb.NewDaprInternalClient(clientConn)
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
 		request := invokev1.NewInvokeMethodRequest("method").Proto()
 
 		_, err := client.CallLocal(context.Background(), request)
@@ -258,7 +258,7 @@ func TestCallLocal(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		client := internalv1pb.NewDaprInternalClient(clientConn)
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
 		request := &internalv1pb.InternalInvokeRequest{
 			Message: nil,
 		}
@@ -281,7 +281,7 @@ func TestCallLocal(t *testing.T) {
 		clientConn := createTestClient(port)
 		defer clientConn.Close()
 
-		client := internalv1pb.NewDaprInternalClient(clientConn)
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
 		request := invokev1.NewInvokeMethodRequest("method").Proto()
 
 		_, err := client.CallLocal(context.Background(), request)

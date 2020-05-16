@@ -13,7 +13,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

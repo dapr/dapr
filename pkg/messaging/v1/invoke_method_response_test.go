@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"

@@ -9,7 +9,7 @@ import (
 	"errors"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	any "github.com/golang/protobuf/ptypes/any"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/metadata"

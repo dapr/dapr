@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 const (

@@ -25,7 +25,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/placement"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/mitchellh/mapstructure"
@@ -352,7 +352,7 @@ func (a *actorsRuntime) callRemoteActor(
 	defer span.End()
 
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
-	client := internalv1pb.NewDaprInternalClient(conn)
+	client := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := client.CallActor(ctx, req.Proto())
 	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
 	if err != nil {

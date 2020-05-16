@@ -22,7 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -235,7 +235,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	req := state.GetRequest{
 		Key: a.getModifiedStateKey(in.Key),
 		Options: state.GetStateOption{
-			Consistency: in.Consistency,
+			Consistency: stateConsistencyToString(in.Consistency),
 		},
 	}
 
@@ -278,13 +278,13 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
-				Consistency: s.Options.Consistency,
-				Concurrency: s.Options.Concurrency,
+				Consistency: stateConsistencyToString(s.Options.Consistency),
+				Concurrency: stateConcurrencyToString(s.Options.Concurrency),
 			}
 			if s.Options.RetryPolicy != nil {
 				req.Options.RetryPolicy = state.RetryPolicy{
 					Threshold: int(s.Options.RetryPolicy.Threshold),
-					Pattern:   s.Options.RetryPolicy.Pattern,
+					Pattern:   retryPatternToString(s.Options.RetryPolicy.Pattern),
 				}
 				if s.Options.RetryPolicy.Interval != nil {
 					dur, err := duration(s.Options.RetryPolicy.Interval)
@@ -326,14 +326,14 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
-			Concurrency: in.Options.Concurrency,
-			Consistency: in.Options.Consistency,
+			Concurrency: stateConcurrencyToString(in.Options.Concurrency),
+			Consistency: stateConsistencyToString(in.Options.Consistency),
 		}
 
 		if in.Options.RetryPolicy != nil {
 			retryPolicy := state.RetryPolicy{
 				Threshold: int(in.Options.RetryPolicy.Threshold),
-				Pattern:   in.Options.RetryPolicy.Pattern,
+				Pattern:   retryPatternToString(in.Options.RetryPolicy.Pattern),
 			}
 			if in.Options.RetryPolicy.Interval != nil {
 				dur, err := duration(in.Options.RetryPolicy.Interval)
