@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc"
@@ -19,27 +19,33 @@ import (
 
 const grpcTraceContextKey = "grpc-trace-bin"
 
-// SetTracingSpanContextGRPCMiddlewareStream sets the trace spancontext into gRPC stream
-func SetTracingSpanContextGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
-	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		ctx := stream.Context()
-		sc := GetSpanContextFromGRPC(ctx, spec)
-		ctx = NewContext(ctx, sc)
-		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = ctx
-
-		err := handler(srv, wrappedStream)
-
-		return err
-	}
-}
-
-// SetTracingSpanContextGRPCMiddlewareUnary sets the trace spancontext into gRPC unary calls
-func SetTracingSpanContextGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
+// SetTracingInGRPCMiddlewareUnary sets the trace context or starts the trace client span based on request
+func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		sc := GetSpanContextFromGRPC(ctx, spec)
-		ctx = NewContext(ctx, sc)
-		resp, err := handler(ctx, req)
+		method := info.FullMethod
+		newCtx := NewContext(ctx, sc)
+		var err error
+		var resp interface{}
+		var span *trace.Span
+
+		// do not start the client span if the request is local service invocation call
+		if isLocalServiceInvocationMethod(method) {
+			if m, ok := req.(*internalv1pb.InternalInvokeRequest); ok {
+				method = m.Message.Method
+			}
+			_, span = StartTracingServerSpanFromGRPCContext(newCtx, method, spec)
+		} else {
+			_, span = StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
+		}
+
+		// build new context now on top of passed root context with started span context
+		newCtx = NewContext(ctx, span.SpanContext())
+		resp, err = handler(newCtx, req)
+
+		UpdateSpanStatusFromError(span, err, method)
+
+		defer span.End()
 
 		return resp, err
 	}
@@ -119,4 +125,8 @@ func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span)
 			span.AddAttributes(trace.StringAttribute(k, v))
 		}
 	}
+}
+
+func isLocalServiceInvocationMethod(method string) bool {
+	return strings.Contains(method, "/CallLocal")
 }

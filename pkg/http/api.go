@@ -28,7 +28,6 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp"
 	fhttp "github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 )
 
@@ -280,6 +279,9 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 	body := reqCtx.PostBody()
 
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
+	diag.SpanContextToRequest(sc, &reqCtx.Request)
+
 	var req OutputBindingRequest
 	err := a.json.Unmarshal(body, &req)
 	if err != nil {
@@ -294,14 +296,6 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		respondWithError(reqCtx, 500, msg)
 		return
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("Binding: %s", name)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
 
 	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
 		Metadata: req.Metadata,
@@ -330,14 +324,6 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		respondWithError(reqCtx, 401, msg)
 		return
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("GetState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
@@ -408,14 +394,6 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		},
 	}
 
-	var span *trace.Span
-	spanName := fmt.Sprintf("DeleteState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
-
 	err := a.stateStores[storeName].Delete(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
@@ -455,14 +433,6 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Name:     key,
 		Metadata: metadata,
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("GetSecret: %s", secretStoreName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
 
 	resp, err := a.secretStores[secretStoreName].GetSecret(req)
 	if err != nil {
@@ -506,14 +476,6 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	for i, r := range reqs {
 		reqs[i].Key = a.getModifiedStateKey(r.Key)
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("SaveState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
 
 	err = a.stateStores[storeName].BulkSet(reqs)
 	if err != nil {
@@ -1000,14 +962,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 
 	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	var span *trace.Span
-	spanName := fmt.Sprintf("PublishEvent: %s", topic)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
-
-	corID := diag.SpanContextToString(span.SpanContext())
+	corID := diag.SpanContextToString(sc)
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 
 	b, err := a.json.Marshal(envelope)
