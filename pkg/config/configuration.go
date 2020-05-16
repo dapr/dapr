@@ -103,11 +103,11 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient operat
 	if err != nil {
 		return nil, err
 	}
-	if resp.Configuration == nil {
+	if resp.GetConfiguration() == nil {
 		return nil, fmt.Errorf("configuration %s not found", config)
 	}
 	var conf Configuration
-	err = json.Unmarshal(resp.Configuration.Value, &conf)
+	err = json.Unmarshal(resp.GetConfiguration(), &conf)
 	if err != nil {
 		return nil, err
 	}

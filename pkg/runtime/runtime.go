@@ -397,7 +397,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			log.Debug("received component update")
 
 			var component components_v1alpha1.Component
-			err = json.Unmarshal(c.Component.Value, &component)
+			err = json.Unmarshal(c.GetComponent(), &component)
 			if err != nil {
 				log.Warnf("error deserializing component: %s", err)
 				continue
@@ -572,6 +572,12 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		req := invokev1.NewInvokeMethodRequest(bindingName)
 		req.WithHTTPExtension(nethttp.MethodPost, "")
 		req.WithRawData(data, invokev1.JSONContentType)
+
+		reqMetadata := map[string][]string{}
+		for k, v := range metadata {
+			reqMetadata[k] = []string{v}
+		}
+		req.WithMetadata(reqMetadata)
 
 		ctx := context.Background()
 		spanName := fmt.Sprintf("Binding: %s", bindingName)
