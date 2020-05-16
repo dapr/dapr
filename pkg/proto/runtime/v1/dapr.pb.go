@@ -132,7 +132,7 @@ func (m *GetStateRequest) GetConsistency() v1.StateOptions_StateConsistency {
 	if m != nil {
 		return m.Consistency
 	}
-	return v1.StateOptions_EVENTUAL
+	return v1.StateOptions_CONSISTENCY_UNSPECIFIED
 }
 
 // GetStateResponse is the response conveying the state value and etag.
