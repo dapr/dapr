@@ -140,5 +140,5 @@ message GetSecretRequest {
 message GetSecretResponse {
   // data is the secret value. Some secret store, such as kubernetes secret
   // store, can save multiple secrets for single secret key.
-  map<string,string> data = 1;
+  map<string, string> data = 1;
 }

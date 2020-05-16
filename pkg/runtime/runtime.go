@@ -666,7 +666,7 @@ func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
 	client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-	resp, err := client.ListBindingsSubscriptions(context.Background(), &empty.Empty{})
+	resp, err := client.ListInputBindings(context.Background(), &empty.Empty{})
 	bindings := []string{}
 
 	if err == nil && resp != nil {
