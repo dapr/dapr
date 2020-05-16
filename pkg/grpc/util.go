@@ -12,7 +12,7 @@ func stateConsistencyToString(c commonv1pb.StateOptions_StateConsistency) string
 	case commonv1pb.StateOptions_EVENTUAL:
 		return "eventual"
 	case commonv1pb.StateOptions_STRONG:
-		return "string"
+		return "strong"
 	}
 
 	return ""
