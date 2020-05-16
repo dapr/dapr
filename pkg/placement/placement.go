@@ -26,7 +26,7 @@ type Service struct {
 	generation        int
 	entriesLock       *sync.RWMutex
 	entries           map[string]*Consistent
-	hosts             []placementv1pb.PlacementService_ReportDaprStatusServer
+	hosts             []placementv1pb.Placement_ReportDaprStatusServer
 	hostsEntitiesLock *sync.RWMutex
 	hostsEntities     map[string][]string
 	hostsLock         *sync.Mutex
@@ -50,7 +50,7 @@ func NewPlacementService() *Service {
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts
-func (p *Service) ReportDaprStatus(srv placementv1pb.PlacementService_ReportDaprStatusServer) error {
+func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 	p.hostsLock.Lock()
 	md, _ := metadata.FromIncomingContext(srv.Context())
@@ -65,7 +65,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.PlacementService_ReportDapr
 	p.hostsLock.Unlock()
 
 	// send the current placements
-	p.PerformTablesUpdate([]placementv1pb.PlacementService_ReportDaprStatusServer{srv},
+	p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
 		placementOptions{incrementGeneration: false})
 
 	monitoring.RecordHostsCount(len(p.hosts))
@@ -92,7 +92,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.PlacementService_ReportDapr
 }
 
 // RemoveHost removes the host from the hosts list
-func (p *Service) RemoveHost(srv placementv1pb.PlacementService_ReportDaprStatusServer) {
+func (p *Service) RemoveHost(srv placementv1pb.Placement_ReportDaprStatusServer) {
 	for i := len(p.hosts) - 1; i >= 0; i-- {
 		if p.hosts[i] == srv {
 			p.hosts = append(p.hosts[:i], p.hosts[i+1:]...)
@@ -102,7 +102,7 @@ func (p *Service) RemoveHost(srv placementv1pb.PlacementService_ReportDaprStatus
 
 // PerformTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
 // it then proceeds to update and then unlock once all runtimes have been updated
-func (p *Service) PerformTablesUpdate(hosts []placementv1pb.PlacementService_ReportDaprStatusServer,
+func (p *Service) PerformTablesUpdate(hosts []placementv1pb.Placement_ReportDaprStatusServer,
 	options placementOptions) {
 	p.updateLock.Lock()
 	defer p.updateLock.Unlock()
@@ -237,7 +237,7 @@ func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
 		log.Fatalf("error creating gRPC options: %s", err)
 	}
 	s := grpc.NewServer(opts...)
-	placementv1pb.RegisterPlacementServiceServer(s, p)
+	placementv1pb.RegisterPlacementServer(s, p)
 
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

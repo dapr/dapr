@@ -512,7 +512,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
-func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.PlacementService_ReportDaprStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.Placement_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
@@ -542,7 +542,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
-		client := placementv1pb.NewPlacementServiceClient(conn)
+		client := placementv1pb.NewPlacementClient(conn)
 		stream, err := client.ReportDaprStatus(ctx)
 		if err != nil {
 			log.Warnf("error establishing client to placement service: %v", err)
