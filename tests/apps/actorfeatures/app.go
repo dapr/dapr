@@ -156,6 +156,15 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	method := mux.Vars(r)["method"]
 	reminderOrTimer := mux.Vars(r)["reminderOrTimer"] != ""
 
+	actorID := createActorID(actorType, id)
+	log.Printf("storing, actorID is %s\n", actorID)
+
+	actors.Store(actorID, daprActor{
+		actorType: actorType,
+		id:        actorID,
+		value:     epoch(),
+	})
+
 	hostname, err := os.Hostname()
 	var data []byte
 	if method == "hostname" {
@@ -191,7 +200,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func activateDeactivateActorHandler(w http.ResponseWriter, r *http.Request) {
+func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
 
 	start := epoch()
@@ -206,18 +215,9 @@ func activateDeactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID := createActorID(actorType, id)
-
 	action := ""
-	_, ok := actors.Load(actorID)
-	if !ok && r.Method == "POST" {
-		action = "activation"
-		actors.Store(actorID, daprActor{
-			actorType: actorType,
-			id:        actorID,
-			value:     epoch(),
-		})
-	}
 
+	_, ok := actors.Load(actorID)
 	if ok && r.Method == "DELETE" {
 		action = "deactivation"
 		actors.Delete(actorID)
@@ -345,7 +345,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
 	router.HandleFunc("/actors/{actorType}/{id}/method/{reminderOrTimer}/{method}", actorMethodHandler).Methods("PUT")
-	router.HandleFunc("/actors/{actorType}/{id}", activateDeactivateActorHandler).Methods("POST", "DELETE")
+	router.HandleFunc("/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/{actorType}/{id}/{callType}/{method}", testCallActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
