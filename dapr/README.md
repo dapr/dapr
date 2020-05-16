@@ -1,13 +1,13 @@
 ## Overview
 
-| packages | description |
-|---------|-------------|
-| common  | common protos which are imported by multiple packages |
-| internal | internal gRPC and protobuf definitions which is used for Dapr internal |
-| runtime | Dapr and App Callback services and its associated protobuf messages |
-| operator | Dapr Operator gRPC service |
-| placement | Dapr Placement service |
-| sentry | Dapr Sentry for CA service |
+| packages  | description                                                            |
+|-----------|------------------------------------------------------------------------|
+| common    | common protos that are imported by multiple packages                   |
+| internals | internal gRPC and protobuf definitions which is used for Dapr internal |
+| runtime   | Dapr and App Callback services and its associated protobuf messages    |
+| operator  | Dapr Operator gRPC service                                             |
+| placement | Dapr Placement service                                                 |
+| sentry    | Dapr Sentry for CA service                                             |
 
 ## Proto client generation
 
