@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 
-package dapr.proto.dapr.v1;
+package dapr.proto.runtime.v1;
 
 import "google/protobuf/empty.proto";
 import "dapr/proto/common/v1/common.proto";
@@ -25,25 +25,22 @@ service AppCallback {
   // Lists all topics subscribed by this app.
   rpc ListTopicSubscriptions(google.protobuf.Empty) returns (ListTopicSubscriptionsResponse) {}
 
-  // Listens events from Pubsub
+  // Subscribes events from Pubsub
   rpc OnTopicEvent(TopicEventRequest) returns (google.protobuf.Empty) {}
 
   // Lists all input bindings subscribed by this app.
-  rpc ListBindingsSubscriptions(google.protobuf.Empty) returns (ListBindingsSubscriptionsResponse) {}
+  rpc ListInputBindings(google.protobuf.Empty) returns (ListInputBindingsResponse) {}
 
-  // Listens events from input bindings
+  // Listens events from the input bindings
+  //
+  // User application can save the states or send the events to the output
+  // bindings optionally by returning BindingEventResponse.
   rpc OnBindingEvent(BindingEventRequest) returns (BindingEventResponse) {}
 }
 
-// TopicEventRequest conveys the event which publisher sends.
-message TopicEventRequest {
-  // The message compatible with CloudEvent spec V1.
-  CloudEventV1 event = 1;
-}
-
-// CloudEventV1 message is compatiable with CloudEvent spec v1.0
+// TopicEventRequest message is compatiable with CloudEvent spec v1.0
 // https://github.com/cloudevents/spec/blob/v1.0/spec.md
-message CloudEventV1 {
+message TopicEventRequest {
   // id identifies the event. Producers MUST ensure that source + id 
   // is unique for each distinct event. If a duplicate event is re-sent
   // (e.g. due to a network error) it MAY have the same id. 
@@ -85,7 +82,7 @@ message BindingEventRequest {
 }
 
 // BindingEventResponse includes operations to save state or
-// send data to output bindings.
+// send data to output bindings optionally.
 message BindingEventResponse {
   // The name of state store where states are saved.
   string store_name = 1;
@@ -126,8 +123,8 @@ message TopicSubscription {
   map<string,string> metadata = 2;
 }
 
-// ListBindingsSubscriptionsResponse is the message including the list of input bindings.
-message ListBindingsSubscriptionsResponse {
+// ListInputBindingsResponse is the message including the list of input bindings.
+message ListInputBindingsResponse {
   // The list of input bindings.
   repeated string bindings = 1;
 }
