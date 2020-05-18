@@ -104,14 +104,15 @@ message StateOptions {
   // Enum describing the supported concurrency for state.
   enum StateConcurrency {
     CONCURRENCY_UNSPECIFIED = 0;
-    FIRST_WRITE = 1;
-    LAST_WRITE = 2;
+    CONCURRENCY_FIRST_WRITE = 1;
+    CONCURRENCY_LAST_WRITE = 2;
   }
 
   // Enum describing the supported consistency for state.
   enum StateConsistency {
-    EVENTUAL = 0;
-    STRONG = 1;
+    CONSISTENCY_UNSPECIFIED = 0;
+    CONSISTENCY_EVENTUAL = 1;
+    CONSISTENCY_STRONG = 2;
   }
 
   StateConcurrency concurrency = 1;
@@ -124,8 +125,8 @@ message StateRetryPolicy {
   // Enum describing the support retry pattern
   enum RetryPattern {
     RETRY_UNSPECIFIED = 0;
-    LINEAR = 1;
-    EXPONENTIAL = 2;
+    RETRY_LINEAR = 1;
+    RETRY_EXPONENTIAL = 2;
   }
 
   // Maximum number of retries.

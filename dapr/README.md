@@ -1,13 +1,13 @@
 ## Overview
 
-| packages | description |
-|---------|-------------|
-| common  | common protos which are imported by multiple packages |
-| internal | internal gRPC and protobuf definitions which is used for Dapr internal |
-| runtime | Dapr and App Callback services and its associated protobuf messages |
-| operator | Dapr Operator gRPC service |
-| placement | Dapr Placement service |
-| sentry | Dapr Sentry for CA service |
+| packages  | description                                                            |
+|-----------|------------------------------------------------------------------------|
+| common    | common protos that are imported by multiple packages                   |
+| internals | internal gRPC and protobuf definitions which is used for Dapr internal |
+| runtime   | Dapr and App Callback services and its associated protobuf messages    |
+| operator  | Dapr Operator gRPC service                                             |
+| placement | Dapr Placement service                                                 |
+| sentry    | Dapr Sentry for CA service                                             |
 
 ## Proto client generation
 
@@ -29,5 +29,5 @@ protoc -I . ./dapr/proto/placement/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./dapr/proto/sentry/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./dapr/proto/common/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./dapr/proto/runtime/v1/*.proto --go_out=plugins=grpc:../../../
-protoc -I . ./dapr/proto/internal/v1/*.proto --go_out=plugins=grpc:../../../
+protoc -I . ./dapr/proto/internals/v1/*.proto --go_out=plugins=grpc:../../../
 ```

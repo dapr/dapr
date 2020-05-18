@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	fake "k8s.io/client-go/kubernetes/fake"
@@ -44,7 +43,7 @@ func TestGetDeployment(t *testing.T) {
 
 	assert.Equal(t, nil, err)
 
-	_, err = fakeClient.AppsV1().Deployments(namespace).Get(name, meta_v1.GetOptions{})
+	_, err = fakeClient.AppsV1().Deployments(namespace).Get(name, metav1.GetOptions{})
 	assert.Equal(t, nil, err)
 }
 
@@ -66,7 +65,7 @@ func TestCreateService(t *testing.T) {
 	fakeClient.AppsV1().Deployments(d.ObjectMeta.Namespace).Create(d)
 
 	service := &corev1.Service{
-		ObjectMeta: meta_v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: servicename,
 		},
 		Spec: corev1.ServiceSpec{
@@ -98,7 +97,7 @@ func TestDeleteService(t *testing.T) {
 	d := getDeployment(name, namespace, label)
 
 	service := &corev1.Service{
-		ObjectMeta: meta_v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "ds",
 		},
 		Spec: corev1.ServiceSpec{
@@ -133,7 +132,7 @@ func TestServiceExists(t *testing.T) {
 	d := getDeployment(name, namespace, label)
 
 	service := &corev1.Service{
-		ObjectMeta: meta_v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "se",
 		},
 		Spec: corev1.ServiceSpec{
@@ -167,7 +166,7 @@ func TestGetEndpoints(t *testing.T) {
 	kubeAPI := NewAPI(fakeClient, versioned.New(nil))
 	epname := "testep"
 	ep := &corev1.Endpoints{
-		ObjectMeta: meta_v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: epname,
 		},
 		Subsets: []corev1.EndpointSubset{
@@ -194,7 +193,7 @@ func TestGetDeploymentsBySelector(t *testing.T) {
 	d := getDeployment(name, namespace, label)
 	fakeClient.AppsV1().Deployments(d.ObjectMeta.Namespace).Create(d)
 
-	selector := meta_v1.LabelSelector{
+	selector := metav1.LabelSelector{
 		MatchLabels: map[string]string{label: label},
 	}
 
@@ -205,14 +204,14 @@ func TestGetDeploymentsBySelector(t *testing.T) {
 
 func getDeployment(name, namespace, label string) *appsv1.Deployment {
 	podTemplateSpec := corev1.PodTemplateSpec{
-		ObjectMeta: meta_v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:   "podname",
 			Labels: map[string]string{label: label},
 		},
 	}
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: meta_v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 			Labels:    map[string]string{label: label},

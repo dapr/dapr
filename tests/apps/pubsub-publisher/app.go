@@ -95,7 +95,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Publish succeeded")
 	w.WriteHeader(http.StatusOK)
-	resp = appResponse{Message: fmt.Sprintf("Success")}
+	resp = appResponse{Message: "Success"}
 	resp.StartTime = startTime
 	resp.EndTime = epoch()
 
