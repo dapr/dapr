@@ -39,6 +39,10 @@ const (
 	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
 	daprCPURequestKey                 = "dapr.io/sidecar-cpu-request"
 	daprMemoryRequestKey              = "dapr.io/sidecar-memory-request"
+	daprLivenessProbeDelayKey         = "dapr.io/sidecar-liveness-probe-delay-seconds"
+	daprLivenessProbeTimeoutKey       = "dapr.io/sidecar-liveness-probe-timeout-seconds"
+	daprLivenessProbePeriodKey        = "dapr.io/sidecar-liveness-probe-period-seconds"
+	daprLivenessProbeThresholdKey     = "dapr.io/sidecar-liveness-probe-threshold"
 	daprReadinessProbeDelayKey        = "dapr.io/sidecar-readiness-probe-delay-seconds"
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
@@ -414,10 +418,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
 				},
 			},
-			InitialDelaySeconds: defaultHealthzProbeDelaySeconds,
-			TimeoutSeconds:      defaultHealthzProbeTimeoutSeconds,
-			PeriodSeconds:       defaultHealthzProbePeriodSeconds,
-			FailureThreshold:    defaultHealthzProbeThreshold,
+			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprLivenessProbeDelayKey, defaultHealthzProbeDelaySeconds),
+			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprLivenessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
+			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),
+			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprLivenessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 	}
 
