@@ -24,7 +24,11 @@ jobs:
               "msfussell",
               "shalabhms",
               "LMWF",
-              "artursouza"
+              "artursouza",
+              "vinayada1",
+              "mukundansundar",
+              "wcs1only",
+              "orizohar"
             ];
 
             const payload = context.payload;
