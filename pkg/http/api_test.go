@@ -31,7 +31,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	routing "github.com/fasthttp/router"
@@ -192,7 +191,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				return true
 			}), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
 			})).Return(fakeDirectMessageResponse, nil).Once()
 
@@ -220,7 +219,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				return true
 			}), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
 			})).Return(fakeDirectMessageResponse, nil).Once()
 
@@ -284,7 +283,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 				return true
 			}), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
 			})).Return(fakeDirectMessageResponse, nil).Once()
 
@@ -312,7 +311,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 				return true
 			}), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
 			})).Return(fakeDirectMessageResponse, nil).Once()
 
@@ -983,7 +982,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 				return true
 			}), mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
-			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
 			})).Return(fakeDirectMessageResponse, nil).Once()
 
@@ -1079,7 +1078,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 				return true
 			}), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
 			})).Return(fakeDirectMessageResponse, nil).Once()
 
@@ -1151,7 +1150,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 				return true
 			}), mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *v1.InvokeMethodRequest) bool {
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
 				return true
 			})).Return(fakeDirectMessageResponse, nil).Once()
 

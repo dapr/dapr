@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"

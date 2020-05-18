@@ -17,11 +17,11 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/golang/protobuf/ptypes/any"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
@@ -197,14 +197,12 @@ func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	client := pb.NewDaprClient(conn)
 
 	for i := 0; i < n; i++ {
-		_, err = client.SaveState(context.Background(), &pb.SaveStateEnvelope{
+		_, err = client.SaveState(context.Background(), &pb.SaveStateRequest{
 			StoreName: "statestore",
-			Requests: []*pb.StateRequest{
-				&pb.StateRequest{
-					Key: "myKey",
-					Value: &any.Any{
-						Value: []byte("My State"),
-					},
+			Requests: []*commonv1pb.StateSaveRequest{
+				{
+					Key:   "myKey",
+					Value: []byte("My State"),
 				},
 			},
 		})
@@ -248,7 +246,7 @@ func testGRPCMetrics(t *testing.T, app string, res *http.Response) {
 					}
 
 					if strings.EqualFold(l.GetName(), "grpc_server_method") {
-						if strings.EqualFold(l.GetValue(), "/dapr.proto.dapr.v1.Dapr/SaveState") {
+						if strings.EqualFold(l.GetValue(), "/dapr.proto.runtime.v1.Dapr/SaveState") {
 							foundMethod = true
 
 							// Check value is as expected

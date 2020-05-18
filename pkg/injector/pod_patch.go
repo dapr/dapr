@@ -17,7 +17,6 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -270,7 +269,7 @@ func getInt32Annotation(annotations map[string]string, key string) (int32, error
 	return int32(value), nil
 }
 
-func appendQuantityToResourceList(quantity string, resourceName v1.ResourceName, resourceList v1.ResourceList) (*v1.ResourceList, error) {
+func appendQuantityToResourceList(quantity string, resourceName corev1.ResourceName, resourceList corev1.ResourceList) (*corev1.ResourceList, error) {
 	q, err := resource.ParseQuantity(quantity)
 	if err != nil {
 		return nil, err
@@ -279,14 +278,14 @@ func appendQuantityToResourceList(quantity string, resourceName v1.ResourceName,
 	return &resourceList, nil
 }
 
-func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequirements, error) {
-	r := v1.ResourceRequirements{
-		Limits:   v1.ResourceList{},
-		Requests: v1.ResourceList{},
+func getResourceRequirements(annotations map[string]string) (*corev1.ResourceRequirements, error) {
+	r := corev1.ResourceRequirements{
+		Limits:   corev1.ResourceList{},
+		Requests: corev1.ResourceList{},
 	}
 	cpuLimit, ok := annotations[daprCPULimitKey]
 	if ok {
-		list, err := appendQuantityToResourceList(cpuLimit, v1.ResourceCPU, r.Limits)
+		list, err := appendQuantityToResourceList(cpuLimit, corev1.ResourceCPU, r.Limits)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar cpu limit: %s", err)
 		}
@@ -294,7 +293,7 @@ func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequire
 	}
 	memLimit, ok := annotations[daprMemoryLimitKey]
 	if ok {
-		list, err := appendQuantityToResourceList(memLimit, v1.ResourceMemory, r.Limits)
+		list, err := appendQuantityToResourceList(memLimit, corev1.ResourceMemory, r.Limits)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar memory limit: %s", err)
 		}
@@ -302,7 +301,7 @@ func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequire
 	}
 	cpuRequest, ok := annotations[daprCPURequestKey]
 	if ok {
-		list, err := appendQuantityToResourceList(cpuRequest, v1.ResourceCPU, r.Requests)
+		list, err := appendQuantityToResourceList(cpuRequest, corev1.ResourceCPU, r.Requests)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar cpu request: %s", err)
 		}
@@ -310,7 +309,7 @@ func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequire
 	}
 	memRequest, ok := annotations[daprMemoryRequestKey]
 	if ok {
-		list, err := appendQuantityToResourceList(memRequest, v1.ResourceMemory, r.Requests)
+		list, err := appendQuantityToResourceList(memRequest, corev1.ResourceMemory, r.Requests)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar memory request: %s", err)
 		}

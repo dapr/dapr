@@ -27,7 +27,6 @@ import (
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp"
-	fhttp "github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 )
 
@@ -118,19 +117,19 @@ func (a *api) MarkStatusAsReady() {
 func (a *api) constructStateEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onGetState,
 		},
 		{
-			Methods: []string{fhttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "state/{storeName}",
 			Version: apiVersionV1,
 			Handler: a.onPostState,
 		},
 		{
-			Methods: []string{fhttp.MethodDelete},
+			Methods: []string{fasthttp.MethodDelete},
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
@@ -141,7 +140,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "secrets/{secretStoreName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onGetSecret,
@@ -152,7 +151,7 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "publish/{topic:*}",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
@@ -163,7 +162,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 func (a *api) constructBindingsEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "bindings/{name}",
 			Version: apiVersionV1,
 			Handler: a.onOutputBindingMessage,
@@ -174,7 +173,7 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet, fhttp.MethodPost, fhttp.MethodDelete, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost, fasthttp.MethodDelete, fasthttp.MethodPut},
 			Route:   "invoke/{id}/method/{method:*}",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
@@ -185,61 +184,61 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 func (a *api) constructActorEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/state",
 			Version: apiVersionV1,
 			Handler: a.onActorStateTransaction,
 		},
 		{
-			Methods: []string{fhttp.MethodGet, fhttp.MethodPost, fhttp.MethodDelete, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost, fasthttp.MethodDelete, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/method/{method}",
 			Version: apiVersionV1,
 			Handler: a.onDirectActorMessage,
 		},
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/state/{key}",
 			Version: apiVersionV1,
 			Handler: a.onSaveActorState,
 		},
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "actors/{actorType}/{actorId}/state/{key}",
 			Version: apiVersionV1,
 			Handler: a.onGetActorState,
 		},
 		{
-			Methods: []string{fhttp.MethodDelete},
+			Methods: []string{fasthttp.MethodDelete},
 			Route:   "actors/{actorType}/{actorId}/state/{key}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorState,
 		},
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onCreateActorReminder,
 		},
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/timers/{name}",
 			Version: apiVersionV1,
 			Handler: a.onCreateActorTimer,
 		},
 		{
-			Methods: []string{fhttp.MethodDelete},
+			Methods: []string{fasthttp.MethodDelete},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorReminder,
 		},
 		{
-			Methods: []string{fhttp.MethodDelete},
+			Methods: []string{fasthttp.MethodDelete},
 			Route:   "actors/{actorType}/{actorId}/timers/{name}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorTimer,
 		},
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onGetActorReminder,
@@ -250,13 +249,13 @@ func (a *api) constructActorEndpoints() []Endpoint {
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "metadata",
 			Version: apiVersionV1,
 			Handler: a.onGetMetadata,
 		},
 		{
-			Methods: []string{fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPut},
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata,
@@ -267,7 +266,7 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "healthz",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
@@ -501,7 +500,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 	if invokeMethodName == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", "invalid method name")
-		respondWithError(reqCtx, fhttp.StatusBadRequest, msg)
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		return
 	}
 
@@ -523,7 +522,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// err does not represent user application response
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
-		respondWithError(reqCtx, fhttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		return
 	}
 
@@ -751,7 +750,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, fhttp.StatusBadRequest, msg)
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		return
 	}
 
@@ -779,7 +778,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
-		respondWithError(reqCtx, fhttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		return
 	}
 
