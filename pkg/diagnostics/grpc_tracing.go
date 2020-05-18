@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
@@ -28,6 +29,12 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		var err error
 		var resp interface{}
 		var span *trace.Span
+
+		// do not start the client/server spans, just set the trace context when the sampling rate is 0
+		if !diag_utils.IsTracingEnabled(spec.SamplingRate) {
+			resp, err = handler(newCtx, req)
+			return resp, err
+		}
 
 		// do not start the client span if the request is local service invocation call
 		if isLocalServiceInvocationMethod(method) {
