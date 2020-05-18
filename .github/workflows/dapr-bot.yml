@@ -28,7 +28,8 @@ jobs:
               "vinayada1",
               "mukundansundar",
               "wcs1only",
-              "orizohar"
+              "orizohar",
+              "pruthvidhodda"
             ];
 
             const payload = context.payload;
