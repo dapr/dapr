@@ -19,17 +19,14 @@ var log = logger.NewLogger("dapr.runtime.discovery")
 // RegisterMDNS uses mdns to publish an entry of the service to a local network
 func RegisterMDNS(id string, host string, ips []string, port int) error {
 	go func() {
-		if host == "" {
-			host, _ = os.Hostname()
-		}
+		host, _ := os.Hostname()
 		info := []string{id}
 		var server *zeroconf.Server
 		var err error
-		domain := "local."
-		if len(ips) == 0 {
-			server, err = zeroconf.Register(host, id, domain, port, info, nil)
+		if len(ips) > 0 {
+			server, err = zeroconf.RegisterProxy(host, id, "local.", port, host, ips, info, nil)
 		} else {
-			server, err = zeroconf.RegisterProxy(host, id, domain, port, host, ips, info, nil)
+			server, err = zeroconf.Register(host, id, "local.", port, info, nil)
 		}
 		if err != nil {
 			log.Errorf("error from zeroconf register: %s", err)
