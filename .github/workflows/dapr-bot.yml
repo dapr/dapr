@@ -29,7 +29,8 @@ jobs:
               "mukundansundar",
               "wcs1only",
               "orizohar",
-              "pruthvidhodda"
+              "pruthvidhodda",
+              "mchmarny"
             ];
 
             const payload = context.payload;
