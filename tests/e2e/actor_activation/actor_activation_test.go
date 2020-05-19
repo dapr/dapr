@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	guuid "github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -101,7 +102,6 @@ func TestActorActivation(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Actor deactivates due to timeout.", func(t *testing.T) {
-		// TODO: Use UUID in ActorId once dapr/dapr#895 is fixed.
 		actorId := "100"
 
 		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorId)
@@ -133,7 +133,7 @@ func TestActorActivation(t *testing.T) {
 	})
 
 	t.Run("Actor does not deactivate since there is no timeout.", func(t *testing.T) {
-		actorId := "200"
+		actorId := guuid.New().String()
 		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorId)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
