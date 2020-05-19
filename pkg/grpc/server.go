@@ -15,11 +15,10 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"google.golang.org/grpc"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -102,9 +101,9 @@ func (s *server) StartNonBlocking() error {
 	s.srv = server
 
 	if s.kind == internalServer {
-		internalv1pb.RegisterDaprInternalServer(server, s.api)
+		internalv1pb.RegisterServiceInvocationServer(server, s.api)
 	} else if s.kind == apiServer {
-		daprv1pb.RegisterDaprServer(server, s.api)
+		runtimev1pb.RegisterDaprServer(server, s.api)
 	}
 	go func() {
 		if err := server.Serve(lis); err != nil {
@@ -156,7 +155,7 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	opts := s.getMiddlewareOptions()
 	if s.maxConnectionAge != nil {
-		opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
+		opts = append(opts, grpc_go.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
 	}
 
 	if s.authenticator != nil {

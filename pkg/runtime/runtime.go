@@ -49,20 +49,22 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
-	daprclientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
 )
 
 const (
-	appConfigEndpoint   = "dapr/config"
-	parallelConcurrency = "parallel"
-	actorStateStore     = "actorStateStore"
+	appConfigEndpoint = "dapr/config"
+	actorStateStore   = "actorStateStore"
+
+	// output bindings concurrency
+	bindingsConcurrnecyParallel   = "parallel"
+	bindingsConcurrnecySequential = "sequential"
 )
 
 var log = logger.NewLogger("dapr.runtime")
@@ -511,7 +513,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 			return err
 		}
 
-		if response.Concurrency == parallelConcurrency {
+		if response.Concurrency == bindingsConcurrnecyParallel {
 			a.sendBatchOutputBindingsParallel(response.To, b)
 		} else {
 			return a.sendBatchOutputBindingsSequential(response.To, b)
@@ -532,12 +534,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 
-		client := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-		resp, err := client.OnBindingEvent(ctx, &daprclientv1pb.BindingEventEnvelope{
-			Name: bindingName,
-			Data: &any.Any{
-				Value: data,
-			},
+		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+		resp, err := client.OnBindingEvent(ctx, &runtimev1pb.BindingEventRequest{
+			Name:     bindingName,
+			Data:     data,
 			Metadata: metadata,
 		})
 
@@ -547,20 +547,25 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 		if resp != nil {
-			response.Concurrency = resp.Concurrency
+			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
+				response.Concurrency = bindingsConcurrnecyParallel
+			} else {
+				response.Concurrency = bindingsConcurrnecySequential
+			}
+
 			response.To = resp.To
 
 			if resp.Data != nil {
 				var d interface{}
-				err := a.json.Unmarshal(resp.Data.Value, &d)
+				err := a.json.Unmarshal(resp.Data, &d)
 				if err == nil {
 					response.Data = d
 				}
 			}
 
-			for _, s := range resp.State {
+			for _, s := range resp.States {
 				var i interface{}
-				a.json.Unmarshal(s.Value.Value, &i)
+				a.json.Unmarshal(s.Value, &i)
 
 				response.State = append(response.State, state.SetRequest{
 					Key:   s.Key,
@@ -660,8 +665,8 @@ func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
-	client := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
-	resp, err := client.GetBindingsSubscriptions(context.Background(), &empty.Empty{})
+	client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+	resp, err := client.ListInputBindings(context.Background(), &empty.Empty{})
 	bindings := []string{}
 
 	if err == nil && resp != nil {
@@ -814,7 +819,7 @@ func (a *DaprRuntime) getTopicRoutes() map[string]string {
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		subscriptions = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		client := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
+		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		subscriptions = runtime_pubsub.GetSubscriptionsGRPC(client, log)
 	}
 
@@ -1001,7 +1006,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		return err
 	}
 
-	envelope := &daprclientv1pb.CloudEventEnvelope{
+	envelope := &runtimev1pb.TopicEventRequest{
 		Id:              cloudEvent.ID,
 		Source:          cloudEvent.Source,
 		DataContentType: cloudEvent.DataContentType,
@@ -1011,16 +1016,14 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	}
 
 	if cloudEvent.Data != nil {
-		var b []byte
+		envelope.Data = nil
 		if cloudEvent.DataContentType == "text/plain" {
-			b = []byte(cloudEvent.Data.(string))
+			envelope.Data = []byte(cloudEvent.Data.(string))
 		} else if cloudEvent.DataContentType == "application/json" {
-			b, _ = a.json.Marshal(cloudEvent.Data)
-		}
-		envelope.Data = &any.Any{
-			Value: b,
+			envelope.Data, _ = a.json.Marshal(cloudEvent.Data)
 		}
 	}
+
 	// subject contains the correlationID which is passed span context
 	subject := cloudEvent.Subject
 	sc, _ := diag.SpanContextFromString(subject)
@@ -1031,7 +1034,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
 
-	clientV1 := daprclientv1pb.NewDaprClientClient(a.grpc.AppClient)
+	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 	_, err = clientV1.OnTopicEvent(ctx, envelope)
 
 	diag.UpdateSpanStatusFromError(span, err, spanName)

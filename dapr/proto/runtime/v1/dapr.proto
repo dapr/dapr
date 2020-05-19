@@ -5,7 +5,7 @@
 
 syntax = "proto3";
 
-package dapr.proto.dapr.v1;
+package dapr.proto.runtime.v1;
 
 import "google/protobuf/empty.proto";
 import "dapr/proto/common/v1/common.proto";
@@ -93,7 +93,7 @@ message SaveStateRequest {
   string store_name = 1;
 
   // The array of the state key values.
-  repeated common.v1.StateSaveRequest states = 2;
+  repeated common.v1.StateSaveRequest requests = 2;
 }
 
 // PublishEventRequest is the message to publish event data to pubsub topic
@@ -135,10 +135,9 @@ message GetSecretRequest {
   map<string,string> metadata = 3;
 }
 
-
 // GetSecretResponse is the response mesage to convey the requested secret.
 message GetSecretResponse {
   // data is the secret value. Some secret store, such as kubernetes secret
   // store, can save multiple secrets for single secret key.
-  map<string,string> data = 1;
+  map<string, string> data = 1;
 }

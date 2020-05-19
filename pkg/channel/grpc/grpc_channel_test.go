@@ -16,7 +16,7 @@ import (
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	daprclientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/golang/protobuf/ptypes/any"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/stretchr/testify/assert"
@@ -45,16 +45,20 @@ func (m *mockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest)
 	ds, _ := json.Marshal(dt)
 	return &commonv1pb.InvokeResponse{Data: &any.Any{Value: ds}, ContentType: "application/json"}, nil
 }
-func (m *mockServer) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*daprclientv1pb.GetTopicSubscriptionsEnvelope, error) {
-	return &daprclientv1pb.GetTopicSubscriptionsEnvelope{}, nil
+
+func (m *mockServer) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
+	return &runtimev1pb.ListTopicSubscriptionsResponse{}, nil
 }
-func (m *mockServer) GetBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*daprclientv1pb.GetBindingsSubscriptionsEnvelope, error) {
-	return &daprclientv1pb.GetBindingsSubscriptionsEnvelope{}, nil
+
+func (m *mockServer) ListInputBindings(ctx context.Context, in *empty.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
+	return &runtimev1pb.ListInputBindingsResponse{}, nil
 }
-func (m *mockServer) OnBindingEvent(ctx context.Context, in *daprclientv1pb.BindingEventEnvelope) (*daprclientv1pb.BindingResponseEnvelope, error) {
-	return &daprclientv1pb.BindingResponseEnvelope{}, nil
+
+func (m *mockServer) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
+	return &runtimev1pb.BindingEventResponse{}, nil
 }
-func (m *mockServer) OnTopicEvent(ctx context.Context, in *daprclientv1pb.CloudEventEnvelope) (*empty.Empty, error) {
+
+func (m *mockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
@@ -66,7 +70,7 @@ func TestInvokeMethod(t *testing.T) {
 
 	grpcServer := grpc.NewServer()
 	go func() {
-		daprclientv1pb.RegisterDaprClientServer(grpcServer, &mockServer{})
+		runtimev1pb.RegisterAppCallbackServer(grpcServer, &mockServer{})
 		grpcServer.Serve(lis)
 	}()
 
