@@ -24,19 +24,22 @@ const grpcTraceContextKey = "grpc-trace-bin"
 func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		sc := GetSpanContextFromGRPC(ctx, spec)
-		method := info.FullMethod
 		newCtx := NewContext(ctx, sc)
+
 		var err error
 		var resp interface{}
-		var span *trace.Span
 
-		// do not start the client/server spans, just set the trace context when the sampling rate is 0
+		// 1. check if tracing is enabled or not
+		// 2. if tracing is disabled, set the trace context and call the handler
+		// 3. if tracing is enabled, start the client or server spans based on the request and call the handler with appropriate span context
 		if !diag_utils.IsTracingEnabled(spec.SamplingRate) {
 			resp, err = handler(newCtx, req)
 			return resp, err
 		}
 
-		// do not start the client span if the request is local service invocation call
+		var span *trace.Span
+		method := info.FullMethod
+
 		if isLocalServiceInvocationMethod(method) {
 			if m, ok := req.(*internalv1pb.InternalInvokeRequest); ok {
 				method = m.Message.Method
@@ -52,7 +55,7 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 
 		UpdateSpanStatusFromError(span, err, method)
 
-		defer span.End()
+		span.End()
 
 		return resp, err
 	}
