@@ -76,6 +76,8 @@ HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
+HELM_REGISTRY?=vinayaacr001.azurecr.io
+export HELM_EXPERIMENTAL_OCI:=1
 
 ################################################################################
 # Go build details                                                             #
@@ -89,7 +91,7 @@ ifeq ($(origin DEBUG), undefined)
   LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
 else ifeq ($(DEBUG),0)
   BUILDTYPE_DIR:=release
-  LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
+  LDFLAGS:="$/(DEFAULT_LDFLAGS) -s -w"
 else
   BUILDTYPE_DIR:=debug
   GCFLAGS:=-gcflags="all=-N -l"
@@ -173,6 +175,14 @@ dapr.yaml: check-docker-env
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
 		--include-crds=true --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
+
+################################################################################
+# Target: upload-helmchart
+################################################################################
+upload-helmchart:
+# Upload helm charts to Helm Registry
+	helm chart save ${HELM_CHART_ROOT}/${RELEASE_NAME} ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}
+	helm chart push ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION} 
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #

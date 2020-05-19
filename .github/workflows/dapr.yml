@@ -101,11 +101,6 @@ jobs:
           docker -v
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
-      - name: Set DAPR_VERSION
-        if: ${{ env.DAPR_VERSION }} == ''
-        run: |
-          echo ::set-env name=DAPR_VERSION::"edge"
-          echo DAPR_VERSION is ${{ env.DAPR_VERSION }}
       - name: Generate helm chart manifest
         run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: move helm chart manifest to artifact
@@ -182,10 +177,8 @@ jobs:
             --prerelease true \
             ${RELEASE_ARTIFACT[*]}
       - name: Upload Helm charts to Azure Container Registry
-        if: startswith(github.ref, 'refs/tags/v')
+        #if: startswith(github.ref, 'refs/tags/v')
         run: |
           export HELM_EXPERIMENTAL_OCI=1
           echo ${{ secrets.SP_PASSWD }} | helm registry login ${{ secrets.ACR_NAME }} --username ${{ secrets.SP_APP_ID }} --password-stdin
-          helm chart save ${{ env.HELM_CHART_ROOT }} ${{ secrets.ACR_NAME }}/${{ env.HELM }}/${{ env.RELEASE_NAME }}:${{ env.DAPR_VERSION }}
-          helm chart push ${{ secrets.ACR_NAME }}/${{ env.HELM }}/${{ env.RELEASE_NAME }}:${{ env.DAPR_VERSION }}
-
+          make upload-helmchart
