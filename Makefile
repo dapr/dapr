@@ -76,7 +76,7 @@ HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
-HELM_REGISTRY?=vinayaacr001.azurecr.io
+HELM_REGISTRY?=daprio.azurecr.io
 export HELM_EXPERIMENTAL_OCI:=1
 
 ################################################################################
