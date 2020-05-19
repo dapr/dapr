@@ -27,9 +27,6 @@ jobs:
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
       ARCHIVE_OUTDIR: dist/archives
-      HELM_CHART_ROOT: ./charts/dapr
-      HELM: helm
-      RELEASE_NAME: dapr
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
