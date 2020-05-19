@@ -77,7 +77,6 @@ HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 HELM_REGISTRY?=daprio.azurecr.io
-export HELM_EXPERIMENTAL_OCI:=1
 
 ################################################################################
 # Go build details                                                             #
@@ -181,8 +180,9 @@ dapr.yaml: check-docker-env
 ################################################################################
 upload-helmchart:
 # Upload helm charts to Helm Registry
-	helm chart save ${HELM_CHART_ROOT}/${RELEASE_NAME} ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}
-	helm chart push ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION} 
+	export HELM_EXPERIMENTAL_OCI:=1
+	$(HELM) chart save ${HELM_CHART_ROOT}/${RELEASE_NAME} ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}
+	$(HELM) chart push ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION} 
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #
