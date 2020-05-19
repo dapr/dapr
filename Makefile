@@ -91,7 +91,7 @@ ifeq ($(origin DEBUG), undefined)
   LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
 else ifeq ($(DEBUG),0)
   BUILDTYPE_DIR:=release
-  LDFLAGS:="$/(DEFAULT_LDFLAGS) -s -w"
+  LDFLAGS:="$(DEFAULT_LDFLAGS) -s -w"
 else
   BUILDTYPE_DIR:=debug
   GCFLAGS:=-gcflags="all=-N -l"
