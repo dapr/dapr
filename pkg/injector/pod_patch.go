@@ -13,8 +13,8 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/utils"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -371,7 +371,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 		Command: []string{"/daprd"},
 		Env: []corev1.EnvVar{
 			{
-				Name: runtime.HostIPEnvVar,
+				Name: utils.HostIPEnvVar,
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{
 						FieldPath: "status.podIP",
