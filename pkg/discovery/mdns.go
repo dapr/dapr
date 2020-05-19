@@ -17,7 +17,7 @@ import (
 var log = logger.NewLogger("dapr.runtime.discovery")
 
 // RegisterMDNS uses mdns to publish an entry of the service to a local network
-func RegisterMDNS(id string, host string, ips []string, port int) error {
+func RegisterMDNS(id string, ips []string, port int) error {
 	go func() {
 		host, _ := os.Hostname()
 		info := []string{id}
