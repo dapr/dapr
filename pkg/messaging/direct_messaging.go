@@ -20,7 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 const (
@@ -133,7 +133,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	defer cancel()
 
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
-	clientV1 := internalv1pb.NewDaprInternalClient(conn)
+	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {
 		return nil, err

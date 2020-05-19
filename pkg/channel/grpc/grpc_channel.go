@@ -13,8 +13,8 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	clientv1pb "github.com/dapr/dapr/pkg/proto/daprclient/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -72,7 +72,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 	sc := diag.FromContext(ctx)
 
-	clientV1 := clientv1pb.NewDaprClientClient(g.client)
+	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
 	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(req.Metadata(), true)
 	// Prepare gRPC Metadata
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)

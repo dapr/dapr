@@ -24,7 +24,7 @@ import (
 	"github.com/gorilla/mux"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
@@ -193,7 +193,7 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 	return client.Do(req)
 }
 
-func constructRequest(id, method, httpVerb string, body []byte) *daprv1pb.InvokeServiceRequest {
+func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.InvokeServiceRequest {
 	msg := &commonv1pb.InvokeRequest{Method: method}
 	msg.ContentType = jsonContentType
 	msg.Data = &any.Any{Value: body}
@@ -203,7 +203,7 @@ func constructRequest(id, method, httpVerb string, body []byte) *daprv1pb.Invoke
 		}
 	}
 
-	return &daprv1pb.InvokeServiceRequest{
+	return &runtimev1pb.InvokeServiceRequest{
 		Id:      id,
 		Message: msg,
 	}
@@ -419,12 +419,12 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Create the client
-	client := daprv1pb.NewDaprClient(conn)
+	client := runtimev1pb.NewDaprClient(conn)
 	ctx := metadata.AppendToOutgoingContext(
 		context.Background(),
 		"DaprTest-Request-1", "DaprValue1",
 		"DaprTest-Request-2", "DaprValue2")
-	req := &daprv1pb.InvokeServiceRequest{
+	req := &runtimev1pb.InvokeServiceRequest{
 		Id: commandBody.RemoteApp,
 		Message: &commonv1pb.InvokeRequest{
 			Method:      "retrieve_request_object",
@@ -498,12 +498,12 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Create the client
-	client := daprv1pb.NewDaprClient(conn)
+	client := runtimev1pb.NewDaprClient(conn)
 	ctx := metadata.AppendToOutgoingContext(
 		context.Background(),
 		"DaprTest-Request-1", "DaprValue1",
 		"DaprTest-Request-2", "DaprValue2")
-	req := &daprv1pb.InvokeServiceRequest{
+	req := &runtimev1pb.InvokeServiceRequest{
 		Id: commandBody.RemoteApp,
 		Message: &commonv1pb.InvokeRequest{
 			Method:      "retrieve_request_object",
@@ -575,7 +575,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Create the client
-	client := daprv1pb.NewDaprClient(conn)
+	client := runtimev1pb.NewDaprClient(conn)
 
 	testMessage := guuid.New().String()
 	b, err := json.Marshal(testMessage)
@@ -855,7 +855,7 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	// Create the client
-	client := daprv1pb.NewDaprClient(conn)
+	client := runtimev1pb.NewDaprClient(conn)
 
 	var b []byte
 	for _, v := range httpMethods {

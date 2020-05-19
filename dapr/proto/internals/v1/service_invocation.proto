@@ -5,13 +5,13 @@
 
 syntax = "proto3";
 
-package dapr.proto.internal.v1;
+package dapr.proto.internals.v1;
 
 import "dapr/proto/common/v1/common.proto";
-import "dapr/proto/internal/v1/apiversion.proto";
-import "dapr/proto/internal/v1/status.proto";
+import "dapr/proto/internals/v1/apiversion.proto";
+import "dapr/proto/internals/v1/status.proto";
 
-option go_package = "github.com/dapr/dapr/pkg/proto/internal/v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1";
 
 // ServiceInvocation service is used to exchange the data between 
 // caller dapr runtime and callee dapr runtime.
