@@ -178,10 +178,11 @@ dapr.yaml: check-docker-env
 ################################################################################
 # Target: upload-helmchart
 ################################################################################
-upload-helmchart:
+
 # Upload helm charts to Helm Registry
-	export HELM_EXPERIMENTAL_OCI:=1
-	$(HELM) chart save ${HELM_CHART_ROOT}/${RELEASE_NAME} ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}
+upload-helmchart:
+	export HELM_EXPERIMENTAL_OCI=1; \
+	$(HELM) chart save ${HELM_CHART_ROOT}/${RELEASE_NAME} ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}; \
 	$(HELM) chart push ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION} 
 
 ################################################################################
