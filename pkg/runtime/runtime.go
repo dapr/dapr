@@ -529,17 +529,16 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 	var response bindings.AppResponse
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		tracingEnabled := diag_utils.IsTracingEnabled(a.globalConfig.Spec.TracingSpec.SamplingRate)
-		newCtx, span, spanName := a.getTracingContext(context.Background(), tracingEnabled, bindingName, func(name string) string { return fmt.Sprintf("Binding: %s", name) })
+		ctx, span, spanName := a.getTracingContext(bindingName, func(name string) string { return fmt.Sprintf("Binding: %s", name) }, trace.SpanContext{})
 
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		resp, err := client.OnBindingEvent(newCtx, &runtimev1pb.BindingEventRequest{
+		resp, err := client.OnBindingEvent(ctx, &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
 			Data:     data,
 			Metadata: metadata,
 		})
 
-		if tracingEnabled {
+		if span != nil {
 			diag.UpdateSpanStatusFromError(span, err, spanName)
 		}
 
@@ -584,15 +583,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		req.WithMetadata(reqMetadata)
 
-		tracingEnabled := diag_utils.IsTracingEnabled(a.globalConfig.Spec.TracingSpec.SamplingRate)
-		newCtx, span, spanName := a.getTracingContext(context.Background(), tracingEnabled, bindingName, func(name string) string { return fmt.Sprintf("Binding: %s", name) })
+		ctx, span, spanName := a.getTracingContext(bindingName, func(name string) string { return fmt.Sprintf("Binding: %s", name) }, trace.SpanContext{})
 
-		resp, err := a.appChannel.InvokeMethod(newCtx, req)
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 
-		if tracingEnabled {
+		if span != nil {
 			diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
 		}
 
@@ -974,16 +972,14 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 
 	// subject contains the correlationID which is passed span context
 	sc, _ := diag.SpanContextFromString(subject)
-	ctx := diag.NewContext(context.Background(), sc)
-	tracingEnabled := diag_utils.IsTracingEnabled(a.globalConfig.Spec.TracingSpec.SamplingRate)
-	newCtx, span, spanName := a.getTracingContext(ctx, tracingEnabled, msg.Topic, func(name string) string { return fmt.Sprintf("DeliveredEvent: %s", name) })
+	ctx, span, spanName := a.getTracingContext(msg.Topic, func(name string) string { return fmt.Sprintf("DeliveredEvent: %s", name) }, sc)
 
-	resp, err := a.appChannel.InvokeMethod(newCtx, req)
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
 
-	if tracingEnabled {
+	if span != nil {
 		diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
 	}
 
@@ -1024,20 +1020,12 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	// subject contains the correlationID which is passed span context
 	subject := cloudEvent.Subject
 	sc, _ := diag.SpanContextFromString(subject)
-	ctx := context.Background()
-	tracingEnabled := diag_utils.IsTracingEnabled(a.globalConfig.Spec.TracingSpec.SamplingRate)
-	var span *trace.Span
-	var spanName string
-	if tracingEnabled {
-		ctx, span, spanName = a.getTracingContext(diag.NewContext(ctx, sc), tracingEnabled, msg.Topic, func(name string) string { return fmt.Sprintf("DeliveredEvent: %s", name) })
-	} else {
-		ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
-	}
+	ctx, span, spanName := a.getTracingContext(msg.Topic, func(name string) string { return fmt.Sprintf("DeliveredEvent: %s", name) }, sc)
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 	_, err = clientV1.OnTopicEvent(ctx, envelope)
 
-	if tracingEnabled {
+	if span != nil {
 		diag.UpdateSpanStatusFromError(span, err, spanName)
 	}
 
@@ -1394,20 +1382,27 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	return nil
 }
 
-func (a *DaprRuntime) getTracingContext(ctx context.Context, traceEnabled bool, n string, getSpanNameFn func(name string) string) (context.Context, *trace.Span, string) {
+func (a *DaprRuntime) getTracingContext(name string, getSpanNameFn func(n string) string, oldSC trace.SpanContext) (context.Context, *trace.Span, string) {
 	var span *trace.Span
-	spanName := getSpanNameFn(n)
+	spanName := getSpanNameFn(name)
+	sc := oldSC
+	ctx := context.Background()
+	traceEnabled := diag_utils.IsTracingEnabled(a.globalConfig.Spec.TracingSpec.SamplingRate)
 	// start and update the trace span only when tracing is enabled - sampling rate is non zero
 	if traceEnabled {
+		ctx = diag.NewContext(ctx, sc)
 		ctx, span = diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+		sc = span.SpanContext()
 		span.End()
-
+	}
+	if (sc != trace.SpanContext{}) {
 		if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-			ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
-		} else {
-			ctx = diag.NewContext(ctx, span.SpanContext())
+			ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
+		}
+
+		if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+			ctx = diag.NewContext(ctx, sc)
 		}
 	}
-
 	return ctx, span, spanName
 }
