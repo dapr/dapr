@@ -527,10 +527,9 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
 	var response bindings.AppResponse
+	ctx, span, spanName := a.getTracingContext(bindingName, func(name string) string { return fmt.Sprintf("Binding: %s", name) }, trace.SpanContext{})
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		ctx, span, spanName := a.getTracingContext(bindingName, func(name string) string { return fmt.Sprintf("Binding: %s", name) }, trace.SpanContext{})
-
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		resp, err := client.OnBindingEvent(ctx, &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
@@ -582,8 +581,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			reqMetadata[k] = []string{v}
 		}
 		req.WithMetadata(reqMetadata)
-
-		ctx, span, spanName := a.getTracingContext(bindingName, func(name string) string { return fmt.Sprintf("Binding: %s", name) }, trace.SpanContext{})
 
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
