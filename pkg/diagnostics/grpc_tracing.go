@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
@@ -23,13 +24,22 @@ const grpcTraceContextKey = "grpc-trace-bin"
 func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		sc := GetSpanContextFromGRPC(ctx, spec)
-		method := info.FullMethod
 		newCtx := NewContext(ctx, sc)
+
 		var err error
 		var resp interface{}
-		var span *trace.Span
 
-		// do not start the client span if the request is local service invocation call
+		// 1. check if tracing is enabled or not
+		// 2. if tracing is disabled, set the trace context and call the handler
+		// 3. if tracing is enabled, start the client or server spans based on the request and call the handler with appropriate span context
+		if !diag_utils.IsTracingEnabled(spec.SamplingRate) {
+			resp, err = handler(newCtx, req)
+			return resp, err
+		}
+
+		var span *trace.Span
+		method := info.FullMethod
+
 		if isLocalServiceInvocationMethod(method) {
 			if m, ok := req.(*internalv1pb.InternalInvokeRequest); ok {
 				method = m.Message.Method
@@ -45,7 +55,7 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 
 		UpdateSpanStatusFromError(span, err, method)
 
-		defer span.End()
+		span.End()
 
 		return resp, err
 	}
