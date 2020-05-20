@@ -527,7 +527,8 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
 	var response bindings.AppResponse
-	ctx, span, spanName := a.getTracingContext(bindingName, func(name string) string { return fmt.Sprintf("Binding: %s", name) }, trace.SpanContext{})
+	spanName := fmt.Sprintf("Binding: %s", bindingName)
+	ctx, span := a.getTracingContext(spanName, trace.SpanContext{})
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
@@ -969,7 +970,8 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 
 	// subject contains the correlationID which is passed span context
 	sc, _ := diag.SpanContextFromString(subject)
-	ctx, span, spanName := a.getTracingContext(msg.Topic, func(name string) string { return fmt.Sprintf("DeliveredEvent: %s", name) }, sc)
+	spanName := fmt.Sprintf("DeliveredEvent: %s", msg.Topic)
+	ctx, span := a.getTracingContext(spanName, sc)
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
@@ -1017,7 +1019,8 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	// subject contains the correlationID which is passed span context
 	subject := cloudEvent.Subject
 	sc, _ := diag.SpanContextFromString(subject)
-	ctx, span, spanName := a.getTracingContext(msg.Topic, func(name string) string { return fmt.Sprintf("DeliveredEvent: %s", name) }, sc)
+	spanName := fmt.Sprintf("DeliveredEvent: %s", msg.Topic)
+	ctx, span := a.getTracingContext(spanName, sc)
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 	_, err = clientV1.OnTopicEvent(ctx, envelope)
@@ -1379,9 +1382,8 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	return nil
 }
 
-func (a *DaprRuntime) getTracingContext(name string, getSpanNameFn func(n string) string, oldSC trace.SpanContext) (context.Context, *trace.Span, string) {
+func (a *DaprRuntime) getTracingContext(spanName string, oldSC trace.SpanContext) (context.Context, *trace.Span) {
 	var span *trace.Span
-	spanName := getSpanNameFn(name)
 	sc := oldSC
 	ctx := context.Background()
 	traceEnabled := diag_utils.IsTracingEnabled(a.globalConfig.Spec.TracingSpec.SamplingRate)
@@ -1401,5 +1403,5 @@ func (a *DaprRuntime) getTracingContext(name string, getSpanNameFn func(n string
 			ctx = diag.NewContext(ctx, sc)
 		}
 	}
-	return ctx, span, spanName
+	return ctx, span
 }
