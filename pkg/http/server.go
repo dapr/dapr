@@ -107,28 +107,28 @@ func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 		} else {
 			proto = "http"
 		}
-		// Add Forwarded header: https://tools.ietf.org/html/rfc7239
-		ctx.Request.Header.Add("Forwarded",
-			fmt.Sprintf("by=%s;for=%s;host=%s;proto=%s",
-				ctx.LocalAddr(),
-				ctx.RemoteAddr(),
-				ctx.Host(),
-				proto))
+
+		forwardedHeaderValue = fmt.Sprintf("proto=%s", proto)
+		// Add X-Forwarded-Proto: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
+		ctx.Request.Header.Add(fasthttp.HeaderXForwardedProto, proto)
 
 		hostAddress, err := utils.GetHostAddress()
 		if err == nil {
 			// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-			ctx.Request.Header.Add("X-Forwarded-For", hostAddress)
+			ctx.Request.Header.Add(fasthttp.HeaderXForwardedFor, hostAddress)
+			forwardedHeaderValue += fmt.Sprintf(";for=%s;by=%s", hostAddress, hostAddress)
 		}
 
 		hostName, err := os.Hostname()
 		if err == nil {
 			// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
-			ctx.Request.Header.Add("X-Forwarded-Host", hostName)
+			ctx.Request.Header.Add(fasthttp.HeaderXForwardedHost, hostName)
+			forwardedHeaderValue += fmt.Sprintf(";host=%s", hostName)
 		}
 
-		// Add X-Forwarded-Proto: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
-		ctx.Request.Header.Add("X-Forwarded-Proto", proto)
+		// Add Forwarded header: https://tools.ietf.org/html/rfc7239
+		ctx.Request.Header.Add(fasthttp.HeaderForwarded, forwardedHeaderValue)
+
 		next(ctx)
 	}
 }
