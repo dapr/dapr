@@ -108,7 +108,7 @@ func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 			proto = "http"
 		}
 
-		forwardedHeaderValue = fmt.Sprintf("proto=%s", proto)
+		forwardedHeaderValue := fmt.Sprintf("proto=%s", proto)
 		// Add X-Forwarded-Proto: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
 		ctx.Request.Header.Add(fasthttp.HeaderXForwardedProto, proto)
 
