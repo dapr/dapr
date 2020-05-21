@@ -40,6 +40,7 @@ import (
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
@@ -57,6 +58,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
+	"go.opencensus.io/trace"
 )
 
 const (
@@ -526,15 +528,10 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
 	var response bindings.AppResponse
+	spanName := fmt.Sprintf("Binding: %s", bindingName)
+	ctx, span := a.getTracingContext(spanName, trace.SpanContext{})
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		ctx := context.Background()
-		spanName := fmt.Sprintf("Binding: %s", bindingName)
-		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
-		defer span.End()
-
-		ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
-
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		resp, err := client.OnBindingEvent(ctx, &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
@@ -542,7 +539,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			Metadata: metadata,
 		})
 
-		diag.UpdateSpanStatusFromError(span, err, spanName)
+		if span != nil {
+			diag.UpdateSpanStatusFromError(span, err, spanName)
+		}
 
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
@@ -585,20 +584,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		req.WithMetadata(reqMetadata)
 
-		ctx := context.Background()
-		spanName := fmt.Sprintf("Binding: %s", bindingName)
-		// context.Background() can be considered as GRPC context and so using StartTracingServerSpanFromGRPCContext to generate span
-		ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
-		defer span.End()
-
-		ctx = diag.NewContext(ctx, span.SpanContext())
-
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 
-		diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
+		if span != nil {
+			diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
+		}
 
 		if resp.Status().Code != nethttp.StatusOK {
 			return fmt.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
@@ -978,18 +971,17 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 
 	// subject contains the correlationID which is passed span context
 	sc, _ := diag.SpanContextFromString(subject)
-	ctx := diag.NewContext(context.Background(), sc)
 	spanName := fmt.Sprintf("DeliveredEvent: %s", msg.Topic)
-	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
-	defer span.End()
+	ctx, span := a.getTracingContext(spanName, sc)
 
-	ctx = diag.NewContext(ctx, span.SpanContext())
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
 
-	diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
+	if span != nil {
+		diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
+	}
 
 	if resp.Status().Code != nethttp.StatusOK {
 		_, errorMsg := resp.RawData()
@@ -1028,17 +1020,15 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	// subject contains the correlationID which is passed span context
 	subject := cloudEvent.Subject
 	sc, _ := diag.SpanContextFromString(subject)
-	ctx := diag.NewContext(context.Background(), sc)
 	spanName := fmt.Sprintf("DeliveredEvent: %s", msg.Topic)
-	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
-	defer span.End()
-
-	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
+	ctx, span := a.getTracingContext(spanName, sc)
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 	_, err = clientV1.OnTopicEvent(ctx, envelope)
 
-	diag.UpdateSpanStatusFromError(span, err, spanName)
+	if span != nil {
+		diag.UpdateSpanStatusFromError(span, err, spanName)
+	}
 
 	if err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
@@ -1391,4 +1381,28 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 	diag.DefaultMonitoring.MTLSInitCompleted()
 	return nil
+}
+
+func (a *DaprRuntime) getTracingContext(spanName string, oldSC trace.SpanContext) (context.Context, *trace.Span) {
+	var span *trace.Span
+	sc := oldSC
+	ctx := context.Background()
+	traceEnabled := diag_utils.IsTracingEnabled(a.globalConfig.Spec.TracingSpec.SamplingRate)
+	// start and update the trace span only when tracing is enabled - sampling rate is non zero
+	if traceEnabled {
+		ctx = diag.NewContext(ctx, sc)
+		ctx, span = diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
+		sc = span.SpanContext()
+		span.End()
+	}
+	if (sc != trace.SpanContext{}) {
+		if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+			ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
+		}
+
+		if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
+			ctx = diag.NewContext(ctx, sc)
+		}
+	}
+	return ctx, span
 }

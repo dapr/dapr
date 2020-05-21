@@ -192,6 +192,10 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 
 // UpdateSpanStatusFromError updates tracer span status based on error object
 func UpdateSpanStatusFromError(span *trace.Span, err error, method string) {
+	if span == nil {
+		return
+	}
+
 	if err != nil {
 		span.SetStatus(trace.Status{
 			Code:    trace.StatusCodeInternal,
