@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
@@ -37,12 +38,15 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 	return func(ctx *fasthttp.RequestCtx) {
 		sc := GetSpanContextFromRequestContext(ctx, spec)
 		path := string(ctx.Request.URI().Path())
-		method := ctx.Request.Header.Method()
 
-		if isHealthzRequest(path) {
+		// 1. check if tracing is enabled or not, and if request is health request
+		// 2. if tracing is disabled or health request, set the trace context and call the handler
+		// 3. if tracing is enabled, start the client or server spans based on the request and call the handler with appropriate span context
+		if isHealthzRequest(path) || !diag_utils.IsTracingEnabled(spec.SamplingRate) {
 			SpanContextToRequest(sc, &ctx.Request)
 			next(ctx)
 		} else {
+			method := ctx.Request.Header.Method()
 			spanName := fmt.Sprintf("%s:%s", method, path)
 
 			newCtx := NewContext((context.Context)(ctx), sc)
@@ -52,7 +56,7 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			next(ctx)
 
 			UpdateSpanStatus(span, spanName, ctx.Response.StatusCode())
-			defer span.End()
+			span.End()
 		}
 	}
 }
