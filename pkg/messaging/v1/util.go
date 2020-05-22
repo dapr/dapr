@@ -154,7 +154,7 @@ func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader fun
 		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader || isTraceCorrleationHeaderKey(k) {
 			continue
 		}
-		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), strings.Join(listVal.Values, ";"))
+		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0])
 	}
 }
 

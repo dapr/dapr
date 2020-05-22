@@ -48,6 +48,8 @@ type directMessaging struct {
 	namespace           string
 	resolver            servicediscovery.Resolver
 	tracingSpec         config.TracingSpec
+	hostAddress         string
+	hostName            string
 }
 
 // NewDirectMessaging returns a new direct messaging api
@@ -58,6 +60,8 @@ func NewDirectMessaging(
 	clientConnFn messageClientConnection,
 	resolver servicediscovery.Resolver,
 	tracingSpec config.TracingSpec) DirectMessaging {
+	hAddr, _ := utils.GetHostAddress()
+	hName, _ := os.Hostname()
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: clientConnFn,
@@ -67,6 +71,8 @@ func NewDirectMessaging(
 		namespace:           namespace,
 		resolver:            resolver,
 		tracingSpec:         tracingSpec,
+		hostAddress:         hAddr,
+		hostName:            hName,
 	}
 }
 
@@ -141,20 +147,18 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 
 	var forwardedHeaderValue string
 
-	hostAddress, err := utils.GetHostAddress()
-	if err == nil {
+	if d.hostAddress != "" {
 		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-		metadata[fasthttp.HeaderXForwardedFor] = []string{hostAddress}
+		metadata[fasthttp.HeaderXForwardedFor] = []string{d.hostAddress}
 
-		forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", hostAddress, hostAddress)
+		forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", d.hostAddress, d.hostAddress)
 	}
 
-	hostName, err := os.Hostname()
-	if err == nil {
+	if d.hostName != "" {
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
-		metadata[fasthttp.HeaderXForwardedHost] = []string{hostName}
+		metadata[fasthttp.HeaderXForwardedHost] = []string{d.hostName}
 
-		forwardedHeaderValue += fmt.Sprintf("host=%s", hostName)
+		forwardedHeaderValue += fmt.Sprintf("host=%s", d.hostName)
 	}
 
 	// Add Forwarded header: https://tools.ietf.org/html/rfc7239

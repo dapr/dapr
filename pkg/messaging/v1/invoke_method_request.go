@@ -109,15 +109,13 @@ func (imr *InvokeMethodRequest) AppendMetadata(md map[string][]string) *InvokeMe
 	metadata := imr.r.Metadata
 
 	for k, values := range md {
-		listValue := internalv1pb.ListStringValue{}
-		if _, ok := metadata[k]; ok {
-			listValue = *metadata[k]
+		if _, ok := metadata[k]; !ok {
+			metadata[k] = &internalv1pb.ListStringValue{Values: []string{}}
 		}
-		listValue.Values = append(listValue.Values, values...)
-		metadata[k] = &listValue
+		metadata[k].Values = append(metadata[k].Values, values...)
+		metadata[k].Values = []string{strings.Join(metadata[k].Values, ";")}
 	}
 
-	imr.r.Metadata = metadata
 	return imr
 }
 
