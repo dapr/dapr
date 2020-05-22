@@ -40,6 +40,7 @@ jobs:
 
             if (commentBody && commentBody.indexOf("/make-me-laugh") == 0) {
               const result = await github.request("https://official-joke-api.appspot.com/random_joke");
+              console.log(result);
 
               if (!result || !result.data) {
                 return;
