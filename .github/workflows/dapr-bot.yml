@@ -57,7 +57,7 @@ jobs:
             if (commentBody && commentBody.indexOf("/make-me-laugh") == 0) {
               const result = await github.request("https://official-joke-api.appspot.com/random_joke");
               jokedata = result.data
-              joke = "i have a bad feeling about this"
+              joke = "I have a bad feeling about this"
               if (jokedata && jokedata.setup && jokedata.punchline) {
                 joke = `${jokedata.setup} - ${jokedata.punchline}`
               }
