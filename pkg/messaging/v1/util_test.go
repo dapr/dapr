@@ -20,7 +20,7 @@ import (
 
 func TestInternalMetadataToHTTPHeader(t *testing.T) {
 	testValue := &internalv1pb.ListStringValue{
-		Values: []string{"fakeValue"},
+		Values: []string{"fakeValue1"},
 	}
 
 	fakeMetadata := map[string]*internalv1pb.ListStringValue{
@@ -44,6 +44,24 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 	sort.Strings(savedHeaderKeyNames)
 
 	assert.Equal(t, expectedKeyNames, savedHeaderKeyNames)
+}
+
+func TestInternalMetadataToHTTPHeaderMultipleValues(t *testing.T) {
+	testValue := &internalv1pb.ListStringValue{
+		Values: []string{"fakeValue1", "fakeValue2"},
+	}
+
+	fakeMetadata := map[string]*internalv1pb.ListStringValue{
+		"custom-header": testValue,
+	}
+
+	expectedHeaderValue := "fakeValue1;fakeValue2"
+	var savedHeaderValue string
+	InternalMetadataToHTTPHeader(fakeMetadata, func(k, v string) {
+		savedHeaderValue = v
+	})
+
+	assert.Equal(t, expectedHeaderValue, savedHeaderValue)
 }
 
 func TestGrpcMetadataToInternalMetadata(t *testing.T) {

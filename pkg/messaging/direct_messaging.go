@@ -9,12 +9,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/utils"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -133,6 +136,33 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	defer cancel()
 
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
+
+	metadata := map[string][]string{}
+
+	var forwardedHeaderValue string
+
+	hostAddress, err := utils.GetHostAddress()
+	if err == nil {
+		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
+		metadata[fasthttp.HeaderXForwardedFor] = []string{hostAddress}
+
+		forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", hostAddress, hostAddress)
+	}
+
+	hostName, err := os.Hostname()
+	if err == nil {
+		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
+		metadata[fasthttp.HeaderXForwardedHost] = []string{hostName}
+
+		forwardedHeaderValue += fmt.Sprintf("host=%s", hostName)
+	}
+
+	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
+	metadata[fasthttp.HeaderForwarded] = []string{forwardedHeaderValue}
+
+	// Append metadata to existing metadata in request
+	req.AppendMetadata(metadata)
+
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {

@@ -7,13 +7,11 @@ package http
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/utils"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -108,26 +106,11 @@ func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 			proto = "http"
 		}
 
-		forwardedHeaderValue := fmt.Sprintf("proto=%s", proto)
 		// Add X-Forwarded-Proto: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
 		ctx.Request.Header.Add(fasthttp.HeaderXForwardedProto, proto)
 
-		hostAddress, err := utils.GetHostAddress()
-		if err == nil {
-			// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-			ctx.Request.Header.Add(fasthttp.HeaderXForwardedFor, hostAddress)
-			forwardedHeaderValue += fmt.Sprintf(";for=%s;by=%s", hostAddress, hostAddress)
-		}
-
-		hostName, err := os.Hostname()
-		if err == nil {
-			// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
-			ctx.Request.Header.Add(fasthttp.HeaderXForwardedHost, hostName)
-			forwardedHeaderValue += fmt.Sprintf(";host=%s", hostName)
-		}
-
 		// Add Forwarded header: https://tools.ietf.org/html/rfc7239
-		ctx.Request.Header.Add(fasthttp.HeaderForwarded, forwardedHeaderValue)
+		ctx.Request.Header.Add(fasthttp.HeaderForwarded, fmt.Sprintf("proto=%s", proto))
 
 		next(ctx)
 	}
