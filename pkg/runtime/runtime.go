@@ -1286,11 +1286,11 @@ func (a *DaprRuntime) createAppChannel() error {
 func (a *DaprRuntime) announceSelf() error {
 	switch a.runtimeConfig.Mode {
 	case modes.StandaloneMode:
-		err := discovery.RegisterMDNS(a.runtimeConfig.ID, a.runtimeConfig.InternalGRPCPort)
+		err := discovery.RegisterMDNS(a.runtimeConfig.ID, []string{a.hostAddress}, a.runtimeConfig.InternalGRPCPort)
 		if err != nil {
 			return err
 		}
-		log.Info("local service entry announced")
+		log.Infof("local service entry announced: %s -> %s:%d", a.runtimeConfig.ID, a.hostAddress, a.runtimeConfig.InternalGRPCPort)
 	}
 	return nil
 }
