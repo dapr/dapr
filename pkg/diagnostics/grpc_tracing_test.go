@@ -45,6 +45,8 @@ func TestWithGRPCWithNoSpanContext(t *testing.T) {
 		spec := config.TracingSpec{SamplingRate: "1"}
 		sc := GetSpanContextFromGRPC(ctx, spec)
 		assert.NotEmpty(t, sc, "Should get default span context")
+		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
+		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
 		assert.Equal(t, 1, int(sc.TraceOptions), "Should be sampled")
 	})
 
@@ -52,6 +54,8 @@ func TestWithGRPCWithNoSpanContext(t *testing.T) {
 		ctx := context.Background()
 		spec := config.TracingSpec{SamplingRate: "0.5"}
 		sc := GetSpanContextFromGRPC(ctx, spec)
+		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
+		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
 		assert.NotEmpty(t, sc, "Should get default span context")
 	})
 
@@ -60,6 +64,8 @@ func TestWithGRPCWithNoSpanContext(t *testing.T) {
 		spec := config.TracingSpec{SamplingRate: "0"}
 		sc := GetSpanContextFromGRPC(ctx, spec)
 		assert.NotEmpty(t, sc, "Should get default span context")
+		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
+		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
 		assert.Equal(t, 0, int(sc.TraceOptions), "Should not be sampled")
 	})
 }
