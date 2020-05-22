@@ -118,6 +118,8 @@ func TestWithNoSpanContext(t *testing.T) {
 		spec := config.TracingSpec{SamplingRate: "1"}
 		sc := GetSpanContextFromRequestContext(ctx, spec)
 		assert.NotEmpty(t, sc, "Should get default span context")
+		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
+		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
 		assert.Equal(t, 1, int(sc.TraceOptions), "Should be sampled")
 	})
 
@@ -126,6 +128,8 @@ func TestWithNoSpanContext(t *testing.T) {
 		spec := config.TracingSpec{SamplingRate: "0.5"}
 		sc := GetSpanContextFromRequestContext(ctx, spec)
 		assert.NotEmpty(t, sc, "Should get default span context")
+		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
+		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
 	})
 
 	t.Run("No SpanContext with zero sampling rate", func(t *testing.T) {
@@ -133,6 +137,8 @@ func TestWithNoSpanContext(t *testing.T) {
 		spec := config.TracingSpec{SamplingRate: "0"}
 		sc := GetSpanContextFromRequestContext(ctx, spec)
 		assert.NotEmpty(t, sc, "Should get default span context")
+		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
+		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
 		assert.Equal(t, 0, int(sc.TraceOptions), "Should not be sampled")
 	})
 }

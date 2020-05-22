@@ -134,8 +134,8 @@ func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
 
 	gen := tracingConfig.Load().(*traceIDGenerator)
 
-	// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
 	spanContext.TraceID = gen.NewTraceID()
+	spanContext.SpanID = gen.NewSpanID()
 
 	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
 
