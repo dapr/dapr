@@ -88,7 +88,7 @@ message BindingEventResponse {
   string store_name = 1;
 
   // The state key values which will be stored in store_name.
-  repeated common.v1.StateSaveRequest states = 2;
+  repeated common.v1.StateItem states = 2;
 
   // BindingEventConcurrency is the kind of concurrency 
   enum BindingEventConcurrency {
