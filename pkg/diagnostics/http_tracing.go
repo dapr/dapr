@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"net/textproto"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
@@ -55,7 +55,7 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 
 			next(ctx)
 
-			UpdateSpanStatus(span, spanName, ctx.Response.StatusCode())
+			UpdateSpanStatusFromHTTPStatus(span, spanName, ctx.Response.StatusCode())
 			span.End()
 		}
 	}
@@ -117,13 +117,11 @@ func isHealthzRequest(name string) bool {
 	return strings.Contains(name, "/healthz")
 }
 
-// UpdateSpanStatus updates trace span status based on response code
-func UpdateSpanStatus(span *trace.Span, spanName string, code int) {
+// UpdateSpanStatusFromHTTPStatus updates trace span status based on response code
+func UpdateSpanStatusFromHTTPStatus(span *trace.Span, spanName string, code int) {
 	if span != nil {
-		span.SetStatus(trace.Status{
-			Code:    projectStatusCode(code),
-			Message: fmt.Sprintf("method %s status - %s", spanName, strconv.Itoa(code)),
-		})
+		code := invokev1.CodeFromHTTPStatus(code)
+		span.SetStatus(trace.Status{Code: int32(code), Message: code.String()})
 	}
 }
 
