@@ -415,7 +415,7 @@ func TestSaveState(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 	request := &runtimev1pb.SaveStateRequest{
-		Requests: []*commonv1pb.StateSaveRequest{
+		States: []*commonv1pb.StateItem{
 			{
 				Key:   "1",
 				Value: []byte("2"),

@@ -80,8 +80,8 @@ message InvokeResponse {
   string content_type = 2;
 }
 
-// StateSaveRequest represents state and options to save the state value.
-message StateSaveRequest {
+// StateItem represents state key, value, and additional options to save state.
+message StateItem {
   // Required. The state key
   string key = 1;
 
