@@ -199,7 +199,7 @@ func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
 	for i := 0; i < n; i++ {
 		_, err = client.SaveState(context.Background(), &pb.SaveStateRequest{
 			StoreName: "statestore",
-			Requests: []*commonv1pb.StateSaveRequest{
+			States: []*commonv1pb.StateItem{
 				{
 					Key:   "myKey",
 					Value: []byte("My State"),
