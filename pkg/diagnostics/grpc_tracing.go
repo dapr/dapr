@@ -15,7 +15,9 @@ import (
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const grpcTraceContextKey = "grpc-trace-bin"
@@ -53,11 +55,25 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		newCtx = NewContext(ctx, span.SpanContext())
 		resp, err = handler(newCtx, req)
 
-		UpdateSpanStatusFromError(span, err, method)
+		UpdateSpanStatusFromGRPCError(span, err, method)
 
 		span.End()
 
 		return resp, err
+	}
+}
+
+// UpdateSpanStatusFromGRPCError updates tracer span status based on error object
+func UpdateSpanStatusFromGRPCError(span *trace.Span, err error, method string) {
+	if span == nil || err == nil {
+		return
+	}
+
+	s, ok := status.FromError(err)
+	if ok {
+		span.SetStatus(trace.Status{Code: int32(s.Code()), Message: s.Message()})
+	} else {
+		span.SetStatus(trace.Status{Code: int32(codes.Internal), Message: err.Error()})
 	}
 }
 
