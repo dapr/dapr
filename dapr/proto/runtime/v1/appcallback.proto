@@ -120,7 +120,7 @@ message TopicSubscription {
   // Required. The name of topic which will be subscribed
   string topic = 1;
 
-  // The optional properties used for topic subscribtions e.g. session id
+  // The optional properties used for this topic's subscribtion e.g. session id
   map<string,string> metadata = 2;
 }
 
