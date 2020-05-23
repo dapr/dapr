@@ -337,8 +337,9 @@ func (m *ListTopicSubscriptionsResponse) GetSubscriptions() []*TopicSubscription
 
 // TopicSubscription represents topic and metadata.
 type TopicSubscription struct {
-	// The name of topic which will be subscribed
-	Topic                string            `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	// Required. The name of topic which will be subscribed
+	Topic string `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	// The optional properties used for topic subscribtions e.g. session id
 	Metadata             map[string]string `protobuf:"bytes,2,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`
