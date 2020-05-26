@@ -93,7 +93,7 @@ message SaveStateRequest {
   string store_name = 1;
 
   // The array of the state key values.
-  repeated common.v1.StateSaveRequest requests = 2;
+  repeated common.v1.StateItem states = 2;
 }
 
 // PublishEventRequest is the message to publish event data to pubsub topic
