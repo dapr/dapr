@@ -10,7 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"go.opencensus.io/trace/propagation"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -109,6 +111,11 @@ func isTraceCorrleationHeaderKey(key string) bool {
 	return k == tracestateHeader || k == traceparentHeader || k == tracebinMetadata
 }
 
+func isGRPCTraceCorrelationHeaderKey(key string) bool {
+	k := strings.ToLower(key)
+	return k == tracebinMetadata
+}
+
 // InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata
 func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
 	var md = metadata.MD{}
@@ -150,8 +157,19 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 // InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers
 func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
-		// Skip if the header key has -bin suffix
-		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader || isTraceCorrleationHeaderKey(k) {
+		if isGRPCTraceCorrelationHeaderKey(k) {
+			// add the grpc-trace-bin value to the http header as it contains the traceid
+			traceContext := listVal.Values[0]
+			if traceContext != "" {
+				traceContextBinary := []byte(traceContext)
+				sc, _ := propagation.FromBinary(traceContextBinary)
+				setHeader(traceparentHeader, diag.SpanContextToString(sc))
+			}
+			continue
+		}
+
+		// Skip if the header key has -bin suffix except grpc-trace-bin
+		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader {
 			continue
 		}
 		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0])
