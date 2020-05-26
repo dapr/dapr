@@ -76,7 +76,7 @@ func (m *Actor) GetActorId() string {
 }
 
 // InternalInvokeRequest is the message to transfer caller's data to callee
-// for service invocaton. This includes callee's app id and caller's request data.
+// for service invocation. This includes callee's app id and caller's request data.
 type InternalInvokeRequest struct {
 	// Required. The version of Dapr runtime API.
 	Ver APIVersion `protobuf:"varint,1,opt,name=ver,proto3,enum=dapr.proto.internals.v1.APIVersion" json:"ver,omitempty"`
@@ -146,7 +146,7 @@ func (m *InternalInvokeRequest) GetActor() *Actor {
 }
 
 // InternalInvokeResponse is the message to transfer callee's response to caller
-// for service invocaton.
+// for service invocation.
 type InternalInvokeResponse struct {
 	// Required. HTTP/gRPC status.
 	Status *Status `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`

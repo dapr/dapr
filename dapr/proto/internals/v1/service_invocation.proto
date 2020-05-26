@@ -41,7 +41,7 @@ message Actor {
 }
 
 // InternalInvokeRequest is the message to transfer caller's data to callee
-// for service invocaton. This includes callee's app id and caller's request data.
+// for service invocation. This includes callee's app id and caller's request data.
 message InternalInvokeRequest {
   // Required. The version of Dapr runtime API.
   APIVersion ver = 1;
@@ -58,7 +58,7 @@ message InternalInvokeRequest {
 }
 
 // InternalInvokeResponse is the message to transfer callee's response to caller
-// for service invocaton.
+// for service invocation.
 message InternalInvokeResponse {
   // Required. HTTP/gRPC status.
   Status status = 1;

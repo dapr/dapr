@@ -88,7 +88,7 @@ message BindingEventResponse {
   string store_name = 1;
 
   // The state key values which will be stored in store_name.
-  repeated common.v1.StateSaveRequest states = 2;
+  repeated common.v1.StateItem states = 2;
 
   // BindingEventConcurrency is the kind of concurrency 
   enum BindingEventConcurrency {
@@ -117,9 +117,10 @@ message ListTopicSubscriptionsResponse {
 
 // TopicSubscription represents topic and metadata.
 message TopicSubscription {
-  // The name of topic which will be subscribed
+  // Required. The name of topic which will be subscribed
   string topic = 1;
 
+  // The optional properties used for this topic's subscribtion e.g. session id
   map<string,string> metadata = 2;
 }
 

@@ -246,7 +246,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	}
 
 	reqs := []state.SetRequest{}
-	for _, s := range in.Requests {
+	for _, s := range in.States {
 		req := state.SetRequest{
 			Key:      a.getModifiedStateKey(s.Key),
 			Metadata: s.Metadata,
