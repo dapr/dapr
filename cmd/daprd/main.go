@@ -212,7 +212,7 @@ func main() {
 			}),
 			pubsub_loader.New("snssqs", func() pubs.PubSub {
 				return pubsub_snssqs.NewSnsSqs(logContrib)
-      }),
+			}),
 			pubsub_loader.New("mqtt", func() pubs.PubSub {
 				return pubsub_mqtt.NewMQTTPubSub(logContrib)
 			}),
