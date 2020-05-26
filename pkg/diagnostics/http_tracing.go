@@ -59,6 +59,8 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			AddAttributesToSpan(span, m)
 
 			UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
+			UpdateResponseHeaders(ctx, span.SpanContext())
+
 			span.End()
 		}
 	}
@@ -171,7 +173,7 @@ func tracestateToRequest(sc trace.SpanContext, req *fasthttp.Request) {
 	}
 }
 
-// GetSpanAttributesMap builds the span trace attributes map for HTTP calls based on given parameters as per open-telemetry specs
+// GetSpanAttributesMapFromHTTP builds the span trace attributes map for HTTP calls based on given parameters as per open-telemetry specs
 func GetSpanAttributesMapFromHTTP(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
 	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
 	m := make(map[string]string)
@@ -204,4 +206,43 @@ func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]st
 	statusCode := ctx.Response.StatusCode()
 	r := getAPIComponent(route)
 	return GetSpanAttributesMapFromHTTP(r.componentType, r.componentValue, method, route, uri, statusCode)
+}
+
+func getResponseHeader(resp *fasthttp.Response, name string) (string, bool) {
+	s := string(resp.Header.Peek(textproto.CanonicalMIMEHeaderKey(name)))
+	if s == "" {
+		return "", false
+	}
+
+	return s, true
+}
+
+func tracestateToResponse(sc trace.SpanContext, resp *fasthttp.Response) {
+	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
+	if sc.Tracestate != nil {
+		for _, entry := range sc.Tracestate.Entries() {
+			pairs = append(pairs, strings.Join([]string{entry.Key, entry.Value}, "="))
+		}
+		h := strings.Join(pairs, ",")
+
+		if h != "" && len(h) <= maxTracestateLen {
+			resp.Header.Set(tracestateHeader, h)
+		}
+	}
+}
+
+// SpanContextToResponse modifies the given response to include traceparent and tracestate headers.
+func SpanContextToResponse(sc trace.SpanContext, resp *fasthttp.Response) {
+	h := SpanContextToString(sc)
+	resp.Header.Set(traceparentHeader, h)
+	tracestateToResponse(sc, resp)
+}
+
+// UpdateResponse updates trace headers in the response
+func UpdateResponseHeaders(ctx *fasthttp.RequestCtx, sc trace.SpanContext) {
+	_, ok := getResponseHeader(&ctx.Response, traceparentHeader)
+	// if there is no response headers found, add the Dapr generated SpanContext in the response header
+	if !ok {
+		SpanContextToResponse(sc, &ctx.Response)
+	}
 }
