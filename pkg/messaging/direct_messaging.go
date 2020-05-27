@@ -143,29 +143,32 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
 
-	metadata := map[string][]string{}
+	metadata := req.Metadata()
 
 	var forwardedHeaderValue string
 
 	if d.hostAddress != "" {
 		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-		metadata[fasthttp.HeaderXForwardedFor] = []string{d.hostAddress}
+		metadata[fasthttp.HeaderXForwardedFor] = &internalv1pb.ListStringValue{
+			Values: []string{d.hostAddress},
+		}
 
 		forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", d.hostAddress, d.hostAddress)
 	}
 
 	if d.hostName != "" {
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
-		metadata[fasthttp.HeaderXForwardedHost] = []string{d.hostName}
+		metadata[fasthttp.HeaderXForwardedHost] = &internalv1pb.ListStringValue{
+			Values: []string{d.hostName},
+		}
 
 		forwardedHeaderValue += fmt.Sprintf("host=%s", d.hostName)
 	}
 
 	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
-	metadata[fasthttp.HeaderForwarded] = []string{forwardedHeaderValue}
-
-	// Append metadata to existing metadata in request
-	req.AppendMetadata(metadata)
+	metadata[fasthttp.HeaderForwarded] = &internalv1pb.ListStringValue{
+		Values: []string{forwardedHeaderValue},
+	}
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())

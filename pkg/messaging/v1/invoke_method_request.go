@@ -104,21 +104,6 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 	return imr
 }
 
-// AppendMetadata appends to existing metadata
-func (imr *InvokeMethodRequest) AppendMetadata(md map[string][]string) *InvokeMethodRequest {
-	metadata := imr.r.Metadata
-
-	for k, values := range md {
-		if _, ok := metadata[k]; !ok {
-			metadata[k] = &internalv1pb.ListStringValue{Values: []string{}}
-		}
-		metadata[k].Values = append(metadata[k].Values, values...)
-		metadata[k].Values = []string{strings.Join(metadata[k].Values, ";")}
-	}
-
-	return imr
-}
-
 // EncodeHTTPQueryString generates querystring for http using http extension object
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	m := imr.r.Message

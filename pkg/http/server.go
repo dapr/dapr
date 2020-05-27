@@ -47,10 +47,9 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pip
 // StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
 	handler :=
-		s.useProxy(
-			s.useCors(
-				s.useComponents(
-					s.useRouter())))
+		s.useCors(
+			s.useComponents(
+				s.useRouter()))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
@@ -94,26 +93,6 @@ func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)
 	return corsHandler.CorsMiddleware(next)
-}
-
-func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled proxy http middleware")
-	return func(ctx *fasthttp.RequestCtx) {
-		var proto string
-		if ctx.IsTLS() {
-			proto = "https"
-		} else {
-			proto = "http"
-		}
-
-		// Add X-Forwarded-Proto: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
-		ctx.Request.Header.Add(fasthttp.HeaderXForwardedProto, proto)
-
-		// Add Forwarded header: https://tools.ietf.org/html/rfc7239
-		ctx.Request.Header.Add(fasthttp.HeaderForwarded, fmt.Sprintf("proto=%s", proto))
-
-		next(ctx)
-	}
 }
 
 func (s *server) getCorsHandler(allowedOrigins []string) *cors.CorsHandler {
