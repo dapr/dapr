@@ -49,10 +49,11 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pip
 // StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
 	handler :=
-		s.useProxy(
-			s.useCors(
-				s.useComponents(
-					s.useRouter())))
+		useAPIAuthentication(
+			s.useProxy(
+				s.useCors(
+					s.useComponents(
+						s.useRouter()))))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
