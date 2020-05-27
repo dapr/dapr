@@ -14,6 +14,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/runtime"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +33,7 @@ const (
 	appIDKey                          = "dapr.io/id"
 	daprProfilingKey                  = "dapr.io/profiling"
 	daprLogLevel                      = "dapr.io/log-level"
+	daprAPITokenSecret                = "dapr.io/api-token-secret"
 	daprLogAsJSON                     = "dapr.io/log-as-json"
 	daprMaxConcurrencyKey             = "dapr.io/max-concurrency"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
@@ -222,6 +224,10 @@ func logAsJSONEnabled(annotations map[string]string) bool {
 
 func profilingEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprProfilingKey, false)
+}
+
+func getAPITokenSecret(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprAPITokenSecret, "")
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -457,6 +463,21 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 				Name:  "SENTRY_LOCAL_IDENTITY",
 				Value: identity,
 			})
+	}
+
+	secret := getAPITokenSecret(annotations)
+	if secret != "" {
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name: auth.APITokenEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "token",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secret,
+					},
+				},
+			},
+		})
 	}
 
 	resources, err := getResourceRequirements(annotations)
