@@ -33,7 +33,7 @@ const (
 	appIDKey                          = "dapr.io/id"
 	daprProfilingKey                  = "dapr.io/profiling"
 	daprLogLevel                      = "dapr.io/log-level"
-	daprAPITokenSecret                = "dapr.io/api-token-secret"
+	daprAPITokenSecret                = "dapr.io/api-token-secret" /* #nosec */
 	daprLogAsJSON                     = "dapr.io/log-as-json"
 	daprMaxConcurrencyKey             = "dapr.io/max-concurrency"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
