@@ -55,6 +55,7 @@ import (
 	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
 	"github.com/dapr/components-contrib/pubsub/nats"
+	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -215,6 +216,9 @@ func main() {
 			}),
 			pubsub_loader.New("mqtt", func() pubs.PubSub {
 				return pubsub_mqtt.NewMQTTPubSub(logContrib)
+			}),
+			pubsub_loader.New("pulsar", func() pubs.PubSub {
+				return pubsub_pulsar.NewPulsar(logContrib)
 			}),
 		),
 		runtime.WithExporters(
