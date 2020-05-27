@@ -40,6 +40,7 @@ func TestGetSideCarContainer(t *testing.T) {
 	annotations[daprConfigKey] = "config"
 	annotations[daprPortKey] = "5000"
 	annotations[daprLogAsJSON] = "true"
+	annotations[daprAPITokenSecret] = "secret"
 
 	container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
 
@@ -61,5 +62,6 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--log-as-json",
 	}
 
+	assert.Equal(t, "secret", container.Env[2].ValueFrom.SecretKeyRef.Name)
 	assert.EqualValues(t, expectedArgs, container.Args)
 }
