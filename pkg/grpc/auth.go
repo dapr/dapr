@@ -11,7 +11,12 @@ import (
 
 func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		md, _ := metadata.FromIncomingContext(ctx)
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "missing metadata in request")
+			return nil, err
+		}
+
 		token := md.Get(authHeader)
 		if len(token) == 0 {
 			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "missing api token in request metadata")

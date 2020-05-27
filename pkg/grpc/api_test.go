@@ -168,7 +168,7 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc_go.Ser
 	opts := []grpc_go.ServerOption{}
 	if token != "" {
 		opts = append(opts,
-			grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token"))),
+			grpc_go.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token")),
 		)
 	}
 

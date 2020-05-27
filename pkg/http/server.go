@@ -101,17 +101,17 @@ func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 
 func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	token := auth.GetAPIToken()
-	if token != "" {
-		return func(ctx *fasthttp.RequestCtx) {
-			v := ctx.Request.Header.Peek(auth.APITokenHeader)
-			if string(v) == token {
-				next(ctx)
-			} else {
-				ctx.Error("invalid api token", http.StatusUnauthorized)
-			}
+	if token == "" {
+		return next
+	}
+	return func(ctx *fasthttp.RequestCtx) {
+		v := ctx.Request.Header.Peek(auth.APITokenHeader)
+		if string(v) == token {
+			next(ctx)
+		} else {
+			ctx.Error("invalid api token", http.StatusUnauthorized)
 		}
 	}
-	return next
 }
 
 func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler {

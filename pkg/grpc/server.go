@@ -138,25 +138,25 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
 	s.logger.Infof("enabled monitoring middleware")
-	unaryServerInterceptor := diag.SetTracingInGRPCMiddlewareUnary(s.config.AppID, s.tracingSpec)
+
+	intr := []grpc_go.UnaryServerInterceptor{
+		diag.SetTracingInGRPCMiddlewareUnary(s.config.AppID, s.tracingSpec),
+	}
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
-		unaryServerInterceptor = grpc_middleware.ChainUnaryServer(
-			unaryServerInterceptor,
-			diag.DefaultGRPCMonitoring.UnaryServerInterceptor(),
-		)
+		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
+	}
+	if s.authToken != "" {
+		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
 	}
 
+	chain := grpc_middleware.ChainUnaryServer(
+		intr...,
+	)
 	opts = append(
 		opts,
-		grpc_go.UnaryInterceptor(unaryServerInterceptor))
-
-	if s.authToken != "" {
-		opts = append(
-			opts,
-			grpc_go.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader)),
-		)
-	}
+		grpc_go.UnaryInterceptor(chain),
+	)
 	return opts
 }
 
