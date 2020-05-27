@@ -38,42 +38,29 @@ jobs:
             const isFromPulls = !!payload.issue.pull_request;
             const commentBody = payload.comment.body;
 
+            if (owners.indexOf(context.actor) < 0) {
+              return;
+            }
+
             if (commentBody && commentBody.indexOf("/make-me-laugh") == 0) {
               const result = await github.request("https://official-joke-api.appspot.com/random_joke");
-
-              if (!result || !result.data) {
-                return;
+              jokedata = result.data;
+              joke = "I have a bad feeling about this.";
+              if (jokedata && jokedata.setup && jokedata.punchline) {
+                joke = `${jokedata.setup} - ${jokedata.punchline}`;
               }
-
-              joke = JSON.parse(result.data);
 
               await github.issues.createComment({
                 owner: issue.owner,
                 repo: issue.repo,
                 issue_number: issue.number,
-                body: `${joke["setup"]} ${joke["punchline"]}`,
+                body: joke,
               });
 
               return;
             }
 
             if (isFromPulls && commentBody && commentBody.indexOf("/ok-to-test") == 0) {
-              // Ignore the command unless the actor is in owner list
-              if (owners.indexOf(context.actor) < 0) {
-                const errorMessage = `${context.actor} doesn't have the permission to execute the command`;
-
-                console.log(errorMessage);
-                
-                await github.issues.createComment({
-                  owner: issue.owner,
-                  repo: issue.repo,
-                  issue_number: issue.number,
-                  body: errorMessage
-                });
-
-                return;
-              }
-
               // Get pull request
               const pull = await github.pulls.get({
                 owner: issue.owner,
