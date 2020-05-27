@@ -158,13 +158,8 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
 		if isGRPCTraceCorrelationHeaderKey(k) {
-			// add the grpc-trace-bin value to the http header as it contains the traceid
-			traceContext := listVal.Values[0]
-			if traceContext != "" {
-				traceContextBinary := []byte(traceContext)
-				sc, _ := propagation.FromBinary(traceContextBinary)
-				setHeader(traceparentHeader, diag.SpanContextToString(sc))
-			}
+			// process the grpc-trace-bin value to add in the response HTTP header
+			processGRPCTraceHeader(listVal.Values, setHeader)
 			continue
 		}
 
@@ -294,4 +289,14 @@ func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
 	}
 
 	return grpc_status.ErrorProto(respStatus)
+}
+
+func processGRPCTraceHeader(values []string, setHeader func(string, string)) {
+	// add the grpc-trace-bin value to the http header as it contains the traceID
+	traceContext := values[0]
+	if traceContext != "" {
+		traceContextBinary := []byte(traceContext)
+		sc, _ := propagation.FromBinary(traceContextBinary)
+		setHeader(traceparentHeader, diag.SpanContextToString(sc))
+	}
 }
