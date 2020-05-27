@@ -1422,6 +1422,7 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 		panic(fmt.Errorf("failed to request: %v", err))
 	}
 
+	res.Body.Close()
 	response := fakeHTTPResponse{
 		StatusCode:  res.StatusCode,
 		ContentType: res.Header.Get("Content-Type"),

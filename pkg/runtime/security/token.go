@@ -4,6 +4,7 @@ import (
 	"os"
 )
 
+/* #nosec */
 const (
 	APITokenEnvVar = "DAPR_API_TOKEN"
 	APITokenHeader = "dapr-api-token"
