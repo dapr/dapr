@@ -64,8 +64,8 @@ func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeS
 	return &commonv1pb.InvokeResponse{}, nil
 }
 
-func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
+	return &runtimev1pb.InvokeBindingResponse{}, nil
 }
 
 func (m *mockGRPCAPI) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
