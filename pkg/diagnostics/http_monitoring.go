@@ -6,8 +6,10 @@
 package diagnostics
 
 import (
+	"bytes"
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -217,7 +219,7 @@ func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.
 		method := string(ctx.Method())
 		path := string(ctx.Path())
 
-		h.ServerRequestReceived(ctx, method, path, int64(reqContentSize))
+		h.ServerRequestReceived(ctx, method, h.convertPathToMethodName(path), int64(reqContentSize))
 
 		start := time.Now()
 
@@ -228,4 +230,55 @@ func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.
 		respSize := int64(len(ctx.Response.Body()))
 		h.ServerRequestCompleted(ctx, method, path, status, respSize, elapsed)
 	}
+}
+
+func (h *httpMetrics) convertPathToMethodName(path string) string {
+	var parsedPath = strings.Split(path, "/")
+
+	if len(parsedPath) > 1 && parsedPath[0] == "" {
+		parsedPath = parsedPath[1:]
+	}
+
+	if len(parsedPath) < 3 {
+		return path
+	}
+
+	var methodName bytes.Buffer
+	methodName.WriteString("/")
+	methodName.WriteString(parsedPath[0])
+	methodName.WriteString("/")
+	methodName.WriteString(parsedPath[1])
+	methodName.WriteString("/")
+
+	switch parsedPath[1] {
+	case "state":
+		methodName.WriteString(parsedPath[2])
+		if len(parsedPath) >= 4 {
+			methodName.WriteString("/*")
+		}
+
+	case "actors":
+		if len(parsedPath) < 5 {
+			return path
+		}
+		methodName.WriteString(parsedPath[2])
+		methodName.WriteString("/")
+		methodName.WriteString(parsedPath[3])
+		methodName.WriteString("/")
+		methodName.WriteString(parsedPath[4])
+		if len(parsedPath) >= 5 {
+			methodName.WriteString("/*")
+		}
+
+	case "secrets":
+		methodName.WriteString(parsedPath[2])
+		if len(parsedPath) >= 4 {
+			methodName.WriteString("/*")
+		}
+
+	default:
+		return path
+	}
+
+	return methodName.String()
 }
