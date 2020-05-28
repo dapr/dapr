@@ -243,6 +243,7 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 		p = path[1:]
 	}
 
+	// Split up to 6 delimiters in 'v1/actors/DemoActor/1/timer/name'
 	var parsedPath = strings.SplitN(p, "/", 6)
 
 	if len(parsedPath) < 3 {
@@ -251,15 +252,18 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 
 	switch parsedPath[1] {
 	case "state":
+		// Concat 3 items(v1, state, statestore) in /v1/state/statestore/key
 		return "/" + strings.Join(parsedPath[0:3], "/")
 
 	case "actors":
 		if len(parsedPath) < 5 {
 			return path
 		}
+		// Concat 5 items(v1, actors, DemoActor, 1, timer) in /v1/actors/DemoActor/1/timer/name
 		return "/" + strings.Join(parsedPath[0:5], "/")
 
 	case "secrets":
+		// Concat 3 items(v1, secrets, keyvault) from /v1/secrets/keyvault/name
 		return "/" + strings.Join(parsedPath[0:3], "/")
 	}
 
