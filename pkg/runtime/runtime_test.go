@@ -900,7 +900,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			Operation: bindings.GetOperation,
 		})
 		assert.NotNil(t, err)
-		assert.Equal(t, "binding mockBinding does not support operation get", err.Error())
+		assert.Equal(t, "binding mockBinding does not support operation get. supported operations: create", err.Error())
 	})
 }
 
