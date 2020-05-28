@@ -190,7 +190,8 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
 	req := &bindings.InvokeRequest{
-		Metadata: in.Metadata,
+		Metadata:  in.Metadata,
+		Operation: bindings.OperationKind(in.Operation),
 	}
 	if in.Data != nil {
 		req.Data = in.Data

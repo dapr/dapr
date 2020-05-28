@@ -297,8 +297,9 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
-		Metadata: req.Metadata,
-		Data:     b,
+		Metadata:  req.Metadata,
+		Data:      b,
+		Operation: bindings.OperationKind(req.Operation),
 	})
 	if err != nil {
 		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
