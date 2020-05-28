@@ -7,14 +7,13 @@ package diagnostics
 
 import (
 	"context"
-	"fmt"
 	"net/textproto"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
@@ -46,25 +45,22 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			SpanContextToRequest(sc, &ctx.Request)
 			next(ctx)
 		} else {
-			method := ctx.Request.Header.Method()
-			spanName := fmt.Sprintf("%s:%s", method, path)
-
 			newCtx := NewContext((context.Context)(ctx), sc)
-			_, span := StartTracingClientSpanFromHTTPContext(newCtx, &ctx.Request, spanName, spec)
+			_, span := StartTracingClientSpanFromHTTPContext(newCtx, &ctx.Request, path, spec)
 			SpanContextToRequest(span.SpanContext(), &ctx.Request)
 
 			next(ctx)
 
-			UpdateSpanStatus(span, spanName, ctx.Response.StatusCode())
+			UpdateSpanStatusFromHTTPStatus(span, path, ctx.Response.StatusCode())
 			span.End()
 		}
 	}
 }
 
 // StartTracingClientSpanFromHTTPContext creates a client span before invoking http method call
-func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Request, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Request, spanName string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
-	ctx, span = startTracingSpanInternal(ctx, method, spec.SamplingRate, trace.SpanKindClient)
+	ctx, span = startTracingSpanInternal(ctx, spanName, spec.SamplingRate, trace.SpanKindClient)
 
 	addAnnotationsToSpan(req, span)
 
@@ -117,13 +113,11 @@ func isHealthzRequest(name string) bool {
 	return strings.Contains(name, "/healthz")
 }
 
-// UpdateSpanStatus updates trace span status based on response code
-func UpdateSpanStatus(span *trace.Span, spanName string, code int) {
+// UpdateSpanStatusFromHTTPStatus updates trace span status based on response code
+func UpdateSpanStatusFromHTTPStatus(span *trace.Span, spanName string, code int) {
 	if span != nil {
-		span.SetStatus(trace.Status{
-			Code:    projectStatusCode(code),
-			Message: fmt.Sprintf("method %s status - %s", spanName, strconv.Itoa(code)),
-		})
+		code := invokev1.CodeFromHTTPStatus(code)
+		span.SetStatus(trace.Status{Code: int32(code), Message: code.String()})
 	}
 }
 

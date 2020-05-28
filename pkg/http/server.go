@@ -7,6 +7,7 @@ package http
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
@@ -15,6 +16,7 @@ import (
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
 	routing "github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
@@ -47,10 +49,11 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pip
 // StartNonBlocking starts a new server in a goroutine
 func (s *server) StartNonBlocking() {
 	handler :=
-		s.useProxy(
-			s.useCors(
-				s.useComponents(
-					s.useRouter())))
+		useAPIAuthentication(
+			s.useProxy(
+				s.useCors(
+					s.useComponents(
+						s.useRouter()))))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
@@ -94,6 +97,21 @@ func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)
 	return corsHandler.CorsMiddleware(next)
+}
+
+func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	token := auth.GetAPIToken()
+	if token == "" {
+		return next
+	}
+	return func(ctx *fasthttp.RequestCtx) {
+		v := ctx.Request.Header.Peek(auth.APITokenHeader)
+		if string(v) == token {
+			next(ctx)
+		} else {
+			ctx.Error("invalid api token", http.StatusUnauthorized)
+		}
+	}
 }
 
 func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler {
