@@ -553,9 +553,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			Metadata: metadata,
 		})
 
-		if span != nil {
-			diag.UpdateSpanStatusFromError(span, err, spanName)
-		}
+		diag.UpdateSpanStatusFromGRPCError(span, err, spanName)
 
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
@@ -603,9 +601,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 
-		if span != nil {
-			diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
-		}
+		diag.UpdateSpanStatusFromHTTPStatus(span, spanName, int(resp.Status().Code))
 
 		if resp.Status().Code != nethttp.StatusOK {
 			return fmt.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
@@ -993,9 +989,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
 
-	if span != nil {
-		diag.UpdateSpanStatus(span, spanName, int(resp.Status().Code))
-	}
+	diag.UpdateSpanStatusFromHTTPStatus(span, spanName, int(resp.Status().Code))
 
 	if resp.Status().Code != nethttp.StatusOK {
 		_, errorMsg := resp.RawData()
@@ -1040,9 +1034,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 	_, err = clientV1.OnTopicEvent(ctx, envelope)
 
-	if span != nil {
-		diag.UpdateSpanStatusFromError(span, err, spanName)
-	}
+	diag.UpdateSpanStatusFromGRPCError(span, err, spanName)
 
 	if err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
