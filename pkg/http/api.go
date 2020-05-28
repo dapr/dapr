@@ -297,8 +297,9 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
-		Metadata: req.Metadata,
-		Data:     b,
+		Metadata:  req.Metadata,
+		Data:      b,
+		Operation: bindings.OperationKind(req.Operation),
 	})
 	if err != nil {
 		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
@@ -328,6 +329,8 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	metadata := getMetadataFromRequest(reqCtx)
+
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	req := state.GetRequest{
@@ -335,6 +338,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		Options: state.GetStateOption{
 			Consistency: consistency,
 		},
+		Metadata: metadata,
 	}
 
 	resp, err := a.stateStores[storeName].Get(&req)
@@ -421,15 +425,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	metadata := map[string]string{}
-	const metadataPrefix string = "metadata."
-	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
-		queryKey := string(key)
-		if strings.HasPrefix(queryKey, metadataPrefix) {
-			k := strings.TrimPrefix(queryKey, metadataPrefix)
-			metadata[k] = string(value)
-		}
-	})
+	metadata := getMetadataFromRequest(reqCtx)
 
 	key := reqCtx.UserValue(secretNameParam).(string)
 	req := secretstores.GetSecretRequest{
@@ -1008,4 +1004,18 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(reqCtx, 200)
 	}
+}
+
+func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
+	metadata := map[string]string{}
+	const metadataPrefix string = "metadata."
+	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
+		queryKey := string(key)
+		if strings.HasPrefix(queryKey, metadataPrefix) {
+			k := strings.TrimPrefix(queryKey, metadataPrefix)
+			metadata[k] = string(value)
+		}
+	})
+
+	return metadata
 }
