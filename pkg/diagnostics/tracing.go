@@ -206,7 +206,7 @@ func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]st
 	return GetSpanAttributesMap(r.componentType, r.componentValue, method, route, uri, statusCode)
 }
 
-// GetSpanAttributesMap builds the span trace attributes map based on given parameters
+// GetSpanAttributesMap builds the span trace attributes map based on given parameters as per open-telemetry specs
 func GetSpanAttributesMap(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
 	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
 	m := make(map[string]string)
