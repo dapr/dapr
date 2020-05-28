@@ -25,7 +25,8 @@ type testSendRequest struct {
 }
 
 type messageData struct {
-	Data string `json:"data,omitempty"`
+	Data      string `json:"data,omitempty"`
+	Operation string `json:"operation"`
 }
 
 type receivedTopicsResponse struct {
@@ -93,7 +94,7 @@ func TestBindings(t *testing.T) {
 
 	var req testSendRequest
 	for _, mes := range testMessages {
-		req.Messages = append(req.Messages, messageData{Data: mes})
+		req.Messages = append(req.Messages, messageData{Data: mes, Operation: "create"})
 	}
 
 	body, err := json.Marshal(req)

@@ -45,7 +45,7 @@ type api struct {
 	json                  jsoniter.API
 	actor                 actors.Actors
 	publishFn             func(req *pubsub.PublishRequest) error
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	id                    string
 	extendedMetadata      sync.Map
 	readyStatus           bool
@@ -79,7 +79,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, tracingSpec config.TracingSpec) API {
+func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error), tracingSpec config.TracingSpec) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -296,9 +296,10 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
-		Metadata: req.Metadata,
-		Data:     b,
+	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
+		Metadata:  req.Metadata,
+		Data:      b,
+		Operation: bindings.OperationKind(req.Operation),
 	})
 	if err != nil {
 		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
@@ -306,7 +307,11 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		respondWithError(reqCtx, 500, msg)
 		return
 	}
-	respondEmpty(reqCtx, 200)
+	if resp == nil {
+		respondEmpty(reqCtx, 200)
+	} else {
+		respondWithJSON(reqCtx, 200, resp.Data)
+	}
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
@@ -324,6 +329,8 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	metadata := getMetadataFromRequest(reqCtx)
+
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	req := state.GetRequest{
@@ -331,6 +338,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		Options: state.GetStateOption{
 			Consistency: consistency,
 		},
+		Metadata: metadata,
 	}
 
 	resp, err := a.stateStores[storeName].Get(&req)
@@ -417,15 +425,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	metadata := map[string]string{}
-	const metadataPrefix string = "metadata."
-	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
-		queryKey := string(key)
-		if strings.HasPrefix(queryKey, metadataPrefix) {
-			k := strings.TrimPrefix(queryKey, metadataPrefix)
-			metadata[k] = string(value)
-		}
-	})
+	metadata := getMetadataFromRequest(reqCtx)
 
 	key := reqCtx.UserValue(secretNameParam).(string)
 	req := secretstores.GetSecretRequest{
@@ -1004,4 +1004,18 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(reqCtx, 200)
 	}
+}
+
+func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
+	metadata := map[string]string{}
+	const metadataPrefix string = "metadata."
+	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
+		queryKey := string(key)
+		if strings.HasPrefix(queryKey, metadataPrefix) {
+			k := strings.TrimPrefix(queryKey, metadataPrefix)
+			metadata[k] = string(value)
+		}
+	})
+
+	return metadata
 }

@@ -47,7 +47,7 @@ var retryCounter = 0
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
+		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
 		json:                  jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
@@ -74,8 +74,8 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		}
 		b, _ := json.Marshal(&req)
 
-		testAPI.sendToOutputBindingFn = func(name string, req *bindings.WriteRequest) error {
-			return errors.New("missing binding name")
+		testAPI.sendToOutputBindingFn = func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+			return nil, errors.New("missing binding name")
 		}
 
 		testMethods := []string{"POST", "PUT"}
@@ -106,7 +106,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	createExporters(meta)
 
 	testAPI := &api{
-		sendToOutputBindingFn: func(name string, req *bindings.WriteRequest) error { return nil },
+		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
 		json:                  jsoniter.ConfigFastest,
 		tracingSpec:           spec,
 	}
@@ -137,8 +137,8 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 		}
 		b, _ := json.Marshal(&req)
 
-		testAPI.sendToOutputBindingFn = func(name string, req *bindings.WriteRequest) error {
-			return errors.New("missing binding name")
+		testAPI.sendToOutputBindingFn = func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+			return nil, errors.New("missing binding name")
 		}
 
 		testMethods := []string{"POST", "PUT"}

@@ -22,7 +22,8 @@ const (
 
 type testCommandRequest struct {
 	Messages []struct {
-		Data string `json:"data,omitempty"`
+		Data      string `json:"data,omitempty"`
+		Operation string `json:"operation"`
 	} `json:"messages,omitempty"`
 }
 
