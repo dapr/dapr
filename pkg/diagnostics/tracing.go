@@ -12,12 +12,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/valyala/fasthttp"
 
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
@@ -25,8 +28,30 @@ import (
 
 type DaprTraceContextKey struct{}
 
+type apiComponent struct {
+	componentType  string
+	componentValue string
+}
+
 const (
 	daprHeaderPrefix = "dapr-"
+
+	// span attribute keys
+	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+	dbTypeSpanAttributeKey      = "db.type"
+	dbInstanceSpanAttributeKey  = "db.instance"
+	dbStatementSpanAttributeKey = "db.statement"
+	dbUrlSpanAttributeKey       = "db.url"
+
+	httpMethodSpanAttributeKey     = "http.method"
+	httpUrlSpanAttributeKey        = "http.url"
+	httpStatusCodeSpanAttributeKey = "http.status_code"
+	httpStatusTextSpanAttributeKey = "http.status_text"
+
+	messagingDestinationKind                 = "topic"
+	messagingSystemSpanAttributeKey          = "messaging.system"
+	messagingDestinationSpanAttributeKey     = "messaging.destination"
+	messagingDestinationKindSpanAttributeKey = "messaging.destination_kind"
 )
 
 // NewContext returns a new context with the given SpanContext attached.
@@ -169,6 +194,57 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 	}
 
 	return daprMetadata
+}
+
+func getSpanAttributesMapFromHTTP(ctx *fasthttp.RequestCtx) map[string]string {
+	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+	path := string(ctx.Request.URI().Path())
+	method := string(ctx.Request.Header.Method())
+
+	r := getAPIComponent(path)
+	m := make(map[string]string)
+	switch r.componentType {
+	case "state", "secrets", "bindings":
+		m[dbTypeSpanAttributeKey] = r.componentType
+		m[dbInstanceSpanAttributeKey] = r.componentValue
+		// TODO: not possible currently to get the route {state_store} , so using path instead of route
+		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, path)
+		m[dbUrlSpanAttributeKey] = path
+	case "invoke":
+		m[httpMethodSpanAttributeKey] = method
+		m[httpUrlSpanAttributeKey] = ctx.Request.URI().String()
+		httpStatusCode := ctx.Response.StatusCode()
+		code := invokev1.CodeFromHTTPStatus(httpStatusCode)
+		m[httpStatusCodeSpanAttributeKey] = strconv.Itoa(httpStatusCode)
+		m[httpStatusTextSpanAttributeKey] = code.String()
+	case "publish":
+		m[messagingSystemSpanAttributeKey] = r.componentType
+		m[messagingDestinationSpanAttributeKey] = r.componentValue
+		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
+	}
+	return m
+}
+
+func getAPIComponent(apiPath string) apiComponent {
+	// Dapr API reference : https://github.com/dapr/docs/tree/master/reference/api
+	// example : apiPath /v1.0/state/statestore
+	if apiPath == "" {
+		return apiComponent{}
+	}
+
+	p := apiPath
+	if p[0] == '/' {
+		p = apiPath[1:]
+	}
+
+	// Split up to 4 delimiters in 'v1.0/state/statestore/key' to get component api type and value
+	var tokens = strings.SplitN(p, "/", 4)
+	if len(tokens) < 3 {
+		return apiComponent{}
+	}
+
+	// return 'state', 'statestore' from the parsed tokens in apiComponent type
+	return apiComponent{componentType: tokens[1], componentValue: tokens[2]}
 }
 
 var tracingConfig atomic.Value // access atomically

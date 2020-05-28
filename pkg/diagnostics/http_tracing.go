@@ -46,7 +46,7 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			next(ctx)
 		} else {
 			newCtx := NewContext((context.Context)(ctx), sc)
-			_, span := StartTracingClientSpanFromHTTPContext(newCtx, &ctx.Request, path, spec)
+			_, span := StartTracingClientSpanFromHTTPContext(newCtx, ctx, path, spec)
 			SpanContextToRequest(span.SpanContext(), &ctx.Request)
 
 			next(ctx)
@@ -58,11 +58,11 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 }
 
 // StartTracingClientSpanFromHTTPContext creates a client span before invoking http method call
-func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Request, spanName string, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartTracingClientSpanFromHTTPContext(ctx context.Context, reqCtx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
 	ctx, span = startTracingSpanInternal(ctx, spanName, spec.SamplingRate, trace.SpanKindClient)
 
-	addAnnotationsToSpan(req, span)
+	addAttributesToSpan(reqCtx, span)
 
 	return ctx, span
 }
@@ -99,14 +99,13 @@ func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
 	tracestateToRequest(sc, req)
 }
 
-func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
-	req.Header.VisitAll(func(key []byte, value []byte) {
-		headerKey := string(key)
-		headerKey = strings.ToLower(headerKey)
-		if strings.HasPrefix(headerKey, daprHeaderPrefix) {
-			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
+func addAttributesToSpan(reqCtx *fasthttp.RequestCtx, span *trace.Span) {
+	m := getSpanAttributesMapFromHTTP(reqCtx)
+	for k, v := range m {
+		if v != "" {
+			span.AddAttributes(trace.StringAttribute(k, v))
 		}
-	})
+	}
 }
 
 func isHealthzRequest(name string) bool {
