@@ -51,6 +51,7 @@ type server struct {
 	kind               string
 	logger             logger.Logger
 	maxConnectionAge   *time.Duration
+	authToken          string
 }
 
 var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
@@ -64,6 +65,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) 
 		tracingSpec: tracingSpec,
 		kind:        apiServer,
 		logger:      apiServerLogger,
+		authToken:   auth.GetAPIToken(),
 	}
 }
 
@@ -135,20 +137,26 @@ func (s *server) generateWorkloadCert() error {
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
-	s.logger.Infof("enabled monitoring middleware.")
-	unaryServerInterceptor := diag.SetTracingInGRPCMiddlewareUnary(s.config.AppID, s.tracingSpec)
+	s.logger.Infof("enabled monitoring middleware")
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
-		unaryServerInterceptor = grpc_middleware.ChainUnaryServer(
-			unaryServerInterceptor,
-			diag.DefaultGRPCMonitoring.UnaryServerInterceptor(),
-		)
+	intr := []grpc_go.UnaryServerInterceptor{
+		diag.SetTracingInGRPCMiddlewareUnary(s.config.AppID, s.tracingSpec),
 	}
 
+	if diag.DefaultGRPCMonitoring.IsEnabled() {
+		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
+	}
+	if s.authToken != "" {
+		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
+	}
+
+	chain := grpc_middleware.ChainUnaryServer(
+		intr...,
+	)
 	opts = append(
 		opts,
-		grpc_go.UnaryInterceptor(unaryServerInterceptor))
-
+		grpc_go.UnaryInterceptor(chain),
+	)
 	return opts
 }
 

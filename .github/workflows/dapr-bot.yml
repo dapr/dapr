@@ -38,23 +38,7 @@ jobs:
             const isFromPulls = !!payload.issue.pull_request;
             const commentBody = payload.comment.body;
 
-            if (context.actor == "dapr-bot") {
-              return;
-            }
-
-            // Ignore the command unless the actor is in owner list
             if (owners.indexOf(context.actor) < 0) {
-              const errorMessage = `${context.actor} doesn't have the permission to execute the command`;
-
-              console.log(errorMessage);
-
-              await github.issues.createComment({
-                owner: issue.owner,
-                repo: issue.repo,
-                issue_number: issue.number,
-                body: errorMessage
-              });
-
               return;
             }
 
