@@ -46,25 +46,22 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			SpanContextToRequest(sc, &ctx.Request)
 			next(ctx)
 		} else {
-			method := ctx.Request.Header.Method()
-			spanName := fmt.Sprintf("%s:%s", method, path)
-
 			newCtx := NewContext((context.Context)(ctx), sc)
-			_, span := StartTracingClientSpanFromHTTPContext(newCtx, &ctx.Request, spanName, spec)
+			_, span := StartTracingClientSpanFromHTTPContext(newCtx, &ctx.Request, path, spec)
 			SpanContextToRequest(span.SpanContext(), &ctx.Request)
 
 			next(ctx)
 
-			UpdateSpanStatus(span, spanName, ctx.Response.StatusCode())
+			UpdateSpanStatus(span, path, ctx.Response.StatusCode())
 			span.End()
 		}
 	}
 }
 
 // StartTracingClientSpanFromHTTPContext creates a client span before invoking http method call
-func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Request, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Request, spanName string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
-	ctx, span = startTracingSpanInternal(ctx, method, spec.SamplingRate, trace.SpanKindClient)
+	ctx, span = startTracingSpanInternal(ctx, spanName, spec.SamplingRate, trace.SpanKindClient)
 
 	addAnnotationsToSpan(req, span)
 
