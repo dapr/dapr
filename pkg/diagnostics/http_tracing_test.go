@@ -18,7 +18,8 @@ import (
 
 func TestStartClientSpanTracing(t *testing.T) {
 	req := getTestHTTPRequest()
-	reqCtx := &fasthttp.RequestCtx{Request: *req}
+	reqCtx := &fasthttp.RequestCtx{}
+	req.CopyTo(&reqCtx.Request)
 	spec := config.TracingSpec{SamplingRate: "0.5"}
 
 	StartTracingClientSpanFromHTTPContext(context.Background(), reqCtx, "test", spec)
@@ -26,7 +27,8 @@ func TestStartClientSpanTracing(t *testing.T) {
 
 func TestTracingClientSpanFromHTTPContext(t *testing.T) {
 	req := getTestHTTPRequest()
-	reqCtx := &fasthttp.RequestCtx{Request: *req}
+	reqCtx := &fasthttp.RequestCtx{}
+	req.CopyTo(&reqCtx.Request)
 	spec := config.TracingSpec{SamplingRate: "1"}
 	sc := GetSpanContextFromRequestContext(reqCtx, spec)
 	ctx := NewContext((context.Context)(reqCtx), sc)
@@ -198,7 +200,8 @@ func TestGetSpanAttributesMapFromHTTP(t *testing.T) {
 			resp := &fasthttp.Response{}
 			resp.SetStatusCode(200)
 			req.SetRequestURI(tt.path)
-			reqCtx := &fasthttp.RequestCtx{Request: *req}
+			reqCtx := &fasthttp.RequestCtx{}
+			req.CopyTo(&reqCtx.Request)
 			method := string(req.Header.Method())
 
 			want := map[string]string{}
@@ -207,10 +210,10 @@ func TestGetSpanAttributesMapFromHTTP(t *testing.T) {
 				want[dbTypeSpanAttributeKey] = tt.expectedType
 				want[dbInstanceSpanAttributeKey] = tt.expectedValue
 				want[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, tt.path)
-				want[dbUrlSpanAttributeKey] = tt.path
+				want[dbURLSpanAttributeKey] = tt.path
 			case "invoke":
 				want[httpMethodSpanAttributeKey] = method
-				want[httpUrlSpanAttributeKey] = reqCtx.Request.URI().String()
+				want[httpURLSpanAttributeKey] = reqCtx.Request.URI().String()
 				want[httpStatusCodeSpanAttributeKey] = "200"
 				want[httpStatusTextSpanAttributeKey] = "OK"
 			case "publish":

@@ -41,10 +41,10 @@ const (
 	dbTypeSpanAttributeKey      = "db.type"
 	dbInstanceSpanAttributeKey  = "db.instance"
 	dbStatementSpanAttributeKey = "db.statement"
-	dbUrlSpanAttributeKey       = "db.url"
+	dbURLSpanAttributeKey       = "db.url"
 
 	httpMethodSpanAttributeKey     = "http.method"
-	httpUrlSpanAttributeKey        = "http.url"
+	httpURLSpanAttributeKey        = "http.url"
 	httpStatusCodeSpanAttributeKey = "http.status_code"
 	httpStatusTextSpanAttributeKey = "http.status_text"
 
@@ -209,10 +209,10 @@ func getSpanAttributesMapFromHTTP(ctx *fasthttp.RequestCtx) map[string]string {
 		m[dbInstanceSpanAttributeKey] = r.componentValue
 		// TODO: not possible currently to get the route {state_store} , so using path instead of route
 		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, path)
-		m[dbUrlSpanAttributeKey] = path
+		m[dbURLSpanAttributeKey] = path
 	case "invoke":
 		m[httpMethodSpanAttributeKey] = method
-		m[httpUrlSpanAttributeKey] = ctx.Request.URI().String()
+		m[httpURLSpanAttributeKey] = ctx.Request.URI().String()
 		httpStatusCode := ctx.Response.StatusCode()
 		code := invokev1.CodeFromHTTPStatus(httpStatusCode)
 		m[httpStatusCodeSpanAttributeKey] = strconv.Itoa(httpStatusCode)
