@@ -861,6 +861,49 @@ func (b *mockBinding) Read(handler func(*bindings.ReadResponse) error) error {
 	return nil
 }
 
+func (b *mockBinding) Operations() []bindings.OperationKind {
+	return []bindings.OperationKind{"create"}
+}
+
+func (b *mockBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+	return nil, nil
+}
+
+func TestInvokeOutputBindings(t *testing.T) {
+	t.Run("output binding missing operation", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		_, err := rt.sendToOutputBinding("mockBinding", &bindings.InvokeRequest{
+			Data: []byte(""),
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, "operation field is missing from request", err.Error())
+	})
+
+	t.Run("output binding valid operation", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.outputBindings["mockBinding"] = &mockBinding{}
+
+		_, err := rt.sendToOutputBinding("mockBinding", &bindings.InvokeRequest{
+			Data:      []byte(""),
+			Operation: bindings.CreateOperation,
+		})
+		assert.Nil(t, err)
+	})
+
+	t.Run("output binding invalid operation", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.outputBindings["mockBinding"] = &mockBinding{}
+
+		_, err := rt.sendToOutputBinding("mockBinding", &bindings.InvokeRequest{
+			Data:      []byte(""),
+			Operation: bindings.GetOperation,
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, "binding mockBinding does not support operation get. supported operations: create", err.Error())
+	})
+}
+
 func TestReadInputBindings(t *testing.T) {
 	t.Run("app acknowledge, no retry", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)

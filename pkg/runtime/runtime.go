@@ -467,8 +467,9 @@ func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
 	for _, dst := range to {
 		go func(name string) {
-			err := a.sendToOutputBinding(name, &bindings.WriteRequest{
-				Data: data,
+			_, err := a.sendToOutputBinding(name, &bindings.InvokeRequest{
+				Data:      data,
+				Operation: bindings.CreateOperation,
 			})
 			if err != nil {
 				log.Error(err)
@@ -479,8 +480,9 @@ func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) 
 
 func (a *DaprRuntime) sendBatchOutputBindingsSequential(to []string, data []byte) error {
 	for _, dst := range to {
-		err := a.sendToOutputBinding(dst, &bindings.WriteRequest{
-			Data: data,
+		_, err := a.sendToOutputBinding(dst, &bindings.InvokeRequest{
+			Data:      data,
+			Operation: bindings.CreateOperation,
 		})
 		if err != nil {
 			return err
@@ -489,12 +491,25 @@ func (a *DaprRuntime) sendBatchOutputBindingsSequential(to []string, data []byte
 	return nil
 }
 
-func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.WriteRequest) error {
-	if binding, ok := a.outputBindings[name]; ok {
-		err := binding.Write(req)
-		return err
+func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+	if req.Operation == "" {
+		return nil, errors.New("operation field is missing from request")
 	}
-	return fmt.Errorf("couldn't find output binding %s", name)
+
+	if binding, ok := a.outputBindings[name]; ok {
+		ops := binding.Operations()
+		for _, o := range ops {
+			if o == req.Operation {
+				return binding.Invoke(req)
+			}
+		}
+		supported := make([]string, len(ops))
+		for _, o := range ops {
+			supported = append(supported, string(o))
+		}
+		return nil, fmt.Errorf("binding %s does not support operation %s. supported operations:%s", name, req.Operation, strings.Join(supported, " "))
+	}
+	return nil, fmt.Errorf("couldn't find output binding %s", name)
 }
 
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {

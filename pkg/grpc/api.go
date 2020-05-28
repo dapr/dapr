@@ -51,7 +51,7 @@ type API interface {
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
-	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*empty.Empty, error)
+	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
@@ -66,7 +66,7 @@ type api struct {
 	secretStores          map[string]secretstores.SecretStore
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 }
 
@@ -78,7 +78,7 @@ func NewAPI(
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error,
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec) API {
 	return &api{
 		directMessaging:       directMessaging,
@@ -188,19 +188,25 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	return resp.Message(), respError
 }
 
-func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*empty.Empty, error) {
-	req := &bindings.WriteRequest{
+func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
+	req := &bindings.InvokeRequest{
 		Metadata: in.Metadata,
 	}
 	if in.Data != nil {
 		req.Data = in.Data
 	}
 
-	err := a.sendToOutputBindingFn(in.Name, req)
+	r := &runtimev1pb.InvokeBindingResponse{}
+	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
+		return r, fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
 	}
-	return &empty.Empty{}, nil
+
+	if resp != nil {
+		r.Data = resp.Data
+		r.Metadata = resp.Metadata
+	}
+	return r, nil
 }
 
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
