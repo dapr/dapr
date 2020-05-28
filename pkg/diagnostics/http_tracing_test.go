@@ -20,9 +20,8 @@ func TestStartClientSpanTracing(t *testing.T) {
 	req := getTestHTTPRequest()
 	reqCtx := &fasthttp.RequestCtx{}
 	req.CopyTo(&reqCtx.Request)
-	spec := config.TracingSpec{SamplingRate: "0.5"}
 
-	StartTracingClientSpanFromHTTPContext(context.Background(), reqCtx, "test", spec)
+	StartTracingClientSpanFromHTTPContext(context.Background(), "test", config.TracingSpec{SamplingRate: "0.5"})
 }
 
 func TestTracingClientSpanFromHTTPContext(t *testing.T) {
@@ -32,7 +31,7 @@ func TestTracingClientSpanFromHTTPContext(t *testing.T) {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	sc := GetSpanContextFromRequestContext(reqCtx, spec)
 	ctx := NewContext((context.Context)(reqCtx), sc)
-	StartTracingClientSpanFromHTTPContext(ctx, reqCtx, "spanName", config.TracingSpec{SamplingRate: "1"})
+	StartTracingClientSpanFromHTTPContext(ctx, "spanName", config.TracingSpec{SamplingRate: "1"})
 }
 
 func TestSpanContextFromRequest(t *testing.T) {
@@ -180,7 +179,7 @@ func TestGetAPIComponent(t *testing.T) {
 	}
 }
 
-func TestGetSpanAttributesMapFromHTTP(t *testing.T) {
+func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	var tests = []struct {
 		path          string
 		expectedType  string
@@ -211,7 +210,7 @@ func TestGetSpanAttributesMapFromHTTP(t *testing.T) {
 				want[dbInstanceSpanAttributeKey] = tt.expectedValue
 				want[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, tt.path)
 				want[dbURLSpanAttributeKey] = tt.path
-			case "invoke":
+			case "invoke", "actors":
 				want[httpMethodSpanAttributeKey] = method
 				want[httpURLSpanAttributeKey] = reqCtx.Request.URI().String()
 				want[httpStatusCodeSpanAttributeKey] = "200"
@@ -222,7 +221,7 @@ func TestGetSpanAttributesMapFromHTTP(t *testing.T) {
 				want[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
 			}
 
-			got := getSpanAttributesMapFromHTTP(reqCtx)
+			got := getSpanAttributesMapFromHTTPContext(reqCtx)
 			assert.Equal(t, want, got)
 		})
 	}

@@ -46,24 +46,26 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			next(ctx)
 		} else {
 			newCtx := NewContext((context.Context)(ctx), sc)
-			_, span := StartTracingClientSpanFromHTTPContext(newCtx, ctx, path, spec)
+			_, span := StartTracingClientSpanFromHTTPContext(newCtx, path, spec)
+
 			SpanContextToRequest(span.SpanContext(), &ctx.Request)
 
 			next(ctx)
 
-			UpdateSpanStatusFromHTTPStatus(span, path, ctx.Response.StatusCode())
+			// add span attributes
+			m := getSpanAttributesMapFromHTTPContext(ctx)
+			AddAttributesToSpan(span, m)
+
+			UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
 			span.End()
 		}
 	}
 }
 
 // StartTracingClientSpanFromHTTPContext creates a client span before invoking http method call
-func StartTracingClientSpanFromHTTPContext(ctx context.Context, reqCtx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartTracingClientSpanFromHTTPContext(ctx context.Context, spanName string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
 	ctx, span = startTracingSpanInternal(ctx, spanName, spec.SamplingRate, trace.SpanKindClient)
-
-	addAttributesToSpan(reqCtx, span)
-
 	return ctx, span
 }
 
@@ -99,21 +101,12 @@ func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
 	tracestateToRequest(sc, req)
 }
 
-func addAttributesToSpan(reqCtx *fasthttp.RequestCtx, span *trace.Span) {
-	m := getSpanAttributesMapFromHTTP(reqCtx)
-	for k, v := range m {
-		if v != "" {
-			span.AddAttributes(trace.StringAttribute(k, v))
-		}
-	}
-}
-
 func isHealthzRequest(name string) bool {
 	return strings.Contains(name, "/healthz")
 }
 
 // UpdateSpanStatusFromHTTPStatus updates trace span status based on response code
-func UpdateSpanStatusFromHTTPStatus(span *trace.Span, spanName string, code int) {
+func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
 	if span != nil {
 		code := invokev1.CodeFromHTTPStatus(code)
 		span.SetStatus(trace.Status{Code: int32(code), Message: code.String()})

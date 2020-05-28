@@ -196,33 +196,50 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 	return daprMetadata
 }
 
-func getSpanAttributesMapFromHTTP(ctx *fasthttp.RequestCtx) map[string]string {
+func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]string {
 	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	path := string(ctx.Request.URI().Path())
+	route := string(ctx.Request.URI().Path())
 	method := string(ctx.Request.Header.Method())
+	uri := ctx.Request.URI().String()
+	statusCode := ctx.Response.StatusCode()
+	r := getAPIComponent(route)
+	return GetSpanAttributesMap(r.componentType, r.componentValue, method, route, uri, statusCode)
+}
 
-	r := getAPIComponent(path)
+// GetSpanAttributesMap builds the span trace attributes map based on given parameters
+func GetSpanAttributesMap(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
+	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
 	m := make(map[string]string)
-	switch r.componentType {
+	switch componentType {
 	case "state", "secrets", "bindings":
-		m[dbTypeSpanAttributeKey] = r.componentType
-		m[dbInstanceSpanAttributeKey] = r.componentValue
+		m[dbTypeSpanAttributeKey] = componentType
+		m[dbInstanceSpanAttributeKey] = componentValue
 		// TODO: not possible currently to get the route {state_store} , so using path instead of route
-		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, path)
-		m[dbURLSpanAttributeKey] = path
-	case "invoke":
+		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, route)
+		m[dbURLSpanAttributeKey] = route
+	case "invoke", "actors":
 		m[httpMethodSpanAttributeKey] = method
-		m[httpURLSpanAttributeKey] = ctx.Request.URI().String()
-		httpStatusCode := ctx.Response.StatusCode()
-		code := invokev1.CodeFromHTTPStatus(httpStatusCode)
-		m[httpStatusCodeSpanAttributeKey] = strconv.Itoa(httpStatusCode)
+		m[httpURLSpanAttributeKey] = uri
+		code := invokev1.CodeFromHTTPStatus(statusCode)
+		m[httpStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
 		m[httpStatusTextSpanAttributeKey] = code.String()
 	case "publish":
-		m[messagingSystemSpanAttributeKey] = r.componentType
-		m[messagingDestinationSpanAttributeKey] = r.componentValue
+		m[messagingSystemSpanAttributeKey] = componentType
+		m[messagingDestinationSpanAttributeKey] = componentValue
 		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
 	}
 	return m
+}
+
+// AddAttributesToSpan adds the given attributes in the span
+func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
+	if span != nil {
+		for k, v := range attributes {
+			if v != "" {
+				span.AddAttributes(trace.StringAttribute(k, v))
+			}
+		}
+	}
 }
 
 func getAPIComponent(apiPath string) apiComponent {
