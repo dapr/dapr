@@ -33,7 +33,7 @@ service Dapr {
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
 
   // Invokes binding data to specific output bindings
-  rpc InvokeBinding(InvokeBindingRequest) returns (google.protobuf.Empty) {}
+  rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
 
   // Gets secrets from secret stores.
   rpc GetSecret(GetSecretRequest) returns (GetSecretResponse) {}
@@ -121,6 +121,18 @@ message InvokeBindingRequest {
   // have a default time to live. The message ttl overrides any value
   // in the binding definition.
   map<string,string> metadata = 3;
+
+  // The name of the operation type for the binding to invoke
+  string operation = 4;
+}
+
+// InvokeBindingResponse is the message returned from an output binding invocation
+message InvokeBindingResponse {
+  // The data which will be sent to output binding.
+  bytes data = 1;
+
+  // The metadata returned from an external system
+  map<string,string> metadata = 2;
 }
 
 // GetSecretRequest is the message to get secret from secret store.
