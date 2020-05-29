@@ -29,6 +29,7 @@ type PlatformInterface interface {
 	addApps(apps []kube.AppDescription) error
 
 	AcquireAppExternalURL(name string) string
+	GetAppHostDetails(name string) (string, string, error)
 	Restart(name string) error
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)

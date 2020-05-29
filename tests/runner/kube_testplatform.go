@@ -122,6 +122,17 @@ func (c *KubeTestPlatform) AcquireAppExternalURL(name string) string {
 	return app.(*kube.AppManager).AcquireExternalURL()
 }
 
+// GetAppHostDetails returns the name and IP address of the host(pod) running 'name'
+func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error) {
+	app := c.AppResources.FindActiveResource(name)
+	hostname, hostIP, err := app.(*kube.AppManager).GetHostDetails()
+	if err != nil {
+		return "", "", err
+	}
+
+	return hostname, hostIP, nil
+}
+
 // Scale changes the number of replicas of the app
 func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 	app := c.AppResources.FindActiveResource(name)
