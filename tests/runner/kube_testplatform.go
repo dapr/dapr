@@ -19,14 +19,14 @@ const (
 	defaultImageTag      = "latest"
 )
 
-// KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps
+// KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
 type KubeTestPlatform struct {
 	AppResources       *TestResources
 	ComponentResources *TestResources
 	kubeClient         *kube.KubeClient
 }
 
-// NewKubeTestPlatform creates KubeTestPlatform instance
+// NewKubeTestPlatform creates KubeTestPlatform instance.
 func NewKubeTestPlatform() *KubeTestPlatform {
 	return &KubeTestPlatform{
 		AppResources:       new(TestResources),
@@ -55,7 +55,7 @@ func (c *KubeTestPlatform) tearDown() error {
 	return nil
 }
 
-// addComponents adds component to disposable Resource queues
+// addComponents adds component to disposable Resource queues.
 func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) error {
 	if c.kubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup")
@@ -73,7 +73,7 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 	return nil
 }
 
-// addApps adds test apps to disposable App Resource queues
+// addApps adds test apps to disposable App Resource queues.
 func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	if c.kubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
@@ -116,7 +116,7 @@ func (c *KubeTestPlatform) imageTag() string {
 	return tag
 }
 
-// AcquireAppExternalURL returns the external url for 'name'
+// AcquireAppExternalURL returns the external url for 'name'.
 func (c *KubeTestPlatform) AcquireAppExternalURL(name string) string {
 	app := c.AppResources.FindActiveResource(name)
 	return app.(*kube.AppManager).AcquireExternalURL()
@@ -147,7 +147,7 @@ func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 	return err
 }
 
-// Restart restarts all instances for the app
+// Restart restarts all instances for the app.
 func (c *KubeTestPlatform) Restart(name string) error {
 	// To minic the restart behavior, scale to 0 and then scale to the original replicas.
 	app := c.AppResources.FindActiveResource(name)
@@ -160,7 +160,7 @@ func (c *KubeTestPlatform) Restart(name string) error {
 	return c.Scale(name, originalReplicas)
 }
 
-// PortForwardToApp opens a new connection to the app on a the target port and returns the local port or error
+// PortForwardToApp opens a new connection to the app on a the target port and returns the local port or error.
 func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) ([]int, error) {
 	app := c.AppResources.FindActiveResource(appName)
 	appManager := app.(*kube.AppManager)
