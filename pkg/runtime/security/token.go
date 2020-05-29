@@ -2,6 +2,7 @@ package security
 
 import (
 	"os"
+	"strings"
 )
 
 /* #nosec */
@@ -12,7 +13,19 @@ const (
 	APITokenHeader = "dapr-api-token"
 )
 
+var excludedRoutes = []string{"/healthz"}
+
 // GetAPIToken returns the value of the api token from an environment variable
 func GetAPIToken() string {
 	return os.Getenv(APITokenEnvVar)
+}
+
+// ExcludedRoute returns whether a given route should be excluded from a token check
+func ExcludedRoute(route string) bool {
+	for _, r := range excludedRoutes {
+		if strings.Contains(route, r) {
+			return true
+		}
+	}
+	return false
 }
