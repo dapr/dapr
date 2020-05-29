@@ -6,9 +6,11 @@
 package grpc
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
@@ -23,6 +25,7 @@ import (
 const (
 	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
+	dialTimeout       = time.Second * 5
 )
 
 // Manager is a wrapper around gRPC connection pooling
@@ -98,8 +101,11 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 		opts = append(opts, grpc.WithInsecure())
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+	defer cancel()
+
 	dialPrefix := GetDialAddressPrefix(g.mode)
-	conn, err := grpc.Dial(dialPrefix+address, opts...)
+	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
 	if err != nil {
 		g.lock.Unlock()
 		return nil, err
