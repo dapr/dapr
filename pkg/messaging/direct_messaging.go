@@ -143,6 +143,18 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
 
+	d.addForwardedHeadersToMetadata(req)
+
+	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
+	resp, err := clientV1.CallLocal(ctx, req.Proto())
+	if err != nil {
+		return nil, err
+	}
+
+	return invokev1.InternalInvokeResponse(resp)
+}
+
+func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMethodRequest) {
 	metadata := req.Metadata()
 
 	var forwardedHeaderValue string
@@ -169,14 +181,6 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	metadata[fasthttp.HeaderForwarded] = &internalv1pb.ListStringValue{
 		Values: []string{forwardedHeaderValue},
 	}
-
-	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
-	resp, err := clientV1.CallLocal(ctx, req.Proto())
-	if err != nil {
-		return nil, err
-	}
-
-	return invokev1.InternalInvokeResponse(resp)
 }
 
 func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {
