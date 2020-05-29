@@ -78,7 +78,7 @@ jobs:
     env:
       ARTIFACT_DIR: ./release
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-      HELMVER: v3.1.2
+      HELMVER: v3.2.1
     runs-on: ubuntu-latest
     steps:
       - name: Set up Helm ${{ env.HELMVER }}
