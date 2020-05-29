@@ -15,13 +15,13 @@ jobs:
     name: end-to-end tests
     runs-on: ubuntu-latest
     env:
-      GOVER: 1.14
+      GOVER: 1.14.3
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
-      HELMVER: v3.0.3
+      HELMVER: v3.2.1
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
     steps:
