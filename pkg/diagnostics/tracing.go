@@ -154,25 +154,6 @@ func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
 	return spanContext
 }
 
-func projectStatusCode(code int) int32 {
-	switch code {
-	case 200:
-		return trace.StatusCodeOK
-	case 201:
-		return trace.StatusCodeOK
-	case 400:
-		return trace.StatusCodeInvalidArgument
-	case 500:
-		return trace.StatusCodeInternal
-	case 404:
-		return trace.StatusCodeNotFound
-	case 403:
-		return trace.StatusCodePermissionDenied
-	default:
-		return int32(code)
-	}
-}
-
 func extractDaprMetadata(ctx context.Context) map[string][]string {
 	daprMetadata := make(map[string][]string)
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -188,25 +169,6 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 	}
 
 	return daprMetadata
-}
-
-// UpdateSpanStatusFromError updates tracer span status based on error object
-func UpdateSpanStatusFromError(span *trace.Span, err error, method string) {
-	if span == nil {
-		return
-	}
-
-	if err != nil {
-		span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeInternal,
-			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
-		})
-	} else {
-		span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeOK,
-			Message: fmt.Sprintf("method %s succeeded", method),
-		})
-	}
 }
 
 var tracingConfig atomic.Value // access atomically
