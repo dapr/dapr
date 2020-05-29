@@ -208,7 +208,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 			a.actorsTable.Range(func(key, value interface{}) bool {
 				actorInstance := value.(*actor)
 
-				if actorInstance.isBusy() {
+				if !actorInstance.isBusy() {
 					return true
 				}
 
