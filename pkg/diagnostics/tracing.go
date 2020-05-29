@@ -20,6 +20,8 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/valyala/fasthttp"
 
 	"go.opencensus.io/trace"
@@ -52,6 +54,10 @@ const (
 	messagingSystemSpanAttributeKey          = "messaging.system"
 	messagingDestinationSpanAttributeKey     = "messaging.destination"
 	messagingDestinationKindSpanAttributeKey = "messaging.destination_kind"
+
+	gRPCServiceSpanAttributeKey = "rpc.service"
+	// below attribute is not as per open temetery spec, adding custom dapr attribute to have additional details
+	gRPCDaprInstanceSpanAttributeKey = "rpc.dapr.instance"
 )
 
 // NewContext returns a new context with the given SpanContext attached.
@@ -262,6 +268,73 @@ func getAPIComponent(apiPath string) apiComponent {
 
 	// return 'state', 'statestore' from the parsed tokens in apiComponent type
 	return apiComponent{componentType: tokens[1], componentValue: tokens[2]}
+}
+
+func getSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]string {
+	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
+	// gRPC method /package.service/method
+	var serviceName string
+
+	p := rpcMethod
+	if p[0] == '/' {
+		p = rpcMethod[1:]
+	}
+
+	// Split up to 3 delimiters in '/package.service/method'
+	// example for internal call : "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
+	// example for non-internal call : "/dapr.proto.runtime.v1.Dapr/InvokeService"
+	internalCall := strings.Contains(p, "dapr.proto.internals.")
+
+	tokens := strings.SplitN(p, "/", 3)
+	if len(tokens) >= 2 {
+		if internalCall {
+			if t := strings.SplitN(tokens[0], ".", 5); len(t) >= 4 {
+				serviceName = t[4]
+			}
+		} else {
+			// TODO : need to revisit /package.service/method format in runtime calls, currently service name is "Dapr"
+			// so instead of taking general "Dapr", taking method name as service name to give better insights
+			serviceName = tokens[1]
+		}
+	}
+
+	m := make(map[string]string)
+	m[gRPCServiceSpanAttributeKey] = serviceName
+
+	// below attribute is not as per open temetery spec, adding custom dapr attribute to have additional details
+	m[gRPCDaprInstanceSpanAttributeKey] = extractComponentValueFromGRPCRequest(req)
+	return m
+}
+
+func extractComponentValueFromGRPCRequest(req interface{}) string {
+	if req == nil {
+		return ""
+	}
+	if s, ok := req.(*internalv1pb.InternalInvokeRequest); ok {
+		return s.Message.GetMethod()
+	}
+	if s, ok := req.(*runtimev1pb.PublishEventRequest); ok {
+		return s.GetTopic()
+	}
+	if s, ok := req.(*runtimev1pb.InvokeServiceRequest); ok {
+		return s.Message.GetMethod()
+	}
+	if s, ok := req.(*runtimev1pb.InvokeBindingRequest); ok {
+		return s.GetName()
+	}
+	if s, ok := req.(*runtimev1pb.GetStateRequest); ok {
+		return s.GetStoreName()
+	}
+	if s, ok := req.(*runtimev1pb.GetSecretRequest); ok {
+		return s.GetStoreName()
+	}
+	if s, ok := req.(*runtimev1pb.SaveStateRequest); ok {
+		return s.GetStoreName()
+	}
+	if s, ok := req.(*runtimev1pb.DeleteStateRequest); ok {
+		return s.GetStoreName()
+	}
+	return ""
 }
 
 var tracingConfig atomic.Value // access atomically

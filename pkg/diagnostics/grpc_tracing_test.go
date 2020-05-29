@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/config"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
@@ -68,4 +71,50 @@ func TestWithGRPCWithNoSpanContext(t *testing.T) {
 		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
 		assert.Equal(t, 0, int(sc.TraceOptions), "Should not be sampled")
 	})
+}
+
+func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
+	var tests = []struct {
+		rpcMethod                    string
+		requestType                  string
+		expectedServiceNameAttribute string
+		expectedCustomAttribute      string
+	}{
+		{"/dapr.proto.internals.v1.ServiceInvocation/CallLocal", "InternalInvokeRequest", "ServiceInvocation", "mymethod"},
+		{"/dapr.proto.runtime.v1.Dapr/InvokeService", "InvokeServiceRequest", "InvokeService", "mymethod"},
+		{"/dapr.proto.runtime.v1.Dapr/GetState", "GetStateRequest", "GetState", "mystore"},
+		{"/dapr.proto.runtime.v1.Dapr/SaveState", "SaveStateRequest", "SaveState", "mystore"},
+		{"/dapr.proto.runtime.v1.Dapr/DeleteState", "DeleteStateRequest", "DeleteState", "mystore"},
+		{"/dapr.proto.runtime.v1.Dapr/GetSecret", "GetSecretRequest", "GetSecret", "mysecretstore"},
+		{"/dapr.proto.runtime.v1.Dapr/InvokeBinding", "InvokeBindingRequest", "InvokeBinding", "mybindings"},
+		{"/dapr.proto.runtime.v1.Dapr/PublishEvent", "PublishEventRequest", "PublishEvent", "mytopic"},
+		{"/invalid.rpcMethodformat", "InvokeServiceRequest", "", "mymethod"},
+	}
+	var req interface{}
+	for _, tt := range tests {
+		t.Run(tt.rpcMethod, func(t *testing.T) {
+			switch tt.requestType {
+			case "InvokeServiceRequest":
+				req = &runtimev1pb.InvokeServiceRequest{Message: &commonv1pb.InvokeRequest{Method: "mymethod"}}
+			case "GetStateRequest":
+				req = &runtimev1pb.GetStateRequest{StoreName: "mystore"}
+			case "SaveStateRequest":
+				req = &runtimev1pb.SaveStateRequest{StoreName: "mystore"}
+			case "DeleteStateRequest":
+				req = &runtimev1pb.DeleteStateRequest{StoreName: "mystore"}
+			case "GetSecretRequest":
+				req = &runtimev1pb.GetSecretRequest{StoreName: "mysecretstore"}
+			case "InvokeBindingRequest":
+				req = &runtimev1pb.InvokeBindingRequest{Name: "mybindings"}
+			case "PublishEventRequest":
+				req = &runtimev1pb.PublishEventRequest{Topic: "mytopic"}
+			case "InternalInvokeRequest":
+				req = &internalv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "mymethod"}}
+			}
+
+			got := getSpanAttributesMapFromGRPC(req, tt.rpcMethod)
+			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
+			assert.Equal(t, tt.expectedCustomAttribute, got[gRPCDaprInstanceSpanAttributeKey], "custom attribute should be equal")
+		})
+	}
 }

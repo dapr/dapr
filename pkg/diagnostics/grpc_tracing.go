@@ -55,6 +55,10 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		newCtx = NewContext(ctx, span.SpanContext())
 		resp, err = handler(newCtx, req)
 
+		// add span attributes
+		m := getSpanAttributesMapFromGRPC(req, info.FullMethod)
+		AddAttributesToSpan(span, m)
+
 		UpdateSpanStatusFromGRPCError(span, err, method)
 
 		span.End()
