@@ -9,7 +9,7 @@ func NewValidator() identity.Validator {
 type validator struct {
 }
 
-// no validation for self hosted
 func (v *validator) Validate(id, token string) error {
+	// no validation for self hosted.
 	return nil
 }

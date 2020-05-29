@@ -21,8 +21,8 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.14
-      GOLANGCILINT_VER: 1.23.8
+      GOVER: 1.14.3
+      GOLANGCILINT_VER: 1.26.0
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
@@ -78,7 +78,7 @@ jobs:
     env:
       ARTIFACT_DIR: ./release
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-      HELMVER: v3.1.2
+      HELMVER: v3.2.1
     runs-on: ubuntu-latest
     steps:
       - name: Set up Helm ${{ env.HELMVER }}
