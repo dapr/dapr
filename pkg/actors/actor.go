@@ -22,7 +22,7 @@ type actor struct {
 	busy            bool
 	busyCh          chan (bool)
 
-	pendingLocks int32
+	pendingLockCount int32
 }
 
 func newActor(actorType, actorID string) *actor {
@@ -45,8 +45,8 @@ func (a *actor) channel() chan (bool) {
 }
 
 func (a *actor) lock() {
-	pLocks := atomic.AddInt32(&a.pendingLocks, 1)
-	diag.DefaultMonitoring.ReportCurrentPendingLocks(a.actorType, a.actorID, pLocks)
+	atomic.AddInt32(&a.pendingLockCount, 1)
+	diag.DefaultMonitoring.ReportCurrentPendingLocks(a.actorType, a.actorID, a.pendingLockCount)
 	a.concurrencyLock.Lock()
 
 	a.busy = true
@@ -61,6 +61,6 @@ func (a *actor) unLock() {
 	}
 
 	a.concurrencyLock.Unlock()
-	pLocks := atomic.AddInt32(&a.pendingLocks, -1)
-	diag.DefaultMonitoring.ReportCurrentPendingLocks(a.actorType, a.actorID, pLocks)
+	atomic.AddInt32(&a.pendingLockCount, -1)
+	diag.DefaultMonitoring.ReportCurrentPendingLocks(a.actorType, a.actorID, a.pendingLockCount)
 }
