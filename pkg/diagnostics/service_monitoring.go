@@ -15,6 +15,7 @@ var (
 	failReasonKey = tag.MustNewKey("reason")
 	operationKey  = tag.MustNewKey("operation")
 	actorTypeKey  = tag.MustNewKey("actor_type")
+	actorIDKey    = tag.MustNewKey("actor_id")
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods
@@ -35,10 +36,9 @@ type serviceMetrics struct {
 	actorStatusReportFailedTotal *stats.Int64Measure
 	actorTableOperationRecvTotal *stats.Int64Measure
 	actorRebalancedTotal         *stats.Int64Measure
-	actorActivatedTotal          *stats.Int64Measure
-	actorActivatedFailedTotal    *stats.Int64Measure
 	actorDeactivationTotal       *stats.Int64Measure
 	actorDeactivationFailedTotal *stats.Int64Measure
+	actorPendingCalls            *stats.Int64Measure
 
 	appID   string
 	ctx     context.Context
@@ -97,14 +97,6 @@ func newServiceMetrics() *serviceMetrics {
 			"runtime/actor/rebalanced_total",
 			"The number of the actor rebalance requests.",
 			stats.UnitDimensionless),
-		actorActivatedTotal: stats.Int64(
-			"runtime/actor/activated_total",
-			"The number of the actor activation.",
-			stats.UnitDimensionless),
-		actorActivatedFailedTotal: stats.Int64(
-			"runtime/actor/activated_failed_total",
-			"The number of the actor activation failures.",
-			stats.UnitDimensionless),
 		actorDeactivationTotal: stats.Int64(
 			"runtime/actor/deactivated_total",
 			"The number of the successful actor deactivation.",
@@ -112,6 +104,10 @@ func newServiceMetrics() *serviceMetrics {
 		actorDeactivationFailedTotal: stats.Int64(
 			"runtime/actor/deactivated_failed_total",
 			"The number of the failed actor deactivation.",
+			stats.UnitDimensionless),
+		actorPendingCalls: stats.Int64(
+			"runtime/actor/pending_actor_calls",
+			"The number of pending actor calls waiting to acquire the per-actor lock.",
 			stats.UnitDimensionless),
 
 		// TODO: use the correct context for each request
@@ -138,10 +134,9 @@ func (s *serviceMetrics) Init(appID string) error {
 		diag_utils.NewMeasureView(s.actorStatusReportFailedTotal, []tag.Key{appIDKey, actorTypeKey, operationKey, failReasonKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorTableOperationRecvTotal, []tag.Key{appIDKey, actorTypeKey, operationKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorRebalancedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diag_utils.NewMeasureView(s.actorActivatedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diag_utils.NewMeasureView(s.actorActivatedFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
+		diag_utils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.LastValue()),
 	)
 }
 
@@ -241,26 +236,6 @@ func (s *serviceMetrics) ActorRebalanced(actorType string) {
 	}
 }
 
-// ActorActivated records metric when actor is activated.
-func (s *serviceMetrics) ActorActivated(actorType string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorActivatedTotal.M(1))
-	}
-}
-
-// ActorActivationFailed records metric when actor activation is failed.
-func (s *serviceMetrics) ActorActivationFailed(actorType string, reason string) {
-	if s.enabled {
-		stats.RecordWithTags(
-			s.ctx,
-			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
-			s.actorActivatedFailedTotal.M(1))
-	}
-}
-
 // ActorDeactivated records metric when actor is deactivated.
 func (s *serviceMetrics) ActorDeactivated(actorType string) {
 	if s.enabled {
@@ -278,5 +253,15 @@ func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
 			s.ctx,
 			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, failReasonKey, reason),
 			s.actorDeactivationFailedTotal.M(1))
+	}
+}
+
+// ReportCurrentPendingLocks records the current pending actor locks.
+func (s *serviceMetrics) ReportCurrentPendingLocks(actorType, actorID string, pendingLocks int32) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
+			s.actorPendingCalls.M(int64(pendingLocks)))
 	}
 }
