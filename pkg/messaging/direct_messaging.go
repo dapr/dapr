@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/dapr/pkg/channel"
@@ -25,6 +26,7 @@ import (
 
 const (
 	invokeRemoteRetryCount = 3
+	backoffInterval        = time.Second
 )
 
 // messageClientConnection is the function type to connect to the other
@@ -72,7 +74,7 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	if targetAppID == d.appID {
 		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(ctx, invokeRemoteRetryCount, targetAppID, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, invokeRemoteRetryCount, backoffInterval, targetAppID, d.invokeRemote, req)
 }
 
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
@@ -81,6 +83,7 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 func (d *directMessaging) invokeWithRetry(
 	ctx context.Context,
 	numRetries int,
+	backoffInterval time.Duration,
 	targetID string,
 	fn func(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
@@ -89,16 +92,17 @@ func (d *directMessaging) invokeWithRetry(
 		if err == nil {
 			return resp, nil
 		}
+		time.Sleep(backoffInterval)
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			address, addErr := d.getAddressFromMessageRequest(targetID)
-			if addErr != nil {
-				return nil, addErr
+			address, err := d.getAddressFromMessageRequest(targetID)
+			if err != nil {
+				return nil, err
 			}
-			_, connErr := d.connectionCreatorFn(address, targetID, false, true)
-			if connErr != nil {
-				return nil, connErr
+			_, err = d.connectionCreatorFn(address, targetID, false, true)
+			if err != nil {
+				return nil, err
 			}
 			continue
 		}
