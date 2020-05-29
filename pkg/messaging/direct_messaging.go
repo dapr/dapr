@@ -96,13 +96,13 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			address, err := d.getAddressFromMessageRequest(targetID)
-			if err != nil {
-				return nil, err
+			address, adderr := d.getAddressFromMessageRequest(targetID)
+			if adderr != nil {
+				return nil, adderr
 			}
-			_, err = d.connectionCreatorFn(address, targetID, false, true)
-			if err != nil {
-				return nil, err
+			_, connerr := d.connectionCreatorFn(address, targetID, false, true)
+			if connerr != nil {
+				return nil, connerr
 			}
 			continue
 		}
