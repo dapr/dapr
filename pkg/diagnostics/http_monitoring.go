@@ -252,7 +252,8 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 
 	switch parsedPath[1] {
 	case "state", "secrets":
-		// Concat 3 items(v1, state, statestore) in /v1/state/statestore/key
+		// state api: Concat 3 items(v1, state, statestore) in /v1/state/statestore/key
+		// secrets api: Concat 3 items(v1, secrets, keyvault) in /v1/secrets/keyvault/name
 		return "/" + strings.Join(parsedPath[0:3], "/")
 
 	case "actors":
