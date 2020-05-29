@@ -16,17 +16,13 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-)
-
-const (
-	invokeRemoteRetryCount = 3
-	backoffInterval        = time.Second
 )
 
 // messageClientConnection is the function type to connect to the other
@@ -74,7 +70,7 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	if targetAppID == d.appID {
 		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(ctx, invokeRemoteRetryCount, backoffInterval, targetAppID, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, targetAppID, d.invokeRemote, req)
 }
 
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
