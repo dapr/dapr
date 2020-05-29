@@ -70,11 +70,11 @@ func TestConvertPathToMethodName(t *testing.T) {
 		{"/v1/publish/topic", "/v1/publish/topic"},
 		{"/v1/bindings/kafka", "/v1/bindings/kafka"},
 		{"/healthz", "/healthz"},
-		{"/v1/actors/DemoActor/1/state/key", "/v1/actors/DemoActor/1/state"},
-		{"/v1/actors/DemoActor/1/reminder/name", "/v1/actors/DemoActor/1/reminder"},
-		{"/v1/actors/DemoActor/1/timer/name", "/v1/actors/DemoActor/1/timer"},
-		{"/v1/actors/DemoActor/1/timer/name?query=string", "/v1/actors/DemoActor/1/timer"},
-		{"v1/actors/DemoActor/1/timer/name", "/v1/actors/DemoActor/1/timer"},
+		{"/v1/actors/DemoActor/1/state/key", "/v1/actors/DemoActor/{id}/state"},
+		{"/v1/actors/DemoActor/1/reminder/name", "/v1/actors/DemoActor/{id}/reminder"},
+		{"/v1/actors/DemoActor/1/timer/name", "/v1/actors/DemoActor/{id}/timer"},
+		{"/v1/actors/DemoActor/1/timer/name?query=string", "/v1/actors/DemoActor/{id}/timer"},
+		{"v1/actors/DemoActor/1/timer/name", "/v1/actors/DemoActor/{id}/timer"},
 		{"", ""},
 	}
 
