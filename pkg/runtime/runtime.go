@@ -602,7 +602,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 
-		diag.UpdateSpanStatusFromHTTPStatus(span, spanName, int(resp.Status().Code))
+		// route value and bindingName are same.
+		updateSpanPropertiesHTTP(span, spanName, "bindings", bindingName, nethttp.MethodPost, bindingName, int(resp.Status().Code))
 
 		if resp.Status().Code != nethttp.StatusOK {
 			return fmt.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
@@ -990,7 +991,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
 
-	diag.UpdateSpanStatusFromHTTPStatus(span, spanName, int(resp.Status().Code))
+	updateSpanPropertiesHTTP(span, spanName, "publish", msg.Topic, nethttp.MethodPost, route, int(resp.Status().Code))
 
 	if resp.Status().Code != nethttp.StatusOK {
 		_, errorMsg := resp.RawData()
@@ -1412,4 +1413,11 @@ func (a *DaprRuntime) getTracingContext(spanName string, oldSC trace.SpanContext
 		}
 	}
 	return ctx, span
+}
+
+func updateSpanPropertiesHTTP(span *trace.Span, spanName, componentType, componentValue, method, route string, statusCode int) {
+	// add span attributes
+	m := diag.GetSpanAttributesMap(componentType, componentValue, method, route, route, statusCode)
+	diag.AddAttributesToSpan(span, m)
+	diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
 }

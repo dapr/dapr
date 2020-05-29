@@ -7,6 +7,7 @@ package diagnostics
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -17,17 +18,20 @@ import (
 
 func TestStartClientSpanTracing(t *testing.T) {
 	req := getTestHTTPRequest()
-	spec := config.TracingSpec{SamplingRate: "0.5"}
+	reqCtx := &fasthttp.RequestCtx{}
+	req.CopyTo(&reqCtx.Request)
 
-	StartTracingClientSpanFromHTTPContext(context.Background(), req, "test", spec)
+	StartTracingClientSpanFromHTTPContext(context.Background(), "test", config.TracingSpec{SamplingRate: "0.5"})
 }
 
 func TestTracingClientSpanFromHTTPContext(t *testing.T) {
-	reqCtx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
+	req := getTestHTTPRequest()
+	reqCtx := &fasthttp.RequestCtx{}
+	req.CopyTo(&reqCtx.Request)
 	spec := config.TracingSpec{SamplingRate: "1"}
 	sc := GetSpanContextFromRequestContext(reqCtx, spec)
 	ctx := NewContext((context.Context)(reqCtx), sc)
-	StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, "spanName", config.TracingSpec{SamplingRate: "1"})
+	StartTracingClientSpanFromHTTPContext(ctx, "spanName", config.TracingSpec{SamplingRate: "1"})
 }
 
 func TestSpanContextFromRequest(t *testing.T) {
@@ -143,11 +147,93 @@ func TestWithNoSpanContext(t *testing.T) {
 	})
 }
 
+func TestGetAPIComponent(t *testing.T) {
+	state := apiComponent{componentType: "state", componentValue: "statestore"}
+	secret := apiComponent{componentType: "secrets", componentValue: "keyvault"}
+	invoke := apiComponent{componentType: "invoke", componentValue: "fakeApp"}
+	publish := apiComponent{componentType: "publish", componentValue: "topicA"}
+	bindings := apiComponent{componentType: "bindings", componentValue: "kafka"}
+	empty := apiComponent{}
+	actors := apiComponent{componentType: "actors", componentValue: "DemoActor"}
+
+	var tests = []struct {
+		path string
+		want apiComponent
+	}{
+		{"/v1.0/state/statestore/key", state},
+		{"/v1.0/state/statestore", state},
+		{"/v1.0/secrets/keyvault/name", secret},
+		{"/v1.0/invoke/fakeApp/method/add", invoke},
+		{"/v1/publish/topicA", publish},
+		{"/v1/bindings/kafka", bindings},
+		{"/healthz", empty},
+		{"/v1/actors/DemoActor/1/state/key", actors},
+		{"", empty},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got := getAPIComponent(tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
+	var tests = []struct {
+		path          string
+		expectedType  string
+		expectedValue string
+	}{
+		{"/v1.0/state/statestore/key", "state", "statestore"},
+		{"/v1.0/state/statestore", "state", "statestore"},
+		{"/v1.0/secrets/keyvault/name", "secrets", "keyvault"},
+		{"/v1.0/invoke/fakeApp/method/add", "invoke", "fakeApp"},
+		{"/v1/publish/topicA", "publish", "topicA"},
+		{"/v1/bindings/kafka", "bindings", "kafka"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			req := getTestHTTPRequest()
+			resp := &fasthttp.Response{}
+			resp.SetStatusCode(200)
+			req.SetRequestURI(tt.path)
+			reqCtx := &fasthttp.RequestCtx{}
+			req.CopyTo(&reqCtx.Request)
+			method := string(req.Header.Method())
+
+			want := map[string]string{}
+			switch tt.expectedType {
+			case "state", "secrets", "bindings":
+				want[dbTypeSpanAttributeKey] = tt.expectedType
+				want[dbInstanceSpanAttributeKey] = tt.expectedValue
+				want[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, tt.path)
+				want[dbURLSpanAttributeKey] = tt.path
+			case "invoke", "actors":
+				want[httpMethodSpanAttributeKey] = method
+				want[httpURLSpanAttributeKey] = reqCtx.Request.URI().String()
+				want[httpStatusCodeSpanAttributeKey] = "200"
+				want[httpStatusTextSpanAttributeKey] = "OK"
+			case "publish":
+				want[messagingSystemSpanAttributeKey] = tt.expectedType
+				want[messagingDestinationSpanAttributeKey] = tt.expectedValue
+				want[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
+			}
+
+			got := getSpanAttributesMapFromHTTPContext(reqCtx)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
 func getTestHTTPRequest() *fasthttp.Request {
 	req := &fasthttp.Request{}
+	req.SetRequestURI("/v1.0/state/statestore/key")
 	req.Header.Set("dapr-testheaderkey", "dapr-testheadervalue")
 	req.Header.Set("x-testheaderkey1", "dapr-testheadervalue")
 	req.Header.Set("daprd-testheaderkey2", "dapr-testheadervalue")
+	req.Header.SetMethod(fasthttp.MethodGet)
 
 	var (
 		tid = trace.TraceID{1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 4, 8, 16, 32, 64, 128}
