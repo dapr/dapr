@@ -30,7 +30,7 @@ func newActor(actorType, actorID string) *actor {
 		actorType:       actorType,
 		actorID:         actorID,
 		concurrencyLock: &sync.RWMutex{},
-		busy:            true,
+		busy:            false,
 		busyCh:          make(chan bool, 1),
 		lastUsedTime:    time.Now().UTC(),
 	}
