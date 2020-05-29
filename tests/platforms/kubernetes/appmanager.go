@@ -402,7 +402,7 @@ func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
 // GetHostDetails returns the name and IP address of the pod running the app
 func (m *AppManager) GetHostDetails() (string, string, error) {
 	if int(m.app.Replicas) != 1 {
-		return "", "", fmt.Errorf("Number of replicas should be 1")
+		return "", "", fmt.Errorf("number of replicas should be 1")
 	}
 	if !m.app.DaprEnabled {
 		return "", "", fmt.Errorf("dapr is not enabled for this app")
