@@ -122,7 +122,7 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 // HTTPGetRaw is a helper to make GET request call to url
 func HTTPGetRaw(url string) (*http.Response, error) {
 	client := newHTTPClient()
-	resp, err := client.Get(sanitizeHTTPURL(url)) //nolint
+	resp, err := client.Get(sanitizeHTTPURL(url))
 	if err != nil {
 		return nil, err
 	}

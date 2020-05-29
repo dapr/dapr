@@ -32,27 +32,27 @@ func initKubeConfig() {
 
 // GetConfig gets a kubernetes rest config
 func GetConfig() *rest.Config {
-	if kubeConfig == nil {
-		var kubeconfig *string
-		if home := homedir.HomeDir(); home != "" {
-			kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-		} else {
-			kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-		}
-		flag.Parse()
-
-		conf, err := rest.InClusterConfig()
-		if err != nil {
-			conf, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		return conf
+	if kubeConfig != nil {
+		return kubeConfig
 	}
 
-	return kubeConfig
+	var kubeconfig *string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+	flag.Parse()
+
+	conf, err := rest.InClusterConfig()
+	if err != nil {
+		conf, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	return conf
 }
 
 // GetKubeClient gets a kubernetes client

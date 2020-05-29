@@ -68,6 +68,7 @@ func getTestCertAuth() CertificateAuthority {
 	return certAuth
 }
 
+// nolint:gosec
 func writeTestCredentialsToDisk() {
 	ioutil.WriteFile("ca.crt", []byte(rootCert), 0644)
 	ioutil.WriteFile("issuer.crt", []byte(issuerCert), 0644)
