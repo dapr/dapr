@@ -203,38 +203,38 @@ func GetSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]
 }
 
 func extractComponentValueFromGRPCRequest(req interface{}) string {
-	if req == nil {
+	switch req.(type) {
+	case *internalv1pb.InternalInvokeRequest:
+		s := req.(*internalv1pb.InternalInvokeRequest)
+		return s.Message.GetMethod()
+	case *runtimev1pb.InvokeServiceRequest:
+		s := req.(*runtimev1pb.InvokeServiceRequest)
+		return s.Message.GetMethod()
+	case *runtimev1pb.PublishEventRequest:
+		s := req.(*runtimev1pb.PublishEventRequest)
+		return s.GetTopic()
+	case *runtimev1pb.InvokeBindingRequest:
+		s := req.(*runtimev1pb.InvokeBindingRequest)
+		return s.GetName()
+	case *runtimev1pb.GetStateRequest:
+		s := req.(*runtimev1pb.GetStateRequest)
+		return s.GetStoreName()
+	case *runtimev1pb.SaveStateRequest:
+		s := req.(*runtimev1pb.SaveStateRequest)
+		return s.GetStoreName()
+	case *runtimev1pb.DeleteStateRequest:
+		s := req.(*runtimev1pb.DeleteStateRequest)
+		return s.GetStoreName()
+	case *runtimev1pb.GetSecretRequest:
+		s := req.(*runtimev1pb.GetSecretRequest)
+		return s.GetStoreName()
+	case *runtimev1pb.TopicEventRequest:
+		s := req.(*runtimev1pb.TopicEventRequest)
+		return s.GetTopic()
+	case *runtimev1pb.BindingEventRequest:
+		s := req.(*runtimev1pb.BindingEventRequest)
+		return s.GetName()
+	default:
 		return ""
 	}
-	if s, ok := req.(*internalv1pb.InternalInvokeRequest); ok {
-		return s.Message.GetMethod()
-	}
-	if s, ok := req.(*runtimev1pb.PublishEventRequest); ok {
-		return s.GetTopic()
-	}
-	if s, ok := req.(*runtimev1pb.InvokeServiceRequest); ok {
-		return s.Message.GetMethod()
-	}
-	if s, ok := req.(*runtimev1pb.InvokeBindingRequest); ok {
-		return s.GetName()
-	}
-	if s, ok := req.(*runtimev1pb.GetStateRequest); ok {
-		return s.GetStoreName()
-	}
-	if s, ok := req.(*runtimev1pb.GetSecretRequest); ok {
-		return s.GetStoreName()
-	}
-	if s, ok := req.(*runtimev1pb.SaveStateRequest); ok {
-		return s.GetStoreName()
-	}
-	if s, ok := req.(*runtimev1pb.DeleteStateRequest); ok {
-		return s.GetStoreName()
-	}
-	if s, ok := req.(*runtimev1pb.TopicEventRequest); ok {
-		return s.GetTopic()
-	}
-	if s, ok := req.(*runtimev1pb.BindingEventRequest); ok {
-		return s.GetName()
-	}
-	return ""
 }
