@@ -12,15 +12,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"github.com/valyala/fasthttp"
 
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
@@ -52,6 +49,10 @@ const (
 	messagingSystemSpanAttributeKey          = "messaging.system"
 	messagingDestinationSpanAttributeKey     = "messaging.destination"
 	messagingDestinationKindSpanAttributeKey = "messaging.destination_kind"
+
+	gRPCServiceSpanAttributeKey = "rpc.service"
+	// below attribute is not as per open temetery spec, adding custom dapr attribute to have additional details
+	gRPCDaprInstanceSpanAttributeKey = "rpc.dapr.instance"
 )
 
 // NewContext returns a new context with the given SpanContext attached.
@@ -194,41 +195,6 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 	}
 
 	return daprMetadata
-}
-
-func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]string {
-	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	route := string(ctx.Request.URI().Path())
-	method := string(ctx.Request.Header.Method())
-	uri := ctx.Request.URI().String()
-	statusCode := ctx.Response.StatusCode()
-	r := getAPIComponent(route)
-	return GetSpanAttributesMap(r.componentType, r.componentValue, method, route, uri, statusCode)
-}
-
-// GetSpanAttributesMap builds the span trace attributes map based on given parameters as per open-telemetry specs
-func GetSpanAttributesMap(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
-	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	m := make(map[string]string)
-	switch componentType {
-	case "state", "secrets", "bindings":
-		m[dbTypeSpanAttributeKey] = componentType
-		m[dbInstanceSpanAttributeKey] = componentValue
-		// TODO: not possible currently to get the route {state_store} , so using path instead of route
-		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, route)
-		m[dbURLSpanAttributeKey] = route
-	case "invoke", "actors":
-		m[httpMethodSpanAttributeKey] = method
-		m[httpURLSpanAttributeKey] = uri
-		code := invokev1.CodeFromHTTPStatus(statusCode)
-		m[httpStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
-		m[httpStatusTextSpanAttributeKey] = code.String()
-	case "publish":
-		m[messagingSystemSpanAttributeKey] = componentType
-		m[messagingDestinationSpanAttributeKey] = componentValue
-		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
-	}
-	return m
 }
 
 // AddAttributesToSpan adds the given attributes in the span

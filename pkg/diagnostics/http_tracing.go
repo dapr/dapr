@@ -7,8 +7,10 @@ package diagnostics
 
 import (
 	"context"
+	"fmt"
 	"net/textproto"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -167,4 +169,39 @@ func tracestateToRequest(sc trace.SpanContext, req *fasthttp.Request) {
 			req.Header.Set(tracestateHeader, h)
 		}
 	}
+}
+
+// GetSpanAttributesMap builds the span trace attributes map for HTTP calls based on given parameters as per open-telemetry specs
+func GetSpanAttributesMapFromHTTP(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
+	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+	m := make(map[string]string)
+	switch componentType {
+	case "state", "secrets", "bindings":
+		m[dbTypeSpanAttributeKey] = componentType
+		m[dbInstanceSpanAttributeKey] = componentValue
+		// TODO: not possible currently to get the route {state_store} , so using path instead of route
+		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, route)
+		m[dbURLSpanAttributeKey] = route
+	case "invoke", "actors":
+		m[httpMethodSpanAttributeKey] = method
+		m[httpURLSpanAttributeKey] = uri
+		code := invokev1.CodeFromHTTPStatus(statusCode)
+		m[httpStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
+		m[httpStatusTextSpanAttributeKey] = code.String()
+	case "publish":
+		m[messagingSystemSpanAttributeKey] = componentType
+		m[messagingDestinationSpanAttributeKey] = componentValue
+		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
+	}
+	return m
+}
+
+func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]string {
+	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+	route := string(ctx.Request.URI().Path())
+	method := string(ctx.Request.Header.Method())
+	uri := ctx.Request.URI().String()
+	statusCode := ctx.Response.StatusCode()
+	r := getAPIComponent(route)
+	return GetSpanAttributesMapFromHTTP(r.componentType, r.componentValue, method, route, uri, statusCode)
 }

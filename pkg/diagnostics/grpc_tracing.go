@@ -12,6 +12,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc"
@@ -54,6 +55,10 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		// build new context now on top of passed root context with started span context
 		newCtx = NewContext(ctx, span.SpanContext())
 		resp, err = handler(newCtx, req)
+
+		// add span attributes
+		m := GetSpanAttributesMapFromGRPC(req, info.FullMethod)
+		AddAttributesToSpan(span, m)
 
 		UpdateSpanStatusFromGRPCError(span, err, method)
 
@@ -155,4 +160,71 @@ func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span)
 
 func isLocalServiceInvocationMethod(method string) bool {
 	return strings.Contains(method, "/CallLocal")
+}
+
+// GetSpanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs
+func GetSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]string {
+	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
+	// gRPC method /package.service/method
+	var serviceName string
+
+	p := rpcMethod
+	if p[0] == '/' {
+		p = rpcMethod[1:]
+	}
+
+	// Split up to 3 delimiters in '/package.service/method'
+	// example for internal call : "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
+	// example for non-internal call : "/dapr.proto.runtime.v1.Dapr/InvokeService"
+	internalCall := strings.Contains(p, "dapr.proto.internals.")
+
+	tokens := strings.SplitN(p, "/", 3)
+	if len(tokens) >= 2 {
+		if internalCall {
+			if t := strings.SplitN(tokens[0], ".", 5); len(t) >= 4 {
+				serviceName = t[4]
+			}
+		} else {
+			// TODO : need to revisit /package.service/method format in runtime calls, currently service name is "Dapr"
+			// so instead of taking general "Dapr", taking method name as service name to give better insights
+			serviceName = tokens[1]
+		}
+	} else {
+		// default service name to full method name, after removing first "/"
+		serviceName = p
+	}
+
+	m := make(map[string]string)
+	m[gRPCServiceSpanAttributeKey] = serviceName
+
+	// below attribute is not as per open temetery spec, adding custom dapr attribute to have additional details
+	m[gRPCDaprInstanceSpanAttributeKey] = extractComponentValueFromGRPCRequest(req)
+	return m
+}
+
+func extractComponentValueFromGRPCRequest(req interface{}) string {
+	switch s := req.(type) {
+	case *internalv1pb.InternalInvokeRequest:
+		return s.Message.GetMethod()
+	case *runtimev1pb.InvokeServiceRequest:
+		return s.Message.GetMethod()
+	case *runtimev1pb.PublishEventRequest:
+		return s.GetTopic()
+	case *runtimev1pb.InvokeBindingRequest:
+		return s.GetName()
+	case *runtimev1pb.GetStateRequest:
+		return s.GetStoreName()
+	case *runtimev1pb.SaveStateRequest:
+		return s.GetStoreName()
+	case *runtimev1pb.DeleteStateRequest:
+		return s.GetStoreName()
+	case *runtimev1pb.GetSecretRequest:
+		return s.GetStoreName()
+	case *runtimev1pb.TopicEventRequest:
+		return s.GetTopic()
+	case *runtimev1pb.BindingEventRequest:
+		return s.GetName()
+	default:
+		return ""
+	}
 }
