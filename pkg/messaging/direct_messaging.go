@@ -9,20 +9,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-<<<<<<< HEAD
 	"os"
-=======
 	"time"
->>>>>>> master
 
 	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
 	"github.com/valyala/fasthttp"
-	"github.com/dapr/dapr/pkg/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
