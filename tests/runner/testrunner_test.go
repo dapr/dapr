@@ -40,6 +40,11 @@ func (m *MockPlatform) AcquireAppExternalURL(name string) string {
 	return args.String(0)
 }
 
+func (m *MockPlatform) GetAppHostDetails(name string) (string, string, error) {
+	args := m.Called(name)
+	return args.String(0), args.String(0), args.Error(0)
+}
+
 func (m *MockPlatform) addComponents(comps []kube.ComponentDescription) error {
 	args := m.Called(comps)
 	return args.Error(0)

@@ -55,6 +55,7 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
+	"github.com/dapr/dapr/utils"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
 	"go.opencensus.io/trace"
@@ -204,7 +205,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.blockUntilAppIsReady()
 
-	a.hostAddress, err = GetHostAddress()
+	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return fmt.Errorf("failed to determine host address: %s", err)
 	}

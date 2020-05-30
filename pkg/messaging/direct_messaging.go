@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/dapr/components-contrib/servicediscovery"
@@ -17,6 +18,8 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/retry"
+	"github.com/dapr/dapr/utils"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -43,6 +46,8 @@ type directMessaging struct {
 	namespace           string
 	resolver            servicediscovery.Resolver
 	tracingSpec         config.TracingSpec
+	hostAddress         string
+	hostName            string
 }
 
 // NewDirectMessaging returns a new direct messaging api
@@ -53,6 +58,8 @@ func NewDirectMessaging(
 	clientConnFn messageClientConnection,
 	resolver servicediscovery.Resolver,
 	tracingSpec config.TracingSpec) DirectMessaging {
+	hAddr, _ := utils.GetHostAddress()
+	hName, _ := os.Hostname()
 	return &directMessaging{
 		appChannel:          appChannel,
 		connectionCreatorFn: clientConnFn,
@@ -62,6 +69,8 @@ func NewDirectMessaging(
 		namespace:           namespace,
 		resolver:            resolver,
 		tracingSpec:         tracingSpec,
+		hostAddress:         hAddr,
+		hostName:            hName,
 	}
 }
 
@@ -133,6 +142,9 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	defer cancel()
 
 	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
+
+	d.addForwardedHeadersToMetadata(req)
+
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {
@@ -140,6 +152,35 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	}
 
 	return invokev1.InternalInvokeResponse(resp)
+}
+
+func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMethodRequest) {
+	metadata := req.Metadata()
+
+	var forwardedHeaderValue string
+
+	if d.hostAddress != "" {
+		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
+		metadata[fasthttp.HeaderXForwardedFor] = &internalv1pb.ListStringValue{
+			Values: []string{d.hostAddress},
+		}
+
+		forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", d.hostAddress, d.hostAddress)
+	}
+
+	if d.hostName != "" {
+		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
+		metadata[fasthttp.HeaderXForwardedHost] = &internalv1pb.ListStringValue{
+			Values: []string{d.hostName},
+		}
+
+		forwardedHeaderValue += fmt.Sprintf("host=%s", d.hostName)
+	}
+
+	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
+	metadata[fasthttp.HeaderForwarded] = &internalv1pb.ListStringValue{
+		Values: []string{forwardedHeaderValue},
+	}
 }
 
 func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {

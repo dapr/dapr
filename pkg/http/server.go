@@ -50,10 +50,9 @@ func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pip
 func (s *server) StartNonBlocking() {
 	handler :=
 		useAPIAuthentication(
-			s.useProxy(
-				s.useCors(
-					s.useComponents(
-						s.useRouter()))))
+			s.useCors(
+				s.useComponents(
+					s.useRouter())))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
@@ -111,32 +110,6 @@ func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 		} else {
 			ctx.Error("invalid api token", http.StatusUnauthorized)
 		}
-	}
-}
-
-func (s *server) useProxy(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled proxy http middleware")
-	return func(ctx *fasthttp.RequestCtx) {
-		var proto string
-		if ctx.IsTLS() {
-			proto = "https"
-		} else {
-			proto = "http"
-		}
-		// Add Forwarded header: https://tools.ietf.org/html/rfc7239
-		ctx.Request.Header.Add("Forwarded",
-			fmt.Sprintf("by=%s;for=%s;host=%s;proto=%s",
-				ctx.LocalAddr(),
-				ctx.RemoteAddr(),
-				ctx.Host(),
-				proto))
-		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-		ctx.Request.Header.Add("X-Forwarded-For", ctx.RemoteAddr().String())
-		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
-		ctx.Request.Header.Add("X-Forwarded-Host", fmt.Sprintf("%s", ctx.Host()))
-		// Add X-Forwarded-Proto: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
-		ctx.Request.Header.Add("X-Forwarded-Proto", proto)
-		next(ctx)
 	}
 }
 

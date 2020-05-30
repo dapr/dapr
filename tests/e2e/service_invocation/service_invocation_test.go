@@ -194,7 +194,12 @@ func TestServiceInvocation(t *testing.T) {
 func TestHeaders(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-	var err error
+
+	hostname, hostIP, err := tr.Platform.GetAppHostDetails("serviceinvocation-caller")
+	require.NoError(t, err, "error retrieving host details: %s", err)
+
+	expectedForwarded := fmt.Sprintf("for=%s;by=%s;host=%s", hostIP, hostIP, hostname)
+
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
@@ -231,11 +236,11 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "application/json", requestHeaders["Content-Type"][0])
 		assert.Equal(t, "DaprValue1", requestHeaders["Daprtest-Request-1"][0])
 		assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
-		assert.NotNil(t, requestHeaders["Forwarded"][0])
 		assert.NotNil(t, requestHeaders["Traceparent"][0])
 		assert.NotNil(t, requestHeaders["User-Agent"][0])
-		assert.NotNil(t, requestHeaders["X-Forwarded-For"][0])
-		assert.Equal(t, "http", requestHeaders["X-Forwarded-Proto"][0])
+		assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
+		assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
+		assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
 
 		assert.NotNil(t, responseHeaders["Content-Length"][0])
 		assert.Equal(t, "application/json; utf-8", responseHeaders["Content-Type"][0])
@@ -276,6 +281,9 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, requestHeaders["user-agent"][0])
 		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
 		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		assert.Equal(t, hostIP, requestHeaders["x-forwarded-for"][0])
+		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
+		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
 
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
@@ -316,6 +324,9 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "DaprValue2", requestHeaders["Daprtest-Request-2"][0])
 		assert.NotNil(t, requestHeaders["Traceparent"][0])
 		assert.NotNil(t, requestHeaders["User-Agent"][0])
+		assert.Equal(t, hostIP, requestHeaders["X-Forwarded-For"][0])
+		assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
+		assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
 
 		assert.NotNil(t, responseHeaders["content-length"][0])
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
@@ -358,10 +369,9 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, requestHeaders["user-agent"][0])
 		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
 		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
-		assert.NotNil(t, requestHeaders["x-forwarded-host"][0])
-		assert.Equal(t, "http", requestHeaders["x-forwarded-proto"][0])
-		assert.NotNil(t, requestHeaders["forwarded"][0])
-		assert.NotNil(t, requestHeaders["x-forwarded-for"][0])
+		assert.Equal(t, hostIP, requestHeaders["x-forwarded-for"][0])
+		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
+		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
 
 		assert.NotNil(t, responseHeaders["Content-Length"][0])
 		assert.Equal(t, "application/json", responseHeaders["Content-Type"][0])

@@ -398,3 +398,29 @@ func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
 
 	return ns, err
 }
+
+// GetHostDetails returns the name and IP address of the pod running the app
+func (m *AppManager) GetHostDetails() (string, string, error) {
+	if int(m.app.Replicas) != 1 {
+		return "", "", fmt.Errorf("number of replicas should be 1")
+	}
+	if !m.app.DaprEnabled {
+		return "", "", fmt.Errorf("dapr is not enabled for this app")
+	}
+
+	podClient := m.client.Pods(m.namespace)
+
+	// Filter only 'testapp=appName' labeled Pods
+	podList, err := podClient.List(metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+	})
+	if err != nil {
+		return "", "", err
+	}
+
+	if len(podList.Items) != int(m.app.Replicas) {
+		return "", "", fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
+	}
+
+	return podList.Items[0].GetName(), podList.Items[0].Status.PodIP, nil
+}
