@@ -208,7 +208,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 			a.actorsTable.Range(func(key, value interface{}) bool {
 				actorInstance := value.(*actor)
 
-				if actorInstance.busy {
+				if actorInstance.isBusy() {
 					return true
 				}
 
@@ -286,21 +286,10 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	actorTypeID := req.Actor()
 	key := a.constructCompositeKey(actorTypeID.GetActorType(), actorTypeID.GetActorId())
 
-	val, _ := a.actorsTable.LoadOrStore(key, &actor{
-		lock:         &sync.RWMutex{},
-		busy:         true,
-		lastUsedTime: time.Now().UTC(),
-		busyCh:       make(chan bool, 1),
-	})
-
+	val, _ := a.actorsTable.LoadOrStore(key, newActor(actorTypeID.GetActorType(), actorTypeID.GetActorId()))
 	act := val.(*actor)
-	lock := act.lock
-	lock.Lock()
-	defer lock.Unlock()
-
-	act.busy = true
-	act.busyCh = make(chan bool, 1)
-	act.lastUsedTime = time.Now().UTC()
+	act.lock()
+	defer act.unLock()
 
 	// Replace method to actors method
 	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)
@@ -311,11 +300,6 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT
 	}
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-
-	if act.busy {
-		act.busy = false
-		close(act.busyCh)
-	}
 
 	if err != nil {
 		return nil, err
@@ -643,11 +627,11 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				actor := value.(*actor)
 				if a.config.DrainRebalancedActors {
 					// wait until actor isn't busy or timeout hits
-					if actor.busy {
+					if actor.isBusy() {
 						select {
 						case <-time.After(a.config.DrainOngoingCallTimeout):
 							break
-						case <-actor.busyCh:
+						case <-actor.channel():
 							// if a call comes in from the actor for state changes, that's still allowed
 							break
 						}
@@ -661,7 +645,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 
 				for {
 					// wait until actor is not busy, then deactivate
-					if !actor.busy {
+					if !actor.isBusy() {
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
 							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
