@@ -209,11 +209,11 @@ func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]st
 	uri := ctx.Request.URI().String()
 	statusCode := ctx.Response.StatusCode()
 	r := getAPIComponent(route)
-	return GetSpanAttributesMap(r.componentType, r.componentValue, method, route, uri, statusCode)
+	return GetSpanAttributesMapFromHTTP(r.componentType, r.componentValue, method, route, uri, statusCode)
 }
 
-// GetSpanAttributesMap builds the span trace attributes map based on given parameters as per open-telemetry specs
-func GetSpanAttributesMap(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
+// GetSpanAttributesMap builds the span trace attributes map for HTTP calls based on given parameters as per open-telemetry specs
+func GetSpanAttributesMapFromHTTP(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
 	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
 	m := make(map[string]string)
 	switch componentType {
@@ -270,7 +270,8 @@ func getAPIComponent(apiPath string) apiComponent {
 	return apiComponent{componentType: tokens[1], componentValue: tokens[2]}
 }
 
-func getSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]string {
+// GetSpanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs
+func GetSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]string {
 	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
 	// gRPC method /package.service/method
 	var serviceName string
@@ -296,6 +297,9 @@ func getSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]
 			// so instead of taking general "Dapr", taking method name as service name to give better insights
 			serviceName = tokens[1]
 		}
+	} else {
+		// default service name to full method name, after removing first "/"
+		serviceName = p
 	}
 
 	m := make(map[string]string)
@@ -333,6 +337,12 @@ func extractComponentValueFromGRPCRequest(req interface{}) string {
 	}
 	if s, ok := req.(*runtimev1pb.DeleteStateRequest); ok {
 		return s.GetStoreName()
+	}
+	if s, ok := req.(*runtimev1pb.TopicEventRequest); ok {
+		return s.GetTopic()
+	}
+	if s, ok := req.(*runtimev1pb.BindingEventRequest); ok {
+		return s.GetName()
 	}
 	return ""
 }

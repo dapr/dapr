@@ -88,7 +88,9 @@ func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
 		{"/dapr.proto.runtime.v1.Dapr/GetSecret", "GetSecretRequest", "GetSecret", "mysecretstore"},
 		{"/dapr.proto.runtime.v1.Dapr/InvokeBinding", "InvokeBindingRequest", "InvokeBinding", "mybindings"},
 		{"/dapr.proto.runtime.v1.Dapr/PublishEvent", "PublishEventRequest", "PublishEvent", "mytopic"},
-		{"/invalid.rpcMethodformat", "InvokeServiceRequest", "", "mymethod"},
+		{"/dapr.proto.runtime.v1.Dapr/AppCallback", "TopicEventRequest", "AppCallback", "mytopic"},
+		{"/dapr.proto.runtime.v1.Dapr/AppCallback", "BindingEventRequest", "AppCallback", "mybindings"},
+		{"/invalid.rpcMethodformat", "InvokeServiceRequest", "invalid.rpcMethodformat", "mymethod"},
 	}
 	var req interface{}
 	for _, tt := range tests {
@@ -108,11 +110,15 @@ func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
 				req = &runtimev1pb.InvokeBindingRequest{Name: "mybindings"}
 			case "PublishEventRequest":
 				req = &runtimev1pb.PublishEventRequest{Topic: "mytopic"}
+			case "TopicEventRequest":
+				req = &runtimev1pb.TopicEventRequest{Topic: "mytopic"}
+			case "BindingEventRequest":
+				req = &runtimev1pb.BindingEventRequest{Name: "mybindings"}
 			case "InternalInvokeRequest":
 				req = &internalv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "mymethod"}}
 			}
 
-			got := getSpanAttributesMapFromGRPC(req, tt.rpcMethod)
+			got := GetSpanAttributesMapFromGRPC(req, tt.rpcMethod)
 			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
 			assert.Equal(t, tt.expectedCustomAttribute, got[gRPCDaprInstanceSpanAttributeKey], "custom attribute should be equal")
 		})

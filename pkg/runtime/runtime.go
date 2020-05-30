@@ -548,13 +548,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-		resp, err := client.OnBindingEvent(ctx, &runtimev1pb.BindingEventRequest{
+		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
 			Data:     data,
 			Metadata: metadata,
-		})
+		}
+		resp, err := client.OnBindingEvent(ctx, req)
 
-		diag.UpdateSpanStatusFromGRPCError(span, err, spanName)
+		updateSpanPropertiesGRPC(span, err, spanName, req)
 
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
@@ -1036,7 +1037,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 	_, err = clientV1.OnTopicEvent(ctx, envelope)
 
-	diag.UpdateSpanStatusFromGRPCError(span, err, spanName)
+	updateSpanPropertiesGRPC(span, err, spanName, envelope)
 
 	if err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
@@ -1417,7 +1418,14 @@ func (a *DaprRuntime) getTracingContext(spanName string, oldSC trace.SpanContext
 
 func updateSpanPropertiesHTTP(span *trace.Span, spanName, componentType, componentValue, method, route string, statusCode int) {
 	// add span attributes
-	m := diag.GetSpanAttributesMap(componentType, componentValue, method, route, route, statusCode)
+	m := diag.GetSpanAttributesMapFromHTTP(componentType, componentValue, method, route, route, statusCode)
 	diag.AddAttributesToSpan(span, m)
 	diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
+}
+
+func updateSpanPropertiesGRPC(span *trace.Span, err error, spanName string, req interface{}) {
+	// add span attributes
+	m := diag.GetSpanAttributesMapFromGRPC(req, spanName)
+	diag.AddAttributesToSpan(span, m)
+	diag.UpdateSpanStatusFromGRPCError(span, err, spanName)
 }
