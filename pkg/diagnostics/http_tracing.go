@@ -7,14 +7,13 @@ package diagnostics
 
 import (
 	"context"
-	"encoding/hex"
-	"fmt"
 	"net/textproto"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
@@ -33,22 +32,40 @@ const (
 
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
-// SetTracingSpanContextFromHTTPContext sets the trace SpanContext in the request context
-func SetTracingSpanContextFromHTTPContext(next fasthttp.RequestHandler, spec config.TracingSpec) fasthttp.RequestHandler {
+// SetTracingInHTTPMiddleware sets the trace context or starts the trace client span based on request
+func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		sc := GetSpanContextFromRequestContext(ctx, spec)
-		SpanContextToRequest(sc, &ctx.Request)
-		next(ctx)
+		path := string(ctx.Request.URI().Path())
+
+		// 1. check if tracing is enabled or not, and if request is health request
+		// 2. if tracing is disabled or health request, set the trace context and call the handler
+		// 3. if tracing is enabled, start the client or server spans based on the request and call the handler with appropriate span context
+		if isHealthzRequest(path) || !diag_utils.IsTracingEnabled(spec.SamplingRate) {
+			SpanContextToRequest(sc, &ctx.Request)
+			next(ctx)
+		} else {
+			newCtx := NewContext((context.Context)(ctx), sc)
+			_, span := StartTracingClientSpanFromHTTPContext(newCtx, path, spec)
+
+			SpanContextToRequest(span.SpanContext(), &ctx.Request)
+
+			next(ctx)
+
+			// add span attributes
+			m := getSpanAttributesMapFromHTTPContext(ctx)
+			AddAttributesToSpan(span, m)
+
+			UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
+			span.End()
+		}
 	}
 }
 
 // StartTracingClientSpanFromHTTPContext creates a client span before invoking http method call
-func StartTracingClientSpanFromHTTPContext(ctx context.Context, req *fasthttp.Request, method string, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartTracingClientSpanFromHTTPContext(ctx context.Context, spanName string, spec config.TracingSpec) (context.Context, *trace.Span) {
 	var span *trace.Span
-	ctx, span = startTracingSpanInternal(ctx, method, spec.SamplingRate, trace.SpanKindClient)
-
-	addAnnotationsToSpan(req, span)
-
+	ctx, span = startTracingSpanInternal(ctx, spanName, spec.SamplingRate, trace.SpanKindClient)
 	return ctx, span
 }
 
@@ -68,87 +85,32 @@ func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok boo
 	if !ok {
 		return trace.SpanContext{}, false
 	}
-	sections := strings.Split(h, "-")
-	if len(sections) < 4 {
-		return trace.SpanContext{}, false
-	}
 
-	if len(sections[0]) != 2 {
-		return trace.SpanContext{}, false
-	}
-	ver, err := hex.DecodeString(sections[0])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	version := int(ver[0])
-	if version > maxVersion {
-		return trace.SpanContext{}, false
-	}
+	sc, ok = SpanContextFromString(h)
 
-	if version == 0 && len(sections) != 4 {
-		return trace.SpanContext{}, false
+	if ok {
+		sc.Tracestate = tracestateFromRequest(req)
 	}
-
-	if len(sections[1]) != 32 {
-		return trace.SpanContext{}, false
-	}
-	tid, err := hex.DecodeString(sections[1])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	copy(sc.TraceID[:], tid)
-
-	if len(sections[2]) != 16 {
-		return trace.SpanContext{}, false
-	}
-	sid, err := hex.DecodeString(sections[2])
-	if err != nil {
-		return trace.SpanContext{}, false
-	}
-	copy(sc.SpanID[:], sid)
-
-	opts, err := hex.DecodeString(sections[3])
-	if err != nil || len(opts) < 1 {
-		return trace.SpanContext{}, false
-	}
-	sc.TraceOptions = trace.TraceOptions(opts[0])
-
-	// Don't allow all zero trace or span ID.
-	if sc.TraceID == [16]byte{} || sc.SpanID == [8]byte{} {
-		return trace.SpanContext{}, false
-	}
-
-	sc.Tracestate = tracestateFromRequest(req)
-	return sc, true
+	return sc, ok
 }
 
 // SpanContextToRequest modifies the given request to include traceparent and tracestate headers.
 func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
-	h := fmt.Sprintf("%x-%x-%x-%x",
-		[]byte{supportedVersion},
-		sc.TraceID[:],
-		sc.SpanID[:],
-		[]byte{byte(sc.TraceOptions)})
+	h := SpanContextToString(sc)
 	req.Header.Set(traceparentHeader, h)
 	tracestateToRequest(sc, req)
 }
 
-func addAnnotationsToSpan(req *fasthttp.Request, span *trace.Span) {
-	req.Header.VisitAll(func(key []byte, value []byte) {
-		headerKey := string(key)
-		headerKey = strings.ToLower(headerKey)
-		if strings.HasPrefix(headerKey, daprHeaderPrefix) {
-			span.AddAttributes(trace.StringAttribute(headerKey, string(value)))
-		}
-	})
+func isHealthzRequest(name string) bool {
+	return strings.Contains(name, "/healthz")
 }
 
-// UpdateSpanStatus updates trace span status based on HTTP response
-func UpdateSpanStatus(span *trace.Span, resp *fasthttp.Response) {
-	span.SetStatus(trace.Status{
-		Code:    projectStatusCode(resp.StatusCode()),
-		Message: strconv.Itoa(resp.StatusCode()),
-	})
+// UpdateSpanStatusFromHTTPStatus updates trace span status based on response code
+func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
+	if span != nil {
+		code := invokev1.CodeFromHTTPStatus(code)
+		span.SetStatus(trace.Status{Code: int32(code), Message: code.String()})
+	}
 }
 
 func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {

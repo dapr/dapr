@@ -5,7 +5,7 @@
 
 package modes
 
-// DaprMode is the runtime mode for Dapr
+// DaprMode is the runtime mode for Dapr.
 type DaprMode string
 
 const (

@@ -6,6 +6,7 @@
 package runtime
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
@@ -76,6 +78,29 @@ func TestNewRuntime(t *testing.T) {
 	assert.NotNil(t, r, "runtime must be initiated")
 }
 
+func getSubscriptionsJSONString(topics []string) string {
+	s := []runtime_pubsub.Subscription{}
+	for _, t := range topics {
+		s = append(s, runtime_pubsub.Subscription{
+			Topic: t,
+			Route: t,
+		})
+	}
+	b, _ := json.Marshal(&s)
+	return string(b)
+}
+
+func getSubscriptionCustom(topic, route string) string {
+	s := []runtime_pubsub.Subscription{
+		{
+			Topic: topic,
+			Route: route,
+		},
+	}
+	b, _ := json.Marshal(&s)
+	return string(b)
+}
+
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
@@ -115,7 +140,8 @@ func TestInitPubSub(t *testing.T) {
 		fakeReq.WithRawData(nil, "application/json")
 
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\", \"topic1\" ]"), "application/json")
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
@@ -125,7 +151,46 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+
+		// act
+		err = rt.beginPubSub()
+
+		// assert
+		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("subscribe to topic with custom route", func(t *testing.T) {
+		mockPubSub := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes to a topic via http app channel
+		fakeReq := invokev1.NewInvokeMethodRequest("dapr/subscribe")
+		fakeReq.WithHTTPExtension(http.MethodGet, "")
+		fakeReq.WithRawData(nil, "application/json")
+
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		sub := getSubscriptionCustom("topic0", "customroute/topic0")
+		fakeResp.WithRawData([]byte(sub), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.initPubSub()
+
+		// assert
+		assert.Nil(t, err)
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+
+		// act
+		err = rt.beginPubSub()
+
+		// assert
+		assert.Nil(t, err)
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -148,6 +213,12 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+
+		// act
+		err = rt.beginPubSub()
+
+		// assert
+		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -177,8 +248,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -187,6 +258,12 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+
+		// act
+		err = rt.beginPubSub()
+
+		// assert
+		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
@@ -202,8 +279,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 2 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\", \"topic1\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -212,6 +289,12 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+
+		// act
+		err = rt.beginPubSub()
+
+		// assert
+		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
 	})
 
@@ -227,8 +310,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic3\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic3"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -252,8 +335,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\", \"topic3\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic3"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -262,6 +345,12 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+
+		// act
+		err = rt.beginPubSub()
+
+		// assert
+		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
@@ -277,8 +366,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -304,8 +393,8 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("[ \"topic0\" ]"), "application/json")
-
+		subs := getSubscriptionsJSONString([]string{"topic0"})
+		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
@@ -615,7 +704,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
 		err := rt.publishMessageHTTP(testPubSubMessage)
@@ -633,7 +722,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
 		fakeResp.WithRawData([]byte(clientError.Error()), "application/json")
 
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
 		err := rt.publishMessageHTTP(testPubSubMessage)
@@ -701,6 +790,8 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		"")
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
+	rt.topicRoutes["topic1"] = "topic1"
+
 	rt.components = []components_v1alpha1.Component{
 		{
 			ObjectMeta: meta_v1.ObjectMeta{
@@ -748,6 +839,7 @@ func TestMTLS(t *testing.T) {
 type mockBinding struct {
 	hasError bool
 	data     string
+	metadata map[string]string
 }
 
 func (b *mockBinding) Init(metadata bindings.Metadata) error {
@@ -756,13 +848,60 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 
 func (b *mockBinding) Read(handler func(*bindings.ReadResponse) error) error {
 	b.data = "test"
+	metadata := map[string]string{}
+	if b.metadata != nil {
+		metadata = b.metadata
+	}
 
 	err := handler(&bindings.ReadResponse{
-		Metadata: map[string]string{},
+		Metadata: metadata,
 		Data:     []byte(b.data),
 	})
 	b.hasError = err != nil
 	return nil
+}
+
+func (b *mockBinding) Operations() []bindings.OperationKind {
+	return []bindings.OperationKind{"create"}
+}
+
+func (b *mockBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+	return nil, nil
+}
+
+func TestInvokeOutputBindings(t *testing.T) {
+	t.Run("output binding missing operation", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		_, err := rt.sendToOutputBinding("mockBinding", &bindings.InvokeRequest{
+			Data: []byte(""),
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, "operation field is missing from request", err.Error())
+	})
+
+	t.Run("output binding valid operation", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.outputBindings["mockBinding"] = &mockBinding{}
+
+		_, err := rt.sendToOutputBinding("mockBinding", &bindings.InvokeRequest{
+			Data:      []byte(""),
+			Operation: bindings.CreateOperation,
+		})
+		assert.Nil(t, err)
+	})
+
+	t.Run("output binding invalid operation", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.outputBindings["mockBinding"] = &mockBinding{}
+
+		_, err := rt.sendToOutputBinding("mockBinding", &bindings.InvokeRequest{
+			Data:      []byte(""),
+			Operation: bindings.GetOperation,
+		})
+		assert.NotNil(t, err)
+		assert.Equal(t, "binding mockBinding does not support operation get. supported operations: create", err.Error())
+	})
 }
 
 func TestReadInputBindings(t *testing.T) {
@@ -774,12 +913,13 @@ func TestReadInputBindings(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("test")
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
 
@@ -797,12 +937,13 @@ func TestReadInputBindings(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("test")
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
 		fakeResp.WithRawData([]byte("Internal Error"), "application/json")
 
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
 
@@ -812,7 +953,7 @@ func TestReadInputBindings(t *testing.T) {
 		assert.True(t, b.hasError)
 	})
 
-	t.Run("binding has data", func(t *testing.T) {
+	t.Run("binding has data and metadata", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -820,15 +961,16 @@ func TestReadInputBindings(t *testing.T) {
 		fakeReq := invokev1.NewInvokeMethodRequest("test")
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithMetadata(map[string][]string{"bindings": {"input"}})
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 		rt.appChannel = mockAppChannel
 
-		b := mockBinding{}
+		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
 		rt.readFromBinding("test", &b)
 
 		assert.Equal(t, "test", b.data)

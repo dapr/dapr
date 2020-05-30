@@ -1,0 +1,131 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "google/protobuf/empty.proto";
+import "dapr/proto/common/v1/common.proto";
+
+option csharp_namespace = "Dapr.AppCallback.Autogen.Grpc.v1";
+option java_outer_classname = "DaprAppCallbackProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// AppCallback V1 allows user application to interact with Dapr runtime.
+// User application needs to implement AppCallback service if it needs to
+// receive message from dapr runtime.
+service AppCallback {
+  // Invokes service method with InvokeRequest.
+  rpc OnInvoke (common.v1.InvokeRequest) returns (common.v1.InvokeResponse) {}
+
+  // Lists all topics subscribed by this app.
+  rpc ListTopicSubscriptions(google.protobuf.Empty) returns (ListTopicSubscriptionsResponse) {}
+
+  // Subscribes events from Pubsub
+  rpc OnTopicEvent(TopicEventRequest) returns (google.protobuf.Empty) {}
+
+  // Lists all input bindings subscribed by this app.
+  rpc ListInputBindings(google.protobuf.Empty) returns (ListInputBindingsResponse) {}
+
+  // Listens events from the input bindings
+  //
+  // User application can save the states or send the events to the output
+  // bindings optionally by returning BindingEventResponse.
+  rpc OnBindingEvent(BindingEventRequest) returns (BindingEventResponse) {}
+}
+
+// TopicEventRequest message is compatiable with CloudEvent spec v1.0
+// https://github.com/cloudevents/spec/blob/v1.0/spec.md
+message TopicEventRequest {
+  // id identifies the event. Producers MUST ensure that source + id 
+  // is unique for each distinct event. If a duplicate event is re-sent
+  // (e.g. due to a network error) it MAY have the same id. 
+  string id = 1;
+
+  // source identifies the context in which an event happened.
+  // Often this will include information such as the type of the
+  // event source, the organization publishing the event or the process
+  // that produced the event. The exact syntax and semantics behind
+  // the data encoded in the URI is defined by the event producer.
+  string source = 2;
+
+  // The type of event related to the originating occurrence. 
+  string type = 3;
+
+  // The version of the CloudEvents specification. 
+  string spec_version = 4;
+
+  // The content type of data value.
+  string data_content_type = 5;
+
+  // The content of the event.
+  bytes data = 7;
+
+  // The pubsub topic which publisher sent to.
+  string topic = 6;
+}
+
+// BindingEventRequest represents input bindings event.
+message BindingEventRequest {
+  // Requried. The name of the input binding component.
+  string name = 1;
+
+  // Required. The payload that the input bindings sent
+  bytes data = 2;
+
+  // The metadata set by the input binging components.
+  map<string,string> metadata = 3;
+}
+
+// BindingEventResponse includes operations to save state or
+// send data to output bindings optionally.
+message BindingEventResponse {
+  // The name of state store where states are saved.
+  string store_name = 1;
+
+  // The state key values which will be stored in store_name.
+  repeated common.v1.StateItem states = 2;
+
+  // BindingEventConcurrency is the kind of concurrency 
+  enum BindingEventConcurrency {
+    // SEQUENTIAL sends data to output bindings specified in "to" sequentially.
+    SEQUENTIAL = 0;
+    // PARALLEL sends data to output bindings specified in "to" in parallel.
+    PARALLEL = 1;
+  }
+
+  // The list of output bindings.
+  repeated string to = 3;
+
+  // The content which will be sent to "to" output bindings.
+  bytes data = 4;
+
+  // The concurrency of output bindings to send data to
+  // "to" output bindings list. The default is SEQUENTIAL.
+  BindingEventConcurrency concurrency = 5;
+}
+
+// ListTopicSubscriptionsResponse is the message including the list of the subscribing topics.
+message ListTopicSubscriptionsResponse {
+  // The list of topics.
+  repeated TopicSubscription subscriptions = 1;
+}
+
+// TopicSubscription represents topic and metadata.
+message TopicSubscription {
+  // Required. The name of topic which will be subscribed
+  string topic = 1;
+
+  // The optional properties used for this topic's subscribtion e.g. session id
+  map<string,string> metadata = 2;
+}
+
+// ListInputBindingsResponse is the message including the list of input bindings.
+message ListInputBindingsResponse {
+  // The list of input bindings.
+  repeated string bindings = 1;
+}

@@ -7,23 +7,23 @@ package v1
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
-	structpb "github.com/golang/protobuf/ptypes/struct"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/stretchr/testify/assert"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func TestInternalMetadataToHTTPHeader(t *testing.T) {
-	testValue := &structpb.ListValue{
-		Values: []*structpb.Value{
-			{
-				Kind: &structpb.Value_StringValue{StringValue: "fakeValue"},
-			},
-		},
+	testValue := &internalv1pb.ListStringValue{
+		Values: []string{"fakeValue"},
 	}
 
-	fakeMetadata := map[string]*structpb.ListValue{
+	fakeMetadata := map[string]*internalv1pb.ListStringValue{
 		"custom-header":  testValue,
 		":method":        testValue,
 		":scheme":        testValue,
@@ -53,10 +53,10 @@ func TestGrpcMetadataToInternalMetadata(t *testing.T) {
 	)
 	internalMD := GrpcMetadataToInternalMetadata(testMD)
 
-	assert.Equal(t, "key value", internalMD["key"].GetValues()[0].GetStringValue())
+	assert.Equal(t, "key value", internalMD["key"].GetValues()[0])
 	assert.Equal(t, 1, len(internalMD["key"].GetValues()))
 
-	assert.Equal(t, string([]byte{101, 200}), internalMD["key-bin"].GetValues()[0].GetStringValue(), "binary metadata must be saved")
+	assert.Equal(t, string([]byte{101, 200}), internalMD["key-bin"].GetValues()[0], "binary metadata must be saved")
 	assert.Equal(t, 1, len(internalMD["key-bin"].GetValues()))
 }
 
@@ -78,26 +78,18 @@ func TestIsJSONContentType(t *testing.T) {
 }
 
 func TestInternalMetadataToGrpcMetadata(t *testing.T) {
-	httpHeaders := map[string]*structpb.ListValue{
+	httpHeaders := map[string]*internalv1pb.ListStringValue{
 		"Host": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "localhost"}},
-			},
+			Values: []string{"localhost"},
 		},
 		"Content-Type": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "application/json"}},
-			},
+			Values: []string{"application/json"},
 		},
 		"Accept-Encoding": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "gzip, deflate"}},
-			},
+			Values: []string{"gzip, deflate"},
 		},
 		"User-Agent": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "Go-http-client/1.1"}},
-			},
+			Values: []string{"Go-http-client/1.1"},
 		},
 	}
 
@@ -119,38 +111,24 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		assert.Equal(t, "Go-http-client/1.1", convertedMD["user-agent"][0])
 	})
 
-	grpcMetadata := map[string]*structpb.ListValue{
+	grpcMetadata := map[string]*internalv1pb.ListStringValue{
 		":authority": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "localhost"}},
-			},
+			Values: []string{"localhost"},
 		},
 		"grpc-timeout": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "1S"}},
-			},
+			Values: []string{"1S"},
 		},
 		"grpc-encoding": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "gzip, deflate"}},
-			},
+			Values: []string{"gzip, deflate"},
 		},
 		"authorization": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "bearer token"}},
-			},
+			Values: []string{"bearer token"},
 		},
 		"grpc-trace-bin": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: string([]byte{10, 30, 50, 60})}},
-			},
+			Values: []string{string([]byte{10, 30, 50, 60})},
 		},
 		"my-metadata": {
-			Values: []*structpb.Value{
-				{Kind: &structpb.Value_StringValue{StringValue: "value1"}},
-				{Kind: &structpb.Value_StringValue{StringValue: "value2"}},
-				{Kind: &structpb.Value_StringValue{StringValue: "value3"}},
-			},
+			Values: []string{"value1", "value2", "value3"},
 		},
 	}
 
@@ -167,4 +145,94 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		assert.Equal(t, "value2", convertedMD["my-metadata"][1])
 		assert.Equal(t, "value3", convertedMD["my-metadata"][2])
 	})
+}
+
+func TestErrorFromHTTPResponseCode(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(200, "OK")
+
+		// assert
+		assert.NoError(t, err)
+	})
+
+	t.Run("NotFound", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(404, "Not Found")
+
+		// assert
+		s, ok := status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.NotFound, s.Code())
+		assert.Equal(t, "Not Found", s.Message())
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, "404", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
+		assert.Equal(t, "Not Found", errInfo.GetMetadata()[errorInfoHTTPErrorMetadata])
+	})
+
+	t.Run("Unknown", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(201, "Created")
+
+		// assert
+		s, ok := status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.Unknown, s.Code())
+		assert.Equal(t, "Created", s.Message())
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, "201", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
+		assert.Equal(t, "Created", errInfo.GetMetadata()[errorInfoHTTPErrorMetadata])
+	})
+
+	t.Run("Internal Server Error", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(500, "HTTPExtensions is not given")
+
+		// assert
+		s, ok := status.FromError(err)
+		assert.True(t, ok)
+		assert.Equal(t, codes.Unknown, s.Code())
+		assert.Equal(t, "Internal Server Error", s.Message())
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, "500", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
+		assert.Equal(t, "HTTPExtensions is not given", errInfo.GetMetadata()[errorInfoHTTPErrorMetadata])
+	})
+
+	t.Run("Truncate error message", func(t *testing.T) {
+		longMessage := strings.Repeat("test", 30)
+
+		// act
+		err := ErrorFromHTTPResponseCode(500, longMessage)
+
+		// assert
+		s, _ := status.FromError(err)
+		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
+		assert.Equal(t, 63, len(errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]))
+	})
+}
+
+func TestErrorFromInternalStatus(t *testing.T) {
+	expected := status.New(codes.Internal, "Internal Service Error")
+	expected.WithDetails(
+		&epb.DebugInfo{
+			StackEntries: []string{
+				"first stack",
+				"second stack",
+			},
+		},
+	)
+
+	internal := &internalv1pb.Status{
+		Code:    expected.Proto().Code,
+		Message: expected.Proto().Message,
+		Details: expected.Proto().Details,
+	}
+
+	// act
+	statusError := ErrorFromInternalStatus(internal)
+
+	// assert
+	actual, ok := status.FromError(statusError)
+	assert.True(t, ok)
+	assert.Equal(t, expected, actual)
 }

@@ -10,38 +10,70 @@ import (
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const grpcTraceContextKey = "grpc-trace-bin"
 
-// SetTracingSpanContextGRPCMiddlewareStream sets the trace spancontext into gRPC stream
-func SetTracingSpanContextGRPCMiddlewareStream(spec config.TracingSpec) grpc.StreamServerInterceptor {
-	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		ctx := stream.Context()
+// SetTracingInGRPCMiddlewareUnary sets the trace context or starts the trace client span based on request
+func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		sc := GetSpanContextFromGRPC(ctx, spec)
-		ctx = NewContext(ctx, sc)
-		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		wrappedStream.WrappedContext = ctx
+		newCtx := NewContext(ctx, sc)
 
-		err := handler(srv, wrappedStream)
+		var err error
+		var resp interface{}
 
-		return err
+		// 1. check if tracing is enabled or not
+		// 2. if tracing is disabled, set the trace context and call the handler
+		// 3. if tracing is enabled, start the client or server spans based on the request and call the handler with appropriate span context
+		if !diag_utils.IsTracingEnabled(spec.SamplingRate) {
+			resp, err = handler(newCtx, req)
+			return resp, err
+		}
+
+		var span *trace.Span
+		method := info.FullMethod
+
+		if isLocalServiceInvocationMethod(method) {
+			if m, ok := req.(*internalv1pb.InternalInvokeRequest); ok {
+				method = m.Message.Method
+			}
+			_, span = StartTracingServerSpanFromGRPCContext(newCtx, method, spec)
+		} else {
+			_, span = StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
+		}
+
+		// build new context now on top of passed root context with started span context
+		newCtx = NewContext(ctx, span.SpanContext())
+		resp, err = handler(newCtx, req)
+
+		UpdateSpanStatusFromGRPCError(span, err, method)
+
+		span.End()
+
+		return resp, err
 	}
 }
 
-// SetTracingSpanContextGRPCMiddlewareUnary sets the trace spancontext into gRPC unary calls
-func SetTracingSpanContextGRPCMiddlewareUnary(spec config.TracingSpec) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		sc := GetSpanContextFromGRPC(ctx, spec)
-		ctx = NewContext(ctx, sc)
-		resp, err := handler(ctx, req)
+// UpdateSpanStatusFromGRPCError updates tracer span status based on error object
+func UpdateSpanStatusFromGRPCError(span *trace.Span, err error, method string) {
+	if span == nil || err == nil {
+		return
+	}
 
-		return resp, err
+	s, ok := status.FromError(err)
+	if ok {
+		span.SetStatus(trace.Status{Code: int32(s.Code()), Message: s.Message()})
+	} else {
+		span.SetStatus(trace.Status{Code: int32(codes.Internal), Message: err.Error()})
 	}
 }
 
@@ -119,4 +151,8 @@ func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span)
 			span.AddAttributes(trace.StringAttribute(k, v))
 		}
 	}
+}
+
+func isLocalServiceInvocationMethod(method string) bool {
+	return strings.Contains(method, "/CallLocal")
 }

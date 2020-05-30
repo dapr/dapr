@@ -316,3 +316,21 @@ func TestGetResourceRequirements(t *testing.T) {
 		assert.Nil(t, r)
 	})
 }
+
+func TestAPITokenSecret(t *testing.T) {
+	t.Run("secret exists", func(t *testing.T) {
+		annotations := map[string]string{}
+		annotations[daprAPITokenSecret] = "secret"
+
+		s := getAPITokenSecret(annotations)
+		assert.NotNil(t, s)
+	})
+
+	t.Run("secret empty", func(t *testing.T) {
+		annotations := map[string]string{}
+		annotations[daprAPITokenSecret] = ""
+
+		s := getAPITokenSecret(annotations)
+		assert.Equal(t, "", s)
+	})
+}

@@ -25,11 +25,11 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/placement"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/mitchellh/mapstructure"
-	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -37,8 +37,7 @@ import (
 )
 
 const (
-	daprSeparator             = "||"
-	callRemoteActorRetryCount = 3
+	daprSeparator = "||"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -192,6 +191,8 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	actorKey := a.constructCompositeKey(actorType, actorID)
 	a.actorsTable.Delete(actorKey)
 	diag.DefaultMonitoring.ActorDeactivated(actorType)
+	log.Debugf("deactivated actor type=%s, id=%s\n", actorType, actorID)
+
 	return nil
 }
 
@@ -207,7 +208,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 			a.actorsTable.Range(func(key, value interface{}) bool {
 				actorInstance := value.(*actor)
 
-				if actorInstance.busy {
+				if actorInstance.isBusy() {
 					return true
 				}
 
@@ -245,7 +246,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
 		resp, err = a.callLocalActor(ctx, req)
 	} else {
-		resp, err = a.callRemoteActorWithRetry(ctx, callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, appID, req)
+		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, targetActorAddress, appID, req)
 	}
 
 	if err != nil {
@@ -258,6 +259,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 func (a *actorsRuntime) callRemoteActorWithRetry(
 	ctx context.Context,
 	numRetries int,
+	backoffInterval time.Duration,
 	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
 	targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
@@ -265,6 +267,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		if err == nil {
 			return resp, nil
 		}
+		time.Sleep(backoffInterval)
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
@@ -283,29 +286,10 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	actorTypeID := req.Actor()
 	key := a.constructCompositeKey(actorTypeID.GetActorType(), actorTypeID.GetActorId())
 
-	val, exists := a.actorsTable.LoadOrStore(key, &actor{
-		lock:         &sync.RWMutex{},
-		busy:         true,
-		lastUsedTime: time.Now().UTC(),
-		busyCh:       make(chan bool, 1),
-	})
-
+	val, _ := a.actorsTable.LoadOrStore(key, newActor(actorTypeID.GetActorType(), actorTypeID.GetActorId()))
 	act := val.(*actor)
-	lock := act.lock
-	lock.Lock()
-	defer lock.Unlock()
-
-	if !exists {
-		err := a.tryActivateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
-		if err != nil {
-			a.actorsTable.Delete(key)
-			return nil, err
-		}
-	} else {
-		act.busy = true
-		act.busyCh = make(chan bool, 1)
-		act.lastUsedTime = time.Now().UTC()
-	}
+	act.lock()
+	defer act.unLock()
 
 	// Replace method to actors method
 	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)
@@ -316,11 +300,6 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT
 	}
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-
-	if act.busy {
-		act.busy = false
-		close(act.busyCh)
-	}
 
 	if err != nil {
 		return nil, err
@@ -347,44 +326,15 @@ func (a *actorsRuntime) callRemoteActor(
 	// ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
 	// defer cancel()
 
-	var span *trace.Span
-	ctx, span = diag.StartTracingClientSpanFromGRPCContext(ctx, req.Message().Method, a.tracingSpec)
-	defer span.End()
-
-	ctx = diag.AppendToOutgoingGRPCContext(ctx, span.SpanContext())
-	client := internalv1pb.NewDaprInternalClient(conn)
+	sc := diag.FromContext(ctx)
+	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
+	client := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := client.CallActor(ctx, req.Proto())
-	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
 	if err != nil {
 		return nil, err
 	}
 
 	return invokev1.InternalInvokeResponse(resp)
-}
-
-func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
-	// Send the activation signal to the app
-	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
-	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(nil, invokev1.JSONContentType)
-
-	// TODO Propagate context
-	ctx := context.Background()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	if err != nil {
-		return err
-	}
-
-	if resp.Status().Code != nethttp.StatusOK {
-		diag.DefaultMonitoring.ActorActivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
-		key := a.constructCompositeKey(actorType, actorID)
-		a.actorsTable.Delete(key)
-		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
-	}
-
-	diag.DefaultMonitoring.ActorActivated(actorType)
-
-	return nil
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
@@ -543,7 +493,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
-func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.PlacementService_ReportDaprStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.Placement_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
@@ -552,9 +502,12 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
 			return nil
 		}
-		opts = append(
-			opts,
-			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
+
+		if diag.DefaultGRPCMonitoring.IsEnabled() {
+			opts = append(
+				opts,
+				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
+		}
 
 		conn, err := grpc.Dial(
 			placementAddress,
@@ -570,7 +523,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
-		client := placementv1pb.NewPlacementServiceClient(conn)
+		client := placementv1pb.NewPlacementClient(conn)
 		stream, err := client.ReportDaprStatus(ctx)
 		if err != nil {
 			log.Warnf("error establishing client to placement service: %v", err)
@@ -674,11 +627,11 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				actor := value.(*actor)
 				if a.config.DrainRebalancedActors {
 					// wait until actor isn't busy or timeout hits
-					if actor.busy {
+					if actor.isBusy() {
 						select {
 						case <-time.After(a.config.DrainOngoingCallTimeout):
 							break
-						case <-actor.busyCh:
+						case <-actor.channel():
 							// if a call comes in from the actor for state changes, that's still allowed
 							break
 						}
@@ -692,7 +645,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 
 				for {
 					// wait until actor is not busy, then deactivate
-					if !actor.busy {
+					if !actor.isBusy() {
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
 							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)

@@ -12,6 +12,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
+	"github.com/dapr/dapr/pkg/health"
 	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator/api"
@@ -23,6 +24,10 @@ import (
 )
 
 var log = logger.NewLogger("dapr.operator")
+
+const (
+	healthzPort = 8080
+)
 
 // Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle
 type Operator interface {
@@ -145,6 +150,16 @@ func (o *operator) Run(ctx context.Context) {
 		certChain = chain
 		log.Info("tls certificates loaded successfully")
 	}
+
+	go func() {
+		healthzServer := health.NewServer(log)
+		healthzServer.Ready()
+
+		err := healthzServer.Run(ctx, healthzPort)
+		if err != nil {
+			log.Fatalf("failed to start healthz server: %s", err)
+		}
+	}()
 
 	o.apiServer.Run(certChain)
 	cancel()

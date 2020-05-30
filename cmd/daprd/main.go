@@ -47,12 +47,15 @@ import (
 
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
+	pubsub_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
 	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
 	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
+	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
 	"github.com/dapr/components-contrib/pubsub/nats"
+	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -107,15 +110,16 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-var log = logger.NewLogger("dapr.runtime")
+var (
+	log        = logger.NewLogger("dapr.runtime")
+	logContrib = logger.NewLogger("dapr.contrib")
+)
 
 func main() {
 	rt, err := runtime.FromFlags()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	var logContrib = logger.NewLogger("dapr.contrib")
 
 	err = rt.Run(
 		runtime.WithSecretStores(
@@ -206,6 +210,15 @@ func main() {
 			}),
 			pubsub_loader.New("kafka", func() pubs.PubSub {
 				return pubsub_kafka.NewKafka(logContrib)
+			}),
+			pubsub_loader.New("snssqs", func() pubs.PubSub {
+				return pubsub_snssqs.NewSnsSqs(logContrib)
+			}),
+			pubsub_loader.New("mqtt", func() pubs.PubSub {
+				return pubsub_mqtt.NewMQTTPubSub(logContrib)
+			}),
+			pubsub_loader.New("pulsar", func() pubs.PubSub {
+				return pubsub_pulsar.NewPulsar(logContrib)
 			}),
 		),
 		runtime.WithExporters(

@@ -7,11 +7,15 @@ package v1
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
-	structpb "github.com/golang/protobuf/ptypes/struct"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	grpc_status "google.golang.org/grpc/status"
 )
 
 const (
@@ -33,11 +37,20 @@ const (
 	traceparentHeader = "traceparent"
 	tracestateHeader  = "tracestate"
 	tracebinMetadata  = "grpc-trace-bin"
+
+	// ErrorInfo metadata value is limited to 64 chars
+	// https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L126
+	maxMetadataValueLen = 63
+
+	// ErrorInfo metadata for HTTP response
+	errorInfoDomain            = "dapr.io"
+	errorInfoHTTPCodeMetadata  = "http.code"
+	errorInfoHTTPErrorMetadata = "http.error_message"
 )
 
 // DaprInternalMetadata is the metadata type to transfer HTTP header and gRPC metadata
 // from user app to Dapr.
-type DaprInternalMetadata map[string]*structpb.ListValue
+type DaprInternalMetadata map[string]*internalv1pb.ListStringValue
 
 // IsJSONContentType returns true if contentType is the mime media type for JSON
 func IsJSONContentType(contentType string) bool {
@@ -48,12 +61,8 @@ func IsJSONContentType(contentType string) bool {
 func GrpcMetadataToInternalMetadata(md metadata.MD) DaprInternalMetadata {
 	var internalMD = DaprInternalMetadata{}
 	for k, values := range md {
-		var listValue = structpb.ListValue{}
-		for _, v := range values {
-			listValue.Values = append(listValue.Values, &structpb.Value{
-				Kind: &structpb.Value_StringValue{StringValue: v},
-			})
-		}
+		var listValue = internalv1pb.ListStringValue{}
+		listValue.Values = append(listValue.Values, values...)
 		internalMD[k] = &listValue
 	}
 
@@ -112,9 +121,7 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 		if httpHeaderConversion && isPermanentHTTPHeader(k) {
 			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
 		}
-		for _, v := range listVal.Values {
-			md.Append(keyName, v.GetStringValue())
-		}
+		md.Append(keyName, listVal.Values...)
 	}
 	return md
 }
@@ -123,7 +130,7 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
 	var originContentType = ""
 	if val, ok := internalMD[ContentTypeHeader]; ok {
-		originContentType = val.Values[0].GetStringValue()
+		originContentType = val.Values[0]
 	}
 	return strings.HasPrefix(originContentType, GRPCContentType)
 }
@@ -147,7 +154,7 @@ func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader fun
 		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader || isTraceCorrleationHeaderKey(k) {
 			continue
 		}
-		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0].GetStringValue())
+		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0])
 	}
 }
 
@@ -227,4 +234,46 @@ func CodeFromHTTPStatus(httpStatusCode int) codes.Code {
 	}
 
 	return codes.Unknown
+}
+
+// ErrorFromHTTPResponseCode converts http response code to gRPC status error
+func ErrorFromHTTPResponseCode(code int, detail string) error {
+	grpcCode := CodeFromHTTPStatus(code)
+	if grpcCode == codes.OK {
+		return nil
+	}
+	httpStatusText := http.StatusText(code)
+	respStatus := grpc_status.New(grpcCode, httpStatusText)
+
+	// Truncate detail string longer than 64 characters
+	if len(detail) >= maxMetadataValueLen {
+		detail = detail[:maxMetadataValueLen]
+	}
+
+	resps, err := respStatus.WithDetails(
+		&epb.ErrorInfo{
+			Type:   httpStatusText,
+			Domain: errorInfoDomain,
+			Metadata: map[string]string{
+				errorInfoHTTPCodeMetadata:  strconv.Itoa(code),
+				errorInfoHTTPErrorMetadata: detail,
+			},
+		},
+	)
+	if err != nil {
+		resps = respStatus
+	}
+
+	return resps.Err()
+}
+
+// ErrorFromInternalStatus converts internal status to gRPC status error
+func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
+	respStatus := &spb.Status{
+		Code:    internalStatus.GetCode(),
+		Message: internalStatus.GetMessage(),
+		Details: internalStatus.GetDetails(),
+	}
+
+	return grpc_status.ErrorProto(respStatus)
 }

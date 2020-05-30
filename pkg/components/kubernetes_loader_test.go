@@ -11,7 +11,6 @@ import (
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -25,7 +24,7 @@ func (o *mockOperator) GetConfiguration(ctx context.Context, in *operatorv1pb.Ge
 	return nil, nil
 }
 
-func (o *mockOperator) GetComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.GetComponentResponse, error) {
+func (o *mockOperator) ListComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	component := v1alpha1.Component{}
 	component.ObjectMeta.Name = "test"
 	component.Spec = v1alpha1.ComponentSpec{
@@ -33,12 +32,8 @@ func (o *mockOperator) GetComponents(ctx context.Context, in *empty.Empty) (*ope
 	}
 	b, _ := json.Marshal(&component)
 
-	return &operatorv1pb.GetComponentResponse{
-		Components: []*any.Any{
-			{
-				Value: b,
-			},
-		},
+	return &operatorv1pb.ListComponentResponse{
+		Components: [][]byte{b},
 	}, nil
 }
 

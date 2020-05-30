@@ -9,14 +9,18 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/valyala/fasthttp"
 
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
@@ -24,13 +28,102 @@ import (
 
 type DaprTraceContextKey struct{}
 
+type apiComponent struct {
+	componentType  string
+	componentValue string
+}
+
 const (
 	daprHeaderPrefix = "dapr-"
+
+	// span attribute keys
+	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+	dbTypeSpanAttributeKey      = "db.type"
+	dbInstanceSpanAttributeKey  = "db.instance"
+	dbStatementSpanAttributeKey = "db.statement"
+	dbURLSpanAttributeKey       = "db.url"
+
+	httpMethodSpanAttributeKey     = "http.method"
+	httpURLSpanAttributeKey        = "http.url"
+	httpStatusCodeSpanAttributeKey = "http.status_code"
+	httpStatusTextSpanAttributeKey = "http.status_text"
+
+	messagingDestinationKind                 = "topic"
+	messagingSystemSpanAttributeKey          = "messaging.system"
+	messagingDestinationSpanAttributeKey     = "messaging.destination"
+	messagingDestinationKindSpanAttributeKey = "messaging.destination_kind"
 )
 
 // NewContext returns a new context with the given SpanContext attached.
 func NewContext(ctx context.Context, spanContext trace.SpanContext) context.Context {
 	return context.WithValue(ctx, DaprTraceContextKey{}, spanContext)
+}
+
+// SpanContextToString returns the SpanContext string representation
+func SpanContextToString(sc trace.SpanContext) string {
+	return fmt.Sprintf("%x-%x-%x-%x",
+		[]byte{supportedVersion},
+		sc.TraceID[:],
+		sc.SpanID[:],
+		[]byte{byte(sc.TraceOptions)})
+}
+
+// SpanContextFromString extracts a span context from given string which got earlier from SpanContextToString format
+func SpanContextFromString(h string) (sc trace.SpanContext, ok bool) {
+	if h == "" {
+		return trace.SpanContext{}, false
+	}
+	sections := strings.Split(h, "-")
+	if len(sections) < 4 {
+		return trace.SpanContext{}, false
+	}
+
+	if len(sections[0]) != 2 {
+		return trace.SpanContext{}, false
+	}
+	ver, err := hex.DecodeString(sections[0])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	version := int(ver[0])
+	if version > maxVersion {
+		return trace.SpanContext{}, false
+	}
+
+	if version == 0 && len(sections) != 4 {
+		return trace.SpanContext{}, false
+	}
+
+	if len(sections[1]) != 32 {
+		return trace.SpanContext{}, false
+	}
+	tid, err := hex.DecodeString(sections[1])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	copy(sc.TraceID[:], tid)
+
+	if len(sections[2]) != 16 {
+		return trace.SpanContext{}, false
+	}
+	sid, err := hex.DecodeString(sections[2])
+	if err != nil {
+		return trace.SpanContext{}, false
+	}
+	copy(sc.SpanID[:], sid)
+
+	opts, err := hex.DecodeString(sections[3])
+	if err != nil || len(opts) < 1 {
+		return trace.SpanContext{}, false
+	}
+	sc.TraceOptions = trace.TraceOptions(opts[0])
+
+	// Don't allow all zero trace or span ID.
+	if sc.TraceID == [16]byte{} || sc.SpanID == [8]byte{} {
+		return trace.SpanContext{}, false
+	}
+
+	return sc, true
 }
 
 // FromContext returns the SpanContext stored in a context, or nil if there isn't one.
@@ -39,9 +132,8 @@ func FromContext(ctx context.Context) trace.SpanContext {
 	return sc
 }
 
-func startTracingSpanInternal(ctx context.Context, uri, samplingRate string, spanKind int) (context.Context, *trace.Span) {
+func startTracingSpanInternal(ctx context.Context, name, samplingRate string, spanKind int) (context.Context, *trace.Span) {
 	var span *trace.Span
-	name := createSpanName(uri)
 
 	rate := diag_utils.GetTraceSamplingRate(samplingRate)
 
@@ -67,8 +159,8 @@ func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
 
 	gen := tracingConfig.Load().(*traceIDGenerator)
 
-	// Only generating TraceID. SpanID is not generated as there is no span started in the middleware.
 	spanContext.TraceID = gen.NewTraceID()
+	spanContext.SpanID = gen.NewSpanID()
 
 	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
 
@@ -85,36 +177,6 @@ func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
 	}
 
 	return spanContext
-}
-
-func projectStatusCode(code int) int32 {
-	switch code {
-	case 200:
-		return trace.StatusCodeOK
-	case 201:
-		return trace.StatusCodeOK
-	case 400:
-		return trace.StatusCodeInvalidArgument
-	case 500:
-		return trace.StatusCodeInternal
-	case 404:
-		return trace.StatusCodeNotFound
-	case 403:
-		return trace.StatusCodePermissionDenied
-	default:
-		return int32(code)
-	}
-}
-
-func createSpanName(name string) string {
-	i := strings.Index(name, "/invoke/")
-	if i > 0 {
-		j := strings.Index(name[i+8:], "/")
-		if j > 0 {
-			return name[i+8 : i+8+j]
-		}
-	}
-	return name
 }
 
 func extractDaprMetadata(ctx context.Context) map[string][]string {
@@ -134,19 +196,72 @@ func extractDaprMetadata(ctx context.Context) map[string][]string {
 	return daprMetadata
 }
 
-// UpdateSpanPairStatusesFromError updates tracer span statuses based on error object
-func UpdateSpanPairStatusesFromError(span *trace.Span, err error, method string) {
-	if err != nil {
-		span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeInternal,
-			Message: fmt.Sprintf("method %s failed - %s", method, err.Error()),
-		})
-	} else {
-		span.SetStatus(trace.Status{
-			Code:    trace.StatusCodeOK,
-			Message: fmt.Sprintf("method %s succeeded", method),
-		})
+func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]string {
+	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+	route := string(ctx.Request.URI().Path())
+	method := string(ctx.Request.Header.Method())
+	uri := ctx.Request.URI().String()
+	statusCode := ctx.Response.StatusCode()
+	r := getAPIComponent(route)
+	return GetSpanAttributesMap(r.componentType, r.componentValue, method, route, uri, statusCode)
+}
+
+// GetSpanAttributesMap builds the span trace attributes map based on given parameters as per open-telemetry specs
+func GetSpanAttributesMap(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
+	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+	m := make(map[string]string)
+	switch componentType {
+	case "state", "secrets", "bindings":
+		m[dbTypeSpanAttributeKey] = componentType
+		m[dbInstanceSpanAttributeKey] = componentValue
+		// TODO: not possible currently to get the route {state_store} , so using path instead of route
+		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, route)
+		m[dbURLSpanAttributeKey] = route
+	case "invoke", "actors":
+		m[httpMethodSpanAttributeKey] = method
+		m[httpURLSpanAttributeKey] = uri
+		code := invokev1.CodeFromHTTPStatus(statusCode)
+		m[httpStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
+		m[httpStatusTextSpanAttributeKey] = code.String()
+	case "publish":
+		m[messagingSystemSpanAttributeKey] = componentType
+		m[messagingDestinationSpanAttributeKey] = componentValue
+		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
 	}
+	return m
+}
+
+// AddAttributesToSpan adds the given attributes in the span
+func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
+	if span != nil {
+		for k, v := range attributes {
+			if v != "" {
+				span.AddAttributes(trace.StringAttribute(k, v))
+			}
+		}
+	}
+}
+
+func getAPIComponent(apiPath string) apiComponent {
+	// Dapr API reference : https://github.com/dapr/docs/tree/master/reference/api
+	// example : apiPath /v1.0/state/statestore
+	if apiPath == "" {
+		return apiComponent{}
+	}
+
+	p := apiPath
+	if p[0] == '/' {
+		p = apiPath[1:]
+	}
+
+	// Split up to 4 delimiters in 'v1.0/state/statestore/key' to get component api type and value
+	var tokens = strings.SplitN(p, "/", 4)
+	if len(tokens) < 3 {
+		return apiComponent{}
+	}
+
+	// return 'state', 'statestore' from the parsed tokens in apiComponent type
+	return apiComponent{componentType: tokens[1], componentValue: tokens[2]}
 }
 
 var tracingConfig atomic.Value // access atomically

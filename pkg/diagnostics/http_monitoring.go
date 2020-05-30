@@ -8,6 +8,7 @@ package diagnostics
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -81,6 +82,10 @@ func newHTTPMetrics() *httpMetrics {
 
 		enabled: false,
 	}
+}
+
+func (h *httpMetrics) IsEnabled() bool {
+	return h.enabled
 }
 
 func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path string, contentSize int64) {
@@ -213,7 +218,7 @@ func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.
 		method := string(ctx.Method())
 		path := string(ctx.Path())
 
-		h.ServerRequestReceived(ctx, method, path, int64(reqContentSize))
+		h.ServerRequestReceived(ctx, method, h.convertPathToMetricLabel(path), int64(reqContentSize))
 
 		start := time.Now()
 
@@ -224,4 +229,42 @@ func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.
 		respSize := int64(len(ctx.Response.Body()))
 		h.ServerRequestCompleted(ctx, method, path, status, respSize, elapsed)
 	}
+}
+
+// convertPathToMetricLabel removes the variant parameters in URL path for low cardinality label space
+// For example, it removes {keys} param from /v1/state/statestore/{keys}
+func (h *httpMetrics) convertPathToMetricLabel(path string) string {
+	if path == "" {
+		return path
+	}
+
+	p := path
+	if p[0] == '/' {
+		p = path[1:]
+	}
+
+	// Split up to 6 delimiters in 'v1/actors/DemoActor/1/timer/name'
+	var parsedPath = strings.SplitN(p, "/", 6)
+
+	if len(parsedPath) < 3 {
+		return path
+	}
+
+	switch parsedPath[1] {
+	case "state", "secrets":
+		// state api: Concat 3 items(v1, state, statestore) in /v1/state/statestore/key
+		// secrets api: Concat 3 items(v1, secrets, keyvault) in /v1/secrets/keyvault/name
+		return "/" + strings.Join(parsedPath[0:3], "/")
+
+	case "actors":
+		if len(parsedPath) < 5 {
+			return path
+		}
+		// ignore id part
+		parsedPath[3] = "{id}"
+		// Concat 5 items(v1, actors, DemoActor, {id}, timer) in /v1/actors/DemoActor/1/timer/name
+		return "/" + strings.Join(parsedPath[0:5], "/")
+	}
+
+	return path
 }

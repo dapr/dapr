@@ -1,0 +1,155 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.runtime.v1;
+
+import "google/protobuf/empty.proto";
+import "dapr/proto/common/v1/common.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "DaprProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/runtime/v1;runtime";
+
+// Dapr service provides APIs to user application to access Dapr building blocks.
+service Dapr {
+  // Invokes a method on a remote Dapr app.
+  rpc InvokeService(InvokeServiceRequest) returns (common.v1.InvokeResponse) {}
+
+  // Gets the state for a specific key.
+  rpc GetState(GetStateRequest) returns (GetStateResponse) {}
+
+  // Saves the state for a specific key.
+  rpc SaveState(SaveStateRequest) returns (google.protobuf.Empty) {}
+
+  // Deletes the state for a specific key.
+  rpc DeleteState(DeleteStateRequest) returns (google.protobuf.Empty) {}
+
+  // Publishes events to the specific topic.
+  rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
+
+  // Invokes binding data to specific output bindings
+  rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
+
+  // Gets secrets from secret stores.
+  rpc GetSecret(GetSecretRequest) returns (GetSecretResponse) {}
+}
+
+// InvokeServiceRequest represents the request message for Service invocation.
+message InvokeServiceRequest {
+  // Required. Callee's app id.
+  string id = 1;
+
+  // Required. message which will be delivered to callee.
+  common.v1.InvokeRequest message = 3;
+}
+
+// GetStateRequest is the message to get key-value states from specific state store.
+message GetStateRequest {
+  // The name of state store.
+  string store_name = 1;
+
+  // The key of the desired state
+  string key = 2;
+
+  // The read consistency of the state store.
+  common.v1.StateOptions.StateConsistency consistency = 3;
+}
+
+// GetStateResponse is the response conveying the state value and etag.
+message GetStateResponse {
+  // The byte array data
+  bytes data = 1;
+
+  // The entity tag which represents the specific version of data.
+  // ETag format is defined by the corresponding data store.
+  string etag = 2;
+}
+
+// DeleteStateRequest is the message to delete key-value states in the specific state store.
+message DeleteStateRequest {
+  // The name of state store.
+  string store_name = 1;
+
+  // The key of the desired state
+  string key = 2;
+
+  // The entity tag which represents the specific version of data.
+  // The exact ETag format is defined by the corresponding data store.
+  string etag = 3;
+
+  // State operation options which includes concurrency/
+  // consistency/retry_policy.
+  common.v1.StateOptions options = 4;
+}
+
+// SaveStateRequest is the message to save multiple states into state store.
+message SaveStateRequest {
+  // The name of state store.
+  string store_name = 1;
+
+  // The array of the state key values.
+  repeated common.v1.StateItem states = 2;
+}
+
+// PublishEventRequest is the message to publish event data to pubsub topic
+message PublishEventRequest {
+  // The pubsub topic
+  string topic = 1;
+
+  // The data which will be published to topic.
+  bytes data = 2;
+}
+
+// InvokeBindingRequest is the message to send data to output bindings
+message InvokeBindingRequest {
+  // The name of the output binding to invoke.
+  string name = 1;
+
+  // The data which will be sent to output binding.
+  bytes data = 2;
+
+  // The metadata passing to output binding components
+  // 
+  // Common metadata property:
+  // - ttlInSeconds : the time to live in seconds for the message. 
+  // If set in the binding definition will cause all messages to 
+  // have a default time to live. The message ttl overrides any value
+  // in the binding definition.
+  map<string,string> metadata = 3;
+
+  // The name of the operation type for the binding to invoke
+  string operation = 4;
+}
+
+// InvokeBindingResponse is the message returned from an output binding invocation
+message InvokeBindingResponse {
+  // The data which will be sent to output binding.
+  bytes data = 1;
+
+  // The metadata returned from an external system
+  map<string,string> metadata = 2;
+}
+
+// GetSecretRequest is the message to get secret from secret store.
+message GetSecretRequest {
+  // The name of secret store.
+  string store_name = 1;
+
+  // The name of secret key.
+  string key = 2;
+
+  // The metadata which will be sent to secret store components.
+  map<string,string> metadata = 3;
+}
+
+// GetSecretResponse is the response mesage to convey the requested secret.
+message GetSecretResponse {
+  // data is the secret value. Some secret store, such as kubernetes secret
+  // store, can save multiple secrets for single secret key.
+  map<string, string> data = 1;
+}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/logger"
@@ -20,6 +21,10 @@ import (
 )
 
 var log = logger.NewLogger("dapr.injector")
+
+const (
+	healthzPort = 8080
+)
 
 func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
@@ -33,6 +38,16 @@ func main() {
 	kubeClient := utils.GetKubeClient()
 	conf := utils.GetConfig()
 	daprClient, _ := scheme.NewForConfig(conf)
+
+	go func() {
+		healthzServer := health.NewServer(log)
+		healthzServer.Ready()
+
+		err := healthzServer.Run(ctx, healthzPort)
+		if err != nil {
+			log.Fatalf("failed to start healthz server: %s", err)
+		}
+	}()
 
 	injector.NewInjector(cfg, daprClient, kubeClient).Run(ctx)
 

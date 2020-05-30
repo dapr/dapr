@@ -13,11 +13,11 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/runtime"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/utils"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -33,6 +33,7 @@ const (
 	appIDKey                          = "dapr.io/id"
 	daprProfilingKey                  = "dapr.io/profiling"
 	daprLogLevel                      = "dapr.io/log-level"
+	daprAPITokenSecret                = "dapr.io/api-token-secret" /* #nosec */
 	daprLogAsJSON                     = "dapr.io/log-as-json"
 	daprMaxConcurrencyKey             = "dapr.io/max-concurrency"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
@@ -40,6 +41,10 @@ const (
 	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
 	daprCPURequestKey                 = "dapr.io/sidecar-cpu-request"
 	daprMemoryRequestKey              = "dapr.io/sidecar-memory-request"
+	daprLivenessProbeDelayKey         = "dapr.io/sidecar-liveness-probe-delay-seconds"
+	daprLivenessProbeTimeoutKey       = "dapr.io/sidecar-liveness-probe-timeout-seconds"
+	daprLivenessProbePeriodKey        = "dapr.io/sidecar-liveness-probe-period-seconds"
+	daprLivenessProbeThresholdKey     = "dapr.io/sidecar-liveness-probe-threshold"
 	daprReadinessProbeDelayKey        = "dapr.io/sidecar-readiness-probe-delay-seconds"
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
@@ -221,6 +226,10 @@ func profilingEnabled(annotations map[string]string) bool {
 	return getBoolAnnotationOrDefault(annotations, daprProfilingKey, false)
 }
 
+func getAPITokenSecret(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprAPITokenSecret, "")
+}
+
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
 	enabled, ok := annotations[key]
 	if !ok {
@@ -266,7 +275,7 @@ func getInt32Annotation(annotations map[string]string, key string) (int32, error
 	return int32(value), nil
 }
 
-func appendQuantityToResourceList(quantity string, resourceName v1.ResourceName, resourceList v1.ResourceList) (*v1.ResourceList, error) {
+func appendQuantityToResourceList(quantity string, resourceName corev1.ResourceName, resourceList corev1.ResourceList) (*corev1.ResourceList, error) {
 	q, err := resource.ParseQuantity(quantity)
 	if err != nil {
 		return nil, err
@@ -275,14 +284,14 @@ func appendQuantityToResourceList(quantity string, resourceName v1.ResourceName,
 	return &resourceList, nil
 }
 
-func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequirements, error) {
-	r := v1.ResourceRequirements{
-		Limits:   v1.ResourceList{},
-		Requests: v1.ResourceList{},
+func getResourceRequirements(annotations map[string]string) (*corev1.ResourceRequirements, error) {
+	r := corev1.ResourceRequirements{
+		Limits:   corev1.ResourceList{},
+		Requests: corev1.ResourceList{},
 	}
 	cpuLimit, ok := annotations[daprCPULimitKey]
 	if ok {
-		list, err := appendQuantityToResourceList(cpuLimit, v1.ResourceCPU, r.Limits)
+		list, err := appendQuantityToResourceList(cpuLimit, corev1.ResourceCPU, r.Limits)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar cpu limit: %s", err)
 		}
@@ -290,7 +299,7 @@ func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequire
 	}
 	memLimit, ok := annotations[daprMemoryLimitKey]
 	if ok {
-		list, err := appendQuantityToResourceList(memLimit, v1.ResourceMemory, r.Limits)
+		list, err := appendQuantityToResourceList(memLimit, corev1.ResourceMemory, r.Limits)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar memory limit: %s", err)
 		}
@@ -298,7 +307,7 @@ func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequire
 	}
 	cpuRequest, ok := annotations[daprCPURequestKey]
 	if ok {
-		list, err := appendQuantityToResourceList(cpuRequest, v1.ResourceCPU, r.Requests)
+		list, err := appendQuantityToResourceList(cpuRequest, corev1.ResourceCPU, r.Requests)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar cpu request: %s", err)
 		}
@@ -306,7 +315,7 @@ func getResourceRequirements(annotations map[string]string) (*v1.ResourceRequire
 	}
 	memRequest, ok := annotations[daprMemoryRequestKey]
 	if ok {
-		list, err := appendQuantityToResourceList(memRequest, v1.ResourceMemory, r.Requests)
+		list, err := appendQuantityToResourceList(memRequest, corev1.ResourceMemory, r.Requests)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing sidecar memory request: %s", err)
 		}
@@ -368,7 +377,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 		Command: []string{"/daprd"},
 		Env: []corev1.EnvVar{
 			{
-				Name: runtime.HostIPEnvVar,
+				Name: utils.HostIPEnvVar,
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{
 						FieldPath: "status.podIP",
@@ -415,10 +424,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
 				},
 			},
-			InitialDelaySeconds: defaultHealthzProbeDelaySeconds,
-			TimeoutSeconds:      defaultHealthzProbeTimeoutSeconds,
-			PeriodSeconds:       defaultHealthzProbePeriodSeconds,
-			FailureThreshold:    defaultHealthzProbeThreshold,
+			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprLivenessProbeDelayKey, defaultHealthzProbeDelaySeconds),
+			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprLivenessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
+			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),
+			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprLivenessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 	}
 
@@ -454,6 +463,21 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 				Name:  "SENTRY_LOCAL_IDENTITY",
 				Value: identity,
 			})
+	}
+
+	secret := getAPITokenSecret(annotations)
+	if secret != "" {
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name: auth.APITokenEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "token",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: secret,
+					},
+				},
+			},
+		})
 	}
 
 	resources, err := getResourceRequirements(annotations)

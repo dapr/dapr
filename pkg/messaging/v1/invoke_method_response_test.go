@@ -10,8 +10,7 @@ import (
 	"testing"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
-	"github.com/golang/protobuf/ptypes"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
@@ -23,24 +22,35 @@ func TestInvocationResponse(t *testing.T) {
 
 	assert.Equal(t, int32(0), req.r.GetStatus().Code)
 	assert.Equal(t, "OK", req.r.GetStatus().Message)
-	assert.NotNil(t, req.m)
+	assert.NotNil(t, req.r.Message)
 }
 
 func TestInternalInvocationResponse(t *testing.T) {
-	m := commonv1pb.InvokeResponse{
-		Data:        &any.Any{Value: []byte("response")},
-		ContentType: "application/json",
-	}
-	ms, _ := ptypes.MarshalAny(&m)
-	pb := internalv1pb.InternalInvokeResponse{
-		Status:  &internalv1pb.Status{Code: 0},
-		Message: ms,
-	}
+	t.Run("valid internal invoke response", func(t *testing.T) {
+		m := &commonv1pb.InvokeResponse{
+			Data:        &any.Any{Value: []byte("response")},
+			ContentType: "application/json",
+		}
+		pb := internalv1pb.InternalInvokeResponse{
+			Status:  &internalv1pb.Status{Code: 0},
+			Message: m,
+		}
 
-	ir, err := InternalInvokeResponse(&pb)
-	assert.NoError(t, err)
-	assert.NotNil(t, ir.m)
-	assert.Equal(t, int32(0), ir.r.GetStatus().GetCode())
+		ir, err := InternalInvokeResponse(&pb)
+		assert.NoError(t, err)
+		assert.NotNil(t, ir.r.Message)
+		assert.Equal(t, int32(0), ir.r.GetStatus().GetCode())
+	})
+
+	t.Run("Message is nil", func(t *testing.T) {
+		pb := internalv1pb.InternalInvokeResponse{
+			Status:  &internalv1pb.Status{Code: 0},
+			Message: nil,
+		}
+
+		_, err := InternalInvokeResponse(&pb)
+		assert.Error(t, err)
+	})
 }
 
 func TestResponseData(t *testing.T) {
@@ -62,7 +72,7 @@ func TestResponseData(t *testing.T) {
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
 		resp := NewInvokeMethodResponse(0, "OK", nil)
-		resp.m.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
+		resp.r.Message.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
 		contentType, bData := resp.RawData()
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, []byte("fake"), bData)
@@ -79,10 +89,10 @@ func TestResponseHeader(t *testing.T) {
 		resp.WithHeaders(md)
 		mheader := resp.Headers()
 
-		assert.Equal(t, "val1", mheader["test1"].GetValues()[0].GetStringValue())
-		assert.Equal(t, "val2", mheader["test1"].GetValues()[1].GetStringValue())
-		assert.Equal(t, "val3", mheader["test2"].GetValues()[0].GetStringValue())
-		assert.Equal(t, "val4", mheader["test2"].GetValues()[1].GetStringValue())
+		assert.Equal(t, "val1", mheader["test1"].GetValues()[0])
+		assert.Equal(t, "val2", mheader["test1"].GetValues()[1])
+		assert.Equal(t, "val3", mheader["test2"].GetValues()[0])
+		assert.Equal(t, "val4", mheader["test2"].GetValues()[1])
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
@@ -95,9 +105,9 @@ func TestResponseHeader(t *testing.T) {
 		re.WithFastHTTPHeaders(&resp.Header)
 		mheader := re.Headers()
 
-		assert.Equal(t, "Value1", mheader["Header1"].GetValues()[0].GetStringValue())
-		assert.Equal(t, "Value2", mheader["Header2"].GetValues()[0].GetStringValue())
-		assert.Equal(t, "Value3", mheader["Header3"].GetValues()[0].GetStringValue())
+		assert.Equal(t, "Value1", mheader["Header1"].GetValues()[0])
+		assert.Equal(t, "Value2", mheader["Header2"].GetValues()[0])
+		assert.Equal(t, "Value3", mheader["Header3"].GetValues()[0])
 	})
 }
 
@@ -110,10 +120,10 @@ func TestResponseTrailer(t *testing.T) {
 	resp.WithTrailers(md)
 	mheader := resp.Trailers()
 
-	assert.Equal(t, "val1", mheader["test1"].GetValues()[0].GetStringValue())
-	assert.Equal(t, "val2", mheader["test1"].GetValues()[1].GetStringValue())
-	assert.Equal(t, "val3", mheader["test2"].GetValues()[0].GetStringValue())
-	assert.Equal(t, "val4", mheader["test2"].GetValues()[1].GetStringValue())
+	assert.Equal(t, "val1", mheader["test1"].GetValues()[0])
+	assert.Equal(t, "val2", mheader["test1"].GetValues()[1])
+	assert.Equal(t, "val3", mheader["test2"].GetValues()[0])
+	assert.Equal(t, "val4", mheader["test2"].GetValues()[1])
 }
 
 func TestIsHTTPResponse(t *testing.T) {

@@ -27,8 +27,6 @@ import (
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp"
-	fhttp "github.com/valyala/fasthttp"
-	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 )
 
@@ -47,7 +45,7 @@ type api struct {
 	json                  jsoniter.API
 	actor                 actors.Actors
 	publishFn             func(req *pubsub.PublishRequest) error
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	id                    string
 	extendedMetadata      sync.Map
 	readyStatus           bool
@@ -81,7 +79,7 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error, tracingSpec config.TracingSpec) API {
+func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error), tracingSpec config.TracingSpec) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
@@ -119,19 +117,19 @@ func (a *api) MarkStatusAsReady() {
 func (a *api) constructStateEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onGetState,
 		},
 		{
-			Methods: []string{fhttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost},
 			Route:   "state/{storeName}",
 			Version: apiVersionV1,
 			Handler: a.onPostState,
 		},
 		{
-			Methods: []string{fhttp.MethodDelete},
+			Methods: []string{fasthttp.MethodDelete},
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
@@ -142,7 +140,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "secrets/{secretStoreName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onGetSecret,
@@ -153,7 +151,7 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "publish/{topic:*}",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
@@ -164,7 +162,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 func (a *api) constructBindingsEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "bindings/{name}",
 			Version: apiVersionV1,
 			Handler: a.onOutputBindingMessage,
@@ -175,7 +173,7 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet, fhttp.MethodPost, fhttp.MethodDelete, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost, fasthttp.MethodDelete, fasthttp.MethodPut},
 			Route:   "invoke/{id}/method/{method:*}",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,
@@ -186,61 +184,61 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 func (a *api) constructActorEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/state",
 			Version: apiVersionV1,
 			Handler: a.onActorStateTransaction,
 		},
 		{
-			Methods: []string{fhttp.MethodGet, fhttp.MethodPost, fhttp.MethodDelete, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost, fasthttp.MethodDelete, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/method/{method}",
 			Version: apiVersionV1,
 			Handler: a.onDirectActorMessage,
 		},
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/state/{key}",
 			Version: apiVersionV1,
 			Handler: a.onSaveActorState,
 		},
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "actors/{actorType}/{actorId}/state/{key}",
 			Version: apiVersionV1,
 			Handler: a.onGetActorState,
 		},
 		{
-			Methods: []string{fhttp.MethodDelete},
+			Methods: []string{fasthttp.MethodDelete},
 			Route:   "actors/{actorType}/{actorId}/state/{key}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorState,
 		},
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onCreateActorReminder,
 		},
 		{
-			Methods: []string{fhttp.MethodPost, fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/timers/{name}",
 			Version: apiVersionV1,
 			Handler: a.onCreateActorTimer,
 		},
 		{
-			Methods: []string{fhttp.MethodDelete},
+			Methods: []string{fasthttp.MethodDelete},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorReminder,
 		},
 		{
-			Methods: []string{fhttp.MethodDelete},
+			Methods: []string{fasthttp.MethodDelete},
 			Route:   "actors/{actorType}/{actorId}/timers/{name}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteActorTimer,
 		},
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
 			Handler: a.onGetActorReminder,
@@ -251,13 +249,13 @@ func (a *api) constructActorEndpoints() []Endpoint {
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "metadata",
 			Version: apiVersionV1,
 			Handler: a.onGetMetadata,
 		},
 		{
-			Methods: []string{fhttp.MethodPut},
+			Methods: []string{fasthttp.MethodPut},
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata,
@@ -268,7 +266,7 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fhttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet},
 			Route:   "healthz",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
@@ -279,6 +277,9 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 	body := reqCtx.PostBody()
+
+	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
+	diag.SpanContextToRequest(sc, &reqCtx.Request)
 
 	var req OutputBindingRequest
 	err := a.json.Unmarshal(body, &req)
@@ -295,17 +296,10 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var span *trace.Span
-	spanName := fmt.Sprintf("OutputBindingMessage: %s", name)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
-
-	err = a.sendToOutputBindingFn(name, &bindings.WriteRequest{
-		Metadata: req.Metadata,
-		Data:     b,
+	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
+		Metadata:  req.Metadata,
+		Data:      b,
+		Operation: bindings.OperationKind(req.Operation),
 	})
 	if err != nil {
 		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
@@ -313,7 +307,11 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		respondWithError(reqCtx, 500, msg)
 		return
 	}
-	respondEmpty(reqCtx, 200)
+	if resp == nil {
+		respondEmpty(reqCtx, 200)
+	} else {
+		respondWithJSON(reqCtx, 200, resp.Data)
+	}
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
@@ -331,13 +329,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var span *trace.Span
-	spanName := fmt.Sprintf("GetState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
+	metadata := getMetadataFromRequest(reqCtx)
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
@@ -346,6 +338,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		Options: state.GetStateOption{
 			Consistency: consistency,
 		},
+		Metadata: metadata,
 	}
 
 	resp, err := a.stateStores[storeName].Get(&req)
@@ -408,14 +401,6 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		},
 	}
 
-	var span *trace.Span
-	spanName := fmt.Sprintf("DeleteState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
-
 	err := a.stateStores[storeName].Delete(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
@@ -440,29 +425,13 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	metadata := map[string]string{}
-	const metadataPrefix string = "metadata."
-	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
-		queryKey := string(key)
-		if strings.HasPrefix(queryKey, metadataPrefix) {
-			k := strings.TrimPrefix(queryKey, metadataPrefix)
-			metadata[k] = string(value)
-		}
-	})
+	metadata := getMetadataFromRequest(reqCtx)
 
 	key := reqCtx.UserValue(secretNameParam).(string)
 	req := secretstores.GetSecretRequest{
 		Name:     key,
 		Metadata: metadata,
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("GetSecret: %s", secretStoreName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
 
 	resp, err := a.secretStores[secretStoreName].GetSecret(req)
 	if err != nil {
@@ -507,14 +476,6 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		reqs[i].Key = a.getModifiedStateKey(r.Key)
 	}
 
-	var span *trace.Span
-	spanName := fmt.Sprintf("SaveState: %s", storeName)
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
-
 	err = a.stateStores[storeName].BulkSet(reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_SAVE", err.Error())
@@ -539,7 +500,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 	if invokeMethodName == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", "invalid method name")
-		respondWithError(reqCtx, fhttp.StatusBadRequest, msg)
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		return
 	}
 
@@ -561,7 +522,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// err does not represent user application response
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
-		respondWithError(reqCtx, fhttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		return
 	}
 
@@ -789,7 +750,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, fhttp.StatusBadRequest, msg)
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		return
 	}
 
@@ -817,7 +778,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
-		respondWithError(reqCtx, fhttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		return
 	}
 
@@ -999,9 +960,8 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	topic := reqCtx.UserValue(topicParam).(string)
 	body := reqCtx.PostBody()
 
-	// TODO : Remove passing corID in NewCloudEventsEnvelope through arguments as it can be passed through context
 	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	corID := sc.TraceID.String()
+	corID := diag.SpanContextToString(sc)
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 
 	b, err := a.json.Marshal(envelope)
@@ -1015,13 +975,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		Topic: topic,
 		Data:  b,
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("PublishEvent: %s", topic)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	_, span = diag.StartTracingClientSpanFromHTTPContext(ctx, &reqCtx.Request, spanName, a.tracingSpec)
-	diag.SpanContextToRequest(span.SpanContext(), &reqCtx.Request)
-	defer span.End()
 
 	err = a.publishFn(&req)
 	if err != nil {
@@ -1051,4 +1004,18 @@ func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(reqCtx, 200)
 	}
+}
+
+func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
+	metadata := map[string]string{}
+	const metadataPrefix string = "metadata."
+	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
+		queryKey := string(key)
+		if strings.HasPrefix(queryKey, metadataPrefix) {
+			k := strings.TrimPrefix(queryKey, metadataPrefix)
+			metadata[k] = string(value)
+		}
+	})
+
+	return metadata
 }

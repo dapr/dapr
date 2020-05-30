@@ -15,11 +15,10 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"google.golang.org/grpc"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -52,6 +51,7 @@ type server struct {
 	kind               string
 	logger             logger.Logger
 	maxConnectionAge   *time.Duration
+	authToken          string
 }
 
 var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
@@ -65,6 +65,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) 
 		tracingSpec: tracingSpec,
 		kind:        apiServer,
 		logger:      apiServerLogger,
+		authToken:   auth.GetAPIToken(),
 	}
 }
 
@@ -102,9 +103,9 @@ func (s *server) StartNonBlocking() error {
 	s.srv = server
 
 	if s.kind == internalServer {
-		internalv1pb.RegisterDaprInternalServer(server, s.api)
+		internalv1pb.RegisterServiceInvocationServer(server, s.api)
 	} else if s.kind == apiServer {
-		daprv1pb.RegisterDaprServer(server, s.api)
+		runtimev1pb.RegisterDaprServer(server, s.api)
 	}
 	go func() {
 		if err := server.Serve(lis); err != nil {
@@ -136,23 +137,33 @@ func (s *server) generateWorkloadCert() error {
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 
-	s.logger.Infof("enabled monitoring middleware.")
-	unaryChains := grpc_middleware.ChainUnaryServer(
-		diag.SetTracingSpanContextGRPCMiddlewareUnary(s.tracingSpec),
-		diag.DefaultGRPCMonitoring.UnaryServerInterceptor(),
+	s.logger.Infof("enabled monitoring middleware")
+
+	intr := []grpc_go.UnaryServerInterceptor{
+		diag.SetTracingInGRPCMiddlewareUnary(s.config.AppID, s.tracingSpec),
+	}
+
+	if diag.DefaultGRPCMonitoring.IsEnabled() {
+		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
+	}
+	if s.authToken != "" {
+		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
+	}
+
+	chain := grpc_middleware.ChainUnaryServer(
+		intr...,
 	)
 	opts = append(
 		opts,
-		grpc_go.StreamInterceptor(diag.SetTracingSpanContextGRPCMiddlewareStream(s.tracingSpec)),
-		grpc_go.UnaryInterceptor(unaryChains))
-
+		grpc_go.UnaryInterceptor(chain),
+	)
 	return opts
 }
 
 func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 	opts := s.getMiddlewareOptions()
 	if s.maxConnectionAge != nil {
-		opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
+		opts = append(opts, grpc_go.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
 	}
 
 	if s.authenticator != nil {

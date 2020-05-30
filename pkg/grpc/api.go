@@ -22,14 +22,12 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	daprv1pb "github.com/dapr/dapr/pkg/proto/dapr/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/daprinternal/v1"
-	"github.com/golang/protobuf/ptypes/any"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
-	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -51,13 +49,13 @@ type API interface {
 	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 
 	// Dapr Service methods
-	PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error)
-	InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
-	InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error)
-	GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*daprv1pb.GetStateResponseEnvelope, error)
-	GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*daprv1pb.GetSecretResponseEnvelope, error)
-	SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*empty.Empty, error)
-	DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope) (*empty.Empty, error)
+	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error)
+	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
+	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
+	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
+	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
+	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
+	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -68,7 +66,7 @@ type api struct {
 	secretStores          map[string]secretstores.SecretStore
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 }
 
@@ -80,7 +78,7 @@ func NewAPI(
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error,
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec) API {
 	return &api{
 		directMessaging:       directMessaging,
@@ -106,12 +104,8 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
-	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, req.Message().Method, a.tracingSpec)
-	defer span.End()
-	ctx = diag.NewContext(ctx, span.SpanContext())
-
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-	diag.UpdateSpanPairStatusesFromError(span, err, req.Message().Method)
+
 	if err != nil {
 		return nil, err
 	}
@@ -125,10 +119,6 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
-	ctx, span := diag.StartTracingServerSpanFromGRPCContext(ctx, req.Message().Method, a.tracingSpec)
-	defer span.End()
-	ctx = diag.NewContext(ctx, span.SpanContext())
-
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		return nil, err
@@ -136,7 +126,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), nil
 }
 
-func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelope) (*empty.Empty, error) {
+func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
 		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
@@ -145,13 +135,11 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 	body := []byte{}
 
 	if in.Data != nil {
-		body = in.Data.Value
+		body = in.Data
 	}
 
-	// TODO : Remove passing corID in NewCloudEventsEnvelope through arguments as it can be passed through context
 	sc := diag.FromContext(ctx)
-	corID := sc.TraceID.String()
-
+	corID := diag.SpanContextToString(sc)
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
@@ -163,11 +151,6 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 		Data:  b,
 	}
 
-	var span *trace.Span
-	spanName := fmt.Sprintf("PublishEvent: %s", topic)
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
-	defer span.End()
-
 	err = a.publishFn(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
@@ -175,7 +158,7 @@ func (a *api) PublishEvent(ctx context.Context, in *daprv1pb.PublishEventEnvelop
 	return &empty.Empty{}, nil
 }
 
-func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
+func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
@@ -189,37 +172,45 @@ func (a *api) InvokeService(ctx context.Context, in *daprv1pb.InvokeServiceReque
 
 	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Headers(), true))
 
-	statusCode := int(resp.Status().Code)
+	var respError error
 	if resp.IsHTTPResponse() {
-		statusCode = int(invokev1.CodeFromHTTPStatus(statusCode))
+		var errorMessage = []byte("")
+		if resp != nil {
+			_, errorMessage = resp.RawData()
+		}
+		respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
 	} else {
-		// ignore if appchannel uses HTTP
+		respError = invokev1.ErrorFromInternalStatus(resp.Status())
+		// ignore trailer if appchannel uses HTTP
 		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Trailers(), false))
 	}
 
-	return resp.Message(), status.Error(codes.Code(statusCode), resp.Status().Message)
+	return resp.Message(), respError
 }
 
-func (a *api) InvokeBinding(ctx context.Context, in *daprv1pb.InvokeBindingEnvelope) (*empty.Empty, error) {
-	req := &bindings.WriteRequest{
-		Metadata: in.Metadata,
+func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
+	req := &bindings.InvokeRequest{
+		Metadata:  in.Metadata,
+		Operation: bindings.OperationKind(in.Operation),
 	}
 	if in.Data != nil {
-		req.Data = in.Data.Value
+		req.Data = in.Data
 	}
 
-	var span *trace.Span
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, "InvokeBinding", a.tracingSpec)
-	defer span.End()
-
-	err := a.sendToOutputBindingFn(in.Name, req)
+	r := &runtimev1pb.InvokeBindingResponse{}
+	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
+		return r, fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
 	}
-	return &empty.Empty{}, nil
+
+	if resp != nil {
+		r.Data = resp.Data
+		r.Metadata = resp.Metadata
+	}
+	return r, nil
 }
 
-func (a *api) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*daprv1pb.GetStateResponseEnvelope, error) {
+func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -233,29 +224,24 @@ func (a *api) GetState(ctx context.Context, in *daprv1pb.GetStateEnvelope) (*dap
 	req := state.GetRequest{
 		Key: a.getModifiedStateKey(in.Key),
 		Options: state.GetStateOption{
-			Consistency: in.Consistency,
+			Consistency: stateConsistencyToString(in.Consistency),
 		},
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("GetState: %s", storeName)
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
-	defer span.End()
 
 	getResponse, err := a.stateStores[storeName].Get(&req)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
 
-	response := &daprv1pb.GetStateResponseEnvelope{}
+	response := &runtimev1pb.GetStateResponse{}
 	if getResponse != nil {
 		response.Etag = getResponse.ETag
-		response.Data = &any.Any{Value: getResponse.Data}
+		response.Data = getResponse.Data
 	}
 	return response, nil
 }
 
-func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*empty.Empty, error) {
+func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -267,22 +253,22 @@ func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*e
 	}
 
 	reqs := []state.SetRequest{}
-	for _, s := range in.Requests {
+	for _, s := range in.States {
 		req := state.SetRequest{
 			Key:      a.getModifiedStateKey(s.Key),
 			Metadata: s.Metadata,
-			Value:    s.Value.Value,
+			Value:    s.Value,
 			ETag:     s.Etag,
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
-				Consistency: s.Options.Consistency,
-				Concurrency: s.Options.Concurrency,
+				Consistency: stateConsistencyToString(s.Options.Consistency),
+				Concurrency: stateConcurrencyToString(s.Options.Concurrency),
 			}
 			if s.Options.RetryPolicy != nil {
 				req.Options.RetryPolicy = state.RetryPolicy{
 					Threshold: int(s.Options.RetryPolicy.Threshold),
-					Pattern:   s.Options.RetryPolicy.Pattern,
+					Pattern:   retryPatternToString(s.Options.RetryPolicy.Pattern),
 				}
 				if s.Options.RetryPolicy.Interval != nil {
 					dur, err := duration(s.Options.RetryPolicy.Interval)
@@ -295,11 +281,6 @@ func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*e
 		reqs = append(reqs, req)
 	}
 
-	var span *trace.Span
-	spanName := fmt.Sprintf("SaveState: %s", storeName)
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
-	defer span.End()
-
 	err := a.stateStores[storeName].BulkSet(reqs)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
@@ -307,7 +288,7 @@ func (a *api) SaveState(ctx context.Context, in *daprv1pb.SaveStateEnvelope) (*e
 	return &empty.Empty{}, nil
 }
 
-func (a *api) DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope) (*empty.Empty, error) {
+func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -324,14 +305,14 @@ func (a *api) DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope)
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
-			Concurrency: in.Options.Concurrency,
-			Consistency: in.Options.Consistency,
+			Concurrency: stateConcurrencyToString(in.Options.Concurrency),
+			Consistency: stateConsistencyToString(in.Options.Consistency),
 		}
 
 		if in.Options.RetryPolicy != nil {
 			retryPolicy := state.RetryPolicy{
 				Threshold: int(in.Options.RetryPolicy.Threshold),
-				Pattern:   in.Options.RetryPolicy.Pattern,
+				Pattern:   retryPatternToString(in.Options.RetryPolicy.Pattern),
 			}
 			if in.Options.RetryPolicy.Interval != nil {
 				dur, err := duration(in.Options.RetryPolicy.Interval)
@@ -342,11 +323,6 @@ func (a *api) DeleteState(ctx context.Context, in *daprv1pb.DeleteStateEnvelope)
 			req.Options.RetryPolicy = retryPolicy
 		}
 	}
-
-	var span *trace.Span
-	spanName := fmt.Sprintf("DeleteState: %s", storeName)
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
-	defer span.End()
 
 	err := a.stateStores[storeName].Delete(&req)
 	if err != nil {
@@ -362,7 +338,7 @@ func (a *api) getModifiedStateKey(key string) string {
 	return key
 }
 
-func (a *api) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*daprv1pb.GetSecretResponseEnvelope, error) {
+func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
 	}
@@ -378,18 +354,13 @@ func (a *api) GetSecret(ctx context.Context, in *daprv1pb.GetSecretEnvelope) (*d
 		Metadata: in.Metadata,
 	}
 
-	var span *trace.Span
-	spanName := fmt.Sprintf("GetSecret: %s", secretStoreName)
-	_, span = diag.StartTracingClientSpanFromGRPCContext(ctx, spanName, a.tracingSpec)
-	defer span.End()
-
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 
 	if err != nil {
 		return nil, fmt.Errorf("ERR_SECRET_GET: %s", err)
 	}
 
-	response := &daprv1pb.GetSecretResponseEnvelope{}
+	response := &runtimev1pb.GetSecretResponse{}
 	if getResponse.Data != nil {
 		response.Data = getResponse.Data
 	}

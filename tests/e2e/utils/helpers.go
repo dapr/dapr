@@ -1,5 +1,3 @@
-// +build e2e
-
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -124,7 +122,7 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 // HTTPGetRaw is a helper to make GET request call to url
 func HTTPGetRaw(url string) (*http.Response, error) {
 	client := newHTTPClient()
-	resp, err := client.Get(sanitizeHTTPURL(url)) //nolint
+	resp, err := client.Get(sanitizeHTTPURL(url))
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +156,7 @@ func HTTPDelete(url string) ([]byte, error) {
 	}
 
 	body, err := extractBody(res.Body)
+	defer res.Body.Close()
 	if err != nil {
 		return nil, err
 	}
