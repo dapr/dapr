@@ -209,7 +209,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 				want[dbTypeSpanAttributeKey] = tt.expectedType
 				want[dbInstanceSpanAttributeKey] = tt.expectedValue
 				want[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, tt.path)
-				want[dbURLSpanAttributeKey] = tt.path
+				want[dbURLSpanAttributeKey] = tt.expectedType
 			case "invoke", "actors":
 				want[httpMethodSpanAttributeKey] = method
 				want[httpURLSpanAttributeKey] = reqCtx.Request.URI().String()

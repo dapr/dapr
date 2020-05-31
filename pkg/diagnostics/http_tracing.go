@@ -8,6 +8,7 @@ package diagnostics
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/textproto"
 	"regexp"
 	"strconv"
@@ -15,10 +16,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
+	"google.golang.org/grpc/codes"
 )
 
 // We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
@@ -48,7 +49,13 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			next(ctx)
 		} else {
 			newCtx := NewContext((context.Context)(ctx), sc)
-			_, span := StartTracingClientSpanFromHTTPContext(newCtx, path, spec)
+			spanName := path
+
+			if strings.HasPrefix(spanName, "/v1.0/invoke/") {
+				spanName = "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
+			}
+			// TODO: set actor invocation spanname
+			_, span := StartTracingClientSpanFromHTTPContext(newCtx, spanName, spec)
 
 			SpanContextToRequest(span.SpanContext(), &ctx.Request)
 
@@ -110,9 +117,43 @@ func isHealthzRequest(name string) bool {
 // UpdateSpanStatusFromHTTPStatus updates trace span status based on response code
 func UpdateSpanStatusFromHTTPStatus(span *trace.Span, code int) {
 	if span != nil {
-		code := invokev1.CodeFromHTTPStatus(code)
-		span.SetStatus(trace.Status{Code: int32(code), Message: code.String()})
+		span.SetStatus(traceStatusFromHTTPCode(code))
 	}
+}
+
+// https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/http.md#status
+func traceStatusFromHTTPCode(httpCode int) trace.Status {
+	var code codes.Code = codes.Unknown
+	switch httpCode {
+	case http.StatusUnauthorized:
+		code = codes.Unauthenticated
+	case http.StatusForbidden:
+		code = codes.PermissionDenied
+	case http.StatusNotFound:
+		code = codes.NotFound
+	case http.StatusTooManyRequests:
+		code = codes.ResourceExhausted
+	case http.StatusNotImplemented:
+		code = codes.Unimplemented
+	case http.StatusServiceUnavailable:
+		code = codes.Unavailable
+	case http.StatusGatewayTimeout:
+		code = codes.DeadlineExceeded
+	}
+
+	if code == codes.Unknown {
+		if httpCode >= 100 && httpCode < 300 {
+			code = codes.OK
+		} else if httpCode >= 300 && httpCode < 400 {
+			code = codes.DeadlineExceeded
+		} else if httpCode >= 400 && httpCode < 500 {
+			code = codes.InvalidArgument
+		} else if httpCode >= 500 {
+			code = codes.Internal
+		}
+	}
+
+	return trace.Status{Code: int32(code), Message: code.String()}
 }
 
 func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
@@ -171,7 +212,7 @@ func tracestateToRequest(sc trace.SpanContext, req *fasthttp.Request) {
 	}
 }
 
-// GetSpanAttributesMap builds the span trace attributes map for HTTP calls based on given parameters as per open-telemetry specs
+// GetSpanAttributesMapFromHTTP builds the span trace attributes map for HTTP calls based on given parameters as per open-telemetry specs
 func GetSpanAttributesMapFromHTTP(componentType, componentValue, method, route, uri string, statusCode int) map[string]string {
 	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
 	m := make(map[string]string)
@@ -181,18 +222,19 @@ func GetSpanAttributesMapFromHTTP(componentType, componentValue, method, route, 
 		m[dbInstanceSpanAttributeKey] = componentValue
 		// TODO: not possible currently to get the route {state_store} , so using path instead of route
 		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, route)
-		m[dbURLSpanAttributeKey] = route
+		m[dbURLSpanAttributeKey] = componentType
 	case "invoke", "actors":
-		m[httpMethodSpanAttributeKey] = method
-		m[httpURLSpanAttributeKey] = uri
-		code := invokev1.CodeFromHTTPStatus(statusCode)
-		m[httpStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
-		m[httpStatusTextSpanAttributeKey] = code.String()
+		m[gRPCServiceSpanAttributeKey] = "ServiceInvocation"
 	case "publish":
 		m[messagingSystemSpanAttributeKey] = componentType
 		m[messagingDestinationSpanAttributeKey] = componentValue
 		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
 	}
+
+	m["dapr.status_code"] = strconv.Itoa(statusCode)
+	m["dapr.protocol"] = "http"
+	m["dapr.api"] = fmt.Sprintf("%s %s", method, route)
+
 	return m
 }
 

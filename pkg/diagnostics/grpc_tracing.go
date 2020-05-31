@@ -43,10 +43,7 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		var span *trace.Span
 		method := info.FullMethod
 
-		if isLocalServiceInvocationMethod(method) {
-			if m, ok := req.(*internalv1pb.InternalInvokeRequest); ok {
-				method = m.Message.Method
-			}
+		if isInternalCalls(method) {
 			_, span = StartTracingServerSpanFromGRPCContext(newCtx, method, spec)
 		} else {
 			_, span = StartTracingClientSpanFromGRPCContext(newCtx, method, spec)
@@ -158,8 +155,8 @@ func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span)
 	}
 }
 
-func isLocalServiceInvocationMethod(method string) bool {
-	return strings.Contains(method, "/CallLocal")
+func isInternalCalls(method string) bool {
+	return strings.HasPrefix(method, "/dapr.proto.internals.")
 }
 
 // GetSpanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs
@@ -176,11 +173,10 @@ func GetSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]
 	// Split up to 3 delimiters in '/package.service/method'
 	// example for internal call : "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
 	// example for non-internal call : "/dapr.proto.runtime.v1.Dapr/InvokeService"
-	internalCall := strings.Contains(p, "dapr.proto.internals.")
 
 	tokens := strings.SplitN(p, "/", 3)
 	if len(tokens) >= 2 {
-		if internalCall {
+		if isInternalCalls(rpcMethod) {
 			if t := strings.SplitN(tokens[0], ".", 5); len(t) >= 4 {
 				serviceName = t[4]
 			}
@@ -196,6 +192,8 @@ func GetSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]
 
 	m := make(map[string]string)
 	m[gRPCServiceSpanAttributeKey] = serviceName
+
+	// TODO: populate equivalent attributes with HTTP
 
 	// below attribute is not as per open temetery spec, adding custom dapr attribute to have additional details
 	m[gRPCDaprInstanceSpanAttributeKey] = extractComponentValueFromGRPCRequest(req)
