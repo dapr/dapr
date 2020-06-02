@@ -118,6 +118,11 @@ func isTraceStateHeaderKey(key string) bool {
 	return k == tracestateHeader
 }
 
+func isGRPCTraceHeaderKey(key string) bool {
+	k := strings.ToLower(key)
+	return k == tracebinMetadata
+}
+
 // InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata
 func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
 	var traceparentValue, tracestateValue string
@@ -171,18 +176,21 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 // InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers
 func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	grpcProtocol := IsGRPCProtocol(internalMD)
+	var traceContext string
 	for k, listVal := range internalMD {
-		if grpcProtocol {
-			// if grpcProtocol, then get grpc-trace-bin value, and attach it in HTTP traceparent and HTTP tracestate header
-			processGRPCTraceHeaderToHTTPTraceHeaders(listVal.Values[0], setHeader)
-			// explicit continue to make it less bug prone going forward, otherwise it is not needed as it is checked further in gRPCBinaryMetadataSuffix
+		// get the HTTP traceparent and tracestate header key values and continue
+		if isGRPCTraceHeaderKey(k) {
+			traceContext = listVal.Values[0]
 			continue
 		}
-
 		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader {
 			continue
 		}
 		setHeader(reservedGRPCMetadataToDaprPrefixHeader(k), listVal.Values[0])
+	}
+	if grpcProtocol {
+		// if grpcProtocol, then get grpc-trace-bin value, and attach it in HTTP traceparent and HTTP tracestate header
+		processGRPCTraceHeaderToHTTPTraceHeaders(traceContext, setHeader)
 	}
 }
 
