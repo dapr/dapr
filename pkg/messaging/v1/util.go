@@ -107,11 +107,6 @@ func isPermanentHTTPHeader(hdr string) bool {
 	return false
 }
 
-func isTraceCorrelationHeaderKey(key string) bool {
-	k := strings.ToLower(key)
-	return k == traceparentHeader || k == tracestateHeader || k == tracebinMetadata
-}
-
 func isTraceParentHeaderKey(key string) bool {
 	k := strings.ToLower(key)
 	return k == traceparentHeader
