@@ -279,7 +279,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 
 	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	diag.SpanContextToRequest(sc, &reqCtx.Request)
+	diag.SpanContextToHTTPHeaders(sc, reqCtx.Request.Header.Set)
 
 	var req OutputBindingRequest
 	err := a.json.Unmarshal(body, &req)
@@ -535,6 +535,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
+
 	respond(reqCtx, statusCode, body)
 }
 

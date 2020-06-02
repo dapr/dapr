@@ -130,7 +130,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	invokev1.InternalMetadataToHTTPHeader(req.Metadata(), channelReq.Header.Set)
 
 	sc := diag.FromContext(ctx)
-	diag.SpanContextToRequest(sc, channelReq)
+	diag.SpanContextToHTTPHeaders(sc, channelReq.Header.Set)
 
 	// Set Content body and types
 	contentType, body := req.RawData()

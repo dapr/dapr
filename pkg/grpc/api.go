@@ -170,7 +170,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, err
 	}
 
-	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Headers(), true))
+	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true))
 
 	var respError error
 	if resp.IsHTTPResponse() {
@@ -182,7 +182,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	} else {
 		respError = invokev1.ErrorFromInternalStatus(resp.Status())
 		// ignore trailer if appchannel uses HTTP
-		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Trailers(), false))
+		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Trailers(), false))
 	}
 
 	return resp.Message(), respError

@@ -73,7 +73,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	sc := diag.FromContext(ctx)
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
-	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(req.Metadata(), true)
+	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
 	// Prepare gRPC Metadata
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
 	// populate span context

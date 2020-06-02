@@ -6,12 +6,14 @@
 package v1
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"testing"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/valyala/fasthttp"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -93,8 +95,10 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
+
 	t.Run("without http header conversion for http headers", func(t *testing.T) {
-		convertedMD := InternalMetadataToGrpcMetadata(httpHeaders, false)
+		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, false)
 		assert.Equal(t, 4, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD["host"][0])
 		assert.Equal(t, "application/json", convertedMD["content-type"][0])
@@ -103,7 +107,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 	})
 
 	t.Run("with http header conversion for http headers", func(t *testing.T) {
-		convertedMD := InternalMetadataToGrpcMetadata(httpHeaders, true)
+		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, true)
 		assert.Equal(t, 4, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD["dapr-host"][0])
 		assert.Equal(t, "application/json", convertedMD["dapr-content-type"][0])
@@ -133,7 +137,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 	}
 
 	t.Run("with grpc header conversion for grpc headers", func(t *testing.T) {
-		convertedMD := InternalMetadataToGrpcMetadata(grpcMetadata, true)
+		convertedMD := InternalMetadataToGrpcMetadata(ctx, grpcMetadata, true)
 		assert.Equal(t, 5, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD[":authority"][0])
 		assert.Equal(t, "1S", convertedMD["grpc-timeout"][0])
@@ -235,4 +239,31 @@ func TestErrorFromInternalStatus(t *testing.T) {
 	actual, ok := status.FromError(statusError)
 	assert.True(t, ok)
 	assert.Equal(t, expected, actual)
+}
+
+func TestInternalMetadataToHTTPHeader1(t *testing.T) {
+	testValue := &internalv1pb.ListStringValue{
+		Values: []string{"fakeValue"},
+	}
+
+	fakeMetadata := map[string]*internalv1pb.ListStringValue{
+		"custom-header":  testValue,
+		":method":        testValue,
+		":scheme":        testValue,
+		":path":          testValue,
+		":authority":     testValue,
+		"grpc-timeout":   testValue,
+		"content-type":   testValue, // skip
+		"grpc-trace-bin": testValue, // skip binary metadata
+	}
+
+	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout"}
+	savedHeaderKeyNames := []string{}
+	resp := &fasthttp.Response{}
+	InternalMetadataToHTTPHeader(fakeMetadata, resp.Header.Set)
+
+	sort.Strings(expectedKeyNames)
+	sort.Strings(savedHeaderKeyNames)
+
+	assert.Equal(t, expectedKeyNames, savedHeaderKeyNames)
 }

@@ -6,6 +6,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -106,21 +107,33 @@ func isPermanentHTTPHeader(hdr string) bool {
 	return false
 }
 
-func isTraceCorrleationHeaderKey(key string) bool {
+func isTraceCorrelationHeaderKey(key string) bool {
 	k := strings.ToLower(key)
-	return k == tracestateHeader || k == traceparentHeader || k == tracebinMetadata
+	return k == traceparentHeader || k == tracestateHeader || k == tracebinMetadata
 }
 
-func isGRPCTraceCorrelationHeaderKey(key string) bool {
+func isTraceParentHeaderKey(key string) bool {
 	k := strings.ToLower(key)
-	return k == tracebinMetadata
+	return k == traceparentHeader
+}
+
+func isTraceStateHeaderKey(key string) bool {
+	k := strings.ToLower(key)
+	return k == tracestateHeader
 }
 
 // InternalMetadataToGrpcMetadata converts internal metadata map to gRPC metadata
-func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
+func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternalMetadata, httpHeaderConversion bool) metadata.MD {
+	var traceparentValue, tracestateValue string
 	var md = metadata.MD{}
 	for k, listVal := range internalMD {
-		if isTraceCorrleationHeaderKey(k) {
+		// get the HTTP traceparent and tracestate header key values and continue
+		if isTraceParentHeaderKey(k) {
+			traceparentValue = listVal.Values[0]
+			continue
+		}
+		if isTraceStateHeaderKey(k) {
+			tracestateValue = listVal.Values[0]
 			continue
 		}
 
@@ -129,6 +142,11 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
 		}
 		md.Append(keyName, listVal.Values...)
+	}
+
+	// if httpProtocol, then get HTTP traceparent and HTTP tracestate header values, attach it in grpc-trace-bin header
+	if !IsGRPCProtocol(internalMD) {
+		processHTTPTraceHeaderToGRPCTraceHeader(ctx, md, traceparentValue, tracestateValue)
 	}
 	return md
 }
@@ -156,14 +174,15 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 
 // InternalMetadataToHTTPHeader converts internal metadata pb to HTTP headers
 func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader func(string, string)) {
+	grpcProtocol := IsGRPCProtocol(internalMD)
 	for k, listVal := range internalMD {
-		if isGRPCTraceCorrelationHeaderKey(k) {
-			// process the grpc-trace-bin value to add in the response HTTP header
-			processGRPCTraceHeader(listVal.Values, setHeader)
+		if grpcProtocol {
+			// if grpcProtocol, then get grpc-trace-bin value, and attach it in HTTP traceparent and HTTP tracestate header
+			processGRPCTraceHeaderToHTTPTraceHeaders(listVal.Values[0], setHeader)
+			// explicit continue to make it less bug prone going forward, otherwise it is not needed as it is checked further in gRPCBinaryMetadataSuffix
 			continue
 		}
 
-		// Skip if the header key has -bin suffix except grpc-trace-bin
 		if len(listVal.Values) == 0 || strings.HasSuffix(k, gRPCBinaryMetadataSuffix) || k == ContentTypeHeader {
 			continue
 		}
@@ -291,12 +310,20 @@ func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
 	return grpc_status.ErrorProto(respStatus)
 }
 
-func processGRPCTraceHeader(values []string, setHeader func(string, string)) {
-	// add the grpc-trace-bin value to the http header as it contains the traceID
-	traceContext := values[0]
-	if traceContext != "" {
-		traceContextBinary := []byte(traceContext)
-		sc, _ := propagation.FromBinary(traceContextBinary)
-		setHeader(traceparentHeader, diag.SpanContextToString(sc))
+func processGRPCTraceHeaderToHTTPTraceHeaders(traceContext string, setHeader func(string, string)) {
+	// attach grpc-trace-bin value in traceparent and tracestate header
+	if sc, ok := propagation.FromBinary([]byte(traceContext)); ok {
+		diag.SpanContextToHTTPHeaders(sc, setHeader)
+	}
+}
+
+func processHTTPTraceHeaderToGRPCTraceHeader(ctx context.Context, md metadata.MD, traceparentValue, traceStateValue string) {
+	// attach traceparent and tracestate header values to grpc-trace-bin value
+	if sc, ok := diag.SpanContextFromString(traceparentValue); ok {
+		sc.Tracestate = diag.TraceStateFromString(traceStateValue)
+		md.Append(tracebinMetadata, string(propagation.Binary(sc)))
+	} else {
+		sc := diag.FromContext(ctx)
+		md.Append(tracebinMetadata, string(propagation.Binary(sc)))
 	}
 }

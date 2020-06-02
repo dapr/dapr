@@ -93,7 +93,7 @@ func TestSpanContextFromRequest(t *testing.T) {
 	}
 }
 
-func TestSpanContextToRequest(t *testing.T) {
+func TestSpanContextToHTTPHeaders(t *testing.T) {
 	tests := []struct {
 		sc trace.SpanContext
 	}{
@@ -106,13 +106,13 @@ func TestSpanContextToRequest(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		t.Run("SpanContextToRequest", func(t *testing.T) {
+		t.Run("SpanContextToHTTPHeaders", func(t *testing.T) {
 			req := &fasthttp.Request{}
-			SpanContextToRequest(tt.sc, req)
+			SpanContextToHTTPHeaders(tt.sc, req.Header.Set)
 
 			got, _ := SpanContextFromRequest(req)
 
-			assert.Equalf(t, got, tt.sc, "SpanContextToRequest() got = %v, want %v", got, tt.sc)
+			assert.Equalf(t, got, tt.sc, "SpanContextToHTTPHeaders() got = %v, want %v", got, tt.sc)
 		})
 	}
 }
@@ -180,31 +180,6 @@ func TestGetAPIComponent(t *testing.T) {
 	}
 }
 
-func TestSpanContextToResponse(t *testing.T) {
-	tests := []struct {
-		sc trace.SpanContext
-	}{
-		{
-			sc: trace.SpanContext{
-				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-				TraceOptions: trace.TraceOptions(1),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run("SpanContextToResponse", func(t *testing.T) {
-			resp := &fasthttp.Response{}
-			SpanContextToResponse(tt.sc, resp)
-
-			h := string(resp.Header.Peek(textproto.CanonicalMIMEHeaderKey("traceparent")))
-			got, _ := SpanContextFromString(h)
-
-			assert.Equalf(t, got, tt.sc, "SpanContextToResponse() got = %v, want %v", got, tt.sc)
-		})
-	}
-}
-
 func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	var tests = []struct {
 		path          string
@@ -253,7 +228,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	}
 }
 
-func TestUpdateResponseHeaders(t *testing.T) {
+func TestUpdateResponseTraceHeadersHTTP(t *testing.T) {
 	daprSC := trace.SpanContext{
 		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
 		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
@@ -261,7 +236,7 @@ func TestUpdateResponseHeaders(t *testing.T) {
 	}
 	t.Run("No SpanContext found in the response headers", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Response: fasthttp.Response{}}
-		UpdateResponseHeaders(ctx, daprSC)
+		UpdateResponseTraceHeadersHTTP(ctx, daprSC)
 		s := string(ctx.Response.Header.Peek(textproto.CanonicalMIMEHeaderKey("traceparent")))
 		got, _ := SpanContextFromString(s)
 		assert.NotEmpty(t, s, "Should get span context")
@@ -277,10 +252,10 @@ func TestUpdateResponseHeaders(t *testing.T) {
 			TraceOptions: trace.TraceOptions(1),
 		}
 		ctx := &fasthttp.RequestCtx{Response: fasthttp.Response{}}
-		SpanContextToResponse(sc, &ctx.Response)
+		SpanContextToHTTPHeaders(sc, ctx.Response.Header.Set)
 
 		// test
-		UpdateResponseHeaders(ctx, daprSC)
+		UpdateResponseTraceHeadersHTTP(ctx, daprSC)
 		s := string(ctx.Response.Header.Peek(textproto.CanonicalMIMEHeaderKey("traceparent")))
 		got, _ := SpanContextFromString(s)
 		assert.NotEmpty(t, s, "Should get span context")
@@ -291,6 +266,31 @@ func TestUpdateResponseHeaders(t *testing.T) {
 		assert.Equal(t, sc.SpanID, got.SpanID, "Should get client generated spanID")
 		assert.Equal(t, sc.TraceOptions, got.TraceOptions, "Should get client generated traceOptions")
 	})
+}
+
+func TestSpanContextToResponse(t *testing.T) {
+	tests := []struct {
+		sc trace.SpanContext
+	}{
+		{
+			sc: trace.SpanContext{
+				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceOptions: trace.TraceOptions(1),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run("SpanContextToResponse", func(t *testing.T) {
+			resp := &fasthttp.Response{}
+			SpanContextToHTTPHeaders(tt.sc, resp.Header.Set)
+
+			h := string(resp.Header.Peek(textproto.CanonicalMIMEHeaderKey("traceparent")))
+			got, _ := SpanContextFromString(h)
+
+			assert.Equalf(t, got, tt.sc, "SpanContextToResponse() got = %v, want %v", got, tt.sc)
+		})
+	}
 }
 
 func getTestHTTPRequest() *fasthttp.Request {
@@ -312,6 +312,6 @@ func getTestHTTPRequest() *fasthttp.Request {
 		TraceOptions: 0x0,
 	}
 
-	SpanContextToRequest(sc, req)
+	SpanContextToHTTPHeaders(sc, req.Header.Set)
 	return req
 }
