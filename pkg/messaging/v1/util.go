@@ -13,6 +13,7 @@ import (
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
@@ -319,6 +320,8 @@ func processHTTPTraceHeaderToGRPCTraceHeader(ctx context.Context, md metadata.MD
 		md.Append(tracebinMetadata, string(propagation.Binary(sc)))
 	} else {
 		sc := diag.FromContext(ctx)
-		md.Append(tracebinMetadata, string(propagation.Binary(sc)))
+		if (sc != trace.SpanContext{}) {
+			md.Append(tracebinMetadata, string(propagation.Binary(sc)))
+		}
 	}
 }

@@ -13,7 +13,6 @@ import (
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/valyala/fasthttp"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -138,13 +137,13 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 
 	t.Run("with grpc header conversion for grpc headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, grpcMetadata, true)
-		assert.Equal(t, 5, convertedMD.Len())
+		assert.Equal(t, 6, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD[":authority"][0])
 		assert.Equal(t, "1S", convertedMD["grpc-timeout"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["grpc-encoding"][0])
 		assert.Equal(t, "bearer token", convertedMD["authorization"][0])
 		_, ok := convertedMD["grpc-trace-bin"]
-		assert.False(t, ok)
+		assert.True(t, ok)
 		assert.Equal(t, "value1", convertedMD["my-metadata"][0])
 		assert.Equal(t, "value2", convertedMD["my-metadata"][1])
 		assert.Equal(t, "value3", convertedMD["my-metadata"][2])
@@ -239,31 +238,4 @@ func TestErrorFromInternalStatus(t *testing.T) {
 	actual, ok := status.FromError(statusError)
 	assert.True(t, ok)
 	assert.Equal(t, expected, actual)
-}
-
-func TestInternalMetadataToHTTPHeader1(t *testing.T) {
-	testValue := &internalv1pb.ListStringValue{
-		Values: []string{"fakeValue"},
-	}
-
-	fakeMetadata := map[string]*internalv1pb.ListStringValue{
-		"custom-header":  testValue,
-		":method":        testValue,
-		":scheme":        testValue,
-		":path":          testValue,
-		":authority":     testValue,
-		"grpc-timeout":   testValue,
-		"content-type":   testValue, // skip
-		"grpc-trace-bin": testValue, // skip binary metadata
-	}
-
-	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout"}
-	savedHeaderKeyNames := []string{}
-	resp := &fasthttp.Response{}
-	InternalMetadataToHTTPHeader(fakeMetadata, resp.Header.Set)
-
-	sort.Strings(expectedKeyNames)
-	sort.Strings(savedHeaderKeyNames)
-
-	assert.Equal(t, expectedKeyNames, savedHeaderKeyNames)
 }
