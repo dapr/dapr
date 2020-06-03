@@ -246,6 +246,7 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "application/json; utf-8", responseHeaders["Content-Type"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
+		assert.NotNil(t, responseHeaders["Traceparent"][0])
 	})
 
 	t.Run("grpc-to-grpc", func(t *testing.T) {
@@ -288,6 +289,8 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
+		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
+		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
 
 		assert.Equal(t, "DaprTest-Trailer-Value-1", trailerHeaders["daprtest-trailer-1"][0])
 		assert.Equal(t, "DaprTest-Trailer-Value-2", trailerHeaders["daprtest-trailer-2"][0])
@@ -334,6 +337,8 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, responseHeaders["dapr-date"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
+		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
+		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
 	})
 
 	t.Run("http-to-grpc", func(t *testing.T) {
@@ -378,6 +383,7 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, responseHeaders["Date"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["Daprtest-Response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["Daprtest-Response-2"][0])
+		assert.NotNil(t, responseHeaders["Traceparent"][0])
 	})
 
 }
