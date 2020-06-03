@@ -163,15 +163,6 @@ func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, strin
 	tracestateToHeader(sc, setHeader)
 }
 
-func getResponseHeader(resp *fasthttp.Response, name string) (string, bool) {
-	s := string(resp.Header.Peek(textproto.CanonicalMIMEHeaderKey(name)))
-	if s == "" {
-		return "", false
-	}
-
-	return s, true
-}
-
 func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
 	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
 	if sc.Tracestate != nil {
