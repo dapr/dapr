@@ -127,10 +127,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	channelReq.Header.SetMethod(req.Message().HttpExtension.Verb.String())
 
 	// Recover headers
-	invokev1.InternalMetadataToHTTPHeader(req.Metadata(), channelReq.Header.Set)
-
-	sc := diag.FromContext(ctx)
-	diag.SpanContextToHTTPHeaders(sc, channelReq.Header.Set)
+	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
 
 	// Set Content body and types
 	contentType, body := req.RawData()

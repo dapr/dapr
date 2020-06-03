@@ -60,7 +60,6 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 			AddAttributesToSpan(span, m)
 
 			UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
-			UpdateResponseTraceHeadersHTTP(ctx, span.SpanContext())
 
 			span.End()
 		}
@@ -155,15 +154,6 @@ func TraceStateFromString(h string) *tracestate.Tracestate {
 	}
 
 	return ts
-}
-
-// UpdateResponseTraceHeadersHTTP updates Dapr generated trace headers in the response if no trace headers found in the response
-func UpdateResponseTraceHeadersHTTP(ctx *fasthttp.RequestCtx, sc trace.SpanContext) {
-	_, ok := getResponseHeader(&ctx.Response, traceparentHeader)
-	// if there is no response headers found, add the Dapr generated SpanContext in the response header
-	if !ok {
-		SpanContextToHTTPHeaders(sc, ctx.Response.Header.Set)
-	}
 }
 
 // SpanContextToHTTPHeaders adds the spancontect in traceparent and tracestate headers.
