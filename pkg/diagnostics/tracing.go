@@ -42,7 +42,6 @@ const (
 
 	gRPCServiceSpanAttributeKey = "rpc.service"
 	netPeerNameSpanAttributeKey = "net.peer.name"
-	netPeerPortSpanAttributeKey = "net.peer.port"
 
 	daprAPISpanAttributeKey           = "dapr.api"
 	daprAPIStatusCodeSpanAttributeKey = "dapr.status_code"
