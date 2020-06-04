@@ -107,6 +107,12 @@ jobs:
                   console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
                 }
               } else if (commentBody.indexOf("/ok-to-perf") == 0) {
+                // Get pull request
+                const pull = await github.pulls.get({
+                  owner: issue.owner,
+                  repo: issue.repo,
+                  pull_number: issue.number
+                });
                 if (pull && pull.data) {                
                   // Get commit id and repo from pull head
                   const perfPayload = {
