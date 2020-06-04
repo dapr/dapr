@@ -226,7 +226,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			case "publish":
 				assert.Equal(t, got[messagingSystemSpanAttributeKey], tt.expectedType)
 				assert.Equal(t, got[messagingDestinationSpanAttributeKey], tt.expectedValue)
-				assert.Equal(t, got[messagingDestinationKindSpanAttributeKey], messagingDestinationKind)
+				assert.Equal(t, got[messagingDestinationKindSpanAttributeKey], messagingDestinationTopicKind)
 			}
 		})
 	}

@@ -172,10 +172,9 @@ func GetSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]
 	// gRPC method /package.service/method
 	m := make(map[string]string)
 
-	// Dapr is the default grpc Service
-
 	var dbType string
 	switch s := req.(type) {
+	// Internal service invocation request
 	case *internalv1pb.InternalInvokeRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		m[daprAPIInvokeMethod] = s.Message.GetMethod()
@@ -189,7 +188,7 @@ func GetSpanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]
 		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService
 		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
 		m[messagingDestinationSpanAttributeKey] = s.GetTopic()
-		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
+		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationTopicKind
 
 	case *runtimev1pb.InvokeBindingRequest:
 		dbType = bindingBuildingBlockType

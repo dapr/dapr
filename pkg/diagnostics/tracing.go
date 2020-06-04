@@ -35,7 +35,7 @@ const (
 	dbStatementSpanAttributeKey = "db.statement"
 	dbURLSpanAttributeKey       = "db.url"
 
-	messagingDestinationKind                 = "topic"
+	messagingDestinationTopicKind            = "topic"
 	messagingSystemSpanAttributeKey          = "messaging.system"
 	messagingDestinationSpanAttributeKey     = "messaging.destination"
 	messagingDestinationKindSpanAttributeKey = "messaging.destination_kind"
@@ -273,4 +273,23 @@ func (gen *traceIDGenerator) NewTraceID() [16]byte {
 	binary.LittleEndian.PutUint64(tid[8:16], gen.traceIDRand.Uint64()+gen.traceIDAdd[1])
 	gen.Unlock()
 	return tid
+}
+
+// ConstructInputBindingSpanAttributes creates span attributes for InputBindings.
+func ConstructInputBindingSpanAttributes(bindingName, url string) map[string]string {
+	return map[string]string{
+		dbInstanceSpanAttributeKey:  bindingName,
+		gRPCServiceSpanAttributeKey: daprGRPCDaprService,
+		dbTypeSpanAttributeKey:      bindingBuildingBlockType,
+		dbURLSpanAttributeKey:       url,
+	}
+}
+
+// ConstructSubscriptionSpanAttributes creates span attributes for Pubsub subscription.
+func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
+	return map[string]string{
+		messagingSystemSpanAttributeKey:          pubsubBuildingBlockType,
+		messagingDestinationSpanAttributeKey:     topic,
+		messagingDestinationKindSpanAttributeKey: messagingDestinationTopicKind,
+	}
 }

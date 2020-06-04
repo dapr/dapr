@@ -271,7 +271,7 @@ func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]st
 	case "publish":
 		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
 		m[messagingDestinationSpanAttributeKey] = getContextValue(ctx, "topic")
-		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
+		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationTopicKind
 
 	case "actor":
 		// TODO: support later
