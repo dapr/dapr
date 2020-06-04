@@ -148,33 +148,27 @@ func TestWithNoSpanContext(t *testing.T) {
 }
 
 func TestGetAPIComponent(t *testing.T) {
-	state := apiComponent{componentType: "state", componentValue: "statestore"}
-	secret := apiComponent{componentType: "secrets", componentValue: "keyvault"}
-	invoke := apiComponent{componentType: "invoke", componentValue: "fakeApp"}
-	publish := apiComponent{componentType: "publish", componentValue: "topicA"}
-	bindings := apiComponent{componentType: "bindings", componentValue: "kafka"}
-	empty := apiComponent{}
-	actors := apiComponent{componentType: "actors", componentValue: "DemoActor"}
-
 	var tests = []struct {
-		path string
-		want apiComponent
+		path    string
+		version string
+		api     string
 	}{
-		{"/v1.0/state/statestore/key", state},
-		{"/v1.0/state/statestore", state},
-		{"/v1.0/secrets/keyvault/name", secret},
-		{"/v1.0/invoke/fakeApp/method/add", invoke},
-		{"/v1/publish/topicA", publish},
-		{"/v1/bindings/kafka", bindings},
-		{"/healthz", empty},
-		{"/v1/actors/DemoActor/1/state/key", actors},
-		{"", empty},
+		{"/v1.0/state/statestore/key", "v1.0", "state"},
+		{"/v1.0/state/statestore", "v1.0", "state"},
+		{"/v1.0/secrets/keyvault/name", "v1.0", "secrets"},
+		{"/v1.0/invoke/fakeApp/method/add", "v1.0", "invoke"},
+		{"/v1/publish/topicA", "v1", "publish"},
+		{"/v1/bindings/kafka", "v1", "bindings"},
+		{"/healthz", "", ""},
+		{"/v1/actors/DemoActor/1/state/key", "v1", "actors"},
+		{"", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			got := getAPIComponent(tt.path)
-			assert.Equal(t, tt.want, got)
+			ver, api := getAPIComponent(tt.path)
+			assert.Equal(t, tt.version, ver)
+			assert.Equal(t, tt.api, api)
 		})
 	}
 }
@@ -189,7 +183,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 		{"/v1.0/state/statestore", "state", "statestore"},
 		{"/v1.0/secrets/keyvault/name", "secrets", "keyvault"},
 		{"/v1.0/invoke/fakeApp/method/add", "invoke", "fakeApp"},
-		{"/v1/publish/topicA", "publish", "topicA"},
+		{"/v1/publish/topicA", "pubsub", "topicA"},
 		{"/v1/bindings/kafka", "bindings", "kafka"},
 	}
 
@@ -203,26 +197,37 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			req.CopyTo(&reqCtx.Request)
 			method := string(req.Header.Method())
 
-			want := map[string]string{}
-			switch tt.expectedType {
-			case "state", "secrets", "bindings":
-				want[dbTypeSpanAttributeKey] = tt.expectedType
-				want[dbInstanceSpanAttributeKey] = tt.expectedValue
-				want[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, tt.path)
-				want[dbURLSpanAttributeKey] = tt.path
-			case "invoke", "actors":
-				want[httpMethodSpanAttributeKey] = method
-				want[httpURLSpanAttributeKey] = reqCtx.Request.URI().String()
-				want[httpStatusCodeSpanAttributeKey] = "200"
-				want[httpStatusTextSpanAttributeKey] = "OK"
-			case "publish":
-				want[messagingSystemSpanAttributeKey] = tt.expectedType
-				want[messagingDestinationSpanAttributeKey] = tt.expectedValue
-				want[messagingDestinationKindSpanAttributeKey] = messagingDestinationKind
-			}
+			reqCtx.SetUserValue("storeName", "statestore")
+			reqCtx.SetUserValue("secretStoreName", "keyvault")
+			reqCtx.SetUserValue("topic", "topicA")
+			reqCtx.SetUserValue("name", "kafka")
 
 			got := getSpanAttributesMapFromHTTPContext(reqCtx)
-			assert.Equal(t, want, got)
+			_, componentType := getAPIComponent(tt.path)
+			switch componentType {
+			case "state":
+				assert.Equal(t, got[dbTypeSpanAttributeKey], tt.expectedType)
+				assert.Equal(t, got[dbInstanceSpanAttributeKey], tt.expectedValue)
+				assert.Equal(t, got[dbStatementSpanAttributeKey], fmt.Sprintf("%s %s", method, tt.path))
+				assert.Equal(t, got[dbURLSpanAttributeKey], tt.expectedType)
+
+			case "secrets":
+				assert.Equal(t, got[dbTypeSpanAttributeKey], tt.expectedType)
+				assert.Equal(t, got[dbInstanceSpanAttributeKey], tt.expectedValue)
+				assert.Equal(t, got[dbStatementSpanAttributeKey], fmt.Sprintf("%s %s", method, tt.path))
+				assert.Equal(t, got[dbURLSpanAttributeKey], tt.expectedType)
+
+			case "bindings":
+				assert.Equal(t, got[dbTypeSpanAttributeKey], tt.expectedType)
+				assert.Equal(t, got[dbInstanceSpanAttributeKey], tt.expectedValue)
+				assert.Equal(t, got[dbStatementSpanAttributeKey], fmt.Sprintf("%s %s", method, tt.path))
+				assert.Equal(t, got[dbURLSpanAttributeKey], tt.expectedType)
+
+			case "publish":
+				assert.Equal(t, got[messagingSystemSpanAttributeKey], tt.expectedType)
+				assert.Equal(t, got[messagingDestinationSpanAttributeKey], tt.expectedValue)
+				assert.Equal(t, got[messagingDestinationKindSpanAttributeKey], messagingDestinationTopicKind)
+			}
 		})
 	}
 }
