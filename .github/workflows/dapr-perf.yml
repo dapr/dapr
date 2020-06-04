@@ -41,7 +41,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if (testPayload && testPayload.command == "perf-test") {
+            if (testPayload && testPayload.command == "ok-to-perf") {
               // Set environment variables
               console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
               console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
