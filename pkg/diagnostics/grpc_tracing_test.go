@@ -81,16 +81,15 @@ func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
 		expectedCustomAttribute      string
 	}{
 		{"/dapr.proto.internals.v1.ServiceInvocation/CallLocal", "InternalInvokeRequest", "ServiceInvocation", "mymethod"},
-		{"/dapr.proto.runtime.v1.Dapr/InvokeService", "InvokeServiceRequest", "InvokeService", "mymethod"},
-		{"/dapr.proto.runtime.v1.Dapr/GetState", "GetStateRequest", "GetState", "mystore"},
-		{"/dapr.proto.runtime.v1.Dapr/SaveState", "SaveStateRequest", "SaveState", "mystore"},
-		{"/dapr.proto.runtime.v1.Dapr/DeleteState", "DeleteStateRequest", "DeleteState", "mystore"},
-		{"/dapr.proto.runtime.v1.Dapr/GetSecret", "GetSecretRequest", "GetSecret", "mysecretstore"},
-		{"/dapr.proto.runtime.v1.Dapr/InvokeBinding", "InvokeBindingRequest", "InvokeBinding", "mybindings"},
-		{"/dapr.proto.runtime.v1.Dapr/PublishEvent", "PublishEventRequest", "PublishEvent", "mytopic"},
-		{"/dapr.proto.runtime.v1.Dapr/AppCallback", "TopicEventRequest", "AppCallback", "mytopic"},
-		{"/dapr.proto.runtime.v1.Dapr/AppCallback", "BindingEventRequest", "AppCallback", "mybindings"},
-		{"/invalid.rpcMethodformat", "InvokeServiceRequest", "invalid.rpcMethodformat", "mymethod"},
+		// InvokeService will be ServiceInvocation because this call will be treated as client call
+		// of service invocation.
+		{"/dapr.proto.runtime.v1.Dapr/InvokeService", "InvokeServiceRequest", "ServiceInvocation", "mymethod"},
+		{"/dapr.proto.runtime.v1.Dapr/GetState", "GetStateRequest", "Dapr", "mystore"},
+		{"/dapr.proto.runtime.v1.Dapr/SaveState", "SaveStateRequest", "Dapr", "mystore"},
+		{"/dapr.proto.runtime.v1.Dapr/DeleteState", "DeleteStateRequest", "Dapr", "mystore"},
+		{"/dapr.proto.runtime.v1.Dapr/GetSecret", "GetSecretRequest", "Dapr", "mysecretstore"},
+		{"/dapr.proto.runtime.v1.Dapr/InvokeBinding", "InvokeBindingRequest", "Dapr", "mybindings"},
+		{"/dapr.proto.runtime.v1.Dapr/PublishEvent", "PublishEventRequest", "Dapr", "mytopic"},
 	}
 	var req interface{}
 	for _, tt := range tests {
@@ -120,7 +119,6 @@ func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
 
 			got := GetSpanAttributesMapFromGRPC(req, tt.rpcMethod)
 			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
-			assert.Equal(t, tt.expectedCustomAttribute, got[gRPCDaprInstanceSpanAttributeKey], "custom attribute should be equal")
 		})
 	}
 }

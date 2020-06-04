@@ -1427,5 +1427,5 @@ func updateSpanPropertiesGRPC(span *trace.Span, err error, spanName string, req 
 	// add span attributes
 	m := diag.GetSpanAttributesMapFromGRPC(req, spanName)
 	diag.AddAttributesToSpan(span, m)
-	diag.UpdateSpanStatusFromGRPCError(span, err, spanName)
+	diag.UpdateSpanStatusFromGRPCError(span, err)
 }

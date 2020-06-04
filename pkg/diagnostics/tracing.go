@@ -25,11 +25,6 @@ import (
 
 type DaprTraceContextKey struct{}
 
-type apiComponent struct {
-	componentType  string
-	componentValue string
-}
-
 const (
 	daprHeaderPrefix = "dapr-"
 
@@ -40,19 +35,32 @@ const (
 	dbStatementSpanAttributeKey = "db.statement"
 	dbURLSpanAttributeKey       = "db.url"
 
-	httpMethodSpanAttributeKey     = "http.method"
-	httpURLSpanAttributeKey        = "http.url"
-	httpStatusCodeSpanAttributeKey = "http.status_code"
-	httpStatusTextSpanAttributeKey = "http.status_text"
-
 	messagingDestinationKind                 = "topic"
 	messagingSystemSpanAttributeKey          = "messaging.system"
 	messagingDestinationSpanAttributeKey     = "messaging.destination"
 	messagingDestinationKindSpanAttributeKey = "messaging.destination_kind"
 
 	gRPCServiceSpanAttributeKey = "rpc.service"
-	// below attribute is not as per open temetery spec, adding custom dapr attribute to have additional details
-	gRPCDaprInstanceSpanAttributeKey = "rpc.dapr.instance"
+	netPeerNameSpanAttributeKey = "net.peer.name"
+	netPeerPortSpanAttributeKey = "net.peer.port"
+
+	daprAPISpanAttributeKey           = "dapr.api"
+	daprAPIStatusCodeSpanAttributeKey = "dapr.status_code"
+	daprAPIProtocolSpanAttributeKey   = "dapr.protocol"
+	daprAPIInvokeMethod               = "dapr.invoke_method"
+
+	daprAPIHTTPSpanAttrValue = "http"
+	daprAPIGRPCSpanAttrValue = "grpc"
+
+	stateBuildingBlockType   = "state"
+	secretBuildingBlockType  = "secrets"
+	bindingBuildingBlockType = "bindings"
+	pubsubBuildingBlockType  = "pubsub"
+
+	daprGRPCServiceInvocationService = "ServiceInvocation"
+	daprGRPCDaprService              = "Dapr"
+
+	daprServiceInvocationFullMethod = "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
 )
 
 // NewContext returns a new context with the given SpanContext attached.
@@ -206,28 +214,6 @@ func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
 			}
 		}
 	}
-}
-
-func getAPIComponent(apiPath string) apiComponent {
-	// Dapr API reference : https://github.com/dapr/docs/tree/master/reference/api
-	// example : apiPath /v1.0/state/statestore
-	if apiPath == "" {
-		return apiComponent{}
-	}
-
-	p := apiPath
-	if p[0] == '/' {
-		p = apiPath[1:]
-	}
-
-	// Split up to 4 delimiters in 'v1.0/state/statestore/key' to get component api type and value
-	var tokens = strings.SplitN(p, "/", 4)
-	if len(tokens) < 3 {
-		return apiComponent{}
-	}
-
-	// return 'state', 'statestore' from the parsed tokens in apiComponent type
-	return apiComponent{componentType: tokens[1], componentValue: tokens[2]}
 }
 
 var tracingConfig atomic.Value // access atomically
