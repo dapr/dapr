@@ -114,15 +114,6 @@ func GetSpanContextFromGRPC(ctx context.Context, spec config.TracingSpec) trace.
 	return spanContext
 }
 
-// UpdateResponseTraceHeadersGRPC updates Dapr generated trace headers in the response if no trace headers found in the context
-func UpdateResponseTraceHeadersGRPC(ctx context.Context, sc trace.SpanContext) {
-	spanContext, ok := FromGRPCContext(ctx)
-	if !ok {
-		spanContext = sc
-	}
-	AppendToOutgoingGRPCContext(ctx, spanContext)
-}
-
 // FromGRPCContext returns the SpanContext stored in a context, or empty if there isn't one.
 func FromGRPCContext(ctx context.Context) (trace.SpanContext, bool) {
 	var sc trace.SpanContext
