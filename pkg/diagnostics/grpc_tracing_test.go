@@ -13,6 +13,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -80,4 +81,13 @@ func TestUserDefinedMetadata(t *testing.T) {
 	assert.Equal(t, 2, len(m))
 	assert.Equal(t, "value1", m["dapr-userdefined-1"])
 	assert.Equal(t, "value2", m["dapr-userdefined-2"])
+}
+
+func TestSpanContextToGRPCMetadata(t *testing.T) {
+	t.Run("empty span context", func(t *testing.T) {
+		ctx := context.Background()
+		newCtx := SpanContextToGRPCMetadata(ctx, trace.SpanContext{})
+
+		assert.Equal(t, ctx, newCtx)
+	})
 }

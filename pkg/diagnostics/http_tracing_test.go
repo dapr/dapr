@@ -107,6 +107,14 @@ func TestSpanContextToRequest(t *testing.T) {
 			assert.Equalf(t, got, tt.sc, "SpanContextToRequest() got = %v, want %v", got, tt.sc)
 		})
 	}
+
+	t.Run("empty span context", func(t *testing.T) {
+		req := &fasthttp.Request{}
+		sc := trace.SpanContext{}
+		SpanContextToRequest(sc, req)
+
+		assert.Nil(t, req.Header.Peek(traceparentHeader))
+	})
 }
 
 func TestGetAPIComponent(t *testing.T) {

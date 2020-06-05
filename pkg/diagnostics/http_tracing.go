@@ -105,11 +105,14 @@ func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok boo
 
 // SpanContextToRequest modifies the given request to include traceparent and tracestate headers.
 func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
-	if (sc != trace.SpanContext{}) {
-		h := SpanContextToW3CString(sc)
-		req.Header.Set(traceparentHeader, h)
-		tracestateToRequest(sc, req)
+	// if sc is empty context, no ops.
+	if (trace.SpanContext{}) == sc {
+		return
 	}
+
+	h := SpanContextToW3CString(sc)
+	req.Header.Set(traceparentHeader, h)
+	tracestateToRequest(sc, req)
 }
 
 func isHealthzRequest(name string) bool {

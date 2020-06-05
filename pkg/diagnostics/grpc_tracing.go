@@ -121,7 +121,8 @@ func SpanContextFromGRPCMetadata(ctx context.Context) (trace.SpanContext, bool) 
 
 // SpanContextToGRPCMetadata appends binary serialized SpanContext to the outgoing GRPC context
 func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContext) context.Context {
-	if (spanContext == trace.SpanContext{}) {
+	// if span context is empty, no ops
+	if (trace.SpanContext{}) == spanContext {
 		return ctx
 	}
 	traceContextBinary := propagation.Binary(spanContext)
