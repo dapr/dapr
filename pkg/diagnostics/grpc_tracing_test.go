@@ -7,73 +7,24 @@ package diagnostics
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/propagation"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
-func TestStartTracingClientSpanFromGRPCContext(t *testing.T) {
-	spec := config.TracingSpec{SamplingRate: "0.5"}
-	ctx := context.Background()
-	ctx = metadata.NewIncomingContext(ctx, metadata.MD{"dapr-headerKey": {"v3", "v4"}})
-
-	StartTracingClientSpanFromGRPCContext(ctx, "invoke", spec)
-}
-
-func TestWithGRPCSpanContext(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
-	defer cancel()
-	wantSc := trace.SpanContext{
-		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-		SpanID:       trace.SpanID{0, 0, 0, 0, 0, 0, 0, 0},
-		TraceOptions: trace.TraceOptions(1),
-	}
-	ctx = AppendToOutgoingGRPCContext(ctx, wantSc)
-
-	gotSc, _ := FromOutgoingGRPCContext(ctx)
-
-	assert.Equalf(t, gotSc, wantSc, "WithGRPCSpanContext gotSc = %v, want %v", gotSc, wantSc)
-}
-
-func TestWithGRPCWithNoSpanContext(t *testing.T) {
-	t.Run("No SpanContext with always sampling rate", func(t *testing.T) {
-		ctx := context.Background()
-		spec := config.TracingSpec{SamplingRate: "1"}
-		sc := GetSpanContextFromGRPC(ctx, spec)
-		assert.NotEmpty(t, sc, "Should get default span context")
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-		assert.Equal(t, 1, int(sc.TraceOptions), "Should be sampled")
-	})
-
-	t.Run("No SpanContext with non-zero sampling rate", func(t *testing.T) {
-		ctx := context.Background()
-		spec := config.TracingSpec{SamplingRate: "0.5"}
-		sc := GetSpanContextFromGRPC(ctx, spec)
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-		assert.NotEmpty(t, sc, "Should get default span context")
-	})
-
-	t.Run("No SpanContext with zero sampling rate", func(t *testing.T) {
-		ctx := context.Background()
-		spec := config.TracingSpec{SamplingRate: "0"}
-		sc := GetSpanContextFromGRPC(ctx, spec)
-		assert.NotEmpty(t, sc, "Should get default span context")
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-		assert.Equal(t, 0, int(sc.TraceOptions), "Should not be sampled")
-	})
-}
-
-func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
+func TestSpanAttributesMapFromGRPC(t *testing.T) {
 	var tests = []struct {
 		rpcMethod                    string
 		requestType                  string
@@ -117,8 +68,105 @@ func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
 				req = &internalv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "mymethod"}}
 			}
 
-			got := GetSpanAttributesMapFromGRPC(req, tt.rpcMethod)
+			got := spanAttributesMapFromGRPC(req, tt.rpcMethod)
 			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
 		})
 	}
+}
+
+func TestUserDefinedMetadata(t *testing.T) {
+	md := metadata.MD{
+		"dapr-userdefined-1": []string{"value1"},
+		"dapr-userdefined-2": []string{"value2", "value3"},
+		"no-attr":            []string{"value3"},
+	}
+
+	testCtx := metadata.NewIncomingContext(context.Background(), md)
+
+	m := userDefinedMetadata(testCtx)
+
+	assert.Equal(t, 2, len(m))
+	assert.Equal(t, "value1", m["dapr-userdefined-1"])
+	assert.Equal(t, "value2", m["dapr-userdefined-2"])
+}
+
+func TestSpanContextToGRPCMetadata(t *testing.T) {
+	t.Run("empty span context", func(t *testing.T) {
+		ctx := context.Background()
+		newCtx := SpanContextToGRPCMetadata(ctx, trace.SpanContext{})
+
+		assert.Equal(t, ctx, newCtx)
+	})
+}
+
+func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
+	rate := config.TracingSpec{SamplingRate: "1"}
+	interceptor := GRPCTraceUnaryServerInterceptor("fakeAppID", rate)
+
+	testTraceParent := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	testSpanContext, _ := SpanContextFromW3CString(testTraceParent)
+	testTraceBinary := propagation.Binary(testSpanContext)
+	ctx := context.Background()
+
+	t.Run("grpc-trace-bin is given", func(t *testing.T) {
+		ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
+		fakeInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+		}
+		fakeReq := runtimev1pb.GetStateRequest{
+			StoreName: "statestore",
+			Key:       "state",
+		}
+
+		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			span := diag_utils.SpanFromContext(ctx)
+			sc := span.SpanContext()
+			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", sc.TraceID[:]))
+			assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", sc.SpanID[:]))
+
+			return nil, errors.New("fake error")
+		}
+
+		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+	})
+
+	t.Run("grpc-trace-bin is not given", func(t *testing.T) {
+		fakeInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+		}
+		fakeReq := runtimev1pb.GetStateRequest{
+			StoreName: "statestore",
+			Key:       "state",
+		}
+
+		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			span := diag_utils.SpanFromContext(ctx)
+			sc := span.SpanContext()
+			assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
+			assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
+
+			return nil, errors.New("fake error")
+		}
+
+		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+	})
+
+	t.Run("InvokeService call", func(t *testing.T) {
+		fakeInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/InvokeService",
+		}
+		fakeReq := runtimev1pb.InvokeServiceRequest{}
+
+		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			span := diag_utils.SpanFromContext(ctx)
+			sc := span.SpanContext()
+			assert.True(t, strings.Contains(span.String(), daprServiceInvocationFullMethod))
+			assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
+			assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
+
+			return nil, errors.New("fake error")
+		}
+
+		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+	})
 }

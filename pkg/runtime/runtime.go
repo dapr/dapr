@@ -40,7 +40,6 @@ import (
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
@@ -544,9 +543,10 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := a.getTracingContext(spanName, trace.SpanContext{})
+	ctx, span := diag.StartInternalCallbackSpan(spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		req := &runtimev1pb.BindingEventRequest{
 			Name:     bindingName,
@@ -995,9 +995,9 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	req.WithRawData(msg.Data, pubsub.ContentType)
 
 	// subject contains the correlationID which is passed span context
-	sc, _ := diag.SpanContextFromString(subject)
+	sc, _ := diag.SpanContextFromW3CString(subject)
 	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-	ctx, span := a.getTracingContext(spanName, sc)
+	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
@@ -1047,10 +1047,14 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 
 	// subject contains the correlationID which is passed span context
 	subject := cloudEvent.Subject
-	sc, _ := diag.SpanContextFromString(subject)
+	sc, _ := diag.SpanContextFromW3CString(subject)
 	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-	ctx, span := a.getTracingContext(spanName, sc)
 
+	// no ops if trace is off
+	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+
+	// call appcallback
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 	_, err = clientV1.OnTopicEvent(ctx, envelope)
 
@@ -1412,27 +1416,4 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 	diag.DefaultMonitoring.MTLSInitCompleted()
 	return nil
-}
-
-func (a *DaprRuntime) getTracingContext(spanName string, oldSC trace.SpanContext) (context.Context, *trace.Span) {
-	var span *trace.Span
-	sc := oldSC
-	ctx := context.Background()
-	traceEnabled := diag_utils.IsTracingEnabled(a.globalConfig.Spec.TracingSpec.SamplingRate)
-	// start and update the trace span only when tracing is enabled - sampling rate is non zero
-	if traceEnabled {
-		ctx = diag.NewContext(ctx, sc)
-		ctx, span = diag.StartTracingServerSpanFromGRPCContext(ctx, spanName, a.globalConfig.Spec.TracingSpec)
-		sc = span.SpanContext()
-	}
-	if (sc != trace.SpanContext{}) {
-		if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-			ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
-		}
-
-		if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-			ctx = diag.NewContext(ctx, sc)
-		}
-	}
-	return ctx, span
 }
