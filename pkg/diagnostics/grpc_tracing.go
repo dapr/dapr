@@ -50,7 +50,7 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 			spanKind = trace.WithSpanKind(trace.SpanKindClient)
 		}
 
-		_, span = trace.StartSpanWithRemoteParent(ctx, spanName, sc, sampler, spanKind)
+		ctx, span = trace.StartSpanWithRemoteParent(ctx, spanName, sc, sampler, spanKind)
 		resp, err := handler(ctx, req)
 
 		if span.SpanContext().TraceOptions.IsSampled() {
@@ -80,6 +80,19 @@ func UpdateSpanStatusFromGRPCError(span *trace.Span, err error) {
 	}
 }
 
+// SpanContextFromGRPCMetadata returns the SpanContext stored in a context, or empty if there isn't one.
+func SpanContextFromGRPCMetadata(ctx context.Context) (trace.SpanContext, bool) {
+	var sc trace.SpanContext
+	var ok bool
+	md, _ := metadata.FromIncomingContext(ctx)
+	traceContext := md[grpcTraceContextKey]
+	if len(traceContext) > 0 {
+		traceContextBinary := []byte(traceContext[0])
+		sc, ok = propagation.FromBinary(traceContextBinary)
+	}
+	return sc, ok
+}
+
 // SpanContextToGRPCMetadata appends binary serialized SpanContext to the outgoing GRPC context
 func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContext) context.Context {
 	if (spanContext == trace.SpanContext{}) {
@@ -87,19 +100,6 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 	}
 	traceContextBinary := propagation.Binary(spanContext)
 	return metadata.AppendToOutgoingContext(ctx, grpcTraceContextKey, string(traceContextBinary))
-}
-
-// SpanContextFromGRPCMetadata returns the SpanContext stored in a context, or empty if there isn't one.
-func SpanContextFromGRPCMetadata(ctx context.Context) (trace.SpanContext, bool) {
-	var sc trace.SpanContext
-	var ok bool
-	md, _ := metadata.FromOutgoingContext(ctx)
-	traceContext := md[grpcTraceContextKey]
-	if len(traceContext) > 0 {
-		traceContextBinary := []byte(traceContext[0])
-		sc, ok = propagation.FromBinary(traceContextBinary)
-	}
-	return sc, ok
 }
 
 func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span) {

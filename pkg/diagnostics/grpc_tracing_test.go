@@ -6,31 +6,13 @@
 package diagnostics
 
 import (
-	"context"
 	"testing"
-	"time"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
-	"go.opencensus.io/trace"
 )
-
-func TestWithGRPCSpanContext(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
-	defer cancel()
-	wantSc := trace.SpanContext{
-		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-		SpanID:       trace.SpanID{0, 0, 0, 0, 0, 0, 0, 0},
-		TraceOptions: trace.TraceOptions(1),
-	}
-	ctx = SpanContextToGRPCMetadata(ctx, wantSc)
-
-	gotSc, _ := SpanContextFromGRPCMetadata(ctx)
-
-	assert.Equalf(t, gotSc, wantSc, "WithGRPCSpanContext gotSc = %v, want %v", gotSc, wantSc)
-}
 
 func TestSpanAttributesMapFromGRPC(t *testing.T) {
 	var tests = []struct {

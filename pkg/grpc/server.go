@@ -142,7 +142,7 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 
 	intr := []grpc_go.UnaryServerInterceptor{}
 
-	if !diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
+	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		intr = append(intr, diag.SetTracingInGRPCMiddlewareUnary(s.config.AppID, s.tracingSpec))
 	}
 
