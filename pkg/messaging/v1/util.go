@@ -7,6 +7,7 @@ package v1
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"strconv"
 	"strings"
@@ -316,7 +317,8 @@ func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
 
 func processGRPCToHTTPTraceHeaders(ctx context.Context, traceContext string, setHeader func(string, string)) {
 	// attach grpc-trace-bin value in traceparent and tracestate header
-	sc, ok := propagation.FromBinary([]byte(traceContext))
+	decoded, _ := base64.RawStdEncoding.DecodeString(traceContext)
+	sc, ok := propagation.FromBinary(decoded)
 	if !ok {
 		sc = diag.FromContext(ctx)
 	}
@@ -341,13 +343,14 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 	} else {
 		sc = diag.FromContext(ctx)
 	}
-	md.Append(tracebinMetadata, string(propagation.Binary(sc)))
+	md.Append(tracebinMetadata, base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
 }
 
 func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctracebinValue string) {
 	if grpctracebinValue == "" {
 		sc := diag.FromContext(ctx)
-		md.Append(tracebinMetadata, string(propagation.Binary(sc)))
+		s := string(propagation.Binary(sc))
+		md.Append(tracebinMetadata, s)
 	} else {
 		md.Append(tracebinMetadata, grpctracebinValue)
 	}

@@ -8,6 +8,7 @@
 package service_invocation_e2e
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,11 +20,14 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/propagation"
 )
 
 type testCommandRequest struct {
-	RemoteApp string `json:"remoteApp,omitempty"`
-	Method    string `json:"method,omitempty"`
+	RemoteApp        string `json:"remoteApp,omitempty"`
+	Method           string `json:"method,omitempty"`
+	RemoteAppTracing string `json:"remoteAppTracing"`
 }
 
 type appResponse struct {
@@ -299,7 +303,7 @@ func TestHeaders(t *testing.T) {
 	t.Run("grpc-to-http", func(t *testing.T) {
 		body, err := json.Marshal(testCommandRequest{
 			RemoteApp: "serviceinvocation-callee-0",
-			Method:    "grpc-to-grpc",
+			Method:    "grpc-to-http",
 		})
 		require.NoError(t, err)
 
@@ -386,4 +390,171 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, responseHeaders["Traceparent"][0])
 	})
 
+	/* Tracing specific tests */
+	/*
+		// following is the span context of expectedTraceID
+		trace.SpanContext{
+		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+		TraceOptions: trace.TraceOptions(1),
+		}
+	*/
+	expectedTraceID := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+	t.Run("http-to-http-tracing", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "http-to-http-tracing",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPPost(
+			fmt.Sprintf("http://%s/tests/v1_httptohttptest", externalURL), body)
+		t.Log("checking err...")
+		require.NoError(t, err)
+
+		var appResp appResponse
+		t.Logf("unmarshalling..%s\n", string(resp))
+		err = json.Unmarshal(resp, &appResp)
+
+		var actualHeaders = map[string]string{}
+		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+		var requestHeaders = map[string][]string{}
+		var responseHeaders = map[string][]string{}
+		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
+		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
+
+		require.NoError(t, err)
+
+		assert.NotNil(t, requestHeaders["Traceparent"][0])
+		assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
+
+		assert.NotNil(t, responseHeaders["Traceparent"][0])
+		assert.Equal(t, expectedTraceID, responseHeaders["Traceparent"][0])
+	})
+
+	t.Run("grpc-to-grpc-tracing", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "grpcapp",
+			Method:           "grpc-to-grpc-tracing",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPPost(
+			fmt.Sprintf("http://%s/tests/v1_grpctogrpctest", externalURL), body)
+		t.Log("checking err...")
+		require.NoError(t, err)
+
+		var appResp appResponse
+		t.Logf("unmarshalling..%s\n", string(resp))
+		err = json.Unmarshal(resp, &appResp)
+
+		var actualHeaders = map[string]string{}
+		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+		var requestHeaders = map[string][]string{}
+		var responseHeaders = map[string][]string{}
+		var trailerHeaders = map[string][]string{}
+		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
+		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
+		json.Unmarshal([]byte(actualHeaders["trailers"]), &trailerHeaders)
+
+		require.NoError(t, err)
+
+		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
+		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+
+		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
+		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
+		encoded := responseHeaders["grpc-trace-bin"][0]
+		decoded, _ := base64.RawStdEncoding.DecodeString(encoded)
+		gotSc, ok := propagation.FromBinary(decoded)
+
+		assert.True(t, ok)
+		assert.NotNil(t, gotSc)
+		assert.Equal(t, expectedTraceID, spanContextToString(gotSc))
+	})
+
+	t.Run("http-to-grpc-tracing", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "grpcapp",
+			Method:           "http-to-grpc-tracing",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPPost(
+			fmt.Sprintf("http://%s/tests/v1_httptogrpctest", externalURL), body)
+		t.Log("checking err...")
+		require.NoError(t, err)
+
+		var appResp appResponse
+		t.Logf("unmarshalling..%s\n", string(resp))
+		err = json.Unmarshal(resp, &appResp)
+
+		var actualHeaders = map[string]string{}
+		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+		var requestHeaders = map[string][]string{}
+		var responseHeaders = map[string][]string{}
+		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
+		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
+
+		require.NoError(t, err)
+
+		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
+		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+
+		assert.NotNil(t, responseHeaders["Traceparent"][0])
+		assert.Equal(t, expectedTraceID, responseHeaders["Traceparent"][0])
+	})
+
+	t.Run("grpc-to-http-tracing", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "grpc-to-http-tracing",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPPost(
+			fmt.Sprintf("http://%s/tests/v1_grpctohttptest", externalURL), body)
+		t.Log("checking err...")
+		require.NoError(t, err)
+
+		var appResp appResponse
+		t.Logf("unmarshalling..%s\n", string(resp))
+		err = json.Unmarshal(resp, &appResp)
+
+		var actualHeaders = map[string]string{}
+		json.Unmarshal([]byte(appResp.Message), &actualHeaders)
+		var requestHeaders = map[string][]string{}
+		var responseHeaders = map[string][]string{}
+		json.Unmarshal([]byte(actualHeaders["request"]), &requestHeaders)
+		json.Unmarshal([]byte(actualHeaders["response"]), &responseHeaders)
+
+		require.NoError(t, err)
+
+		assert.NotNil(t, requestHeaders["Traceparent"][0])
+		assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
+
+		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
+		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
+		encoded := responseHeaders["grpc-trace-bin"][0]
+		decoded, _ := base64.RawStdEncoding.DecodeString(encoded)
+		gotSc, ok := propagation.FromBinary(decoded)
+
+		assert.True(t, ok)
+		assert.NotNil(t, gotSc)
+		assert.Equal(t, expectedTraceID, spanContextToString(gotSc))
+	})
+}
+
+// spanContextToString returns the SpanContext string representation
+func spanContextToString(sc trace.SpanContext) string {
+	return fmt.Sprintf("%x-%x-%x-%x",
+		[]byte{0},
+		sc.TraceID[:],
+		sc.SpanID[:],
+		[]byte{byte(sc.TraceOptions)})
 }
