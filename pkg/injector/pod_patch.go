@@ -8,6 +8,7 @@ package injector
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 
@@ -408,7 +409,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: fmt.Sprintf("%s/%s", apiVersionV1, sidecarHealthzPath),
+					Path: path.Clean(fmt.Sprintf("/%s/%s", apiVersionV1, sidecarHealthzPath)),
 					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
 				},
 			},
@@ -420,7 +421,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: fmt.Sprintf("%s/%s", apiVersionV1, sidecarHealthzPath),
+					Path: path.Clean(fmt.Sprintf("/%s/%s", apiVersionV1, sidecarHealthzPath)),
 					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
 				},
 			},
