@@ -71,8 +71,7 @@ func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName st
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
 
 	_, span := trace.StartSpanWithRemoteParent(ctx, spanName, sc, kindOption, probSamplerOption)
-	ctx.SetUserValue(diag_utils.DaprFastHTTPContextKey, span)
-
+	diag_utils.SpanToFastHTTPContext(ctx, span)
 	return ctx, span
 }
 

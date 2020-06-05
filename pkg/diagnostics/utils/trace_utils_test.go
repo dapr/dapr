@@ -15,18 +15,32 @@ import (
 )
 
 func TestSpanFromContext(t *testing.T) {
-	t.Run("fasthttp.RequestCtx", func(t *testing.T) {
+	t.Run("fasthttp.RequestCtx, not nil span", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{}
-		ctx.SetUserValue(DaprFastHTTPContextKey, &trace.Span{})
+		SpanToFastHTTPContext(ctx, &trace.Span{})
 
 		assert.NotNil(t, SpanFromContext(ctx))
 	})
 
-	t.Run("context.Background", func(t *testing.T) {
+	t.Run("fasthttp.RequestCtx, nil span", func(t *testing.T) {
+		ctx := &fasthttp.RequestCtx{}
+		SpanToFastHTTPContext(ctx, nil)
+
+		assert.Nil(t, SpanFromContext(ctx))
+	})
+
+	t.Run("not nil span for context", func(t *testing.T) {
 		ctx := context.Background()
 		newCtx := trace.NewContext(ctx, &trace.Span{})
 
 		assert.NotNil(t, SpanFromContext(newCtx))
+	})
+
+	t.Run("nil span for context", func(t *testing.T) {
+		ctx := context.Background()
+		newCtx := trace.NewContext(ctx, nil)
+
+		assert.Nil(t, SpanFromContext(newCtx))
 	})
 
 	t.Run("nil", func(t *testing.T) {

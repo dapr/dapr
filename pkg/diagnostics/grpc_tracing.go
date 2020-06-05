@@ -29,7 +29,7 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		var span *trace.Span
 		spanName := info.FullMethod
 
-		sc, _ := FromGRPCContext(ctx)
+		sc, _ := SpanContextFromGRPCMetadata(ctx)
 		sampler := diag_utils.TraceSampler(spec.SamplingRate)
 
 		var spanKind trace.StartOption
@@ -78,19 +78,6 @@ func UpdateSpanStatusFromGRPCError(span *trace.Span, err error) {
 	} else {
 		span.SetStatus(trace.Status{Code: int32(codes.Internal), Message: err.Error()})
 	}
-}
-
-// FromGRPCContext returns the SpanContext stored in a context, or empty if there isn't one.
-func FromGRPCContext(ctx context.Context) (trace.SpanContext, bool) {
-	var sc trace.SpanContext
-	var ok bool
-	md, _ := metadata.FromIncomingContext(ctx)
-	traceContext := md[grpcTraceContextKey]
-	if len(traceContext) > 0 {
-		traceContextBinary := []byte(traceContext[0])
-		sc, ok = propagation.FromBinary(traceContextBinary)
-	}
-	return sc, ok
 }
 
 // SpanContextToGRPCMetadata appends binary serialized SpanContext to the outgoing GRPC context

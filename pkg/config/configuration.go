@@ -67,7 +67,7 @@ func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
-				SamplingRate: "0.0",
+				SamplingRate: "",
 			},
 		},
 	}
