@@ -16,6 +16,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
@@ -135,13 +136,14 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 		return nil, err
 	}
 
-	sc := diag.FromContext(ctx)
+	span := diag_utils.SpanFromContext(ctx)
 
 	// TODO: Use built-in grpc client timeout instead of using context timeout
 	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
 	defer cancel()
 
-	ctx = diag.AppendToOutgoingGRPCContext(ctx, sc)
+	// no ops if span context is empty
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	d.addForwardedHeadersToMetadata(req)
 

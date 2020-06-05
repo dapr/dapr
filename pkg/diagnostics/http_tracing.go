@@ -6,7 +6,6 @@
 package diagnostics
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/textproto"
@@ -38,58 +37,43 @@ var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 // SetTracingInHTTPMiddleware sets the trace context or starts the trace client span based on request
 func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		sc := GetSpanContextFromRequestContext(ctx, spec)
 		path := string(ctx.Request.URI().Path())
-
-		// 1. check if tracing is enabled or not, and if request is health request
-		// 2. if tracing is disabled or health request, set the trace context and call the handler
-		// 3. if tracing is enabled, start the client or server spans based on the request and call the handler with appropriate span context
-		if isHealthzRequest(path) || !diag_utils.IsTracingEnabled(spec.SamplingRate) {
-			SpanContextToRequest(sc, &ctx.Request)
+		if isHealthzRequest(path) {
 			next(ctx)
-		} else {
-			newCtx := NewContext((context.Context)(ctx), sc)
-			spanName := path
-
-			// Instead of generating the span in direct_messaging, dapr changes the spanname
-			// to CallLocal.
-			if strings.HasPrefix(spanName, "/v1.0/invoke/") {
-				spanName = daprServiceInvocationFullMethod
-			}
-
-			// TODO: set actor invocation spanname
-			_, span := StartTracingClientSpanFromHTTPContext(newCtx, spanName, spec)
-			SpanContextToRequest(span.SpanContext(), &ctx.Request)
-
-			next(ctx)
-
-			// add span attributes
-			if span.SpanContext().TraceOptions.IsSampled() {
-				m := getSpanAttributesMapFromHTTPContext(ctx)
-				AddAttributesToSpan(span, m)
-			}
-
-			UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
-			span.End()
+			return
 		}
+
+		var spanName = path
+		// Instead of generating the span in direct_messaging, dapr changes the spanname
+		// to CallLocal.
+		if strings.HasPrefix(path, "/v1.0/invoke/") {
+			spanName = daprServiceInvocationFullMethod
+		}
+
+		// TODO: set actor invocation spanname
+		ctx, span := startTracingClientSpanFromHTTPContext(ctx, spanName, spec)
+		next(ctx)
+
+		// add span attributes
+		if span.SpanContext().TraceOptions.IsSampled() {
+			m := spanAttributesMapFromHTTPContext(ctx)
+			AddAttributesToSpan(span, m)
+		}
+
+		UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
+		span.End()
 	}
 }
 
-// StartTracingClientSpanFromHTTPContext creates a client span before invoking http method call
-func StartTracingClientSpanFromHTTPContext(ctx context.Context, spanName string, spec config.TracingSpec) (context.Context, *trace.Span) {
-	var span *trace.Span
-	ctx, span = startTracingSpanInternal(ctx, spanName, spec.SamplingRate, trace.SpanKindClient)
+func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (*fasthttp.RequestCtx, *trace.Span) {
+	sc, _ := SpanContextFromRequest(&ctx.Request)
+	probSamplerOption := diag_utils.TraceSampler(spec.SamplingRate)
+	kindOption := trace.WithSpanKind(trace.SpanKindClient)
+
+	_, span := trace.StartSpanWithRemoteParent(ctx, spanName, sc, kindOption, probSamplerOption)
+	ctx.SetUserValue(diag_utils.DaprFastHTTPContextKey, span)
+
 	return ctx, span
-}
-
-func GetSpanContextFromRequestContext(ctx *fasthttp.RequestCtx, spec config.TracingSpec) trace.SpanContext {
-	spanContext, ok := SpanContextFromRequest(&ctx.Request)
-
-	if !ok {
-		spanContext = GetDefaultSpanContext(spec)
-	}
-
-	return spanContext
 }
 
 // SpanContextFromRequest extracts a span context from incoming requests.
@@ -98,9 +82,7 @@ func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok boo
 	if !ok {
 		return trace.SpanContext{}, false
 	}
-
-	sc, ok = SpanContextFromString(h)
-
+	sc, ok = SpanContextFromW3CString(h)
 	if ok {
 		sc.Tracestate = tracestateFromRequest(req)
 	}
@@ -109,9 +91,11 @@ func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok boo
 
 // SpanContextToRequest modifies the given request to include traceparent and tracestate headers.
 func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
-	h := SpanContextToString(sc)
-	req.Header.Set(traceparentHeader, h)
-	tracestateToRequest(sc, req)
+	if (sc != trace.SpanContext{}) {
+		h := SpanContextToW3CString(sc)
+		req.Header.Set(traceparentHeader, h)
+		tracestateToRequest(sc, req)
+	}
 }
 
 func isHealthzRequest(name string) bool {
@@ -240,7 +224,7 @@ func getAPIComponent(apiPath string) (string, string) {
 	return tokens[1], tokens[2]
 }
 
-func getSpanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]string {
+func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]string {
 	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
 	path := string(ctx.Request.URI().Path())
 	method := string(ctx.Request.Header.Method())

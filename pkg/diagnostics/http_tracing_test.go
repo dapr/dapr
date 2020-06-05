@@ -6,33 +6,13 @@
 package diagnostics
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 )
-
-func TestStartClientSpanTracing(t *testing.T) {
-	req := getTestHTTPRequest()
-	reqCtx := &fasthttp.RequestCtx{}
-	req.CopyTo(&reqCtx.Request)
-
-	StartTracingClientSpanFromHTTPContext(context.Background(), "test", config.TracingSpec{SamplingRate: "0.5"})
-}
-
-func TestTracingClientSpanFromHTTPContext(t *testing.T) {
-	req := getTestHTTPRequest()
-	reqCtx := &fasthttp.RequestCtx{}
-	req.CopyTo(&reqCtx.Request)
-	spec := config.TracingSpec{SamplingRate: "1"}
-	sc := GetSpanContextFromRequestContext(reqCtx, spec)
-	ctx := NewContext((context.Context)(reqCtx), sc)
-	StartTracingClientSpanFromHTTPContext(ctx, "spanName", config.TracingSpec{SamplingRate: "1"})
-}
 
 func TestSpanContextFromRequest(t *testing.T) {
 	tests := []struct {
@@ -116,37 +96,6 @@ func TestSpanContextToRequest(t *testing.T) {
 	}
 }
 
-func TestWithNoSpanContext(t *testing.T) {
-	t.Run("No SpanContext with always sampling rate", func(t *testing.T) {
-		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
-		spec := config.TracingSpec{SamplingRate: "1"}
-		sc := GetSpanContextFromRequestContext(ctx, spec)
-		assert.NotEmpty(t, sc, "Should get default span context")
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-		assert.Equal(t, 1, int(sc.TraceOptions), "Should be sampled")
-	})
-
-	t.Run("No SpanContext with non-zero sampling rate", func(t *testing.T) {
-		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
-		spec := config.TracingSpec{SamplingRate: "0.5"}
-		sc := GetSpanContextFromRequestContext(ctx, spec)
-		assert.NotEmpty(t, sc, "Should get default span context")
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-	})
-
-	t.Run("No SpanContext with zero sampling rate", func(t *testing.T) {
-		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
-		spec := config.TracingSpec{SamplingRate: "0"}
-		sc := GetSpanContextFromRequestContext(ctx, spec)
-		assert.NotEmpty(t, sc, "Should get default span context")
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-		assert.Equal(t, 0, int(sc.TraceOptions), "Should not be sampled")
-	})
-}
-
 func TestGetAPIComponent(t *testing.T) {
 	var tests = []struct {
 		path    string
@@ -202,7 +151,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			reqCtx.SetUserValue("topic", "topicA")
 			reqCtx.SetUserValue("name", "kafka")
 
-			got := getSpanAttributesMapFromHTTPContext(reqCtx)
+			got := spanAttributesMapFromHTTPContext(reqCtx)
 			_, componentType := getAPIComponent(tt.path)
 			switch componentType {
 			case "state":

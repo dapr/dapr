@@ -10,22 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/config"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/trace"
-	"google.golang.org/grpc/metadata"
 )
-
-func TestStartTracingClientSpanFromGRPCContext(t *testing.T) {
-	spec := config.TracingSpec{SamplingRate: "0.5"}
-	ctx := context.Background()
-	ctx = metadata.NewIncomingContext(ctx, metadata.MD{"dapr-headerKey": {"v3", "v4"}})
-
-	StartTracingClientSpanFromGRPCContext(ctx, "invoke", spec)
-}
 
 func TestWithGRPCSpanContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
@@ -35,45 +25,14 @@ func TestWithGRPCSpanContext(t *testing.T) {
 		SpanID:       trace.SpanID{0, 0, 0, 0, 0, 0, 0, 0},
 		TraceOptions: trace.TraceOptions(1),
 	}
-	ctx = AppendToOutgoingGRPCContext(ctx, wantSc)
+	ctx = SpanContextToGRPCMetadata(ctx, wantSc)
 
-	gotSc, _ := FromOutgoingGRPCContext(ctx)
+	gotSc, _ := SpanContextFromGRPCMetadata(ctx)
 
 	assert.Equalf(t, gotSc, wantSc, "WithGRPCSpanContext gotSc = %v, want %v", gotSc, wantSc)
 }
 
-func TestWithGRPCWithNoSpanContext(t *testing.T) {
-	t.Run("No SpanContext with always sampling rate", func(t *testing.T) {
-		ctx := context.Background()
-		spec := config.TracingSpec{SamplingRate: "1"}
-		sc := GetSpanContextFromGRPC(ctx, spec)
-		assert.NotEmpty(t, sc, "Should get default span context")
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-		assert.Equal(t, 1, int(sc.TraceOptions), "Should be sampled")
-	})
-
-	t.Run("No SpanContext with non-zero sampling rate", func(t *testing.T) {
-		ctx := context.Background()
-		spec := config.TracingSpec{SamplingRate: "0.5"}
-		sc := GetSpanContextFromGRPC(ctx, spec)
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-		assert.NotEmpty(t, sc, "Should get default span context")
-	})
-
-	t.Run("No SpanContext with zero sampling rate", func(t *testing.T) {
-		ctx := context.Background()
-		spec := config.TracingSpec{SamplingRate: "0"}
-		sc := GetSpanContextFromGRPC(ctx, spec)
-		assert.NotEmpty(t, sc, "Should get default span context")
-		assert.NotEmpty(t, sc.TraceID, "Should get default traceID")
-		assert.NotEmpty(t, sc.SpanID, "Should get default spanID")
-		assert.Equal(t, 0, int(sc.TraceOptions), "Should not be sampled")
-	})
-}
-
-func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
+func TestSpanAttributesMapFromGRPC(t *testing.T) {
 	var tests = []struct {
 		rpcMethod                    string
 		requestType                  string
@@ -117,7 +76,7 @@ func TestGetSpanAttributesMapFromGRPC(t *testing.T) {
 				req = &internalv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "mymethod"}}
 			}
 
-			got := GetSpanAttributesMapFromGRPC(req, tt.rpcMethod)
+			got := spanAttributesMapFromGRPC(req, tt.rpcMethod)
 			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
 		})
 	}

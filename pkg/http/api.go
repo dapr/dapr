@@ -6,7 +6,6 @@
 package http
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/google/uuid"
@@ -278,9 +278,6 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	name := reqCtx.UserValue(nameParam).(string)
 	body := reqCtx.PostBody()
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	diag.SpanContextToRequest(sc, &reqCtx.Request)
-
 	var req OutputBindingRequest
 	err := a.json.Unmarshal(body, &req)
 	if err != nil {
@@ -514,11 +511,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	})
 	req.WithMetadata(metadata)
 
-	// Get trace headers from request context header because middleware sets traceparent.
-	// Then populate trace headers to context.
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-	resp, err := a.directMessaging.Invoke(ctx, targetID, req)
+	resp, err := a.directMessaging.Invoke(reqCtx, targetID, req)
 	// err does not represent user application response
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
@@ -562,10 +555,7 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	err = a.actor.CreateReminder(ctx, &req)
+	err = a.actor.CreateReminder(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", err.Error())
 		respondWithError(reqCtx, 500, msg)
@@ -597,10 +587,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	err = a.actor.CreateTimer(ctx, &req)
+	err = a.actor.CreateTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", err.Error())
 		respondWithError(reqCtx, 500, msg)
@@ -626,10 +613,7 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 		ActorType: actorType,
 	}
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	err := a.actor.DeleteReminder(ctx, &req)
+	err := a.actor.DeleteReminder(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", err.Error())
 		respondWithError(reqCtx, 500, msg)
@@ -649,10 +633,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	body := reqCtx.PostBody()
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -677,7 +658,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		Operations: ops,
 	}
 
-	err = a.actor.TransactionalStateOperation(ctx, &req)
+	err = a.actor.TransactionalStateOperation(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", err.Error())
 		respondWithError(reqCtx, 500, msg)
@@ -697,10 +678,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	resp, err := a.actor.GetReminder(ctx, &actors.GetReminderRequest{
+	resp, err := a.actor.GetReminder(reqCtx, &actors.GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Name:      name,
@@ -734,11 +712,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 		ActorID:   actorID,
 		ActorType: actorType,
 	}
-
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	err := a.actor.DeleteTimer(ctx, &req)
+	err := a.actor.DeleteTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", err.Error())
 		respondWithError(reqCtx, 500, msg)
@@ -772,10 +746,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	})
 	req.WithMetadata(metadata)
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	resp, err := a.actor.Call(ctx, req)
+	resp, err := a.actor.Call(reqCtx, req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
@@ -807,10 +778,7 @@ func (a *api) onSaveActorState(reqCtx *fasthttp.RequestCtx) {
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	body := reqCtx.PostBody()
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -838,7 +806,7 @@ func (a *api) onSaveActorState(reqCtx *fasthttp.RequestCtx) {
 		Value:     val,
 	}
 
-	err = a.actor.SaveState(ctx, &req)
+	err = a.actor.SaveState(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_SAVE", err.Error())
 		respondWithError(reqCtx, 500, msg)
@@ -864,10 +832,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		Key:       key,
 	}
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	resp, err := a.actor.GetState(ctx, &req)
+	resp, err := a.actor.GetState(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_GET", err.Error())
 		respondWithError(reqCtx, 500, msg)
@@ -887,10 +852,7 @@ func (a *api) onDeleteActorState(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
-	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -907,7 +869,7 @@ func (a *api) onDeleteActorState(reqCtx *fasthttp.RequestCtx) {
 		Key:       key,
 	}
 
-	err := a.actor.DeleteState(ctx, &req)
+	err := a.actor.DeleteState(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_DELETE", err.Error())
 		respondWithError(reqCtx, 500, msg)
@@ -925,12 +887,9 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		return true
 	})
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	ctx := diag.NewContext((context.Context)(reqCtx), sc)
-
 	mtd := metadata{
 		ID:                a.id,
-		ActiveActorsCount: a.actor.GetActiveActorsCount(ctx),
+		ActiveActorsCount: a.actor.GetActiveActorsCount(reqCtx),
 		Extended:          temp,
 	}
 
@@ -960,8 +919,10 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	topic := reqCtx.UserValue(topicParam).(string)
 	body := reqCtx.PostBody()
 
-	sc := diag.GetSpanContextFromRequestContext(reqCtx, a.tracingSpec)
-	corID := diag.SpanContextToString(sc)
+	// Extract trace context from context.
+	span := diag_utils.SpanFromContext(reqCtx)
+	// Populate W3C traceparent to cloudevent envelope
+	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 
 	b, err := a.json.Marshal(envelope)

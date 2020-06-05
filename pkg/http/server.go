@@ -15,6 +15,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	routing "github.com/fasthttp/router"
@@ -70,12 +71,16 @@ func (s *server) StartNonBlocking() {
 }
 
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	log.Infof("enabled tracing http middleware")
-	return diag.SetTracingInHTTPMiddleware(next, s.config.AppID, s.tracingSpec)
+	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
+		log.Infof("enabled tracing http middleware")
+		return diag.SetTracingInHTTPMiddleware(next, s.config.AppID, s.tracingSpec)
+	}
+	return next
 }
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	if diag.DefaultHTTPMonitoring.IsEnabled() {
+		log.Infof("enabled metrics http middleware")
 		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
 	}
 	return next
