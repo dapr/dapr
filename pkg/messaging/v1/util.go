@@ -335,7 +335,7 @@ func ErrorFromInternalStatus(internalStatus *internalv1pb.Status) error {
 
 func processGRPCToHTTPTraceHeaders(ctx context.Context, traceContext string, setHeader func(string, string)) {
 	// attach grpc-trace-bin value in traceparent and tracestate header
-	decoded, _ := base64.RawStdEncoding.DecodeString(traceContext)
+	decoded, _ := base64.StdEncoding.DecodeString(traceContext)
 	sc, ok := propagation.FromBinary(decoded)
 	if !ok {
 		sc = diag.FromContext(ctx)
@@ -361,14 +361,17 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 	} else {
 		sc = diag.FromContext(ctx)
 	}
-	md.Set(tracebinMetadata, base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
+	md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 }
 
 func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctracebinValue string) {
 	if grpctracebinValue == "" {
 		sc := diag.FromContext(ctx)
-		md.Set(tracebinMetadata, base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
+		md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 	} else {
-		md.Set(tracebinMetadata, grpctracebinValue)
+		decoded, err := base64.StdEncoding.DecodeString(grpctracebinValue)
+		if err == nil {
+			md.Set(tracebinMetadata, string(decoded))
+		}
 	}
 }

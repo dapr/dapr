@@ -6,7 +6,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -90,7 +89,7 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
 		TraceOptions: trace.TraceOptions(1),
 	}
-	header.Append("grpc-trace-bin", base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
+	header.Set("grpc-trace-bin", string(propagation.Binary(sc)))
 
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(
