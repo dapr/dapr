@@ -84,18 +84,13 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 		"DaprTest-Response-1", "DaprTest-Response-Value-1",
 		"DaprTest-Response-2", "DaprTest-Response-Value-2")
 
-	if requestMD["Daprtest-Traceid"] {
-		// val[0] is client side trace id
-		// following traceid byte is of expectedTraceID "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-		sc := trace.SpanContext{
-			TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
-			SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-			TraceOptions: trace.TraceOptions(1),
-		}
-		b := propagation.Binary(sc)
-		kv := metadata.Pairs("grpc-trace-bin", base64.RawStdEncoding.EncodeToString(b))
-		append(header, kv)
+	// following traceid byte is of expectedTraceID "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	sc := trace.SpanContext{
+		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+		TraceOptions: trace.TraceOptions(1),
 	}
+	header.Append("grpc-trace-bin", base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
 
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(
