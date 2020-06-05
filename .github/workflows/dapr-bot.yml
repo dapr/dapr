@@ -60,49 +60,77 @@ jobs:
               return;
             }
 
-            if (isFromPulls && commentBody && commentBody.indexOf("/ok-to-test") == 0) {
-              // Get pull request
-              const pull = await github.pulls.get({
-                owner: issue.owner,
-                repo: issue.repo,
-                pull_number: issue.number
-              });
+            // Pollyfill: register createDispatchEvent because actions/github-script@0.3.0 
+            // does not have createDispatchEvent.
+            github.registerEndpoints({
+              repos: {
+                createDispatchEvent: {
+                  "headers": { "accept": "application/vnd.github.everest-preview+json" },
+                  "method": "POST",
+                  "params": {
+                    "client_payload": { "type": "object" },
+                    "event_type": { "type": "string" },
+                    "owner": { "required": true, "type": "string" },
+                    "repo": { "required": true, "type": "string" }
+                  },
+                  "url": "/repos/:owner/:repo/dispatches"
+                }
+              }
+            });
 
-              if (pull && pull.data) {
-                // Pollyfill: register createDispatchEvent because actions/github-script@0.3.0 
-                // does not have createDispatchEvent.
-                github.registerEndpoints({
-                  repos: {
-                    createDispatchEvent: {
-                      "headers": { "accept": "application/vnd.github.everest-preview+json" },
-                      "method": "POST",
-                      "params": {
-                        "client_payload": { "type": "object" },
-                        "event_type": { "type": "string" },
-                        "owner": { "required": true, "type": "string" },
-                        "repo": { "required": true, "type": "string" }
-                      },
-                      "url": "/repos/:owner/:repo/dispatches"
-                    }
-                  }
-                });
-                
-                // Get commit id and repo from pull head
-                const testPayload = {
-                  pull_head_ref: pull.data.head.sha,
-                  pull_head_repo: pull.data.head.repo.full_name,
-                  command: "ok-to-test",
-                  issue: issue,
-                };
-    
-                // Fire repository_dispatch event to trigger e2e test
-                await github.repos.createDispatchEvent({
+            if (isFromPulls && commentBody) {
+              if (commentBody.indexOf("/ok-to-test") == 0) {
+                // Get pull request
+                const pull = await github.pulls.get({
                   owner: issue.owner,
                   repo: issue.repo,
-                  event_type: "e2e-test",
-                  client_payload: testPayload,
+                  pull_number: issue.number
                 });
-                
-                console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
+
+                if (pull && pull.data) {                
+                  // Get commit id and repo from pull head
+                  const testPayload = {
+                    pull_head_ref: pull.data.head.sha,
+                    pull_head_repo: pull.data.head.repo.full_name,
+                    command: "ok-to-test",
+                    issue: issue,
+                  };
+      
+                  // Fire repository_dispatch event to trigger e2e test
+                  await github.repos.createDispatchEvent({
+                    owner: issue.owner,
+                    repo: issue.repo,
+                    event_type: "e2e-test",
+                    client_payload: testPayload,
+                  });
+                  
+                  console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
+                }
+              } else if (commentBody.indexOf("/ok-to-perf") == 0) {
+                // Get pull request
+                const pull = await github.pulls.get({
+                  owner: issue.owner,
+                  repo: issue.repo,
+                  pull_number: issue.number
+                });
+                if (pull && pull.data) {                
+                  // Get commit id and repo from pull head
+                  const perfPayload = {
+                    pull_head_ref: pull.data.head.sha,
+                    pull_head_repo: pull.data.head.repo.full_name,
+                    command: "ok-to-perf",
+                    issue: issue,
+                  };
+      
+                  // Fire repository_dispatch event to trigger e2e test
+                  await github.repos.createDispatchEvent({
+                    owner: issue.owner,
+                    repo: issue.repo,
+                    event_type: "perf-test",
+                    client_payload: perfPayload,
+                  });
+                  
+                  console.log(`Trigger Perf test for ${JSON.stringify(perfPayload)}`);
+                }
               }
             }
