@@ -6,6 +6,7 @@
 package v1
 
 import (
+	"encoding/base64"
 	"sort"
 	"strings"
 	"testing"
@@ -47,16 +48,17 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 }
 
 func TestGrpcMetadataToInternalMetadata(t *testing.T) {
+	var keyBinValue = []byte{101, 200}
 	testMD := metadata.Pairs(
 		"key", "key value",
-		"key-bin", string([]byte{101, 200}),
+		"key-bin", string(keyBinValue),
 	)
 	internalMD := GrpcMetadataToInternalMetadata(testMD)
 
 	assert.Equal(t, "key value", internalMD["key"].GetValues()[0])
 	assert.Equal(t, 1, len(internalMD["key"].GetValues()))
 
-	assert.Equal(t, string([]byte{101, 200}), internalMD["key-bin"].GetValues()[0], "binary metadata must be saved")
+	assert.Equal(t, base64.StdEncoding.EncodeToString(keyBinValue), internalMD["key-bin"].GetValues()[0], "binary metadata must be saved")
 	assert.Equal(t, 1, len(internalMD["key-bin"].GetValues()))
 }
 
@@ -111,6 +113,9 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		assert.Equal(t, "Go-http-client/1.1", convertedMD["user-agent"][0])
 	})
 
+	var keyBinValue = []byte{100, 50}
+	var keyBinEncodedValue = base64.StdEncoding.EncodeToString(keyBinValue)
+
 	grpcMetadata := map[string]*internalv1pb.ListStringValue{
 		":authority": {
 			Values: []string{"localhost"},
@@ -130,11 +135,14 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		"my-metadata": {
 			Values: []string{"value1", "value2", "value3"},
 		},
+		"key-bin": {
+			Values: []string{keyBinEncodedValue, keyBinEncodedValue},
+		},
 	}
 
 	t.Run("with grpc header conversion for grpc headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(grpcMetadata, true)
-		assert.Equal(t, 5, convertedMD.Len())
+		assert.Equal(t, 6, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD[":authority"][0])
 		assert.Equal(t, "1S", convertedMD["grpc-timeout"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["grpc-encoding"][0])
@@ -144,6 +152,8 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		assert.Equal(t, "value1", convertedMD["my-metadata"][0])
 		assert.Equal(t, "value2", convertedMD["my-metadata"][1])
 		assert.Equal(t, "value3", convertedMD["my-metadata"][2])
+		assert.Equal(t, string(keyBinValue), convertedMD["key-bin"][0])
+		assert.Equal(t, string(keyBinValue), convertedMD["key-bin"][1])
 	})
 }
 
