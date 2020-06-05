@@ -6,6 +6,7 @@
 package v1
 
 import (
+	"encoding/base64"
 	"net/http"
 	"strconv"
 	"strings"
@@ -62,7 +63,14 @@ func GrpcMetadataToInternalMetadata(md metadata.MD) DaprInternalMetadata {
 	var internalMD = DaprInternalMetadata{}
 	for k, values := range md {
 		var listValue = internalv1pb.ListStringValue{}
-		listValue.Values = append(listValue.Values, values...)
+		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
+			// binary key requires base64 encoded.
+			for _, val := range values {
+				listValue.Values = append(listValue.Values, base64.StdEncoding.EncodeToString([]byte(val)))
+			}
+		} else {
+			listValue.Values = append(listValue.Values, values...)
+		}
 		internalMD[k] = &listValue
 	}
 
@@ -121,7 +129,18 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 		if httpHeaderConversion && isPermanentHTTPHeader(k) {
 			keyName = strings.ToLower(DaprHeaderPrefix + keyName)
 		}
-		md.Append(keyName, listVal.Values...)
+
+		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
+			// decoded base64 encoded key binary
+			for _, val := range listVal.Values {
+				decoded, err := base64.StdEncoding.DecodeString(val)
+				if err == nil {
+					md.Append(keyName, string(decoded))
+				}
+			}
+		} else {
+			md.Append(keyName, listVal.Values...)
+		}
 	}
 	return md
 }
