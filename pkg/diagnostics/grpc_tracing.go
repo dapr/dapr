@@ -42,7 +42,7 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		} else {
 			// For dapr.proto.runtime package, this generates ClientSpan because each Dapr service API
 			// is treat as dependency or internal calls.
-			if spanName == "/dapr.proto.runtime.v1.Dapr/InvokeService" {
+			if strings.HasSuffix(spanName, "Dapr/InvokeService") {
 				// Instead of generating the span in direct_messaging, dapr changes the spanname
 				// to CallLocal.
 				spanName = daprServiceInvocationFullMethod
@@ -51,19 +51,45 @@ func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc
 		}
 
 		ctx, span = trace.StartSpanWithRemoteParent(ctx, spanName, sc, sampler, spanKind)
+
+		var prefixedMetadata map[string]string
+		if span.SpanContext().TraceOptions.IsSampled() {
+			// users can add dapr- prefix if they want to see the header values in span attributes.
+			prefixedMetadata = userDefinedMetadata(ctx)
+		}
+
 		resp, err := handler(ctx, req)
 
 		if span.SpanContext().TraceOptions.IsSampled() {
-			m := spanAttributesMapFromGRPC(req, info.FullMethod)
-			AddAttributesToSpan(span, m)
+			// Populates dapr- prefixed header first
+			AddAttributesToSpan(span, prefixedMetadata)
+			AddAttributesToSpan(span, spanAttributesMapFromGRPC(req, info.FullMethod))
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
-
 		span.End()
 
 		return resp, err
 	}
+}
+
+// userDefinedMetadata returns dapr- prefixed header from incoming metdata.
+// Users can add dapr- prefixed headers that they want to see in span attributes.
+func userDefinedMetadata(ctx context.Context) map[string]string {
+	var daprMetadata = map[string]string{}
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return daprMetadata
+	}
+
+	for k, v := range md {
+		k = strings.ToLower(k)
+		if strings.HasPrefix(k, daprHeaderPrefix) && !strings.HasSuffix(k, daprHeaderBinSuffix) {
+			daprMetadata[k] = v[0]
+		}
+	}
+
+	return daprMetadata
 }
 
 // UpdateSpanStatusFromGRPCError updates tracer span status based on error object
@@ -100,22 +126,6 @@ func SpanContextToGRPCMetadata(ctx context.Context, spanContext trace.SpanContex
 	}
 	traceContextBinary := propagation.Binary(spanContext)
 	return metadata.AppendToOutgoingContext(ctx, grpcTraceContextKey, string(traceContextBinary))
-}
-
-func addAnnotationsToSpanFromGRPCMetadata(ctx context.Context, span *trace.Span) {
-	md := extractDaprMetadata(ctx)
-
-	// md metadata must only have dapr prefixed headers metadata
-	// still extra check for dapr headers to avoid, it might be micro performance hit but that is ok
-	for k, vv := range md {
-		if !strings.HasPrefix(strings.ToLower(k), daprHeaderPrefix) {
-			continue
-		}
-
-		for _, v := range vv {
-			span.AddAttributes(trace.StringAttribute(k, v))
-		}
-	}
 }
 
 func isInternalCalls(method string) bool {

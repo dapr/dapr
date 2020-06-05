@@ -54,15 +54,30 @@ func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec
 		ctx, span := startTracingClientSpanFromHTTPContext(ctx, spanName, spec)
 		next(ctx)
 
-		// add span attributes
+		// Add span attributes only if it is sampled, which reduced the perf impact.
 		if span.SpanContext().TraceOptions.IsSampled() {
-			m := spanAttributesMapFromHTTPContext(ctx)
-			AddAttributesToSpan(span, m)
+			AddAttributesToSpan(span, userDefinedHTTPHeaders(ctx))
+			AddAttributesToSpan(span, spanAttributesMapFromHTTPContext(ctx))
 		}
 
 		UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
 		span.End()
 	}
+}
+
+// userDefinedHTTPHeaders returns dapr- prefixed header from incoming metdata.
+// Users can add dapr- prefixed headers that they want to see in span attributes.
+func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
+	var m = map[string]string{}
+
+	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
+		k := string(key)
+		if strings.HasPrefix(k, daprHeaderPrefix) {
+			m[k] = string(value)
+		}
+	})
+
+	return m
 }
 
 func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (*fasthttp.RequestCtx, *trace.Span) {

@@ -14,11 +14,11 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/trace"
-	"google.golang.org/grpc/metadata"
 )
 
 const (
-	daprHeaderPrefix = "dapr-"
+	daprHeaderPrefix    = "dapr-"
+	daprHeaderBinSuffix = "-bin"
 
 	// span attribute keys
 	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
@@ -119,23 +119,6 @@ func SpanContextFromW3CString(h string) (sc trace.SpanContext, ok bool) {
 	}
 
 	return sc, true
-}
-
-func extractDaprMetadata(ctx context.Context) map[string][]string {
-	daprMetadata := make(map[string][]string)
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return daprMetadata
-	}
-
-	for k, v := range md {
-		k = strings.ToLower(k)
-		if strings.HasPrefix(k, daprHeaderPrefix) {
-			daprMetadata[k] = v
-		}
-	}
-
-	return daprMetadata
 }
 
 // AddAttributesToSpan adds the given attributes in the span
