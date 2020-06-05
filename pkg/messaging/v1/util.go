@@ -343,14 +343,14 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 	} else {
 		sc = diag.FromContext(ctx)
 	}
-	md.Append(tracebinMetadata, base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
+	md.Set(tracebinMetadata, base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
 }
 
 func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctracebinValue string) {
 	if grpctracebinValue == "" {
 		sc := diag.FromContext(ctx)
-		md.Append(tracebinMetadata, base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
+		md.Set(tracebinMetadata, base64.RawStdEncoding.EncodeToString(propagation.Binary(sc)))
 	} else {
-		md.Append(tracebinMetadata, grpctracebinValue)
+		md.Set(tracebinMetadata, grpctracebinValue)
 	}
 }
