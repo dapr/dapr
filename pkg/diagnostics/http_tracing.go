@@ -71,7 +71,7 @@ func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
 	var m = map[string]string{}
 
 	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
-		k := string(key)
+		k := strings.ToLower(string(key))
 		if strings.HasPrefix(k, daprHeaderPrefix) {
 			m[k] = string(value)
 		}

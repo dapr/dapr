@@ -72,6 +72,19 @@ func TestSpanContextFromRequest(t *testing.T) {
 	}
 }
 
+func TestUserDefinedHTTPHeaders(t *testing.T) {
+	reqCtx := &fasthttp.RequestCtx{}
+	reqCtx.Request.Header.Add("dapr-userdefined-1", "value1")
+	reqCtx.Request.Header.Add("dapr-userdefined-2", "value2")
+	reqCtx.Request.Header.Add("no-attr", "value3")
+
+	m := userDefinedHTTPHeaders(reqCtx)
+
+	assert.Equal(t, 2, len(m))
+	assert.Equal(t, "value1", m["dapr-userdefined-1"])
+	assert.Equal(t, "value2", m["dapr-userdefined-2"])
+}
+
 func TestSpanContextToRequest(t *testing.T) {
 	tests := []struct {
 		sc trace.SpanContext

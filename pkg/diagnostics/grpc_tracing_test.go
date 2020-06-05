@@ -6,12 +6,14 @@
 package diagnostics
 
 import (
+	"context"
 	"testing"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestSpanAttributesMapFromGRPC(t *testing.T) {
@@ -62,4 +64,20 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
 		})
 	}
+}
+
+func TestUserDefinedMetadata(t *testing.T) {
+	md := metadata.MD{
+		"dapr-userdefined-1": []string{"value1"},
+		"dapr-userdefined-2": []string{"value2", "value3"},
+		"no-attr":            []string{"value3"},
+	}
+
+	testCtx := metadata.NewIncomingContext(context.Background(), md)
+
+	m := userDefinedMetadata(testCtx)
+
+	assert.Equal(t, 2, len(m))
+	assert.Equal(t, "value1", m["dapr-userdefined-1"])
+	assert.Equal(t, "value2", m["dapr-userdefined-2"])
 }
