@@ -7,8 +7,13 @@ package diagnostics
 
 import (
 	"fmt"
+	"net"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
@@ -223,4 +228,85 @@ func getTestHTTPRequest() *fasthttp.Request {
 
 	SpanContextToRequest(sc, req)
 	return req
+}
+
+func TestHTTPTraceMiddleware(t *testing.T) {
+	requestBody := "fake_requestDaprBody"
+	responseBody := "fake_responseDaprBody"
+
+	fakeHandler := func(ctx *fasthttp.RequestCtx) {
+		time.Sleep(100 * time.Millisecond)
+		ctx.Response.SetBodyRaw([]byte(responseBody))
+	}
+
+	rate := config.TracingSpec{SamplingRate: "1"}
+	handler := HTTPTraceMiddleware(fakeHandler, "fakeAppID", rate)
+
+	t.Run("traceparent is given and sampling is enabled", func(t *testing.T) {
+		testRequestCtx := newTraceFastHTTPRequestCtx(
+			requestBody, "/v1.0/state/statestore",
+			map[string]string{
+				"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+			},
+		)
+		handler(testRequestCtx)
+		span := diag_utils.SpanFromContext(testRequestCtx)
+		sc := span.SpanContext()
+		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", sc.TraceID[:]))
+		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", sc.SpanID[:]))
+	})
+
+	t.Run("traceparent is not given", func(t *testing.T) {
+		testRequestCtx := newTraceFastHTTPRequestCtx(
+			requestBody, "/v1.0/state/statestore",
+			map[string]string{
+				"dapr-userdefined": "value",
+			},
+		)
+		handler(testRequestCtx)
+		span := diag_utils.SpanFromContext(testRequestCtx)
+		sc := span.SpanContext()
+		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
+		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
+	})
+
+	t.Run("path is /v1.0/invoke/*", func(t *testing.T) {
+		testRequestCtx := newTraceFastHTTPRequestCtx(
+			requestBody, "/v1.0/invoke/callee/method/method1",
+			map[string]string{},
+		)
+		handler(testRequestCtx)
+		span := diag_utils.SpanFromContext(testRequestCtx)
+		sc := span.SpanContext()
+		assert.True(t, strings.Contains(span.String(), daprServiceInvocationFullMethod))
+		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
+		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
+	})
+}
+
+func newTraceFastHTTPRequestCtx(expectedBody, expectedRequestURI string, expectedHeader map[string]string) *fasthttp.RequestCtx {
+	expectedMethod := fasthttp.MethodPost
+	expectedTransferEncoding := "encoding"
+	expectedHost := "dapr.io"
+	expectedRemoteAddr := "1.2.3.4:6789"
+
+	var ctx fasthttp.RequestCtx
+	var req fasthttp.Request
+
+	req.Header.SetMethod(expectedMethod)
+	req.SetRequestURI(expectedRequestURI)
+	req.Header.SetHost(expectedHost)
+	req.Header.Add(fasthttp.HeaderTransferEncoding, expectedTransferEncoding)
+	req.Header.SetContentLength(len([]byte(expectedBody)))
+	req.BodyWriter().Write([]byte(expectedBody)) // nolint:errcheck
+
+	for k, v := range expectedHeader {
+		req.Header.Set(k, v)
+	}
+
+	remoteAddr, _ := net.ResolveTCPAddr("tcp", expectedRemoteAddr)
+
+	ctx.Init(&req, remoteAddr, nil)
+
+	return &ctx
 }

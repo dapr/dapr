@@ -7,13 +7,20 @@ package diagnostics
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/config"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/propagation"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -89,5 +96,77 @@ func TestSpanContextToGRPCMetadata(t *testing.T) {
 		newCtx := SpanContextToGRPCMetadata(ctx, trace.SpanContext{})
 
 		assert.Equal(t, ctx, newCtx)
+	})
+}
+
+func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
+	rate := config.TracingSpec{SamplingRate: "1"}
+	interceptor := GRPCTraceUnaryServerInterceptor("fakeAppID", rate)
+
+	testTraceParent := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	testSpanContext, _ := SpanContextFromW3CString(testTraceParent)
+	testTraceBinary := propagation.Binary(testSpanContext)
+	ctx := context.Background()
+
+	t.Run("grpc-trace-bin is given", func(t *testing.T) {
+		ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("grpc-trace-bin", string(testTraceBinary)))
+		fakeInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+		}
+		fakeReq := runtimev1pb.GetStateRequest{
+			StoreName: "statestore",
+			Key:       "state",
+		}
+
+		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			span := diag_utils.SpanFromContext(ctx)
+			sc := span.SpanContext()
+			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", sc.TraceID[:]))
+			assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", sc.SpanID[:]))
+
+			return nil, errors.New("fake error")
+		}
+
+		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+	})
+
+	t.Run("grpc-trace-bin is not given", func(t *testing.T) {
+		fakeInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
+		}
+		fakeReq := runtimev1pb.GetStateRequest{
+			StoreName: "statestore",
+			Key:       "state",
+		}
+
+		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			span := diag_utils.SpanFromContext(ctx)
+			sc := span.SpanContext()
+			assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
+			assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
+
+			return nil, errors.New("fake error")
+		}
+
+		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+	})
+
+	t.Run("InvokeService call", func(t *testing.T) {
+		fakeInfo := &grpc.UnaryServerInfo{
+			FullMethod: "/dapr.proto.runtime.v1.Dapr/InvokeService",
+		}
+		fakeReq := runtimev1pb.InvokeServiceRequest{}
+
+		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			span := diag_utils.SpanFromContext(ctx)
+			sc := span.SpanContext()
+			assert.True(t, strings.Contains(span.String(), daprServiceInvocationFullMethod))
+			assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
+			assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
+
+			return nil, errors.New("fake error")
+		}
+
+		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
 	})
 }

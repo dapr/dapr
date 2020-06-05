@@ -34,8 +34,8 @@ const (
 
 var trimOWSRegExp = regexp.MustCompile(trimOWSRegexFmt)
 
-// SetTracingInHTTPMiddleware sets the trace context or starts the trace client span based on request
-func SetTracingInHTTPMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
+// HTTPTraceMiddleware sets the trace context or starts the trace client span based on request
+func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		path := string(ctx.Request.URI().Path())
 		if isHealthzRequest(path) {

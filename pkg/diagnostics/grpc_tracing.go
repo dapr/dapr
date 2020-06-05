@@ -23,8 +23,8 @@ import (
 
 const grpcTraceContextKey = "grpc-trace-bin"
 
-// SetTracingInGRPCMiddlewareUnary sets the trace context or starts the trace client span based on request
-func SetTracingInGRPCMiddlewareUnary(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
+// GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request
+func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		var span *trace.Span
 		spanName := info.FullMethod

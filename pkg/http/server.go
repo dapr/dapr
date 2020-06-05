@@ -73,7 +73,7 @@ func (s *server) StartNonBlocking() {
 func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		log.Infof("enabled tracing http middleware")
-		return diag.SetTracingInHTTPMiddleware(next, s.config.AppID, s.tracingSpec)
+		return diag.HTTPTraceMiddleware(next, s.config.AppID, s.tracingSpec)
 	}
 	return next
 }
