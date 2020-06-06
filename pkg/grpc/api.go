@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -138,8 +139,8 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		body = in.Data
 	}
 
-	sc := diag.FromContext(ctx)
-	corID := diag.SpanContextToString(sc)
+	span := diag_utils.SpanFromContext(ctx)
+	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
