@@ -9,6 +9,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 
 	global_config "github.com/dapr/dapr/pkg/config"
@@ -31,7 +33,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
-	componentsPath := flag.String("components-path", DefaultComponentsPath, "Path for components directory. Standalone mode only")
+	componentsPath := flag.String("components-path", getDefaultComponentsFolder(), "Path for components directory. Standalone mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
@@ -147,4 +149,18 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 	return NewDaprRuntime(runtimeConfig, globalConfig), nil
+}
+
+// getDefaultComponentsFolder returns the hidden .components folder created at init time
+func getDefaultComponentsFolder() string {
+	const daprDirName = ".dapr"
+	const daprWindowsOS = "windows"
+	const componentsDirName = "components"
+	daprDirPath := os.Getenv("HOME")
+	if runtime.GOOS == daprWindowsOS {
+		daprDirPath = os.Getenv("USERPROFILE")
+	}
+
+	defaultComponentsPath := filepath.Join(daprDirPath, daprDirName, componentsDirName)
+	return defaultComponentsPath
 }
