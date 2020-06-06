@@ -160,39 +160,7 @@ func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
 
 func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
 	h, _ := getRequestHeader(req, tracestateHeader)
-	return TraceStateFromString(h)
-}
-
-func TraceStateFromString(h string) *tracestate.Tracestate {
-	if h == "" {
-		return nil
-	}
-
-	entries := make([]tracestate.Entry, 0, len(h))
-	pairs := strings.Split(h, ",")
-	hdrLenWithoutOWS := len(pairs) - 1 // Number of commas
-	for _, pair := range pairs {
-		matches := trimOWSRegExp.FindStringSubmatch(pair)
-		if matches == nil {
-			return nil
-		}
-		pair = matches[1]
-		hdrLenWithoutOWS += len(pair)
-		if hdrLenWithoutOWS > maxTracestateLen {
-			return nil
-		}
-		kv := strings.Split(pair, "=")
-		if len(kv) != 2 {
-			return nil
-		}
-		entries = append(entries, tracestate.Entry{Key: kv[0], Value: kv[1]})
-	}
-	ts, err := tracestate.New(nil, entries...)
-	if err != nil {
-		return nil
-	}
-
-	return ts
+	return TraceStateFromW3CString(h)
 }
 
 // SpanContextToHTTPHeaders adds the spancontect in traceparent and tracestate headers.

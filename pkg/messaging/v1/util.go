@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
@@ -338,15 +339,16 @@ func processGRPCToHTTPTraceHeaders(ctx context.Context, traceContext string, set
 	decoded, _ := base64.StdEncoding.DecodeString(traceContext)
 	sc, ok := propagation.FromBinary(decoded)
 	if !ok {
-		sc = diag.FromContext(ctx)
+		span := diag_utils.SpanFromContext(ctx)
+		sc = span.SpanContext()
 	}
 	diag.SpanContextToHTTPHeaders(sc, setHeader)
 }
 
 func processHTTPToHTTPTraceHeaders(ctx context.Context, traceparentValue, traceStateValue string, setHeader func(string, string)) {
 	if traceparentValue == "" {
-		sc := diag.FromContext(ctx)
-		diag.SpanContextToHTTPHeaders(sc, setHeader)
+		span := diag_utils.SpanFromContext(ctx)
+		diag.SpanContextToHTTPHeaders(span.SpanContext(), setHeader)
 	} else {
 		setHeader(traceparentHeader, traceparentValue)
 		setHeader(tracestateHeader, traceStateValue)
@@ -356,17 +358,19 @@ func processHTTPToHTTPTraceHeaders(ctx context.Context, traceparentValue, traceS
 func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, traceparentValue, traceStateValue string) {
 	var sc trace.SpanContext
 	var ok bool
-	if sc, ok = diag.SpanContextFromString(traceparentValue); ok {
-		sc.Tracestate = diag.TraceStateFromString(traceStateValue)
+	if sc, ok = diag.SpanContextFromW3CString(traceparentValue); ok {
+		sc.Tracestate = diag.TraceStateFromW3CString(traceStateValue)
 	} else {
-		sc = diag.FromContext(ctx)
+		span := diag_utils.SpanFromContext(ctx)
+		sc = span.SpanContext()
 	}
 	md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 }
 
 func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctracebinValue string) {
 	if grpctracebinValue == "" {
-		sc := diag.FromContext(ctx)
+		span := diag_utils.SpanFromContext(ctx)
+		sc := span.SpanContext()
 		md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(grpctracebinValue)

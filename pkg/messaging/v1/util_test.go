@@ -36,7 +36,7 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 		"grpc-trace-bin": testValue,
 	}
 
-	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout", "traceparent"}
+	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout"}
 	savedHeaderKeyNames := []string{}
 	ctx := context.Background()
 	InternalMetadataToHTTPHeader(ctx, fakeMetadata, func(k, v string) {
