@@ -776,7 +776,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		"10.10.10.11",
 		DefaultAllowedOrigins,
 		"globalConfig",
-		getDefaultComponentsFolder(),
+		getDefaultComponentsPath(),
 		string(HTTPProtocol),
 		string(mode),
 		DefaultDaprHTTPPort,
