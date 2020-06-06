@@ -398,8 +398,16 @@ func TestHeaders(t *testing.T) {
 		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
 		TraceOptions: trace.TraceOptions(1),
 		}
+
+		string representation of span context : "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+		all the -bin headers are stored in Dapr as base64 encoded string.
+		for the above span context when passed in grpc-trace-bin header, Dapr retrieved binary header and stored as encoded string.
+		the encoded string for the above span context is :
+		"AABL+S81d7NNpqPOkp0ODkc2AQDwZ6oLqQK3AgE="
 	*/
 	expectedTraceID := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	expectedEncodedTraceID := "AABL+S81d7NNpqPOkp0ODkc2AQDwZ6oLqQK3AgE="
 
 	t.Run("http-to-http-tracing", func(t *testing.T) {
 		body, err := json.Marshal(testCommandRequest{
@@ -467,9 +475,12 @@ func TestHeaders(t *testing.T) {
 
 		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
 		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
-		encoded := responseHeaders["grpc-trace-bin"][0]
-		decoded, _ := base64.RawStdEncoding.DecodeString(encoded)
-		gotSc, ok := propagation.FromBinary(decoded)
+		traceContext := responseHeaders["grpc-trace-bin"][0]
+
+		t.Logf("received response grpc header..%s\n", traceContext)
+		assert.Equal(t, expectedEncodedTraceID, traceContext)
+		decoded, _ := base64.StdEncoding.DecodeString(traceContext)
+		gotSc, ok := propagation.FromBinary([]byte(decoded))
 
 		assert.True(t, ok)
 		assert.NotNil(t, gotSc)
@@ -540,9 +551,12 @@ func TestHeaders(t *testing.T) {
 
 		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
 		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
-		encoded := responseHeaders["grpc-trace-bin"][0]
-		decoded, _ := base64.RawStdEncoding.DecodeString(encoded)
-		gotSc, ok := propagation.FromBinary(decoded)
+		traceContext := responseHeaders["grpc-trace-bin"][0]
+
+		t.Logf("received response grpc header..%s\n", traceContext)
+		assert.Equal(t, expectedEncodedTraceID, traceContext)
+		decoded, _ := base64.StdEncoding.DecodeString(traceContext)
+		gotSc, ok := propagation.FromBinary([]byte(decoded))
 
 		assert.True(t, ok)
 		assert.NotNil(t, gotSc)
