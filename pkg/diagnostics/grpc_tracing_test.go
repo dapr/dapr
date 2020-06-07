@@ -171,7 +171,7 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
 
 		sc := span.SpanContext()
-		assert.True(t, strings.Contains(span.String(), "targetID/CallLocal/method1"))
+		assert.True(t, strings.Contains(span.String(), "CallLocal/targetID/method1"))
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
 	})

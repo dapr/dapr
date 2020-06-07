@@ -147,10 +147,10 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 
 		// Rename spanname
 		if s.GetActor() == nil {
-			m[daprAPISpanNameInternal] = fmt.Sprintf("%s/CallLocal/%s", appID, s.Message.GetMethod())
+			m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", appID, s.Message.GetMethod())
 			m[daprAPIInvokeMethod] = s.Message.GetMethod()
 		} else {
-			m[daprAPISpanNameInternal] = fmt.Sprintf("%s/CallActor/%s", s.GetActor().GetActorType(), s.Message.GetMethod())
+			m[daprAPISpanNameInternal] = fmt.Sprintf("CallActor/%s/%s", s.GetActor().GetActorType(), s.Message.GetMethod())
 			m[daprAPIActorTypeID] = fmt.Sprintf("%s.%s", s.GetActor().GetActorType(), s.GetActor().GetActorId())
 		}
 
@@ -158,7 +158,7 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 	case *runtimev1pb.InvokeServiceRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		m[netPeerNameSpanAttributeKey] = s.GetId()
-		m[daprAPISpanNameInternal] = fmt.Sprintf("%s/CallLocal/%s", s.GetId(), s.Message.GetMethod())
+		m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", s.GetId(), s.Message.GetMethod())
 
 	case *runtimev1pb.PublishEventRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService

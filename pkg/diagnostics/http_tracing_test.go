@@ -185,7 +185,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			map[string]string{
 				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
 				netPeerNameSpanAttributeKey: "fakeApp",
-				daprAPISpanNameInternal:     "fakeApp/CallLocal/add",
+				daprAPISpanNameInternal:     "CallLocal/fakeApp/add",
 			},
 		},
 		{
@@ -221,6 +221,7 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
 				netPeerNameSpanAttributeKey: "demo_actor.1",
 				daprAPIActorTypeID:          "demo_actor.1",
+				daprAPISpanNameInternal:     "CallActor/demo_actor/add",
 			},
 		},
 	}
@@ -328,7 +329,7 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		// assert
 		span := diag_utils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.True(t, strings.Contains(span.String(), "callee/CallLocal/method1"))
+		assert.True(t, strings.Contains(span.String(), "CallLocal/callee/method1"))
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
 	})

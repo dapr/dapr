@@ -266,7 +266,7 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]strin
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		targetID := getContextValue(ctx, "id")
 		m[netPeerNameSpanAttributeKey] = targetID
-		m[daprAPISpanNameInternal] = fmt.Sprintf("%s/CallLocal/%s", targetID, getContextValue(ctx, "method"))
+		m[daprAPISpanNameInternal] = fmt.Sprintf("CallLocal/%s/%s", targetID, getContextValue(ctx, "method"))
 
 	case "publish":
 		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
@@ -314,7 +314,7 @@ func populateActorParams(ctx *fasthttp.RequestCtx, m map[string]string) string {
 	case "method":
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		m[netPeerNameSpanAttributeKey] = m[daprAPIActorTypeID]
-		m[daprAPISpanNameInternal] = fmt.Sprintf("%s/CallActor/%s", actorType, getContextValue(ctx, "method"))
+		m[daprAPISpanNameInternal] = fmt.Sprintf("CallActor/%s/%s", actorType, getContextValue(ctx, "method"))
 
 	case "state":
 		dbType = stateBuildingBlockType
