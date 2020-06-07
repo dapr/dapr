@@ -150,16 +150,80 @@ func TestGetAPIComponent(t *testing.T) {
 
 func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	var tests = []struct {
-		path          string
-		expectedType  string
-		expectedValue string
+		path string
+		out  map[string]string
 	}{
-		{"/v1.0/state/statestore/key", "state", "statestore"},
-		{"/v1.0/state/statestore", "state", "statestore"},
-		{"/v1.0/secrets/keyvault/name", "secrets", "keyvault"},
-		{"/v1.0/invoke/fakeApp/method/add", "invoke", "fakeApp"},
-		{"/v1/publish/topicA", "pubsub", "topicA"},
-		{"/v1/bindings/kafka", "bindings", "kafka"},
+		{
+			"/v1.0/state/statestore/key",
+			map[string]string{
+				dbTypeSpanAttributeKey:      "state",
+				dbInstanceSpanAttributeKey:  "statestore",
+				dbStatementSpanAttributeKey: "GET /v1.0/state/statestore/key",
+				dbURLSpanAttributeKey:       "state",
+			},
+		},
+		{
+			"/v1.0/state/statestore",
+			map[string]string{
+				dbTypeSpanAttributeKey:      "state",
+				dbInstanceSpanAttributeKey:  "statestore",
+				dbStatementSpanAttributeKey: "GET /v1.0/state/statestore",
+				dbURLSpanAttributeKey:       "state",
+			},
+		},
+		{
+			"/v1.0/secrets/keyvault/name",
+			map[string]string{
+				dbTypeSpanAttributeKey:      secretBuildingBlockType,
+				dbInstanceSpanAttributeKey:  "keyvault",
+				dbStatementSpanAttributeKey: "GET /v1.0/secrets/keyvault/name",
+				dbURLSpanAttributeKey:       secretBuildingBlockType,
+			},
+		},
+		{
+			"/v1.0/invoke/fakeApp/method/add",
+			map[string]string{
+				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
+				netPeerNameSpanAttributeKey: "fakeApp",
+				daprAPISpanNameInternal:     "CallLocal/fakeApp/add",
+			},
+		},
+		{
+			"/v1/publish/topicA",
+			map[string]string{
+				messagingSystemSpanAttributeKey:          pubsubBuildingBlockType,
+				messagingDestinationSpanAttributeKey:     "topicA",
+				messagingDestinationKindSpanAttributeKey: messagingDestinationTopicKind,
+			},
+		},
+		{
+			"/v1/bindings/kafka",
+			map[string]string{
+				dbTypeSpanAttributeKey:      bindingBuildingBlockType,
+				dbInstanceSpanAttributeKey:  "kafka",
+				dbStatementSpanAttributeKey: "GET /v1/bindings/kafka",
+				dbURLSpanAttributeKey:       bindingBuildingBlockType,
+			},
+		},
+		{
+			"/v1.0/actors/demo_actor/1/state/my_data",
+			map[string]string{
+				dbTypeSpanAttributeKey:      stateBuildingBlockType,
+				dbInstanceSpanAttributeKey:  "actor",
+				dbStatementSpanAttributeKey: "GET /v1.0/actors/demo_actor/1/state/my_data",
+				dbURLSpanAttributeKey:       stateBuildingBlockType,
+				daprAPIActorTypeID:          "demo_actor.1",
+			},
+		},
+		{
+			"/v1.0/actors/demo_actor/1/method/method1",
+			map[string]string{
+				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
+				netPeerNameSpanAttributeKey: "demo_actor.1",
+				daprAPIActorTypeID:          "demo_actor.1",
+				daprAPISpanNameInternal:     "CallActor/demo_actor/add",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -170,38 +234,19 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			req.SetRequestURI(tt.path)
 			reqCtx := &fasthttp.RequestCtx{}
 			req.CopyTo(&reqCtx.Request)
-			method := string(req.Header.Method())
 
 			reqCtx.SetUserValue("storeName", "statestore")
 			reqCtx.SetUserValue("secretStoreName", "keyvault")
 			reqCtx.SetUserValue("topic", "topicA")
 			reqCtx.SetUserValue("name", "kafka")
+			reqCtx.SetUserValue("id", "fakeApp")
+			reqCtx.SetUserValue("method", "add")
+			reqCtx.SetUserValue("actorType", "demo_actor")
+			reqCtx.SetUserValue("actorId", "1")
 
 			got := spanAttributesMapFromHTTPContext(reqCtx)
-			_, componentType := getAPIComponent(tt.path)
-			switch componentType {
-			case "state":
-				assert.Equal(t, got[dbTypeSpanAttributeKey], tt.expectedType)
-				assert.Equal(t, got[dbInstanceSpanAttributeKey], tt.expectedValue)
-				assert.Equal(t, got[dbStatementSpanAttributeKey], fmt.Sprintf("%s %s", method, tt.path))
-				assert.Equal(t, got[dbURLSpanAttributeKey], tt.expectedType)
-
-			case "secrets":
-				assert.Equal(t, got[dbTypeSpanAttributeKey], tt.expectedType)
-				assert.Equal(t, got[dbInstanceSpanAttributeKey], tt.expectedValue)
-				assert.Equal(t, got[dbStatementSpanAttributeKey], fmt.Sprintf("%s %s", method, tt.path))
-				assert.Equal(t, got[dbURLSpanAttributeKey], tt.expectedType)
-
-			case "bindings":
-				assert.Equal(t, got[dbTypeSpanAttributeKey], tt.expectedType)
-				assert.Equal(t, got[dbInstanceSpanAttributeKey], tt.expectedValue)
-				assert.Equal(t, got[dbStatementSpanAttributeKey], fmt.Sprintf("%s %s", method, tt.path))
-				assert.Equal(t, got[dbURLSpanAttributeKey], tt.expectedType)
-
-			case "publish":
-				assert.Equal(t, got[messagingSystemSpanAttributeKey], tt.expectedType)
-				assert.Equal(t, got[messagingDestinationSpanAttributeKey], tt.expectedValue)
-				assert.Equal(t, got[messagingDestinationKindSpanAttributeKey], messagingDestinationTopicKind)
+			for k, v := range tt.out {
+				assert.Equal(t, v, got[k])
 			}
 		})
 	}
@@ -275,10 +320,16 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 			requestBody, "/v1.0/invoke/callee/method/method1",
 			map[string]string{},
 		)
+		testRequestCtx.SetUserValue("id", "callee")
+		testRequestCtx.SetUserValue("method", "method1")
+
+		// act
 		handler(testRequestCtx)
+
+		// assert
 		span := diag_utils.SpanFromContext(testRequestCtx)
 		sc := span.SpanContext()
-		assert.True(t, strings.Contains(span.String(), daprServiceInvocationFullMethod))
+		assert.True(t, strings.Contains(span.String(), "CallLocal/callee/method1"))
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
 	})
