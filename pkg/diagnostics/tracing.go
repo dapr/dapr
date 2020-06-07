@@ -20,6 +20,13 @@ const (
 	daprHeaderPrefix    = "dapr-"
 	daprHeaderBinSuffix = "-bin"
 
+	// daprInternalSpanAttrPrefix is the internal span attribution prefix.
+	// Middleware will not populate it if the span key starts with this prefix.
+	daprInternalSpanAttrPrefix = "__dapr."
+	// daprAPISpanNameInternal is the internal attributation, but not populated
+	// to span attribution.
+	daprAPISpanNameInternal = daprInternalSpanAttrPrefix + "spanname"
+
 	// span attribute keys
 	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
 	dbTypeSpanAttributeKey      = "db.type"
@@ -39,6 +46,7 @@ const (
 	daprAPIStatusCodeSpanAttributeKey = "dapr.status_code"
 	daprAPIProtocolSpanAttributeKey   = "dapr.protocol"
 	daprAPIInvokeMethod               = "dapr.invoke_method"
+	daprAPIActorTypeID                = "dapr.actor"
 
 	daprAPIHTTPSpanAttrValue = "http"
 	daprAPIGRPCSpanAttrValue = "grpc"
@@ -128,7 +136,8 @@ func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
 	}
 
 	for k, v := range attributes {
-		if v != "" {
+		// Skip if key is for internal use.
+		if !strings.HasPrefix(k, daprInternalSpanAttrPrefix) && v != "" {
 			span.AddAttributes(trace.StringAttribute(k, v))
 		}
 	}

@@ -68,7 +68,7 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 				req = &internalv1pb.InternalInvokeRequest{Message: &commonv1pb.InvokeRequest{Method: "mymethod"}}
 			}
 
-			got := spanAttributesMapFromGRPC(req, tt.rpcMethod)
+			got := spanAttributesMapFromGRPC("fakeAppID", req, tt.rpcMethod)
 			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
 		})
 	}
@@ -113,60 +113,66 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		fakeInfo := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
-		fakeReq := runtimev1pb.GetStateRequest{
+		fakeReq := &runtimev1pb.GetStateRequest{
 			StoreName: "statestore",
 			Key:       "state",
 		}
 
+		var span *trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			span := diag_utils.SpanFromContext(ctx)
-			sc := span.SpanContext()
-			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", sc.TraceID[:]))
-			assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", sc.SpanID[:]))
-
+			span = diag_utils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
 		}
 
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+
+		sc := span.SpanContext()
+		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", sc.TraceID[:]))
+		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", sc.SpanID[:]))
 	})
 
 	t.Run("grpc-trace-bin is not given", func(t *testing.T) {
 		fakeInfo := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
-		fakeReq := runtimev1pb.GetStateRequest{
+		fakeReq := &runtimev1pb.GetStateRequest{
 			StoreName: "statestore",
 			Key:       "state",
 		}
 
+		var span *trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			span := diag_utils.SpanFromContext(ctx)
-			sc := span.SpanContext()
-			assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
-			assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
-
+			span = diag_utils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
 		}
 
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+
+		sc := span.SpanContext()
+		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
+		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
 	})
 
 	t.Run("InvokeService call", func(t *testing.T) {
 		fakeInfo := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/InvokeService",
 		}
-		fakeReq := runtimev1pb.InvokeServiceRequest{}
+		fakeReq := &runtimev1pb.InvokeServiceRequest{
+			Id:      "targetID",
+			Message: &commonv1pb.InvokeRequest{Method: "method1"},
+		}
 
+		var span *trace.Span
 		assertHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			span := diag_utils.SpanFromContext(ctx)
-			sc := span.SpanContext()
-			assert.True(t, strings.Contains(span.String(), daprServiceInvocationFullMethod))
-			assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
-			assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
-
+			span = diag_utils.SpanFromContext(ctx)
 			return nil, errors.New("fake error")
 		}
 
 		interceptor(ctx, fakeReq, fakeInfo, assertHandler)
+
+		sc := span.SpanContext()
+		assert.True(t, strings.Contains(span.String(), "targetID/CallLocal/method1"))
+		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
+		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
 	})
 }

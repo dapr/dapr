@@ -7,6 +7,7 @@ package diagnostics
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -40,13 +41,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			// For dapr.proto.internals package, this generates ServerSpan.
 			spanKind = trace.WithSpanKind(trace.SpanKindServer)
 		} else {
-			// For dapr.proto.runtime package, this generates ClientSpan because each Dapr service API
-			// is treat as dependency or internal calls.
-			if strings.HasSuffix(spanName, "Dapr/InvokeService") {
-				// Instead of generating the span in direct_messaging, dapr changes the spanname
-				// to CallLocal.
-				spanName = daprServiceInvocationFullMethod
-			}
+			// For dapr.proto.runtime package, this generates ClientSpan.
 			spanKind = trace.WithSpanKind(trace.SpanKindClient)
 		}
 
@@ -63,7 +58,13 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		if span.SpanContext().TraceOptions.IsSampled() {
 			// Populates dapr- prefixed header first
 			AddAttributesToSpan(span, prefixedMetadata)
-			AddAttributesToSpan(span, spanAttributesMapFromGRPC(req, info.FullMethod))
+			spanAttr := spanAttributesMapFromGRPC(appID, req, info.FullMethod)
+			AddAttributesToSpan(span, spanAttr)
+
+			// Correct the span name based on API.
+			if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
+				span.SetName(sname)
+			}
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
@@ -134,22 +135,30 @@ func isInternalCalls(method string) bool {
 }
 
 // spanAttributesMapFromGRPC builds the span trace attributes map for gRPC calls based on given parameters as per open-telemetry specs
-func spanAttributesMapFromGRPC(req interface{}, rpcMethod string) map[string]string {
+func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) map[string]string {
 	// RPC Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/semantic_conventions/rpc.md
-	// gRPC method /package.service/method
-	m := make(map[string]string)
+	var m = map[string]string{}
 
 	var dbType string
 	switch s := req.(type) {
 	// Internal service invocation request
 	case *internalv1pb.InternalInvokeRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
-		m[daprAPIInvokeMethod] = s.Message.GetMethod()
-		// TODO: actor support
 
+		// Rename spanname
+		if s.GetActor() == nil {
+			m[daprAPISpanNameInternal] = fmt.Sprintf("%s/CallLocal/%s", appID, s.Message.GetMethod())
+			m[daprAPIInvokeMethod] = s.Message.GetMethod()
+		} else {
+			m[daprAPISpanNameInternal] = fmt.Sprintf("%s/CallActor/%s", s.GetActor().GetActorType(), s.Message.GetMethod())
+			m[daprAPIActorTypeID] = fmt.Sprintf("%s.%s", s.GetActor().GetActorType(), s.GetActor().GetActorId())
+		}
+
+	// Dapr APIs
 	case *runtimev1pb.InvokeServiceRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		m[netPeerNameSpanAttributeKey] = s.GetId()
+		m[daprAPISpanNameInternal] = fmt.Sprintf("%s/CallLocal/%s", s.GetId(), s.Message.GetMethod())
 
 	case *runtimev1pb.PublishEventRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService
