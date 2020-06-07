@@ -58,8 +58,6 @@ const (
 
 	daprGRPCServiceInvocationService = "ServiceInvocation"
 	daprGRPCDaprService              = "Dapr"
-
-	daprServiceInvocationFullMethod = "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
 )
 
 // SpanContextToW3CString returns the SpanContext string representation
