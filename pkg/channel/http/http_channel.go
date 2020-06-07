@@ -95,7 +95,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, req.Message().Method, req.Message().Method, int64(len(req.Message().Data.GetValue())))
+	verb := string(channelReq.Header.Method())
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, verb, req.Message().Method, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
 	// Send request to user application
@@ -113,7 +114,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	rsp := h.parseChannelResponse(req, resp, err)
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, req.Message().GetMethod(), req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(resp.Header.ContentLength()), elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, verb, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), int64(resp.Header.ContentLength()), elapsedMs)
 
 	return rsp, nil
 }
