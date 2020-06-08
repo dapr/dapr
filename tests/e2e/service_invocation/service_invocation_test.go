@@ -15,12 +15,12 @@ import (
 	"strings"
 	"testing"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 )
 
@@ -484,7 +484,7 @@ func TestHeaders(t *testing.T) {
 
 		assert.True(t, ok)
 		assert.NotNil(t, gotSc)
-		assert.Equal(t, expectedTraceID, spanContextToString(gotSc))
+		assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
 	})
 
 	t.Run("http-to-grpc-tracing", func(t *testing.T) {
@@ -560,15 +560,6 @@ func TestHeaders(t *testing.T) {
 
 		assert.True(t, ok)
 		assert.NotNil(t, gotSc)
-		assert.Equal(t, expectedTraceID, spanContextToString(gotSc))
+		assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
 	})
-}
-
-// spanContextToString returns the SpanContext string representation
-func spanContextToString(sc trace.SpanContext) string {
-	return fmt.Sprintf("%x-%x-%x-%x",
-		[]byte{0},
-		sc.TraceID[:],
-		sc.SpanID[:],
-		[]byte{byte(sc.TraceOptions)})
 }
