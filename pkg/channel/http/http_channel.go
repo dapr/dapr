@@ -15,7 +15,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -128,11 +127,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	channelReq.Header.SetMethod(req.Message().HttpExtension.Verb.String())
 
 	// Recover headers
-	invokev1.InternalMetadataToHTTPHeader(req.Metadata(), channelReq.Header.Set)
-
-	span := diag_utils.SpanFromContext(ctx)
-	// no ops if sc is nil
-	diag.SpanContextToRequest(span.SpanContext(), channelReq)
+	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
 
 	// Set Content body and types
 	contentType, body := req.RawData()

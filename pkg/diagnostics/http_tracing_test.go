@@ -8,6 +8,7 @@ package diagnostics
 import (
 	"fmt"
 	"net"
+	"net/textproto"
 	"strings"
 	"testing"
 	"time"
@@ -90,7 +91,7 @@ func TestUserDefinedHTTPHeaders(t *testing.T) {
 	assert.Equal(t, "value2", m["dapr-userdefined-2"])
 }
 
-func TestSpanContextToRequest(t *testing.T) {
+func TestSpanContextToHTTPHeaders(t *testing.T) {
 	tests := []struct {
 		sc trace.SpanContext
 	}{
@@ -103,20 +104,20 @@ func TestSpanContextToRequest(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		t.Run("SpanContextToRequest", func(t *testing.T) {
+		t.Run("SpanContextToHTTPHeaders", func(t *testing.T) {
 			req := &fasthttp.Request{}
-			SpanContextToRequest(tt.sc, req)
+			SpanContextToHTTPHeaders(tt.sc, req.Header.Set)
 
 			got, _ := SpanContextFromRequest(req)
 
-			assert.Equalf(t, got, tt.sc, "SpanContextToRequest() got = %v, want %v", got, tt.sc)
+			assert.Equalf(t, got, tt.sc, "SpanContextToHTTPHeaders() got = %v, want %v", got, tt.sc)
 		})
 	}
 
 	t.Run("empty span context", func(t *testing.T) {
 		req := &fasthttp.Request{}
 		sc := trace.SpanContext{}
-		SpanContextToRequest(sc, req)
+		SpanContextToHTTPHeaders(sc, req.Header.Set)
 
 		assert.Nil(t, req.Header.Peek(traceparentHeader))
 	})
@@ -207,6 +208,31 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	}
 }
 
+func TestSpanContextToResponse(t *testing.T) {
+	tests := []struct {
+		sc trace.SpanContext
+	}{
+		{
+			sc: trace.SpanContext{
+				TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+				SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceOptions: trace.TraceOptions(1),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run("SpanContextToResponse", func(t *testing.T) {
+			resp := &fasthttp.Response{}
+			SpanContextToHTTPHeaders(tt.sc, resp.Header.Set)
+
+			h := string(resp.Header.Peek(textproto.CanonicalMIMEHeaderKey("traceparent")))
+			got, _ := SpanContextFromW3CString(h)
+
+			assert.Equalf(t, got, tt.sc, "SpanContextToResponse() got = %v, want %v", got, tt.sc)
+		})
+	}
+}
+
 func getTestHTTPRequest() *fasthttp.Request {
 	req := &fasthttp.Request{}
 	req.SetRequestURI("/v1.0/state/statestore/key")
@@ -226,7 +252,7 @@ func getTestHTTPRequest() *fasthttp.Request {
 		TraceOptions: 0x0,
 	}
 
-	SpanContextToRequest(sc, req)
+	SpanContextToHTTPHeaders(sc, req.Header.Set)
 	return req
 }
 
