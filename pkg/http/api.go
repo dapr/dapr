@@ -519,8 +519,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// TODO: add trace parent and state
-	invokev1.InternalMetadataToHTTPHeader(resp.Headers(), reqCtx.Response.Header.Set)
+	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
 	contentType, body := resp.RawData()
 	reqCtx.Response.Header.SetContentType(contentType)
 
@@ -529,6 +528,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
+
 	respond(reqCtx, statusCode, body)
 }
 
@@ -753,8 +753,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// TODO: add trace parent and state
-	invokev1.InternalMetadataToHTTPHeader(resp.Headers(), reqCtx.Response.Header.Set)
+	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Set)
 	contentType, body := resp.RawData()
 	reqCtx.Response.Header.SetContentType(contentType)
 
