@@ -7,6 +7,7 @@ package diagnostics
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -175,4 +176,18 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.TraceID[:]))
 		assert.NotEmpty(t, fmt.Sprintf("%x", sc.SpanID[:]))
 	})
+}
+
+func TestSpanContextSerialization(t *testing.T) {
+	wantSc := trace.SpanContext{
+		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+		TraceOptions: trace.TraceOptions(1),
+	}
+
+	passedOverWire := string(propagation.Binary(wantSc))
+	storedInDapr := base64.StdEncoding.EncodeToString([]byte(passedOverWire))
+	decoded, _ := base64.StdEncoding.DecodeString(storedInDapr)
+	gotSc, _ := propagation.FromBinary(decoded)
+	assert.Equal(t, wantSc, gotSc)
 }

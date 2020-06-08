@@ -14,6 +14,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/tracestate"
 )
 
 const (
@@ -125,6 +126,39 @@ func SpanContextFromW3CString(h string) (sc trace.SpanContext, ok bool) {
 	}
 
 	return sc, true
+}
+
+// TraceStateFromW3CString extracts a span tracestate from given string which got earlier from TraceStateFromW3CString format
+func TraceStateFromW3CString(h string) *tracestate.Tracestate {
+	if h == "" {
+		return nil
+	}
+
+	entries := make([]tracestate.Entry, 0, len(h))
+	pairs := strings.Split(h, ",")
+	hdrLenWithoutOWS := len(pairs) - 1 // Number of commas
+	for _, pair := range pairs {
+		matches := trimOWSRegExp.FindStringSubmatch(pair)
+		if matches == nil {
+			return nil
+		}
+		pair = matches[1]
+		hdrLenWithoutOWS += len(pair)
+		if hdrLenWithoutOWS > maxTracestateLen {
+			return nil
+		}
+		kv := strings.Split(pair, "=")
+		if len(kv) != 2 {
+			return nil
+		}
+		entries = append(entries, tracestate.Entry{Key: kv[0], Value: kv[1]})
+	}
+	ts, err := tracestate.New(nil, entries...)
+	if err != nil {
+		return nil
+	}
+
+	return ts
 }
 
 // AddAttributesToSpan adds the given attributes in the span

@@ -101,18 +101,6 @@ func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok boo
 	return sc, ok
 }
 
-// SpanContextToRequest modifies the given request to include traceparent and tracestate headers.
-func SpanContextToRequest(sc trace.SpanContext, req *fasthttp.Request) {
-	// if sc is empty context, no ops.
-	if (trace.SpanContext{}) == sc {
-		return
-	}
-
-	h := SpanContextToW3CString(sc)
-	req.Header.Set(traceparentHeader, h)
-	tracestateToRequest(sc, req)
-}
-
 func isHealthzRequest(name string) bool {
 	return strings.Contains(name, "/healthz")
 }
@@ -170,38 +158,21 @@ func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
 
 func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
 	h, _ := getRequestHeader(req, tracestateHeader)
-	if h == "" {
-		return nil
-	}
-
-	entries := make([]tracestate.Entry, 0, len(h))
-	pairs := strings.Split(h, ",")
-	hdrLenWithoutOWS := len(pairs) - 1 // Number of commas
-	for _, pair := range pairs {
-		matches := trimOWSRegExp.FindStringSubmatch(pair)
-		if matches == nil {
-			return nil
-		}
-		pair = matches[1]
-		hdrLenWithoutOWS += len(pair)
-		if hdrLenWithoutOWS > maxTracestateLen {
-			return nil
-		}
-		kv := strings.Split(pair, "=")
-		if len(kv) != 2 {
-			return nil
-		}
-		entries = append(entries, tracestate.Entry{Key: kv[0], Value: kv[1]})
-	}
-	ts, err := tracestate.New(nil, entries...)
-	if err != nil {
-		return nil
-	}
-
-	return ts
+	return TraceStateFromW3CString(h)
 }
 
-func tracestateToRequest(sc trace.SpanContext, req *fasthttp.Request) {
+// SpanContextToHTTPHeaders adds the spancontect in traceparent and tracestate headers.
+func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, string)) {
+	// if sc is empty context, no ops.
+	if (trace.SpanContext{}) == sc {
+		return
+	}
+	h := SpanContextToW3CString(sc)
+	setHeader(traceparentHeader, h)
+	tracestateToHeader(sc, setHeader)
+}
+
+func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
 	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
 	if sc.Tracestate != nil {
 		for _, entry := range sc.Tracestate.Entries() {
@@ -210,7 +181,7 @@ func tracestateToRequest(sc trace.SpanContext, req *fasthttp.Request) {
 		h := strings.Join(pairs, ",")
 
 		if h != "" && len(h) <= maxTracestateLen {
-			req.Header.Set(tracestateHeader, h)
+			setHeader(tracestateHeader, h)
 		}
 	}
 }
