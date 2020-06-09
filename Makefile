@@ -77,7 +77,7 @@ HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
 HELM_PACKAGE_DIR:=$(OUT_DIR)/packages
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
-HELM_REGISTRY?=vinayaacr001.azurecr.io
+HELM_REGISTRY?=daprio.azurecr.io
 
 ################################################################################
 # Go build details                                                             #
@@ -183,7 +183,6 @@ dapr.yaml: check-docker-env
 # Upload helm charts to Helm Registry
 upload-helmchart:
 	@mkdir -p $(HELM_PACKAGE_DIR)
-	export HELM_EXPERIMENTAL_OCI=1; \
 	$(HELM) package ${HELM_CHART_DIR} --destination $(HELM_PACKAGE_DIR)
 	az acr $(HELM) push -n ${HELM_REGISTRY} $(HELM_PACKAGE_DIR)/*
 	@rm -rf $(HELM_PACKAGE_DIR)

@@ -176,6 +176,7 @@ jobs:
       - name: Upload Helm charts to Helm Registry
         if: startswith(github.ref, 'refs/tags/v')
         run: |
-          export HELM_EXPERIMENTAL_OCI=1
-          echo ${{ secrets.SP_PASSWD }} | helm registry login ${{ secrets.HELM_REGISTRY }} --username ${{ secrets.SP_APP_ID }} --password-stdin
-          make upload-helmchart
+          if [ "$LATEST_RELEASE" = "true" ]; then
+            az login --service-principal -u ${{ secrets.SP_APP_ID }} -p ${{ secrets.SP_PASSWD }} --tenant ${{ secrets.SP_TENANT_ID }} --output none
+            make upload-helmchart
+          fi
