@@ -75,8 +75,9 @@ DAPR_NAMESPACE?=dapr-system
 HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
+HELM_PACKAGE_DIR:=$(OUT_DIR)/packages
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
-HELM_REGISTRY?=daprio.azurecr.io
+HELM_REGISTRY?=vinayaacr001.azurecr.io
 
 ################################################################################
 # Go build details                                                             #
@@ -181,9 +182,11 @@ dapr.yaml: check-docker-env
 
 # Upload helm charts to Helm Registry
 upload-helmchart:
+	@mkdir -p $(HELM_PACKAGE_DIR)
 	export HELM_EXPERIMENTAL_OCI=1; \
-	$(HELM) chart save ${HELM_CHART_ROOT}/${RELEASE_NAME} ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}; \
-	$(HELM) chart push ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION} 
+	$(HELM) package ${HELM_CHART_DIR} --destination $(HELM_PACKAGE_DIR)
+	az acr $(HELM) push -n ${HELM_REGISTRY} $(HELM_PACKAGE_DIR)/*
+	@rm -rf $(HELM_PACKAGE_DIR)
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #
