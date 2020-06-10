@@ -48,6 +48,10 @@ AwEHoUQDQgAEkDB/emmKm1PwOpt50ZCEanV8VXToYsIBIYbSQ/+rmCyJObLAeUsg
 zWtds/T7oYatEywym92pgjUlQ7Yz8HsB4w==
 -----END EC PRIVATE KEY-----`
 
+const allowedClockSkew = time.Minute * 10
+
+const workloadCertTTL = time.Hour * 10
+
 func getTestCSR(name string) *x509.CertificateRequest {
 	return &x509.CertificateRequest{
 		Subject:  pkix.Name{CommonName: name},
@@ -64,6 +68,8 @@ func getTestCertAuth() CertificateAuthority {
 	conf.RootCertPath = "./ca.crt"
 	conf.IssuerCertPath = "./issuer.crt"
 	conf.IssuerKeyPath = "./issuer.key"
+	conf.AllowedClockSkew = allowedClockSkew
+	conf.WorkloadCertTTL = workloadCertTTL
 	certAuth, _ := NewCertificateAuthority(conf)
 	return certAuth
 }
@@ -104,7 +110,7 @@ func TestCertValidity(t *testing.T) {
 }
 
 func TestSignCSR(t *testing.T) {
-	t.Run("valid csr", func(t *testing.T) {
+	t.Run("valid csr positive ttl", func(t *testing.T) {
 		writeTestCredentialsToDisk()
 		defer cleanupCredentials()
 
@@ -119,7 +125,25 @@ func TestSignCSR(t *testing.T) {
 		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*24, false)
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
-		assert.Equal(t, time.Now().UTC().Add(time.Hour*24).Day(), resp.Certificate.NotAfter.UTC().Day())
+		assert.Equal(t, time.Now().UTC().Add(time.Hour*24+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
+	})
+
+	t.Run("valid csr negative ttl", func(t *testing.T) {
+		writeTestCredentialsToDisk()
+		defer cleanupCredentials()
+
+		csr := getTestCSR("test.a.com")
+		pk, _ := getECDSAPrivateKey()
+		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+
+		certAuth := getTestCertAuth()
+		certAuth.LoadOrStoreTrustBundle()
+
+		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*-1, false)
+		assert.Nil(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, time.Now().UTC().Add(workloadCertTTL+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
 	})
 
 	t.Run("invalid csr", func(t *testing.T) {
