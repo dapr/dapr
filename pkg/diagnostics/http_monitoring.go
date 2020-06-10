@@ -116,7 +116,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
 			h.clientSentBytes.M(contentSize))
 	}
 }
@@ -125,7 +125,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	if h.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx, diag_utils.WithTags(appIDKey, h.appID),
@@ -216,9 +216,9 @@ func (h *httpMetrics) FastHTTPMiddleware(next fasthttp.RequestHandler) fasthttp.
 		}
 
 		method := string(ctx.Method())
-		path := string(ctx.Path())
+		path := h.convertPathToMetricLabel(string(ctx.Path()))
 
-		h.ServerRequestReceived(ctx, method, h.convertPathToMetricLabel(path), int64(reqContentSize))
+		h.ServerRequestReceived(ctx, method, path, int64(reqContentSize))
 
 		start := time.Now()
 
@@ -248,6 +248,12 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 
 	if len(parsedPath) < 3 {
 		return path
+	}
+
+	// Replace actor id with {id} for appcallback url - 'actors/DemoActor/1/method/method1'
+	if parsedPath[0] == "actors" {
+		parsedPath[2] = "{id}"
+		return strings.Join(parsedPath, "/")
 	}
 
 	switch parsedPath[1] {
