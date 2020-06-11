@@ -7,7 +7,6 @@ package http
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -1034,11 +1033,11 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	return metadata
 }
 
-func (a *api) onPerformTransaction(reqCtx *fasthttp.RequestCtx) error {
+func (a *api) onPerformTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
 		respondWithError(reqCtx, 400, msg)
-		return nil
+		return
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
@@ -1046,7 +1045,7 @@ func (a *api) onPerformTransaction(reqCtx *fasthttp.RequestCtx) error {
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
 		respondWithError(reqCtx, 401, msg)
-		return nil
+		return
 	}
 
 	body := reqCtx.PostBody()
@@ -1056,12 +1055,13 @@ func (a *api) onPerformTransaction(reqCtx *fasthttp.RequestCtx) error {
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respondWithError(reqCtx, 400, msg)
-		return nil
+		return
 	}
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
-		return errors.New(incompatibleStateStore)
+		respondWithError(reqCtx, 500, incompatibleStateStore)
+		return
 	}
 
 	err = transactionalStore.Multi(requests)
@@ -1071,6 +1071,4 @@ func (a *api) onPerformTransaction(reqCtx *fasthttp.RequestCtx) error {
 	} else {
 		respondEmpty(reqCtx, 201)
 	}
-
-	return nil
 }

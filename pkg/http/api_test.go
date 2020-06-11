@@ -1669,6 +1669,7 @@ func (c fakeStateStore) Set(req *state.SetRequest) error {
 	return errors.New("NOT FOUND")
 }
 
+func (c fakeStateStore) Multi(reqs []state.TransactionalRequest) error { return nil }
 func TestV1SecretEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	fakeStore := fakeSecretStore{}
@@ -1742,6 +1743,52 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestV1TransactionEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	fakeStore := fakeStateStore{}
+	fakeStores := map[string]state.Store{
+		"store1": fakeStore,
+	}
+	testAPI := &api{
+		stateStores: fakeStores,
+		json:        jsoniter.ConfigFastest,
+	}
+	fakeServer.StartServer(testAPI.constructTransactionEndpoints())
+	storeName := "store1"
+	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
+
+		testTransactionalOperations := []state.TransactionalOperation{
+			{
+				Operation: actors.Upsert,
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
+			},
+			{
+				Operation: actors.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
+		mockActors := new(daprt.MockActors)
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 201, resp.StatusCode, "Dapr should return 201")
 	})
 
 	fakeServer.Shutdown()
