@@ -7,6 +7,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -59,23 +60,24 @@ type metadata struct {
 }
 
 const (
-	apiVersionV1         = "v1.0"
-	idParam              = "id"
-	methodParam          = "method"
-	topicParam           = "topic"
-	actorTypeParam       = "actorType"
-	actorIDParam         = "actorId"
-	storeNameParam       = "storeName"
-	stateKeyParam        = "key"
-	secretStoreNameParam = "secretStoreName"
-	secretNameParam      = "key"
-	nameParam            = "name"
-	consistencyParam     = "consistency"
-	retryIntervalParam   = "retryInterval"
-	retryPatternParam    = "retryPattern"
-	retryThresholdParam  = "retryThreshold"
-	concurrencyParam     = "concurrency"
-	daprSeparator        = "||"
+	apiVersionV1           = "v1.0"
+	idParam                = "id"
+	methodParam            = "method"
+	topicParam             = "topic"
+	actorTypeParam         = "actorType"
+	actorIDParam           = "actorId"
+	storeNameParam         = "storeName"
+	stateKeyParam          = "key"
+	secretStoreNameParam   = "secretStoreName"
+	secretNameParam        = "key"
+	nameParam              = "name"
+	consistencyParam       = "consistency"
+	retryIntervalParam     = "retryInterval"
+	retryPatternParam      = "retryPattern"
+	retryThresholdParam    = "retryThreshold"
+	concurrencyParam       = "concurrency"
+	daprSeparator          = "||"
+	incompatibleStateStore = "state store does not support transactions - please see https://github.com/dapr/docs"
 )
 
 // NewAPI returns a new API
@@ -100,6 +102,7 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructTransactionEndpoints()...)
 
 	return api
 }
@@ -270,6 +273,17 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Route:   "healthz",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
+		},
+	}
+}
+
+func (a *api) constructTransactionEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "state/{storeName}/transaction",
+			Version: apiVersionV1,
+			Handler: a.onPerformTransaction,
 		},
 	}
 }
@@ -1018,4 +1032,45 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	})
 
 	return metadata
+}
+
+func (a *api) onPerformTransaction(reqCtx *fasthttp.RequestCtx) error {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
+		respondWithError(reqCtx, 400, msg)
+		return nil
+	}
+
+	storeName := reqCtx.UserValue(storeNameParam).(string)
+
+	if a.stateStores[storeName] == nil {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(reqCtx, 401, msg)
+		return nil
+	}
+
+	body := reqCtx.PostBody()
+
+	var requests = []state.TransactionalRequest{}
+	err := a.json.Unmarshal(body, &requests)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(reqCtx, 400, msg)
+		return nil
+	}
+
+	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
+	if !ok {
+		return errors.New(incompatibleStateStore)
+	}
+
+	err = transactionalStore.Multi(requests)
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
+		respondWithError(reqCtx, 500, msg)
+	} else {
+		respondEmpty(reqCtx, 201)
+	}
+
+	return nil
 }
