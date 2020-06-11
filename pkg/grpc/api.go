@@ -56,6 +56,7 @@ type API interface {
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
+	PerformTransaction(ctx context.Context, in *runtimev1pb.MultiStateRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -367,6 +368,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	return response, nil
 }
 
+func (a *api) PerformTransaction 
 func duration(p *durpb.Duration) (time.Duration, error) {
 	if err := validateDuration(p); err != nil {
 		return 0, err

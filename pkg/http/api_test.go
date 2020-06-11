@@ -1771,8 +1771,6 @@ func TestV1TransactionEndpoints(t *testing.T) {
 				},
 			},
 		}
-		mockActors := new(daprt.MockActors)
-		testAPI.actor = mockActors
 
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
@@ -1800,8 +1798,6 @@ func TestV1TransactionEndpoints(t *testing.T) {
 				},
 			},
 		}
-		mockActors := new(daprt.MockActors)
-		testAPI.actor = mockActors
 
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)

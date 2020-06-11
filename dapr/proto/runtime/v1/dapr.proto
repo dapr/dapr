@@ -153,3 +153,17 @@ message GetSecretResponse {
   // store, can save multiple secrets for single secret key.
   map<string, string> data = 1;
 }
+
+message TransactionalStateRequest {
+  // The type of operation to be executed
+  string operationType = 1;
+  // Array of key values to be operated on 
+  repeated common.v1.StateItem states = 2;
+}
+
+message MultiStateRequest {
+  // Name of store
+  string storeName = 1;
+  // Array of TransactionalStateRequests
+  repeated TransactionalStateRequest requests = 2;
+}
