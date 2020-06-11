@@ -1682,13 +1682,6 @@ func TestV1SecretEndpoints(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
-	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-		// assert
-		assert.Equal(t, 401, resp.StatusCode, "reading non-existing store should return 401")
-	})
 	t.Run("Get secret - 204 No Content Found", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", storeName)
 		// act
@@ -1763,7 +1756,6 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	storeName := "store1"
 	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-
 		testTransactionalOperations := []state.TransactionalRequest{
 			{
 				Operation: state.Upsert,
@@ -1791,6 +1783,32 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 201, resp.StatusCode, "Dapr should return 201")
 	})
+	t.Run("Post non-existent state store - 401 No State Store Found", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "non-existent-store")
+		testTransactionalOperations := []state.TransactionalRequest{
+			{
+				Operation: state.Upsert,
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
+			},
+			{
+				Operation: state.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
+		mockActors := new(daprt.MockActors)
+		testAPI.actor = mockActors
 
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+		// assert
+		assert.Equal(t, 401, resp.StatusCode, "Accessing non-existent state store should return 401")
+	})
 	fakeServer.Shutdown()
 }
