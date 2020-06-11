@@ -1759,20 +1759,21 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		json:        jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructTransactionEndpoints())
+	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
 	storeName := "store1"
 	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 
 		testTransactionalOperations := []state.TransactionalRequest{
 			{
-				Operation: actors.Upsert,
+				Operation: state.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: actors.Delete,
+				Operation: state.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
