@@ -1763,7 +1763,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 
-		testTransactionalOperations := []state.TransactionalOperation{
+		testTransactionalOperations := []state.TransactionalRequest{
 			{
 				Operation: actors.Upsert,
 				Request: map[string]interface{}{
