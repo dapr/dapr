@@ -27,8 +27,6 @@ const (
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints
 	DefaultMetricsPort = 9090
-	// DefaultComponentsPath is the default dir for Dapr components (standalone mode)
-	DefaultComponentsPath = "./components"
 	// DefaultAllowedOrigins is the default origins allowed for the Dapr HTTP servers
 	DefaultAllowedOrigins = "*"
 )

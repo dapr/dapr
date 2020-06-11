@@ -173,9 +173,3 @@ jobs:
             --body "${RELEASE_BODY}" \
             --prerelease true \
             ${RELEASE_ARTIFACT[*]}
-      - name: Upload Helm charts to Helm Registry
-        if: startswith(github.ref, 'refs/tags/v')
-        run: |
-          export HELM_EXPERIMENTAL_OCI=1
-          echo ${{ secrets.SP_PASSWD }} | helm registry login ${{ secrets.HELM_REGISTRY }} --username ${{ secrets.SP_APP_ID }} --password-stdin
-          make upload-helmchart
