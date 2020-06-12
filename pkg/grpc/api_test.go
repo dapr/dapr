@@ -84,6 +84,10 @@ func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRe
 	return &runtimev1pb.GetSecretResponse{}, nil
 }
 
+func (m *mockGRPCAPI) PerformTransaction(ctx context.Context, in *runtimev1pb.MultiStateRequest) (*empty.Empty, error) {
+	return &empty.Empty{}, nil
+}
+
 func ExtractSpanContext(ctx context.Context) []byte {
 	sc, _ := ctx.Value(diag.DaprTraceContextKey{}).(trace.SpanContext)
 	return []byte(SerializeSpanContext(sc))
@@ -630,3 +634,52 @@ func TestInvokeBinding(t *testing.T) {
 	_, err := client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{})
 	assert.Nil(t, err)
 }
+
+/*
+func TestPerformTransaction(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	assert.NoError(t, err)
+
+	server := grpc_go.NewServer()
+	go func() {
+		dapr_pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		server.Serve(lis)
+	}()
+
+	time.Sleep(5 * time.Second)
+
+	var opts []grpc_go.DialOption
+	opts = append(opts, grpc_go.WithInsecure())
+	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
+	defer close(t, conn)
+	assert.NoError(t, err)
+
+	client := runtimev1pb.NewDaprClient(conn)
+	_, err = client.PerformTransaction(context.Background(), &runtimev1pb.MultiStateRequest{
+		Requests: []*runtimev1pb.TransactionalStateRequest{
+			{
+				OperationType: "Upsert",
+				Request: &runtimev1pb.TransactionalStateRequest{
+					Key:   "key1",
+					Value: &any.Any{Value: []byte("value1")},
+				},
+			},
+			{
+				OperationType: "Upsert",
+				Request: &runtimev1pb.TransactionalStateRequest{
+					Key:   "key2",
+					Value: &any.Any{Value: []byte("value2")},
+				},
+			},
+			{
+				OperationType: "Delete",
+				Request: &runtimev1pb.TransactionalStateRequest{
+					Key: "key1",
+				},
+			},
+		},
+	})
+	server.Stop()
+	assert.Nil(t, err)
+}*/

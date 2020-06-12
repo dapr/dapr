@@ -37,6 +37,9 @@ service Dapr {
 
   // Gets secrets from secret stores.
   rpc GetSecret(GetSecretRequest) returns (GetSecretResponse) {}
+
+  // Perform transactions for a specified store
+  rpc PerformTransaction(MultiStateRequest) returns (google.protobuf.Empty) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -158,7 +161,7 @@ message TransactionalStateRequest {
   // The type of operation to be executed
   string operationType = 1;
   // Array of key values to be operated on 
-  repeated common.v1.StateItem states = 2;
+  common.v1.StateItem states = 2;
 }
 
 message MultiStateRequest {

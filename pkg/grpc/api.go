@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -37,9 +38,10 @@ import (
 const (
 	// Range of a durpb.Duration in seconds, as specified in
 	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
-	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
-	minSeconds    = -maxSeconds
-	daprSeparator = "||"
+	maxSeconds             = int64(10000 * 365.25 * 24 * 60 * 60)
+	minSeconds             = -maxSeconds
+	daprSeparator          = "||"
+	incompatibleStateStore = "state store does not support transactions - please see https://github.com/dapr/docs"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -139,8 +141,8 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		body = in.Data
 	}
 
-	sc := diag.FromContext(ctx)
-	corID := diag.SpanContextToString(sc)
+	span := diag_utils.SpanFromContext(ctx)
+	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
@@ -171,7 +173,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, err
 	}
 
-	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Headers(), true))
+	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true))
 
 	var respError error
 	if resp.IsHTTPResponse() {
@@ -183,7 +185,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	} else {
 		respError = invokev1.ErrorFromInternalStatus(resp.Status())
 		// ignore trailer if appchannel uses HTTP
-		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(resp.Trailers(), false))
+		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Trailers(), false))
 	}
 
 	return resp.Message(), respError
@@ -368,7 +370,106 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	return response, nil
 }
 
-func (a *api) PerformTransaction 
+func (a *api) PerformTransaction(ctx context.Context, in *runtimev1pb.MultiStateRequest) (*empty.Empty, error) {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+	}
+
+	storeName := in.StoreName
+
+	if a.stateStores[storeName] == nil {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
+	}
+
+	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
+	if !ok {
+		return &empty.Empty{}, errors.New(incompatibleStateStore)
+	}
+
+	requests := []state.TransactionalRequest{}
+	for _, inputReq := range in.Requests {
+		switch state.OperationType(inputReq.OperationType) {
+		case state.Upsert:
+			setReq := state.SetRequest{
+				Key:      a.getModifiedStateKey(inputReq.States.Key),
+				Metadata: inputReq.States.Metadata,
+				Value:    inputReq.States.Value,
+				Options:  a.getSetStateOptions(inputReq.States),
+			}
+			req := state.TransactionalRequest{
+				Operation: state.Upsert,
+				Request:   setReq,
+			}
+			requests = append(requests, req)
+
+		case state.Delete:
+			delReq := state.DeleteRequest{
+				Key:      a.getModifiedStateKey(inputReq.States.Key),
+				Metadata: inputReq.States.Metadata,
+				Options:  a.getDeleteStateOption(inputReq.States),
+			}
+			req := state.TransactionalRequest{
+				Operation: state.Delete,
+				Request:   delReq,
+			}
+			requests = append(requests, req)
+
+			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
+		}
+	}
+
+	err := transactionalStore.Multi(requests)
+	if err != nil {
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
+	}
+	return &empty.Empty{}, nil
+}
+
+func (a *api) getSetStateOptions(r *commonv1pb.StateItem) (o state.SetStateOption) {
+	if r.Options != nil {
+		o.Consistency = stateConsistencyToString(r.Options.Consistency)
+		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
+
+		if r.Options.RetryPolicy != nil {
+			o.RetryPolicy = state.RetryPolicy{
+				Threshold: int(r.Options.RetryPolicy.Threshold),
+				Pattern:   retryPatternToString(r.Options.RetryPolicy.Pattern),
+			}
+
+			if r.Options.RetryPolicy.Interval != nil {
+				dur, err := duration(r.Options.RetryPolicy.Interval)
+				if err == nil {
+					o.RetryPolicy.Interval = dur
+				}
+			}
+		}
+	}
+	return
+}
+
+func (a *api) getDeleteStateOption(r *commonv1pb.StateItem) (o state.DeleteStateOption) {
+
+	if r.Options != nil {
+		o.Consistency = stateConsistencyToString(r.Options.Consistency)
+		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
+
+		if r.Options.RetryPolicy != nil {
+			o.RetryPolicy = state.RetryPolicy{
+				Threshold: int(r.Options.RetryPolicy.Threshold),
+				Pattern:   retryPatternToString(r.Options.RetryPolicy.Pattern),
+			}
+
+			if r.Options.RetryPolicy.Interval != nil {
+				dur, err := duration(r.Options.RetryPolicy.Interval)
+				if err == nil {
+					o.RetryPolicy.Interval = dur
+				}
+			}
+		}
+	}
+	return
+}
+
 func duration(p *durpb.Duration) (time.Duration, error) {
 	if err := validateDuration(p); err != nil {
 		return 0, err
