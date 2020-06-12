@@ -204,6 +204,8 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		case tracebinMetadata:
 			grpctracebinValue = listVal.Values[0]
 			continue
+		case DestinationIDHeader:
+			continue
 		}
 
 		if len(listVal.Values) == 0 || strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader {
