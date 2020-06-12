@@ -1,6 +1,6 @@
 global:
   registry: docker.io/daprio
-  tag: "0.7.1"
+  tag: "0.8.0"
   logAsJson: false
   imagePullPolicy: Always
   imagePullSecrets: ""

@@ -7,26 +7,26 @@ package diagnostics
 
 import (
 	"context"
-	crand "crypto/rand"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"strings"
-	"sync"
-	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-
 	"go.opencensus.io/trace"
-	"google.golang.org/grpc/metadata"
+	"go.opencensus.io/trace/tracestate"
 )
 
-type DaprTraceContextKey struct{}
-
 const (
-	daprHeaderPrefix = "dapr-"
+	daprHeaderPrefix    = "dapr-"
+	daprHeaderBinSuffix = "-bin"
+
+	// daprInternalSpanAttrPrefix is the internal span attribution prefix.
+	// Middleware will not populate it if the span key starts with this prefix.
+	daprInternalSpanAttrPrefix = "__dapr."
+	// daprAPISpanNameInternal is the internal attributation, but not populated
+	// to span attribution.
+	daprAPISpanNameInternal = daprInternalSpanAttrPrefix + "spanname"
 
 	// span attribute keys
 	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
@@ -47,6 +47,7 @@ const (
 	daprAPIStatusCodeSpanAttributeKey = "dapr.status_code"
 	daprAPIProtocolSpanAttributeKey   = "dapr.protocol"
 	daprAPIInvokeMethod               = "dapr.invoke_method"
+	daprAPIActorTypeID                = "dapr.actor"
 
 	daprAPIHTTPSpanAttrValue = "http"
 	daprAPIGRPCSpanAttrValue = "grpc"
@@ -58,17 +59,10 @@ const (
 
 	daprGRPCServiceInvocationService = "ServiceInvocation"
 	daprGRPCDaprService              = "Dapr"
-
-	daprServiceInvocationFullMethod = "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
 )
 
-// NewContext returns a new context with the given SpanContext attached.
-func NewContext(ctx context.Context, spanContext trace.SpanContext) context.Context {
-	return context.WithValue(ctx, DaprTraceContextKey{}, spanContext)
-}
-
-// SpanContextToString returns the SpanContext string representation
-func SpanContextToString(sc trace.SpanContext) string {
+// SpanContextToW3CString returns the SpanContext string representation
+func SpanContextToW3CString(sc trace.SpanContext) string {
 	return fmt.Sprintf("%x-%x-%x-%x",
 		[]byte{supportedVersion},
 		sc.TraceID[:],
@@ -76,8 +70,8 @@ func SpanContextToString(sc trace.SpanContext) string {
 		[]byte{byte(sc.TraceOptions)})
 }
 
-// SpanContextFromString extracts a span context from given string which got earlier from SpanContextToString format
-func SpanContextFromString(h string) (sc trace.SpanContext, ok bool) {
+// SpanContextFromW3CString extracts a span context from given string which got earlier from SpanContextToW3CString format
+func SpanContextFromW3CString(h string) (sc trace.SpanContext, ok bool) {
 	if h == "" {
 		return trace.SpanContext{}, false
 	}
@@ -134,144 +128,51 @@ func SpanContextFromString(h string) (sc trace.SpanContext, ok bool) {
 	return sc, true
 }
 
-// FromContext returns the SpanContext stored in a context, or nil if there isn't one.
-func FromContext(ctx context.Context) trace.SpanContext {
-	sc, _ := ctx.Value(DaprTraceContextKey{}).(trace.SpanContext)
-	return sc
-}
-
-func startTracingSpanInternal(ctx context.Context, name, samplingRate string, spanKind int) (context.Context, *trace.Span) {
-	var span *trace.Span
-
-	rate := diag_utils.GetTraceSamplingRate(samplingRate)
-
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	probSamplerOption := trace.WithSampler(trace.ProbabilitySampler(rate))
-	kindOption := trace.WithSpanKind(spanKind)
-
-	sc := FromContext(ctx)
-
-	if (sc != trace.SpanContext{}) {
-		// Note that if parent span context is provided which is sc in this case then ctx will be ignored
-		ctx, span = trace.StartSpanWithRemoteParent(ctx, name, sc, kindOption, probSamplerOption)
-	} else {
-		ctx, span = trace.StartSpan(ctx, name, kindOption, probSamplerOption)
+// TraceStateFromW3CString extracts a span tracestate from given string which got earlier from TraceStateFromW3CString format
+func TraceStateFromW3CString(h string) *tracestate.Tracestate {
+	if h == "" {
+		return nil
 	}
 
-	return ctx, span
-}
-
-// GetDefaultSpanContext returns default span context when not provided by the client
-func GetDefaultSpanContext(spec config.TracingSpec) trace.SpanContext {
-	spanContext := trace.SpanContext{}
-
-	gen := tracingConfig.Load().(*traceIDGenerator)
-
-	spanContext.TraceID = gen.NewTraceID()
-	spanContext.SpanID = gen.NewSpanID()
-
-	rate := diag_utils.GetTraceSamplingRate(spec.SamplingRate)
-
-	// TODO : Continue using ProbabilitySampler till Go SDK starts supporting RateLimiting sampler
-	sampler := trace.ProbabilitySampler(rate)
-	sampled := sampler(trace.SamplingParameters{
-		ParentContext:   trace.SpanContext{},
-		TraceID:         spanContext.TraceID,
-		SpanID:          spanContext.SpanID,
-		HasRemoteParent: false}).Sample
-
-	if sampled {
-		spanContext.TraceOptions = 1
-	}
-
-	return spanContext
-}
-
-func extractDaprMetadata(ctx context.Context) map[string][]string {
-	daprMetadata := make(map[string][]string)
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return daprMetadata
-	}
-
-	for k, v := range md {
-		k = strings.ToLower(k)
-		if strings.HasPrefix(k, daprHeaderPrefix) {
-			daprMetadata[k] = v
+	entries := make([]tracestate.Entry, 0, len(h))
+	pairs := strings.Split(h, ",")
+	hdrLenWithoutOWS := len(pairs) - 1 // Number of commas
+	for _, pair := range pairs {
+		matches := trimOWSRegExp.FindStringSubmatch(pair)
+		if matches == nil {
+			return nil
 		}
+		pair = matches[1]
+		hdrLenWithoutOWS += len(pair)
+		if hdrLenWithoutOWS > maxTracestateLen {
+			return nil
+		}
+		kv := strings.Split(pair, "=")
+		if len(kv) != 2 {
+			return nil
+		}
+		entries = append(entries, tracestate.Entry{Key: kv[0], Value: kv[1]})
+	}
+	ts, err := tracestate.New(nil, entries...)
+	if err != nil {
+		return nil
 	}
 
-	return daprMetadata
+	return ts
 }
 
 // AddAttributesToSpan adds the given attributes in the span
 func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
-	if span != nil {
-		for k, v := range attributes {
-			if v != "" {
-				span.AddAttributes(trace.StringAttribute(k, v))
-			}
+	if span == nil {
+		return
+	}
+
+	for k, v := range attributes {
+		// Skip if key is for internal use.
+		if !strings.HasPrefix(k, daprInternalSpanAttrPrefix) && v != "" {
+			span.AddAttributes(trace.StringAttribute(k, v))
 		}
 	}
-}
-
-var tracingConfig atomic.Value // access atomically
-
-func init() {
-	gen := &traceIDGenerator{}
-	// initialize traceID and spanID generators.
-	var rngSeed int64
-	for _, p := range []interface{}{
-		&rngSeed, &gen.traceIDAdd, &gen.nextSpanID, &gen.spanIDInc,
-	} {
-		binary.Read(crand.Reader, binary.LittleEndian, p)
-	}
-	gen.traceIDRand = rand.New(rand.NewSource(rngSeed))
-	gen.spanIDInc |= 1
-
-	tracingConfig.Store(gen)
-}
-
-type traceIDGenerator struct {
-	sync.Mutex
-
-	// Please keep these as the first fields
-	// so that these 8 byte fields will be aligned on addresses
-	// divisible by 8, on both 32-bit and 64-bit machines when
-	// performing atomic increments and accesses.
-	// See:
-	// * https://github.com/census-instrumentation/opencensus-go/issues/587
-	// * https://github.com/census-instrumentation/opencensus-go/issues/865
-	// * https://golang.org/pkg/sync/atomic/#pkg-note-BUG
-	nextSpanID uint64
-	spanIDInc  uint64
-
-	traceIDAdd  [2]uint64
-	traceIDRand *rand.Rand
-}
-
-// NewSpanID returns a non-zero span ID from a randomly-chosen sequence.
-func (gen *traceIDGenerator) NewSpanID() [8]byte {
-	var id uint64
-	for id == 0 {
-		id = atomic.AddUint64(&gen.nextSpanID, gen.spanIDInc)
-	}
-	var sid [8]byte
-	binary.LittleEndian.PutUint64(sid[:], id)
-	return sid
-}
-
-// NewTraceID returns a non-zero trace ID from a randomly-chosen sequence.
-// mu should be held while this function is called.
-func (gen *traceIDGenerator) NewTraceID() [16]byte {
-	var tid [16]byte
-	// Construct the trace ID from two outputs of traceIDRand, with a constant
-	// added to each half for additional entropy.
-	gen.Lock()
-	binary.LittleEndian.PutUint64(tid[0:8], gen.traceIDRand.Uint64()+gen.traceIDAdd[0])
-	binary.LittleEndian.PutUint64(tid[8:16], gen.traceIDRand.Uint64()+gen.traceIDAdd[1])
-	gen.Unlock()
-	return tid
 }
 
 // ConstructInputBindingSpanAttributes creates span attributes for InputBindings.
@@ -291,4 +192,16 @@ func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 		messagingDestinationSpanAttributeKey:     topic,
 		messagingDestinationKindSpanAttributeKey: messagingDestinationTopicKind,
 	}
+}
+
+// StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
+func StartInternalCallbackSpan(spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, *trace.Span) {
+	traceEnabled := diag_utils.IsTracingEnabled(spec.SamplingRate)
+	ctx := context.Background()
+	if !traceEnabled {
+		return ctx, nil
+	}
+
+	sampler := diag_utils.TraceSampler(spec.SamplingRate)
+	return trace.StartSpanWithRemoteParent(ctx, spanName, parent, sampler, trace.WithSpanKind(trace.SpanKindServer))
 }

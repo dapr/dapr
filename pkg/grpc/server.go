@@ -14,6 +14,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/logger"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -139,8 +140,10 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 
 	s.logger.Infof("enabled monitoring middleware")
 
-	intr := []grpc_go.UnaryServerInterceptor{
-		diag.SetTracingInGRPCMiddlewareUnary(s.config.AppID, s.tracingSpec),
+	intr := []grpc_go.UnaryServerInterceptor{}
+
+	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
+		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {

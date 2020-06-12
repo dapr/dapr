@@ -17,6 +17,7 @@ import (
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -89,8 +90,8 @@ func (m *mockGRPCAPI) PerformTransaction(ctx context.Context, in *runtimev1pb.Mu
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
-	sc, _ := ctx.Value(diag.DaprTraceContextKey{}).(trace.SpanContext)
-	return []byte(SerializeSpanContext(sc))
+	span := diag_utils.SpanFromContext(ctx)
+	return []byte(SerializeSpanContext(span.SpanContext()))
 }
 
 // SerializeSpanContext serializes a span context into a simple string
@@ -116,7 +117,7 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc_go.NewServer(
-		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.SetTracingInGRPCMiddlewareUnary("id", spec))),
+		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
 	)
 
 	go func() {
