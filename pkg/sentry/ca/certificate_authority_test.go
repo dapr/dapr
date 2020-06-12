@@ -18,7 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const rootCert = `-----BEGIN CERTIFICATE-----
+const (
+	rootCert = `-----BEGIN CERTIFICATE-----
 MIIBgjCCASigAwIBAgIRAIrX/pDJ+p4f6dujmOifvbkwCgYIKoZIzj0EAwIwFDES
 MBAGA1UEAxMJbG9jYWxob3N0MB4XDTIwMDEyMjE4MTQwMloXDTMwMDExOTE4MTQw
 MlowFDESMBAGA1UEAxMJbG9jYWxob3N0MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD
@@ -30,7 +31,7 @@ xlY/D2Y8sYvui1VXj0q0HHElgAIhAK2jBa2onvy/K1Epk9q7d3pZi5Kqz0NsOzFV
 0qL4GK10
 -----END CERTIFICATE-----`
 
-const issuerCert = `-----BEGIN CERTIFICATE-----
+	issuerCert = `-----BEGIN CERTIFICATE-----
 MIIBgjCCASigAwIBAgIRANfF9X4LJ314GZjUe17qsQ0wCgYIKoZIzj0EAwIwFDES
 MBAGA1UEAxMJbG9jYWxob3N0MB4XDTIwMDEyMjE4MTQyMVoXDTIxMDEyMTE4MTQy
 MVowFDESMBAGA1UEAxMJbG9jYWxob3N0MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD
@@ -42,15 +43,16 @@ flWXeGl/HN2HQQTcszk2fRvb0c4CICs60ZlkjXoRA8rLLi1wnfkUS8rQ1PT3R/Mp
 2ZK4OZle
 -----END CERTIFICATE-----`
 
-const issuerKey = `-----BEGIN EC PRIVATE KEY-----
+	issuerKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIPka7+VUgUXmJghUv2JAYn9Pow1o6T3r3dxrvamrdubboAoGCCqGSM49
 AwEHoUQDQgAEkDB/emmKm1PwOpt50ZCEanV8VXToYsIBIYbSQ/+rmCyJObLAeUsg
 zWtds/T7oYatEywym92pgjUlQ7Yz8HsB4w==
 -----END EC PRIVATE KEY-----`
 
-const allowedClockSkew = time.Minute * 10
+	allowedClockSkew = time.Minute * 10
 
-const workloadCertTTL = time.Hour * 10
+	workloadCertTTL = time.Hour * 10
+)
 
 func getTestCSR(name string) *x509.CertificateRequest {
 	return &x509.CertificateRequest{
