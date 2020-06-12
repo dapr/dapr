@@ -44,6 +44,9 @@ const (
 	tracestateHeader  = "tracestate"
 	tracebinMetadata  = "grpc-trace-bin"
 
+	// DestinationIDHeader is the header carrying the value of the invoked app id
+	DestinationIDHeader = "destination-app-id"
+
 	// ErrorInfo metadata value is limited to 64 chars
 	// https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L126
 	maxMetadataValueLen = 63
@@ -133,6 +136,8 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 			continue
 		case tracebinMetadata:
 			grpctracebinValue = listVal.Values[0]
+			continue
+		case DestinationIDHeader:
 			continue
 		}
 
