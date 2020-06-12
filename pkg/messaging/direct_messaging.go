@@ -29,6 +29,10 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
+var (
+	destinationAppIDHeader = fmt.Sprintf("%s-destination-app-id", invokev1.DaprHeaderPrefix)
+)
+
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
 type messageClientConnection func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
@@ -146,6 +150,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	d.addForwardedHeadersToMetadata(req)
+	d.addDestinationAppIDHeaderToMetadata(targetID, req)
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
@@ -154,6 +159,12 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	}
 
 	return invokev1.InternalInvokeResponse(resp)
+}
+
+func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
+	req.Metadata()[destinationAppIDHeader] = &internalv1pb.ListStringValue{
+		Values: []string{appID},
+	}
 }
 
 func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMethodRequest) {
