@@ -636,46 +636,35 @@ func TestInvokeBinding(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-/*
 func TestPerformTransaction(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	assert.NoError(t, err)
 
-	server := grpc_go.NewServer()
-	go func() {
-		dapr_pb.RegisterDaprServer(server, &mockGRPCAPI{})
-		server.Serve(lis)
-	}()
+	server := startTestServer(port)
+	defer server.Stop()
 
-	time.Sleep(5 * time.Second)
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
 
-	var opts []grpc_go.DialOption
-	opts = append(opts, grpc_go.WithInsecure())
-	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
-	defer close(t, conn)
-	assert.NoError(t, err)
-
-	client := runtimev1pb.NewDaprClient(conn)
-	_, err = client.PerformTransaction(context.Background(), &runtimev1pb.MultiStateRequest{
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.PerformTransaction(context.Background(), &runtimev1pb.MultiStateRequest{
 		Requests: []*runtimev1pb.TransactionalStateRequest{
 			{
 				OperationType: "Upsert",
-				Request: &runtimev1pb.TransactionalStateRequest{
+				States: &commonv1pb.StateItem{
 					Key:   "key1",
-					Value: &any.Any{Value: []byte("value1")},
+					Value: []byte("1"),
 				},
 			},
 			{
 				OperationType: "Upsert",
-				Request: &runtimev1pb.TransactionalStateRequest{
+				States: &commonv1pb.StateItem{
 					Key:   "key2",
-					Value: &any.Any{Value: []byte("value2")},
+					Value: []byte("1"),
 				},
 			},
 			{
 				OperationType: "Delete",
-				Request: &runtimev1pb.TransactionalStateRequest{
+				States: &commonv1pb.StateItem{
 					Key: "key1",
 				},
 			},
@@ -683,4 +672,4 @@ func TestPerformTransaction(t *testing.T) {
 	})
 	server.Stop()
 	assert.Nil(t, err)
-}*/
+}
