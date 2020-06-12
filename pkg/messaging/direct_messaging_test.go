@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )
@@ -25,7 +26,7 @@ func TestDestinationHeaders(t *testing.T) {
 
 		dm := newDirectMessaging()
 		dm.addDestinationAppIDHeaderToMetadata(appID, req)
-		md := req.Metadata()[destinationAppIDHeader]
+		md := req.Metadata()[v1.DestinationIDHeader]
 		assert.Equal(t, appID, md.Values[0])
 	})
 }

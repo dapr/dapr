@@ -26,11 +26,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-)
-
-var (
-	destinationAppIDHeader = fmt.Sprintf("%s-destination-app-id", invokev1.DaprHeaderPrefix)
 )
 
 // messageClientConnection is the function type to connect to the other
@@ -162,7 +159,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
-	req.Metadata()[destinationAppIDHeader] = &internalv1pb.ListStringValue{
+	req.Metadata()[v1.DestinationIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{appID},
 	}
 }
