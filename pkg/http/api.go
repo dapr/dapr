@@ -1020,7 +1020,7 @@ func (a *api) onPerformTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
+		msg := NewErrorResponse(incompatibleStateStore, fmt.Sprintf("state store name: %s", storeName))
 		respondWithError(reqCtx, 500, msg)
 		return
 	}

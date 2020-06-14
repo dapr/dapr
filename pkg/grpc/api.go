@@ -413,7 +413,7 @@ func (a *api) PerformTransaction(ctx context.Context, in *runtimev1pb.MultiState
 				Request:   delReq,
 			}
 			requests = append(requests, req)
-
+		default:
 			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
 		}
 	}
@@ -448,7 +448,6 @@ func (a *api) getSetStateOptions(r *commonv1pb.StateItem) (o state.SetStateOptio
 }
 
 func (a *api) getDeleteStateOption(r *commonv1pb.StateItem) (o state.DeleteStateOption) {
-
 	if r.Options != nil {
 		o.Consistency = stateConsistencyToString(r.Options.Consistency)
 		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
