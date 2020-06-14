@@ -8,7 +8,6 @@ package v1
 import (
 	"context"
 	"encoding/base64"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -258,6 +257,5 @@ func TestErrorFromInternalStatus(t *testing.T) {
 	// assert
 	actual, ok := status.FromError(statusError)
 	assert.True(t, ok)
-	//assert.Equal(t, expected, actual)
-	assert.True(t, reflect.DeepEqual(expected, actual))
+	assert.Equal(t, expected, actual)
 }
