@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -146,6 +147,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	d.addForwardedHeadersToMetadata(req)
+	d.addDestinationAppIDHeaderToMetadata(targetID, req)
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
@@ -154,6 +156,12 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	}
 
 	return invokev1.InternalInvokeResponse(resp)
+}
+
+func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
+	req.Metadata()[v1.DestinationIDHeader] = &internalv1pb.ListStringValue{
+		Values: []string{appID},
+	}
 }
 
 func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMethodRequest) {
