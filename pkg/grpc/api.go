@@ -171,7 +171,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, err
 	}
 
-	grpc.SendHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true))
+	grpc.SetHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true))
 
 	var respError error
 	if resp.IsHTTPResponse() {
