@@ -94,6 +94,14 @@ Reach out with any questions you may have and we'll make sure to answer then as 
 
 Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome!
 
+**Upcoming Meetings**:
+- Tuesday June 23rd 10am Pacific Time (PST)
+- Tuesday July 7th 10am Pacific Time (PST)
+- Tuesday July 21st 10am Pacific Time (PST)
+- Tuesday August 4th 10am Pacific Time (PST)
+- Tuesday August 18th 10am Pacific Time (PST)
+- Tuesday September 1st 10am Pacific Time (PST)
+
 | Asset | Link        |
 |:-----------|:------------|
 | 🔗 Meeting Link & Password | **Zoom Call:** https://us02web.zoom.us/j/85305980190<br>**Password:** eWRhSklVTjJjSnhTaURDcFZaU2ZzQT09
