@@ -85,7 +85,7 @@ func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRe
 	return &runtimev1pb.GetSecretResponse{}, nil
 }
 
-func (m *mockGRPCAPI) PerformTransaction(ctx context.Context, in *runtimev1pb.MultiStateRequest) (*empty.Empty, error) {
+func (m *mockGRPCAPI) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }
 
@@ -636,7 +636,7 @@ func TestInvokeBinding(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func TestPerformTransaction(t *testing.T) {
+func TestExecuteStateTransaction(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
 	server := startTestServer(port)
@@ -646,7 +646,7 @@ func TestPerformTransaction(t *testing.T) {
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
-	_, err := client.PerformTransaction(context.Background(), &runtimev1pb.MultiStateRequest{
+	_, err := client.ExecuteStateTransaction(context.Background(), &runtimev1pb.MultiStateRequest{
 		Requests: []*runtimev1pb.TransactionalStateRequest{
 			{
 				OperationType: "Upsert",

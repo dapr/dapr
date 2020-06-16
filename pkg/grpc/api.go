@@ -58,7 +58,7 @@ type API interface {
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
-	PerformTransaction(ctx context.Context, in *runtimev1pb.MultiStateRequest) (*empty.Empty, error)
+	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -370,7 +370,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	return response, nil
 }
 
-func (a *api) PerformTransaction(ctx context.Context, in *runtimev1pb.MultiStateRequest) (*empty.Empty, error) {
+func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
