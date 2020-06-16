@@ -195,6 +195,31 @@ func generateTestCases() []testCase {
 				},
 			},
 		},
+		{
+			"Test state transaction APIs",
+			[]testStep{
+				{
+					"upsert",
+					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
+					emptyResponse,
+				},
+				{
+					"get",
+					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
+					newRequestResponse(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
+				},
+				{
+					"delete",
+					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
+					emptyResponse,
+				},
+				{
+					"get",
+					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
+					newRequestResponse(utils.SimpleKeyValue{testCase1Key, nil}),
+				},
+			},
+		},
 	}
 }
 
