@@ -35,6 +35,12 @@ type daprState struct {
 	Value *appState `json:"value,omitempty"`
 }
 
+// daprTransactionRequest represents a transaction request in Dapr.
+type daprTransactionReqiest struct {
+	Operation string      `json:"operation,omitempty"`
+	Request   interface{} `json:"request"`
+}
+
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
 	StartTime int         `json:"start_time,omitempty"`
@@ -219,6 +225,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
+func transactionHandler(w http.ResponseWriter, r *http.Request) {
+
+}
 func createStateURL(key string) (string, error) {
 	url, err := url.Parse(stateURL)
 	if err != nil {
@@ -240,7 +249,7 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/{command}", handler).Methods("POST")
-
+	router.HandleFunc("/transaction", transactionHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
