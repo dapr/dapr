@@ -192,8 +192,8 @@ github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f h1:lBNOc5arjvs8E5mO2tbp
 github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f/go.mod h1:E3G3o1h8I7cfcXa63jLwjI0eiQQMgzzUDFVpN/nH/eA=
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
-github.com/dapr/components-contrib v0.1.1-0.20200616173129-98dba0e1cb4f h1:NZVLaY5sHrSJdiKu4fD30EAI3ED0fPCSYs3qUGgNr0Y=
-github.com/dapr/components-contrib v0.1.1-0.20200616173129-98dba0e1cb4f/go.mod h1:aaRt+DpVrufMTIM3eXaNjPf/eOLHmcQYDpMl0Qr/F3Q=
+github.com/dapr/components-contrib v0.1.1-0.20200616175024-f46249c55422 h1:Ot+CSi2hO3q+uZN/kUrrrXOHpigmikQl6N/9Cb7jkW8=
+github.com/dapr/components-contrib v0.1.1-0.20200616175024-f46249c55422/go.mod h1:aaRt+DpVrufMTIM3eXaNjPf/eOLHmcQYDpMl0Qr/F3Q=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad h1:RKWoYovBc+B9ltvjtZLMnbu49stSucH8rZze3MeqyvQ=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad/go.mod h1:yeOIFBz6+BigHpk4ASJbgQDVjQ8+00oCWrFyOAFdob8=
