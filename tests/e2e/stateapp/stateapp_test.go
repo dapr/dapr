@@ -196,10 +196,10 @@ func generateTestCases() []testCase {
 			},
 		},
 		{
-			"Test state transaction APIs",
+			"Test state transaction APIs for single keys and values",
 			[]testStep{
 				{
-					"upsert",
+					"upsertTransaction",
 					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
 					emptyResponse,
 				},
@@ -209,7 +209,7 @@ func generateTestCases() []testCase {
 					newRequestResponse(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
 				},
 				{
-					"delete",
+					"deleteTransaction",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					emptyResponse,
 				},
@@ -217,6 +217,31 @@ func generateTestCases() []testCase {
 					"get",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					newRequestResponse(utils.SimpleKeyValue{testCase1Key, nil}),
+				},
+			},
+		},
+		{
+			"Test state transaction APIs for multiple keys and values",
+			[]testStep{
+				{
+					"upsertTransaction",
+					newRequest(testCaseManyKeyValues...),
+					emptyResponse,
+				},
+				{
+					"get",
+					newRequest(testCaseManyKeys...),
+					newRequestResponse(testCaseManyKeyValues...),
+				},
+				{
+					"deleteTransaction",
+					newRequest(testCaseManyKeys...),
+					emptyResponse,
+				},
+				{
+					"get",
+					newRequest(testCaseManyKeys...),
+					newRequestResponse(testCaseManyKeys...),
 				},
 			},
 		},
