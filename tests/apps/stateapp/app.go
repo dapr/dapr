@@ -24,7 +24,7 @@ const appPort = 3000
 
 // statestore is the name of the store
 const stateURL = "http://localhost:3500/v1.0/state/statestore"
-const stateTransactionUrl = "http://localhost:3500/v1.0/state/statestore/transaction"
+const stateTransactionURL = "http://localhost:3500/v1.0/state/statestore/transaction"
 
 // appState represents a state in this app.
 type appState struct {
@@ -35,12 +35,6 @@ type appState struct {
 type daprState struct {
 	Key   string    `json:"key,omitempty"`
 	Value *appState `json:"value,omitempty"`
-}
-
-// daprTransactionRequest represents a transaction request in Dapr.
-type daprTransactionReqiest struct {
-	Operation string      `json:"operation,omitempty"`
-	Request   interface{} `json:"request"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
@@ -199,8 +193,8 @@ func performTransaction(states []daprState, operationType string) error {
 		return err
 	}
 
-	log.Printf("Posting state to %s with '%s'", stateTransactionUrl, jsonValue)
-	res, err := http.Post(stateTransactionUrl, "application/json", bytes.NewBuffer(jsonValue))
+	log.Printf("Posting state to %s with '%s'", stateTransactionURL, jsonValue)
+	res, err := http.Post(stateTransactionURL, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		return err
 	}
