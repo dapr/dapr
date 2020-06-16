@@ -646,7 +646,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
-	_, err := client.ExecuteStateTransaction(context.Background(), &runtimev1pb.MultiStateRequest{
+	_, err := client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
 		Requests: []*runtimev1pb.TransactionalStateRequest{
 			{
 				OperationType: "Upsert",
