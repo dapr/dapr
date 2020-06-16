@@ -16,6 +16,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/dapr/components-contrib/state"
 	"github.com/gorilla/mux"
 )
 
@@ -23,6 +24,7 @@ const appPort = 3000
 
 // statestore is the name of the store
 const stateURL = "http://localhost:3500/v1.0/state/statestore"
+const stateTransactionUrl = "http://localhost:3500/v1.0/state/statestore/transaction"
 
 // appState represents a state in this app.
 type appState struct {
@@ -171,6 +173,41 @@ func deleteAll(states []daprState) error {
 	return nil
 }
 
+func performTransaction(states []daprState, operationType string) error {
+	log.Printf("Processing transaction for operation %s", operationType)
+
+	transactionalOperations := []state.TransactionalRequest{}
+	var operation state.OperationType
+
+	switch operationType {
+	case "upsert":
+		operation = state.Upsert
+	case "delete":
+		operation = state.Delete
+	}
+	for _, daprState := range states {
+		transactionalRequest := state.TransactionalRequest{
+			Operation: operation,
+			Request:   daprState,
+		}
+		transactionalOperations = append(transactionalOperations, transactionalRequest)
+	}
+
+	jsonValue, err := json.Marshal(transactionalOperations)
+	if err != nil {
+		log.Printf("Could save transactional operations in Dapr: %s", err.Error())
+		return err
+	}
+
+	log.Printf("Posting state to %s with '%s'", stateTransactionUrl, jsonValue)
+	res, err := http.Post(stateTransactionUrl, "application/json", bytes.NewBuffer(jsonValue))
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	return nil
+}
+
 // handles all APIs
 func handler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing request for %s", r.URL.RequestURI())
@@ -203,6 +240,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		res.States = states
 	case "delete":
 		err = deleteAll(req.States)
+	case "upsertTransaction":
+		err = performTransaction(req.States, "upsert")
+	case "deleteTransaction":
+		err = performTransaction(req.States, "delete")
 	default:
 		err = fmt.Errorf("invalid URI: %s", uri)
 		statusCode = http.StatusBadRequest
@@ -225,9 +266,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
-func transactionHandler(w http.ResponseWriter, r *http.Request) {
-
-}
 func createStateURL(key string) (string, error) {
 	url, err := url.Parse(stateURL)
 	if err != nil {
@@ -249,7 +287,7 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/test/{command}", handler).Methods("POST")
-	router.HandleFunc("/transaction", transactionHandler).Methods("POST")
+
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
