@@ -282,7 +282,7 @@ func (a *api) constructTransactionEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "state/{storeName}/transaction",
 			Version: apiVersionV1,
-			Handler: a.onPerformTransaction,
+			Handler: a.onPostTransaction,
 		},
 	}
 }
@@ -993,7 +993,7 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	return metadata
 }
 
-func (a *api) onPerformTransaction(reqCtx *fasthttp.RequestCtx) {
+func (a *api) onPostTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
 		respondWithError(reqCtx, 400, msg)

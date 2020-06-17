@@ -1682,6 +1682,13 @@ func TestV1SecretEndpoints(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
+	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 401, resp.StatusCode, "reading non-existing store should return 401")
+	})
 	t.Run("Get secret - 204 No Content Found", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", storeName)
 		// act

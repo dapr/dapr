@@ -53,6 +53,13 @@ type testStep struct {
 	expectedResponse requestResponse
 }
 
+// state transaction steps
+type transactionTestStep struct {
+	command string
+	request requestResponse
+	expectedResponse requestResponse
+}
+
 type testCase struct {
 	name  string
 	steps []testStep
@@ -195,11 +202,14 @@ func generateTestCases() []testCase {
 				},
 			},
 		},
-		{
+	}
+}
+
+{
 			"Test state transaction APIs for single keys and values",
 			[]testStep{
 				{
-					"upsertTransaction",
+					"transact",
 					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
 					emptyResponse,
 				},
@@ -209,7 +219,7 @@ func generateTestCases() []testCase {
 					newRequestResponse(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
 				},
 				{
-					"deleteTransaction",
+					"transact",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					emptyResponse,
 				},
@@ -245,9 +255,6 @@ func generateTestCases() []testCase {
 				},
 			},
 		},
-	}
-}
-
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {

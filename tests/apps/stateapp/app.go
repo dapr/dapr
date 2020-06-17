@@ -33,8 +33,9 @@ type appState struct {
 
 // daprState represents a state in Dapr.
 type daprState struct {
-	Key   string    `json:"key,omitempty"`
-	Value *appState `json:"value,omitempty"`
+	Key           string    `json:"key,omitempty"`
+	Value         *appState `json:"value,omitempty"`
+	OperationType string    `json:"operationType,omitempty"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
@@ -167,19 +168,20 @@ func deleteAll(states []daprState) error {
 	return nil
 }
 
-func performTransaction(states []daprState, operationType string) error {
-	log.Printf("Processing transaction for operation %s", operationType)
-
+func ExecuteTransaction(states []daprState) error {
 	transactionalOperations := []state.TransactionalRequest{}
 	var operation state.OperationType
 
-	switch operationType {
-	case "upsert":
-		operation = state.Upsert
-	case "delete":
-		operation = state.Delete
-	}
 	for _, daprState := range states {
+		switch daprState.OperationType {
+		case "upsert":
+			operation = state.Upsert
+		case "delete":
+			operation = state.Delete
+		default:
+			return fmt.Errorf("Operation Type %s not supported", daprState.OperationType)
+		}
+
 		transactionalRequest := state.TransactionalRequest{
 			Operation: operation,
 			Request:   daprState,
@@ -234,10 +236,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		res.States = states
 	case "delete":
 		err = deleteAll(req.States)
-	case "upsertTransaction":
-		err = performTransaction(req.States, "upsert")
-	case "deleteTransaction":
-		err = performTransaction(req.States, "delete")
+	case "transact":
+		err = ExecuteTransaction(req.States)
 	default:
 		err = fmt.Errorf("invalid URI: %s", uri)
 		statusCode = http.StatusBadRequest
