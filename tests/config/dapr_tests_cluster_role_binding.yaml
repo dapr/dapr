@@ -1,16 +1,25 @@
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: dapr-secret-reader
+  namespace: dapr-tests
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: secret-reader
 subjects:
   - kind: ServiceAccount
     name: default
-    namespace: default
-  - kind: ServiceAccount
-    name: default
     namespace: dapr-tests
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+  namespace: dapr-tests
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+  
