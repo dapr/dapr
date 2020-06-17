@@ -18,7 +18,6 @@ func main() {
 			panic(err)
 		}
 		if info.IsDir() {
-
 			_, err := os.Stat(path + "/go.mod")
 			if !os.IsNotExist(err) {
 				files = append(files, path)
