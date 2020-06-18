@@ -179,7 +179,7 @@ func ExecuteTransaction(states []daprState) error {
 		case "delete":
 			operation = state.Delete
 		default:
-			return fmt.Errorf("Operation Type %s not supported", daprState.OperationType)
+			return fmt.Errorf("operation type %s not supported", daprState.OperationType)
 		}
 
 		transactionalRequest := state.TransactionalRequest{
