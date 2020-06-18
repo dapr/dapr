@@ -24,6 +24,13 @@ type SimpleKeyValue struct {
 	Value interface{}
 }
 
+// StateTransactionKeyValue is a key-value pair with an operation type
+type StateTransactionKeyValue struct {
+	Key           string
+	Value         interface{}
+	OperationType string
+}
+
 // GenerateRandomStringKeys generates random string keys (values are nil).
 func GenerateRandomStringKeys(num int) []SimpleKeyValue {
 	if num < 0 {

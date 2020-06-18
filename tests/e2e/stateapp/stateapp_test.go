@@ -53,16 +53,32 @@ type testStep struct {
 	expectedResponse requestResponse
 }
 
-// state transaction steps
-type transactionTestStep struct {
-	command string
-	request requestResponse
+//  stateTransactionRequest represents a request for state transactions
+type stateTransaction struct {
+	Key           string    `json:"key,omitempty"`
+	Value         *appState `json:"value,omitempty"`
+	OperationType string    `json:"operationType,omitempty"`
+}
+
+// represents each step in a test for state transactions
+type stateTransactionTestStep struct {
+	command          string
+	request          stateTransactionRequestResponse
 	expectedResponse requestResponse
+}
+
+type stateTransactionRequestResponse struct {
+	States []stateTransaction
 }
 
 type testCase struct {
 	name  string
 	steps []testStep
+}
+
+type testStateTransactionCase struct {
+	name  string
+	steps []stateTransactionTestStep
 }
 
 func generateDaprState(kv utils.SimpleKeyValue) daprState {
@@ -88,6 +104,20 @@ func newRequestResponse(keyValues ...utils.SimpleKeyValue) requestResponse {
 
 	return requestResponse{
 		daprStates,
+	}
+}
+
+// creates a requestResponse based on an array of key value pairs.
+func newStateTransactionRequestResponse(keyValues ...utils.StateTransactionKeyValue) stateTransactionRequestResponse {
+	daprStateTransactions := make([]stateTransaction, 0, len(keyValues))
+	for _, keyValue := range keyValues {
+		daprStateTransactions = append(daprStateTransactions, stateTransaction{
+			keyValue.Key, &appState{keyValue.Value}, keyValue.OperationType,
+		})
+	}
+
+	return stateTransactionRequestResponse{
+		daprStateTransactions,
 	}
 }
 
@@ -205,56 +235,6 @@ func generateTestCases() []testCase {
 	}
 }
 
-{
-			"Test state transaction APIs for single keys and values",
-			[]testStep{
-				{
-					"transact",
-					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
-					emptyResponse,
-				},
-				{
-					"get",
-					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
-					newRequestResponse(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
-				},
-				{
-					"transact",
-					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
-					emptyResponse,
-				},
-				{
-					"get",
-					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
-					newRequestResponse(utils.SimpleKeyValue{testCase1Key, nil}),
-				},
-			},
-		},
-		{
-			"Test state transaction APIs for multiple keys and values",
-			[]testStep{
-				{
-					"upsertTransaction",
-					newRequest(testCaseManyKeyValues...),
-					emptyResponse,
-				},
-				{
-					"get",
-					newRequest(testCaseManyKeys...),
-					newRequestResponse(testCaseManyKeyValues...),
-				},
-				{
-					"deleteTransaction",
-					newRequest(testCaseManyKeys...),
-					emptyResponse,
-				},
-				{
-					"get",
-					newRequest(testCaseManyKeys...),
-					newRequestResponse(testCaseManyKeys...),
-				},
-			},
-		},
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
@@ -286,6 +266,99 @@ func TestStateApp(t *testing.T) {
 
 	// Now we are ready to run the actual tests
 	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, step := range tt.steps {
+				body, err := json.Marshal(step.request)
+				require.NoError(t, err)
+
+				url := fmt.Sprintf("%s/test/%s", externalURL, step.command)
+
+				resp, err := utils.HTTPPost(url, body)
+				require.NoError(t, err)
+
+				var appResp requestResponse
+				err = json.Unmarshal(resp, &appResp)
+				require.NoError(t, err)
+				require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
+			}
+		})
+	}
+}
+
+func generateStateTransactionCases() []testStateTransactionCase {
+	testCase1Key, testCase2Key := guuid.New().String(), guuid.New().String()
+	testCase1Value := "The best song ever is 'Highwayman' by 'The Highwaymen'."
+	testCase2Value := "Hello World"
+	// Just for readability
+	emptyResponse := requestResponse{
+		nil,
+	}
+
+	testStateTransactionCases := []testStateTransactionCase{
+		{
+			"Test state transaction APIs for single transactions",
+			[]stateTransactionTestStep{
+				{
+					"transact",
+					newStateTransactionRequestResponse(utils.StateTransactionKeyValue{testCase1Key, testCase1Value, "upsert"}),
+					emptyResponse,
+				},
+				{
+					"get",
+					newStateTransactionRequestResponse(utils.StateTransactionKeyValue{testCase1Key, "", ""}),
+					newRequestResponse(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
+				},
+				{
+					"transact",
+					newStateTransactionRequestResponse(utils.StateTransactionKeyValue{testCase1Key, "", "delete"}),
+					emptyResponse,
+				},
+				{
+					"get",
+					newStateTransactionRequestResponse(utils.StateTransactionKeyValue{testCase1Key, "", ""}),
+					newRequestResponse(utils.SimpleKeyValue{testCase1Key, nil}),
+				},
+			},
+		},
+		{
+			"Test state transaction APIs with multiple transactions",
+			[]stateTransactionTestStep{
+				{
+					"transact",
+					newStateTransactionRequestResponse(
+						utils.StateTransactionKeyValue{testCase1Key, testCase1Value, "upsert"},
+						utils.StateTransactionKeyValue{testCase1Key, testCase1Value, "delete"},
+						utils.StateTransactionKeyValue{testCase2Key, testCase2Value, "upsert"},
+					),
+					emptyResponse,
+				},
+				{
+					"get",
+					newStateTransactionRequestResponse(utils.StateTransactionKeyValue{testCase1Key, "", ""}),
+					newRequestResponse(utils.SimpleKeyValue{testCase1Key, nil}),
+				},
+				{
+					"get",
+					newStateTransactionRequestResponse(utils.StateTransactionKeyValue{testCase2Key, "", ""}),
+					newRequestResponse(utils.SimpleKeyValue{testCase1Key, testCase2Value}),
+				},
+			},
+		},
+	}
+	return testStateTransactionCases
+}
+func TestStateTransactionApps(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	testStateTransactionCases := generateStateTransactionCases()
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// Now we are ready to run the actual tests
+	for _, tt := range testStateTransactionCases {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, step := range tt.steps {
 				body, err := json.Marshal(step.request)
