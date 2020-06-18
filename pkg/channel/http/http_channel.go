@@ -121,8 +121,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) *fasthttp.Request {
 	var channelReq = fasthttp.AcquireRequest()
 
-	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
-	uri := fmt.Sprintf("%s/%s", h.baseAddress, req.Message().GetMethod())
+	// Construct app channel URI: VERB http://localhost:3000/v1.0/method?query1=value1
+	uri := fmt.Sprintf("%s/v1.0/%s", h.baseAddress, req.Message().GetMethod())
 	channelReq.SetRequestURI(uri)
 	channelReq.URI().SetQueryString(req.EncodeHTTPQueryString())
 	channelReq.Header.SetMethod(req.Message().HttpExtension.Verb.String())
