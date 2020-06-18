@@ -101,7 +101,6 @@ func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messagi
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
-	api.endpoints = append(api.endpoints, api.constructTransactionEndpoints()...)
 
 	return api
 }
@@ -135,6 +134,12 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "state/{storeName}/transaction",
+			Version: apiVersionV1,
+			Handler: a.onPostTransaction,
 		},
 	}
 }
@@ -272,17 +277,6 @@ func (a *api) constructHealthzEndpoints() []Endpoint {
 			Route:   "healthz",
 			Version: apiVersionV1,
 			Handler: a.onGetHealthz,
-		},
-	}
-}
-
-func (a *api) constructTransactionEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "state/{storeName}/transaction",
-			Version: apiVersionV1,
-			Handler: a.onPostTransaction,
 		},
 	}
 }
