@@ -101,6 +101,8 @@ Every two weeks we host a community call to showcase new features, review upcomi
 - Tuesday August 4th 10am Pacific Time (PST)
 - Tuesday August 18th 10am Pacific Time (PST)
 - Tuesday September 1st 10am Pacific Time (PST)
+- Tuesday September 15th 10am Pacific Time (PST)
+- Tuesday September 29th 10am Pacific Time (PST)
 
 | Asset | Link        |
 |:-----------|:------------|
@@ -113,7 +115,7 @@ Every two weeks we host a community call to showcase new features, review upcomi
 | Engagement | Link        |
 |:-----------|:------------|
 | 📺 Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
-| 🔥 MS Ignite 2019 | - [Dapr, Rudr, OAM Mark Russinovich presents next gen app development & deployment](https://www.youtube.com/watch?v=LAUDVk8PaCY)<br>- [Mark Russinovich presents "The Future of Cloud Native Applications with OAM and Dapr"](https://myignite.techcommunity.microsoft.com/sessions/82059)
+| 🌎 Conferences | - [Dapr, Rudr, OAM: Mark Russinovich presents next gen app development & deployment](https://www.youtube.com/watch?v=eJCu6a-x9uo)<br>- [Mark Russinovich presents "The Future of Cloud Native Applications with OAM and Dapr"](https://myignite.techcommunity.microsoft.com/sessions/82059)<br>- [Build 2020: Mark Fussell presents Dapr](https://channel9.msdn.com/Events/Build/2020/INT118)
 | 🎤 Hanselminutes | [Dapr Distributed Application Runtime with Mark Russinovich](https://hanselminutes.com/718/dapr-distributed-application-runtime-with-azure-cto-mark-russinovich) 
 | 💻 Azure Community Live | [Build microservice applications using DAPR with Mark Fussell ](https://www.youtube.com/watch?v=CgqI7nen-Ng) 
 
