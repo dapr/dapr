@@ -270,8 +270,6 @@ func HTTPStatusFromCode(code codes.Code) int {
 // See: https://github.com/grpc/grpc/blob/master/doc/http-grpc-status-mapping.md
 func CodeFromHTTPStatus(httpStatusCode int) codes.Code {
 	switch httpStatusCode {
-	case http.StatusOK:
-		return codes.OK
 	case http.StatusRequestTimeout:
 		return codes.Canceled
 	case http.StatusInternalServerError:
@@ -294,6 +292,10 @@ func CodeFromHTTPStatus(httpStatusCode int) codes.Code {
 		return codes.Unimplemented
 	case http.StatusServiceUnavailable:
 		return codes.Unavailable
+	}
+
+	if httpStatusCode >= 200 && httpStatusCode < 300 {
+		return codes.OK
 	}
 
 	return codes.Unknown
