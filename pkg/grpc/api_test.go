@@ -482,7 +482,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 		},
 		{
 			status:         204,
-			statusMessage:  "Accepted",
+			statusMessage:  "No Content",
 			grpcStatusCode: codes.OK,
 			grpcMessage:    "",
 			errHTTPCode:    "",
