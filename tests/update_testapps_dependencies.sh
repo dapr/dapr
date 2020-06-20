@@ -2,13 +2,12 @@
 
 # Update dapr dependencies for all e2e test apps
 cd ./apps
-for i in `ls`
-do
-   if test -f "$i/go.mod"
-   then
-      cd $i > /dev/null
+appsroot=`pwd`
+appsdirName='apps'
+for appdir in * ; do
+   if test -f "$appsroot/$appdir/go.mod"; then
+      cd $appsroot/$appdir > /dev/null
       go get -u github.com/dapr/dapr@master
-      echo "successfully updated dapr dependency for $i"
-      cd - > /dev/null
+      echo "successfully updated dapr dependency for $appdir"
    fi
 done
