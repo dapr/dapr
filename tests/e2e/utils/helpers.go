@@ -27,7 +27,7 @@ type SimpleKeyValue struct {
 // StateTransactionKeyValue is a key-value pair with an operation type
 type StateTransactionKeyValue struct {
 	Key           string
-	Value         interface{}
+	Value         string
 	OperationType string
 }
 

@@ -406,7 +406,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			delReq := state.DeleteRequest{
 				Key:      a.getModifiedStateKey(inputReq.States.Key),
 				Metadata: inputReq.States.Metadata,
-				Options:  a.getDeleteStateOption(inputReq.States),
+				Options:  state.DeleteStateOption(a.getSetStateOptions(inputReq.States)),
 			}
 			req := state.TransactionalRequest{
 				Operation: state.Delete,
@@ -426,28 +426,6 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) getSetStateOptions(r *commonv1pb.StateItem) (o state.SetStateOption) {
-	if r.Options != nil {
-		o.Consistency = stateConsistencyToString(r.Options.Consistency)
-		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
-
-		if r.Options.RetryPolicy != nil {
-			o.RetryPolicy = state.RetryPolicy{
-				Threshold: int(r.Options.RetryPolicy.Threshold),
-				Pattern:   retryPatternToString(r.Options.RetryPolicy.Pattern),
-			}
-
-			if r.Options.RetryPolicy.Interval != nil {
-				dur, err := duration(r.Options.RetryPolicy.Interval)
-				if err == nil {
-					o.RetryPolicy.Interval = dur
-				}
-			}
-		}
-	}
-	return
-}
-
-func (a *api) getDeleteStateOption(r *commonv1pb.StateItem) (o state.DeleteStateOption) {
 	if r.Options != nil {
 		o.Consistency = stateConsistencyToString(r.Options.Consistency)
 		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
