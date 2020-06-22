@@ -6,9 +6,10 @@
 package injector
 
 import (
+	"testing"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -79,7 +80,7 @@ func TestGetProbeHttpHandler(t *testing.T) {
 		},
 	}
 
-	assert.EqualValues(t, expectedHandler, getProbeHttpHandler(sidecarHTTPPort, pathElements...))
+	assert.EqualValues(t, expectedHandler, getProbeHTTPHandler(sidecarHTTPPort, pathElements...))
 }
 
 func TestGetSideCarContainer(t *testing.T) {

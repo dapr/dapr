@@ -276,7 +276,7 @@ func getInt32Annotation(annotations map[string]string, key string) (int32, error
 	return int32(value), nil
 }
 
-func getProbeHttpHandler(port int32, pathElements ...string) corev1.Handler {
+func getProbeHTTPHandler(port int32, pathElements ...string) corev1.Handler {
 	return corev1.Handler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: formatProbePath(pathElements...),
@@ -370,7 +370,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 		log.Warn(err)
 	}
 
-	httpHandler := getProbeHttpHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
+	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
