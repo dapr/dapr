@@ -56,7 +56,9 @@ const (
 	apiAddress                        = "dapr-api"
 	placementService                  = "dapr-placement"
 	sentryService                     = "dapr-sentry"
+	userContainerDaprHTTPPortName     = "DAPR_HTTP_PORT"
 	sidecarHTTPPortName               = "dapr-http"
+	userContainerDaprGRPCPortName     = "DAPR_GRPC_PORT"
 	sidecarGRPCPortName               = "dapr-grpc"
 	sidecarInternalGRPCPortName       = "dapr-internal"
 	sidecarMetricsPortName            = "dapr-metrics"
@@ -124,12 +126,14 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	patchOps := []PatchOperation{}
+	envPatchOps := []PatchOperation{}
 	var path string
 	var value interface{}
 	if len(pod.Spec.Containers) == 0 {
 		path = "/spec/containers"
 		value = []corev1.Container{*sidecarContainer}
 	} else {
+		envPatchOps = setDaprEnvVars(pod.Spec.Containers, "/spec/containers")
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -142,8 +146,55 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 			Value: value,
 		},
 	)
+	patchOps = append(patchOps, envPatchOps...)
 
 	return patchOps, nil
+}
+
+func setDaprEnvVars(list []corev1.Container, basePath string) []PatchOperation {
+	envPatchOps := []PatchOperation{}
+	portEnv := []corev1.EnvVar{
+		{
+			Name:  userContainerDaprHTTPPortName,
+			Value: strconv.Itoa(sidecarHTTPPort),
+		},
+		{
+			Name:  userContainerDaprGRPCPortName,
+			Value: strconv.Itoa(sidecarAPIGRPCPort),
+		},
+	}
+	var value interface{}
+	for i, container := range list {
+		first := len(container.Env) == 0
+		for _, addEnv := range portEnv {
+			path := fmt.Sprintf("%s/%d/env", basePath, i)
+			hasKey := false
+			for _, actual := range container.Env {
+				if actual.Name == addEnv.Name {
+					hasKey = true
+					log.Infof("env var already set by user in container %s. %s=%s", container.Name, actual.Name, actual.Value)
+					break
+				}
+			}
+
+			if !hasKey {
+				value = addEnv
+				if !first {
+					path += "/-"
+				} else {
+					first = false
+					value = []corev1.EnvVar{addEnv}
+				}
+				log.Infof("env var added to container %s. %s=%s", container.Name, addEnv.Name, addEnv.Value)
+				envPatchOps = append(envPatchOps, PatchOperation{
+					Op:    "add",
+					Path:  path,
+					Value: value,
+				})
+			}
+		}
+	}
+	return envPatchOps
 }
 
 func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {

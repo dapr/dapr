@@ -6,12 +6,14 @@
 package injector
 
 import (
-	"testing"
+	"github.com/stretchr/testify/assert"
 
 	corev1 "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/stretchr/testify/assert"
+	"strconv"
+	"testing"
 )
 
 func TestLogAsJSONEnabled(t *testing.T) {
@@ -112,4 +114,102 @@ func TestGetSideCarContainer(t *testing.T) {
 
 	assert.Equal(t, "secret", container.Env[2].ValueFrom.SecretKeyRef.Name)
 	assert.EqualValues(t, expectedArgs, container.Args)
+}
+
+func TestSetDaprEnvVars(t *testing.T) {
+	mockContainer := corev1.Container{}
+	mockContainer.Name = "MockContainer"
+	patchEnv := setDaprEnvVars([]corev1.Container{mockContainer}, "/spec/containers")
+
+	var expectedPatchOps = []PatchOperation{
+		{
+			Op:   "add",
+			Path: "/spec/containers/0/env",
+			Value: []corev1.EnvVar{
+				{
+					Name:  userContainerDaprHTTPPortName,
+					Value: strconv.Itoa(sidecarHTTPPort),
+				},
+			},
+		},
+		{
+			Op:   "add",
+			Path: "/spec/containers/0/env/-",
+			Value: corev1.EnvVar{
+				Name:  userContainerDaprGRPCPortName,
+				Value: strconv.Itoa(sidecarAPIGRPCPort),
+			},
+		},
+	}
+	assert.Equal(t, 2, len(patchEnv))
+	assert.Equal(t, patchEnv, expectedPatchOps)
+
+	mockContainer.Env = []corev1.EnvVar{
+		{
+			Name:  "TEST",
+			Value: "Existing value",
+		},
+	}
+	patchEnv = setDaprEnvVars([]corev1.Container{mockContainer}, "/spec/containers")
+
+	expectedPatchOps = []PatchOperation{
+		{
+			Op:   "add",
+			Path: "/spec/containers/0/env/-",
+			Value: corev1.EnvVar{
+				Name:  userContainerDaprHTTPPortName,
+				Value: strconv.Itoa(sidecarHTTPPort),
+			},
+		},
+		{
+			Op:   "add",
+			Path: "/spec/containers/0/env/-",
+			Value: corev1.EnvVar{
+				Name:  userContainerDaprGRPCPortName,
+				Value: strconv.Itoa(sidecarAPIGRPCPort),
+			},
+		},
+	}
+
+	assert.Equal(t, 2, len(patchEnv))
+	assert.Equal(t, patchEnv, expectedPatchOps)
+
+	mockContainer.Env = []corev1.EnvVar{
+		{
+			Name:  "TEST",
+			Value: "Existing value",
+		},
+		{
+			Name:  userContainerDaprGRPCPortName,
+			Value: "550000",
+		},
+	}
+	patchEnv = setDaprEnvVars([]corev1.Container{mockContainer}, "/spec/containers")
+
+	expectedPatchOps = []PatchOperation{
+		{
+			Op:   "add",
+			Path: "/spec/containers/0/env/-",
+			Value: corev1.EnvVar{
+				Name:  userContainerDaprHTTPPortName,
+				Value: strconv.Itoa(sidecarHTTPPort),
+			},
+		},
+	}
+	assert.Equal(t, 1, len(patchEnv))
+	assert.Equal(t, patchEnv, expectedPatchOps)
+
+	mockContainer.Env = []corev1.EnvVar{
+		{
+			Name:  userContainerDaprHTTPPortName,
+			Value: "3500",
+		},
+		{
+			Name:  userContainerDaprGRPCPortName,
+			Value: "550000",
+		},
+	}
+	patchEnv = setDaprEnvVars([]corev1.Container{mockContainer}, "/spec/containers")
+
+	assert.Equal(t, 0, len(patchEnv))
 }
