@@ -23,7 +23,7 @@ func main() {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", appPort))
 	grpcServer := grpc_go.NewServer()
 	runtimev1pb.RegisterDaprServer(grpcServer, DaprServer{})
-	if err := server.Serve(lis); err != nil {
+	if err := grpcServer.Serve(lis); err != nil {
 		panic(err)
 	}
 }
