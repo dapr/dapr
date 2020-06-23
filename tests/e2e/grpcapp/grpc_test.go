@@ -52,17 +52,21 @@ func TestGRPCExecuteStateTransaction(t *testing.T) {
 		conn, err := grpc_go.Dial(fmt.Sprintf(":%d", appPort))
 		assert.Nil(t, err)
 		defer conn.Close()
-		
+
 		client := runtimev1pb.NewDaprClient(conn)
 		_, err = client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
 			storeName: "statestore",
 			Requests: ExecuteStateTransactionTestCases
 		}
-		response, _ := client.GetState(context.Background(), &runtimev1pb.GetStateRequest{
+		responseForKey1, _ := client.GetState(context.Background(), &runtimev1pb.GetStateRequest{
+			Key: "key1",
+		})
+		responseForKey2, _ := client.GetState(context.Background(), &runtimev1pb.GetStateRequest{
 			Key: "key2",
 		})
 		
-		assert.Equal(response.Data, []byte("2"))
+		assert.Equal(responseForKey1.Data, nil)
+		assert.Equal(responseForKey2.Data, []byte("2"))
 		)
 	}
 }
