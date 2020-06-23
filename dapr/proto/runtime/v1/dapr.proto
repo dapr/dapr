@@ -29,7 +29,7 @@ service Dapr {
   // Deletes the state for a specific key.
   rpc DeleteState(DeleteStateRequest) returns (google.protobuf.Empty) {}
   
-  // Perform transactions for a specified store
+  // Executes transactions for a specified store
   rpc ExecuteStateTransaction(ExecuteStateTransactionRequest) returns (google.protobuf.Empty) {}
 
   // Publishes events to the specific topic.

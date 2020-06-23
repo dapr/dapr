@@ -698,6 +698,7 @@ func TestInvokeBinding(t *testing.T) {
 }
 
 func TestExecuteStateTransaction(t *testing.T) {
+	stateOptions := GenerateStateOptions()
 	port, _ := freeport.GetFreePort()
 
 	server := startTestServer(port)
@@ -712,8 +713,9 @@ func TestExecuteStateTransaction(t *testing.T) {
 			{
 				OperationType: "Upsert",
 				States: &commonv1pb.StateItem{
-					Key:   "key1",
-					Value: []byte("1"),
+					Key:     "key1",
+					Value:   []byte("1"),
+					Options: stateOptions,
 				},
 			},
 			{
@@ -733,4 +735,20 @@ func TestExecuteStateTransaction(t *testing.T) {
 	})
 	server.Stop()
 	assert.Nil(t, err)
+}
+
+func GenerateStateOptions() *commonv1pb.StateOptions {
+	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
+	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
+	retryPolicyOption := commonv1pb.StateRetryPolicy{
+		Threshold: 10,
+		Pattern:   commonv1pb.StateRetryPolicy_RETRY_EXPONENTIAL,
+	}
+
+	testOptions := commonv1pb.StateOptions{
+		Concurrency: concurrencyOption,
+		Consistency: consistencyOption,
+		RetryPolicy: &retryPolicyOption,
+	}
+	return &testOptions
 }

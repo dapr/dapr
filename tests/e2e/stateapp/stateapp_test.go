@@ -253,9 +253,15 @@ func generateStateTransactionCases() testStateTransactionCase {
 					utils.StateTransactionKeyValue{testCase1Key, testCase1Value, "upsert"},
 					utils.StateTransactionKeyValue{testCase1Key, "", "delete"},
 					utils.StateTransactionKeyValue{testCase2Key, testCase2Value, "upsert"},
-					utils.StateTransactionKeyValue{testCase2Key, "", "delete"},
 				),
 				emptyResponse,
+			},
+			{
+				"get",
+				newStateTransactionRequestResponse(
+					utils.StateTransactionKeyValue{testCase2Key, "", ""},
+				),
+				newResponse(utils.SimpleKeyValue{testCase2Key, testCase2Value}),
 			},
 		},
 	}

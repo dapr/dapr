@@ -780,7 +780,7 @@ type DaprClient interface {
 	SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Deletes the state for a specific key.
 	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
-	// Perform transactions for a specified store
+	// Executes transactions for a specified store
 	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*empty.Empty, error)
@@ -880,7 +880,7 @@ type DaprServer interface {
 	SaveState(context.Context, *SaveStateRequest) (*empty.Empty, error)
 	// Deletes the state for a specific key.
 	DeleteState(context.Context, *DeleteStateRequest) (*empty.Empty, error)
-	// Perform transactions for a specified store
+	// Executes transactions for a specified store
 	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*empty.Empty, error)
 	// Publishes events to the specific topic.
 	PublishEvent(context.Context, *PublishEventRequest) (*empty.Empty, error)
