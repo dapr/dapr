@@ -6,7 +6,7 @@ package runtime
 import (
 	context "context"
 	fmt "fmt"
-	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	runetimev1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/golang/protobuf/proto"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
