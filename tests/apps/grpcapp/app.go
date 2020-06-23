@@ -15,7 +15,7 @@ import (
 
 const appPort = 3000
 
-// UserApp
+// DaprServer is a barebones application
 type DaprServer interface {
 }
 
