@@ -8,6 +8,7 @@ package injector
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 
@@ -275,6 +276,23 @@ func getInt32Annotation(annotations map[string]string, key string) (int32, error
 	return int32(value), nil
 }
 
+func getProbeHTTPHandler(port int32, pathElements ...string) corev1.Handler {
+	return corev1.Handler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: formatProbePath(pathElements...),
+			Port: intstr.IntOrString{IntVal: port},
+		},
+	}
+}
+
+func formatProbePath(elements ...string) string {
+	pathStr := path.Join(elements...)
+	if !strings.HasPrefix(pathStr, "/") {
+		pathStr = fmt.Sprintf("/%s", pathStr)
+	}
+	return pathStr
+}
+
 func appendQuantityToResourceList(quantity string, resourceName corev1.ResourceName, resourceList corev1.ResourceList) (*corev1.ResourceList, error) {
 	q, err := resource.ParseQuantity(quantity)
 	if err != nil {
@@ -352,6 +370,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 		log.Warn(err)
 	}
 
+	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
+
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -406,24 +426,14 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 			"--metrics-port", fmt.Sprintf("%v", metricsPort),
 		},
 		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: fmt.Sprintf("%s/%s", apiVersionV1, sidecarHealthzPath),
-					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
-				},
-			},
+			Handler:             httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprReadinessProbeDelayKey, defaultHealthzProbeDelaySeconds),
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprReadinessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprReadinessProbePeriodKey, defaultHealthzProbePeriodSeconds),
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprReadinessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: fmt.Sprintf("%s/%s", apiVersionV1, sidecarHealthzPath),
-					Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
-				},
-			},
+			Handler:             httpHandler,
 			InitialDelaySeconds: getInt32AnnotationOrDefault(annotations, daprLivenessProbeDelayKey, defaultHealthzProbeDelaySeconds),
 			TimeoutSeconds:      getInt32AnnotationOrDefault(annotations, daprLivenessProbeTimeoutKey, defaultHealthzProbeTimeoutSeconds),
 			PeriodSeconds:       getInt32AnnotationOrDefault(annotations, daprLivenessProbePeriodKey, defaultHealthzProbePeriodSeconds),
