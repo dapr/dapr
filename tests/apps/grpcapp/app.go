@@ -6,10 +6,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/golang/protobuf/ptypes/empty"
 	grpc_go "google.golang.org/grpc"
 )
 
@@ -18,16 +22,14 @@ const appPort = 3000
 // DaprServer is a barebones application
 type DaprServer struct {
 }
-m
+
 func (s *DaprServer) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
 	return resp.Proto(), nil
 }
 
 func (s *DaprServer) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	var resp = invokev1.NewInvokeMethodResponse(0, "", nil)
-	resp.WithRawData(ExtractSpanContext(ctx), "text/plains")
 	return resp.Proto(), nil
 }
 
