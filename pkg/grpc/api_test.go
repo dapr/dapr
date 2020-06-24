@@ -15,6 +15,7 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/state"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -28,6 +29,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
+	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
@@ -698,7 +700,7 @@ func TestInvokeBinding(t *testing.T) {
 }
 
 func TestExecuteStateTransaction(t *testing.T) {
-	stateOptions := GenerateStateOptions()
+	stateOptions, _ := GenerateStateOptionsTestCase()
 	port, _ := freeport.GetFreePort()
 
 	server := startTestServer(port)
@@ -737,12 +739,15 @@ func TestExecuteStateTransaction(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func GenerateStateOptions() *commonv1pb.StateOptions {
+func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
 	retryPolicyOption := commonv1pb.StateRetryPolicy{
 		Threshold: 10,
 		Pattern:   commonv1pb.StateRetryPolicy_RETRY_EXPONENTIAL,
+		Interval: &durpb.Duration{
+			Seconds: 15,
+		},
 	}
 
 	testOptions := commonv1pb.StateOptions{
@@ -750,5 +755,32 @@ func GenerateStateOptions() *commonv1pb.StateOptions {
 		Consistency: consistencyOption,
 		RetryPolicy: &retryPolicyOption,
 	}
-	return &testOptions
+	expected := state.SetStateOption{
+		Concurrency: "first-write",
+		Consistency: "strong",
+		RetryPolicy: state.RetryPolicy{
+			Threshold: 10,
+			Pattern:   "exponential",
+			Interval:  time.Second * 15,
+		},
+	}
+	return &testOptions, expected
+}
+
+func TestGetStateOptions(t *testing.T) {
+	mockAppChannel := new(channelt.MockAppChannel)
+	fakeAPI := &api{
+		id:         "fakeAPI",
+		appChannel: mockAppChannel,
+	}
+	stateOptionTestCase, expected := GenerateStateOptionsTestCase()
+	stateItemTestCase := commonv1pb.StateItem{
+		Key:     "key1",
+		Value:   []byte("1"),
+		Options: stateOptionTestCase,
+	}
+	t.Run("extract state options", func(t *testing.T) {
+		result := fakeAPI.getSetStateOptions(&stateItemTestCase)
+		assert.Equal(t, expected, result)
+	})
 }
