@@ -21,7 +21,9 @@ const (
 	defaultPort                 = 50001
 	defaultWorkloadCertTTL      = time.Hour * 24
 	defaultAllowedClockSkew     = time.Minute * 15
-	defaultConfigName           = "default"
+
+	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config
+	defaultDaprSystemConfigName = "daprsystem"
 )
 
 var log = logger.NewLogger("dapr.sentry.config")
@@ -101,7 +103,7 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 	}
 
 	if configName == "" {
-		configName = defaultConfigName
+		configName = defaultDaprSystemConfigName
 	}
 
 	for _, i := range list.Items {
