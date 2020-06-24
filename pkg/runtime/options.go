@@ -4,23 +4,23 @@ import (
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/exporters"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
+	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
-	"github.com/dapr/dapr/pkg/components/servicediscovery"
 	"github.com/dapr/dapr/pkg/components/state"
 )
 
 type (
 	// runtimeOpts encapsulates the components to include in the runtime.
 	runtimeOpts struct {
-		secretStores     []secretstores.SecretStore
-		states           []state.State
-		pubsubs          []pubsub.PubSub
-		exporters        []exporters.Exporter
-		serviceDiscovery []servicediscovery.ServiceDiscovery
-		inputBindings    []bindings.InputBinding
-		outputBindings   []bindings.OutputBinding
-		httpMiddleware   []http.Middleware
+		secretStores    []secretstores.SecretStore
+		states          []state.State
+		pubsubs         []pubsub.PubSub
+		exporters       []exporters.Exporter
+		nameResolutions []nameresolution.NameResolution
+		inputBindings   []bindings.InputBinding
+		outputBindings  []bindings.OutputBinding
+		httpMiddleware  []http.Middleware
 	}
 
 	// Option is a function that customizes the runtime.
@@ -55,10 +55,10 @@ func WithExporters(exporters ...exporters.Exporter) Option {
 	}
 }
 
-// WithServiceDiscovery adds service discovery components to the runtime.
-func WithServiceDiscovery(serviceDiscoveries ...servicediscovery.ServiceDiscovery) Option {
+// WithNameResolutions adds name resolution components to the runtime.
+func WithNameResolutions(nameResolutions ...nameresolution.NameResolution) Option {
 	return func(o *runtimeOpts) {
-		o.serviceDiscovery = append(o.serviceDiscovery, serviceDiscoveries...)
+		o.nameResolutions = append(o.nameResolutions, nameResolutions...)
 	}
 }
 
