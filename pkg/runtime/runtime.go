@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,9 +23,9 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
+	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -34,13 +35,12 @@ import (
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
-	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/logger"
@@ -73,60 +73,60 @@ var log = logger.NewLogger("dapr.runtime")
 
 // DaprRuntime holds all the core components of the runtime
 type DaprRuntime struct {
-	runtimeConfig            *Config
-	globalConfig             *config.Configuration
-	components               []components_v1alpha1.Component
-	grpc                     *grpc.Manager
-	appChannel               channel.AppChannel
-	appConfig                config.ApplicationConfig
-	directMessaging          messaging.DirectMessaging
-	stateStoreRegistry       state_loader.Registry
-	secretStoresRegistry     secretstores_loader.Registry
-	exporterRegistry         exporter_loader.Registry
-	serviceDiscoveryRegistry servicediscovery_loader.Registry
-	stateStores              map[string]state.Store
-	actor                    actors.Actors
-	bindingsRegistry         bindings_loader.Registry
-	inputBindings            map[string]bindings.InputBinding
-	outputBindings           map[string]bindings.OutputBinding
-	secretStores             map[string]secretstores.SecretStore
-	pubSubRegistry           pubsub_loader.Registry
-	pubSub                   pubsub.PubSub
-	servicediscoveryResolver servicediscovery.Resolver
-	json                     jsoniter.API
-	httpMiddlewareRegistry   http_middleware_loader.Registry
-	hostAddress              string
-	actorStateStoreName      string
-	actorStateStoreCount     int
-	authenticator            security.Authenticator
-	namespace                string
-	scopedSubscriptions      []string
-	scopedPublishings        []string
-	allowedTopics            []string
-	daprHTTPAPI              http.API
-	operatorClient           operatorv1pb.OperatorClient
-	topicRoutes              map[string]string
+	runtimeConfig          *Config
+	globalConfig           *config.Configuration
+	components             []components_v1alpha1.Component
+	grpc                   *grpc.Manager
+	appChannel             channel.AppChannel
+	appConfig              config.ApplicationConfig
+	directMessaging        messaging.DirectMessaging
+	stateStoreRegistry     state_loader.Registry
+	secretStoresRegistry   secretstores_loader.Registry
+	exporterRegistry       exporter_loader.Registry
+	nameResolutionRegistry nr_loader.Registry
+	stateStores            map[string]state.Store
+	actor                  actors.Actors
+	bindingsRegistry       bindings_loader.Registry
+	inputBindings          map[string]bindings.InputBinding
+	outputBindings         map[string]bindings.OutputBinding
+	secretStores           map[string]secretstores.SecretStore
+	pubSubRegistry         pubsub_loader.Registry
+	pubSub                 pubsub.PubSub
+	nameResolver           nr.Resolver
+	json                   jsoniter.API
+	httpMiddlewareRegistry http_middleware_loader.Registry
+	hostAddress            string
+	actorStateStoreName    string
+	actorStateStoreCount   int
+	authenticator          security.Authenticator
+	namespace              string
+	scopedSubscriptions    []string
+	scopedPublishings      []string
+	allowedTopics          []string
+	daprHTTPAPI            http.API
+	operatorClient         operatorv1pb.OperatorClient
+	topicRoutes            map[string]string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *DaprRuntime {
 	return &DaprRuntime{
-		runtimeConfig:            runtimeConfig,
-		globalConfig:             globalConfig,
-		grpc:                     grpc.NewGRPCManager(runtimeConfig.Mode),
-		json:                     jsoniter.ConfigFastest,
-		inputBindings:            map[string]bindings.InputBinding{},
-		outputBindings:           map[string]bindings.OutputBinding{},
-		secretStores:             map[string]secretstores.SecretStore{},
-		stateStores:              map[string]state.Store{},
-		stateStoreRegistry:       state_loader.NewRegistry(),
-		bindingsRegistry:         bindings_loader.NewRegistry(),
-		pubSubRegistry:           pubsub_loader.NewRegistry(),
-		secretStoresRegistry:     secretstores_loader.NewRegistry(),
-		exporterRegistry:         exporter_loader.NewRegistry(),
-		serviceDiscoveryRegistry: servicediscovery_loader.NewRegistry(),
-		httpMiddlewareRegistry:   http_middleware_loader.NewRegistry(),
-		topicRoutes:              map[string]string{},
+		runtimeConfig:          runtimeConfig,
+		globalConfig:           globalConfig,
+		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
+		json:                   jsoniter.ConfigFastest,
+		inputBindings:          map[string]bindings.InputBinding{},
+		outputBindings:         map[string]bindings.OutputBinding{},
+		secretStores:           map[string]secretstores.SecretStore{},
+		stateStores:            map[string]state.Store{},
+		stateStoreRegistry:     state_loader.NewRegistry(),
+		bindingsRegistry:       bindings_loader.NewRegistry(),
+		pubSubRegistry:         pubsub_loader.NewRegistry(),
+		secretStoresRegistry:   secretstores_loader.NewRegistry(),
+		exporterRegistry:       exporter_loader.NewRegistry(),
+		nameResolutionRegistry: nr_loader.NewRegistry(),
+		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
+		topicRoutes:            map[string]string{},
 	}
 }
 
@@ -237,18 +237,18 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to init exporters: %s", err)
 	}
 
-	// Register and initialize service discovery
-	a.serviceDiscoveryRegistry.Register(opts.serviceDiscovery...)
-	err = a.initServiceDiscovery()
+	// Register and initialize name resolution for service discovery.
+	a.nameResolutionRegistry.Register(opts.nameResolutions...)
+	err = a.initNameResolution()
 	if err != nil {
-		log.Warnf("failed to init service discovery: %s", err)
+		log.Warnf("failed to init name resolution: %s", err)
 	}
 
 	// Register and initialize bindings
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.initBindings()
-	a.initDirectMessaging(a.servicediscoveryResolver)
+	a.initDirectMessaging(a.nameResolver)
 
 	err = a.initActors()
 	if err != nil {
@@ -279,12 +279,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
-
-	// Announce presence to local network if self-hosted
-	err = a.announceSelf()
-	if err != nil {
-		log.Warnf("failed to broadcast address to local network: %s", err)
-	}
 
 	return nil
 }
@@ -369,7 +363,7 @@ func (a *DaprRuntime) beginPubSub() error {
 	return nil
 }
 
-func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
+func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(
 		a.runtimeConfig.ID,
 		a.namespace,
@@ -957,27 +951,38 @@ func (a *DaprRuntime) isPubSubOperationAllowed(topic string, scopedTopics []stri
 	return allowedScope
 }
 
-func (a *DaprRuntime) initServiceDiscovery() error {
-	var resolver servicediscovery.Resolver
+func (a *DaprRuntime) initNameResolution() error {
+	var resolver nr.Resolver
 	var err error
+	var resolverMetadata = nr.Metadata{}
+
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		resolver, err = a.serviceDiscoveryRegistry.Create("kubernetes")
+		resolver, err = a.nameResolutionRegistry.Create("kubernetes")
 	case modes.StandaloneMode:
-		resolver, err = a.serviceDiscoveryRegistry.Create("mdns")
-
+		resolver, err = a.nameResolutionRegistry.Create("mdns")
+		resolverMetadata.Properties = map[string]string{
+			nr.MDNSInstanceName:    a.runtimeConfig.ID,
+			nr.MDNSInstanceAddress: a.hostAddress,
+			nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
+		}
 	default:
 		return fmt.Errorf("remote calls not supported for %s mode", string(a.runtimeConfig.Mode))
 	}
 
 	if err != nil {
-		log.Warnf("error creating service discovery resolver %s: %s", a.runtimeConfig.Mode, err)
+		log.Warnf("error creating name resolution resolver %s: %s", a.runtimeConfig.Mode, err)
 		return err
 	}
 
-	a.servicediscoveryResolver = resolver
+	if err = resolver.Init(resolverMetadata); err != nil {
+		log.Errorf("failed to initialize name resolution resolver %s: %s", a.runtimeConfig.Mode, err)
+		return err
+	}
 
-	log.Infof("Initialized service discovery to %s", a.runtimeConfig.Mode)
+	a.nameResolver = resolver
+
+	log.Infof("Initialized name resolution to %s", a.runtimeConfig.Mode)
 	return nil
 }
 
@@ -1315,18 +1320,6 @@ func (a *DaprRuntime) createAppChannel() error {
 		a.appChannel = ch
 	}
 
-	return nil
-}
-
-func (a *DaprRuntime) announceSelf() error {
-	switch a.runtimeConfig.Mode {
-	case modes.StandaloneMode:
-		err := discovery.RegisterMDNS(a.runtimeConfig.ID, []string{a.hostAddress}, a.runtimeConfig.InternalGRPCPort)
-		if err != nil {
-			return err
-		}
-		log.Infof("local service entry announced: %s -> %s:%d", a.runtimeConfig.ID, a.hostAddress, a.runtimeConfig.InternalGRPCPort)
-	}
 	return nil
 }
 
