@@ -211,7 +211,9 @@ func ExecuteTransaction(states []daprState) error {
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+
+	res.Body.Close()
+
 	return nil
 }
 
