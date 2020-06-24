@@ -173,10 +173,10 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/tests/get", getReceivedMessages).Methods("POST")
 
-	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
+	router.HandleFunc("/v1.0/dapr/subscribe", configureSubscribeHandler).Methods("GET")
 
-	router.HandleFunc("/"+pubsubA, subscribeHandler).Methods("POST")
-	router.HandleFunc("/"+pubsubB, subscribeHandler).Methods("POST")
+	router.HandleFunc("/v1.0/"+pubsubA, subscribeHandler).Methods("POST")
+	router.HandleFunc("/v1.0/"+pubsubB, subscribeHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

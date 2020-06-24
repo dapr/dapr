@@ -216,16 +216,16 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/singlehop", singlehopHandler).Methods("POST")
-	router.HandleFunc("/multihop", multihopHandler).Methods("POST")
+	router.HandleFunc("/v1.0/singlehop", singlehopHandler).Methods("POST")
+	router.HandleFunc("/v1.0/multihop", multihopHandler).Methods("POST")
 
 	router.HandleFunc("/tests/invoke_test", testHandler)
 
 	// these are called through dapr service invocation
-	router.HandleFunc("/posthandler", postHandler).Methods("POST")
-	router.HandleFunc("/gethandler", getHandler).Methods("GET")
-	router.HandleFunc("/puthandler", putHandler).Methods("PUT")
-	router.HandleFunc("/deletehandler", deleteHandler).Methods("DELETE")
+	router.HandleFunc("/v1.0/posthandler", postHandler).Methods("POST")
+	router.HandleFunc("/v1.0/gethandler", getHandler).Methods("GET")
+	router.HandleFunc("/v1.0/puthandler", putHandler).Methods("PUT")
+	router.HandleFunc("/v1.0/deletehandler", deleteHandler).Methods("DELETE")
 
 	// called by test to run some cases - these will themselves make calls
 	router.HandleFunc("/httptohttptest", httpTohttpTest).Methods("POST")
@@ -238,7 +238,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/tests/v1_httptogrpctest", testV1RequestHTTPToGRPC).Methods("POST")
 	router.HandleFunc("/tests/v1_grpctogrpctest", testV1RequestGRPCToGRPC).Methods("POST")
 	router.HandleFunc("/tests/v1_grpctohttptest", testV1RequestGRPCToHTTP).Methods("POST")
-	router.HandleFunc("/retrieve_request_object", retrieveRequestObject).Methods("POST")
+	router.HandleFunc("/v1.0/retrieve_request_object", retrieveRequestObject).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 

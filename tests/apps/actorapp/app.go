@@ -206,9 +206,9 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
-	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
-	router.HandleFunc("/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE")
+	router.HandleFunc("/v1.0/dapr/config", configHandler).Methods("GET")
+	router.HandleFunc("/v1.0/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
+	router.HandleFunc("/v1.0/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/{actorType}/{id}/method/{method}", testCallActorHandler).Methods("POST")
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 	router.HandleFunc("/healthz", healthzHandler).Methods("GET")

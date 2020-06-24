@@ -93,7 +93,7 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/test-topic", testTopicHandler).Methods("POST", "OPTIONS")
+	router.HandleFunc("/v1.0/test-topic", testTopicHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/tests/get_received_topics", testHandler).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))

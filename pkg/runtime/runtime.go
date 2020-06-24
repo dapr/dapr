@@ -1257,7 +1257,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 }
 
 // getConfigurationHTTP gets application config from user application
-// GET http://localhost:<app_port>/dapr/config
+// GET http://localhost:<app_port>/v1.0/dapr/config
 func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
 	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint)
 	req.WithHTTPExtension(nethttp.MethodGet, "")

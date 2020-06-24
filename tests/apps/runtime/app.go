@@ -208,11 +208,11 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/tests/bindings", getBindingsDaprAPIResponse).Methods("GET")
 
-	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
+	router.HandleFunc("/v1.0/dapr/subscribe", configureSubscribeHandler).Methods("GET")
 
-	router.HandleFunc("/"+bindingsTopic, onInputBinding).Methods("POST", "OPTIONS")
+	router.HandleFunc("/v1.0/"+bindingsTopic, onInputBinding).Methods("POST", "OPTIONS")
 
-	router.HandleFunc("/"+pubsubHTTPTopic, onPubsub).Methods("POST")
+	router.HandleFunc("/v1.0/"+pubsubHTTPTopic, onPubsub).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
