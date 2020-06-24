@@ -8,6 +8,9 @@ package injector
 import (
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,6 +36,51 @@ func TestLogAsJSONEnabled(t *testing.T) {
 
 		assert.Equal(t, false, logAsJSONEnabled(fakeAnnotation))
 	})
+}
+
+func TestFormatProbePath(t *testing.T) {
+	var testCases = []struct {
+		given    []string
+		expected string
+	}{
+		{
+			given:    []string{"api", "v1"},
+			expected: "/api/v1",
+		},
+		{
+			given:    []string{"//api", "v1"},
+			expected: "/api/v1",
+		},
+		{
+			given:    []string{"//api", "/v1/"},
+			expected: "/api/v1",
+		},
+		{
+			given:    []string{"//api", "/v1/", "healthz"},
+			expected: "/api/v1/healthz",
+		},
+		{
+			given:    []string{""},
+			expected: "/",
+		},
+	}
+
+	for _, tc := range testCases {
+		assert.Equal(t, tc.expected, formatProbePath(tc.given...))
+	}
+}
+
+func TestGetProbeHttpHandler(t *testing.T) {
+	pathElements := []string{"api", "v1", "healthz"}
+	expectedPath := "/api/v1/healthz"
+	expectedHandler := corev1.Handler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: expectedPath,
+			Port: intstr.IntOrString{IntVal: sidecarHTTPPort},
+		},
+	}
+
+	assert.EqualValues(t, expectedHandler, getProbeHTTPHandler(sidecarHTTPPort, pathElements...))
 }
 
 func TestGetSideCarContainer(t *testing.T) {

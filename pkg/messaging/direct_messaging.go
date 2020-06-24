@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/dapr/components-contrib/servicediscovery"
+	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -46,7 +46,7 @@ type directMessaging struct {
 	mode                modes.DaprMode
 	grpcPort            int
 	namespace           string
-	resolver            servicediscovery.Resolver
+	resolver            nr.Resolver
 	tracingSpec         config.TracingSpec
 	hostAddress         string
 	hostName            string
@@ -58,7 +58,7 @@ func NewDirectMessaging(
 	port int, mode modes.DaprMode,
 	appChannel channel.AppChannel,
 	clientConnFn messageClientConnection,
-	resolver servicediscovery.Resolver,
+	resolver nr.Resolver,
 	tracingSpec config.TracingSpec) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
@@ -194,6 +194,6 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 }
 
 func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {
-	request := servicediscovery.ResolveRequest{ID: appID, Namespace: d.namespace, Port: d.grpcPort}
+	request := nr.ResolveRequest{ID: appID, Namespace: d.namespace, Port: d.grpcPort}
 	return d.resolver.ResolveID(request)
 }
