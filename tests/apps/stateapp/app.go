@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,10 +15,14 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"time"
 
 	"github.com/dapr/components-contrib/state"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/gorilla/mux"
+	"google.golang.org/grpc"
 )
 
 const appPort = 3000
@@ -38,12 +43,23 @@ type daprState struct {
 	OperationType string    `json:"operationType,omitempty"`
 }
 
+// stateTransactionRequest represents a request for GRPC API state transactions in this app.
+type stateTransactionRequest struct {
+	Key           string `json:"key,omitempty"`
+	Value         string `json:"value,omitempty"`
+	OperationType string `json:"operationType,omitempty"`
+}
+
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
 	StartTime int         `json:"start_time,omitempty"`
 	EndTime   int         `json:"end_time,omitempty"`
 	States    []daprState `json:"states,omitempty"`
 	Message   string      `json:"message,omitempty"`
+}
+
+type appResponse struct {
+	Message string `json:"message,omitempty"`
 }
 
 // indexHandler is the handler for root path
@@ -204,8 +220,8 @@ func ExecuteTransaction(states []daprState) error {
 	return nil
 }
 
-// handles all APIs
-func handler(w http.ResponseWriter, r *http.Request) {
+// handles all APIs for HTTP calls
+func httpHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing request for %s", r.URL.RequestURI())
 
 	// Retrieve request body contents
@@ -260,6 +276,70 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
+// Handles State TransasctionRequest for GRPC
+func grpcHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing request for %s", r.URL.RequestURI())
+
+	// Retrieve request body contents
+	var req requestResponse
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		log.Printf("Could not parse request body: %s", err.Error())
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(requestResponse{
+			Message: err.Error(),
+		})
+		return
+	}
+
+	var res requestResponse
+	res.StartTime = epoch()
+	var statusCode = http.StatusOK
+
+	daprPort := 50001
+	daprAddress := fmt.Sprintf("localhost:%s", strconv.Itoa(daprPort))
+	log.Printf("dapr grpc address is %s\n", daprAddress)
+	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
+
+	if err != nil {
+		log.Printf(err.Error())
+	}
+	defer conn.Close()
+
+	client := runtimev1pb.NewDaprClient(conn)
+
+	_, err = client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
+		StoreName: "statestore",
+		Requests:  daprState2TransactionalStateRequest(req.States),
+	})
+	if err != nil {
+		log.Printf(fmt.Sprintf("GRPC Execute State Transaction had error %s\n", err.Error()))
+		res.Message = err.Error()
+	}
+
+	res.EndTime = epoch()
+	if statusCode != http.StatusOK {
+		log.Printf("Error status code %v: %v", statusCode, res.Message)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(res)
+}
+
+func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.TransactionalStateRequest {
+	var transactionalStateRequests []*runtimev1pb.TransactionalStateRequest
+	for _, daprState := range daprStates {
+		transactionalStateRequests = append(transactionalStateRequests, &runtimev1pb.TransactionalStateRequest{
+			OperationType: daprState.OperationType,
+			States: &commonv1pb.StateItem{
+				Key:   daprState.Key,
+				Value: []byte(daprState.Value.Data),
+			},
+		})
+	}
+	return transactionalStateRequests
+}
 func createStateURL(key string) (string, error) {
 	url, err := url.Parse(stateURL)
 	if err != nil {
@@ -280,7 +360,8 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/test/{command}", handler).Methods("POST")
+	router.HandleFunc("/test/{command}", httpHandler).Methods("POST")
+	router.HandleFunc("/grpc-test", grpcHandler).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 

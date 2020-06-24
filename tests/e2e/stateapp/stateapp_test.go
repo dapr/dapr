@@ -77,7 +77,6 @@ type testCase struct {
 }
 
 type testStateTransactionCase struct {
-	name  string
 	steps []stateTransactionTestStep
 }
 
@@ -245,7 +244,6 @@ func generateStateTransactionCases() testStateTransactionCase {
 	}
 
 	testStateTransactionCase := testStateTransactionCase{
-		"Test state transaction APIs with multiple transactions",
 		[]stateTransactionTestStep{
 			{
 				"transact",
@@ -329,7 +327,7 @@ func TestStateTransactionApps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now we are ready to run the actual tests
-	t.Run(testStateTransactionCase.name, func(t *testing.T) {
+	t.Run("Test HTTP State Transactions", func(t *testing.T) {
 		for _, step := range testStateTransactionCase.steps {
 			body, err := json.Marshal(step.request)
 			require.NoError(t, err)
@@ -345,4 +343,26 @@ func TestStateTransactionApps(t *testing.T) {
 			require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
 		}
 	})
+	t.Run("Test GRPC State Transactions", func(t *testing.T) {
+		for _, step := range testStateTransactionCase.steps {
+			body, err := json.Marshal(step.request)
+			require.NoError(t, err)
+
+			var url string
+			if step.command == "get" {
+				url = fmt.Sprintf("%s/test/%s", externalURL, step.command)
+			} else {
+				url = fmt.Sprintf("%s/grpc-test", externalURL)
+			}
+
+			resp, err := utils.HTTPPost(url, body)
+			require.NoError(t, err)
+
+			var appResp requestResponse
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
+		}
+	})
+
 }
