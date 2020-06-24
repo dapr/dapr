@@ -43,13 +43,6 @@ type daprState struct {
 	OperationType string    `json:"operationType,omitempty"`
 }
 
-// stateTransactionRequest represents a request for GRPC API state transactions in this app.
-type stateTransactionRequest struct {
-	Key           string `json:"key,omitempty"`
-	Value         string `json:"value,omitempty"`
-	OperationType string `json:"operationType,omitempty"`
-}
-
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
 	StartTime int         `json:"start_time,omitempty"`
