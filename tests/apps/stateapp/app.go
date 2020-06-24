@@ -25,11 +25,13 @@ import (
 	"google.golang.org/grpc"
 )
 
-const appPort = 3000
+const (
+	appPort = 3000
 
-// statestore is the name of the store
-const stateURL = "http://localhost:3500/v1.0/state/statestore"
-const stateTransactionURL = "http://localhost:3500/v1.0/state/statestore/transaction"
+	// statestore is the name of the store
+	stateURL = "http://localhost:3500/v1.0/state/statestore"
+	stateTransactionURL = "http://localhost:3500/v1.0/state/statestore/transaction"
+)
 
 // appState represents a state in this app.
 type appState struct {
@@ -333,6 +335,7 @@ func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.
 	}
 	return transactionalStateRequests
 }
+
 func createStateURL(key string) (string, error) {
 	url, err := url.Parse(stateURL)
 	if err != nil {
