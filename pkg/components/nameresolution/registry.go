@@ -8,7 +8,6 @@ package nameresolution
 import (
 	"fmt"
 
-	"github.com/dapr/components-contrib/nameresolution"
 	nr "github.com/dapr/components-contrib/nameresolution"
 )
 
@@ -16,7 +15,7 @@ type (
 	// NameResolution is a name resolution component definition.
 	NameResolution struct {
 		Name          string
-		FactoryMethod func() nameresolution.Resolver
+		FactoryMethod func() nr.Resolver
 	}
 
 	// Registry handles registering and creating name resolution components.
