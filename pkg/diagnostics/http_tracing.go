@@ -58,9 +58,9 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 			}
 		}
 
-		//check if response has traceparent header
+		// Check if response has traceparent header and add if absent
 		if !checkResponseHeader(&ctx.Response, traceparentHeader) {
-			span := diag_utils.SpanFromContext(ctx)
+			span = diag_utils.SpanFromContext(ctx)
 			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
 		}
 
@@ -164,11 +164,7 @@ func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
 
 func checkResponseHeader(rsp *fasthttp.Response, name string) bool {
 	s := rsp.Header.Peek(name)
-	if s == nil {
-		return false
-	}
-
-	return true
+	return s != nil
 }
 
 func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
