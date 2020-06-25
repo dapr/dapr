@@ -28,6 +28,9 @@ var certChainPath string
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
+
+	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config
+	defaultDaprSystemConfigName = "daprsystem"
 )
 
 func main() {
@@ -70,7 +73,7 @@ func init() {
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
-	flag.StringVar(&config, "config", "default", "Path to config file, or name of a configuration object")
+	flag.StringVar(&config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
 	flag.Parse()
 
