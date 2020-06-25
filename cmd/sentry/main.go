@@ -29,11 +29,14 @@ var log = logger.NewLogger("dapr.sentry")
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
-	healthzPort            = 8080
+	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config
+	defaultDaprSystemConfigName = "daprsystem"
+
+	healthzPort = 8080
 )
 
 func main() {
-	configName := flag.String("config", "default", "Path to config file, or name of a configuration object")
+	configName := flag.String("config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
 

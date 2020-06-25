@@ -117,6 +117,9 @@ jobs:
       - name: Deploy test components
         if: env.TEST_CLUSTER != ''
         run: make setup-test-components
+      - name: Show dapr configurations
+        if: env.TEST_CLUSTER != ''
+        run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
