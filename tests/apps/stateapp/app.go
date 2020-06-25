@@ -320,7 +320,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusInternalServerError
 		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd)
 		log.Printf(unsupportedCommandMessage)
-		res.Message = unsunsupportedCommandMessage
+		res.Message = unsupportedCommandMessage
 	}
 
 	res.EndTime = epoch()
