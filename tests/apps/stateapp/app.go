@@ -313,12 +313,12 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			statusCode = http.StatusInternalServerError
-			log.Printf(fmt.Sprintf("GRPC Execute State Transaction had error %s\n", err.Error()))
+			log.Printf("GRPC Execute State Transaction had error %s\n", err.Error())
 			res.Message = err.Error()
 		}
 	default:
 		statusCode = http.StatusInternalServerError
-		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd))
+		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd)
 		log.Printf(unsupportedCommandMessage)
 		res.Message = unsunsupportedCommandMessage
 	}
