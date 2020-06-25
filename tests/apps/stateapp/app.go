@@ -29,7 +29,7 @@ const (
 	appPort = 3000
 
 	// statestore is the name of the store
-	stateURL = "http://localhost:3500/v1.0/state/statestore"
+	stateURL            = "http://localhost:3500/v1.0/state/statestore"
 	stateTransactionURL = "http://localhost:3500/v1.0/state/statestore/transaction"
 )
 
@@ -304,14 +304,23 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	client := runtimev1pb.NewDaprClient(conn)
-
-	_, err = client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
-		StoreName: "statestore",
-		Requests:  daprState2TransactionalStateRequest(req.States),
-	})
-	if err != nil {
-		log.Printf(fmt.Sprintf("GRPC Execute State Transaction had error %s\n", err.Error()))
-		res.Message = err.Error()
+	cmd := mux.Vars(r)["command"]
+	switch cmd {
+	case "transact":
+		_, err = client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
+			StoreName: "statestore",
+			Requests:  daprState2TransactionalStateRequest(req.States),
+		})
+		if err != nil {
+			statusCode = http.StatusInternalServerError
+			log.Printf(fmt.Sprintf("GRPC Execute State Transaction had error %s\n", err.Error()))
+			res.Message = err.Error()
+		}
+	default:
+		statusCode = http.StatusInternalServerError
+		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd))
+		log.Printf(unsupportedCommandMessage)
+		res.Message = unsunsupportedCommandMessage
 	}
 
 	res.EndTime = epoch()
@@ -358,9 +367,8 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/test/{command}", httpHandler).Methods("POST")
-	router.HandleFunc("/grpc-test", grpcHandler).Methods("POST")
-
+	router.HandleFunc("/test/http/{command}", httpHandler).Methods("POST")
+	router.HandleFunc("/test/grpc/{command}", grpcHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

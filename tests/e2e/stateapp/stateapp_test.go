@@ -302,7 +302,7 @@ func TestStateApp(t *testing.T) {
 				body, err := json.Marshal(step.request)
 				require.NoError(t, err)
 
-				url := fmt.Sprintf("%s/test/%s", externalURL, step.command)
+				url := fmt.Sprintf("%s/test/http/%s", externalURL, step.command)
 
 				resp, err := utils.HTTPPost(url, body)
 				require.NoError(t, err)
@@ -320,49 +320,40 @@ func TestStateTransactionApps(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
-	testStateTransactionCase := generateStateTransactionCases()
+	testCase := generateStateTransactionCases()
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
+	var transactionTests = []struct {
+		protocol string
+		in       testStateTransactionCase
+	}{
+		{"HTTP", testCase},
+		{"GRPC", testCase},
+	}
+
 	// Now we are ready to run the actual tests
-	t.Run("Test HTTP State Transactions", func(t *testing.T) {
-		for _, step := range testStateTransactionCase.steps {
-			body, err := json.Marshal(step.request)
-			require.NoError(t, err)
+	for _, tt := range transactionTests {
+		t.Run(fmt.Sprintf("Test State Transactions using %s protocol", tt.protocol), func(t *testing.T) {
+			for _, step := range tt.in.steps {
+				body, err := json.Marshal(step.request)
+				require.NoError(t, err)
+				var url string
+				if tt.protocol == "HTTP" || step.command == "get" {
+					url = fmt.Sprintf("%s/test/http/%s", externalURL, step.command)
+				} else {
+					url = fmt.Sprintf("%s/test/grpc/%s", externalURL, step.command)
+				}
+				resp, err := utils.HTTPPost(url, body)
+				require.NoError(t, err)
 
-			url := fmt.Sprintf("%s/test/%s", externalURL, step.command)
-
-			resp, err := utils.HTTPPost(url, body)
-			require.NoError(t, err)
-
-			var appResp requestResponse
-			err = json.Unmarshal(resp, &appResp)
-			require.NoError(t, err)
-			require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
-		}
-	})
-	t.Run("Test GRPC State Transactions", func(t *testing.T) {
-		for _, step := range testStateTransactionCase.steps {
-			body, err := json.Marshal(step.request)
-			require.NoError(t, err)
-
-			var url string
-			if step.command == "get" {
-				url = fmt.Sprintf("%s/test/%s", externalURL, step.command)
-			} else {
-				url = fmt.Sprintf("%s/grpc-test", externalURL)
+				var appResp requestResponse
+				err = json.Unmarshal(resp, &appResp)
+				require.NoError(t, err)
+				require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
 			}
-
-			resp, err := utils.HTTPPost(url, body)
-			require.NoError(t, err)
-
-			var appResp requestResponse
-			err = json.Unmarshal(resp, &appResp)
-			require.NoError(t, err)
-			require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
-		}
-	})
-
+		})
+	}
 }
