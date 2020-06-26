@@ -303,7 +303,7 @@ func TestStateApp(t *testing.T) {
 				body, err := json.Marshal(step.request)
 				require.NoError(t, err)
 
-				url := fmt.Sprintf("http://%s/test/http/%s", externalURL, step.command)
+				url := fmt.Sprintf("//%s/test/http/%s", externalURL, step.command)
 
 				resp, err := utils.HTTPPost(url, body)
 				require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestStateTransactionApps(t *testing.T) {
 				require.NoError(t, err)
 				var url string
 				if tt.protocol == "HTTP" || step.command == "get" {
-					url = strings.TrimSpace(fmt.Sprintf("http://%s/test/http/%s", externalURL, step.command))
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/http/%s", externalURL, step.command))
 				} else {
 					url = strings.TrimSpace(fmt.Sprintf("%s/test/grpc/%s", externalURL, step.command))
 				}

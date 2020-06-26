@@ -172,7 +172,7 @@ func HTTPDelete(url string) ([]byte, error) {
 }
 
 func sanitizeHTTPURL(url string) string {
-	if !strings.Contains(url, "http") {
+	if !strings.HasPrefix(url, "http") {
 		url = fmt.Sprintf("http://%s", url)
 	}
 
