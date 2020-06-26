@@ -343,7 +343,7 @@ func TestStateTransactionApps(t *testing.T) {
 				require.NoError(t, err)
 				var url string
 				if tt.protocol == "HTTP" || step.command == "get" {
-					url = strings.TrimSpace(fmt.Sprintf("http://%s/test/http/%s", externalURL, step.command))
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/http/%s", externalURL, step.command))
 				} else {
 					url = strings.TrimSpace(fmt.Sprintf("%s/test/grpc/%s", externalURL, step.command))
 				}
