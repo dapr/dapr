@@ -61,10 +61,13 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			}
 		}
 
-		// Add trace context if absent
-		if diag_utils.SpanFromContext(ctx) == nil {
-			traceContextBinary := propagation.Binary(span.SpanContext())
-			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
+		// Check for trace context in response headers
+		if itrnlInvkResp, ok := resp.(internalv1pb.InternalInvokeResponse); ok {
+			respHdrs := itrnlInvkResp.Headers
+			if _, ok := respHdrs[grpcTraceContextKey]; !ok {
+				traceContextBinary := propagation.Binary(span.SpanContext())
+				grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
+			}
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
@@ -112,19 +115,6 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 	var sc trace.SpanContext
 	var ok bool
 	md, _ := metadata.FromIncomingContext(ctx)
-	traceContext := md[grpcTraceContextKey]
-	if len(traceContext) > 0 {
-		traceContextBinary := []byte(traceContext[0])
-		sc, ok = propagation.FromBinary(traceContextBinary)
-	}
-	return sc, ok
-}
-
-// spanContextFromOutgoingGRPCMetadata returns the SpanContext stored in outgoing metadata of context, or empty if there isn't one.
-func spanContextFromOutgoingGRPCMetadata(ctx context.Context) (trace.SpanContext, bool) {
-	var sc trace.SpanContext
-	var ok bool
-	md, _ := metadata.FromOutgoingContext(ctx)
 	traceContext := md[grpcTraceContextKey]
 	if len(traceContext) > 0 {
 		traceContextBinary := []byte(traceContext[0])
