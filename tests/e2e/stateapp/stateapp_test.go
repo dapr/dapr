@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
@@ -342,9 +343,9 @@ func TestStateTransactionApps(t *testing.T) {
 				require.NoError(t, err)
 				var url string
 				if tt.protocol == "HTTP" || step.command == "get" {
-					url = fmt.Sprintf("%s/test/http/%s", externalURL, step.command)
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/http/%s", externalURL, step.command))
 				} else {
-					url = fmt.Sprintf("%s/test/grpc/%s", externalURL, step.command)
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/grpc/%s", externalURL, step.command))
 				}
 				resp, err := utils.HTTPPost(url, body)
 				require.NoError(t, err)
