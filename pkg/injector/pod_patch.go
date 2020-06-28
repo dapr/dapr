@@ -50,15 +50,16 @@ const (
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
+	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
 	sidecarInternalGRPCPort           = 50002
+	userContainerDaprHTTPPortName     = "DAPR_HTTP_PORT"
+	userContainerDaprGRPCPortName     = "DAPR_GRPC_PORT"
 	apiAddress                        = "dapr-api"
 	placementService                  = "dapr-placement"
 	sentryService                     = "dapr-sentry"
-	userContainerDaprHTTPPortName     = "DAPR_HTTP_PORT"
 	sidecarHTTPPortName               = "dapr-http"
-	userContainerDaprGRPCPortName     = "DAPR_GRPC_PORT"
 	sidecarGRPCPortName               = "dapr-grpc"
 	sidecarInternalGRPCPortName       = "dapr-internal"
 	sidecarMetricsPortName            = "dapr-metrics"
@@ -130,10 +131,10 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	var path string
 	var value interface{}
 	if len(pod.Spec.Containers) == 0 {
-		path = "/spec/containers"
+		path = containersPath
 		value = []corev1.Container{*sidecarContainer}
 	} else {
-		envPatchOps = setDaprEnvVars(pod.Spec.Containers, "/spec/containers")
+		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -151,8 +152,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	return patchOps, nil
 }
 
-func setDaprEnvVars(list []corev1.Container, basePath string) []PatchOperation {
-	envPatchOps := []PatchOperation{}
+func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
 	portEnv := []corev1.EnvVar{
 		{
 			Name:  userContainerDaprHTTPPortName,
@@ -163,38 +163,55 @@ func setDaprEnvVars(list []corev1.Container, basePath string) []PatchOperation {
 			Value: strconv.Itoa(sidecarAPIGRPCPort),
 		},
 	}
-	var value interface{}
-	for i, container := range list {
-		first := len(container.Env) == 0
-		for _, addEnv := range portEnv {
-			path := fmt.Sprintf("%s/%d/env", basePath, i)
-			hasKey := false
-			for _, actual := range container.Env {
-				if actual.Name == addEnv.Name {
-					hasKey = true
-					log.Infof("env var already set by user in container %s. %s=%s", container.Name, actual.Name, actual.Value)
-					break
-				}
-			}
-
-			if !hasKey {
-				value = addEnv
-				if !first {
-					path += "/-"
-				} else {
-					first = false
-					value = []corev1.EnvVar{addEnv}
-				}
-				log.Infof("env var added to container %s. %s=%s", container.Name, addEnv.Name, addEnv.Value)
-				envPatchOps = append(envPatchOps, PatchOperation{
-					Op:    "add",
-					Path:  path,
-					Value: value,
-				})
-			}
+	envPatchOps := []PatchOperation{}
+	for i, container := range containers {
+		path := fmt.Sprintf("%s/%d/env", containersPath, i)
+		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
+		if len(patchOps) != 0 {
+			envPatchOps = append(envPatchOps, patchOps...)
 		}
 	}
 	return envPatchOps
+}
+
+func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path string) []PatchOperation {
+	if len(envs) == 0 {
+		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
+		return []PatchOperation{
+			{
+				Op:    "add",
+				Path:  path,
+				Value: addEnv,
+			},
+		}
+	}
+	// If there are existing env vars, then we are adding to an existing slice of env vars.
+	path += "/-"
+
+	// Add only env vars that do not conflict with existing user defined/injected env vars.
+	toAdd := []corev1.EnvVar{}
+	for _, env := range addEnv {
+		hasEnv := false
+		for _, actual := range envs {
+			if actual.Name == env.Name {
+				hasEnv = true
+				break
+			}
+		}
+		if !hasEnv {
+			toAdd = append(toAdd, env)
+		}
+	}
+
+	patchOps := make([]PatchOperation, len(toAdd))
+	for i, value := range toAdd {
+		patchOps[i] = PatchOperation{
+			Op:    "add",
+			Path:  path,
+			Value: value,
+		}
+	}
+	return patchOps
 }
 
 func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {
