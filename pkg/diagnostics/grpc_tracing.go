@@ -61,14 +61,8 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			}
 		}
 
-		// Check for trace context in response headers
-		if itrnlInvkResp, ok := resp.(internalv1pb.InternalInvokeResponse); ok {
-			respHdrs := itrnlInvkResp.Headers
-			if _, ok := respHdrs[grpcTraceContextKey]; !ok {
-				traceContextBinary := propagation.Binary(span.SpanContext())
-				grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
-			}
-		}
+		traceContextBinary := propagation.Binary(span.SpanContext())
+		grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
 
 		UpdateSpanStatusFromGRPCError(span, err)
 		span.End()
