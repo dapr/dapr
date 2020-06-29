@@ -18,7 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const rootCert = `-----BEGIN CERTIFICATE-----
+const (
+	rootCert = `-----BEGIN CERTIFICATE-----
 MIIBgjCCASigAwIBAgIRAIrX/pDJ+p4f6dujmOifvbkwCgYIKoZIzj0EAwIwFDES
 MBAGA1UEAxMJbG9jYWxob3N0MB4XDTIwMDEyMjE4MTQwMloXDTMwMDExOTE4MTQw
 MlowFDESMBAGA1UEAxMJbG9jYWxob3N0MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD
@@ -30,7 +31,7 @@ xlY/D2Y8sYvui1VXj0q0HHElgAIhAK2jBa2onvy/K1Epk9q7d3pZi5Kqz0NsOzFV
 0qL4GK10
 -----END CERTIFICATE-----`
 
-const issuerCert = `-----BEGIN CERTIFICATE-----
+	issuerCert = `-----BEGIN CERTIFICATE-----
 MIIBgjCCASigAwIBAgIRANfF9X4LJ314GZjUe17qsQ0wCgYIKoZIzj0EAwIwFDES
 MBAGA1UEAxMJbG9jYWxob3N0MB4XDTIwMDEyMjE4MTQyMVoXDTIxMDEyMTE4MTQy
 MVowFDESMBAGA1UEAxMJbG9jYWxob3N0MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcD
@@ -42,11 +43,16 @@ flWXeGl/HN2HQQTcszk2fRvb0c4CICs60ZlkjXoRA8rLLi1wnfkUS8rQ1PT3R/Mp
 2ZK4OZle
 -----END CERTIFICATE-----`
 
-const issuerKey = `-----BEGIN EC PRIVATE KEY-----
+	issuerKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIPka7+VUgUXmJghUv2JAYn9Pow1o6T3r3dxrvamrdubboAoGCCqGSM49
 AwEHoUQDQgAEkDB/emmKm1PwOpt50ZCEanV8VXToYsIBIYbSQ/+rmCyJObLAeUsg
 zWtds/T7oYatEywym92pgjUlQ7Yz8HsB4w==
 -----END EC PRIVATE KEY-----`
+
+	allowedClockSkew = time.Minute * 10
+
+	workloadCertTTL = time.Hour * 10
+)
 
 func getTestCSR(name string) *x509.CertificateRequest {
 	return &x509.CertificateRequest{
@@ -64,10 +70,13 @@ func getTestCertAuth() CertificateAuthority {
 	conf.RootCertPath = "./ca.crt"
 	conf.IssuerCertPath = "./issuer.crt"
 	conf.IssuerKeyPath = "./issuer.key"
+	conf.AllowedClockSkew = allowedClockSkew
+	conf.WorkloadCertTTL = workloadCertTTL
 	certAuth, _ := NewCertificateAuthority(conf)
 	return certAuth
 }
 
+// nolint:gosec
 func writeTestCredentialsToDisk() {
 	ioutil.WriteFile("ca.crt", []byte(rootCert), 0644)
 	ioutil.WriteFile("issuer.crt", []byte(issuerCert), 0644)
@@ -103,7 +112,7 @@ func TestCertValidity(t *testing.T) {
 }
 
 func TestSignCSR(t *testing.T) {
-	t.Run("valid csr", func(t *testing.T) {
+	t.Run("valid csr positive ttl", func(t *testing.T) {
 		writeTestCredentialsToDisk()
 		defer cleanupCredentials()
 
@@ -118,7 +127,25 @@ func TestSignCSR(t *testing.T) {
 		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*24, false)
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
-		assert.Equal(t, time.Now().UTC().AddDate(0, 0, 1).Day(), resp.Certificate.NotAfter.UTC().Day())
+		assert.Equal(t, time.Now().UTC().Add(time.Hour*24+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
+	})
+
+	t.Run("valid csr negative ttl", func(t *testing.T) {
+		writeTestCredentialsToDisk()
+		defer cleanupCredentials()
+
+		csr := getTestCSR("test.a.com")
+		pk, _ := getECDSAPrivateKey()
+		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+
+		certAuth := getTestCertAuth()
+		certAuth.LoadOrStoreTrustBundle()
+
+		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*-1, false)
+		assert.Nil(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, time.Now().UTC().Add(workloadCertTTL+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
 	})
 
 	t.Run("invalid csr", func(t *testing.T) {

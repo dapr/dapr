@@ -5,11 +5,15 @@ Architecture Decision Records (ADRs or simply decision records) are a collection
 This folder contains all the decisions we have recorded in Dapr, including Dapr runtime, Dapr CLI as well as Dapr SDKs in different languages.
 
 ## Dapr decision record organization and index
+
 All decisions are categorized in the following folders:
+
 * **Architecture** - Decisions on general architecture, code structure, coding conventions and common practices.
   
   - [ARC-001: Refactor for modularity and testability](./architecture/ARC-001-refactor-for-modularity-and-testability.md)
   - [ARC-002: Multitenancy](./architecture/ARC-002-multitenancy.md)
+  - [ARC-003: gRPC and Protobuf message coding convention](./architecture/ARC-003-grpc-protobuf-coding-convention.md)
+  - [ARC-004: HTTP API server](./architecture/ARC-004-http-server.md)
   
 * **API** - Decisions on Dapr runtime API designs.
 
@@ -21,12 +25,14 @@ All decisions are categorized in the following folders:
   - [API-006: Universal namespace (customer ask)](./api/API-006-universal-namespace.md)
   - [API-007: Tracing Endpoint](./api/API-007-tracing-endpoint.md)
   - [API-008: Multi State store API design](./api/API-008-multi-state-store-api-design.md)
+  - [API-009: Bi-Directional Bindings](./api/API-009-bidirectional-bindings.md)
 
 * **CLI** - Decisions on Dapr CLI architecture and behaviors.
 
   - [CLI-001: CLI and runtime versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
   
 * **SDKs** - Decisions on Dapr SDKs.
+
   - [SDK-001: SDK releases](./sdk/SDK-001-releases.MD)
   - [SDK-002: Java JDK versions](./sdk/SDK-002-java-jdk-versions.MD)
 
@@ -38,6 +44,7 @@ All decisions are categorized in the following folders:
   - [ENG-004: Signing](./engineering/ENG-004-signing.MD)
 
 ## Creating new decision records
+
 A new decision record should be a _.md_ file named as 
 ```
 <category prefix>-<sequence number in category>-<descriptive title>.md

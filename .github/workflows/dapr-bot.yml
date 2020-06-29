@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Comment analyzer
-        uses: actions/github-script@0.3.0
+        uses: actions/github-script@v1
         with:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
@@ -24,7 +24,13 @@ jobs:
               "msfussell",
               "shalabhms",
               "LMWF",
-              "artursouza"
+              "artursouza",
+              "vinayada1",
+              "mukundansundar",
+              "wcs1only",
+              "orizohar",
+              "pruthvidhodda",
+              "mchmarny"
             ];
 
             const payload = context.payload;
@@ -32,65 +38,99 @@ jobs:
             const isFromPulls = !!payload.issue.pull_request;
             const commentBody = payload.comment.body;
 
-            if (isFromPulls && commentBody && commentBody.indexOf("/ok-to-test") == 0) {
-              // Ignore the command unless the actor is in owner list
-              if (owners.indexOf(context.actor) < 0) {
-                const errorMessage = `${context.actor} doesn't have the permission to execute the command`;
+            if (owners.indexOf(context.actor) < 0) {
+              return;
+            }
 
-                console.log(errorMessage);
-                
-                await github.issues.createComment({
-                  owner: issue.owner,
-                  repo: issue.repo,
-                  issue_number: issue.number,
-                  body: errorMessage
-                });
-
-                return;
+            if (commentBody && commentBody.indexOf("/make-me-laugh") == 0) {
+              const result = await github.request("https://official-joke-api.appspot.com/random_joke");
+              jokedata = result.data;
+              joke = "I have a bad feeling about this.";
+              if (jokedata && jokedata.setup && jokedata.punchline) {
+                joke = `${jokedata.setup} - ${jokedata.punchline}`;
               }
 
-              // Get pull request
-              const pull = await github.pulls.get({
+              await github.issues.createComment({
                 owner: issue.owner,
                 repo: issue.repo,
-                pull_number: issue.number
+                issue_number: issue.number,
+                body: joke,
               });
 
-              if (pull && pull.data) {
-                // Pollyfill: register createDispatchEvent because actions/github-script@0.3.0 
-                // does not have createDispatchEvent.
-                github.registerEndpoints({
-                  repos: {
-                    createDispatchEvent: {
-                      "headers": { "accept": "application/vnd.github.everest-preview+json" },
-                      "method": "POST",
-                      "params": {
-                        "client_payload": { "type": "object" },
-                        "event_type": { "type": "string" },
-                        "owner": { "required": true, "type": "string" },
-                        "repo": { "required": true, "type": "string" }
-                      },
-                      "url": "/repos/:owner/:repo/dispatches"
-                    }
-                  }
-                });
-                
-                // Get commit id and repo from pull head
-                const testPayload = {
-                  pull_head_ref: pull.data.head.sha,
-                  pull_head_repo: pull.data.head.repo.full_name,
-                  command: "ok-to-test",
-                  issue: issue,
-                };
-    
-                // Fire repository_dispatch event to trigger e2e test
-                await github.repos.createDispatchEvent({
+              return;
+            }
+
+            // Pollyfill: register createDispatchEvent because actions/github-script@0.3.0 
+            // does not have createDispatchEvent.
+            github.registerEndpoints({
+              repos: {
+                createDispatchEvent: {
+                  "headers": { "accept": "application/vnd.github.everest-preview+json" },
+                  "method": "POST",
+                  "params": {
+                    "client_payload": { "type": "object" },
+                    "event_type": { "type": "string" },
+                    "owner": { "required": true, "type": "string" },
+                    "repo": { "required": true, "type": "string" }
+                  },
+                  "url": "/repos/:owner/:repo/dispatches"
+                }
+              }
+            });
+
+            if (isFromPulls && commentBody) {
+              if (commentBody.indexOf("/ok-to-test") == 0) {
+                // Get pull request
+                const pull = await github.pulls.get({
                   owner: issue.owner,
                   repo: issue.repo,
-                  event_type: "e2e-test",
-                  client_payload: testPayload,
+                  pull_number: issue.number
                 });
-                
-                console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
+
+                if (pull && pull.data) {                
+                  // Get commit id and repo from pull head
+                  const testPayload = {
+                    pull_head_ref: pull.data.head.sha,
+                    pull_head_repo: pull.data.head.repo.full_name,
+                    command: "ok-to-test",
+                    issue: issue,
+                  };
+      
+                  // Fire repository_dispatch event to trigger e2e test
+                  await github.repos.createDispatchEvent({
+                    owner: issue.owner,
+                    repo: issue.repo,
+                    event_type: "e2e-test",
+                    client_payload: testPayload,
+                  });
+                  
+                  console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
+                }
+              } else if (commentBody.indexOf("/ok-to-perf") == 0) {
+                // Get pull request
+                const pull = await github.pulls.get({
+                  owner: issue.owner,
+                  repo: issue.repo,
+                  pull_number: issue.number
+                });
+                if (pull && pull.data) {                
+                  // Get commit id and repo from pull head
+                  const perfPayload = {
+                    pull_head_ref: pull.data.head.sha,
+                    pull_head_repo: pull.data.head.repo.full_name,
+                    command: "ok-to-perf",
+                    issue: issue,
+                  };
+      
+                  // Fire repository_dispatch event to trigger e2e test
+                  await github.repos.createDispatchEvent({
+                    owner: issue.owner,
+                    repo: issue.repo,
+                    event_type: "perf-test",
+                    client_payload: perfPayload,
+                  });
+                  
+                  console.log(`Trigger Perf test for ${JSON.stringify(perfPayload)}`);
+                }
               }
             }

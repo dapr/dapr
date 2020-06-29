@@ -1,0 +1,19 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.internals.v1;
+
+option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
+
+// APIVersion represents the version of Dapr Runtime API.
+enum APIVersion {
+  // unspecified apiversion
+  APIVERSION_UNSPECIFIED = 0;
+
+  // Dapr API v1
+  V1 = 1;
+}

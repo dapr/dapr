@@ -15,6 +15,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
+	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
@@ -28,10 +29,14 @@ var log = logger.NewLogger("dapr.sentry")
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
+	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config
+	defaultDaprSystemConfigName = "daprsystem"
+
+	healthzPort = 8080
 )
 
 func main() {
-	configName := flag.String("config", "default", "Path to config file, or name of a configuration object")
+	configName := flag.String("config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
 
@@ -96,6 +101,16 @@ func main() {
 			monitoring.IssuerCertChanged()
 			log.Warn("issuer credentials changed. reloading")
 			ca.Restart(ctx, config)
+		}
+	}()
+
+	go func() {
+		healthzServer := health.NewServer(log)
+		healthzServer.Ready()
+
+		err := healthzServer.Run(ctx, healthzPort)
+		if err != nil {
+			log.Fatalf("failed to start healthz server: %s", err)
 		}
 	}()
 

@@ -13,16 +13,19 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	nethttp "net/http"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
+	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/components-contrib/servicediscovery"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -32,90 +35,98 @@ import (
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
+	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
-	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/discovery"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
-	daprclient_pb "github.com/dapr/dapr/pkg/proto/daprclient"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
-	"github.com/golang/protobuf/ptypes/any"
+	"github.com/dapr/dapr/utils"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
+	"go.opencensus.io/trace"
 )
 
 const (
-	appConfigEndpoint   = "dapr/config"
-	parallelConcurrency = "parallel"
-	actorStateStore     = "actorStateStore"
+	appConfigEndpoint = "dapr/config"
+	actorStateStore   = "actorStateStore"
+
+	// output bindings concurrency
+	bindingsConcurrnecyParallel   = "parallel"
+	bindingsConcurrnecySequential = "sequential"
 )
 
 var log = logger.NewLogger("dapr.runtime")
 
 // DaprRuntime holds all the core components of the runtime
 type DaprRuntime struct {
-	runtimeConfig            *Config
-	globalConfig             *config.Configuration
-	components               []components_v1alpha1.Component
-	grpc                     *grpc.Manager
-	appChannel               channel.AppChannel
-	appConfig                config.ApplicationConfig
-	directMessaging          messaging.DirectMessaging
-	stateStoreRegistry       state_loader.Registry
-	secretStoresRegistry     secretstores_loader.Registry
-	exporterRegistry         exporter_loader.Registry
-	serviceDiscoveryRegistry servicediscovery_loader.Registry
-	stateStores              map[string]state.Store
-	actor                    actors.Actors
-	bindingsRegistry         bindings_loader.Registry
-	inputBindings            map[string]bindings.InputBinding
-	outputBindings           map[string]bindings.OutputBinding
-	secretStores             map[string]secretstores.SecretStore
-	pubSubRegistry           pubsub_loader.Registry
-	pubSub                   pubsub.PubSub
-	servicediscoveryResolver servicediscovery.Resolver
-	json                     jsoniter.API
-	httpMiddlewareRegistry   http_middleware_loader.Registry
-	hostAddress              string
-	actorStateStoreName      string
-	actorStateStoreCount     int
-	authenticator            security.Authenticator
-	namespace                string
-	scopedPublishings        []string
-	allowedTopics            []string
-	daprHTTPAPI              http.API
-	operatorClient           operatorv1pb.OperatorClient
+	runtimeConfig          *Config
+	globalConfig           *config.Configuration
+	components             []components_v1alpha1.Component
+	grpc                   *grpc.Manager
+	appChannel             channel.AppChannel
+	appConfig              config.ApplicationConfig
+	directMessaging        messaging.DirectMessaging
+	stateStoreRegistry     state_loader.Registry
+	secretStoresRegistry   secretstores_loader.Registry
+	exporterRegistry       exporter_loader.Registry
+	nameResolutionRegistry nr_loader.Registry
+	stateStores            map[string]state.Store
+	actor                  actors.Actors
+	bindingsRegistry       bindings_loader.Registry
+	inputBindings          map[string]bindings.InputBinding
+	outputBindings         map[string]bindings.OutputBinding
+	secretStores           map[string]secretstores.SecretStore
+	pubSubRegistry         pubsub_loader.Registry
+	pubSub                 pubsub.PubSub
+	nameResolver           nr.Resolver
+	json                   jsoniter.API
+	httpMiddlewareRegistry http_middleware_loader.Registry
+	hostAddress            string
+	actorStateStoreName    string
+	actorStateStoreCount   int
+	authenticator          security.Authenticator
+	namespace              string
+	scopedSubscriptions    []string
+	scopedPublishings      []string
+	allowedTopics          []string
+	daprHTTPAPI            http.API
+	operatorClient         operatorv1pb.OperatorClient
+	topicRoutes            map[string]string
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *DaprRuntime {
 	return &DaprRuntime{
-		runtimeConfig:            runtimeConfig,
-		globalConfig:             globalConfig,
-		grpc:                     grpc.NewGRPCManager(),
-		json:                     jsoniter.ConfigFastest,
-		inputBindings:            map[string]bindings.InputBinding{},
-		outputBindings:           map[string]bindings.OutputBinding{},
-		secretStores:             map[string]secretstores.SecretStore{},
-		stateStores:              map[string]state.Store{},
-		stateStoreRegistry:       state_loader.NewRegistry(),
-		bindingsRegistry:         bindings_loader.NewRegistry(),
-		pubSubRegistry:           pubsub_loader.NewRegistry(),
-		secretStoresRegistry:     secretstores_loader.NewRegistry(),
-		exporterRegistry:         exporter_loader.NewRegistry(),
-		serviceDiscoveryRegistry: servicediscovery_loader.NewRegistry(),
-		httpMiddlewareRegistry:   http_middleware_loader.NewRegistry(),
+		runtimeConfig:          runtimeConfig,
+		globalConfig:           globalConfig,
+		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
+		json:                   jsoniter.ConfigFastest,
+		inputBindings:          map[string]bindings.InputBinding{},
+		outputBindings:         map[string]bindings.OutputBinding{},
+		secretStores:           map[string]secretstores.SecretStore{},
+		stateStores:            map[string]state.Store{},
+		stateStoreRegistry:     state_loader.NewRegistry(),
+		bindingsRegistry:       bindings_loader.NewRegistry(),
+		pubSubRegistry:         pubsub_loader.NewRegistry(),
+		secretStoresRegistry:   secretstores_loader.NewRegistry(),
+		exporterRegistry:       exporter_loader.NewRegistry(),
+		nameResolutionRegistry: nr_loader.NewRegistry(),
+		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
+		topicRoutes:            map[string]string{},
 	}
 }
 
@@ -133,6 +144,11 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	err := a.initRuntime(&o)
 	if err != nil {
 		return err
+	}
+
+	err = a.beginPubSub()
+	if err != nil {
+		log.Warn(err)
 	}
 
 	err = a.beginReadInputBindings()
@@ -188,7 +204,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.blockUntilAppIsReady()
 
-	a.hostAddress, err = GetHostAddress()
+	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return fmt.Errorf("failed to determine host address: %s", err)
 	}
@@ -221,18 +237,18 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to init exporters: %s", err)
 	}
 
-	// Register and initialize service discovery
-	a.serviceDiscoveryRegistry.Register(opts.serviceDiscovery...)
-	err = a.initServiceDiscovery()
+	// Register and initialize name resolution for service discovery.
+	a.nameResolutionRegistry.Register(opts.nameResolutions...)
+	err = a.initNameResolution()
 	if err != nil {
-		log.Warnf("failed to init service discovery: %s", err)
+		log.Warnf("failed to init name resolution: %s", err)
 	}
 
 	// Register and initialize bindings
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
 	a.initBindings()
-	a.initDirectMessaging(a.servicediscoveryResolver)
+	a.initDirectMessaging(a.nameResolver)
 
 	err = a.initActors()
 	if err != nil {
@@ -263,12 +279,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
-
-	// Announce presence to local network if self-hosted
-	err = a.announceSelf()
-	if err != nil {
-		log.Warnf("failed to broadcast address to local network: %s", err)
-	}
 
 	return nil
 }
@@ -322,7 +332,38 @@ func (a *DaprRuntime) beginReadInputBindings() error {
 	return nil
 }
 
-func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
+func (a *DaprRuntime) beginPubSub() error {
+	var publishFunc func(msg *pubsub.NewMessage) error
+	switch a.runtimeConfig.ApplicationProtocol {
+	case HTTPProtocol:
+		publishFunc = a.publishMessageHTTP
+	case GRPCProtocol:
+		publishFunc = a.publishMessageGRPC
+	}
+
+	if a.pubSub != nil && a.appChannel != nil {
+		a.topicRoutes = a.getTopicRoutes()
+
+		for t := range a.topicRoutes {
+			allowed := a.isPubSubOperationAllowed(t, a.scopedSubscriptions)
+			if !allowed {
+				log.Warnf("subscription to topic %s is not allowed", t)
+				continue
+			}
+
+			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
+				Topic: t,
+			}, publishFunc)
+			if err != nil {
+				log.Warnf("failed to subscribe to topic %s: %s", t, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(
 		a.runtimeConfig.ID,
 		a.namespace,
@@ -330,7 +371,8 @@ func (a *DaprRuntime) initDirectMessaging(resolver servicediscovery.Resolver) {
 		a.runtimeConfig.Mode,
 		a.appChannel,
 		a.grpc.GetGRPCConnection,
-		resolver)
+		resolver,
+		a.globalConfig.Spec.TracingSpec)
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {
@@ -353,7 +395,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			log.Debug("received component update")
 
 			var component components_v1alpha1.Component
-			err = json.Unmarshal(c.Component.Value, &component)
+			err = json.Unmarshal(c.GetComponent(), &component)
 			if err != nil {
 				log.Warnf("error deserializing component: %s", err)
 				continue
@@ -419,8 +461,9 @@ func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
 	for _, dst := range to {
 		go func(name string) {
-			err := a.sendToOutputBinding(name, &bindings.WriteRequest{
-				Data: data,
+			_, err := a.sendToOutputBinding(name, &bindings.InvokeRequest{
+				Data:      data,
+				Operation: bindings.CreateOperation,
 			})
 			if err != nil {
 				log.Error(err)
@@ -431,8 +474,9 @@ func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) 
 
 func (a *DaprRuntime) sendBatchOutputBindingsSequential(to []string, data []byte) error {
 	for _, dst := range to {
-		err := a.sendToOutputBinding(dst, &bindings.WriteRequest{
-			Data: data,
+		_, err := a.sendToOutputBinding(dst, &bindings.InvokeRequest{
+			Data:      data,
+			Operation: bindings.CreateOperation,
 		})
 		if err != nil {
 			return err
@@ -441,12 +485,25 @@ func (a *DaprRuntime) sendBatchOutputBindingsSequential(to []string, data []byte
 	return nil
 }
 
-func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.WriteRequest) error {
-	if binding, ok := a.outputBindings[name]; ok {
-		err := binding.Write(req)
-		return err
+func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+	if req.Operation == "" {
+		return nil, errors.New("operation field is missing from request")
 	}
-	return fmt.Errorf("couldn't find output binding %s", name)
+
+	if binding, ok := a.outputBindings[name]; ok {
+		ops := binding.Operations()
+		for _, o := range ops {
+			if o == req.Operation {
+				return binding.Invoke(req)
+			}
+		}
+		supported := make([]string, len(ops))
+		for _, o := range ops {
+			supported = append(supported, string(o))
+		}
+		return nil, fmt.Errorf("binding %s does not support operation %s. supported operations:%s", name, req.Operation, strings.Join(supported, " "))
+	}
+	return nil, fmt.Errorf("couldn't find output binding %s", name)
 }
 
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
@@ -467,7 +524,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 			return err
 		}
 
-		if response.Concurrency == parallelConcurrency {
+		if response.Concurrency == bindingsConcurrnecyParallel {
 			a.sendBatchOutputBindingsParallel(response.To, b)
 		} else {
 			return a.sendBatchOutputBindingsSequential(response.To, b)
@@ -478,36 +535,51 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 }
 
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
-	var response *bindings.AppResponse
+	var response bindings.AppResponse
+	spanName := fmt.Sprintf("bindings/%s", bindingName)
+	ctx, span := diag.StartInternalCallbackSpan(spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
-		resp, err := client.OnBindingEvent(context.Background(), &daprclient_pb.BindingEventEnvelope{
-			Name: bindingName,
-			Data: &any.Any{
-				Value: data,
-			},
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+		req := &runtimev1pb.BindingEventRequest{
+			Name:     bindingName,
+			Data:     data,
 			Metadata: metadata,
-		})
+		}
+		resp, err := client.OnBindingEvent(ctx, req)
+		if span != nil {
+			m := diag.ConstructInputBindingSpanAttributes(
+				bindingName,
+				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent")
+			diag.AddAttributesToSpan(span, m)
+			diag.UpdateSpanStatusFromGRPCError(span, err)
+			span.End()
+		}
+
 		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 		if resp != nil {
-			response = &bindings.AppResponse{}
-			response.Concurrency = resp.Concurrency
+			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
+				response.Concurrency = bindingsConcurrnecyParallel
+			} else {
+				response.Concurrency = bindingsConcurrnecySequential
+			}
+
 			response.To = resp.To
 
 			if resp.Data != nil {
 				var d interface{}
-				err := a.json.Unmarshal(resp.Data.Value, &d)
+				err := a.json.Unmarshal(resp.Data, &d)
 				if err == nil {
 					response.Data = d
 				}
 			}
 
-			for _, s := range resp.State {
+			for _, s := range resp.States {
 				var i interface{}
-				a.json.Unmarshal(s.Value.Value, &i)
+				a.json.Unmarshal(s.Value, &i)
 
 				response.State = append(response.State, state.SetRequest{
 					Key:   s.Key,
@@ -516,31 +588,42 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			}
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		req := channel.InvokeRequest{
-			Metadata: metadata,
-			Method:   bindingName,
-			Payload:  data,
-		}
+		req := invokev1.NewInvokeMethodRequest(bindingName)
+		req.WithHTTPExtension(nethttp.MethodPost, "")
+		req.WithRawData(data, invokev1.JSONContentType)
 
-		resp, err := a.appChannel.InvokeMethod(&req)
-		if err != nil || http.GetStatusCodeFromMetadata(resp.Metadata) != 200 {
+		reqMetadata := map[string][]string{}
+		for k, v := range metadata {
+			reqMetadata[k] = []string{v}
+		}
+		req.WithMetadata(reqMetadata)
+
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
+		if err != nil {
 			return fmt.Errorf("error invoking app: %s", err)
 		}
 
-		if resp != nil {
-			var r bindings.AppResponse
-			err := a.json.Unmarshal(resp.Data, &r)
-			if err != nil {
-				log.Debugf("error deserializing app response: %s", err)
-			} else {
-				response = &r
-			}
+		if span != nil {
+			m := diag.ConstructInputBindingSpanAttributes(
+				bindingName,
+				fmt.Sprintf("%s /%s", nethttp.MethodPost, bindingName))
+			diag.AddAttributesToSpan(span, m)
+			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
+			span.End()
+		}
+
+		if resp.Status().Code != nethttp.StatusOK {
+			return fmt.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
+		}
+
+		// TODO: Do we need to check content-type?
+		if err := a.json.Unmarshal(resp.Message().Data.Value, &response); err != nil {
+			log.Debugf("error deserializing app response: %s", err)
 		}
 	}
 
-	if response != nil {
-		err := a.onAppResponse(response)
-		if err != nil {
+	if len(response.State) > 0 || len(response.To) > 0 {
+		if err := a.onAppResponse(&response); err != nil {
 			log.Errorf("error executing app response: %s", err)
 		}
 	}
@@ -562,7 +645,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
@@ -584,7 +667,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding)
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
@@ -595,8 +678,8 @@ func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
-	client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
-	resp, err := client.GetBindingsSubscriptions(context.Background(), &empty.Empty{})
+	client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+	resp, err := client.ListInputBindings(context.Background(), &empty.Empty{})
 	bindings := []string{}
 
 	if err == nil && resp != nil {
@@ -615,15 +698,14 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string, bindingsList []st
 		}
 	} else if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		// if HTTP, check if there's an endpoint listening for that binding
-		req := channel.InvokeRequest{
-			Method:   binding,
-			Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Options},
-		}
-		resp, err := a.appChannel.InvokeMethod(&req)
-		if err == nil && resp != nil {
-			statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
-			return statusCode != 404
-		}
+		req := invokev1.NewInvokeMethodRequest(binding)
+		req.WithHTTPExtension(nethttp.MethodOptions, "")
+		req.WithRawData(nil, invokev1.JSONContentType)
+
+		// TODO: Propagate Context
+		ctx := context.Background()
+		resp, err := a.appChannel.InvokeMethod(ctx, req)
+		return err == nil && resp.Status().Code != nethttp.StatusNotFound
 	}
 	return false
 }
@@ -740,38 +822,32 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 	return nil
 }
 
-func (a *DaprRuntime) getSubscribedTopicsFromApp() []string {
-	topics := []string{}
+func (a *DaprRuntime) getTopicRoutes() map[string]string {
+	topicRoutes := map[string]string{}
 	if a.appChannel == nil {
-		return topics
+		return topicRoutes
 	}
 
+	var subscriptions []runtime_pubsub.Subscription
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
-		req := &channel.InvokeRequest{
-			Method:   "dapr/subscribe",
-			Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
-		}
-
-		resp, err := a.appChannel.InvokeMethod(req)
-		statusCode := http.GetStatusCodeFromMetadata(resp.Metadata)
-		if err == nil && statusCode == 200 {
-			err := json.Unmarshal(resp.Data, &topics)
-			if err != nil {
-				log.Errorf("error getting topics from app: %s", err)
-			}
-		} else if statusCode != 200 && statusCode != 404 {
-			log.Warnf("app returned http status code %v from subscription endpoint", statusCode)
-		}
+		subscriptions = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
-		client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
-		resp, err := client.GetTopicSubscriptions(context.Background(), &empty.Empty{})
-		if err == nil && resp != nil {
-			topics = resp.Topics
-		}
+		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+		subscriptions = runtime_pubsub.GetSubscriptionsGRPC(client, log)
 	}
 
-	log.Infof("app is subscribed to the following topics: %v", topics)
-	return topics
+	for _, s := range subscriptions {
+		topicRoutes[s.Topic] = s.Route
+	}
+
+	if len(topicRoutes) > 0 {
+		topics := []string{}
+		for t := range topicRoutes {
+			topics = append(topics, t)
+		}
+		log.Infof("app is subscribed to the following topics: %v", topics)
+	}
+	return topicRoutes
 }
 
 func (a *DaprRuntime) initExporters() error {
@@ -801,8 +877,6 @@ func (a *DaprRuntime) initExporters() error {
 }
 
 func (a *DaprRuntime) initPubSub() error {
-	var scopedSubscriptions []string
-
 	for _, c := range a.components {
 		if strings.Index(c.Spec.Type, "pubsub") == 0 {
 			pubSub, err := a.pubSubRegistry.Create(c.Spec.Type)
@@ -824,7 +898,7 @@ func (a *DaprRuntime) initPubSub() error {
 				continue
 			}
 
-			scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
+			a.scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
 			a.scopedPublishings = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
 			a.allowedTopics = scopes.GetAllowedTopics(properties)
 
@@ -834,31 +908,6 @@ func (a *DaprRuntime) initPubSub() error {
 		}
 	}
 
-	var publishFunc func(msg *pubsub.NewMessage) error
-	switch a.runtimeConfig.ApplicationProtocol {
-	case HTTPProtocol:
-		publishFunc = a.publishMessageHTTP
-	case GRPCProtocol:
-		publishFunc = a.publishMessageGRPC
-	}
-
-	if a.pubSub != nil && a.appChannel != nil {
-		topics := a.getSubscribedTopicsFromApp()
-		for _, t := range topics {
-			allowed := a.isPubSubOperationAllowed(t, scopedSubscriptions)
-			if !allowed {
-				log.Warnf("subscription to topic %s is not allowed", t)
-				continue
-			}
-
-			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
-				Topic: t,
-			}, publishFunc)
-			if err != nil {
-				log.Warnf("failed to subscribe to topic %s: %s", t, err)
-			}
-		}
-	}
 	return nil
 }
 
@@ -902,27 +951,39 @@ func (a *DaprRuntime) isPubSubOperationAllowed(topic string, scopedTopics []stri
 	return allowedScope
 }
 
-func (a *DaprRuntime) initServiceDiscovery() error {
-	var resolver servicediscovery.Resolver
+func (a *DaprRuntime) initNameResolution() error {
+	var resolver nr.Resolver
 	var err error
+	var resolverMetadata = nr.Metadata{}
+
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		resolver, err = a.serviceDiscoveryRegistry.Create("kubernetes")
+		resolver, err = a.nameResolutionRegistry.Create("kubernetes")
 	case modes.StandaloneMode:
-		resolver, err = a.serviceDiscoveryRegistry.Create("mdns")
-
+		resolver, err = a.nameResolutionRegistry.Create("mdns")
+		// properties to register mDNS instances.
+		resolverMetadata.Properties = map[string]string{
+			nr.MDNSInstanceName:    a.runtimeConfig.ID,
+			nr.MDNSInstanceAddress: a.hostAddress,
+			nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
+		}
 	default:
 		return fmt.Errorf("remote calls not supported for %s mode", string(a.runtimeConfig.Mode))
 	}
 
 	if err != nil {
-		log.Warnf("error creating service discovery resolver %s: %s", a.runtimeConfig.Mode, err)
+		log.Warnf("error creating name resolution resolver %s: %s", a.runtimeConfig.Mode, err)
 		return err
 	}
 
-	a.servicediscoveryResolver = resolver
+	if err = resolver.Init(resolverMetadata); err != nil {
+		log.Errorf("failed to initialize name resolution resolver %s: %s", a.runtimeConfig.Mode, err)
+		return err
+	}
 
-	log.Infof("Initialized service discovery to %s", a.runtimeConfig.Mode)
+	a.nameResolver = resolver
+
+	log.Infof("Initialized name resolution to %s", a.runtimeConfig.Mode)
 	return nil
 }
 
@@ -934,32 +995,33 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		subject = cloudEvent.Subject
 	}
 
-	req := channel.InvokeRequest{
-		Method:  msg.Topic,
-		Payload: msg.Data,
-		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Post,
-			"headers":          fmt.Sprintf("%s%s%s", http_channel.ContentType, http_channel.HeaderEquals, pubsub.ContentType),
-			diag.CorrelationID: subject},
+	route := a.topicRoutes[msg.Topic]
+	req := invokev1.NewInvokeMethodRequest(route)
+	req.WithHTTPExtension(nethttp.MethodPost, "")
+	req.WithRawData(msg.Data, pubsub.ContentType)
+
+	// subject contains the correlationID which is passed span context
+	sc, _ := diag.SpanContextFromW3CString(subject)
+	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	if err != nil {
+		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
-	statusCode := 0
-
-	if resp != nil {
-		statusCode = http.GetStatusCodeFromMetadata(resp.Metadata)
+	if span != nil {
+		m := diag.ConstructSubscriptionSpanAttributes(msg.Topic)
+		diag.AddAttributesToSpan(span, m)
+		diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
+		span.End()
 	}
 
-	if err != nil || statusCode != 200 {
-		var err error
-		if resp == nil {
-			err = fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
-		} else {
-			err = fmt.Errorf("error returned from app while processing pub/sub event: %s. status code returned: %v", string(resp.Data), statusCode)
-		}
-
-		log.Debug(err)
-		return err
+	if resp.Status().Code != nethttp.StatusOK {
+		_, errorMsg := resp.RawData()
+		return fmt.Errorf("error returned from app while processing pub/sub event: %s. status code returned: %v", errorMsg, resp.Status().Code)
 	}
+
 	return nil
 }
 
@@ -971,7 +1033,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		return err
 	}
 
-	envelope := &daprclient_pb.CloudEventEnvelope{
+	envelope := &runtimev1pb.TopicEventRequest{
 		Id:              cloudEvent.ID,
 		Source:          cloudEvent.Source,
 		DataContentType: cloudEvent.DataContentType,
@@ -981,31 +1043,46 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	}
 
 	if cloudEvent.Data != nil {
-		var b []byte
+		envelope.Data = nil
 		if cloudEvent.DataContentType == "text/plain" {
-			b = []byte(cloudEvent.Data.(string))
+			envelope.Data = []byte(cloudEvent.Data.(string))
 		} else if cloudEvent.DataContentType == "application/json" {
-			b, _ = a.json.Marshal(cloudEvent.Data)
-		}
-		envelope.Data = &any.Any{
-			Value: b,
+			envelope.Data, _ = a.json.Marshal(cloudEvent.Data)
 		}
 	}
 
-	client := daprclient_pb.NewDaprClientClient(a.grpc.AppClient)
-	_, err = client.OnTopicEvent(context.Background(), envelope)
+	// subject contains the correlationID which is passed span context
+	subject := cloudEvent.Subject
+	sc, _ := diag.SpanContextFromW3CString(subject)
+	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+
+	// no ops if trace is off
+	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+
+	// call appcallback
+	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
+	_, err = clientV1.OnTopicEvent(ctx, envelope)
+
+	if span != nil {
+		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
+		diag.AddAttributesToSpan(span, m)
+		diag.UpdateSpanStatusFromGRPCError(span, err)
+		span.End()
+	}
+
 	if err != nil {
 		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
 		log.Debug(err)
-		return err
 	}
-	return nil
+
+	return err
 }
 
 func (a *DaprRuntime) initActors() error {
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
-	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain)
+	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec)
 	err := act.Init()
 	a.actor = act
 	return err
@@ -1185,20 +1262,32 @@ func (a *DaprRuntime) loadAppConfiguration() {
 	}
 }
 
+// getConfigurationHTTP gets application config from user application
+// GET http://localhost:<app_port>/dapr/config
 func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) {
-	req := channel.InvokeRequest{
-		Method:   appConfigEndpoint,
-		Metadata: map[string]string{http_channel.HTTPVerb: http_channel.Get},
-	}
+	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint)
+	req.WithHTTPExtension(nethttp.MethodGet, "")
+	req.WithRawData(nil, invokev1.JSONContentType)
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	// TODO Propagate context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
 	var config config.ApplicationConfig
-	err = a.json.Unmarshal(resp.Data, &config)
-	if err != nil {
+
+	if resp.Status().Code != nethttp.StatusOK {
+		return &config, nil
+	}
+
+	contentType, body := resp.RawData()
+	if contentType != invokev1.JSONContentType {
+		log.Debugf("dapr/config returns invalid content_type: %s", contentType)
+	}
+
+	if err = a.json.Unmarshal(body, &config); err != nil {
 		return nil, err
 	}
 
@@ -1232,18 +1321,6 @@ func (a *DaprRuntime) createAppChannel() error {
 		a.appChannel = ch
 	}
 
-	return nil
-}
-
-func (a *DaprRuntime) announceSelf() error {
-	switch a.runtimeConfig.Mode {
-	case modes.StandaloneMode:
-		err := discovery.RegisterMDNS(a.runtimeConfig.ID, a.runtimeConfig.InternalGRPCPort)
-		if err != nil {
-			return err
-		}
-		log.Info("local service entry announced")
-	}
 	return nil
 }
 

@@ -1,0 +1,42 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.operator.v1;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/operator/v1;operator";
+
+service Operator {
+  // Sends events to Dapr sidecars upon component changes.
+  rpc ComponentUpdate (google.protobuf.Empty) returns (stream ComponentUpdateEvent) {}
+  // Returns a list of available components
+  rpc ListComponents (google.protobuf.Empty) returns (ListComponentResponse) {}
+  // Returns a given configuration by name
+  rpc GetConfiguration (GetConfigurationRequest) returns (GetConfigurationResponse) {}
+}
+
+// ComponentUpdateEvent includes the updated component event.
+message ComponentUpdateEvent {
+  bytes component = 1;
+}
+
+// ListComponentResponse includes the list of available components 
+message ListComponentResponse {
+  repeated bytes components = 1;
+}
+
+// GetConfigurationRequest is the request message to get the configuration.
+message GetConfigurationRequest {
+  string name = 1;
+  string namespace = 2;
+}
+
+// GetConfigurationResponse includes the requested configuration.
+message GetConfigurationResponse {
+  bytes configuration = 1;
+}

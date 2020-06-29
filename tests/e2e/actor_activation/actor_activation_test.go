@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	guuid "github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +25,7 @@ const (
 	appName                          = "actorapp"                                // App name in Dapr.
 	numHealthChecks                  = 60                                        // Number of get calls before starting tests.
 	secondsToCheckActorRemainsActive = 1                                         // How much time to wait to make sure actor is deactivated
-	secondsToCheckActorDeactivation  = 15                                        // How much time to wait to make sure actor is deactivated
+	secondsToCheckActorDeactivation  = 20                                        // How much time to wait to make sure actor is deactivated
 	actorInvokeURLFormat             = "%s/test/testactor/%s/method/actormethod" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat               = "%s/test/logs"                            // URL to fetch logs from test app.
 )
@@ -85,7 +86,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner(appName, testApps, nil)
+	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
@@ -101,30 +102,38 @@ func TestActorActivation(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Actor deactivates due to timeout.", func(t *testing.T) {
-		// TODO: Use UUID in ActorId once dapr/dapr#895 is fixed.
 		actorId := "100"
+
 		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorId)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
 		require.NoError(t, err)
 
+		fmt.Printf("getting logs, the current time is %s\n", time.Now())
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
-		require.True(t, findActorActivation(resp, actorId))
+
+		// there is no longer an activate message
+		require.False(t, findActorActivation(resp, actorId))
+
 		require.True(t, findActorMethodInvokation(resp, actorId))
 		require.False(t, findActorDeactivation(resp, actorId))
 
 		time.Sleep(secondsToCheckActorDeactivation * time.Second)
 
+		fmt.Printf("getting logs, the current time is %s\n", time.Now())
 		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
-		require.True(t, findActorActivation(resp, actorId))
+
+		// there is no longer an activate message
+		require.False(t, findActorActivation(resp, actorId))
+
 		require.True(t, findActorMethodInvokation(resp, actorId))
 		require.True(t, findActorDeactivation(resp, actorId))
 	})
 
 	t.Run("Actor does not deactivate since there is no timeout.", func(t *testing.T) {
-		actorId := "200"
+		actorId := guuid.New().String()
 		invokeURL := fmt.Sprintf(actorInvokeURLFormat, externalURL, actorId)
 
 		_, err = utils.HTTPPost(invokeURL, []byte{})
@@ -132,7 +141,10 @@ func TestActorActivation(t *testing.T) {
 
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
-		require.True(t, findActorActivation(resp, actorId))
+
+		// there is no longer an activate message
+		require.False(t, findActorActivation(resp, actorId))
+
 		require.True(t, findActorMethodInvokation(resp, actorId))
 		require.False(t, findActorDeactivation(resp, actorId))
 
@@ -140,7 +152,10 @@ func TestActorActivation(t *testing.T) {
 
 		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
-		require.True(t, findActorActivation(resp, actorId))
+
+		// there is no longer an activate message
+		require.False(t, findActorActivation(resp, actorId))
+
 		require.True(t, findActorMethodInvokation(resp, actorId))
 		require.False(t, findActorDeactivation(resp, actorId))
 	})

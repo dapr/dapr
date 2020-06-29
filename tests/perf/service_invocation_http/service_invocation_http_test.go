@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("serviceinvocationhttp", testApps, nil)
+	tr = runner.NewTestRunner("serviceinvocationhttp", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
@@ -59,12 +59,17 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	if val, ok := os.LookupEnv(perf.TestDurationEnvVar); ok && val != "" {
 		p.TestDuration = val
 	}
+	if val, ok := os.LookupEnv(perf.PayloadSizeEnvVar); ok && val != "" {
+		payloadSize, err := strconv.Atoi(val)
+		require.NoError(t, err)
+		p.PayloadSizeKB = payloadSize
+	}
 	if val, ok := os.LookupEnv(perf.QPSEnvVar); ok && val != "" {
 		qps, err := strconv.Atoi(val)
 		require.NoError(t, err)
 		p.QPS = qps
 	}
-	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s", p.QPS, p.ClientConnections, p.TestDuration)
+	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s, payload size=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB)
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")

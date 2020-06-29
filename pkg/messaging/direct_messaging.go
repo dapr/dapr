@@ -9,144 +9,191 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
-	"github.com/dapr/components-contrib/servicediscovery"
+	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/modes"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
-	"github.com/golang/protobuf/ptypes/any"
+	"github.com/dapr/dapr/pkg/retry"
+	"github.com/dapr/dapr/utils"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
-const (
-	invokeRemoteRetryCount = 3
-)
+// messageClientConnection is the function type to connect to the other
+// applications to send the message using service invocation.
+type messageClientConnection func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
 
 // DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
-	Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error)
+	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 }
 
 type directMessaging struct {
 	appChannel          channel.AppChannel
-	connectionCreatorFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
+	connectionCreatorFn messageClientConnection
 	appID               string
 	mode                modes.DaprMode
 	grpcPort            int
 	namespace           string
-	resolver            servicediscovery.Resolver
+	resolver            nr.Resolver
+	tracingSpec         config.TracingSpec
+	hostAddress         string
+	hostName            string
 }
 
 // NewDirectMessaging returns a new direct messaging api
-func NewDirectMessaging(appID, namespace string, port int, mode modes.DaprMode, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), resolver servicediscovery.Resolver) DirectMessaging {
+func NewDirectMessaging(
+	appID, namespace string,
+	port int, mode modes.DaprMode,
+	appChannel channel.AppChannel,
+	clientConnFn messageClientConnection,
+	resolver nr.Resolver,
+	tracingSpec config.TracingSpec) DirectMessaging {
+	hAddr, _ := utils.GetHostAddress()
+	hName, _ := os.Hostname()
 	return &directMessaging{
 		appChannel:          appChannel,
-		connectionCreatorFn: grpcConnectionFn,
+		connectionCreatorFn: clientConnFn,
 		appID:               appID,
 		mode:                mode,
 		grpcPort:            port,
 		namespace:           namespace,
 		resolver:            resolver,
+		tracingSpec:         tracingSpec,
+		hostAddress:         hAddr,
+		hostName:            hName,
 	}
 }
 
 // Invoke takes a message requests and invokes an app, either local or remote
-func (d *directMessaging) Invoke(req *DirectMessageRequest) (*DirectMessageResponse, error) {
-	if req.Target == d.appID {
-		return d.invokeLocal(req)
+func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	if targetAppID == d.appID {
+		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(invokeRemoteRetryCount, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, targetAppID, d.invokeRemote, req)
 }
 
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
 // TODO: check why https://github.com/grpc-ecosystem/go-grpc-middleware/blob/master/retry/examples_test.go doesn't recover the connection when target
 // Server shuts down.
-func (d *directMessaging) invokeWithRetry(numRetries int, fn func(req *DirectMessageRequest) (*DirectMessageResponse, error), req *DirectMessageRequest) (*DirectMessageResponse, error) {
+func (d *directMessaging) invokeWithRetry(
+	ctx context.Context,
+	numRetries int,
+	backoffInterval time.Duration,
+	targetID string,
+	fn func(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
+	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(req)
+		resp, err := fn(ctx, targetID, req)
 		if err == nil {
 			return resp, nil
 		}
+		time.Sleep(backoffInterval)
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			address, addErr := d.getAddressFromMessageRequest(req)
-			if addErr != nil {
-				return nil, addErr
+			address, adderr := d.getAddressFromMessageRequest(targetID)
+			if adderr != nil {
+				return nil, adderr
 			}
-			_, connErr := d.connectionCreatorFn(address, req.Target, false, true)
-			if connErr != nil {
-				return nil, connErr
+			_, connerr := d.connectionCreatorFn(address, targetID, false, true)
+			if connerr != nil {
+				return nil, connerr
 			}
 			continue
 		}
 		return resp, err
 	}
-	return nil, fmt.Errorf("failed to invoke target %s after %v retries", req.Target, numRetries)
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetID, numRetries)
 }
 
-func (d *directMessaging) invokeLocal(req *DirectMessageRequest) (*DirectMessageResponse, error) {
+func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if d.appChannel == nil {
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
 
-	localInvokeReq := channel.InvokeRequest{
-		Metadata: req.Metadata,
-		Method:   req.Method,
-		Payload:  req.Data,
-	}
-
-	resp, err := d.appChannel.InvokeMethod(&localInvokeReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return &DirectMessageResponse{
-		Data:     resp.Data,
-		Metadata: resp.Metadata,
-	}, nil
+	return d.appChannel.InvokeMethod(ctx, req)
 }
 
-func (d *directMessaging) getAddressFromMessageRequest(req *DirectMessageRequest) (string, error) {
-	request := servicediscovery.ResolveRequest{ID: req.Target, Namespace: d.namespace, Port: d.grpcPort}
-	address, err := d.resolver.ResolveID(request)
-	if err != nil {
-		return "", err
-	}
-	return address, nil
-}
-
-func (d *directMessaging) invokeRemote(req *DirectMessageRequest) (*DirectMessageResponse, error) {
-	address, err := d.getAddressFromMessageRequest(req)
+func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	address, err := d.getAddressFromMessageRequest(targetID)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := d.connectionCreatorFn(address, req.Target, false, false)
+	conn, err := d.connectionCreatorFn(address, targetID, false, false)
 	if err != nil {
 		return nil, err
 	}
 
-	msg := daprinternal_pb.LocalCallEnvelope{
-		Data:     &any.Any{Value: req.Data},
-		Metadata: req.Metadata,
-		Method:   req.Method,
-	}
+	span := diag_utils.SpanFromContext(ctx)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
+	// TODO: Use built-in grpc client timeout instead of using context timeout
+	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
 	defer cancel()
 
-	client := daprinternal_pb.NewDaprInternalClient(conn)
-	resp, err := client.CallLocal(ctx, &msg)
+	// no ops if span context is empty
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+
+	d.addForwardedHeadersToMetadata(req)
+	d.addDestinationAppIDHeaderToMetadata(targetID, req)
+
+	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
+	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {
 		return nil, err
 	}
 
-	return &DirectMessageResponse{
-		Data:     resp.Data.Value,
-		Metadata: resp.Metadata,
-	}, nil
+	return invokev1.InternalInvokeResponse(resp)
+}
+
+func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
+	req.Metadata()[v1.DestinationIDHeader] = &internalv1pb.ListStringValue{
+		Values: []string{appID},
+	}
+}
+
+func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMethodRequest) {
+	metadata := req.Metadata()
+
+	var forwardedHeaderValue string
+
+	if d.hostAddress != "" {
+		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
+		metadata[fasthttp.HeaderXForwardedFor] = &internalv1pb.ListStringValue{
+			Values: []string{d.hostAddress},
+		}
+
+		forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", d.hostAddress, d.hostAddress)
+	}
+
+	if d.hostName != "" {
+		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
+		metadata[fasthttp.HeaderXForwardedHost] = &internalv1pb.ListStringValue{
+			Values: []string{d.hostName},
+		}
+
+		forwardedHeaderValue += fmt.Sprintf("host=%s", d.hostName)
+	}
+
+	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
+	metadata[fasthttp.HeaderForwarded] = &internalv1pb.ListStringValue{
+		Values: []string{forwardedHeaderValue},
+	}
+}
+
+func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {
+	request := nr.ResolveRequest{ID: appID, Namespace: d.namespace, Port: d.grpcPort}
+	return d.resolver.ResolveID(request)
 }

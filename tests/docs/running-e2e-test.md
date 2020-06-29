@@ -18,8 +18,8 @@ E2E tests are designed for verifying the functional correctness by replicating e
     ```
 * Set the environment variables
     ```bash
-    export DAPR_REGISTRY=docker.io/your_dockerhub_id
-    export DAPR_TAG=dev
+    export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
+    export DAPR_TEST_TAG=dev
     export DAPR_NAMESPACE=dapr-tests
 
     # Do not set DAPR_TEST_ENV if you do not use minikube

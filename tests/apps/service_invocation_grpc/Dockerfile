@@ -3,11 +3,14 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-FROM golang:1.14
+FROM golang:1.14 as build_env
 
 WORKDIR /app
-COPY app.go .
+COPY . .
 RUN go get -d -v
 RUN go build -o app .
 
-CMD ["./app"]
+FROM debian:buster-slim
+WORKDIR /
+COPY --from=build_env /app/app /
+CMD ["/app"]

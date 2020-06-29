@@ -15,12 +15,13 @@ import (
 	"os/exec"
 )
 
-//TODO: change to take from "github.com/dapr/dapr/tests/perf" once in repository. otherwise fails on go get step in Dockerfile
+// TODO: change to take from "github.com/dapr/dapr/tests/perf" once in repository. otherwise fails on go get step in Dockerfile.
 type TestParameters struct {
 	QPS               int    `json:"qps"`
 	ClientConnections int    `json:"clientConnections"`
 	TargetEndpoint    string `json:"targetEndpoint"`
 	TestDuration      string `json:"testDuration"`
+	PayloadSizeKB     int    `json:"payloadSizeKB"`
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +69,9 @@ func main() {
 // the test results in json format.
 func runTest(params TestParameters) ([]byte, error) {
 	args := []string{"load", "-json", "result.json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
-		"-t", params.TestDuration, params.TargetEndpoint}
+		"-t", params.TestDuration, "-payload-size", fmt.Sprint(params.PayloadSizeKB), params.TargetEndpoint}
+	fmt.Printf("running test with params: %s", args)
+
 	cmd := exec.Command("fortio", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

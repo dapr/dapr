@@ -16,9 +16,14 @@ import (
 
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
+	"go.opencensus.io/trace"
+	"go.opencensus.io/trace/propagation"
 
-	pb "github.com/dapr/dapr/pkg/proto/daprclient"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // server is our user app
@@ -40,7 +45,7 @@ func main() {
 
 	/* #nosec */
 	s := grpc.NewServer()
-	pb.RegisterDaprClientServer(s, &server{})
+	pb.RegisterAppCallbackServer(s, &server{})
 
 	fmt.Println("Client starting...")
 
@@ -66,10 +71,39 @@ func (s *server) grpcTestHandler(data []byte) ([]byte, error) {
 	return resp, err
 }
 
+func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	var requestMD = map[string][]string{}
+	for k, vals := range md {
+		requestMD[k] = vals
+		fmt.Printf("incoming md: %s %q", k, vals)
+	}
+
+	header := metadata.Pairs(
+		"DaprTest-Response-1", "DaprTest-Response-Value-1",
+		"DaprTest-Response-2", "DaprTest-Response-Value-2")
+
+	// following traceid byte is of expectedTraceID "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	sc := trace.SpanContext{
+		TraceID:      trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+		SpanID:       trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+		TraceOptions: trace.TraceOptions(1),
+	}
+	header.Set("grpc-trace-bin", string(propagation.Binary(sc)))
+
+	grpc.SendHeader(ctx, header)
+	trailer := metadata.Pairs(
+		"DaprTest-Trailer-1", "DaprTest-Trailer-Value-1",
+		"DaprTest-Trailer-2", "DaprTest-Trailer-Value-2")
+	grpc.SetTrailer(ctx, trailer)
+
+	return json.Marshal(requestMD)
+}
+
 // This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload
-func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any, error) {
-	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.Data.Value))
+func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
+	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.GetData().Value))
 
 	var err error
 	var response []byte
@@ -78,7 +112,9 @@ func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any,
 		// not a typo, the handling is the same as the case below
 		fallthrough
 	case "grpcToGrpcTest":
-		response, err = s.grpcTestHandler(in.Data.Value)
+		response, err = s.grpcTestHandler(in.GetData().Value)
+	case "retrieve_request_object":
+		response, err = s.retrieveRequestObject(ctx)
 	}
 
 	if err != nil {
@@ -86,35 +122,39 @@ func (s *server) OnInvoke(ctx context.Context, in *pb.InvokeEnvelope) (*any.Any,
 		response, _ = json.Marshal(msg)
 	}
 
-	return &any.Any{
-		Value: response,
-	}, nil
+	respBody := &any.Any{Value: response}
+
+	return &commonv1pb.InvokeResponse{Data: respBody, ContentType: "application/json"}, nil
 }
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
 // To subscribe to a topic named TopicA
-func (s *server) GetTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetTopicSubscriptionsEnvelope, error) {
-	return &pb.GetTopicSubscriptionsEnvelope{
-		Topics: []string{"TopicA"},
+func (s *server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
+	return &pb.ListTopicSubscriptionsResponse{
+		Subscriptions: []*pb.TopicSubscription{
+			{
+				Topic: "TopicA",
+			},
+		},
 	}, nil
 }
 
-// Dapper will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
+// Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
 // To invoke our app with a binding named storage
-func (s *server) GetBindingsSubscriptions(ctx context.Context, in *empty.Empty) (*pb.GetBindingsSubscriptionsEnvelope, error) {
-	return &pb.GetBindingsSubscriptionsEnvelope{
+func (s *server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.ListInputBindingsResponse, error) {
+	return &pb.ListInputBindingsResponse{
 		Bindings: []string{"storage"},
 	}, nil
 }
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata
-func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventEnvelope) (*pb.BindingResponseEnvelope, error) {
+func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest) (*pb.BindingEventResponse, error) {
 	fmt.Println("Invoked from binding")
-	return &pb.BindingResponseEnvelope{}, nil
+	return &pb.BindingEventResponse{}, nil
 }
 
 // This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 0.3 envelope.
-func (s *server) OnTopicEvent(ctx context.Context, in *pb.CloudEventEnvelope) (*empty.Empty, error) {
+func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*empty.Empty, error) {
 	fmt.Println("Topic message arrived")
 	return &empty.Empty{}, nil
 }

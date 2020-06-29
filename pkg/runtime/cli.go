@@ -31,7 +31,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
 	appProtocol := flag.String("protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
-	componentsPath := flag.String("components-path", DefaultComponentsPath, "Path for components directory. Standalone mode only")
+	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
@@ -140,7 +140,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if configErr != nil {
-		log.Warnf("error loading configuration: %s", err)
+		log.Warnf("error loading configuration: %s", configErr)
 	}
 	if globalConfig == nil {
 		log.Info("loading default configuration")

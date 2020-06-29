@@ -1,0 +1,24 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.internals.v1;
+
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
+
+// Status represents the response status for HTTP and gRPC app channel.
+message Status {
+  // Required. The status code
+  int32 code = 1;
+
+  // Error message
+  string message = 2;
+
+  // A list of messages that carry the error details
+  repeated google.protobuf.Any details = 3;
+}

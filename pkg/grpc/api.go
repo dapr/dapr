@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -17,15 +18,22 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
-	tracing "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
-	dapr_pb "github.com/dapr/dapr/pkg/proto/dapr"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
-	"github.com/golang/protobuf/ptypes/any"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -34,19 +42,24 @@ const (
 	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
 	minSeconds    = -maxSeconds
 	daprSeparator = "||"
+
+	daprHTTPStatusHeader = "dapr-http-status"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
-	CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelope) (*daprinternal_pb.InvokeResponse, error)
-	CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelope) (*daprinternal_pb.InvokeResponse, error)
-	PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error)
-	InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error)
-	InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelope) (*empty.Empty, error)
-	GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error)
-	GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error)
-	SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error)
-	DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error)
+	// DaprInternal Service methods
+	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
+
+	// Dapr Service methods
+	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error)
+	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
+	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
+	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
+	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
+	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
+	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -57,11 +70,20 @@ type api struct {
 	secretStores          map[string]secretstores.SecretStore
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
-	sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec           config.TracingSpec
 }
 
 // NewAPI returns a new gRPC API
-func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(req *pubsub.PublishRequest) error, directMessaging messaging.DirectMessaging, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.WriteRequest) error) API {
+func NewAPI(
+	appID string, appChannel channel.AppChannel,
+	stateStores map[string]state.Store,
+	secretStores map[string]secretstores.SecretStore,
+	publishFn func(req *pubsub.PublishRequest) error,
+	directMessaging messaging.DirectMessaging,
+	actor actors.Actors,
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
+	tracingSpec config.TracingSpec) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -71,54 +93,44 @@ func NewAPI(appID string, appChannel channel.AppChannel, stateStores map[string]
 		stateStores:           stateStores,
 		secretStores:          secretStores,
 		sendToOutputBindingFn: sendToOutputBindingFn,
+		tracingSpec:           tracingSpec,
 	}
 }
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
-func (a *api) CallLocal(ctx context.Context, in *daprinternal_pb.LocalCallEnvelope) (*daprinternal_pb.InvokeResponse, error) {
+func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	if a.appChannel == nil {
-		return nil, errors.New("app channel is not initialized")
+		return nil, status.Error(codes.Internal, "app channel is not initialized")
 	}
 
-	req := channel.InvokeRequest{
-		Payload:  in.Data.Value,
-		Method:   in.Method,
-		Metadata: in.Metadata,
+	req, err := invokev1.InternalInvokeRequest(in)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
+
 	if err != nil {
 		return nil, err
 	}
-
-	return &daprinternal_pb.InvokeResponse{
-		Data:     &any.Any{Value: resp.Data},
-		Metadata: resp.Metadata,
-	}, nil
+	return resp.Proto(), err
 }
 
 // CallActor invokes a virtual actor
-func (a *api) CallActor(ctx context.Context, in *daprinternal_pb.CallActorEnvelope) (*daprinternal_pb.InvokeResponse, error) {
-	req := actors.CallRequest{
-		ActorType: in.ActorType,
-		ActorID:   in.ActorID,
-		Data:      in.Data.Value,
-		Method:    in.Method,
-		Metadata:  in.Metadata,
+func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	req, err := invokev1.InternalInvokeRequest(in)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
-	resp, err := a.actor.Call(&req)
+	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-
-	return &daprinternal_pb.InvokeResponse{
-		Data:     &any.Any{Value: resp.Data},
-		Metadata: map[string]string{},
-	}, nil
+	return resp.Proto(), nil
 }
 
-func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope) (*empty.Empty, error) {
+func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
 		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
 	}
@@ -127,14 +139,11 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 	body := []byte{}
 
 	if in.Data != nil {
-		body = in.Data.Value
+		body = in.Data
 	}
 
-	corID, ok := ctx.Value(tracing.CorrelationID).(string)
-	if !ok {
-		corID = ""
-	}
-
+	span := diag_utils.SpanFromContext(ctx)
+	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
@@ -145,6 +154,7 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 		Topic: topic,
 		Data:  b,
 	}
+
 	err = a.publishFn(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
@@ -152,43 +162,63 @@ func (a *api) PublishEvent(ctx context.Context, in *dapr_pb.PublishEventEnvelope
 	return &empty.Empty{}, nil
 }
 
-func (a *api) InvokeService(ctx context.Context, in *dapr_pb.InvokeServiceEnvelope) (*dapr_pb.InvokeServiceResponseEnvelope, error) {
-	req := messaging.DirectMessageRequest{
-		Method:   in.Method,
-		Metadata: in.Metadata,
-		Target:   in.Id,
+func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
+	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
+
+	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
+		req.WithMetadata(incomingMD)
 	}
 
-	if in.Data != nil {
-		req.Data = in.Data.Value
-	}
-
-	resp, err := a.directMessaging.Invoke(&req)
+	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
 	if err != nil {
 		return nil, err
 	}
-	return &dapr_pb.InvokeServiceResponseEnvelope{
-		Data:     &any.Any{Value: resp.Data},
-		Metadata: resp.Metadata,
-	}, nil
+
+	var headerMD = invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
+
+	var respError error
+	if resp.IsHTTPResponse() {
+		var errorMessage = []byte("")
+		if resp != nil {
+			_, errorMessage = resp.RawData()
+		}
+		respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
+		// Populate http status code to header
+		headerMD.Set(daprHTTPStatusHeader, strconv.Itoa(int(resp.Status().Code)))
+	} else {
+		respError = invokev1.ErrorFromInternalStatus(resp.Status())
+		// ignore trailer if appchannel uses HTTP
+		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Trailers(), false))
+	}
+
+	grpc.SetHeader(ctx, headerMD)
+
+	return resp.Message(), respError
 }
 
-func (a *api) InvokeBinding(ctx context.Context, in *dapr_pb.InvokeBindingEnvelope) (*empty.Empty, error) {
-	req := &bindings.WriteRequest{
-		Metadata: in.Metadata,
+func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error) {
+	req := &bindings.InvokeRequest{
+		Metadata:  in.Metadata,
+		Operation: bindings.OperationKind(in.Operation),
 	}
 	if in.Data != nil {
-		req.Data = in.Data.Value
+		req.Data = in.Data
 	}
 
-	err := a.sendToOutputBindingFn(in.Name, req)
+	r := &runtimev1pb.InvokeBindingResponse{}
+	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
+		return r, fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
 	}
-	return &empty.Empty{}, nil
+
+	if resp != nil {
+		r.Data = resp.Data
+		r.Metadata = resp.Metadata
+	}
+	return r, nil
 }
 
-func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr_pb.GetStateResponseEnvelope, error) {
+func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -202,7 +232,7 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 	req := state.GetRequest{
 		Key: a.getModifiedStateKey(in.Key),
 		Options: state.GetStateOption{
-			Consistency: in.Consistency,
+			Consistency: stateConsistencyToString(in.Consistency),
 		},
 	}
 
@@ -211,15 +241,15 @@ func (a *api) GetState(ctx context.Context, in *dapr_pb.GetStateEnvelope) (*dapr
 		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
 
-	response := &dapr_pb.GetStateResponseEnvelope{}
+	response := &runtimev1pb.GetStateResponse{}
 	if getResponse != nil {
 		response.Etag = getResponse.ETag
-		response.Data = &any.Any{Value: getResponse.Data}
+		response.Data = getResponse.Data
 	}
 	return response, nil
 }
 
-func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*empty.Empty, error) {
+func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -231,22 +261,22 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 	}
 
 	reqs := []state.SetRequest{}
-	for _, s := range in.Requests {
+	for _, s := range in.States {
 		req := state.SetRequest{
 			Key:      a.getModifiedStateKey(s.Key),
 			Metadata: s.Metadata,
-			Value:    s.Value.Value,
+			Value:    s.Value,
 			ETag:     s.Etag,
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
-				Consistency: s.Options.Consistency,
-				Concurrency: s.Options.Concurrency,
+				Consistency: stateConsistencyToString(s.Options.Consistency),
+				Concurrency: stateConcurrencyToString(s.Options.Concurrency),
 			}
 			if s.Options.RetryPolicy != nil {
 				req.Options.RetryPolicy = state.RetryPolicy{
 					Threshold: int(s.Options.RetryPolicy.Threshold),
-					Pattern:   s.Options.RetryPolicy.Pattern,
+					Pattern:   retryPatternToString(s.Options.RetryPolicy.Pattern),
 				}
 				if s.Options.RetryPolicy.Interval != nil {
 					dur, err := duration(s.Options.RetryPolicy.Interval)
@@ -266,7 +296,7 @@ func (a *api) SaveState(ctx context.Context, in *dapr_pb.SaveStateEnvelope) (*em
 	return &empty.Empty{}, nil
 }
 
-func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) (*empty.Empty, error) {
+func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
@@ -283,14 +313,14 @@ func (a *api) DeleteState(ctx context.Context, in *dapr_pb.DeleteStateEnvelope) 
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
-			Concurrency: in.Options.Concurrency,
-			Consistency: in.Options.Consistency,
+			Concurrency: stateConcurrencyToString(in.Options.Concurrency),
+			Consistency: stateConsistencyToString(in.Options.Consistency),
 		}
 
 		if in.Options.RetryPolicy != nil {
 			retryPolicy := state.RetryPolicy{
 				Threshold: int(in.Options.RetryPolicy.Threshold),
-				Pattern:   in.Options.RetryPolicy.Pattern,
+				Pattern:   retryPatternToString(in.Options.RetryPolicy.Pattern),
 			}
 			if in.Options.RetryPolicy.Interval != nil {
 				dur, err := duration(in.Options.RetryPolicy.Interval)
@@ -316,7 +346,7 @@ func (a *api) getModifiedStateKey(key string) string {
 	return key
 }
 
-func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*dapr_pb.GetSecretResponseEnvelope, error) {
+func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
 	}
@@ -338,7 +368,7 @@ func (a *api) GetSecret(ctx context.Context, in *dapr_pb.GetSecretEnvelope) (*da
 		return nil, fmt.Errorf("ERR_SECRET_GET: %s", err)
 	}
 
-	response := &dapr_pb.GetSecretResponseEnvelope{}
+	response := &runtimev1pb.GetSecretResponse{}
 	if getResponse.Data != nil {
 		response.Data = getResponse.Data
 	}

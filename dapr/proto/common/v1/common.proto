@@ -1,0 +1,140 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
+syntax = "proto3";
+
+package dapr.proto.common.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+
+option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
+option java_outer_classname = "CommonProtos";
+option java_package = "io.dapr.v1";
+option go_package = "github.com/dapr/dapr/pkg/proto/common/v1;common";
+
+// HTTPExtension includes HTTP verb and querystring
+// when Dapr runtime delivers HTTP content.
+// 
+// For example, when callers calls http invoke api
+// POST http://localhost:3500/v1.0/invoke/<app_id>/method/<method>?query1=value1&query2=value2
+// 
+// Dapr runtime will parse POST as a verb and extract querystring to quersytring map.
+message HTTPExtension {
+  // Type of HTTP 1.1 Methods
+  // RFC 7231: https://tools.ietf.org/html/rfc7231#page-24
+  enum Verb {
+    NONE = 0;
+    GET = 1;
+    HEAD = 2;
+    POST = 3;
+    PUT = 4;
+    DELETE = 5;
+    CONNECT = 6;
+    OPTIONS = 7;
+    TRACE = 8;
+  }
+
+  // Required. HTTP verb.
+  Verb verb = 1;
+
+  // querystring includes HTTP querystring.
+  map<string, string> querystring = 2;
+}
+
+// InvokeRequest is the message to invoke a method with the data.
+// This message is used in InvokeService of Dapr gRPC Service and OnInvoke
+// of AppCallback gRPC service.
+message InvokeRequest {
+  // Required. method is a method name which will be invoked by caller.
+  string method = 1;
+
+  // Required. Bytes value or Protobuf message which caller sent.
+  // Dapr treats Any.value as bytes type if Any.type_url is unset.
+  google.protobuf.Any data = 2;
+
+  // The type of data content.
+  //
+  // This field is required if data delivers http request body
+  // Otherwise, this is optional.
+  string content_type = 3;
+
+  // HTTP specific fields if request conveys http-compatible request.
+  //
+  // This field is required for http-compatible request. Otherwise,
+  // this field is optional.
+  HTTPExtension http_extension = 4;
+}
+
+// InvokeResponse is the response message inclduing data and its content type
+// from app callback.
+// This message is used in InvokeService of Dapr gRPC Service and OnInvoke
+// of AppCallback gRPC service.
+message InvokeResponse {
+  // Required. The content body of InvokeService response.
+  google.protobuf.Any data = 1;
+
+  // Required. The type of data content.
+  string content_type = 2;
+}
+
+// StateItem represents state key, value, and additional options to save state.
+message StateItem {
+  // Required. The state key
+  string key = 1;
+
+  // Required. The state data for key
+  bytes value = 2;
+
+  // The entity tag which represents the specific version of data.
+  // The exact ETag format is defined by the corresponding data store.
+  string etag = 3;
+
+  // The metadata which will be passed to state store component.
+  map<string,string> metadata = 4;
+
+  // Options for concurrency, consistency, and retry_policy to save the state.
+  StateOptions options = 5;
+}
+
+// StateOptions configures concurrency, consistency, and retry policy for state operations
+message StateOptions {
+  // Enum describing the supported concurrency for state.
+  enum StateConcurrency {
+    CONCURRENCY_UNSPECIFIED = 0;
+    CONCURRENCY_FIRST_WRITE = 1;
+    CONCURRENCY_LAST_WRITE = 2;
+  }
+
+  // Enum describing the supported consistency for state.
+  enum StateConsistency {
+    CONSISTENCY_UNSPECIFIED = 0;
+    CONSISTENCY_EVENTUAL = 1;
+    CONSISTENCY_STRONG = 2;
+  }
+
+  StateConcurrency concurrency = 1;
+  StateConsistency consistency = 2;
+  StateRetryPolicy retry_policy = 3;
+}
+
+// StateRetryPolicy represents retry policy to set and delete state operations.
+message StateRetryPolicy {
+  // Enum describing the support retry pattern
+  enum RetryPattern {
+    RETRY_UNSPECIFIED = 0;
+    RETRY_LINEAR = 1;
+    RETRY_EXPONENTIAL = 2;
+  }
+
+  // Maximum number of retries.
+  int32 threshold = 1;
+
+  // Retry pattern.
+  RetryPattern pattern = 2;
+
+  // Initial delay between retries.
+  google.protobuf.Duration interval = 3;
+}

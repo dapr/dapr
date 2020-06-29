@@ -2,7 +2,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: default
+  name: {{ .Values.dapr_default_system_config_name }}
 spec:
   mtls:
     enabled: {{ .Values.global.mtls.enabled }}

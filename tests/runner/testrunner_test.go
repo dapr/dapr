@@ -40,6 +40,11 @@ func (m *MockPlatform) AcquireAppExternalURL(name string) string {
 	return args.String(0)
 }
 
+func (m *MockPlatform) GetAppHostDetails(name string) (string, string, error) {
+	args := m.Called(name)
+	return args.String(0), args.String(0), args.Error(0)
+}
+
 func (m *MockPlatform) addComponents(comps []kube.ComponentDescription) error {
 	args := m.Called(comps)
 	return args.Error(0)
@@ -60,8 +65,8 @@ func (m *MockPlatform) Restart(name string) error {
 	return args.Error(0)
 }
 
-func (m *MockPlatform) OpenConnection(name string, targetPort ...int) ([]int, error) {
-	args := m.Called(name)
+func (m *MockPlatform) PortForwardToApp(appName string, targetPort ...int) ([]int, error) {
+	args := m.Called(appName)
 	return []int{}, args.Error(0)
 }
 
@@ -104,10 +109,10 @@ func TestStartRunner(t *testing.T) {
 		mockPlatform.On("addComponents", fakeComps).Return(nil)
 
 		fakeRunner := &TestRunner{
-			id:          "fakeRunner",
-			components:  fakeComps,
-			initialApps: fakeTestApps,
-			Platform:    mockPlatform,
+			id:         "fakeRunner",
+			components: fakeComps,
+			testApps:   fakeTestApps,
+			Platform:   mockPlatform,
 		}
 
 		ret := fakeRunner.Start(&fakeTestingM{})
@@ -127,10 +132,10 @@ func TestStartRunner(t *testing.T) {
 		mockPlatform.On("addComponents", fakeComps).Return(nil)
 
 		fakeRunner := &TestRunner{
-			id:          "fakeRunner",
-			components:  fakeComps,
-			initialApps: fakeTestApps,
-			Platform:    mockPlatform,
+			id:         "fakeRunner",
+			components: fakeComps,
+			testApps:   fakeTestApps,
+			Platform:   mockPlatform,
 		}
 
 		ret := fakeRunner.Start(&fakeTestingM{})

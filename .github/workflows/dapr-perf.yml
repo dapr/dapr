@@ -1,0 +1,157 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-perf
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  repository_dispatch:
+
+jobs:
+  test-perf:
+    name: perf tests
+    runs-on: ubuntu-latest
+    env:
+      GOVER: 1.14.3
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: https://proxy.golang.org
+      DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      HELMVER: v3.2.1
+      DAPR_NAMESPACE: dapr-tests
+      MAX_TEST_TIMEOUT: 5400
+      DAPR_PERF_QPS: 1000
+      DAPR_PERF_CONNECTIONS: 16
+      DAPR_TEST_DURATION: 1m
+      DAPR_PAYLOAD_SIZE_KB: 1
+    steps:
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
+          echo ::set-env name=CHECKOUT_REF::refs/heads/master
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-perf") {
+              // Set environment variables
+              console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
+              console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
+            }
+      - name: Set up Go ${{ env.GOVER }}
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Check out code into the Go module directory
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Helm ${{ env.HELMVER }}
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELMVER }}
+      - name: Login Azure
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          az login --service-principal -u ${{ secrets.AZURE_LOGIN_USER }} -p ${{ secrets.AZURE_LOGIN_PASS }} --tenant ${{ secrets.AZURE_TENANT }} --output none
+      - name: Find the test cluster
+        if: env.CHECKOUT_REPO != ''
+        run: ./tests/test-infra/find_cluster.sh
+      - name: Add the test status comment to PR
+        if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const payload = context.payload;
+            const testPayload = payload.client_payload;
+            const testCluster = process.env.TEST_CLUSTER;
+
+            if (!testCluster) {
+              message = "All test clusters are occupied by the other tests. Please try to test later.";
+            } else {
+              message = `Found the available test cluster - ${testCluster}. Please wait until test is done.`;
+            }
+            
+            await github.issues.createComment({
+              owner: testPayload.issue.owner,
+              repo: testPayload.issue.repo,
+              issue_number: testPayload.issue.number,
+              body: message
+            });
+      - name: docker login
+        if: env.TEST_CLUSTER != ''
+        run: |
+          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Build dapr and its docker image
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make build-linux
+          make docker-build
+      - name: Build perf test apps
+        if: env.TEST_CLUSTER != ''
+        run: make build-perf-app-all
+      - name: Push docker images to test dockerhub
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make docker-push
+          make push-perf-app-all
+      - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make setup-helm-init
+          kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
+      - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
+        if: env.TEST_CLUSTER != ''
+        run: make docker-deploy-k8s
+      - name: Run Perf tests
+        if: env.TEST_CLUSTER != ''
+        run: make test-perf-all
+      - name: Add test result comment to PR
+        if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            const jobContext = JSON.parse(process.env.JOB_CONTEXT);
+            const jobStatus = jobContext.status.toLowerCase();
+
+            console.log(`Current Job Status: ${jobStatus}`);
+
+            var message = "";
+            
+            if (jobStatus == "cancelled") {
+              message = "Dapr Perf tests cancelled.";
+            } else if (jobStatus == "success") {
+              message = "All Dapr perf tests completed.";
+            } else if (jobStatus == "failure") {
+              message = "Dapr Perf tests failed.";
+            }
+            
+            if (message) {
+              await github.issues.createComment({
+                owner: testPayload.issue.owner,
+                repo: testPayload.issue.repo,
+                issue_number: testPayload.issue.number,
+                body: message
+              });
+            }
+      - name: Clean up ${{ env.TEST_CLUSTER }} cluster
+        if: always() && env.TEST_CLUSTER != ''
+        run: make clean-test-env

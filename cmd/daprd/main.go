@@ -47,11 +47,15 @@ import (
 
 	// Pub/Sub
 	pubs "github.com/dapr/components-contrib/pubsub"
+	pubsub_snssqs "github.com/dapr/components-contrib/pubsub/aws/snssqs"
 	pubsub_eventhubs "github.com/dapr/components-contrib/pubsub/azure/eventhubs"
 	"github.com/dapr/components-contrib/pubsub/azure/servicebus"
 	pubsub_gcp "github.com/dapr/components-contrib/pubsub/gcp/pubsub"
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
+	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
+	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
 	"github.com/dapr/components-contrib/pubsub/nats"
+	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -63,11 +67,11 @@ import (
 	"github.com/dapr/components-contrib/exporters/zipkin"
 	exporters_loader "github.com/dapr/dapr/pkg/components/exporters"
 
-	// Service Discovery
-	"github.com/dapr/components-contrib/servicediscovery"
-	servicediscovery_kubernetes "github.com/dapr/components-contrib/servicediscovery/kubernetes"
-	"github.com/dapr/components-contrib/servicediscovery/mdns"
-	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
+	// Name resolutions
+	nr "github.com/dapr/components-contrib/nameresolution"
+	nr_kubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
+	nr_mdns "github.com/dapr/components-contrib/nameresolution/mdns"
+	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
@@ -78,6 +82,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/aws/sqs"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
 	bindings_cosmosdb "github.com/dapr/components-contrib/bindings/azure/cosmosdb"
+	"github.com/dapr/components-contrib/bindings/azure/eventgrid"
 	"github.com/dapr/components-contrib/bindings/azure/eventhubs"
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
@@ -90,7 +95,9 @@ import (
 	"github.com/dapr/components-contrib/bindings/mqtt"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
-	"github.com/dapr/components-contrib/bindings/twilio"
+	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
+	"github.com/dapr/components-contrib/bindings/twilio/sms"
+	"github.com/dapr/components-contrib/bindings/twitter"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 
 	// HTTP Middleware
@@ -103,15 +110,16 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-var log = logger.NewLogger("dapr.runtime")
+var (
+	log        = logger.NewLogger("dapr.runtime")
+	logContrib = logger.NewLogger("dapr.contrib")
+)
 
 func main() {
 	rt, err := runtime.FromFlags()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	var logContrib = logger.NewLogger("dapr.contrib")
 
 	err = rt.Run(
 		runtime.WithSecretStores(
@@ -200,6 +208,18 @@ func main() {
 			pubsub_loader.New("gcp.pubsub", func() pubs.PubSub {
 				return pubsub_gcp.NewGCPPubSub(logContrib)
 			}),
+			pubsub_loader.New("kafka", func() pubs.PubSub {
+				return pubsub_kafka.NewKafka(logContrib)
+			}),
+			pubsub_loader.New("snssqs", func() pubs.PubSub {
+				return pubsub_snssqs.NewSnsSqs(logContrib)
+			}),
+			pubsub_loader.New("mqtt", func() pubs.PubSub {
+				return pubsub_mqtt.NewMQTTPubSub(logContrib)
+			}),
+			pubsub_loader.New("pulsar", func() pubs.PubSub {
+				return pubsub_pulsar.NewPulsar(logContrib)
+			}),
 		),
 		runtime.WithExporters(
 			exporters_loader.New("zipkin", func() exporters.Exporter {
@@ -212,12 +232,12 @@ func main() {
 				return native.NewNativeExporter(logContrib)
 			}),
 		),
-		runtime.WithServiceDiscovery(
-			servicediscovery_loader.New("mdns", func() servicediscovery.Resolver {
-				return mdns.NewMDNSResolver(logContrib)
+		runtime.WithNameResolutions(
+			nr_loader.New("mdns", func() nr.Resolver {
+				return nr_mdns.NewResolver(logContrib)
 			}),
-			servicediscovery_loader.New("kubernetes", func() servicediscovery.Resolver {
-				return servicediscovery_kubernetes.NewKubernetesResolver(logContrib)
+			nr_loader.New("kubernetes", func() nr.Resolver {
+				return nr_kubernetes.NewResolver(logContrib)
 			}),
 		),
 		runtime.WithInputBindings(
@@ -250,6 +270,12 @@ func main() {
 			}),
 			bindings_loader.NewInput("kubernetes", func() bindings.InputBinding {
 				return kubernetes.NewKubernetes(logContrib)
+			}),
+			bindings_loader.NewInput("azure.eventgrid", func() bindings.InputBinding {
+				return eventgrid.NewAzureEventGrid(logContrib)
+			}),
+			bindings_loader.NewInput("twitter", func() bindings.InputBinding {
+				return twitter.NewTwitter(logContrib)
 			}),
 		),
 		runtime.WithOutputBindings(
@@ -308,7 +334,13 @@ func main() {
 				return signalr.NewSignalR(logContrib)
 			}),
 			bindings_loader.NewOutput("twilio.sms", func() bindings.OutputBinding {
-				return twilio.NewSMS(logContrib)
+				return sms.NewSMS(logContrib)
+			}),
+			bindings_loader.NewOutput("twilio.sendgrid", func() bindings.OutputBinding {
+				return sendgrid.NewSendGrid(logContrib)
+			}),
+			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
+				return eventgrid.NewAzureEventGrid(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

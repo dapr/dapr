@@ -10,23 +10,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
+	nethttp "net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/config"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/placement"
-	daprinternal_pb "github.com/dapr/dapr/pkg/proto/daprinternal"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,27 +38,26 @@ import (
 )
 
 const (
-	daprSeparator             = "||"
-	callRemoteActorRetryCount = 3
+	daprSeparator = "||"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
 
 // Actors allow calling into virtual actors as well as actor state management
 type Actors interface {
-	Call(req *CallRequest) (*CallResponse, error)
+	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
-	GetState(req *GetStateRequest) (*StateResponse, error)
-	SaveState(req *SaveStateRequest) error
-	DeleteState(req *DeleteStateRequest) error
-	TransactionalStateOperation(req *TransactionalRequest) error
-	GetReminder(req *GetReminderRequest) (*Reminder, error)
-	CreateReminder(req *CreateReminderRequest) error
-	DeleteReminder(req *DeleteReminderRequest) error
-	CreateTimer(req *CreateTimerRequest) error
-	DeleteTimer(req *DeleteTimerRequest) error
-	IsActorHosted(req *ActorHostedRequest) bool
-	GetActiveActorsCount() []ActiveActorsCount
+	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
+	SaveState(ctx context.Context, req *SaveStateRequest) error
+	DeleteState(ctx context.Context, req *DeleteStateRequest) error
+	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
+	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
+	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
+	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
+	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
+	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
+	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
+	GetActiveActorsCount(ctx context.Context) []ActiveActorsCount
 }
 
 type actorsRuntime struct {
@@ -78,6 +80,7 @@ type actorsRuntime struct {
 	evaluationChan      chan bool
 	appHealthy          bool
 	certChain           *dapr_credentials.CertChain
+	tracingSpec         config.TracingSpec
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -95,7 +98,13 @@ const (
 )
 
 // NewActors create a new actors runtime with given config
-func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error), config Config, certChain *dapr_credentials.CertChain) Actors {
+func NewActors(
+	stateStore state.Store,
+	appChannel channel.AppChannel,
+	grpcConnectionFn func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error),
+	config Config,
+	certChain *dapr_credentials.CertChain,
+	tracingSpec config.TracingSpec) Actors {
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
@@ -114,6 +123,7 @@ func NewActors(stateStore state.Store, appChannel channel.AppChannel, grpcConnec
 		evaluationChan:      make(chan bool),
 		appHealthy:          true,
 		certChain:           certChain,
+		tracingSpec:         tracingSpec,
 	}
 }
 
@@ -161,38 +171,30 @@ func (a *actorsRuntime) decomposeCompositeKey(compositeKey string) []string {
 }
 
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
-	req := channel.InvokeRequest{
-		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
-		Metadata: map[string]string{http.HTTPVerb: http.Delete},
-	}
+	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("actors/%s/%s", actorType, actorID))
+	req.WithHTTPExtension(nethttp.MethodDelete, "")
+	req.WithRawData(nil, invokev1.JSONContentType)
 
-	resp, err := a.appChannel.InvokeMethod(&req)
+	// TODO Propagate context
+	ctx := context.Background()
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
 	}
 
-	if status := a.getStatusCodeFromMetadata(resp.Metadata); status != 200 {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
-		return fmt.Errorf("error from actor service: %s", string(resp.Data))
+	if resp.Status().Code != nethttp.StatusOK {
+		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
+		_, body := resp.RawData()
+		return fmt.Errorf("error from actor service: %s", string(body))
 	}
 
 	actorKey := a.constructCompositeKey(actorType, actorID)
 	a.actorsTable.Delete(actorKey)
 	diag.DefaultMonitoring.ActorDeactivated(actorType)
+	log.Debugf("deactivated actor type=%s, id=%s\n", actorType, actorID)
+
 	return nil
-}
-
-func (a *actorsRuntime) getStatusCodeFromMetadata(metadata map[string]string) int {
-	code := metadata[http.HTTPStatusCode]
-	if code != "" {
-		statusCode, err := strconv.Atoi(code)
-		if err == nil {
-			return statusCode
-		}
-	}
-
-	return 200
 }
 
 func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
@@ -207,7 +209,7 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 			a.actorsTable.Range(func(key, value interface{}) bool {
 				actorInstance := value.(*actor)
 
-				if actorInstance.busy {
+				if actorInstance.isBusy() {
 					return true
 				}
 
@@ -228,23 +230,24 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 	}()
 }
 
-func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
-	targetActorAddress, appID := a.lookupActorAddress(req.ActorType, req.ActorID)
+func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	actor := req.Actor()
+	targetActorAddress, appID := a.lookupActorAddress(actor.GetActorType(), actor.GetActorId())
 	if targetActorAddress == "" {
-		return nil, fmt.Errorf("error finding address for actor type %s with id %s", req.ActorType, req.ActorID)
+		return nil, fmt.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
 	}
 
 	if a.placementBlock {
 		<-a.placementSignal
 	}
 
-	var resp *CallResponse
+	var resp *invokev1.InvokeMethodResponse
 	var err error
 
 	if a.isActorLocal(targetActorAddress, a.config.HostAddress, a.config.Port) {
-		resp, err = a.callLocalActor(req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callLocalActor(ctx, req)
 	} else {
-		resp, err = a.callRemoteActorWithRetry(callRemoteActorRetryCount, a.callRemoteActor, targetActorAddress, appID, req.ActorType, req.ActorID, req.Method, req.Data, req.Metadata)
+		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, targetActorAddress, appID, req)
 	}
 
 	if err != nil {
@@ -254,13 +257,18 @@ func (a *actorsRuntime) Call(req *CallRequest) (*CallResponse, error) {
 }
 
 // callRemoteActorWithRetry will call a remote actor for the specified number of retries and will only retry in the case of transient failures
-func (a *actorsRuntime) callRemoteActorWithRetry(numRetries int, fn func(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error),
-	targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
+func (a *actorsRuntime) callRemoteActorWithRetry(
+	ctx context.Context,
+	numRetries int,
+	backoffInterval time.Duration,
+	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
+	targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(targetAddress, targetID, actorType, actorID, actorMethod, data, metadata)
+		resp, err := fn(ctx, targetAddress, targetID, req)
 		if err == nil {
 			return resp, nil
 		}
+		time.Sleep(backoffInterval)
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
@@ -275,113 +283,59 @@ func (a *actorsRuntime) callRemoteActorWithRetry(numRetries int, fn func(targetA
 	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
 }
 
-func (a *actorsRuntime) callLocalActor(actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
-	key := a.constructCompositeKey(actorType, actorID)
+func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	actorTypeID := req.Actor()
+	key := a.constructCompositeKey(actorTypeID.GetActorType(), actorTypeID.GetActorId())
 
-	val, exists := a.actorsTable.LoadOrStore(key, &actor{
-		lock:         &sync.RWMutex{},
-		busy:         true,
-		lastUsedTime: time.Now().UTC(),
-		busyCh:       make(chan bool, 1),
-	})
-
+	val, _ := a.actorsTable.LoadOrStore(key, newActor(actorTypeID.GetActorType(), actorTypeID.GetActorId()))
 	act := val.(*actor)
-	lock := act.lock
-	lock.Lock()
-	defer lock.Unlock()
+	act.lock()
+	defer act.unLock()
 
-	if !exists {
-		err := a.tryActivateActor(actorType, actorID)
-		if err != nil {
-			a.actorsTable.Delete(key)
-			return nil, err
-		}
+	// Replace method to actors method
+	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)
+	// Original code overrides method with PUT. Why?
+	if req.Message().GetHttpExtension() == nil {
+		req.WithHTTPExtension(nethttp.MethodPut, "")
 	} else {
-		act.busy = true
-		act.busyCh = make(chan bool, 1)
-		act.lastUsedTime = time.Now().UTC()
+		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT
 	}
-
-	method := fmt.Sprintf("actors/%s/%s/method/%s", actorType, actorID, actorMethod)
-	req := channel.InvokeRequest{
-		Method:   method,
-		Payload:  data,
-		Metadata: map[string]string{http.HTTPVerb: http.Put},
-	}
-	for k, v := range metadata {
-		req.Metadata[k] = v
-	}
-
-	resp, err := a.appChannel.InvokeMethod(&req)
-
-	if act.busy {
-		act.busy = false
-		close(act.busyCh)
-	}
+	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if a.getStatusCodeFromMetadata(resp.Metadata) != 200 {
-		return nil, fmt.Errorf("error from actor service: %s", string(resp.Data))
+	_, respData := resp.RawData()
+
+	if resp.Status().Code != nethttp.StatusOK {
+		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}
 
-	return &CallResponse{
-		Data:     resp.Data,
-		Metadata: resp.Metadata,
-	}, nil
+	return resp, nil
 }
 
-func (a *actorsRuntime) callRemoteActor(targetAddress, targetID, actorType, actorID, actorMethod string, data []byte, metadata map[string]string) (*CallResponse, error) {
-	req := daprinternal_pb.CallActorEnvelope{
-		ActorType: actorType,
-		ActorID:   actorID,
-		Method:    actorMethod,
-		Data:      &any.Any{Value: data},
-		Metadata:  map[string]string{},
-	}
-
-	for k, v := range metadata {
-		req.Metadata[k] = v
-	}
-
+func (a *actorsRuntime) callRemoteActor(
+	ctx context.Context,
+	targetAddress, targetID string,
+	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	conn, err := a.grpcConnectionFn(targetAddress, targetID, false, false)
 	if err != nil {
 		return nil, err
 	}
 
-	client := daprinternal_pb.NewDaprInternalClient(conn)
-	resp, err := client.CallActor(context.Background(), &req)
+	// ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
+	// defer cancel()
+
+	span := diag_utils.SpanFromContext(ctx)
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	client := internalv1pb.NewServiceInvocationClient(conn)
+	resp, err := client.CallActor(ctx, req.Proto())
 	if err != nil {
 		return nil, err
 	}
 
-	return &CallResponse{
-		Data:     resp.Data.Value,
-		Metadata: resp.Metadata,
-	}, nil
-}
-
-func (a *actorsRuntime) tryActivateActor(actorType, actorID string) error {
-	// Send the activation signal to the app
-	req := channel.InvokeRequest{
-		Method:   fmt.Sprintf("actors/%s/%s", actorType, actorID),
-		Metadata: map[string]string{http.HTTPVerb: http.Post},
-		Payload:  nil,
-	}
-
-	resp, err := a.appChannel.InvokeMethod(&req)
-	if status := a.getStatusCodeFromMetadata(resp.Metadata); err != nil || status != 200 {
-		diag.DefaultMonitoring.ActorActivationFailed(actorType, fmt.Sprintf("status_code_%d", status))
-		key := a.constructCompositeKey(actorType, actorID)
-		a.actorsTable.Delete(key)
-		return fmt.Errorf("error activating actor type %s with id %s: %s", actorType, actorID, err)
-	}
-
-	diag.DefaultMonitoring.ActorActivated(actorType)
-
-	return nil
+	return invokev1.InternalInvokeResponse(resp)
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
@@ -389,7 +343,7 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 		targetActorAddress == fmt.Sprintf("%s:%v", hostAddress, grpcPort)
 }
 
-func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
+func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
 	if a.store == nil {
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -406,7 +360,7 @@ func (a *actorsRuntime) GetState(req *GetStateRequest) (*StateResponse, error) {
 	}, nil
 }
 
-func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) error {
+func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -455,13 +409,13 @@ func (a *actorsRuntime) TransactionalStateOperation(req *TransactionalRequest) e
 	return err
 }
 
-func (a *actorsRuntime) IsActorHosted(req *ActorHostedRequest) bool {
+func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
 	key := a.constructCompositeKey(req.ActorType, req.ActorID)
 	_, exists := a.actorsTable.Load(key)
 	return exists
 }
 
-func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
+func (a *actorsRuntime) SaveState(ctx context.Context, req *SaveStateRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -473,7 +427,7 @@ func (a *actorsRuntime) SaveState(req *SaveStateRequest) error {
 	return err
 }
 
-func (a *actorsRuntime) DeleteState(req *DeleteStateRequest) error {
+func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest) error {
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
@@ -540,7 +494,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 	}()
 }
 
-func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.PlacementService_ReportDaprStatusClient {
+func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAddress string) placementv1pb.Placement_ReportDaprStatusClient {
 	for {
 		retryInterval := time.Millisecond * 250
 
@@ -549,7 +503,12 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
 			return nil
 		}
-		opts = append(opts, grpc.WithStatsHandler(diag.DefaultGRPCMonitoring.ClientStatsHandler))
+
+		if diag.DefaultGRPCMonitoring.IsEnabled() {
+			opts = append(
+				opts,
+				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
+		}
 
 		conn, err := grpc.Dial(
 			placementAddress,
@@ -565,7 +524,7 @@ func (a *actorsRuntime) getPlacementClientPersistently(placementAddress, hostAdd
 
 		header := metadata.New(map[string]string{idHeader: hostAddress})
 		ctx := metadata.NewOutgoingContext(context.Background(), header)
-		client := placementv1pb.NewPlacementServiceClient(conn)
+		client := placementv1pb.NewPlacementClient(conn)
 		stream, err := client.ReportDaprStatus(ctx)
 		if err != nil {
 			log.Warnf("error establishing client to placement service: %v", err)
@@ -669,11 +628,11 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				actor := value.(*actor)
 				if a.config.DrainRebalancedActors {
 					// wait until actor isn't busy or timeout hits
-					if actor.busy {
+					if actor.isBusy() {
 						select {
 						case <-time.After(a.config.DrainOngoingCallTimeout):
 							break
-						case <-actor.busyCh:
+						case <-actor.channel():
 							// if a call comes in from the actor for state changes, that's still allowed
 							break
 						}
@@ -687,7 +646,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 
 				for {
 					// wait until actor is not busy, then deactivate
-					if !actor.busy {
+					if !actor.isBusy() {
 						err := a.deactivateActor(actorType, actorID)
 						if err != nil {
 							log.Warnf("failed to deactivate actor %s: %s", actorKey, err)
@@ -881,7 +840,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 				}
 			}(t, stop, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
 		} else {
-			err := a.DeleteReminder(&DeleteReminderRequest{
+			err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 				Name:      reminder.Name,
 				ActorID:   reminder.ActorID,
 				ActorType: reminder.ActorType,
@@ -907,7 +866,11 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	}
 
 	log.Debugf("executing reminder %s for actor type %s with id %s", reminder, actorType, actorID)
-	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("remind/%s", reminder), b, nil)
+	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("remind/%s", reminder))
+	req.WithActor(actorType, actorID)
+	req.WithRawData(b, invokev1.JSONContentType)
+
+	_, err = a.callLocalActor(context.Background(), req)
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
 		a.updateReminderTrack(key, reminder)
@@ -940,11 +903,11 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 	return nil, false
 }
 
-func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
+func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
 	r, exists := a.getReminder(req)
 	if exists {
 		if a.reminderRequiresUpdate(req, r) {
-			err := a.DeleteReminder(&DeleteReminderRequest{
+			err := a.DeleteReminder(ctx, &DeleteReminderRequest{
 				ActorID:   req.ActorID,
 				ActorType: req.ActorType,
 				Name:      req.Name,
@@ -1002,7 +965,7 @@ func (a *actorsRuntime) CreateReminder(req *CreateReminderRequest) error {
 	return nil
 }
 
-func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
+func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := a.constructCompositeKey(actorKey, req.Name)
 
@@ -1045,7 +1008,7 @@ func (a *actorsRuntime) CreateTimer(req *CreateTimerRequest) error {
 						log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
 					}
 				} else {
-					a.DeleteTimer(&DeleteTimerRequest{
+					a.DeleteTimer(ctx, &DeleteTimerRequest{
 						Name:      name,
 						ActorID:   actorID,
 						ActorType: actorType,
@@ -1083,7 +1046,10 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	}
 
 	log.Debugf("executing timer %s for actor type %s with id %s", name, actorType, actorID)
-	_, err = a.callLocalActor(actorType, actorID, fmt.Sprintf("timer/%s", name), b, nil)
+	req := invokev1.NewInvokeMethodRequest(fmt.Sprintf("timer/%s", name))
+	req.WithActor(actorType, actorID)
+	req.WithRawData(b, invokev1.JSONContentType)
+	_, err = a.callLocalActor(context.Background(), req)
 	if err != nil {
 		log.Debugf("error execution of timer %s for actor type %s with id %s: %s", name, actorType, actorID, err)
 	}
@@ -1104,7 +1070,7 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 	return reminders, nil
 }
 
-func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
+func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
 	if a.evaluationBusy {
 		select {
 		case <-time.After(time.Second * 5):
@@ -1157,7 +1123,7 @@ func (a *actorsRuntime) DeleteReminder(req *DeleteReminderRequest) error {
 	return nil
 }
 
-func (a *actorsRuntime) GetReminder(req *GetReminderRequest) (*Reminder, error) {
+func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
 	reminders, err := a.getRemindersForActorType(req.ActorType)
 	if err != nil {
 		return nil, err
@@ -1175,7 +1141,7 @@ func (a *actorsRuntime) GetReminder(req *GetReminderRequest) (*Reminder, error) 
 	return nil, nil
 }
 
-func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
+func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error {
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := a.constructCompositeKey(actorKey, req.Name)
 
@@ -1188,7 +1154,7 @@ func (a *actorsRuntime) DeleteTimer(req *DeleteTimerRequest) error {
 	return nil
 }
 
-func (a *actorsRuntime) GetActiveActorsCount() []ActiveActorsCount {
+func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
 	var actorCountMap = map[string]int{}
 	a.actorsTable.Range(func(key, value interface{}) bool {
 		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))

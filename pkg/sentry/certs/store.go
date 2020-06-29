@@ -56,6 +56,7 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 	return nil
 }
 
+/* #nosec */
 func storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem []byte, rootCertPath, issuerCertPath, issuerKeyPath string) error {
 	err := ioutil.WriteFile(rootCertPath, rootCertPem, 0644)
 	if err != nil {
