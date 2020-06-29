@@ -303,7 +303,7 @@ func TestStateApp(t *testing.T) {
 				body, err := json.Marshal(step.request)
 				require.NoError(t, err)
 
-				url := fmt.Sprintf("//%s/test/http/%s", externalURL, step.command)
+				url := fmt.Sprintf("%s/test/http/%s", externalURL, step.command)
 
 				resp, err := utils.HTTPPost(url, body)
 				require.NoError(t, err)
