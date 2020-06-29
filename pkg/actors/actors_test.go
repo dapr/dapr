@@ -672,3 +672,14 @@ func TestActorsAppHealthCheck(t *testing.T) {
 	time.Sleep(time.Second * 2)
 	assert.False(t, testActorRuntime.appHealthy)
 }
+
+func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
+	appID := "myapp"
+	actorType := "TestActor"
+	actorID := "abc123"
+
+	actorsRuntime := newTestActorsRuntime()
+	actorKey := actorsRuntime.constructCompositeKey(appID, actorType, actorID)
+
+	assert.Equal(t, "myapp||TestActor||abc123", actorKey)
+}
