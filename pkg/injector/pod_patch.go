@@ -66,7 +66,7 @@ const (
 	defaultLogLevel                   = "info"
 	defaultLogAsJSON                  = false
 	kubernetesMountPath               = "/var/run/secrets/kubernetes.io/serviceaccount"
-	defaultConfig                     = "default"
+	defaultConfig                     = "daprsystem"
 	defaultMetricsPort                = 9090
 	sidecarHealthzPath                = "healthz"
 	defaultHealthzProbeDelaySeconds   = 3
