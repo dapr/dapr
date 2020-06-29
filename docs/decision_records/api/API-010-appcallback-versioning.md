@@ -1,7 +1,7 @@
-# API-010: App Callback Versioning
+# API-010: Do not implement App Callback Versioning for HTTP
 
 ## Status
-Rejected
+Accepted
 
 ## Context
 There was a proposal to introducing versioning for HTTP App Callbacks. The goal of this review was to understand if a versioning was required and how it could handle situations post v1.0 of DAPR
