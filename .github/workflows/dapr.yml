@@ -82,6 +82,10 @@ jobs:
     needs: build
     if: github.event_name != 'pull_request'
     env:
+      ARTIFACT_DIR: ./release
+      HELM_PACKAGE_DIR: helm
+      DAPR_VERSION_ARTIFACT: dapr_version
+      DAPR_RELEASE_TAG_ARTIFACT: dapr_release
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
       HELMVER: v3.2.1
     runs-on: ubuntu-latest
@@ -104,7 +108,21 @@ jobs:
           sudo apt install docker-ce
           docker -v
       - name: Parse release version and set REL_VERSION
-        run: python ./${{ env.DAPR_REPO_CODE_PATH }}/.github/scripts/get_release_version.py
+        run: python ./.github/scripts/get_release_version.py
+      - name: Save release version and release tag
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}
+          echo ${REL_VERSION} > ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+          echo $LATEST_RELEASE > ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ env.DAPR_VERSION_ARTIFACT }}
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+      - name: Upload DAPR release tag artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
       - name: Generate helm chart manifest
         run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: move helm chart manifest to artifact
@@ -185,28 +203,66 @@ jobs:
               HELM_CHARTS_DIR: charts/dapr
         run: |
           if [ "$LATEST_RELEASE" = "true" ]; then
-            mkdir -p ${DAPR_REPO_CODE_PATH}/${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-            helm package ${DAPR_REPO_CODE_PATH}/${{ env.HELM_CHARTS_DIR }} --destination ${DAPR_REPO_CODE_PATH}/${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+            mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+            helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
           fi
+      - name: Upload Helm charts package to artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr_helm_charts_package
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+  helmpublish:
+    name: Publish helm charts to Helm github pages repo
+    needs: publish
+    if: github.event_name != 'pull_request'
+    env:
+      ARTIFACT_DIR: ./release
+      DAPR_VERSION_ARTIFACT: dapr_version
+      DAPR_RELEASE_TAG_ARTIFACT: dapr_release
+      HELM_PACKAGE_DIR: helm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Helm charts directory
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: download artifacts - dapr_helm_charts_package
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_helm_charts_package
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: download artifacts - dapr_version
+        uses: actions/download-artifact@master
+        with:
+          name: ${{ env.DAPR_VERSION_ARTIFACT }}
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+      - name: download artifacts - dapr_release
+        uses: actions/download-artifact@master
+        with:
+          name: ${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v2
         env:
               DAPR_HELM_REPO: dapr/dapr-helm-charts.io
+              DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
         with:
           repository: ${{ env.DAPR_HELM_REPO }}
           ref: refs/heads/master
-          token: ${{ secrets.DAPR_BOT_HELM_TOKEN }}
+          token: ${{ secrets.DAPR_BOT_TOKEN }}
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
+        env:
+              DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
+              DAPR_VERSION_ARTIFACT: dapr_version
         run: |
-          if [ "$LATEST_RELEASE" = "true" ]; then
-            cp ./${{ env.DAPR_REPO_CODE_PATH }}/${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
-            cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            git config user.name "GitHub Actions Bot"
-            git config user.email "<>"
-            git add --all
-            git commit -m "New Helm Chart change - ${{ env.DAPR_VERSION }}"  
-            git push
-            # Cleanup Helm package dir
-            rm -rf ${{ env.DAPR_REPO_CODE_PATH }}/${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-          fi
+            daprReleaseTag=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}`
+            if [ "$daprReleaseTag" = "true" ]; then
+              daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+              cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
+              cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
+              git config --global user.email "daprweb@microsoft.com"
+              git config --global user.name "dapr-bot"
+              git add --all
+              git commit -m "Release - $daprVersion"  
+              git push
+            fi
