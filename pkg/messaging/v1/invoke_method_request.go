@@ -67,21 +67,17 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 
 // WithMetadata sets metadata
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
-	imr.r.Metadata = GrpcMetadataToInternalMetadata(md)
+	imr.r.Metadata = MetadataToInternalMetadata(md)
 	return imr
 }
 
 // WithFastHTTPHeaders sets fasthttp request headers
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
-	var md = DaprInternalMetadata{}
+	md := map[string][]string{}
 	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = &internalv1pb.ListStringValue{
-			Values: []string{string(value)},
-		}
+		md[string(key)] = []string{string(value)}
 	})
-	if len(md) > 0 {
-		imr.r.Metadata = md
-	}
+	imr.r.Metadata = MetadataToInternalMetadata(md)
 	return imr
 }
 
