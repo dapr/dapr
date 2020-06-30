@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package hellodapr_e2e // nolint
+package hellodapr_e2e
 
 import (
 	"encoding/json"
@@ -101,7 +101,7 @@ func TestHelloDapr(t *testing.T) {
 			require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 			// Check if test app endpoint is available
-			_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+			resp, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 			require.NoError(t, err)
 
 			// Trigger test
@@ -110,7 +110,7 @@ func TestHelloDapr(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			resp, err := utils.HTTPPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
+			resp, err = utils.HTTPPost(fmt.Sprintf("%s/tests/%s", externalURL, tt.testCommand), body)
 			require.NoError(t, err)
 
 			var appResp appResponse
