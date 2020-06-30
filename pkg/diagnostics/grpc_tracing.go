@@ -67,8 +67,11 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			}
 		}
 
-		traceContextBinary := propagation.Binary(span.SpanContext())
-		grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
+		// Add grpc-trace-bin header for all non-invocation api's
+		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
+			traceContextBinary := propagation.Binary(span.SpanContext())
+			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
+		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
 		span.End()
