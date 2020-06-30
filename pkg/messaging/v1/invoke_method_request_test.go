@@ -12,6 +12,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
+	"github.com/valyala/fasthttp"
 )
 
 func TestInvokeRequest(t *testing.T) {
@@ -60,18 +61,35 @@ func TestInternalInvokeRequest(t *testing.T) {
 }
 
 func TestMetadata(t *testing.T) {
-	req := NewInvokeMethodRequest("test_method")
-	md := map[string][]string{
-		"test1": {"val1", "val2"},
-		"test2": {"val3", "val4"},
-	}
-	req.WithMetadata(md)
-	mdata := req.Metadata()
+	t.Run("gRPC headers", func(t *testing.T) {
+		req := NewInvokeMethodRequest("test_method")
+		md := map[string][]string{
+			"test1": {"val1", "val2"},
+			"test2": {"val3", "val4"},
+		}
+		req.WithMetadata(md)
+		mdata := req.Metadata()
 
-	assert.Equal(t, "val1", mdata["test1"].GetValues()[0])
-	assert.Equal(t, "val2", mdata["test1"].GetValues()[1])
-	assert.Equal(t, "val3", mdata["test2"].GetValues()[0])
-	assert.Equal(t, "val4", mdata["test2"].GetValues()[1])
+		assert.Equal(t, "val1", mdata["test1"].GetValues()[0])
+		assert.Equal(t, "val2", mdata["test1"].GetValues()[1])
+		assert.Equal(t, "val3", mdata["test2"].GetValues()[0])
+		assert.Equal(t, "val4", mdata["test2"].GetValues()[1])
+	})
+
+	t.Run("HTTP headers", func(t *testing.T) {
+		var req = fasthttp.AcquireRequest()
+		req.Header.Set("Header1", "Value1")
+		req.Header.Set("Header2", "Value2")
+		req.Header.Set("Header3", "Value3")
+
+		re := NewInvokeMethodRequest("test_method")
+		re.WithFastHTTPHeaders(&req.Header)
+		mheader := re.Metadata()
+
+		assert.Equal(t, "Value1", mheader["Header1"].GetValues()[0])
+		assert.Equal(t, "Value2", mheader["Header2"].GetValues()[0])
+		assert.Equal(t, "Value3", mheader["Header3"].GetValues()[0])
+	})
 }
 
 func TestData(t *testing.T) {
