@@ -6,6 +6,7 @@
 package http
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -56,6 +57,11 @@ type metadata struct {
 	ID                string                      `json:"id"`
 	ActiveActorsCount []actors.ActiveActorsCount  `json:"actors"`
 	Extended          map[interface{}]interface{} `json:"extended"`
+}
+
+type SetTransactionalRequest struct {
+	Operation state.OperationType `json:"operationType"`
+	Request   state.SetRequest    `json:"request"`
 }
 
 const (
@@ -1003,9 +1009,15 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	body := reqCtx.PostBody()
-
+	setRequests, err := UnmarshalJSON(body)
 	var requests = []state.TransactionalRequest{}
-	err := a.json.Unmarshal(body, &requests)
+	for _, setRequest := range setRequests {
+		requests = append(requests, state.TransactionalRequest{
+			Operation: setRequest.Operation,
+			Request:   setRequest.Request,
+		})
+	}
+	//err := a.json.Unmarshal(body, &requests)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respondWithError(reqCtx, 400, msg)
@@ -1026,4 +1038,15 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(reqCtx, 201)
 	}
+}
+
+func UnmarshalJSON(b []byte) (setRequests []SetTransactionalRequest, err error) {
+	setRequests = []SetTransactionalRequest{}
+	err = json.Unmarshal(b, &setRequests)
+
+	// no error, but we also need to make sure we unmarshaled something
+	if err == nil {
+		return setRequests, nil
+	}
+	return nil, err
 }
