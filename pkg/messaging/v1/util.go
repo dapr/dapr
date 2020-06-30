@@ -66,8 +66,8 @@ func IsJSONContentType(contentType string) bool {
 	return strings.HasPrefix(strings.ToLower(contentType), JSONContentType)
 }
 
-// MetadataToInternalMetadata converts http/gRPC metadata to dapr internal metadata map
-func MetadataToInternalMetadata(md metadata.MD) DaprInternalMetadata {
+// GrpcMetadataToInternalMetadata converts gRPC metadata to dapr internal metadata map
+func GrpcMetadataToInternalMetadata(md metadata.MD) DaprInternalMetadata {
 	var internalMD = DaprInternalMetadata{}
 	for k, values := range md {
 		var listValue = internalv1pb.ListStringValue{}

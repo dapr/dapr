@@ -55,7 +55,7 @@ func TestGrpcMetadataToInternalMetadata(t *testing.T) {
 		"key", "key value",
 		"key-bin", string(keyBinValue),
 	)
-	internalMD := MetadataToInternalMetadata(testMD)
+	internalMD := GrpcMetadataToInternalMetadata(testMD)
 
 	assert.Equal(t, "key value", internalMD["key"].GetValues()[0])
 	assert.Equal(t, 1, len(internalMD["key"].GetValues()))
