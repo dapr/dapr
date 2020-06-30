@@ -38,7 +38,8 @@ import (
 )
 
 const (
-	daprSeparator = "||"
+	daprSeparator        = "||"
+	metadataPartitionKey = "partitionKey"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -349,7 +350,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}
 
 	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
-	metadata := map[string]string{"partitionkey": partitionKey}
+	metadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	resp, err := a.store.Get(&state.GetRequest{
@@ -371,7 +372,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 	}
 	requests := []state.TransactionalRequest{}
 	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
-	metadata := map[string]string{"partitionkey": partitionKey}
+	metadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	for _, o := range req.Operations {
 		switch o.Operation {
@@ -432,7 +433,7 @@ func (a *actorsRuntime) SaveState(ctx context.Context, req *SaveStateRequest) er
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 
 	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
-	metadata := map[string]string{"partitionkey": partitionKey}
+	metadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	err := a.store.Set(&state.SetRequest{
 		Value:    req.Value,
