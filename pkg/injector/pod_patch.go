@@ -152,6 +152,8 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	return patchOps, nil
 }
 
+// This function add Dapr environment variables to all the containers in any Dapr enabled pod.
+// The containers can be injected or user defined.
 func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
 	portEnv := []corev1.EnvVar{
 		{
@@ -174,6 +176,8 @@ func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation 
 	return envPatchOps
 }
 
+// This function only add new environment variables if they do not exist.
+// It does not override existing values for those variables if they have been defined already.
 func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path string) []PatchOperation {
 	if len(envs) == 0 {
 		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
