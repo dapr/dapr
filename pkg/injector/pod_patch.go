@@ -169,9 +169,7 @@ func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation 
 	for i, container := range containers {
 		path := fmt.Sprintf("%s/%d/env", containersPath, i)
 		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
-		if len(patchOps) != 0 {
-			envPatchOps = append(envPatchOps, patchOps...)
-		}
+		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps
 }
@@ -192,28 +190,20 @@ func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path st
 	// If there are existing env vars, then we are adding to an existing slice of env vars.
 	path += "/-"
 
-	// Add only env vars that do not conflict with existing user defined/injected env vars.
-	toAdd := []corev1.EnvVar{}
+	var patchOps []PatchOperation
+LoopEnv:
 	for _, env := range addEnv {
-		hasEnv := false
 		for _, actual := range envs {
 			if actual.Name == env.Name {
-				hasEnv = true
-				break
+				// Add only env vars that do not conflict with existing user defined/injected env vars.
+				continue LoopEnv
 			}
 		}
-		if !hasEnv {
-			toAdd = append(toAdd, env)
-		}
-	}
-
-	patchOps := make([]PatchOperation, len(toAdd))
-	for i, value := range toAdd {
-		patchOps[i] = PatchOperation{
+		patchOps = append(patchOps, PatchOperation{
 			Op:    "add",
 			Path:  path,
-			Value: value,
-		}
+			Value: env,
+		})
 	}
 	return patchOps
 }
