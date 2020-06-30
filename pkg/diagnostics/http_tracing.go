@@ -58,6 +58,12 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 			}
 		}
 
+		// Check if response has traceparent header and add if absent
+		if ctx.Response.Header.Peek(traceparentHeader) == nil {
+			span = diag_utils.SpanFromContext(ctx)
+			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
+		}
+
 		UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
 		span.End()
 	}
@@ -161,7 +167,7 @@ func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
 	return TraceStateFromW3CString(h)
 }
 
-// SpanContextToHTTPHeaders adds the spancontect in traceparent and tracestate headers.
+// SpanContextToHTTPHeaders adds the spancontext in traceparent and tracestate headers.
 func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, string)) {
 	// if sc is empty context, no ops.
 	if (trace.SpanContext{}) == sc {
