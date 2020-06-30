@@ -24,6 +24,7 @@ import (
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
 	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
+	localsecretstore "github.com/dapr/components-contrib/secretstores/local"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 
 	// State Stores
@@ -67,11 +68,11 @@ import (
 	"github.com/dapr/components-contrib/exporters/zipkin"
 	exporters_loader "github.com/dapr/dapr/pkg/components/exporters"
 
-	// Service Discovery
-	"github.com/dapr/components-contrib/servicediscovery"
-	servicediscovery_kubernetes "github.com/dapr/components-contrib/servicediscovery/kubernetes"
-	"github.com/dapr/components-contrib/servicediscovery/mdns"
-	servicediscovery_loader "github.com/dapr/dapr/pkg/components/servicediscovery"
+	// Name resolutions
+	nr "github.com/dapr/components-contrib/nameresolution"
+	nr_kubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
+	nr_mdns "github.com/dapr/components-contrib/nameresolution/mdns"
+	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
@@ -137,6 +138,9 @@ func main() {
 			}),
 			secretstores_loader.New("gcp.secretmanager", func() secretstores.SecretStore {
 				return gcp_secretmanager.NewSecreteManager(logContrib)
+			}),
+			secretstores_loader.New("local.localsecretstore", func() secretstores.SecretStore {
+				return localsecretstore.NewLocalSecretStore(logContrib)
 			}),
 		),
 		runtime.WithStates(
@@ -232,12 +236,12 @@ func main() {
 				return native.NewNativeExporter(logContrib)
 			}),
 		),
-		runtime.WithServiceDiscovery(
-			servicediscovery_loader.New("mdns", func() servicediscovery.Resolver {
-				return mdns.NewMDNSResolver(logContrib)
+		runtime.WithNameResolutions(
+			nr_loader.New("mdns", func() nr.Resolver {
+				return nr_mdns.NewResolver(logContrib)
 			}),
-			servicediscovery_loader.New("kubernetes", func() servicediscovery.Resolver {
-				return servicediscovery_kubernetes.NewKubernetesResolver(logContrib)
+			nr_loader.New("kubernetes", func() nr.Resolver {
+				return nr_kubernetes.NewResolver(logContrib)
 			}),
 		),
 		runtime.WithInputBindings(

@@ -179,6 +179,14 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("Created", func(t *testing.T) {
+		// act
+		err := ErrorFromHTTPResponseCode(201, "Created")
+
+		// assert
+		assert.NoError(t, err)
+	})
+
 	t.Run("NotFound", func(t *testing.T) {
 		// act
 		err := ErrorFromHTTPResponseCode(404, "Not Found")
@@ -191,20 +199,6 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
 		assert.Equal(t, "404", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
 		assert.Equal(t, "Not Found", errInfo.GetMetadata()[errorInfoHTTPErrorMetadata])
-	})
-
-	t.Run("Unknown", func(t *testing.T) {
-		// act
-		err := ErrorFromHTTPResponseCode(201, "Created")
-
-		// assert
-		s, ok := status.FromError(err)
-		assert.True(t, ok)
-		assert.Equal(t, codes.Unknown, s.Code())
-		assert.Equal(t, "Created", s.Message())
-		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
-		assert.Equal(t, "201", errInfo.GetMetadata()[errorInfoHTTPCodeMetadata])
-		assert.Equal(t, "Created", errInfo.GetMetadata()[errorInfoHTTPErrorMetadata])
 	})
 
 	t.Run("Internal Server Error", func(t *testing.T) {

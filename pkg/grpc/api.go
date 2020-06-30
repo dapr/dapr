@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -41,6 +42,8 @@ const (
 	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
 	minSeconds    = -maxSeconds
 	daprSeparator = "||"
+
+	daprHTTPStatusHeader = "dapr-http-status"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -171,7 +174,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		return nil, err
 	}
 
-	grpc.SetHeader(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true))
+	var headerMD = invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Headers(), true)
 
 	var respError error
 	if resp.IsHTTPResponse() {
@@ -180,11 +183,15 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			_, errorMessage = resp.RawData()
 		}
 		respError = invokev1.ErrorFromHTTPResponseCode(int(resp.Status().Code), string(errorMessage))
+		// Populate http status code to header
+		headerMD.Set(daprHTTPStatusHeader, strconv.Itoa(int(resp.Status().Code)))
 	} else {
 		respError = invokev1.ErrorFromInternalStatus(resp.Status())
 		// ignore trailer if appchannel uses HTTP
 		grpc.SetTrailer(ctx, invokev1.InternalMetadataToGrpcMetadata(ctx, resp.Trailers(), false))
 	}
+
+	grpc.SetHeader(ctx, headerMD)
 
 	return resp.Message(), respError
 }

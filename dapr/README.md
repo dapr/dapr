@@ -31,3 +31,13 @@ protoc -I . ./dapr/proto/common/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./dapr/proto/runtime/v1/*.proto --go_out=plugins=grpc:../../../
 protoc -I . ./dapr/proto/internals/v1/*.proto --go_out=plugins=grpc:../../../
 ```
+
+## Update e2e test apps
+Whenever there are breaking changes in the proto files, we need to update the e2e test apps to use the correct version of dapr dependencies. This can be done by navigating to the tests folder and running the commands:-
+
+```
+./update_testapps_dependencies.sh
+```
+**Note**: On Windows, use the mingw tools to execute the bash script
+
+Check in all the go.mod files for the test apps that have now been modified to point to the latest dapr version.
