@@ -26,6 +26,7 @@ All decisions are categorized in the following folders:
   - [API-007: Tracing Endpoint](./api/API-007-tracing-endpoint.md)
   - [API-008: Multi State store API design](./api/API-008-multi-state-store-api-design.md)
   - [API-009: Bi-Directional Bindings](./api/API-009-bidirectional-bindings.md)
+  - [API-010: Appcallback Versioning for HTTP](./api/API-010-appcallback-versioning.md)
 
 * **CLI** - Decisions on Dapr CLI architecture and behaviors.
 
