@@ -517,12 +517,8 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Construct internal invoke method request
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
 	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
-	// Save headers to metadata
-	metadata := map[string][]string{}
-	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
-		metadata[string(key)] = []string{string(value)}
-	})
-	req.WithMetadata(metadata)
+	// Save headers to internal metadata
+	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
 
 	resp, err := a.directMessaging.Invoke(reqCtx, targetID, req)
 	// err does not represent user application response
