@@ -61,7 +61,7 @@ func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *I
 
 // WithHeaders sets gRPC response header metadata
 func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodResponse {
-	imr.r.Headers = GrpcMetadataToInternalMetadata(headers)
+	imr.r.Headers = MetadataToInternalMetadata(headers)
 	return imr
 }
 
@@ -81,7 +81,7 @@ func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHe
 
 // WithTrailers sets Trailer in internal InvokeMethodResponse
 func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethodResponse {
-	imr.r.Trailers = GrpcMetadataToInternalMetadata(trailer)
+	imr.r.Trailers = MetadataToInternalMetadata(trailer)
 	return imr
 }
 
