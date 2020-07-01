@@ -1022,7 +1022,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	var requests = []SetDeleteTransactionalRequest{}
 	err = a.json.Unmarshal(body, &requests)
 
-	var transactionalRequests []state.TransactionalRequest
+	var transactionalRequests = []state.TransactionalRequest{}
 	for _, request := range requests {
 		var convertedRequest interface{}
 		switch request.Operation {
@@ -1051,7 +1051,6 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			Request:   convertedRequest,
 		}
 		transactionalRequests = append(transactionalRequests, transactionalRequest)
-
 	}
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
