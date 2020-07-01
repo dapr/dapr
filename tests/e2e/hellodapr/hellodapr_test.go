@@ -54,6 +54,13 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 		},
+		{
+			AppName:        "helloenvtestdapr",
+			DaprEnabled:    true,
+			ImageName:      "e2e-hellodapr",
+			Replicas:       1,
+			IngressEnabled: true,
+		},
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
@@ -77,6 +84,12 @@ var helloAppTests = []struct {
 		"hellobluedapr",
 		"blue",
 		"Hello blue dapr!",
+	},
+	{
+		"envTest dapr",
+		"helloenvtestdapr",
+		"envTest",
+		"3500 50001",
 	},
 }
 
