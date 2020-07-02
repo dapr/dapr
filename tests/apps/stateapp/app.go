@@ -114,7 +114,12 @@ func get(key string) (*appState, error) {
 	// a key not found in Dapr will return 200 but an empty response.
 	err = json.Unmarshal(body, &state)
 	if err != nil {
-		return nil, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
+		var stateData string
+		stringMarshalErr := json.Unmarshal(body, &stateData)
+		if stringMarshalErr != nil {
+			return nil, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
+		}
+		state.Data = stateData
 	}
 
 	return state, nil
@@ -275,8 +280,8 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 
 // Handles State TransasctionRequest for GRPC
 func grpcHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing request for %s", r.URL.RequestURI())
-
+	log.Println("Processing request for ", r.URL.RequestURI())
+	log.Println(fmt.Sprintf("%s", r.Body))
 	// Retrieve request body contents
 	var req requestResponse
 	err := json.NewDecoder(r.Body).Decode(&req)
