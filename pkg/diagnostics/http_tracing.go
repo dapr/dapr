@@ -161,7 +161,7 @@ func tracestateFromRequest(req *fasthttp.Request) *tracestate.Tracestate {
 	return TraceStateFromW3CString(h)
 }
 
-// SpanContextToHTTPHeaders adds the spancontect in traceparent and tracestate headers.
+// SpanContextToHTTPHeaders adds the spancontext in traceparent and tracestate headers.
 func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, string)) {
 	// if sc is empty context, no ops.
 	if (trace.SpanContext{}) == sc {
@@ -169,20 +169,10 @@ func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, strin
 	}
 	h := SpanContextToW3CString(sc)
 	setHeader(traceparentHeader, h)
-	tracestateToHeader(sc, setHeader)
-}
 
-func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
-	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
-	if sc.Tracestate != nil {
-		for _, entry := range sc.Tracestate.Entries() {
-			pairs = append(pairs, strings.Join([]string{entry.Key, entry.Value}, "="))
-		}
-		h := strings.Join(pairs, ",")
-
-		if h != "" && len(h) <= maxTracestateLen {
-			setHeader(tracestateHeader, h)
-		}
+	t := SpanContextToTraceStateString(sc)
+	if t != "" && len(t) <= maxTracestateLen {
+		setHeader(tracestateHeader, t)
 	}
 }
 

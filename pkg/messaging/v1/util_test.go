@@ -6,7 +6,6 @@
 package v1
 
 import (
-	"context"
 	"encoding/base64"
 	"sort"
 	"strings"
@@ -36,10 +35,9 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 		"grpc-trace-bin": testValue,
 	}
 
-	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout"}
+	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout", "grpc-trace-bin"}
 	savedHeaderKeyNames := []string{}
-	ctx := context.Background()
-	InternalMetadataToHTTPHeader(ctx, fakeMetadata, func(k, v string) {
+	InternalMetadataToHTTPHeader(fakeMetadata, func(k, v string) {
 		savedHeaderKeyNames = append(savedHeaderKeyNames, k)
 	})
 
@@ -97,10 +95,8 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-
 	t.Run("without http header conversion for http headers", func(t *testing.T) {
-		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, false)
+		convertedMD := InternalMetadataToGrpcMetadata(httpHeaders, false)
 		// always trace header is returned
 		assert.Equal(t, 5, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD["host"][0])
@@ -110,7 +106,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 	})
 
 	t.Run("with http header conversion for http headers", func(t *testing.T) {
-		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, true)
+		convertedMD := InternalMetadataToGrpcMetadata(httpHeaders, true)
 		// always trace header is returned
 		assert.Equal(t, 5, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD["dapr-host"][0])
@@ -153,7 +149,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 	}
 
 	t.Run("with grpc header conversion for grpc headers", func(t *testing.T) {
-		convertedMD := InternalMetadataToGrpcMetadata(ctx, grpcMetadata, true)
+		convertedMD := InternalMetadataToGrpcMetadata(grpcMetadata, true)
 		assert.Equal(t, 8, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD[":authority"][0])
 		assert.Equal(t, "1S", convertedMD["grpc-timeout"][0])

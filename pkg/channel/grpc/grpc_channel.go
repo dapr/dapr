@@ -71,7 +71,11 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
-	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
+	// add the trace context from request context to internal metadata
+	invokev1.AddSpanContextToInternalMetadata(ctx, req.Metadata())
+
+	// convert internal metadata to gRPC metadata
+	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(req.Metadata(), true)
 	// Prepare gRPC Metadata
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
 
