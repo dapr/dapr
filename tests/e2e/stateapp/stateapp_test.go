@@ -235,8 +235,8 @@ func generateTestCases() []testCase {
 	}
 }
 
-func generateStateTransactionCases() testStateTransactionCase {
-	testCase1Key, testCase2Key := guuid.New().String(), guuid.New().String()
+func generateStateTransactionCases(protocolType string) testStateTransactionCase {
+	testCase1Key, testCase2Key := guuid.New().String()+protocolType, guuid.New().String()+protocolType
 	testCase1Value := "The best song ever is 'Highwayman' by 'The Highwaymen'."
 	testCase2Value := "Hello World"
 	// Just for readability
@@ -321,7 +321,6 @@ func TestStateTransactionApps(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
-	testCase := generateStateTransactionCases()
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
@@ -331,8 +330,8 @@ func TestStateTransactionApps(t *testing.T) {
 		protocol string
 		in       testStateTransactionCase
 	}{
-		{"HTTP", testCase},
-		{"GRPC", testCase},
+		{"HTTP", generateStateTransactionCases("HTTP")},
+		{"GRPC", generateStateTransactionCases("GRPC")},
 	}
 
 	// Now we are ready to run the actual tests
