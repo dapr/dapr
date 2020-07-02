@@ -125,7 +125,14 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 	var md = metadata.MD{}
 	for k, listVal := range internalMD {
 		keyName := strings.ToLower(k)
-		if keyName == DestinationIDHeader {
+		switch keyName {
+		case traceparentHeader:
+			continue
+		case tracestateHeader:
+			continue
+		case tracebinMetadata:
+			continue
+		case DestinationIDHeader:
 			continue
 		}
 
@@ -143,6 +150,34 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 			}
 		} else {
 			md.Append(keyName, listVal.Values...)
+		}
+	}
+
+	// converts trace data in internalMD to gRPC metadata
+	if IsGRPCProtocol(internalMD) {
+		listVal := internalMD[tracebinMetadata]
+		if listVal != nil {
+			v := listVal.Values[0]
+			decoded, err := base64.StdEncoding.DecodeString(v)
+			if err == nil {
+				md.Set(tracebinMetadata, string(decoded))
+			}
+		}
+	} else {
+		var sc trace.SpanContext
+		var ok bool
+		listVal := internalMD[traceparentHeader]
+		if listVal != nil {
+			v := listVal.Values[0]
+			sc, ok = diag.SpanContextFromW3CString(v)
+		}
+		if ok {
+			listVal = internalMD[tracestateHeader]
+			if listVal != nil {
+				v := listVal.Values[0]
+				sc.Tracestate = diag.TraceStateFromW3CString(v)
+			}
+			md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 		}
 	}
 	return md
@@ -173,10 +208,40 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	for k, listVal := range internalMD {
 		keyName := strings.ToLower(k)
-		if len(listVal.Values) == 0 || keyName == ContentTypeHeader || keyName == DestinationIDHeader {
+		switch keyName {
+		case traceparentHeader:
+			continue
+		case tracestateHeader:
+			continue
+		case tracebinMetadata:
+			continue
+		case DestinationIDHeader:
+			continue
+		case ContentTypeHeader:
+			continue
+		}
+		if len(listVal.Values) == 0 || strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) {
 			continue
 		}
 		setHeader(reservedGRPCMetadataToDaprPrefixHeader(keyName), listVal.Values[0])
+	}
+
+	// converts trace data in internalMD to HTTP headers
+	if IsGRPCProtocol(internalMD) {
+		listVal := internalMD[tracebinMetadata]
+		v := listVal.Values[0]
+		decoded, _ := base64.StdEncoding.DecodeString(v)
+		sc, _ := propagation.FromBinary(decoded)
+		diag.SpanContextToHTTPHeaders(sc, setHeader)
+	} else {
+		listVal := internalMD[traceparentHeader]
+		if listVal != nil && listVal.Values[0] != "" {
+			setHeader(traceparentHeader, listVal.Values[0])
+		}
+		listVal = internalMD[tracestateHeader]
+		if listVal != nil && listVal.Values[0] != "" {
+			setHeader(tracestateHeader, listVal.Values[0])
+		}
 	}
 }
 
@@ -212,32 +277,6 @@ func AddSpanContextToInternalMetadata(ctx context.Context, internalMD DaprIntern
 		}
 	}
 	return internalMD
-}
-
-// GetSpanContextFromInternalMetadata gets spancontext from Dapr internal metadata
-func GetSpanContextFromInternalMetadata(internalMD DaprInternalMetadata) trace.SpanContext {
-	var sc trace.SpanContext
-	var ok bool
-	if IsGRPCProtocol(internalMD) {
-		listVal := internalMD[tracebinMetadata]
-		if listVal != nil {
-			decoded, err := base64.StdEncoding.DecodeString(listVal.Values[0])
-			if err == nil {
-				sc, ok = propagation.FromBinary(decoded)
-			}
-		}
-	} else {
-		traceparentlistVal := internalMD[traceparentHeader]
-		if traceparentlistVal != nil {
-			sc, ok = diag.SpanContextFromW3CString(traceparentlistVal.Values[0])
-		}
-
-		tracestatelistVal := internalMD[tracestateHeader]
-		if tracestatelistVal != nil && ok {
-			sc.Tracestate = diag.TraceStateFromW3CString(tracestatelistVal.Values[0])
-		}
-	}
-	return sc
 }
 
 // HTTPStatusFromCode converts a gRPC error code into the corresponding HTTP response status.

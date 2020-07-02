@@ -519,7 +519,6 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// convert internal metadata to http headers
 	invokev1.InternalMetadataToHTTPHeader(resp.Headers(), reqCtx.Response.Header.Set)
 	contentType, body := resp.RawData()
 	reqCtx.Response.Header.SetContentType(contentType)
@@ -754,10 +753,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// add the trace context from response and add to internal metadata
-	invokev1.AddSpanContextToInternalMetadata(reqCtx, resp.Headers())
-
-	// convert internal metadata to http headers
 	invokev1.InternalMetadataToHTTPHeader(resp.Headers(), reqCtx.Response.Header.Set)
 
 	contentType, body := resp.RawData()

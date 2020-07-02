@@ -35,7 +35,7 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 		"grpc-trace-bin": testValue,
 	}
 
-	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout", "grpc-trace-bin"}
+	expectedKeyNames := []string{"custom-header", "dapr-method", "dapr-scheme", "dapr-path", "dapr-authority", "dapr-grpc-timeout"}
 	savedHeaderKeyNames := []string{}
 	InternalMetadataToHTTPHeader(fakeMetadata, func(k, v string) {
 		savedHeaderKeyNames = append(savedHeaderKeyNames, k)
@@ -97,8 +97,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 
 	t.Run("without http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(httpHeaders, false)
-		// always trace header is returned
-		assert.Equal(t, 5, convertedMD.Len())
+		assert.Equal(t, 4, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD["host"][0])
 		assert.Equal(t, "application/json", convertedMD["content-type"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["accept-encoding"][0])
@@ -107,8 +106,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 
 	t.Run("with http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(httpHeaders, true)
-		// always trace header is returned
-		assert.Equal(t, 5, convertedMD.Len())
+		assert.Equal(t, 4, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD["dapr-host"][0])
 		assert.Equal(t, "application/json", convertedMD["dapr-content-type"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["accept-encoding"][0])
