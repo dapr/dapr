@@ -58,6 +58,12 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 			}
 		}
 
+		// Check if response has traceparent header and add if absent
+		if ctx.Response.Header.Peek(traceparentHeader) == nil {
+			span = diag_utils.SpanFromContext(ctx)
+			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
+		}
+
 		UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
 		span.End()
 	}
