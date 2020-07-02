@@ -713,7 +713,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	_, err := client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
 		Requests: []*runtimev1pb.TransactionalStateRequest{
 			{
-				OperationType: "Upsert",
+				OperationType: "upsert",
 				States: &commonv1pb.StateItem{
 					Key:     "key1",
 					Value:   []byte("1"),
@@ -721,14 +721,14 @@ func TestExecuteStateTransaction(t *testing.T) {
 				},
 			},
 			{
-				OperationType: "Upsert",
+				OperationType: "upsert",
 				States: &commonv1pb.StateItem{
 					Key:   "key2",
 					Value: []byte("1"),
 				},
 			},
 			{
-				OperationType: "Delete",
+				OperationType: "delete",
 				States: &commonv1pb.StateItem{
 					Key: "key1",
 				},

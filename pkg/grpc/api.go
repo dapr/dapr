@@ -399,7 +399,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			setReq := state.SetRequest{
 				Key:      a.getModifiedStateKey(inputReq.States.Key),
 				Metadata: inputReq.States.Metadata,
-				Value:    inputReq.States.Value,
+				Value:    string(inputReq.States.Value),
 				Options:  a.getSetStateOptions(inputReq.States),
 			}
 			req := state.TransactionalRequest{
