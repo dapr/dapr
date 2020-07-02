@@ -154,6 +154,11 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 	}
 
 	// converts trace data in internalMD to gRPC metadata
+	tracedataFromInternalMetadataToGRPCMetadata(internalMD, md)
+	return md
+}
+
+func tracedataFromInternalMetadataToGRPCMetadata(internalMD DaprInternalMetadata, md metadata.MD) {
 	if IsGRPCProtocol(internalMD) {
 		listVal := internalMD[tracebinMetadata]
 		if listVal != nil {
@@ -180,7 +185,6 @@ func InternalMetadataToGrpcMetadata(internalMD DaprInternalMetadata, httpHeaderC
 			md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 		}
 	}
-	return md
 }
 
 // IsGRPCProtocol checks if metadata is originated from gRPC API
@@ -197,7 +201,7 @@ func reservedGRPCMetadataToDaprPrefixHeader(key string) string {
 	if key == ":method" || key == ":scheme" || key == ":path" || key == ":authority" {
 		return DaprHeaderPrefix + key[1:]
 	}
-	if strings.HasPrefix(key, "grpc-") && key != tracebinMetadata {
+	if strings.HasPrefix(key, "grpc-") {
 		return DaprHeaderPrefix + key
 	}
 
@@ -227,12 +231,18 @@ func InternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader fun
 	}
 
 	// converts trace data in internalMD to HTTP headers
+	tracedataFromInternalMetadataToHTTPHeader(internalMD, setHeader)
+}
+
+func tracedataFromInternalMetadataToHTTPHeader(internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	if IsGRPCProtocol(internalMD) {
 		listVal := internalMD[tracebinMetadata]
-		v := listVal.Values[0]
-		decoded, _ := base64.StdEncoding.DecodeString(v)
-		sc, _ := propagation.FromBinary(decoded)
-		diag.SpanContextToHTTPHeaders(sc, setHeader)
+		if listVal != nil {
+			v := listVal.Values[0]
+			decoded, _ := base64.StdEncoding.DecodeString(v)
+			sc, _ := propagation.FromBinary(decoded)
+			diag.SpanContextToHTTPHeaders(sc, setHeader)
+		}
 	} else {
 		listVal := internalMD[traceparentHeader]
 		if listVal != nil && listVal.Values[0] != "" {
