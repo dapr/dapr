@@ -11,7 +11,7 @@ on:
       - helmrepo
 
 jobs:
-  test-e2e:
+  publish:
     name: helm chart upload
     runs-on: ubuntu-latest
     env:
