@@ -1,0 +1,93 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-helm-repo
+
+on:
+  push:
+    branches:
+      - helmrepo
+
+jobs:
+  test-e2e:
+    name: helm chart upload
+    runs-on: ubuntu-latest
+    env:
+      GOVER: 1.14
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: https://proxy.golang.org
+      HELM: helm
+      RELEASE_NAME: dapr
+      HELM_CHART_ROOT: ./charts/dapr
+      DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      HELMVER: v3.0.3
+      DAPR_NAMESPACE: dapr-tests
+      MAX_TEST_TIMEOUT: 5400
+      DAPR_REPO_CODE_PATH: dapr-gitroot
+      DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
+      ARTIFACT_DIR: release
+      HELM_PACKAGE_DIR: helm
+    steps:
+      - name: Set up Go ${{ env.GOVER }}
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Set env variables
+        run: |
+          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
+          echo ::set-env name=CHECKOUT_REF::refs/heads/master
+      - name: Package Helm chart
+        env:
+              HELM_CHARTS_DIR: charts/dapr
+        run: |
+          #if [ "$LATEST_RELEASE" = "true" ]; then
+            mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+            helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          #fi
+      - name: Upload Helm charts package to artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr_helm_charts_package
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+  helmpublish:
+    name: Publish helm charts to Helm github pages repo
+    needs: publish
+    if: github.event_name != 'pull_request'
+    env:
+      ARTIFACT_DIR: ./release
+      HELM_PACKAGE_DIR: helm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Helm charts directory
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: download artifacts - dapr_helm_charts_package
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_helm_charts_package
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: Checkout Helm Charts Repo
+        uses: actions/checkout@v2
+        env:
+              DAPR_HELM_REPO: dapr/dapr-helm-charts.io
+              DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
+        with:
+          repository: ${{ env.DAPR_HELM_REPO }}
+          ref: refs/heads/master
+          token: ${{ secrets.DAPR_BOT_HELM_TOKEN }}
+          path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
+      - name: Upload helm charts to Helm Repo
+        run: |
+          #if [ "$LATEST_RELEASE" = "true" ]; then
+            cp ./${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
+            cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
+            git config user.name "Dapr Bot"
+            git config user.email "daprweb@microsoft.com"
+            git add --all
+            git commit -m "Release - ${{ env.DAPR_VERSION }}"  
+            git push
+          #fi
