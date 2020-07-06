@@ -98,7 +98,7 @@ jobs:
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         run: |
-            cp ./${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
+            cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
             cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
             git config user.name "Dapr Bot"
             git config user.email "daprweb@microsoft.com"
