@@ -45,10 +45,9 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
-          path: ${{ env.DAPR_REPO_CODE_PATH }}
       - name: Parse release version and set REL_VERSION
         run: |
-          python ./${DAPR_REPO_CODE_PATH}/.github/scripts/get_release_version.py
+          python ./.github/scripts/get_release_version.py
           echo ::set-env name=DAPR_VERSION::"edge"
       - name: Set DAPR_VERSION
         if: ${{ env.DAPR_VERSION }} == ''
@@ -62,6 +61,7 @@ jobs:
         env:
               HELM_CHARTS_DIR: ./charts/dapr
         run: |
+            echo ($pwd)
             mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
             helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
       - name: Upload Helm charts package to artifacts
