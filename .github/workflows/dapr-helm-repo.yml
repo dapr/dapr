@@ -29,7 +29,7 @@ jobs:
       MAX_TEST_TIMEOUT: 5400
       DAPR_REPO_CODE_PATH: dapr-gitroot
       DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
-      ARTIFACT_DIR: release
+      ARTIFACT_DIR: ./release
       HELM_PACKAGE_DIR: helm
     steps:
       - name: Set up Go ${{ env.GOVER }}
@@ -60,12 +60,10 @@ jobs:
           version: ${{ env.HELMVER }}
       - name: Package Helm chart
         env:
-              HELM_CHARTS_DIR: charts/dapr
+              HELM_CHARTS_DIR: ./charts/dapr
         run: |
-          #if [ "$LATEST_RELEASE" = "true" ]; then
             mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
             helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-          #fi
       - name: Upload Helm charts package to artifacts
         uses: actions/upload-artifact@master
         with:
@@ -100,7 +98,6 @@ jobs:
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         run: |
-          #if [ "$LATEST_RELEASE" = "true" ]; then
             cp ./${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
             cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
             git config user.name "Dapr Bot"
@@ -108,4 +105,3 @@ jobs:
             git add --all
             git commit -m "Release - ${{ env.DAPR_VERSION }}"  
             git push
-          #fi
