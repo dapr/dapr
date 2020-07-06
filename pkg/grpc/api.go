@@ -39,11 +39,10 @@ import (
 const (
 	// Range of a durpb.Duration in seconds, as specified in
 	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
-	maxSeconds             = int64(10000 * 365.25 * 24 * 60 * 60)
-	minSeconds             = -maxSeconds
-	daprSeparator          = "||"
-	incompatibleStateStore = "state store does not support transactions - please see https://github.com/dapr/docs"
-	daprHTTPStatusHeader   = "dapr-http-status"
+	maxSeconds           = int64(10000 * 365.25 * 24 * 60 * 60)
+	minSeconds           = -maxSeconds
+	daprSeparator        = "||"
+	daprHTTPStatusHeader = "dapr-http-status"
 )
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
@@ -389,7 +388,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
-		return &empty.Empty{}, errors.New(incompatibleStateStore)
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
 	}
 
 	requests := []state.TransactionalRequest{}
