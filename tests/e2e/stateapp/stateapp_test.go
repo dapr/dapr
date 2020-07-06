@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
@@ -53,9 +54,31 @@ type testStep struct {
 	expectedResponse requestResponse
 }
 
+//  stateTransactionRequest represents a request for state transactions
+type stateTransaction struct {
+	Key           string    `json:"key,omitempty"`
+	Value         *appState `json:"value,omitempty"`
+	OperationType string    `json:"operationType,omitempty"`
+}
+
+// represents each step in a test for state transactions
+type stateTransactionTestStep struct {
+	command          string
+	request          stateTransactionRequestResponse
+	expectedResponse requestResponse
+}
+
+type stateTransactionRequestResponse struct {
+	States []stateTransaction
+}
+
 type testCase struct {
 	name  string
 	steps []testStep
+}
+
+type testStateTransactionCase struct {
+	steps []stateTransactionTestStep
 }
 
 func generateDaprState(kv utils.SimpleKeyValue) daprState {
@@ -81,6 +104,20 @@ func newRequestResponse(keyValues ...utils.SimpleKeyValue) requestResponse {
 
 	return requestResponse{
 		daprStates,
+	}
+}
+
+// creates a requestResponse based on an array of key value pairs.
+func newStateTransactionRequestResponse(keyValues ...utils.StateTransactionKeyValue) stateTransactionRequestResponse {
+	daprStateTransactions := make([]stateTransaction, 0, len(keyValues))
+	for _, keyValue := range keyValues {
+		daprStateTransactions = append(daprStateTransactions, stateTransaction{
+			keyValue.Key, &appState{keyValue.Value}, keyValue.OperationType,
+		})
+	}
+
+	return stateTransactionRequestResponse{
+		daprStateTransactions,
 	}
 }
 
@@ -198,6 +235,38 @@ func generateTestCases() []testCase {
 	}
 }
 
+func generateStateTransactionCases(protocolType string) testStateTransactionCase {
+	testCase1Key, testCase2Key := guuid.New().String()+protocolType, guuid.New().String()+protocolType
+	testCase1Value := "The best song ever is 'Highwayman' by 'The Highwaymen'."
+	testCase2Value := "Hello World"
+	// Just for readability
+	emptyResponse := requestResponse{
+		nil,
+	}
+
+	testStateTransactionCase := testStateTransactionCase{
+		[]stateTransactionTestStep{
+			{
+				"transact",
+				newStateTransactionRequestResponse(
+					utils.StateTransactionKeyValue{testCase1Key, testCase1Value, "upsert"},
+					utils.StateTransactionKeyValue{testCase1Key, "", "delete"},
+					utils.StateTransactionKeyValue{testCase2Key, testCase2Value, "upsert"},
+				),
+				emptyResponse,
+			},
+			{
+				"get",
+				newStateTransactionRequestResponse(
+					utils.StateTransactionKeyValue{testCase2Key, "", ""},
+				),
+				newResponse(utils.SimpleKeyValue{testCase2Key, testCase2Value}),
+			},
+		},
+	}
+	return testStateTransactionCase
+}
+
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
@@ -234,8 +303,49 @@ func TestStateApp(t *testing.T) {
 				body, err := json.Marshal(step.request)
 				require.NoError(t, err)
 
-				url := fmt.Sprintf("%s/test/%s", externalURL, step.command)
+				url := fmt.Sprintf("%s/test/http/%s", externalURL, step.command)
 
+				resp, err := utils.HTTPPost(url, body)
+				require.NoError(t, err)
+
+				var appResp requestResponse
+				err = json.Unmarshal(resp, &appResp)
+				require.NoError(t, err)
+				require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
+			}
+		})
+	}
+}
+
+func TestStateTransactionApps(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	var transactionTests = []struct {
+		protocol string
+		in       testStateTransactionCase
+	}{
+		{"HTTP", generateStateTransactionCases("HTTP")},
+		{"GRPC", generateStateTransactionCases("GRPC")},
+	}
+
+	// Now we are ready to run the actual tests
+	for _, tt := range transactionTests {
+		t.Run(fmt.Sprintf("Test State Transactions using %s protocol", tt.protocol), func(t *testing.T) {
+			for _, step := range tt.in.steps {
+				body, err := json.Marshal(step.request)
+				require.NoError(t, err)
+				var url string
+				if tt.protocol == "HTTP" || step.command == "get" {
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/http/%s", externalURL, step.command))
+				} else {
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/grpc/%s", externalURL, step.command))
+				}
 				resp, err := utils.HTTPPost(url, body)
 				require.NoError(t, err)
 

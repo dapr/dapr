@@ -15,6 +15,7 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/state"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -28,6 +29,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
+	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
@@ -85,6 +87,10 @@ func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *runtimev1pb.DeleteSta
 
 func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	return &runtimev1pb.GetSecretResponse{}, nil
+}
+
+func (m *mockGRPCAPI) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
+	return &empty.Empty{}, nil
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
@@ -691,4 +697,90 @@ func TestInvokeBinding(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 	_, err := client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{})
 	assert.Nil(t, err)
+}
+
+func TestExecuteStateTransaction(t *testing.T) {
+	stateOptions, _ := GenerateStateOptionsTestCase()
+	port, _ := freeport.GetFreePort()
+
+	server := startTestServer(port)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
+		Requests: []*runtimev1pb.TransactionalStateRequest{
+			{
+				OperationType: "upsert",
+				States: &commonv1pb.StateItem{
+					Key:     "key1",
+					Value:   []byte("1"),
+					Options: stateOptions,
+				},
+			},
+			{
+				OperationType: "upsert",
+				States: &commonv1pb.StateItem{
+					Key:   "key2",
+					Value: []byte("1"),
+				},
+			},
+			{
+				OperationType: "delete",
+				States: &commonv1pb.StateItem{
+					Key: "key1",
+				},
+			},
+		},
+	})
+	server.Stop()
+	assert.Nil(t, err)
+}
+
+func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
+	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
+	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
+	retryPolicyOption := commonv1pb.StateRetryPolicy{
+		Threshold: 10,
+		Pattern:   commonv1pb.StateRetryPolicy_RETRY_EXPONENTIAL,
+		Interval: &durpb.Duration{
+			Seconds: 15,
+		},
+	}
+
+	testOptions := commonv1pb.StateOptions{
+		Concurrency: concurrencyOption,
+		Consistency: consistencyOption,
+		RetryPolicy: &retryPolicyOption,
+	}
+	expected := state.SetStateOption{
+		Concurrency: "first-write",
+		Consistency: "strong",
+		RetryPolicy: state.RetryPolicy{
+			Threshold: 10,
+			Pattern:   "exponential",
+			Interval:  time.Second * 15,
+		},
+	}
+	return &testOptions, expected
+}
+
+func TestGetStateOptions(t *testing.T) {
+	mockAppChannel := new(channelt.MockAppChannel)
+	fakeAPI := &api{
+		id:         "fakeAPI",
+		appChannel: mockAppChannel,
+	}
+	stateOptionTestCase, expected := GenerateStateOptionsTestCase()
+	stateItemTestCase := commonv1pb.StateItem{
+		Key:     "key1",
+		Value:   []byte("1"),
+		Options: stateOptionTestCase,
+	}
+	t.Run("extract state options", func(t *testing.T) {
+		result := fakeAPI.getSetStateOptions(&stateItemTestCase)
+		assert.Equal(t, expected, result)
+	})
 }
