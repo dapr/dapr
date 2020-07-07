@@ -333,7 +333,7 @@ func (a *DaprRuntime) beginReadInputBindings() error {
 }
 
 func (a *DaprRuntime) beginPubSub() error {
-	var publishFunc func(msg *pubsub.NewMessage) error
+	var publishFunc func(ctx context.Context, msg *pubsub.NewMessage) error
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
 		publishFunc = a.publishMessageHTTP
@@ -537,7 +537,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(nil, spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -987,7 +987,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMessage) error {
 	subject := ""
 	var cloudEvent pubsub.CloudEventsEnvelope
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
@@ -1003,7 +1003,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	// subject contains the correlationID which is passed span context
 	sc, _ := diag.SpanContextFromW3CString(subject)
 	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
@@ -1025,7 +1025,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMessage) error {
 	var cloudEvent pubsub.CloudEventsEnvelope
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
@@ -1057,7 +1057,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 
 	// no ops if trace is off
-	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	// call appcallback
