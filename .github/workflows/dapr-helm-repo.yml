@@ -130,12 +130,13 @@ jobs:
         run: |
             daprReleaseTag=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}`
             echo $daprReleaseTag
-            if [ $daprReleaseTag = "true" ]; then
-            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}/${{ env.DAPR_VERSION_ARTIFACT }}`
-            cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
-            cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
-            git config --global user.email "daprweb@microsoft.com"
-            git config --global user.name "dapr-bot"
-            git add --all
-            git commit -m "Release - $daprVersion"  
-            git push
+            if [ "$daprReleaseTag" = "true" ]; then
+              daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+              cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
+              cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
+              git config --global user.email "daprweb@microsoft.com"
+              git config --global user.name "dapr-bot"
+              git add --all
+              git commit -m "Release - $daprVersion"  
+              git push
+            fi
