@@ -31,7 +31,7 @@ jobs:
       DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
       ARTIFACT_DIR: ./release
       HELM_PACKAGE_DIR: helm
-      DAPR_VERSION_ARTIFACT: dapr_version.txt
+      DAPR_VERSION_ARTIFACT: dapr_version
     steps:
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v2-beta
@@ -53,11 +53,12 @@ jobs:
       - name: Set DAPR_VERSION
         if: ${{ env.DAPR_VERSION }} == ''
         run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}
           echo DAPR_VERSION > ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
       - name: Upload DAPR version artifact
         uses: actions/upload-artifact@master
         with:
-          name: dapr_version
+          name: ${{ env.DAPR_VERSION_ARTIFACT }}
           path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
       - name: Set up Helm ${{ env.HELMVER }}
         uses: azure/setup-helm@v1
@@ -95,7 +96,7 @@ jobs:
       - name: download artifacts - dapr_version
         uses: actions/download-artifact@master
         with:
-          name: dapr_version
+          name: ${{ env.DAPR_VERSION_ARTIFACT }}
           path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v2
