@@ -111,6 +111,7 @@ jobs:
       - name: Upload helm charts to Helm Repo
         env:
               DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
+              DAPR_VERSION_ARTIFACT: dapr_version
         run: |
             echo $(pwd)
             echo `ls ../`
@@ -119,7 +120,7 @@ jobs:
             cp ./${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
             cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
             git add --all
-            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+            daprVersion=`cat ./${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
             echo $(daprVersion)
             git commit -m "Release - $daprVersion"  
             git push
