@@ -16,7 +16,11 @@ spec:
     spec:
       containers:
       - name: dapr-dashboard
-        image: docker.io/daprio/dashboard:0.1.0
+{{- if contains "/" .Values.image.name }}
+        image: "{{ .Values.image.name }}"
+{{- else }}
+        image: "{{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+{{- end }}
         ports:
         - containerPort: 8080
-        imagePullPolicy: Always
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}

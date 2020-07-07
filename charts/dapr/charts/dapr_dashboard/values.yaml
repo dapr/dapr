@@ -2,7 +2,8 @@ replicaCount: 1
 logLevel: info
 
 image:
-  name: dapr
+  name: dashboard
+  tag: "0.1.0"
 
 nameOverride: ""
 fullnameOverride: ""
