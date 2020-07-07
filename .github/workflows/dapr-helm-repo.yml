@@ -129,7 +129,7 @@ jobs:
               DAPR_VERSION_ARTIFACT: dapr_version
         run: |
             daprReleaseTag=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}`
-            echo $(daprReleaseTag)
+            echo $daprReleaseTag
             if [ $daprReleaseTag = "true" ]; then
             daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}/${{ env.DAPR_VERSION_ARTIFACT }}`
             cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
