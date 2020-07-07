@@ -27,10 +27,6 @@ jobs:
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
       ARCHIVE_OUTDIR: dist/archives
-      DAPR_REPO_CODE_PATH: dapr-gitroot
-      DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
-      ARTIFACT_DIR: release
-      HELM_PACKAGE_DIR: helm
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
@@ -58,10 +54,8 @@ jobs:
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v${{ env.GOLANGCILINT_VER }}
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
-        with:
-          path: ${{ env.DAPR_REPO_CODE_PATH }}
       - name: Parse release version and set REL_VERSION
-        run: python ./${{ env.DAPR_REPO_CODE_PATH }}/.github/scripts/get_release_version.py
+        run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
         if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
         run: make lint
@@ -96,8 +90,6 @@ jobs:
           version: ${{ env.HELMVER }}
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
-        with:
-            path: ${{ env.DAPR_REPO_CODE_PATH }}
       - name: Install Docker CE for buildx
         run: |
           sudo apt update
@@ -127,28 +119,28 @@ jobs:
         run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: move helm chart manifest to artifact
         run: |
-          mkdir -p ./${{ env.ARTIFACT_DIR }}
-          mv ./${{ env.DAPR_REPO_CODE_PATH }}/dist/install/dapr.yaml ./${{ env.ARTIFACT_DIR }}/dapr-operator.yaml
+          mkdir -p ${{ env.ARTIFACT_DIR }}
+          mv ./dist/install/dapr.yaml ${{ env.ARTIFACT_DIR }}/dapr-operator.yaml
       - name: download artifacts - dapr_linux_amd64
         uses: actions/download-artifact@master
         with:
           name: dapr_linux_amd64
-          path: ./${{ env.ARTIFACT_DIR }}
+          path: ${{ env.ARTIFACT_DIR }}
       - name: download artifacts - dapr_linux_arm
         uses: actions/download-artifact@master
         with:
           name: dapr_linux_arm
-          path: ./${{ env.ARTIFACT_DIR }}
+          path: ${{ env.ARTIFACT_DIR }}
       - name: download artifacts - dapr_windows_amd64
         uses: actions/download-artifact@master
         with:
           name: dapr_windows_amd64
-          path: ./${{ env.ARTIFACT_DIR }}
+          path: ${{ env.ARTIFACT_DIR }}
       - name: download artifacts - dapr_darwin_amd64
         uses: actions/download-artifact@master
         with:
           name: dapr_darwin_amd64
-          path: ./${{ env.ARTIFACT_DIR }}
+          path: ${{ env.ARTIFACT_DIR }}
       - name: docker login
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
@@ -162,7 +154,7 @@ jobs:
             RELEASE_DIR=dist/linux_${img_arch}/release/
             mkdir -p $RELEASE_DIR
 
-            for tgzfile in ./$ARTIFACT_DIR/*linux_${img_arch}.tar.gz; do
+            for tgzfile in $ARTIFACT_DIR/*linux_${img_arch}.tar.gz; do
               echo "Extracting $tgzfile ..."
               tar xzvf $tgzfile -C $RELEASE_DIR
             done
@@ -177,13 +169,13 @@ jobs:
           sudo npm install --slient --no-progress -g github-release-cli
 
           if [ "$LATEST_RELEASE" = "true" ]; then
-            export RELEASE_BODY=`cat ./${{ env.DAPR_REPO_CODE_PATH }}/docs/release_notes/v${REL_VERSION}.md`
+            export RELEASE_BODY=`cat ./docs/release_notes/v${REL_VERSION}.md`
           else
             export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
           fi
 
           # Get the list of files
-          RELEASE_ARTIFACT=(./${ARTIFACT_DIR}/*)
+          RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
 
           # Parse repository to get owner and repo names
           OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
