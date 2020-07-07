@@ -32,6 +32,7 @@ jobs:
       ARTIFACT_DIR: ./release
       HELM_PACKAGE_DIR: helm
       DAPR_VERSION_ARTIFACT: dapr_version
+      DAPR_RELEASE_TAG_ARTIFACT: dapr_release
     steps:
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v2-beta
@@ -50,16 +51,23 @@ jobs:
         run: |
           python ./.github/scripts/get_release_version.py
           echo ::set-env name=DAPR_VERSION::"edge"
+          echo ::set-env name=LATEST_RELEASE::"true"
       - name: Set DAPR_VERSION
         if: ${{ env.DAPR_VERSION }} == ''
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}
           echo ${{ env.DAPR_VERSION }} > ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+          echo ${{ env.LATEST_RELEASE }} > ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
       - name: Upload DAPR version artifact
         uses: actions/upload-artifact@master
         with:
           name: ${{ env.DAPR_VERSION_ARTIFACT }}
           path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+      - name: Upload DAPR release tag artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
       - name: Set up Helm ${{ env.HELMVER }}
         uses: azure/setup-helm@v1
         with:
@@ -82,6 +90,8 @@ jobs:
     if: github.event_name != 'pull_request'
     env:
       ARTIFACT_DIR: ./release
+      DAPR_VERSION_ARTIFACT: dapr_version
+      DAPR_RELEASE_TAG_ARTIFACT: dapr_release
       HELM_PACKAGE_DIR: helm
     runs-on: ubuntu-latest
     steps:
@@ -98,6 +108,11 @@ jobs:
         with:
           name: ${{ env.DAPR_VERSION_ARTIFACT }}
           path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+      - name: download artifacts - dapr_release
+        uses: actions/download-artifact@master
+        with:
+          name: ${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v2
         env:
@@ -113,15 +128,9 @@ jobs:
               DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
               DAPR_VERSION_ARTIFACT: dapr_version
         run: |
-            echo $(pwd)
+            daprReleaseTag=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}/${{ env.DAPR_RELEASE_TAG_ARTIFACT }}`
+            if [ "$daprReleaseTag" = "true" ]; then
             daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}/${{ env.DAPR_VERSION_ARTIFACT }}`
-            echo $(daprVersion)
-            echo "This dir: "
-            echo `ls`
-            echo "Release ls -1"
-            echo `ls -l ${{ env.ARTIFACT_DIR }}`
-            echo "Release/dapr_version ls"
-            echo `ls -l ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}/`
             cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
             cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
             git config --global user.email "daprweb@microsoft.com"
