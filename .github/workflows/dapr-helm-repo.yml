@@ -53,7 +53,7 @@ jobs:
       - name: Set DAPR_VERSION
         if: ${{ env.DAPR_VERSION }} == ''
         run: |
-          echo DAPR_VERSION > ${{ env.DAPR_VERSION_ARTIFACT }}
+          echo DAPR_VERSION > ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
       - name: Upload DAPR version artifact
         uses: actions/upload-artifact@master
         with:
