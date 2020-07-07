@@ -91,6 +91,8 @@ spec:
         - name: credentials
           secret:
             secretName: dapr-trust-bundle       
+      nodeSelector:
+        kubernetes.io/os: linux
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}

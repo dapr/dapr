@@ -92,6 +92,8 @@ spec:
       - name: cert
         secret:
           secretName: dapr-sidecar-injector-cert
+      nodeSelector:
+        kubernetes.io/os: linux
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
