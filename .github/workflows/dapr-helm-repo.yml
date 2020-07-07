@@ -106,7 +106,7 @@ jobs:
         with:
           repository: ${{ env.DAPR_HELM_REPO }}
           ref: refs/heads/master
-          token: ${{ secrets.DAPR_BOT_TOKEN }}
+          token: ${{ secrets.DAPR_BOT_HELM_TOKEN }}
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         env:
