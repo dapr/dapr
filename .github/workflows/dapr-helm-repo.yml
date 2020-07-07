@@ -111,6 +111,8 @@ jobs:
       - name: Upload helm charts to Helm Repo
         env:
               DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
+        with:
+          token: ${{ secrets.DAPR_BOT_HELM_TOKEN }}
         run: |
             cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
             cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
