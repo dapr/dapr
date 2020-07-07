@@ -31,6 +31,7 @@ jobs:
       DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
       ARTIFACT_DIR: ./release
       HELM_PACKAGE_DIR: helm
+      DAPR_VERSION_ARTIFACT: dapr_version.txt
     steps:
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v2-beta
@@ -52,7 +53,12 @@ jobs:
       - name: Set DAPR_VERSION
         if: ${{ env.DAPR_VERSION }} == ''
         run: |
-          echo DAPR_VERSION is ${{ env.DAPR_VERSION }}
+          echo DAPR_VERSION > ${{ env.DAPR_VERSION_ARTIFACT }}
+      - name: Upload DAPR version artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr_version
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
       - name: Set up Helm ${{ env.HELMVER }}
         uses: azure/setup-helm@v1
         with:
@@ -86,6 +92,11 @@ jobs:
         with:
           name: dapr_helm_charts_package
           path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: download artifacts - dapr_version
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_version
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v2
         env:
@@ -94,7 +105,7 @@ jobs:
         with:
           repository: ${{ env.DAPR_HELM_REPO }}
           ref: refs/heads/master
-          token: ${{ secrets.DAPR_BOT_HELM_TOKEN }}
+          token: ${{ secrets.DAPR_BOT_TOKEN }}
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         env:
@@ -105,5 +116,6 @@ jobs:
             git config user.name "Dapr Bot"
             git config user.email "daprweb@microsoft.com"
             git add --all
-            git commit -m "Release - ${{ env.DAPR_VERSION }}"  
+            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+            git commit -m "Release - $daprVersion"  
             git push
