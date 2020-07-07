@@ -114,9 +114,10 @@ jobs:
               DAPR_VERSION_ARTIFACT: dapr_version
         run: |
             echo $(pwd)
-            echo `ls ../`
             echo "This dir: "
             echo `ls`
+            echo "Release ls"
+            echo `ls ${{ env.ARTIFACT_DIR }}`
             cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
             cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
             git add --all
