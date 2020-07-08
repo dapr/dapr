@@ -10,7 +10,7 @@ require (
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
-	github.com/dapr/components-contrib v0.1.1-0.20200624182315-a6a0e3e3bc76
+	github.com/dapr/components-contrib v0.1.1-0.20200702150242-4b2252b01798
 	github.com/fasthttp/router v1.0.4
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0

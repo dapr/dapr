@@ -50,9 +50,12 @@ const (
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
+	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
 	sidecarInternalGRPCPort           = 50002
+	userContainerDaprHTTPPortName     = "DAPR_HTTP_PORT"
+	userContainerDaprGRPCPortName     = "DAPR_GRPC_PORT"
 	apiAddress                        = "dapr-api"
 	placementService                  = "dapr-placement"
 	sentryService                     = "dapr-sentry"
@@ -124,12 +127,14 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	patchOps := []PatchOperation{}
+	envPatchOps := []PatchOperation{}
 	var path string
 	var value interface{}
 	if len(pod.Spec.Containers) == 0 {
-		path = "/spec/containers"
+		path = containersPath
 		value = []corev1.Container{*sidecarContainer}
 	} else {
+		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
 		path = "/spec/containers/-"
 		value = sidecarContainer
 	}
@@ -142,8 +147,65 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 			Value: value,
 		},
 	)
+	patchOps = append(patchOps, envPatchOps...)
 
 	return patchOps, nil
+}
+
+// This function add Dapr environment variables to all the containers in any Dapr enabled pod.
+// The containers can be injected or user defined.
+func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation {
+	portEnv := []corev1.EnvVar{
+		{
+			Name:  userContainerDaprHTTPPortName,
+			Value: strconv.Itoa(sidecarHTTPPort),
+		},
+		{
+			Name:  userContainerDaprGRPCPortName,
+			Value: strconv.Itoa(sidecarAPIGRPCPort),
+		},
+	}
+	envPatchOps := []PatchOperation{}
+	for i, container := range containers {
+		path := fmt.Sprintf("%s/%d/env", containersPath, i)
+		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
+		envPatchOps = append(envPatchOps, patchOps...)
+	}
+	return envPatchOps
+}
+
+// This function only add new environment variables if they do not exist.
+// It does not override existing values for those variables if they have been defined already.
+func getEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, path string) []PatchOperation {
+	if len(envs) == 0 {
+		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
+		return []PatchOperation{
+			{
+				Op:    "add",
+				Path:  path,
+				Value: addEnv,
+			},
+		}
+	}
+	// If there are existing env vars, then we are adding to an existing slice of env vars.
+	path += "/-"
+
+	var patchOps []PatchOperation
+LoopEnv:
+	for _, env := range addEnv {
+		for _, actual := range envs {
+			if actual.Name == env.Name {
+				// Add only env vars that do not conflict with existing user defined/injected env vars.
+				continue LoopEnv
+			}
+		}
+		patchOps = append(patchOps, PatchOperation{
+			Op:    "add",
+			Path:  path,
+			Value: env,
+		})
+	}
+	return patchOps
 }
 
 func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {

@@ -13,6 +13,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/golang/protobuf/ptypes/any"
+	"github.com/valyala/fasthttp"
 )
 
 const (
@@ -66,7 +67,17 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 
 // WithMetadata sets metadata
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
-	imr.r.Metadata = GrpcMetadataToInternalMetadata(md)
+	imr.r.Metadata = MetadataToInternalMetadata(md)
+	return imr
+}
+
+// WithFastHTTPHeaders sets fasthttp request headers
+func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
+	md := map[string][]string{}
+	header.VisitAll(func(key []byte, value []byte) {
+		md[string(key)] = []string{string(value)}
+	})
+	imr.r.Metadata = MetadataToInternalMetadata(md)
 	return imr
 }
 

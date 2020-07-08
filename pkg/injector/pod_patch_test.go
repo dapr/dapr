@@ -6,12 +6,16 @@
 package injector
 
 import (
-	"testing"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"fmt"
 
 	"github.com/stretchr/testify/assert"
+
+	corev1 "k8s.io/api/core/v1"
+
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"strconv"
+	"testing"
 )
 
 func TestLogAsJSONEnabled(t *testing.T) {
@@ -112,4 +116,123 @@ func TestGetSideCarContainer(t *testing.T) {
 
 	assert.Equal(t, "secret", container.Env[2].ValueFrom.SecretKeyRef.Name)
 	assert.EqualValues(t, expectedArgs, container.Args)
+}
+
+func TestAddDaprEnvVarsToContainers(t *testing.T) {
+	testCases := []struct {
+		testName      string
+		mockContainer corev1.Container
+		expOpsLen     int
+		expOps        []PatchOperation
+	}{
+		{
+			testName: "empty environment vars",
+			mockContainer: corev1.Container{
+				Name: "MockContainer",
+			},
+			expOpsLen: 1,
+			expOps: []PatchOperation{
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/env",
+					Value: []corev1.EnvVar{
+						{
+							Name:  userContainerDaprHTTPPortName,
+							Value: strconv.Itoa(sidecarHTTPPort),
+						},
+						{
+							Name:  userContainerDaprGRPCPortName,
+							Value: strconv.Itoa(sidecarAPIGRPCPort),
+						},
+					},
+				},
+			},
+		},
+		{
+			testName: "existing env var",
+			mockContainer: corev1.Container{
+				Name: "Mock Container",
+				Env: []corev1.EnvVar{
+					{
+						Name:  "TEST",
+						Value: "Existing value",
+					},
+				},
+			},
+			expOpsLen: 2,
+			expOps: []PatchOperation{
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/env/-",
+					Value: corev1.EnvVar{
+						Name:  userContainerDaprHTTPPortName,
+						Value: strconv.Itoa(sidecarHTTPPort),
+					},
+				},
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/env/-",
+					Value: corev1.EnvVar{
+						Name:  userContainerDaprGRPCPortName,
+						Value: strconv.Itoa(sidecarAPIGRPCPort),
+					},
+				},
+			},
+		},
+		{
+			testName: "existing conflicting env var",
+			mockContainer: corev1.Container{
+				Name: "Mock Container",
+				Env: []corev1.EnvVar{
+					{
+						Name:  "TEST",
+						Value: "Existing value",
+					},
+					{
+						Name:  userContainerDaprGRPCPortName,
+						Value: "550000",
+					},
+				},
+			},
+			expOpsLen: 1,
+			expOps: []PatchOperation{
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/env/-",
+					Value: corev1.EnvVar{
+						Name:  userContainerDaprHTTPPortName,
+						Value: strconv.Itoa(sidecarHTTPPort),
+					},
+				},
+			},
+		},
+		{
+			testName: "multiple existing conflicting env vars",
+			mockContainer: corev1.Container{
+				Name: "Mock Container",
+				Env: []corev1.EnvVar{
+					{
+						Name:  userContainerDaprHTTPPortName,
+						Value: "3510",
+					},
+					{
+						Name:  userContainerDaprGRPCPortName,
+						Value: "550000",
+					},
+				},
+			},
+			expOpsLen: 0,
+			expOps:    []PatchOperation{},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			patchEnv := addDaprEnvVarsToContainers([]corev1.Container{tc.mockContainer})
+			fmt.Println(tc.testName)
+			assert.Equal(t, tc.expOpsLen, len(patchEnv))
+			assert.Equal(t, tc.expOps, patchEnv)
+		})
+	}
 }

@@ -38,7 +38,8 @@ import (
 )
 
 const (
-	daprSeparator = "||"
+	daprSeparator        = "||"
+	metadataPartitionKey = "partitionKey"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -347,9 +348,14 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	if a.store == nil {
 		return nil, errors.New("actors: state store does not exist or incorrectly configured")
 	}
+
+	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
+	metadata := map[string]string{metadataPartitionKey: partitionKey}
+
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
 	resp, err := a.store.Get(&state.GetRequest{
-		Key: key,
+		Key:      key,
+		Metadata: metadata,
 	})
 	if err != nil {
 		return nil, err
@@ -365,6 +371,9 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 	requests := []state.TransactionalRequest{}
+	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
+	metadata := map[string]string{metadataPartitionKey: partitionKey}
+
 	for _, o := range req.Operations {
 		switch o.Operation {
 		case Upsert:
@@ -376,8 +385,9 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 			key := a.constructActorStateKey(req.ActorType, req.ActorID, upsert.Key)
 			requests = append(requests, state.TransactionalRequest{
 				Request: state.SetRequest{
-					Key:   key,
-					Value: upsert.Value,
+					Key:      key,
+					Value:    upsert.Value,
+					Metadata: metadata,
 				},
 				Operation: state.Upsert,
 			})
@@ -391,7 +401,8 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 			key := a.constructActorStateKey(req.ActorType, req.ActorID, delete.Key)
 			requests = append(requests, state.TransactionalRequest{
 				Request: state.DeleteRequest{
-					Key: key,
+					Key:      key,
+					Metadata: metadata,
 				},
 				Operation: state.Delete,
 			})
@@ -420,9 +431,14 @@ func (a *actorsRuntime) SaveState(ctx context.Context, req *SaveStateRequest) er
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
+
+	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
+	metadata := map[string]string{metadataPartitionKey: partitionKey}
+
 	err := a.store.Set(&state.SetRequest{
-		Value: req.Value,
-		Key:   key,
+		Value:    req.Value,
+		Key:      key,
+		Metadata: metadata,
 	})
 	return err
 }
@@ -432,6 +448,7 @@ func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
+
 	err := a.store.Delete(&state.DeleteRequest{
 		Key: key,
 	})
