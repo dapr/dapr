@@ -100,14 +100,10 @@ jobs:
           docker -v
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
-      - name: Save release version and release tag
+      - name: Save release version
         run: |
-          mkdir -p ${{ env.ARTIFACT_DIR }}
-          echo ${REL_VERSION} > ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
-        uses: actions/upload-artifact@master
-        with:
-          name: ${{ env.DAPR_VERSION_ARTIFACT }}
-          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          echo ${REL_VERSION} > ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
       - name: Generate helm chart manifest
         run: make manifest-gen DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: move helm chart manifest to artifact
@@ -217,11 +213,6 @@ jobs:
         with:
           name: dapr_helm_charts_package
           path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
-      - name: download artifacts - dapr_version
-        uses: actions/download-artifact@master
-        with:
-          name: ${{ env.DAPR_VERSION_ARTIFACT }}
-          path: ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v2
         env:
@@ -236,9 +227,10 @@ jobs:
         env:
               DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
         run: |
-            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}/${{ env.DAPR_VERSION_ARTIFACT }}`
-            cp ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/* ./${{ env.DAPR_HELM_REPO_CODE_PATH }}/
-            cd ./${{ env.DAPR_HELM_REPO_CODE_PATH }}
+            daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+            cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+            cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+            cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
             git config --global user.email "daprweb@microsoft.com"
             git config --global user.name "dapr-bot"
             git add --all

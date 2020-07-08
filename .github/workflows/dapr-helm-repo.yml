@@ -1,0 +1,108 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-helm-repo
+
+on:
+  push:
+    branches:
+      - helmrepo
+
+jobs:
+  test-e2e:
+    name: helm chart upload
+    runs-on: ubuntu-latest
+    env:
+      GOVER: 1.14
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: https://proxy.golang.org
+      HELM: helm
+      RELEASE_NAME: dapr
+      HELM_CHART_ROOT: ./charts/dapr
+      DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
+      HELMVER: v3.0.3
+      DAPR_NAMESPACE: dapr-tests
+      MAX_TEST_TIMEOUT: 5400
+      DAPR_REPO_CODE_PATH: dapr-gitroot
+      DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
+      ARTIFACT_DIR: release
+      HELM_PACKAGE_DIR: helm
+      DAPR_VERSION_ARTIFACT: dapr_version
+    steps:
+      - name: Set up Go ${{ env.GOVER }}
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Set env variables
+        run: |
+          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
+          echo ::set-env name=CHECKOUT_REF::refs/heads/master
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+          path: ${{ env.DAPR_REPO_CODE_PATH }}
+      - name: Parse release version and set REL_VERSION
+        run: |
+          python ./${DAPR_REPO_CODE_PATH}/.github/scripts/get_release_version.py
+          echo ::set-env name=DAPR_VERSION::"edge"
+      - name: Set DAPR_VERSION
+        if: ${{ env.DAPR_VERSION }} == ''
+        run: |
+          echo DAPR_VERSION is ${{ env.DAPR_VERSION }}
+      - name: Save release version
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          echo ${DAPR_VERSION} > ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+      - name: Set up Helm ${{ env.HELMVER }}
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELMVER }}
+      - name: Package Helm chart
+        env:
+              HELM_CHARTS_DIR: charts/dapr
+        run: |
+          echo $(pwd)
+          ls -l
+          echo "One dir up ls:"
+          ls -l ../
+          echo HELM_PACKAGE_DIR is ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          mkdir -p ${DAPR_REPO_CODE_PATH}/${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          helm package ${DAPR_REPO_CODE_PATH}/${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: Upload Helm charts package to artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr_helm_charts_package
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: Checkout Helm Charts Repo
+        uses: actions/checkout@v2
+        env:
+              DAPR_HELM_REPO: dapr/dapr-helm-charts.io
+        with:
+          repository: ${{ env.DAPR_HELM_REPO }}
+          ref: refs/heads/master
+          token: ${{ secrets.DAPR_BOT_HELM_TOKEN }}
+          path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
+      - name: download artifacts - dapr_helm_charts_package
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_helm_charts_package
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: Upload helm charts to Helm Repo
+        env:
+            DAPR_HELM_REPO_URL: https://github.com/dapr/dapr-helm-charts.io.git
+        run: |
+          echo $(pwd)
+          echo 
+
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+          echo "Files to commit"
+          ls -A
