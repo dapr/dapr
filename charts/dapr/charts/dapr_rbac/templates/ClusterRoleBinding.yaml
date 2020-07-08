@@ -50,7 +50,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: default
+  namespace: dapr-system
 roleRef:
   kind: ClusterRole
   name: deployment-reader
