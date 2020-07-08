@@ -339,7 +339,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, 400, msg) // 404 Not Found
 		return
 	}
 
@@ -347,7 +347,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 401, msg)
+		respondWithError(reqCtx, 503, msg) // 503 Service Unavailable
 		return
 	}
 
