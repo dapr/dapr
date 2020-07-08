@@ -490,7 +490,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	err := a.json.Unmarshal(reqCtx.PostBody(), &reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, 402, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
