@@ -78,7 +78,7 @@ spec:
           secret:
             secretName: dapr-trust-bundle
       nodeSelector:
-        kubernetes.io/os: linux
+        kubernetes.io/os: {{ .Values.global.daprControlPlaneOs }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
