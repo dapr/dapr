@@ -347,7 +347,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 503, msg) // 503 Service Unavailable
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
@@ -366,7 +366,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	resp, err := a.stateStores[storeName].Get(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, 400, msg)
 		return
 	}
 	if resp == nil || resp.Data == nil {
