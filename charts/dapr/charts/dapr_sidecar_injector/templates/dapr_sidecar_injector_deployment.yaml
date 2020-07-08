@@ -92,8 +92,23 @@ spec:
       - name: cert
         secret:
           secretName: dapr-sidecar-injector-cert
-      nodeSelector:
-        kubernetes.io/os: {{ .Values.global.daprControlPlaneOs }}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                - key: kubernetes.io/os
+                  operator: In
+                  values:
+                  - {{ .Values.global.daprControlPlaneOs }}
+            - weight: 2
+              preference:
+                matchExpressions:
+                - key: beta.kubernetes.io/os
+                  operator: In
+                  values:
+                  - {{ .Values.global.daprControlPlaneOs }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
