@@ -88,13 +88,6 @@ spec:
                   operator: In
                   values:
                   - {{ .Values.global.daprControlPlaneOs }}
-            - weight: 2
-              preference:
-                matchExpressions:
-                - key: beta.kubernetes.io/os
-                  operator: In
-                  values:
-                  - {{ .Values.global.daprControlPlaneOs }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
