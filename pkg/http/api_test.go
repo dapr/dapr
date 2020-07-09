@@ -1484,12 +1484,12 @@ func TestV1StateEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
 
-	t.Run("Get state - 401 ERR_STATE_STORE_NOT_FOUND", func(t *testing.T) {
+	t.Run("Get state - 400 ERR_STATE_STORE_NOT_FOUND", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/bad-key", "notexistStore")
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
-		assert.Equal(t, 401, resp.StatusCode, "reading non-existing store should return 401")
+		assert.Equal(t, 400, resp.StatusCode, "reading non-existing store should return 401")
 	})
 
 	t.Run("Get state - 204 No Content Found", func(t *testing.T) {
