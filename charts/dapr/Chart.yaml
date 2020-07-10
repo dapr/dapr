@@ -19,3 +19,6 @@ dependencies:
   - name: dapr_sentry
     version: "0.3.0"
     repository: "file://dapr_sentry"
+  - name: dapr_dashboard
+    version: "0.1.0"
+    repository: "file://dapr_dashboard"
