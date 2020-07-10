@@ -537,7 +537,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(nil, spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(context.Background(), spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
