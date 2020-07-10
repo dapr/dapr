@@ -1,0 +1,11 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: dapr-dashboard
+spec:
+  selector:
+    app: dapr-dashboard
+  ports:
+  - protocol: TCP
+    port: {{ .Values.ports.port }}
+    targetPort: {{ .Values.ports.targetPort }} 
