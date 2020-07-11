@@ -7,7 +7,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
-	github.com/dapr/components-contrib v0.1.1-0.20200702150242-4b2252b01798
+	github.com/dapr/components-contrib v0.1.1-0.20200710182902-8f96d7fe8299
 	github.com/fasthttp/router v1.0.4
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
@@ -26,7 +26,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
 	github.com/sirupsen/logrus v1.4.2
-	github.com/stretchr/testify v1.4.0
+	github.com/stretchr/testify v1.5.1
 	github.com/valyala/fasthttp v1.12.0
 	go.opencensus.io v0.22.3
 	go.uber.org/zap v1.13.0 // indirect

@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/components-contrib/state/hazelcast"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
+	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
@@ -173,6 +174,9 @@ func main() {
 			}),
 			state_loader.New("gcp.firestore", func() state.Store {
 				return firestore.NewFirestoreStateStore(logContrib)
+			}),
+			state_loader.New("postgresql", func() state.Store {
+				return postgresql.NewPostgreSQLStateStore(logContrib)
 			}),
 			state_loader.New("sqlserver", func() state.Store {
 				return sqlserver.NewSQLServerStateStore(logContrib)
