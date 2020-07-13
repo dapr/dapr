@@ -78,23 +78,24 @@ type SetDeleteTransactionalRequest struct {
 }
 
 const (
-	apiVersionV1         = "v1.0"
-	idParam              = "id"
-	methodParam          = "method"
-	topicParam           = "topic"
-	actorTypeParam       = "actorType"
-	actorIDParam         = "actorId"
-	storeNameParam       = "storeName"
-	stateKeyParam        = "key"
-	secretStoreNameParam = "secretStoreName"
-	secretNameParam      = "key"
-	nameParam            = "name"
-	consistencyParam     = "consistency"
-	retryIntervalParam   = "retryInterval"
-	retryPatternParam    = "retryPattern"
-	retryThresholdParam  = "retryThreshold"
-	concurrencyParam     = "concurrency"
-	daprSeparator        = "||"
+	apiVersionV1           = "v1.0"
+	idParam                = "id"
+	methodParam            = "method"
+	topicParam             = "topic"
+	actorTypeParam         = "actorType"
+	actorIDParam           = "actorId"
+	storeNameParam         = "storeName"
+	stateKeyParam          = "key"
+	secretStoreNameParam   = "secretStoreName"
+	secretNameParam        = "key"
+	nameParam              = "name"
+	consistencyParam       = "consistency"
+	retryIntervalParam     = "retryInterval"
+	retryPatternParam      = "retryPattern"
+	retryThresholdParam    = "retryThreshold"
+	concurrencyParam       = "concurrency"
+	daprSeparator          = "||"
+	incompatibleStateStore = "state store does not support transactions - please see https://github.com/dapr/docs"
 )
 
 // NewAPI returns a new API
@@ -1059,7 +1060,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf("state store name: %s", storeName))
+		msg := NewErrorResponse(incompatibleStateStore, fmt.Sprintf("state store name: %s", storeName))
 		respondWithError(reqCtx, 500, msg)
 		return
 	}
