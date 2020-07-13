@@ -24,13 +24,6 @@ type SimpleKeyValue struct {
 	Value interface{}
 }
 
-// StateTransactionKeyValue is a key-value pair with an operation type
-type StateTransactionKeyValue struct {
-	Key           string
-	Value         string
-	OperationType string
-}
-
 // GenerateRandomStringKeys generates random string keys (values are nil).
 func GenerateRandomStringKeys(num int) []SimpleKeyValue {
 	if num < 0 {
@@ -172,7 +165,7 @@ func HTTPDelete(url string) ([]byte, error) {
 }
 
 func sanitizeHTTPURL(url string) string {
-	if !strings.HasPrefix(url, "http") {
+	if !strings.Contains(url, "http") {
 		url = fmt.Sprintf("http://%s", url)
 	}
 

@@ -28,9 +28,6 @@ service Dapr {
 
   // Deletes the state for a specific key.
   rpc DeleteState(DeleteStateRequest) returns (google.protobuf.Empty) {}
-  
-  // Executes transactions for a specified store
-  rpc ExecuteStateTransaction(ExecuteStateTransactionRequest) returns (google.protobuf.Empty) {}
 
   // Publishes events to the specific topic.
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
@@ -150,25 +147,9 @@ message GetSecretRequest {
   map<string,string> metadata = 3;
 }
 
-// GetSecretResponse is the response message to convey the requested secret.
+// GetSecretResponse is the response mesage to convey the requested secret.
 message GetSecretResponse {
   // data is the secret value. Some secret store, such as kubernetes secret
   // store, can save multiple secrets for single secret key.
   map<string, string> data = 1;
-}
-
-// TransactionalStateRequest is the message to execute a specified operation with a key-value pair.
-message TransactionalStateRequest {
-  // The type of operation to be executed
-  string operationType = 1;
-  // State values to be operated on 
-  common.v1.StateItem states = 2;
-}
-
-// ExecuteStateTransactionRequest is the message to execute multiple operations on a specified store.
-message ExecuteStateTransactionRequest {
-  // Name of store
-  string storeName = 1;
-  // Array of TransactionalStateRequests
-  repeated TransactionalStateRequest requests = 2;
 }
