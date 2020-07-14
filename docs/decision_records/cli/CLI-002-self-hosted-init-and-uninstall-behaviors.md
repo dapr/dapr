@@ -17,7 +17,7 @@ Changes in behavior of `init` and `uninstall` on Self Hosted mode for. Discussed
 * Calling `dapr init --slim` will
   * Install the binaries `daprd` and `placement` in `/usr/local/bin` for Linux/MacOS and `C:\dapr` for Windows.
   * Create the empty default components folder in `$HOME/.dapr` for Linux/MacOS or `%USERPROFILE\.dapr` for Windows.
-* CLI on the init command will fail if a prior installtion exists in the default paths `/usr/local/bin` for Linux/MacOS or `C:\dapr` for Windows or the provided install path using the `--init-path` flag.
+* CLI on the init command will fail if a prior installtion exists in the default paths `/usr/local/bin` for Linux/MacOS or `C:\dapr` for Windows or the provided install path using the `--install-path` flag.
 * Calling `dapr uninstall` will
   * Remove the binary daprd (and placement for slim init) from the default path `/usr/local/bin` for Linux/MacOS and `C:\dapr` for Windows. The path can be overridden with a `--install-path` flag.
   * Remove the docker dapr_placement if Docker is installed.
