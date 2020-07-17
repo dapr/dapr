@@ -58,25 +58,6 @@ type metadata struct {
 	Extended          map[interface{}]interface{} `json:"extended"`
 }
 
-type SetDeleteRequest struct {
-	Key      string            `json:"key"`
-	Value    interface{}       `json:"value"`
-	ETag     string            `json:"etag,omitempty"`
-	Metadata map[string]string `json:"metadata"`
-	Options  SetDeletePolicy   `json:"options,omitempty"`
-}
-
-type SetDeletePolicy struct {
-	Concurrency string            `json:"concurrency,omitempty"` //first-write, last-write
-	Consistency string            `json:"consistency"`           //"eventual, strong"
-	RetryPolicy state.RetryPolicy `json:"retryPolicy,omitempty"`
-}
-
-type SetDeleteTransactionalRequest struct {
-	Operation state.OperationType `json:"operation"`
-	Request   SetDeleteRequest    `json:"request"`
-}
-
 const (
 	apiVersionV1         = "v1.0"
 	idParam              = "id"
@@ -152,12 +133,6 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
-		},
-		{
-			Methods: []string{fasthttp.MethodPost},
-			Route:   "state/{storeName}/transaction",
-			Version: apiVersionV1,
-			Handler: a.onPostStateTransaction,
 		},
 	}
 }
@@ -999,76 +974,4 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	})
 
 	return metadata
-}
-
-func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	var err error
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
-		respondWithError(reqCtx, 400, msg)
-		return
-	}
-
-	storeName := reqCtx.UserValue(storeNameParam).(string)
-
-	if a.stateStores[storeName] == nil {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND:", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 401, msg)
-		return
-	}
-
-	body := reqCtx.PostBody()
-	var requests = []SetDeleteTransactionalRequest{}
-	err = a.json.Unmarshal(body, &requests)
-
-	var transactionalRequests = []state.TransactionalRequest{}
-	for _, request := range requests {
-		var convertedRequest interface{}
-		switch request.Operation {
-		case "delete":
-			convertedRequest = state.DeleteRequest{
-				Key:      a.getModifiedStateKey(request.Request.Key),
-				ETag:     request.Request.ETag,
-				Metadata: request.Request.Metadata,
-				Options:  state.DeleteStateOption(request.Request.Options),
-			}
-		case "upsert":
-			convertedRequest = state.SetRequest{
-				Key:      a.getModifiedStateKey(request.Request.Key),
-				Value:    request.Request.Value,
-				ETag:     request.Request.ETag,
-				Metadata: request.Request.Metadata,
-				Options:  state.SetStateOption(request.Request.Options),
-			}
-		default:
-			msg := NewErrorResponse("ERR_OPERATION_TYPE", fmt.Sprintf("%v", request.Operation))
-			respondWithError(reqCtx, 400, msg)
-			return
-		}
-		transactionalRequest := state.TransactionalRequest{
-			Operation: request.Operation,
-			Request:   convertedRequest,
-		}
-		transactionalRequests = append(transactionalRequests, transactionalRequest)
-	}
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, 400, msg)
-		return
-	}
-
-	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
-	if !ok {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 500, msg)
-		return
-	}
-
-	err = transactionalStore.Multi(transactionalRequests)
-	if err != nil {
-		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
-		respondWithError(reqCtx, 500, msg)
-	} else {
-		respondEmpty(reqCtx, 201)
-	}
 }
