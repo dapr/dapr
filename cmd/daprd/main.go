@@ -286,6 +286,9 @@ func main() {
 			bindings_loader.NewInput("twitter", func() bindings.InputBinding {
 				return twitter.NewTwitter(logContrib)
 			}),
+			bindings_loader.NewInput("cron", func() bindings.InputBinding {
+				return cron.NewCron(logContrib)
+			}),
 		),
 		runtime.WithOutputBindings(
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
@@ -353,6 +356,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("cron", func() bindings.OutputBinding {
 				return cron.NewCron(logContrib)
+			}),
+			bindings_loader.NewOutput("twitter", func() bindings.OutputBinding {
+				return twitter.NewTwitter(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

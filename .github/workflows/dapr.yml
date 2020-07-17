@@ -226,11 +226,13 @@ jobs:
       - name: Upload helm charts to Helm Repo
         env:
               DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
+              DAPR_HELM_REPO: https://github.com/dapr/dapr-helm-charts.io/
         run: |
             daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
             cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
             cp -r `ls -A | grep -v ${{ env.DAPR_VERSION_ARTIFACT }}` $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
             cd $GITHUB_WORKSPACE/${{ env.DAPR_HELM_REPO_CODE_PATH }}
+            helm repo index --url ${{ env.DAPR_HELM_REPO }} --merge index.yaml .
             git config --global user.email "daprweb@microsoft.com"
             git config --global user.name "dapr-bot"
             git add --all
