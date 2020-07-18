@@ -354,6 +354,9 @@ func main() {
 			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
 				return eventgrid.NewAzureEventGrid(logContrib)
 			}),
+			bindings_loader.NewOutput("cron", func() bindings.OutputBinding {
+				return cron.NewCron(logContrib)
+			}),
 			bindings_loader.NewOutput("twitter", func() bindings.OutputBinding {
 				return twitter.NewTwitter(logContrib)
 			}),
