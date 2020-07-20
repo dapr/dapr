@@ -31,6 +31,7 @@ All decisions are categorized in the following folders:
 * **CLI** - Decisions on Dapr CLI architecture and behaviors.
 
   - [CLI-001: CLI and runtime versioning](./cli/CLI-001-cli-and-runtime-versioning.md)
+  - [CLI-002: Self-hosted init and uninstall behaviors](./cli/CLI-002-self-hosted-init-and-uninstall-behaviors.md)
   
 * **SDKs** - Decisions on Dapr SDKs.
 

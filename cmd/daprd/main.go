@@ -89,6 +89,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
 	"github.com/dapr/components-contrib/bindings/azure/storagequeues"
+	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/http"
@@ -285,6 +286,9 @@ func main() {
 			bindings_loader.NewInput("twitter", func() bindings.InputBinding {
 				return twitter.NewTwitter(logContrib)
 			}),
+			bindings_loader.NewInput("cron", func() bindings.InputBinding {
+				return cron.NewCron(logContrib)
+			}),
 		),
 		runtime.WithOutputBindings(
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
@@ -349,6 +353,12 @@ func main() {
 			}),
 			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
 				return eventgrid.NewAzureEventGrid(logContrib)
+			}),
+			bindings_loader.NewOutput("cron", func() bindings.OutputBinding {
+				return cron.NewCron(logContrib)
+			}),
+			bindings_loader.NewOutput("twitter", func() bindings.OutputBinding {
+				return twitter.NewTwitter(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
