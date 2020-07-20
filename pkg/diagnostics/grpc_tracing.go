@@ -71,12 +71,31 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		if info.FullMethod != "/dapr.proto.runtime.v1.Dapr/InvokeService" {
 			traceContextBinary := propagation.Binary(span.SpanContext())
 			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
+
+			// add short term fix to have traceparent header in gRPC response
+			// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
+			// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
+			spanContextToGRPCTraceparentMetadata(ctx, span.SpanContext())
 		}
 
 		UpdateSpanStatusFromGRPCError(span, err)
 		span.End()
 
 		return resp, err
+	}
+}
+
+// spanContextToGRPCTraceparentMetadata adds the spancontext in traceparent and tracestate headers in gRPC metadata.
+func spanContextToGRPCTraceparentMetadata(ctx context.Context, sc trace.SpanContext) {
+	// if sc is empty context, no ops.
+	if (trace.SpanContext{}) == sc {
+		return
+	}
+	h := SpanContextToW3CString(sc)
+	grpc.SetHeader(ctx, metadata.Pairs(traceparentHeader, h))
+	t := TraceStateToW3CString(sc)
+	if t != "" && len(t) <= maxTracestateLen {
+		grpc.SetHeader(ctx, metadata.Pairs(tracestateHeader, t))
 	}
 }
 
@@ -122,6 +141,14 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 	if len(traceContext) > 0 {
 		traceContextBinary := []byte(traceContext[0])
 		sc, ok = propagation.FromBinary(traceContextBinary)
+	} else {
+		traceContext = md[traceparentHeader]
+		if len(traceContext) > 0 {
+			sc, ok = SpanContextFromW3CString(traceContext[0])
+			if ok && len(md[tracestateHeader]) > 0 {
+				sc.Tracestate = TraceStateFromW3CString(md[tracestateHeader][0])
+			}
+		}
 	}
 	return sc, ok
 }

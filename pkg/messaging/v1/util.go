@@ -360,7 +360,9 @@ func processHTTPToHTTPTraceHeaders(ctx context.Context, traceparentValue, traceS
 		diag.SpanContextToHTTPHeaders(span.SpanContext(), setHeader)
 	} else {
 		setHeader(traceparentHeader, traceparentValue)
-		setHeader(tracestateHeader, traceStateValue)
+		if traceStateValue != "" {
+			setHeader(tracestateHeader, traceStateValue)
+		}
 	}
 }
 
@@ -381,10 +383,26 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 		span := diag_utils.SpanFromContext(ctx)
 		sc := span.SpanContext()
 		md.Set(tracebinMetadata, string(propagation.Binary(sc)))
+		// add short term fix to have traceparent header in gRPC response
+		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
+		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
+		addTraceParentHeadersInMetadata(sc, md)
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(grpctracebinValue)
 		if err == nil {
 			md.Set(tracebinMetadata, string(decoded))
+			// adding short term fix to have traceparent header in gRPC response as mentioned in above comment
+			sc, _ := propagation.FromBinary(decoded)
+			addTraceParentHeadersInMetadata(sc, md)
 		}
+	}
+}
+
+func addTraceParentHeadersInMetadata(sc trace.SpanContext, md metadata.MD) {
+	h := diag.SpanContextToW3CString(sc)
+	md.Set(traceparentHeader, h)
+	t := diag.TraceStateToW3CString(sc)
+	if t != "" {
+		md.Set(tracestateHeader, t)
 	}
 }
