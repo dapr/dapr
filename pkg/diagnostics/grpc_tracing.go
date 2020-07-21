@@ -72,7 +72,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			traceContextBinary := propagation.Binary(span.SpanContext())
 			grpc.SetHeader(ctx, metadata.Pairs(grpcTraceContextKey, string(traceContextBinary)))
 
-			// add short term fix to have traceparent header in gRPC response
+			// add workaround to have traceparent header in gRPC response
 			// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 			// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
 			spanContextToGRPCTraceparentMetadata(ctx, span.SpanContext())
