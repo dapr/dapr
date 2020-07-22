@@ -179,16 +179,9 @@ func SpanContextToHTTPHeaders(sc trace.SpanContext, setHeader func(string, strin
 }
 
 func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
-	var pairs = make([]string, 0, len(sc.Tracestate.Entries()))
-	if sc.Tracestate != nil {
-		for _, entry := range sc.Tracestate.Entries() {
-			pairs = append(pairs, strings.Join([]string{entry.Key, entry.Value}, "="))
-		}
-		h := strings.Join(pairs, ",")
-
-		if h != "" && len(h) <= maxTracestateLen {
-			setHeader(tracestateHeader, h)
-		}
+	h := TraceStateToW3CString(sc)
+	if h != "" && len(h) <= maxTracestateLen {
+		setHeader(tracestateHeader, h)
 	}
 }
 
