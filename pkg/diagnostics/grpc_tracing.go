@@ -126,6 +126,7 @@ func SpanContextFromIncomingGRPCMetadata(ctx context.Context) (trace.SpanContext
 		// add workaround to fallback on checking traceparent header
 		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
 		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
+		// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
 		traceContext = md[traceparentHeader]
 		if len(traceContext) > 0 {
 			sc, ok = SpanContextFromW3CString(traceContext[0])
