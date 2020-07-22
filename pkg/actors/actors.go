@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	nethttp "net/http"
 	"strings"
 	"sync"
@@ -634,9 +635,10 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				for _, r := range reminders {
 					if r.ActorType == actorType && r.ActorID == actorID {
 						reminderKey := a.constructCompositeKey(actorKey, r.Name)
-						stopChan, exists := a.activeReminders.Load(reminderKey)
+						reminderInfo, exists := a.activeReminders.Load(reminderKey)
 						if exists {
-							close(stopChan.(chan bool))
+							activeReminder := reminderInfo.(ActiveReminder)
+							close(activeReminder.StopChan)
 							a.activeReminders.Delete(reminderKey)
 						}
 					}
@@ -828,6 +830,21 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 		now := time.Now().UTC()
 		initialDuration := nextInvokeTime.Sub(now)
 		time.Sleep(initialDuration)
+
+		reminderInfo, exists := a.activeReminders.Load(reminderKey)
+		if !exists {
+			log.Errorf("Could not load active reminder with key: %v", reminderKey)
+			return
+		}
+
+		activeReminder := reminderInfo.(ActiveReminder)
+		if activeReminder.ID != reminder.ReminderID {
+			// This reminder ID does not match the one found in the activeReminders.
+			// This means that the reminder has been updated and therefore this execution routine
+			// which corresponds to the old reminder values has been canceled
+			return
+		}
+
 		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, reminder.Data)
 		if err != nil {
 			log.Errorf("error executing reminder: %s", err)
@@ -838,9 +855,6 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 			if err != nil {
 				log.Errorf("error parsing reminder period: %s", err)
 			}
-
-			stop := make(chan bool, 1)
-			a.activeReminders.Store(reminderKey, stop)
 
 			t := a.configureTicker(period)
 			go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, reminder, dueTime, period string, data interface{}) {
@@ -855,7 +869,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 						return
 					}
 				}
-			}(t, stop, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
+			}(t, activeReminder.StopChan, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
 		} else {
 			err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 				Name:      reminder.Name,
@@ -937,6 +951,17 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		}
 	}
 
+	// Store the reminder in active reminders list
+	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
+	reminderKey := a.constructCompositeKey(actorKey, req.Name)
+	stop := make(chan bool, 1)
+	reminderID := rand.Int()
+	activeReminder := ActiveReminder{
+		ID:       reminderID,
+		StopChan: stop,
+	}
+	a.activeReminders.Store(reminderKey, activeReminder)
+
 	if a.evaluationBusy {
 		select {
 		case <-time.After(time.Second * 5):
@@ -947,6 +972,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	}
 
 	reminder := Reminder{
+		ReminderID:     reminderID,
 		ActorID:        req.ActorID,
 		ActorType:      req.ActorType,
 		Name:           req.Name,
@@ -1101,9 +1127,10 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	reminderKey := a.constructCompositeKey(actorKey, req.Name)
 
-	stopChan, exists := a.activeReminders.Load(reminderKey)
+	reminderInfo, exists := a.activeReminders.Load(reminderKey)
 	if exists {
-		close(stopChan.(chan bool))
+		activeReminder := reminderInfo.(ActiveReminder)
+		close(activeReminder.StopChan)
 		a.activeReminders.Delete(reminderKey)
 	}
 
