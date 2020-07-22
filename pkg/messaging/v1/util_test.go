@@ -154,12 +154,7 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 
 	t.Run("with grpc header conversion for grpc headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, grpcMetadata, true)
-		// TODO remove this workaround fix
-		// We need to add workaround to have traceparent header in gRPC response
-		// as grpc-trace-bin is not yet there in OpenTelemetry unlike OpenCensus , tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
-		// and grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
-		// so expected header will be 1 extra traceparent header in this test case - so expected length 9
-		assert.Equal(t, 9, convertedMD.Len())
+		assert.Equal(t, 8, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD[":authority"][0])
 		assert.Equal(t, "1S", convertedMD["grpc-timeout"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["grpc-encoding"][0])
