@@ -6,6 +6,7 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -120,7 +121,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub.On(
 			"Subscribe",
 			mock.AnythingOfType("pubsub.SubscribeRequest"),
-			mock.AnythingOfType("func(*pubsub.NewMessage) error")).Return(nil)
+			mock.AnythingOfType("pubsub.Handler")).Return(nil)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -707,7 +708,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -725,7 +726,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		expectedClientError := fmt.Errorf("error returned from app while processing pub/sub event: Internal Error. status code returned: 500")
@@ -1100,6 +1101,6 @@ func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is a mock subscribe method
-func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler func(msg *pubsub.NewMessage) error) error {
+func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	return nil
 }

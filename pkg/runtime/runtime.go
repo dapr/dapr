@@ -333,7 +333,7 @@ func (a *DaprRuntime) beginReadInputBindings() error {
 }
 
 func (a *DaprRuntime) beginPubSub() error {
-	var publishFunc func(ctx context.Context, msg *pubsub.NewMessage) error
+	var publishFunc pubsub.Handler
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
 		publishFunc = a.publishMessageHTTP
