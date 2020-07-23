@@ -30,6 +30,7 @@ import (
 	// State Stores
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/aerospike"
+	state_azure_blobstorage "github.com/dapr/components-contrib/state/azure/blobstorage"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
@@ -151,6 +152,9 @@ func main() {
 			}),
 			state_loader.New("consul", func() state.Store {
 				return consul.NewConsulStateStore(logContrib)
+			}),
+			state_loader.New("azure.blobstorage", func() state.Store {
+				return state_azure_blobstorage.NewAzureBlobStorageStore(logContrib)
 			}),
 			state_loader.New("azure.cosmosdb", func() state.Store {
 				return state_cosmosdb.NewCosmosDBStateStore(logContrib)
