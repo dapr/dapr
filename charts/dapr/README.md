@@ -7,6 +7,7 @@ This chart installs multiple Dapr components via "child-charts":
 * Dapr Component and Configuration Kubernetes CRDs
 * Dapr Operator
 * Dapr Placement
+* Dapr Dashboard
 
 ## Prerequisites
 * Kubernetes 1.9 or newer cluster with RBAC (Role-Based Access Control) enabled is required

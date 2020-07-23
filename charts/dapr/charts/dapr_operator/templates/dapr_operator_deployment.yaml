@@ -78,6 +78,16 @@ spec:
         - name: credentials
           secret:
             secretName: dapr-trust-bundle
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                - key: kubernetes.io/os
+                  operator: In
+                  values:
+                  - {{ .Values.global.daprControlPlaneOs }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
