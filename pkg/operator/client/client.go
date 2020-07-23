@@ -2,6 +2,7 @@ package client
 
 import (
 	"crypto/x509"
+	"time"
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -42,6 +43,9 @@ func GetOperatorClient(address, serverName string, certChain *dapr_credentials.C
 	} else {
 		opts = append(opts, grpc.WithInsecure())
 	}
+
+	// block for connection
+	opts = append(opts, grpc.WithBlock(), grpc.WithTimeout(30*time.Second))
 
 	conn, err := grpc.Dial(address, opts...)
 	if err != nil {
