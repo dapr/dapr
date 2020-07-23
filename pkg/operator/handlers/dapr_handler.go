@@ -186,6 +186,15 @@ func (h *DaprHandler) ObjectCreated(obj interface{}) {
 
 // ObjectUpdated handles Dapr crd updates
 func (h *DaprHandler) ObjectUpdated(old interface{}, new interface{}) {
+	oldAnnotated := h.isAnnotatedForDapr(old.(*appsv1.Deployment))
+	if !oldAnnotated {
+		h.ObjectCreated(new)
+		return
+	}
+	annotated := h.isAnnotatedForDapr(new.(*appsv1.Deployment))
+	if !annotated {
+		h.ObjectDeleted(old)
+	}
 }
 
 // ObjectDeleted handles Dapr crd deletion

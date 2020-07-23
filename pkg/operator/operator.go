@@ -71,8 +71,8 @@ func NewOperator(kubeAPI *k8s.API, config *Config) Operator {
 
 	o.deploymentsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: o.syncDeployment,
-		UpdateFunc: func(_, newObj interface{}) {
-			o.syncComponent(newObj)
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			o.syncUpdatedDeployment(oldObj, newObj)
 		},
 		DeleteFunc: o.syncDeletedDeployment,
 	})
@@ -96,6 +96,10 @@ func (o *operator) syncComponent(obj interface{}) {
 
 func (o *operator) syncDeployment(obj interface{}) {
 	o.daprHandler.ObjectCreated(obj)
+}
+
+func (o *operator) syncUpdatedDeployment(old, new interface{}) {
+	o.daprHandler.ObjectUpdated(old, new)
 }
 
 func (o *operator) syncDeletedDeployment(obj interface{}) {
