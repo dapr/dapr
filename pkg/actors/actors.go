@@ -7,10 +7,11 @@ package actors
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/big"
 	nethttp "net/http"
 	"strings"
 	"sync"
@@ -955,7 +956,8 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	reminderKey := a.constructCompositeKey(actorKey, req.Name)
 	stop := make(chan bool, 1)
-	reminderID := rand.Int()
+	id, _ := rand.Int(rand.Reader, big.NewInt(5000))
+	reminderID := int(id.Int64())
 	activeReminder := ActiveReminder{
 		ID:       reminderID,
 		StopChan: stop,
