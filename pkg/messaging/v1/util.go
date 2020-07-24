@@ -360,7 +360,9 @@ func processHTTPToHTTPTraceHeaders(ctx context.Context, traceparentValue, traceS
 		diag.SpanContextToHTTPHeaders(span.SpanContext(), setHeader)
 	} else {
 		setHeader(traceparentHeader, traceparentValue)
-		setHeader(tracestateHeader, traceStateValue)
+		if traceStateValue != "" {
+			setHeader(tracestateHeader, traceStateValue)
+		}
 	}
 }
 
