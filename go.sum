@@ -208,6 +208,8 @@ github.com/dapr/components-contrib v0.2.4 h1:tglSWgiZolaLyZ7yxzC9x+UsR2njEPb9fn7
 github.com/dapr/components-contrib v0.2.4/go.mod h1:JSMSHTHQEcLgv7MZKIbKbHXgudogZfIjEkZMmn7nJwQ=
 github.com/dapr/components-contrib v0.2.5-0.20200722154920-6085834d79a1 h1:lbVfHRlKzyyZTzuSP/aKVXEb5G5q5WeAiRMFEPLDnms=
 github.com/dapr/components-contrib v0.2.5-0.20200722154920-6085834d79a1/go.mod h1:JSMSHTHQEcLgv7MZKIbKbHXgudogZfIjEkZMmn7nJwQ=
+github.com/dapr/components-contrib v0.2.5-0.20200724001326-5892feca63f7 h1:5wwh9jI5gIgmxhYfV/syl7/TRQah8z6hwRXeZpGf904=
+github.com/dapr/components-contrib v0.2.5-0.20200724001326-5892feca63f7/go.mod h1:JSMSHTHQEcLgv7MZKIbKbHXgudogZfIjEkZMmn7nJwQ=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad h1:RKWoYovBc+B9ltvjtZLMnbu49stSucH8rZze3MeqyvQ=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad/go.mod h1:yeOIFBz6+BigHpk4ASJbgQDVjQ8+00oCWrFyOAFdob8=
