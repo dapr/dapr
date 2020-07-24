@@ -86,10 +86,8 @@ func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *In
 	if contentType == "" {
 		contentType = JSONContentType
 	}
-
 	imr.r.Message.ContentType = contentType
 	imr.r.Message.Data = &any.Any{Value: data}
-
 	return imr
 }
 
