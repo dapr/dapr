@@ -185,9 +185,6 @@ func (h *DaprHandler) ObjectUpdated(old interface{}, new interface{}) {
 
 // ObjectDeleted handles Dapr crd deletion
 func (h *DaprHandler) ObjectDeleted(obj interface{}) {
-	h.deploymentsLock.Lock()
-	defer h.deploymentsLock.Unlock()
-
 	deployment := obj.(*appsv1.Deployment)
 	annotated := h.isAnnotatedForDapr(deployment)
 	if annotated {

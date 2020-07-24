@@ -70,10 +70,8 @@ func NewOperator(kubeAPI *k8s.API, config *Config) Operator {
 	}
 
 	o.deploymentsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: o.syncDeployment,
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			o.syncUpdatedDeployment(oldObj, newObj)
-		},
+		AddFunc:    o.syncDeployment,
+		UpdateFunc: o.syncUpdatedDeployment,
 		DeleteFunc: o.syncDeletedDeployment,
 	})
 
