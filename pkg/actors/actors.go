@@ -714,7 +714,7 @@ func (a *actorsRuntime) evaluateReminders() {
 						_, exists := a.activeReminders.Load(reminderKey)
 
 						if !exists {
-							err := a.startReminder(&r)
+							err := a.startReminder(&r, make(chan error))
 							if err != nil {
 								log.Debugf("error starting reminder: %s", err)
 							}
@@ -819,7 +819,7 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 	return nextInvokeTime, nil
 }
 
-func (a *actorsRuntime) startReminder(reminder *Reminder) error {
+func (a *actorsRuntime) startReminder(reminder *Reminder, errChannel chan error) error {
 	actorKey := a.constructCompositeKey(reminder.ActorType, reminder.ActorID)
 	reminderKey := a.constructCompositeKey(actorKey, reminder.Name)
 	nextInvokeTime, err := a.getUpcomingReminderInvokeTime(reminder)
@@ -834,7 +834,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 
 		reminderInfo, exists := a.activeReminders.Load(reminderKey)
 		if !exists {
-			log.Errorf("Could not load active reminder with key: %v", reminderKey)
+			errChannel <- fmt.Errorf("Could not load active reminder with key: %v", reminderKey)
 			return
 		}
 
@@ -843,6 +843,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 			// This reminder ID does not match the one found in the activeReminders.
 			// This means that the reminder has been updated and therefore this execution routine
 			// which corresponds to the old reminder values has been canceled
+			errChannel <- fmt.Errorf("Current Reminder ID does not match the ID found in the Active Reminders. Canceling reminder")
 			return
 		}
 
@@ -881,6 +882,8 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 				log.Errorf("error deleting reminder: %s", err)
 			}
 		}
+		errChannel <- nil
+		return
 	}()
 
 	return nil
@@ -1003,7 +1006,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	a.reminders[req.ActorType] = reminders
 	a.remindersLock.Unlock()
 
-	err = a.startReminder(&reminder)
+	err = a.startReminder(&reminder, make(chan error))
 	if err != nil {
 		return err
 	}
