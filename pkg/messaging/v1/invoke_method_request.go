@@ -87,9 +87,8 @@ func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *In
 		contentType = JSONContentType
 	}
 
-	// Clone data to prevent GC from deallocating data
-	imr.r.Message.Data = &any.Any{Value: cloneBytes(data)}
 	imr.r.Message.ContentType = contentType
+	imr.r.Message.Data = &any.Any{Value: data}
 
 	return imr
 }
