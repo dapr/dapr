@@ -6,11 +6,7 @@ metadata:
   labels:
     app: dapr-placement
 spec:
-{{- if eq .Values.global.ha.enabled true }}
-  replicas: {{ .Values.global.ha.replicaCount }}
-{{- else }}
   replicas: {{ .Values.replicaCount }}
-{{- end }}
   selector:
     matchLabels:
       app: dapr-placement
