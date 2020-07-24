@@ -4,6 +4,9 @@ global:
   logAsJson: false
   imagePullPolicy: Always
   imagePullSecrets: ""
+  ha:
+    enabled: true
+    replicaCount: 3
   prometheus:
     enabled: true
     port: 9090
