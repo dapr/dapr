@@ -54,7 +54,9 @@ func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *I
 	}
 
 	imr.r.Message.ContentType = contentType
-	imr.r.Message.Data = &any.Any{Value: data}
+
+	// Clone data to prevent GC from deallocating data
+	imr.r.Message.Data = &any.Any{Value: cloneBytes(data)}
 
 	return imr
 }
