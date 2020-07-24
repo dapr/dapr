@@ -388,3 +388,12 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 		}
 	}
 }
+
+func cloneBytes(data []byte) []byte {
+	if data == nil {
+		return nil
+	}
+	cloneData := make([]byte, len(data))
+	copy(cloneData, data)
+	return cloneData
+}
