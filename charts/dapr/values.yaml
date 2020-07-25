@@ -5,7 +5,7 @@ global:
   imagePullPolicy: Always
   imagePullSecrets: ""
   ha:
-    enabled: true
+    enabled: false
     replicaCount: 3
   prometheus:
     enabled: true
