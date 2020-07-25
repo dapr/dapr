@@ -162,51 +162,69 @@ func (h *DaprHandler) getMetricsPort(deployment *appsv1.Deployment) int {
 
 // ObjectCreated handles Dapr enabled deployment state changes
 func (h *DaprHandler) ObjectCreated(obj interface{}) {
-	h.deploymentsLock.Lock()
-	defer h.deploymentsLock.Unlock()
-
 	deployment := obj.(*appsv1.Deployment)
 	annotated := h.isAnnotatedForDapr(deployment)
 	if annotated {
-		id := h.getAppID(deployment)
-		if id == "" {
-			log.Errorf("skipping service creation: id for deployment %s is empty", deployment.GetName())
-			return
-		}
-
-		metricsPort := h.getMetricsPort(deployment)
-		err := h.createDaprService(id, deployment, metricsPort)
-		if err != nil {
-			log.Errorf("failed creating service for deployment %s: %s", deployment.GetName(), err)
-		}
-
-		monitoring.RecordServiceCreatedCount(id)
+		h.createDaprServiceForDeployment(deployment)
 	}
 }
 
 // ObjectUpdated handles Dapr crd updates
 func (h *DaprHandler) ObjectUpdated(old interface{}, new interface{}) {
+	oldDeployment := old.(*appsv1.Deployment)
+	newDeployment := new.(*appsv1.Deployment)
+
+	oldAnnotated := h.isAnnotatedForDapr(oldDeployment)
+	newAnnotated := h.isAnnotatedForDapr(newDeployment)
+	if !oldAnnotated && newAnnotated {
+		h.createDaprServiceForDeployment(newDeployment)
+	} else if oldAnnotated && !newAnnotated {
+		h.deleteDaprServiceForDeployment(oldDeployment)
+	}
 }
 
 // ObjectDeleted handles Dapr crd deletion
 func (h *DaprHandler) ObjectDeleted(obj interface{}) {
-	h.deploymentsLock.Lock()
-	defer h.deploymentsLock.Unlock()
-
 	deployment := obj.(*appsv1.Deployment)
 	annotated := h.isAnnotatedForDapr(deployment)
 	if annotated {
-		id := h.getAppID(deployment)
-		if id == "" {
-			log.Warnf("skipping service deletion: id for deployment %s is empty", deployment.GetName())
-			return
-		}
-
-		err := h.deleteDaprService(id, deployment)
-		if err != nil {
-			log.Errorf("failed deleting service for deployment %s: %s", deployment.GetName(), err)
-		}
-
-		monitoring.RecordServiceDeletedCount(id)
+		h.deleteDaprServiceForDeployment(deployment)
 	}
+}
+
+func (h *DaprHandler) createDaprServiceForDeployment(deployment *appsv1.Deployment) {
+	h.deploymentsLock.Lock()
+	defer h.deploymentsLock.Unlock()
+
+	id := h.getAppID(deployment)
+	if id == "" {
+		log.Errorf("skipping service creation: id for deployment %s is empty", deployment.GetName())
+		return
+	}
+
+	metricsPort := h.getMetricsPort(deployment)
+	err := h.createDaprService(id, deployment, metricsPort)
+	if err != nil {
+		log.Errorf("failed creating service for deployment %s: %s", deployment.GetName(), err)
+	}
+
+	monitoring.RecordServiceCreatedCount(id)
+}
+
+func (h *DaprHandler) deleteDaprServiceForDeployment(deployment *appsv1.Deployment) {
+	h.deploymentsLock.Lock()
+	defer h.deploymentsLock.Unlock()
+
+	id := h.getAppID(deployment)
+	if id == "" {
+		log.Warnf("skipping service deletion: id for deployment %s is empty", deployment.GetName())
+		return
+	}
+
+	err := h.deleteDaprService(id, deployment)
+	if err != nil {
+		log.Errorf("failed deleting service for deployment %s: %s", deployment.GetName(), err)
+	}
+
+	monitoring.RecordServiceDeletedCount(id)
 }
