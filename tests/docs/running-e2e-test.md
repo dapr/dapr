@@ -18,13 +18,13 @@ E2E tests are designed for verifying the functional correctness by replicating e
     ```
 * Set the environment variables
     ```bash
-    export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
-    export DAPR_TEST_TAG=dev
+    export DAPR_REGISTRY=docker.io/your_dockerhub_id
+    export DAPR_TAG=dev
     export DAPR_NAMESPACE=dapr-tests
 
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
-    
+
     # Set the below environment variables if you want to use the different registry and tag for test apps
     # export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
     # export DARP_TEST_TAG=dev
@@ -33,8 +33,8 @@ E2E tests are designed for verifying the functional correctness by replicating e
     ```bash
     make setup-helm-init
     make setup-test-env-redis
-    
-    # This may take a few minutes.  You can skip kafka install if you do not use bindings for your tests.  
+
+    # This may take a few minutes.  You can skip kafka install if you do not use bindings for your tests.
     make setup-test-env-kafka
     ```
 
