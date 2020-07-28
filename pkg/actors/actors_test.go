@@ -282,6 +282,62 @@ func TestOverrideReminder(t *testing.T) {
 	})
 }
 
+func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
+	type contextType string
+	ctx := context.WithValue(context.Background(), contextType("Test"), true)
+	t.Run("override data", func(t *testing.T) {
+		testActorsRuntime := newTestActorsRuntime()
+		actorType, actorID := getTestActorTypeAndID()
+		reminderName := "reminder1"
+		actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
+		reminderKey := testActorsRuntime.constructCompositeKey(actorKey, reminderName)
+
+		reminder := createReminderData(actorID, actorType, reminderName, "1s", "1s", "a")
+		err := testActorsRuntime.CreateReminder(ctx, &reminder)
+		assert.Nil(t, err)
+		r1, _ := testActorsRuntime.getReminder(&reminder)
+		stop1, _ := testActorsRuntime.activeReminders.Load(reminderKey)
+
+		reminder2 := createReminderData(actorID, actorType, reminderName, "1s", "1s", "b")
+		testActorsRuntime.CreateReminder(ctx, &reminder2)
+		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+		assert.Equal(t, "b", reminders[0].Data)
+		r2, _ := testActorsRuntime.getReminder(&reminder2)
+		stop2, _ := testActorsRuntime.activeReminders.Load(reminderKey)
+
+		reminder3 := createReminderData(actorID, actorType, reminderName, "5s", "1s", "b")
+		testActorsRuntime.CreateReminder(ctx, &reminder3)
+		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+		assert.Equal(t, "5s", reminders[0].Period)
+		r3, _ := testActorsRuntime.getReminder(&reminder3)
+		stop3, _ := testActorsRuntime.activeReminders.Load(reminderKey)
+
+		_, exists := testActorsRuntime.activeReminders.Load(reminderKey)
+		assert.True(t, exists)
+
+		ch1 := make(chan error)
+		testActorsRuntime.startReminder(r1, stop1.(chan bool), ch1)
+		err1 := <-ch1
+		assert.NotNil(t, err1)
+
+		ch2 := make(chan error)
+		testActorsRuntime.startReminder(r2, stop2.(chan bool), ch2)
+		err2 := <-ch2
+		assert.NotNil(t, err2)
+
+		ch3 := make(chan error)
+		testActorsRuntime.startReminder(r3, stop3.(chan bool), ch3)
+		select {
+		case _ = <-ch3:
+			assert.False(t, false)
+		default:
+			assert.True(t, true)
+		}
+	})
+}
+
 func TestDeleteReminder(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
