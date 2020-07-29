@@ -715,7 +715,7 @@ func (a *actorsRuntime) evaluateReminders() {
 
 						if !exists {
 							stop := make(chan bool)
-							err := a.startReminder(&r, stop, nil)
+							err := a.startReminder(&r, stop)
 							if err != nil {
 								log.Debugf("error starting reminder: %s", err)
 							}
@@ -820,7 +820,7 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 	return nextInvokeTime, nil
 }
 
-func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool, errChannel chan error) error {
+func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool) error {
 	actorKey := a.constructCompositeKey(reminder.ActorType, reminder.ActorID)
 	reminderKey := a.constructCompositeKey(actorKey, reminder.Name)
 	nextInvokeTime, err := a.getUpcomingReminderInvokeTime(reminder)
@@ -828,7 +828,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool,
 		return err
 	}
 
-	go func(stop chan bool, errChannel chan error) {
+	go func(reminder *Reminder, stop chan bool) {
 		now := time.Now().UTC()
 		initialDuration := nextInvokeTime.Sub(now)
 		time.Sleep(initialDuration)
@@ -837,7 +837,6 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool,
 		select {
 		case <-stop:
 			log.Infof("Reminder: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
-			errChannel <- fmt.Errorf("Reminder deleted")
 			return
 		default:
 			break
@@ -871,7 +870,6 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool,
 						}
 					case <-stop:
 						log.Infof("Reminder: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", reminderKey, dueTime, period, data)
-						errChannel <- fmt.Errorf("Reminder deleted")
 						return
 					}
 				}
@@ -886,7 +884,10 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool,
 				log.Errorf("error deleting reminder: %s", err)
 			}
 		}
-	}(stopChannel, errChannel)
+
+		return
+	}(reminder, stopChannel)
+
 	return nil
 }
 
@@ -1000,14 +1001,11 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	a.reminders[req.ActorType] = reminders
 	a.remindersLock.Unlock()
 
-	if ctx.Value("Test") != true {
-		// For unit testing, do not start the reminder. The test will control the scheduling
-		// of the go routine for startReminder
-		err = a.startReminder(&reminder, stop, nil)
-		if err != nil {
-			return err
-		}
+	err = a.startReminder(&reminder, stop)
+	if err != nil {
+		return err
 	}
+
 	return nil
 }
 

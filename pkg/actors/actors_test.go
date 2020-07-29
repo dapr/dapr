@@ -72,21 +72,29 @@ func (f *fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
 	return nil
 }
 
-func newTestActorsRuntime() *actorsRuntime {
-	mockAppChannel := new(channelt.MockAppChannel)
-	spec := config.TracingSpec{SamplingRate: "1"}
+func newTestActorsRuntimeWithMock(mockAppChannel *channelt.MockAppChannel) *actorsRuntime {
+	if mockAppChannel == nil {
+		mockAppChannel = new(channelt.MockAppChannel)
+	}
 	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	mockAppChannel.On("GetBaseAddress").Return("http://127.0.0.1", nil)
 	mockAppChannel.On(
 		"InvokeMethod",
 		mock.AnythingOfType("*context.emptyCtx"),
 		mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
 
+	mockAppChannel.On("GetBaseAddress").Return("http://127.0.0.1", nil)
+
+	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false)
 	a := NewActors(store, mockAppChannel, nil, config, nil, spec)
 
 	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntime() *actorsRuntime {
+	mockAppChannel := new(channelt.MockAppChannel)
+	return newTestActorsRuntimeWithMock(mockAppChannel)
 }
 
 func getTestActorTypeAndID() (string, string) {
@@ -283,58 +291,39 @@ func TestOverrideReminder(t *testing.T) {
 }
 
 func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
-	type contextType string
-	ctx := context.WithValue(context.Background(), contextType("Test"), true)
+	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime()
+		mockAppChannel := new(channelt.MockAppChannel)
+		testActorsRuntime := newTestActorsRuntimeWithMock(mockAppChannel)
 		actorType, actorID := getTestActorTypeAndID()
 		reminderName := "reminder1"
-		actorKey := testActorsRuntime.constructCompositeKey(actorType, actorID)
-		reminderKey := testActorsRuntime.constructCompositeKey(actorKey, reminderName)
 
-		reminder := createReminderData(actorID, actorType, reminderName, "1s", "1s", "a")
+		reminder := createReminderData(actorID, actorType, reminderName, "10s", "1s", "a")
 		err := testActorsRuntime.CreateReminder(ctx, &reminder)
 		assert.Nil(t, err)
-		r1, _ := testActorsRuntime.getReminder(&reminder)
-		stop1, _ := testActorsRuntime.activeReminders.Load(reminderKey)
 
-		reminder2 := createReminderData(actorID, actorType, reminderName, "1s", "1s", "b")
+		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
 		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
+		// Check reminder is updated
+		assert.Equal(t, "9s", reminders[0].Period)
+		assert.Equal(t, "1s", reminders[0].DueTime)
 		assert.Equal(t, "b", reminders[0].Data)
-		r2, _ := testActorsRuntime.getReminder(&reminder2)
-		stop2, _ := testActorsRuntime.activeReminders.Load(reminderKey)
 
-		reminder3 := createReminderData(actorID, actorType, reminderName, "5s", "1s", "b")
+		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "2s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder3)
 		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
-		assert.Equal(t, "5s", reminders[0].Period)
-		r3, _ := testActorsRuntime.getReminder(&reminder3)
-		stop3, _ := testActorsRuntime.activeReminders.Load(reminderKey)
+		// Check reminder is updated
+		assert.Equal(t, "8s", reminders[0].Period)
+		assert.Equal(t, "2s", reminders[0].DueTime)
+		assert.Equal(t, "b", reminders[0].Data)
 
-		_, exists := testActorsRuntime.activeReminders.Load(reminderKey)
-		assert.True(t, exists)
+		time.Sleep(2 * time.Second)
 
-		ch1 := make(chan error)
-		testActorsRuntime.startReminder(r1, stop1.(chan bool), ch1)
-		err1 := <-ch1
-		assert.NotNil(t, err1)
-
-		ch2 := make(chan error)
-		testActorsRuntime.startReminder(r2, stop2.(chan bool), ch2)
-		err2 := <-ch2
-		assert.NotNil(t, err2)
-
-		ch3 := make(chan error)
-		testActorsRuntime.startReminder(r3, stop3.(chan bool), ch3)
-		select {
-		case _ = <-ch3:
-			assert.False(t, false)
-		default:
-			assert.True(t, true)
-		}
+		// Test only the last reminder update fires
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 }
 
