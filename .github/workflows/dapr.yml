@@ -71,6 +71,15 @@ jobs:
         with:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARCHIVE_OUTDIR }}
+      - name: docker login
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        run: |
+          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Build and push docker images
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        run: |
+          echo "Build docker image and push image..."
+          make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }} DAPR_TAG=${{ env.REL_VERSION }}
   publish:
     name: Publish docker image and binaries
     needs: build
@@ -126,10 +135,7 @@ jobs:
         with:
           name: dapr_darwin_amd64
           path: ${{ env.ARTIFACT_DIR }}
-      - name: docker login
-        run: |
-          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: build and publish docker image
+      - name: tar release binaries
         run: |
           IMAGE_ARCHS=(amd64 arm)
 
@@ -145,8 +151,6 @@ jobs:
             done
           done
           
-          echo "Build docker image and push image ..."
-          make docker-publish DAPR_REGISTRY=${{ env.DOCKER_REGISTRY }} DAPR_TAG=$REL_VERSION
       - name: publish binaries to github
         if: startswith(github.ref, 'refs/tags/v')
         run: |
@@ -175,6 +179,14 @@ jobs:
             --body "${RELEASE_BODY}" \
             --prerelease true \
             ${RELEASE_ARTIFACT[*]}
+      - name: docker login
+        run: |
+          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Build and push docker multiarch manifest
+        if: matrix.target_os != 'darwin'
+        run: |
+          echo "Build docker multiarch image manifest and push it"
+          make docker-publish DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }} DAPR_TAG=${{ env.REL_VERSION }}
       - name: Save release version
         run: |
           mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}

@@ -55,6 +55,8 @@ for clustername in ${testclusterpool[@]}; do
         echo "::set-env name=TEST_CLUSTER::$clustername"
         echo "::set-env name=DAPR_TAG::$clustername"
         echo "::set-env name=DAPR_TEST_TAG::$clustername"
+        echo "::set-env name=TARGET_OS::$GOOS"
+        echo "::set-env name=TARGET_ARCH::$GOARCH"
         exit 0
     fi
 
