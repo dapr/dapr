@@ -58,8 +58,8 @@ func (m *mockServer) OnBindingEvent(ctx context.Context, in *runtimev1pb.Binding
 	return &runtimev1pb.BindingEventResponse{}, nil
 }
 
-func (m *mockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (m *mockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
+	return &runtimev1pb.TopicEventResponse{}, nil
 }
 
 // TODO: Add APIVersion testing
