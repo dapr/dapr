@@ -108,6 +108,8 @@ func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 	if token == "" {
 		return next
 	}
+	log.Info("enabled token authentication on http server")
+
 	return func(ctx *fasthttp.RequestCtx) {
 		v := ctx.Request.Header.Peek(auth.APITokenHeader)
 		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || string(v) == token {
