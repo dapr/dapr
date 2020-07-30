@@ -884,8 +884,6 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				log.Errorf("error deleting reminder: %s", err)
 			}
 		}
-
-		return
 	}(reminder, stopChannel)
 
 	return nil
