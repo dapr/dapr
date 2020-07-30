@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	defaultImageRegistry       = "docker.io/dapriotest"
-	defaultImageTag            = "latest"
-	disableObservabilityConfig = "disable-observability"
+	defaultImageRegistry   = "docker.io/dapriotest"
+	defaultImageTag        = "latest"
+	disableTelemetryConfig = "disable-telemetry"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
@@ -81,7 +81,7 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}
 
-	do := c.disableObservability()
+	dt := c.disableTelemetry()
 
 	for _, app := range apps {
 		if app.RegistryName == "" {
@@ -92,8 +92,8 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		}
 		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
 
-		if do {
-			app.Config = disableObservabilityConfig
+		if dt {
+			app.Config = disableTelemetryConfig
 		}
 
 		log.Printf("Adding app %v", app)
@@ -124,8 +124,8 @@ func (c *KubeTestPlatform) imageTag() string {
 	return tag
 }
 
-func (c *KubeTestPlatform) disableObservability() bool {
-	disableVal := os.Getenv("DAPR_DISABLE_OBSERVABILITY")
+func (c *KubeTestPlatform) disableTelemetry() bool {
+	disableVal := os.Getenv("DAPR_DISABLE_TELEMETRY")
 	disable, err := strconv.ParseBool(disableVal)
 	if err != nil {
 		return false

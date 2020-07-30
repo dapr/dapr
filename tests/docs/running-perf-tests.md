@@ -67,7 +67,7 @@ make setup-app-configurations
 ### Optional: Disable tracing
 
 ```bash
-export DAPR_DISABLE_OBSERVABILITY=true
+export DAPR_DISABLE_TELEMETRY=true
 ```
 
 ### Optional: Apply this configuration to disable mTLS

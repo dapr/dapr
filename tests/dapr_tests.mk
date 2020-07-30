@@ -135,7 +135,7 @@ setup-disable-mtls:
 
 # Apply default config yaml to turn tracing off for testing (tracing is enabled by default)
 setup-app-configurations:
-	$(KUBECTL) apply -f ./tests/config/dapr_observability_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_telemetry_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 # Apply component yaml for state, secrets, pubsub, and bindings
 setup-test-components:
