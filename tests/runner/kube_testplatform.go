@@ -8,6 +8,7 @@ package runner
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"log"
 
@@ -17,6 +18,7 @@ import (
 const (
 	defaultImageRegistry = "docker.io/dapriotest"
 	defaultImageTag      = "latest"
+	disableObservabilityConfig = "disable-observability"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
@@ -79,6 +81,8 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}
 
+	do := c.disableObservability()
+
 	for _, app := range apps {
 		if app.RegistryName == "" {
 			app.RegistryName = c.imageRegistry()
@@ -87,6 +91,10 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 			return fmt.Errorf("%s app doesn't have imagename property", app.AppName)
 		}
 		app.ImageName = fmt.Sprintf("%s:%s", app.ImageName, c.imageTag())
+
+		if do {
+			app.Config = disableObservabilityConfig
+		}
 
 		log.Printf("Adding app %v", app)
 		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestNamespace, app))
@@ -114,6 +122,15 @@ func (c *KubeTestPlatform) imageTag() string {
 		return defaultImageTag
 	}
 	return tag
+}
+
+func (c *KubeTestPlatform) disableObservability() bool {
+	disableVal := os.Getenv("DAPR_DISABLE_OBSERVABILITY")
+	disable, err := strconv.ParseBool(disableVal)
+	if err != nil {
+		return false
+	}
+	return disable
 }
 
 // AcquireAppExternalURL returns the external url for 'name'.
