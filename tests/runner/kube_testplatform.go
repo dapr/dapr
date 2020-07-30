@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	defaultImageRegistry = "docker.io/dapriotest"
-	defaultImageTag      = "latest"
+	defaultImageRegistry       = "docker.io/dapriotest"
+	defaultImageTag            = "latest"
 	disableObservabilityConfig = "disable-observability"
 )
 
