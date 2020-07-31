@@ -35,8 +35,8 @@ spec:
         testapp: hellodapr
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "hellodapr"
-        dapr.io/port: "3000"
+        dapr.io/app-id: "hellodapr"
+        dapr.io/app-port: "3000"
     spec:
       containers:
       - name: hellodapr
