@@ -21,6 +21,8 @@ E2E tests are designed for verifying the functional correctness by replicating e
     export DAPR_REGISTRY=docker.io/your_dockerhub_id
     export DAPR_TAG=dev
     export DAPR_NAMESPACE=dapr-tests
+    export TARGET_OS=linux
+    export TARGET_ARCH=amd64
 
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube

@@ -1,0 +1,12 @@
+ARG WINDOWS_VERSION=1809
+#This version confirmed to work for both github and AKS
+FROM mcr.microsoft.com/windows/servercore:$WINDOWS_VERSION as servercore
+FROM mcr.microsoft.com/windows/nanoserver:$WINDOWS_VERSION
+# Nanoserver is missing exactly one dll that go needs. The servercore image has this dll, but
+# is nearly 2GB. This has the potential to be somewhat fragile, but it is the only way I can
+# find to keep the container image size small
+COPY --from=servercore /windows/system32/netapi32.dll /windows/system32/netapi32.dll
+ARG PKG_FILES
+WORKDIR /
+COPY /$PKG_FILES.exe /
+ENTRYPOINT []
