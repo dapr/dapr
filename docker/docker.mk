@@ -13,8 +13,9 @@ DAPR_RUNTIME_IMAGE_NAME=daprd
 DAPR_PLACEMENT_IMAGE_NAME=placement
 DAPR_SENTRY_IMAGE_NAME=sentry
 
-
-ifeq ($(origin DEBUG), undefined)
+ifeq ($(TARGET_OS), windows)
+  DOCKERFILE:=Dockerfile-windows
+else ifeq ($(origin DEBUG), undefined)
   DOCKERFILE:=Dockerfile
 else ifeq ($(DEBUG),0)
   DOCKERFILE:=Dockerfile
@@ -23,7 +24,7 @@ else
 endif
 
 # Supported docker image architecture
-DOCKERMUTI_ARCH=linux/amd64,linux/arm/v7
+DOCKERMUTI_ARCH=linux-amd64 linux-arm windows-amd64
 
 ################################################################################
 # Target: docker-build, docker-push                                            #
@@ -42,6 +43,7 @@ DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG=$(DAPR_REGISTRY)/$(DAPR_PLACEMENT_IMAGE_N
 DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG=$(DAPR_REGISTRY)/$(DAPR_SENTRY_IMAGE_NAME):$(LATEST_TAG)
 endif
 
+
 # To use buildx: https://github.com/docker/buildx#docker-ce
 export DOCKER_CLI_EXPERIMENTAL=enabled
 
@@ -54,37 +56,55 @@ ifeq ($(DAPR_TAG),)
 	$(error DAPR_TAG environment variable must be set)
 endif
 
+check-arch:
+ifeq ($(TARGET_OS),)
+	$(error TARGET_OS environment variable must be set)
+endif
+ifeq ($(TARGET_ARCH),)
+	$(error TARGET_ARCH environment variable must be set)
+endif
+
 # build docker image for linux
-docker-build: check-docker-env
+BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)/release
+
+docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) build --build-arg TARGETPLATFORM=linux/amd64 --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(OUT_DIR)/. -t $(DOCKER_IMAGE_TAG)
-	$(DOCKER) build --build-arg TARGETPLATFORM=linux/amd64 --build-arg PKG_FILES=daprd -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(OUT_DIR)/. -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)
-	$(DOCKER) build --build-arg TARGETPLATFORM=linux/amd64 --build-arg PKG_FILES=placement -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(OUT_DIR)/. -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)
-	$(DOCKER) build --build-arg TARGETPLATFORM=linux/amd64 --build-arg PKG_FILES=sentry -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(OUT_DIR)/. -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)
+	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) build --build-arg PKG_FILES=daprd -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) build --build-arg PKG_FILES=placement -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) build --build-arg PKG_FILES=sentry -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 
 # push docker image to the registry
 docker-push: docker-build
 	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) push $(DOCKER_IMAGE_TAG)
-	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)
-	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)
-	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)
+	$(DOCKER) push $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 
 # publish muti-arch docker image to the registry
-docker-publish: check-docker-env
-	-$(DOCKER) buildx create --use --name daprbuild
-	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
-	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
-	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
-	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKERMUTI_ARCH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
-	$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKERMUTI_ARCH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
-	$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKERMUTI_ARCH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
+docker-manifest-create: check-docker-env
+	$(DOCKER) manifest create $(DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
 ifeq ($(LATEST_RELEASE),true)
-	$(info Pushing $(DOCKER_IMAGE_LATEST_TAG) docker image ...)
-	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKERMUTI_ARCH) -t $(DOCKER_IMAGE_LATEST_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
-	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKERMUTI_ARCH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
-	$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKERMUTI_ARCH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
-	$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKERMUTI_ARCH) -t $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG) $(OUT_DIR) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) --push
+	$(DOCKER) manifest create $(DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-%)
+	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG) $(DOCKERMUTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE_TAG)-%)
+endif
+
+docker-publish: docker-manifest-create
+	$(DOCKER) manifest push $(DOCKER_IMAGE_TAG)
+	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)
+	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)
+	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)
+ifeq ($(LATEST_RELEASE),true)
+	$(DOCKER) manifest push $(DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) manifest push $(DAPR_RUNTIME_DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)
+	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)
 endif
 
 ################################################################################
