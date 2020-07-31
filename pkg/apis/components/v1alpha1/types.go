@@ -29,6 +29,7 @@ type Component struct {
 // ComponentSpec is the spec for a component
 type ComponentSpec struct {
 	Type     string         `json:"type"`
+	Version  string         `json:"version"`
 	Metadata []MetadataItem `json:"metadata"`
 }
 
