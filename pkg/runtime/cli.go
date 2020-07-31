@@ -123,7 +123,7 @@ func FromFlags() (*DaprRuntime, error) {
 		placementAddress = *placementServiceAddress
 	}
 
-	concurrency := -1
+	var concurrency int
 	if *appMaxConcurrency != -1 {
 		concurrency = *appMaxConcurrency
 	} else {
