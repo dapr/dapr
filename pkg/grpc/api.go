@@ -35,10 +35,6 @@ import (
 )
 
 const (
-	// Range of a durpb.Duration in seconds, as specified in
-	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
-	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
-	minSeconds    = -maxSeconds
 	daprSeparator = "||"
 
 	daprHTTPStatusHeader = "dapr-http-status"
