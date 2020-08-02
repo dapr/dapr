@@ -61,7 +61,7 @@ make docker-deploy-k8s
 ### Optional: Apply this configuration to disable mTLS
 
 ```bash
-make setup-test-config
+make setup-disable-mtls
 ```
 
 ### Register the default component configurations for testing
