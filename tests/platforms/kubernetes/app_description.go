@@ -16,4 +16,5 @@ type AppDescription struct {
 	Replicas       int32
 	IngressEnabled bool
 	MetricsPort    string
+	Config         string
 }

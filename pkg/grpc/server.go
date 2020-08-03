@@ -137,19 +137,19 @@ func (s *server) generateWorkloadCert() error {
 
 func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
-
-	s.logger.Infof("enabled monitoring middleware")
-
 	intr := []grpc_go.UnaryServerInterceptor{}
 
 	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
+		s.logger.Info("enabled gRPC tracing middleware")
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
+		s.logger.Info("enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 	}
 	if s.authToken != "" {
+		s.logger.Info("enabled token authentication on gRPC server")
 		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
 	}
 
