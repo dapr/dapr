@@ -356,7 +356,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 
 		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "c")
-		err = testActorsRuntime.CreateReminder(ctx, &reminder4)
+		testActorsRuntime.CreateReminder(ctx, &reminder4)
 		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 
