@@ -58,6 +58,9 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 	if appDesc.MetricsPort != "" {
 		annotationObject["dapr.io/metrics-port"] = appDesc.MetricsPort
 	}
+	if appDesc.Config != "" {
+		annotationObject["dapr.io/config"] = appDesc.Config
+	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
