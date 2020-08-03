@@ -130,8 +130,12 @@ setup-test-env-kafka:
 setup-test-env: setup-test-env-kafka setup-test-env-redis
 
 # Apply default config yaml to turn mTLS off for testing (mTLS is enabled by default)
-setup-test-config:
+setup-disable-mtls:
 	$(KUBECTL) apply -f ./tests/config/dapr_mtls_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+
+# Apply default config yaml to turn tracing off for testing (tracing is enabled by default)
+setup-app-configurations:
+	$(KUBECTL) apply -f ./tests/config/dapr_telemetry_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 # Apply component yaml for state, secrets, pubsub, and bindings
 setup-test-components:
