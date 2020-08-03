@@ -30,7 +30,7 @@ func FromFlags() (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", fmt.Sprintf("%v", DefaultProfilePort), "The port for the profile server")
-	appProtocol := flag.String("app-protocol", "", "Protocol for the application: grpc or http")
+	appProtocol := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc or http")
 	componentsPath := flag.String("components-path", "", "Path for components directory. If empty, components will not be loaded. Self-hosted mode only")
 	config := flag.String("config", "", "Path to config file, or name of a configuration object")
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
@@ -46,7 +46,7 @@ func FromFlags() (*DaprRuntime, error) {
 	// deprecate in v1.0 release
 	placementServiceAddress := flag.String("placement-address", "", "[Deprecated] Address for the Dapr placement service")
 	maxConcurrency := flag.Int("max-concurrency", -1, "[Deprecated] Controls the concurrency level when forwarding requests to user code")
-	protocol := flag.String("protocol", "", "[Deprecated] Protocol for the application: grpc or http")
+	protocol := flag.String("protocol", string(HTTPProtocol), "[Deprecated] Protocol for the application: grpc or http")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -131,9 +131,9 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	appPrtcl := string(HTTPProtocol)
-	if *appProtocol != "" {
+	if *appProtocol != string(HTTPProtocol) {
 		appPrtcl = *appProtocol
-	} else if *protocol != "" {
+	} else if *protocol != string(HTTPProtocol) {
 		appPrtcl = *protocol
 	}
 
