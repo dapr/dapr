@@ -58,10 +58,22 @@ make docker-push
 make docker-deploy-k8s
 ```
 
+### Register app configurations
+
+```bash
+make setup-app-configurations
+```
+
+### Optional: Disable tracing
+
+```bash
+export DAPR_DISABLE_TELEMETRY=true
+```
+
 ### Optional: Apply this configuration to disable mTLS
 
 ```bash
-make setup-test-config
+make setup-disable-mtls
 ```
 
 ### Build and push test apps to docker hub
