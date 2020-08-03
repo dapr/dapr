@@ -941,8 +941,8 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
-	defer a.activeRemindersLock.Unlock()
 	a.activeRemindersLock.Lock()
+	defer a.activeRemindersLock.Unlock()
 	r, exists := a.getReminder(req)
 	if exists {
 		if a.reminderRequiresUpdate(req, r) {

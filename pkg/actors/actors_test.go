@@ -327,6 +327,51 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 	})
 }
 
+func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		testActorsRuntime := newTestActorsRuntimeWithMock(mockAppChannel)
+		actorType, actorID := getTestActorTypeAndID()
+		reminderName := "reminder1"
+
+		reminder := createReminderData(actorID, actorType, reminderName, "10s", "2s", "a")
+		err := testActorsRuntime.CreateReminder(ctx, &reminder)
+		assert.Nil(t, err)
+
+		time.Sleep(50 * time.Millisecond)
+
+		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "b")
+		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "1s", "b")
+		testActorsRuntime.CreateReminder(ctx, &reminder2)
+		testActorsRuntime.CreateReminder(ctx, &reminder3)
+		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+
+		// Check reminder is updated
+		assert.Equal(t, "8s", reminders[0].Period)
+		assert.Equal(t, "1s", reminders[0].DueTime)
+		assert.Equal(t, "b", reminders[0].Data)
+
+		time.Sleep(50 * time.Millisecond)
+
+		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "c")
+		err = testActorsRuntime.CreateReminder(ctx, &reminder4)
+		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+
+		time.Sleep(2*time.Second + 100*time.Millisecond)
+
+		// Check reminder is updated
+		assert.Equal(t, "7s", reminders[0].Period)
+		assert.Equal(t, "2s", reminders[0].DueTime)
+		assert.Equal(t, "c", reminders[0].Data)
+
+		// Test only the last reminder update fires
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+}
+
 func TestDeleteReminder(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
