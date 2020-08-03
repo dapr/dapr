@@ -75,6 +75,7 @@ type actorsRuntime struct {
 	activeTimers        *sync.Map
 	activeReminders     *sync.Map
 	remindersLock       *sync.RWMutex
+	activeRemindersLock *sync.RWMutex
 	reminders           map[string][]Reminder
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
@@ -118,6 +119,7 @@ func NewActors(
 		activeTimers:        &sync.Map{},
 		activeReminders:     &sync.Map{},
 		remindersLock:       &sync.RWMutex{},
+		activeRemindersLock: &sync.RWMutex{},
 		reminders:           map[string][]Reminder{},
 		evaluationLock:      &sync.RWMutex{},
 		evaluationBusy:      false,
@@ -939,6 +941,8 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
+	defer a.activeRemindersLock.Unlock()
+	a.activeRemindersLock.Lock()
 	r, exists := a.getReminder(req)
 	if exists {
 		if a.reminderRequiresUpdate(req, r) {
