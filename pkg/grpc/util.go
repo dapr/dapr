@@ -28,14 +28,3 @@ func stateConcurrencyToString(c commonv1pb.StateOptions_StateConcurrency) string
 
 	return ""
 }
-
-func retryPatternToString(r commonv1pb.StateRetryPolicy_RetryPattern) string {
-	switch r {
-	case commonv1pb.StateRetryPolicy_RETRY_LINEAR:
-		return "linear"
-	case commonv1pb.StateRetryPolicy_RETRY_EXPONENTIAL:
-		return "exponential"
-	}
-
-	return ""
-}

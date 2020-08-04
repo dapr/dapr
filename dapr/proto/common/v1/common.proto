@@ -8,7 +8,6 @@ syntax = "proto3";
 package dapr.proto.common.v1;
 
 import "google/protobuf/any.proto";
-import "google/protobuf/duration.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "CommonProtos";
@@ -95,11 +94,11 @@ message StateItem {
   // The metadata which will be passed to state store component.
   map<string,string> metadata = 4;
 
-  // Options for concurrency, consistency, and retry_policy to save the state.
+  // Options for concurrency and consistency to save the state.
   StateOptions options = 5;
 }
 
-// StateOptions configures concurrency, consistency, and retry policy for state operations
+// StateOptions configures concurrency and consistency for state operations
 message StateOptions {
   // Enum describing the supported concurrency for state.
   enum StateConcurrency {
@@ -117,24 +116,4 @@ message StateOptions {
 
   StateConcurrency concurrency = 1;
   StateConsistency consistency = 2;
-  StateRetryPolicy retry_policy = 3;
-}
-
-// StateRetryPolicy represents retry policy to set and delete state operations.
-message StateRetryPolicy {
-  // Enum describing the support retry pattern
-  enum RetryPattern {
-    RETRY_UNSPECIFIED = 0;
-    RETRY_LINEAR = 1;
-    RETRY_EXPONENTIAL = 2;
-  }
-
-  // Maximum number of retries.
-  int32 threshold = 1;
-
-  // Retry pattern.
-  RetryPattern pattern = 2;
-
-  // Initial delay between retries.
-  google.protobuf.Duration interval = 3;
 }
