@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -71,9 +70,6 @@ const (
 	secretNameParam      = "key"
 	nameParam            = "name"
 	consistencyParam     = "consistency"
-	retryIntervalParam   = "retryInterval"
-	retryPatternParam    = "retryPattern"
-	retryThresholdParam  = "retryThreshold"
 	concurrencyParam     = "concurrency"
 	daprSeparator        = "||"
 )
@@ -371,18 +367,6 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	concurrency := string(reqCtx.QueryArgs().Peek(concurrencyParam))
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
-	retryInterval := string(reqCtx.QueryArgs().Peek(retryIntervalParam))
-	retryPattern := string(reqCtx.QueryArgs().Peek(retryPatternParam))
-	retryThredhold := string(reqCtx.QueryArgs().Peek(retryThresholdParam))
-	iRetryInterval := 0
-	iRetryThreshold := 0
-
-	if retryInterval != "" {
-		iRetryInterval, _ = strconv.Atoi(retryInterval)
-	}
-	if retryThredhold != "" {
-		iRetryThreshold, _ = strconv.Atoi(retryThredhold)
-	}
 
 	req := state.DeleteRequest{
 		Key:  a.getModifiedStateKey(key),
@@ -390,11 +374,6 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		Options: state.DeleteStateOption{
 			Concurrency: concurrency,
 			Consistency: consistency,
-			RetryPolicy: state.RetryPolicy{
-				Interval:  time.Duration(iRetryInterval) * time.Millisecond,
-				Threshold: iRetryThreshold,
-				Pattern:   retryPattern,
-			},
 		},
 	}
 
