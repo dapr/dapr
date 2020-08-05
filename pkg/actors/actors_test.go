@@ -335,27 +335,30 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		reminderName := "reminder1"
 
-		reminder := createReminderData(actorID, actorType, reminderName, "10s", "2s", "a")
+		reminder := createReminderData(actorID, actorType, reminderName, "10s", "3s", "a")
 		err := testActorsRuntime.CreateReminder(ctx, &reminder)
 		assert.Nil(t, err)
 
 		time.Sleep(50 * time.Millisecond)
 
-		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "b")
-		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "1s", "b")
-		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		testActorsRuntime.CreateReminder(ctx, &reminder3)
-		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
-		assert.Nil(t, err)
+		reminder2 := createReminderData(actorID, actorType, reminderName, "8s", "4s", "b")
+		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "4s", "c")
+		go testActorsRuntime.CreateReminder(ctx, &reminder2)
+		go testActorsRuntime.CreateReminder(ctx, &reminder3)
+
+		time.Sleep(2 * time.Second)
 
 		// Check reminder is updated
+		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+		// The statestore could have either reminder2 or reminder3 based on the timing.
+		// Therefore, not verifying data field
 		assert.Equal(t, "8s", reminders[0].Period)
-		assert.Equal(t, "1s", reminders[0].DueTime)
-		assert.Equal(t, "b", reminders[0].Data)
+		assert.Equal(t, "4s", reminders[0].DueTime)
 
 		time.Sleep(50 * time.Millisecond)
 
-		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "c")
+		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "d")
 		testActorsRuntime.CreateReminder(ctx, &reminder4)
 		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
@@ -365,7 +368,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		// Check reminder is updated
 		assert.Equal(t, "7s", reminders[0].Period)
 		assert.Equal(t, "2s", reminders[0].DueTime)
-		assert.Equal(t, "c", reminders[0].Data)
+		assert.Equal(t, "d", reminders[0].Data)
 
 		// Test only the last reminder update fires
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
