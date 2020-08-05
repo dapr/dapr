@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -26,7 +25,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
@@ -37,10 +35,6 @@ import (
 )
 
 const (
-	// Range of a durpb.Duration in seconds, as specified in
-	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
-	maxSeconds    = int64(10000 * 365.25 * 24 * 60 * 60)
-	minSeconds    = -maxSeconds
 	daprSeparator = "||"
 
 	daprHTTPStatusHeader = "dapr-http-status"
@@ -273,18 +267,6 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 				Consistency: stateConsistencyToString(s.Options.Consistency),
 				Concurrency: stateConcurrencyToString(s.Options.Concurrency),
 			}
-			if s.Options.RetryPolicy != nil {
-				req.Options.RetryPolicy = state.RetryPolicy{
-					Threshold: int(s.Options.RetryPolicy.Threshold),
-					Pattern:   retryPatternToString(s.Options.RetryPolicy.Pattern),
-				}
-				if s.Options.RetryPolicy.Interval != nil {
-					dur, err := duration(s.Options.RetryPolicy.Interval)
-					if err == nil {
-						req.Options.RetryPolicy.Interval = dur
-					}
-				}
-			}
 		}
 		reqs = append(reqs, req)
 	}
@@ -315,20 +297,6 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		req.Options = state.DeleteStateOption{
 			Concurrency: stateConcurrencyToString(in.Options.Concurrency),
 			Consistency: stateConsistencyToString(in.Options.Consistency),
-		}
-
-		if in.Options.RetryPolicy != nil {
-			retryPolicy := state.RetryPolicy{
-				Threshold: int(in.Options.RetryPolicy.Threshold),
-				Pattern:   retryPatternToString(in.Options.RetryPolicy.Pattern),
-			}
-			if in.Options.RetryPolicy.Interval != nil {
-				dur, err := duration(in.Options.RetryPolicy.Interval)
-				if err == nil {
-					retryPolicy.Interval = dur
-				}
-			}
-			req.Options.RetryPolicy = retryPolicy
 		}
 	}
 
@@ -373,38 +341,4 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		response.Data = getResponse.Data
 	}
 	return response, nil
-}
-
-func duration(p *durpb.Duration) (time.Duration, error) {
-	if err := validateDuration(p); err != nil {
-		return 0, err
-	}
-	d := time.Duration(p.Seconds) * time.Second
-	if int64(d/time.Second) != p.Seconds {
-		return 0, fmt.Errorf("duration: %v is out of range for time.Duration", p)
-	}
-	if p.Nanos != 0 {
-		d += time.Duration(p.Nanos) * time.Nanosecond
-		if (d < 0) != (p.Nanos < 0) {
-			return 0, fmt.Errorf("duration: %v is out of range for time.Duration", p)
-		}
-	}
-	return d, nil
-}
-
-func validateDuration(d *durpb.Duration) error {
-	if d == nil {
-		return errors.New("duration: nil Duration")
-	}
-	if d.Seconds < minSeconds || d.Seconds > maxSeconds {
-		return fmt.Errorf("duration: %v: seconds out of range", d)
-	}
-	if d.Nanos <= -1e9 || d.Nanos >= 1e9 {
-		return fmt.Errorf("duration: %v: nanos out of range", d)
-	}
-	// Seconds and Nanos must have the same sign, unless d.Nanos is zero.
-	if (d.Seconds < 0 && d.Nanos > 0) || (d.Seconds > 0 && d.Nanos < 0) {
-		return fmt.Errorf("duration: %v: seconds and nanos have different signs", d)
-	}
-	return nil
 }
