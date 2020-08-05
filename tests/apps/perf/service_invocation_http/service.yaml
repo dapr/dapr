@@ -18,8 +18,8 @@ spec:
         testapp: perf-service-invocation
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "testapp"
-        dapr.io/port: "3000"
+        dapr.io/app-id: "testapp"
+        dapr.io/app-port: "3000"
     spec:
       containers:
       - name: perf-service-invocation

@@ -28,15 +28,15 @@ import (
 const (
 	sidecarContainerName              = "daprd"
 	daprEnabledKey                    = "dapr.io/enabled"
-	daprPortKey                       = "dapr.io/port"
+	daprAppPortKey                    = "dapr.io/app-port"
 	daprConfigKey                     = "dapr.io/config"
-	daprProtocolKey                   = "dapr.io/protocol"
-	appIDKey                          = "dapr.io/id"
-	daprProfilingKey                  = "dapr.io/profiling"
+	daprAppProtocolKey                = "dapr.io/app-protocol"
+	appIDKey                          = "dapr.io/app-id"
+	daprEnableProfilingKey            = "dapr.io/enable-profiling"
 	daprLogLevel                      = "dapr.io/log-level"
 	daprAPITokenSecret                = "dapr.io/api-token-secret" /* #nosec */
 	daprLogAsJSON                     = "dapr.io/log-as-json"
-	daprMaxConcurrencyKey             = "dapr.io/max-concurrency"
+	daprAppMaxConcurrencyKey          = "dapr.io/app-max-concurrency"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
 	daprCPULimitKey                   = "dapr.io/sidecar-cpu-limit"
 	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
@@ -76,6 +76,13 @@ const (
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
+
+	// Deprecated, remove in v1.0
+	idKey                 = "dapr.io/id"
+	daprPortKey           = "dapr.io/port"
+	daprProfilingKey      = "dapr.io/profiling"
+	daprMaxConcurrencyKey = "dapr.io/max-concurrency"
+	daprProtocolKey       = "dapr.io/protocol"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
@@ -254,11 +261,19 @@ func podContainsSidecarContainer(pod *corev1.Pod) bool {
 }
 
 func getMaxConcurrency(annotations map[string]string) (int32, error) {
-	return getInt32Annotation(annotations, daprMaxConcurrencyKey)
+	maxConcurrencyKey, err := getInt32Annotation(annotations, daprAppMaxConcurrencyKey)
+	if maxConcurrencyKey == -1 {
+		return getInt32Annotation(annotations, daprMaxConcurrencyKey)
+	}
+	return maxConcurrencyKey, err
 }
 
 func getAppPort(annotations map[string]string) (int32, error) {
-	return getInt32Annotation(annotations, daprPortKey)
+	pKey, err := getInt32Annotation(annotations, daprAppPortKey)
+	if pKey == -1 {
+		return getInt32Annotation(annotations, daprPortKey)
+	}
+	return pKey, err
 }
 
 func getConfig(annotations map[string]string) string {
@@ -266,6 +281,11 @@ func getConfig(annotations map[string]string) string {
 }
 
 func getProtocol(annotations map[string]string) string {
+	protocol := getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "")
+	if protocol != "" {
+		return protocol
+	}
+
 	return getStringAnnotationOrDefault(annotations, daprProtocolKey, "http")
 }
 
@@ -274,7 +294,12 @@ func getMetricsPort(annotations map[string]string) int {
 }
 
 func getAppID(pod corev1.Pod) string {
-	return getStringAnnotationOrDefault(pod.Annotations, appIDKey, pod.GetName())
+	id := getStringAnnotationOrDefault(pod.Annotations, appIDKey, "")
+	if id != "" {
+		return id
+	}
+
+	return getStringAnnotationOrDefault(pod.Annotations, idKey, pod.GetName())
 }
 
 func getLogLevel(annotations map[string]string) string {
@@ -286,7 +311,13 @@ func logAsJSONEnabled(annotations map[string]string) bool {
 }
 
 func profilingEnabled(annotations map[string]string) bool {
-	return getBoolAnnotationOrDefault(annotations, daprProfilingKey, false)
+	isEnabled := getBoolAnnotationOrDefault(annotations, daprEnableProfilingKey, false)
+
+	if !isEnabled {
+		return getBoolAnnotationOrDefault(annotations, daprProfilingKey, false)
+	}
+
+	return isEnabled
 }
 
 func getAPITokenSecret(annotations map[string]string) string {
@@ -479,11 +510,11 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 			"--app-port", appPortStr,
 			"--app-id", id,
 			"--control-plane-address", controlPlaneAddress,
-			"--protocol", getProtocol(annotations),
-			"--placement-address", placementServiceAddress,
+			"--app-protocol", getProtocol(annotations),
+			"--placement-host-address", placementServiceAddress,
 			"--config", getConfig(annotations),
 			"--log-level", getLogLevel(annotations),
-			"--max-concurrency", fmt.Sprintf("%v", maxConcurrency),
+			"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
 			"--sentry-address", sentryAddress,
 			"--metrics-port", fmt.Sprintf("%v", metricsPort),
 		},
