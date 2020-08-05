@@ -35,8 +35,8 @@ spec:
         testapp: secretapp
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "secretapp"
-        dapr.io/port: "3000"
+        dapr.io/app-id: "secretapp"
+        dapr.io/app-port: "3000"
     spec:
       containers:
         - name: secretapp

@@ -37,8 +37,8 @@ spec:
         testapp: bindinginput
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "bindinginput"
-        dapr.io/port: "3000"
+        dapr.io/app-id: "bindinginput"
+        dapr.io/app-port: "3000"
     spec:
       containers:
         - name: bindinginput

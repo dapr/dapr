@@ -34,8 +34,8 @@ spec:
         testapp: runtime
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "runtime"
-        dapr.io/port: "3000"
+        dapr.io/app-id: "runtime"
+        dapr.io/app-port: "3000"
     spec:
       containers:
       - name: runtime
