@@ -99,10 +99,9 @@ func (h *DaprHandler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	} else {
 		if deployment.DeletionTimestamp != nil {
 			log.Debugf("deployment is being deleted, %s", req.NamespacedName)
-			expectedService = false
-		} else {
-			expectedService = h.isAnnotatedForDapr(&deployment)
+			return ctrl.Result{}, nil
 		}
+		expectedService = h.isAnnotatedForDapr(&deployment)
 	}
 
 	if expectedService {
@@ -124,23 +123,15 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 		Name:      h.daprServiceName(appID),
 	}
 	var daprSvc corev1.Service
-	presentSvc := true
 	if err := h.Get(ctx, mayDaprService, &daprSvc); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Debugf("no service for deployment found, deployment: %s/%s", namespace, deployment.Name)
-			presentSvc = false
-		} else {
-			log.Errorf("unable to get service, %s, err: %s", mayDaprService, err)
-			return err
+			return h.createDaprService(ctx, mayDaprService, deployment)
 		}
+		log.Errorf("unable to get service, %s, err: %s", mayDaprService, err)
+		return err
 	}
-
-	if presentSvc {
-		// TODO: sync service spec
-		return nil
-	}
-
-	return h.createDaprService(ctx, mayDaprService, deployment)
+	return nil
 }
 
 func (h *DaprHandler) createDaprService(ctx context.Context, expectedService ktypes.NamespacedName, deployment *appsv1.Deployment) error {
@@ -196,7 +187,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService kty
 		log.Errorf("unable to create dapr service for deployment, service: %s, err: %s", expectedService, err)
 		return err
 	}
-	log.Infof("created service: %s", expectedService)
+	log.Debugf("created service: %s", expectedService)
 	monitoring.RecordServiceCreatedCount(appID)
 	return nil
 }
@@ -214,7 +205,7 @@ func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, deploymentKey
 		if err := h.Delete(ctx, &svc, client.PropagationPolicy(meta_v1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
 			log.Errorf("unable to delete svc: %s/%s, err: %s", svc.Namespace, svc.Name, err)
 		} else {
-			log.Infof("deleted service: %s/%s", svc.Namespace, svc.Name)
+			log.Debugf("deleted service: %s/%s", svc.Namespace, svc.Name)
 			monitoring.RecordServiceDeletedCount(svc.Annotations[appIDAnnotationKey])
 		}
 	}
