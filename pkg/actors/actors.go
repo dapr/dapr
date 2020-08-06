@@ -840,7 +840,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		// Check if reminder is still active
 		select {
 		case <-stop:
-			log.Infof("Reminder: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
+			log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
 			return
 		default:
 			break
