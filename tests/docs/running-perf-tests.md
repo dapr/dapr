@@ -1,6 +1,6 @@
 # Running Performance Tests
 
-Performance tests are designed to let you evaluate the latency and processing times for Dapr in your environment for a given hardware. The following describes how to run performance tests in a local dev environment and run them through CI:
+Performance tests are designed to let you evaluate the latency, resource usage and processing times for Dapr in your environment for a given hardware. The following describes how to run performance tests in a local dev environment and run them through CI:
 
   - [Run Performance tests in local dev environment](#run-perf-tests-in-local-dev-environment)
   - [Run Performance tests through GitHub Actions](#run-perf-tests-through-github-actions)
