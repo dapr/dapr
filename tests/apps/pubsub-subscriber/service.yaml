@@ -34,8 +34,8 @@ spec:
         testapp: pubsub-subscriber
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "pubsub-subscriber"
-        dapr.io/port: "3000"
+        dapr.io/app-id: "pubsub-subscriber"
+        dapr.io/app-port: "3000"
     spec:
       containers:
       - name: pubsub-subscriber
