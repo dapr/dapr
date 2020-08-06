@@ -40,7 +40,6 @@ require (
 	k8s.io/code-generator v0.17.3
 	k8s.io/gengo v0.0.0-20200114144118-36b2048a9120 // indirect
 	k8s.io/klog v1.0.0
-	k8s.io/kube-openapi v0.0.0-20200121204235-bf4fb3bd569c // indirect
 	k8s.io/metrics v0.17.0
 	sigs.k8s.io/controller-runtime v0.5.6
 	sigs.k8s.io/yaml v1.2.0 // indirect
