@@ -9,22 +9,19 @@ import (
 	"flag"
 	"time"
 
-	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/credentials"
-	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
-	"github.com/dapr/dapr/utils"
 	"k8s.io/klog"
 )
 
 var log = logger.NewLogger("dapr.operator")
 var config string
 var certChainPath string
+var disableLeaderElection bool
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
@@ -37,24 +34,7 @@ func main() {
 	log.Infof("starting Dapr Operator -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
-
-	kubeClient := utils.GetKubeClient()
-	kubeConfig := utils.GetConfig()
-	daprClient, err := scheme.NewForConfig(kubeConfig)
-
-	if err != nil {
-		log.Fatalf("error building Kubernetes clients: %s", err)
-	}
-
-	kubeAPI := k8s.NewAPI(kubeClient, daprClient)
-
-	config, err := operator.LoadConfiguration(config, daprClient)
-	if err != nil {
-		log.Fatal(err)
-	}
-	config.Credentials = credentials.NewTLSCredentials(certChainPath)
-
-	operator.NewOperator(kubeAPI, config).Run(ctx)
+	operator.NewOperator(config, certChainPath, !disableLeaderElection).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
@@ -75,6 +55,9 @@ func init() {
 
 	flag.StringVar(&config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
+
+	flag.BoolVar(&disableLeaderElection, "disable-leader-election", false, "Disable leader election for controller manager. ")
+
 	flag.Parse()
 
 	// Apply options to all loggers

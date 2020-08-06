@@ -3,13 +3,10 @@ package handlers
 import (
 	"testing"
 
-	versioned "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	fake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestNewDaprHandler(t *testing.T) {
@@ -152,7 +149,5 @@ func getDeployment(appID string, daprEnabled string) *appsv1.Deployment {
 }
 
 func getTestDaprHandler() *DaprHandler {
-	fakeClient := fake.NewSimpleClientset()
-	kubeAPI := kubernetes.NewAPI(fakeClient, versioned.New(nil))
-	return NewDaprHandler(kubeAPI)
+	return &DaprHandler{}
 }

@@ -3,6 +3,6 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-// +k8s:deepcopy-gen=package
+// +kubebuilder:object:generate=true
 // +groupName=configuration.dapr.io
 package v1alpha1

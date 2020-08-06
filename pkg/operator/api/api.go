@@ -11,14 +11,15 @@ import (
 	"fmt"
 	"net"
 
-	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const serverPort = 6500
@@ -28,19 +29,19 @@ var log = logger.NewLogger("dapr.operator.api")
 //Server runs the Dapr API server for components and configurations
 type Server interface {
 	Run(certChain *dapr_credentials.CertChain)
-	OnComponentUpdated(component *v1alpha1.Component)
+	OnComponentUpdated(component *componentsapi.Component)
 }
 
 type apiServer struct {
-	Client     scheme.Interface
-	updateChan chan (*v1alpha1.Component)
+	Client     client.Client
+	updateChan chan (*componentsapi.Component)
 }
 
 // NewAPIServer returns a new API server
-func NewAPIServer(client scheme.Interface) Server {
+func NewAPIServer(client client.Client) Server {
 	return &apiServer{
 		Client:     client,
-		updateChan: make(chan *v1alpha1.Component, 1),
+		updateChan: make(chan *componentsapi.Component, 1),
 	}
 }
 
@@ -64,14 +65,15 @@ func (a *apiServer) Run(certChain *dapr_credentials.CertChain) {
 	}
 }
 
-func (a *apiServer) OnComponentUpdated(component *v1alpha1.Component) {
+func (a *apiServer) OnComponentUpdated(component *componentsapi.Component) {
 	a.updateChan <- component
 }
 
 // GetConfiguration returns a Dapr configuration
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
-	config, err := a.Client.ConfigurationV1alpha1().Configurations(in.Namespace).Get(in.Name, meta_v1.GetOptions{})
-	if err != nil {
+	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
+	var config configurationapi.Configuration
+	if err := a.Client.Get(ctx, key, &config); err != nil {
 		return nil, fmt.Errorf("error getting configuration: %s", err)
 	}
 	b, err := json.Marshal(&config)
@@ -85,8 +87,8 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 
 // GetComponents returns a list of Dapr components
 func (a *apiServer) ListComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListComponentResponse, error) {
-	components, err := a.Client.ComponentsV1alpha1().Components(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
-	if err != nil {
+	var components componentsapi.ComponentList
+	if err := a.Client.List(ctx, &components); err != nil {
 		return nil, fmt.Errorf("error getting components: %s", err)
 	}
 	resp := &operatorv1pb.ListComponentResponse{
@@ -108,7 +110,7 @@ func (a *apiServer) ComponentUpdate(in *empty.Empty, srv operatorv1pb.Operator_C
 	log.Info("sidecar connected for component updates")
 
 	for c := range a.updateChan {
-		go func(c *v1alpha1.Component) {
+		go func(c *componentsapi.Component) {
 			b, err := json.Marshal(&c)
 			if err != nil {
 				log.Warnf("error serializing component %s (%s): %s", c.GetName(), c.Spec.Type, err)
