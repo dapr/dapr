@@ -13,7 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	ktypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,10 +32,7 @@ const (
 	daprSidecarInternalGRPCPort     = 50002
 	defaultMetricsPort              = 9090
 	clusterIPNone                   = "None"
-)
-
-const (
-	daprServiceOwnerKey = ".metadata.controller"
+	daprServiceOwnerField           = ".metadata.controller"
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -61,7 +58,7 @@ func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 // Init allows for various startup tasks
 func (h *DaprHandler) Init() error {
 	if err := h.mgr.GetFieldIndexer().IndexField(
-		&corev1.Service{}, daprServiceOwnerKey, func(rawObj runtime.Object) []string {
+		&corev1.Service{}, daprServiceOwnerField, func(rawObj runtime.Object) []string {
 			svc := rawObj.(*corev1.Service)
 			owner := meta_v1.GetControllerOf(svc)
 			if owner == nil || owner.APIVersion != appsv1.SchemeGroupVersion.String() || owner.Kind != "Deployment" {
@@ -82,16 +79,15 @@ func (h *DaprHandler) daprServiceName(appID string) string {
 	return fmt.Sprintf("%s-dapr", appID)
 }
 
-// Reconcile the expected service for dapr deployment
+// Reconcile the expected services for deployments annotated for Dapr.
 func (h *DaprHandler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 
 	var deployment appsv1.Deployment
-	var expectedService bool
+	expectedService := false
 	if err := h.Get(ctx, req.NamespacedName, &deployment); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Debugf("deployment has be deleted, %s", req.NamespacedName)
-			expectedService = false
 		} else {
 			log.Errorf("unable to get deployment, %s, err: %s", req.NamespacedName, err)
 			return ctrl.Result{}, err
@@ -118,7 +114,7 @@ func (h *DaprHandler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, deployment *appsv1.Deployment) error {
 	appID := h.getAppID(deployment)
-	mayDaprService := ktypes.NamespacedName{
+	mayDaprService := types.NamespacedName{
 		Namespace: namespace,
 		Name:      h.daprServiceName(appID),
 	}
@@ -134,7 +130,7 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 	return nil
 }
 
-func (h *DaprHandler) createDaprService(ctx context.Context, expectedService ktypes.NamespacedName, deployment *appsv1.Deployment) error {
+func (h *DaprHandler) createDaprService(ctx context.Context, expectedService types.NamespacedName, deployment *appsv1.Deployment) error {
 	appID := h.getAppID(deployment)
 	metricsPort := h.getMetricsPort(deployment)
 
@@ -184,7 +180,7 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService kty
 		return err
 	}
 	if err := h.Create(ctx, service); err != nil {
-		log.Errorf("unable to create dapr service for deployment, service: %s, err: %s", expectedService, err)
+		log.Errorf("unable to create Dapr service for deployment, service: %s, err: %s", expectedService, err)
 		return err
 	}
 	log.Debugf("created service: %s", expectedService)
@@ -192,11 +188,11 @@ func (h *DaprHandler) createDaprService(ctx context.Context, expectedService kty
 	return nil
 }
 
-func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, deploymentKey ktypes.NamespacedName) error {
+func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, deploymentKey types.NamespacedName) error {
 	var services corev1.ServiceList
 	if err := h.List(ctx, &services,
 		client.InNamespace(deploymentKey.Namespace),
-		client.MatchingFields{daprServiceOwnerKey: deploymentKey.Name}); err != nil {
+		client.MatchingFields{daprServiceOwnerField: deploymentKey.Name}); err != nil {
 		log.Errorf("unable to list services, err: %s", err)
 		return err
 	}
