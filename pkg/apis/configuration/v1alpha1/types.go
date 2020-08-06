@@ -11,7 +11,7 @@ import (
 
 // +genclient
 // +genclient:noStatus
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
 
 // Configuration describes an Dapr configuration setting
 type Configuration struct {
@@ -67,7 +67,7 @@ type TracingSpec struct {
 	SamplingRate string `json:"samplingRate"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
 
 // ConfigurationList is a list of Dapr event sources
 type ConfigurationList struct {

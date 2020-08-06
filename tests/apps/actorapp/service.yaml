@@ -35,8 +35,8 @@ spec:
         testapp: actorapp
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "actorapp"
-        dapr.io/port: "3000"
+        dapr.io/app-id: "actorapp"
+        dapr.io/app-port: "3000"
     spec:
       containers:
       - name: actorapp

@@ -34,9 +34,9 @@ spec:
         testapp: service-invocation
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "myapp"
-        dapr.io/port: "3000"
-        dapr.io/protocol: "grpc"
+        dapr.io/app-id: "myapp"
+        dapr.io/app-port: "3000"
+        dapr.io/app-protocol: "grpc"
     spec:
       containers:
       - name: service-invocation

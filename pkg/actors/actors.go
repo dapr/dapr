@@ -75,6 +75,7 @@ type actorsRuntime struct {
 	activeTimers        *sync.Map
 	activeReminders     *sync.Map
 	remindersLock       *sync.RWMutex
+	activeRemindersLock *sync.RWMutex
 	reminders           map[string][]Reminder
 	evaluationLock      *sync.RWMutex
 	evaluationBusy      bool
@@ -118,6 +119,7 @@ func NewActors(
 		activeTimers:        &sync.Map{},
 		activeReminders:     &sync.Map{},
 		remindersLock:       &sync.RWMutex{},
+		activeRemindersLock: &sync.RWMutex{},
 		reminders:           map[string][]Reminder{},
 		evaluationLock:      &sync.RWMutex{},
 		evaluationBusy:      false,
@@ -714,7 +716,8 @@ func (a *actorsRuntime) evaluateReminders() {
 						_, exists := a.activeReminders.Load(reminderKey)
 
 						if !exists {
-							err := a.startReminder(&r)
+							stop := make(chan bool)
+							err := a.startReminder(&r, stop)
 							if err != nil {
 								log.Debugf("error starting reminder: %s", err)
 							}
@@ -819,7 +822,7 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 	return nextInvokeTime, nil
 }
 
-func (a *actorsRuntime) startReminder(reminder *Reminder) error {
+func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool) error {
 	actorKey := a.constructCompositeKey(reminder.ActorType, reminder.ActorID)
 	reminderKey := a.constructCompositeKey(actorKey, reminder.Name)
 	nextInvokeTime, err := a.getUpcomingReminderInvokeTime(reminder)
@@ -827,10 +830,20 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 		return err
 	}
 
-	go func() {
+	go func(reminder *Reminder, stop chan bool) {
 		now := time.Now().UTC()
 		initialDuration := nextInvokeTime.Sub(now)
 		time.Sleep(initialDuration)
+
+		// Check if reminder is still active
+		select {
+		case <-stop:
+			log.Infof("Reminder: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
+			return
+		default:
+			break
+		}
+
 		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, reminder.Data)
 		if err != nil {
 			log.Errorf("error executing reminder: %s", err)
@@ -842,11 +855,14 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 				log.Errorf("error parsing reminder period: %s", err)
 			}
 
-			stop := make(chan bool, 1)
-			a.activeReminders.Store(reminderKey, stop)
+			_, exists := a.activeReminders.Load(reminderKey)
+			if !exists {
+				log.Errorf("could not find active reminder with key: %s", reminderKey)
+				return
+			}
 
 			t := a.configureTicker(period)
-			go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, reminder, dueTime, period string, data interface{}) {
+			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, data interface{}) {
 				for {
 					select {
 					case <-ticker.C:
@@ -855,10 +871,11 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 							log.Debugf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
 						}
 					case <-stop:
+						log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, dueTime, period, data)
 						return
 					}
 				}
-			}(t, stop, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
+			}(t, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
 		} else {
 			err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 				Name:      reminder.Name,
@@ -869,7 +886,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder) error {
 				log.Errorf("error deleting reminder: %s", err)
 			}
 		}
-	}()
+	}(reminder, stopChannel)
 
 	return nil
 }
@@ -924,6 +941,8 @@ func (a *actorsRuntime) getReminder(req *CreateReminderRequest) (*Reminder, bool
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
+	a.activeRemindersLock.Lock()
+	defer a.activeRemindersLock.Unlock()
 	r, exists := a.getReminder(req)
 	if exists {
 		if a.reminderRequiresUpdate(req, r) {
@@ -939,6 +958,12 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			return nil
 		}
 	}
+
+	// Store the reminder in active reminders list
+	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
+	reminderKey := a.constructCompositeKey(actorKey, req.Name)
+	stop := make(chan bool)
+	a.activeReminders.Store(reminderKey, stop)
 
 	if a.evaluationBusy {
 		select {
@@ -978,10 +1003,11 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	a.reminders[req.ActorType] = reminders
 	a.remindersLock.Unlock()
 
-	err = a.startReminder(&reminder)
+	err = a.startReminder(&reminder, stop)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -1104,9 +1130,10 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	reminderKey := a.constructCompositeKey(actorKey, req.Name)
 
-	stopChan, exists := a.activeReminders.Load(reminderKey)
+	stop, exists := a.activeReminders.Load(reminderKey)
 	if exists {
-		close(stopChan.(chan bool))
+		log.Infof("Found reminder with key: %v. Deleting reminder", reminderKey)
+		close(stop.(chan bool))
 		a.activeReminders.Delete(reminderKey)
 	}
 
