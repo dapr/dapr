@@ -16,16 +16,20 @@ import (
 )
 
 const (
-	defaultImageRegistry   = "docker.io/dapriotest"
-	defaultImageTag        = "latest"
-	disableTelemetryConfig = "disable-telemetry"
+	defaultImageRegistry        = "docker.io/dapriotest"
+	defaultImageTag             = "latest"
+	disableTelemetryConfig      = "disable-telemetry"
+	defaultSidecarCPULimit      = "4.0"
+	defaultSidecarMemoryLimit   = "512Mi"
+	defaultSidecarCPURequest    = "0.5"
+	defaultSidecarMemoryRequest = "250Mi"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
 type KubeTestPlatform struct {
 	AppResources       *TestResources
 	ComponentResources *TestResources
-	kubeClient         *kube.KubeClient
+	KubeClient         *kube.KubeClient
 }
 
 // NewKubeTestPlatform creates KubeTestPlatform instance.
@@ -38,7 +42,7 @@ func NewKubeTestPlatform() *KubeTestPlatform {
 
 func (c *KubeTestPlatform) setup() (err error) {
 	// TODO: KubeClient will be properly configured by go test arguments
-	c.kubeClient, err = kube.NewKubeClient("", "")
+	c.KubeClient, err = kube.NewKubeClient("", "")
 
 	return
 }
@@ -59,12 +63,12 @@ func (c *KubeTestPlatform) tearDown() error {
 
 // addComponents adds component to disposable Resource queues.
 func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) error {
-	if c.kubeClient == nil {
+	if c.KubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup")
 	}
 
 	for _, comp := range comps {
-		c.ComponentResources.Add(kube.NewDaprComponent(c.kubeClient, kube.DaprTestNamespace, comp))
+		c.ComponentResources.Add(kube.NewDaprComponent(c.KubeClient, kube.DaprTestNamespace, comp))
 	}
 
 	// setup component resources
@@ -77,7 +81,7 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 
 // addApps adds test apps to disposable App Resource queues.
 func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
-	if c.kubeClient == nil {
+	if c.KubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}
 
@@ -96,8 +100,13 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 			app.Config = disableTelemetryConfig
 		}
 
+		app.DaprCPULimit = c.cpuLimit()
+		app.DaprCPURequest = c.cpuRequest()
+		app.DaprMemoryLimit = c.memoryLimit()
+		app.DaprMemoryRequest = c.memoryRequest()
+
 		log.Printf("Adding app %v", app)
-		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestNamespace, app))
+		c.AppResources.Add(kube.NewAppManager(c.KubeClient, kube.DaprTestNamespace, app))
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
@@ -131,6 +140,38 @@ func (c *KubeTestPlatform) disableTelemetry() bool {
 		return false
 	}
 	return disable
+}
+
+func (c *KubeTestPlatform) cpuLimit() string {
+	cpu := os.Getenv("DAPR_SIDECAR_CPU_LIMIT")
+	if cpu != "" {
+		return cpu
+	}
+	return defaultSidecarCPULimit
+}
+
+func (c *KubeTestPlatform) cpuRequest() string {
+	cpu := os.Getenv("DAPR_SIDECAR_CPU_REQUEST")
+	if cpu != "" {
+		return cpu
+	}
+	return defaultSidecarCPURequest
+}
+
+func (c *KubeTestPlatform) memoryRequest() string {
+	mem := os.Getenv("DAPR_SIDECAR_MEMORY_REQUEST")
+	if mem != "" {
+		return mem
+	}
+	return defaultSidecarMemoryRequest
+}
+
+func (c *KubeTestPlatform) memoryLimit() string {
+	mem := os.Getenv("DAPR_SIDECAR_MEMORY_LIMIT")
+	if mem != "" {
+		return mem
+	}
+	return defaultSidecarMemoryLimit
 }
 
 // AcquireAppExternalURL returns the external url for 'name'.
@@ -191,4 +232,19 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 		return nil, fmt.Errorf("cannot open connection with no target ports")
 	}
 	return appManager.DoPortForwarding("", targetPorts...)
+}
+
+// GetAppUsage returns the Cpu and Memory usage for the dapr container for a given app
+func (c *KubeTestPlatform) GetAppUsage(appName string) (*AppUsage, error) {
+	app := c.AppResources.FindActiveResource(appName)
+	appManager := app.(*kube.AppManager)
+
+	cpu, mem, err := appManager.GetAppCPUAndMemory()
+	if err != nil {
+		return nil, err
+	}
+	return &AppUsage{
+		CPU:    fmt.Sprintf("%vm", cpu),
+		Memory: fmt.Sprintf("%.2fMb", mem),
+	}, nil
 }

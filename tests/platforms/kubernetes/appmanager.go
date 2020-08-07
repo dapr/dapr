@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
@@ -423,4 +424,28 @@ func (m *AppManager) GetHostDetails() (string, string, error) {
 	}
 
 	return podList.Items[0].GetName(), podList.Items[0].Status.PodIP, nil
+}
+
+// GetAppCPUAndMemory returns the Cpu and Memory usage for the dapr sidecar
+func (m *AppManager) GetAppCPUAndMemory() (int64, float64, error) {
+	podName, _, err := m.GetHostDetails()
+	if err != nil {
+		return -1, -1, err
+	}
+
+	metrics, err := m.client.MetricsClient.MetricsV1beta1().PodMetricses(m.namespace).Get(podName, metav1.GetOptions{})
+	if err != nil {
+		return -1, -1, err
+	}
+
+	for _, c := range metrics.Containers {
+		if c.Name == DaprSideCarName {
+			mi, _ := c.Usage.Memory().AsInt64()
+			mb := float64((mi / 1024)) * 0.001024
+
+			cpu := c.Usage.Cpu().ScaledValue(resource.Milli)
+			return cpu, mb, nil
+		}
+	}
+	return -1, -1, fmt.Errorf("dapr sidecar not found in pod %s in namespace %s", podName, m.namespace)
 }

@@ -70,6 +70,11 @@ func (m *MockPlatform) PortForwardToApp(appName string, targetPort ...int) ([]in
 	return []int{}, args.Error(0)
 }
 
+func (m *MockPlatform) GetAppUsage(appName string) (*AppUsage, error) {
+	args := m.Called(appName)
+	return &AppUsage{}, args.Error(0)
+}
+
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{

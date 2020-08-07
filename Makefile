@@ -183,7 +183,7 @@ dapr.yaml: check-docker-env
 upload-helmchart:
 	export HELM_EXPERIMENTAL_OCI=1; \
 	$(HELM) chart save ${HELM_CHART_ROOT}/${RELEASE_NAME} ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}; \
-	$(HELM) chart push ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION} 
+	$(HELM) chart push ${HELM_REGISTRY}/${HELM}/${RELEASE_NAME}:${DAPR_VERSION}
 
 ################################################################################
 # Target: docker-deploy-k8s                                                    #
@@ -216,9 +216,13 @@ test:
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
 
+################################################################################
+# Target: codegen                                                              #
+################################################################################
+include tools/codegen.mk
 
 ################################################################################
-# Target: docker                                                                #
+# Target: docker                                                               #
 ################################################################################
 include docker/docker.mk
 
@@ -226,3 +230,4 @@ include docker/docker.mk
 # Target: tests                                                                #
 ################################################################################
 include tests/dapr_tests.mk
+

@@ -11,7 +11,7 @@ import (
 
 // +genclient
 // +genclient:noStatus
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
 
 // Component describes an Dapr component type
 type Component struct {
@@ -51,7 +51,7 @@ type Auth struct {
 	SecretStore string `json:"secretStore"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
 
 // ComponentList is a list of Dapr components
 type ComponentList struct {

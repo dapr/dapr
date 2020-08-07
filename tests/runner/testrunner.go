@@ -33,6 +33,12 @@ type PlatformInterface interface {
 	Restart(name string) error
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)
+	GetAppUsage(appName string) (*AppUsage, error)
+}
+
+type AppUsage struct {
+	CPU    string
+	Memory string
 }
 
 // TestRunner holds initial test apps and testing platform instance
