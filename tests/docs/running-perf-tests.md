@@ -34,10 +34,19 @@ Performance tests are designed to let you evaluate the latency, resource usage a
     # DAPR_PERF_CONNECTIONS sets the number of client connections used to send requests to Dapr. Default is 1.
     # DAPR_TEST_DURATION sets the duration of the test. Default is "1m".
     # DAPR_PAYLOAD_SIZE_KB sets a payload size in kb to test with. default is 0.
+    # DAPR_SIDECAR_CPU_LIMIT sets the cpu resource limit on the Dapr sidecar. default is 4.0.
+    # DAPR_SIDECAR_MEMORY_LIMIT sets the memory resource limit on the Dapr sidecar. default is 512Mi.
+    # DAPR_SIDECAR_CPU_REQUEST sets the cpu resource request on the Dapr sidecar. default is 0.5.
+    # DAPR_SIDECAR_MEMORY_REQUEST sets the memory resource request on the Dapr sidecar. default is 250Mi.
     export DAPR_PERF_QPS
     export DAPR_PERF_CONNECTIONS
     export DAPR_TEST_DURATION
     export DAPR_PAYLOAD_SIZE_KB
+    export DAPR_SIDECAR_CPU_LIMIT
+    export DAPR_SIDECAR_MEMORY_LIMIT
+    export DAPR_SIDECAR_CPU_REQUEST
+    export DAPR_SIDECAR_MEMORY_REQUEST
+
     ```
 
 ### Deploy your dapr runtime change
