@@ -9,6 +9,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
 )
@@ -19,6 +20,20 @@ const (
 	// daprFastHTTPContextKey is the context value of span in fasthttp.RequestCtx.
 	daprFastHTTPContextKey = "daprSpanContextKey"
 )
+
+// StdoutExporter is an open census exporter that writes to stdout.
+type StdoutExporter struct{}
+
+var _ trace.Exporter = &StdoutExporter{}
+
+var log = logger.NewLogger("dapr.runtime.trace")
+
+const msg = "[%s] Trace: %s Span: %s/%s Time: [%s ->  %s] Annotations: %+v"
+
+// ExportSpan implements the open census exporter interface
+func (e *StdoutExporter) ExportSpan(sd *trace.SpanData) {
+	log.Infof(msg, sd.Name, sd.TraceID, sd.ParentSpanID, sd.SpanID, sd.StartTime, sd.EndTime, sd.Annotations)
+}
 
 // GetTraceSamplingRate parses the given rate and returns the parsed rate
 func GetTraceSamplingRate(rate string) float64 {

@@ -41,6 +41,7 @@ import (
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/logger"
@@ -207,6 +208,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return fmt.Errorf("failed to determine host address: %s", err)
+	}
+
+	if a.globalConfig.Spec.TracingSpec.Stdout {
+		trace.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
 
 	err = a.createAppChannel()
