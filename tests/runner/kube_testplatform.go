@@ -25,7 +25,7 @@ const (
 type KubeTestPlatform struct {
 	AppResources       *TestResources
 	ComponentResources *TestResources
-	kubeClient         *kube.KubeClient
+	KubeClient         *kube.KubeClient
 }
 
 // NewKubeTestPlatform creates KubeTestPlatform instance.
@@ -38,7 +38,7 @@ func NewKubeTestPlatform() *KubeTestPlatform {
 
 func (c *KubeTestPlatform) setup() (err error) {
 	// TODO: KubeClient will be properly configured by go test arguments
-	c.kubeClient, err = kube.NewKubeClient("", "")
+	c.KubeClient, err = kube.NewKubeClient("", "")
 
 	return
 }
@@ -59,12 +59,12 @@ func (c *KubeTestPlatform) tearDown() error {
 
 // addComponents adds component to disposable Resource queues.
 func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) error {
-	if c.kubeClient == nil {
+	if c.KubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup")
 	}
 
 	for _, comp := range comps {
-		c.ComponentResources.Add(kube.NewDaprComponent(c.kubeClient, kube.DaprTestNamespace, comp))
+		c.ComponentResources.Add(kube.NewDaprComponent(c.KubeClient, kube.DaprTestNamespace, comp))
 	}
 
 	// setup component resources
@@ -77,7 +77,7 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 
 // addApps adds test apps to disposable App Resource queues.
 func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
-	if c.kubeClient == nil {
+	if c.KubeClient == nil {
 		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}
 
@@ -97,7 +97,7 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		}
 
 		log.Printf("Adding app %v", app)
-		c.AppResources.Add(kube.NewAppManager(c.kubeClient, kube.DaprTestNamespace, app))
+		c.AppResources.Add(kube.NewAppManager(c.KubeClient, kube.DaprTestNamespace, app))
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
@@ -191,4 +191,19 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 		return nil, fmt.Errorf("cannot open connection with no target ports")
 	}
 	return appManager.DoPortForwarding("", targetPorts...)
+}
+
+// GetAppUsage returns the Cpu and Memory usage for the dapr container for a given app
+func (c *KubeTestPlatform) GetAppUsage(appName string) (*AppUsage, error) {
+	app := c.AppResources.FindActiveResource(appName)
+	appManager := app.(*kube.AppManager)
+
+	cpu, mem, err := appManager.GetAppCPUAndMemory()
+	if err != nil {
+		return nil, err
+	}
+	return &AppUsage{
+		CPU:    fmt.Sprintf("%vm", cpu),
+		Memory: fmt.Sprintf("%.2fMb", mem),
+	}, nil
 }

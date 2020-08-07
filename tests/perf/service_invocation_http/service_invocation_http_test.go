@@ -115,7 +115,11 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 
+	usage, err := tr.Platform.GetAppUsage("testapp")
+	require.NoError(t, err)
+
 	t.Logf("dapr test results: %s", string(daprResp))
+	t.Logf("target dapr sidecar consumed %s Cpu and %s of Memory", usage.CPU, usage.Memory)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
@@ -125,9 +129,13 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	err = json.Unmarshal(baselineResp, &baselineResult)
 	require.NoError(t, err)
 
-	daprValue := daprResult.DurationHistogram.Percentiles[1].Value
-	baselineValue := baselineResult.DurationHistogram.Percentiles[1].Value
+	percentiles := map[int]string{1: "75th", 2: "90th"}
 
-	latency := (daprValue - baselineValue) * 1000
-	t.Logf("added latency for 75th percentile: %sms", fmt.Sprintf("%.2f", latency))
+	for k, v := range percentiles {
+		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
+		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
+
+		latency := (daprValue - baselineValue) * 1000
+		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
+	}
 }
