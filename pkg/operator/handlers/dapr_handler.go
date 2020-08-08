@@ -33,6 +33,9 @@ const (
 	defaultMetricsPort              = 9090
 	clusterIPNone                   = "None"
 	daprServiceOwnerField           = ".metadata.controller"
+
+	// deprecated, remove in v1.0 release
+	idAnnotationKey = "dapr.io/id"
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -202,7 +205,11 @@ func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, deploymentKey
 			log.Errorf("unable to delete svc: %s/%s, err: %s", svc.Namespace, svc.Name, err)
 		} else {
 			log.Debugf("deleted service: %s/%s", svc.Namespace, svc.Name)
-			monitoring.RecordServiceDeletedCount(svc.Annotations[appIDAnnotationKey])
+			appID := svc.Annotations[appIDAnnotationKey]
+			if appID == "" {
+				appID = svc.Annotations[idAnnotationKey]
+			}
+			monitoring.RecordServiceDeletedCount(appID)
 		}
 	}
 	return nil
@@ -211,6 +218,10 @@ func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, deploymentKey
 func (h *DaprHandler) getAppID(deployment *appsv1.Deployment) string {
 	annotations := deployment.Spec.Template.ObjectMeta.Annotations
 	if val, ok := annotations[appIDAnnotationKey]; ok && val != "" {
+		return val
+	}
+
+	if val, ok := annotations[idAnnotationKey]; ok && val != "" {
 		return val
 	}
 
