@@ -54,6 +54,7 @@ type SelectorField struct {
 
 type TracingSpec struct {
 	SamplingRate string `json:"samplingRate" yaml:"samplingRate"`
+	Stdout       bool   `json:"stdout" yaml:"stdout"`
 }
 
 type MTLSSpec struct {
