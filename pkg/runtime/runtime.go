@@ -734,7 +734,7 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 
 			binding, err := registry.CreateInputBinding(c.Spec.Type)
 			if err != nil {
-				log.Errorf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				log.Warnf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
@@ -761,7 +761,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
 			if err != nil {
-				log.Errorf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				log.Warnf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
