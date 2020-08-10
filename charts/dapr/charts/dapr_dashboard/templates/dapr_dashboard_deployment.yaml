@@ -41,11 +41,7 @@ spec:
 {{- end }}
       containers:
       - name: dapr-dashboard
-{{- if contains "/" .Values.image.name }}
-        image: "{{ .Values.image.name }}"
-{{- else }}
-        image: "{{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
-{{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         env:
         - name: NAMESPACE
