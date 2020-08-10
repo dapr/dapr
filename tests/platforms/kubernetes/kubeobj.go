@@ -32,10 +32,20 @@ const (
 
 	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests
 	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
+
+	// Environment variable for setting Kubernetes node affinity OS
+	TargetOsEnvVar = "TARGET_OS"
+
+	// Environment variable for setting Kubernetes node affinity ARCH
+	TargetArchEnvVar = "TARGET_ARCH"
 )
 
 // DaprTestNamespace is the default Kubernetes namespace for e2e tests
 var DaprTestNamespace = "dapr-tests"
+
+// Default to linux/amd64 nodes
+var TargetOs = "linux"
+var TargetArch = "amd64"
 
 // buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
 func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
@@ -96,6 +106,28 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 									Name:          "http",
 									Protocol:      apiv1.ProtocolTCP,
 									ContainerPort: DefaultContainerPort,
+								},
+							},
+						},
+					},
+					Affinity: &apiv1.Affinity{
+						NodeAffinity: &apiv1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
+								NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+									{
+										MatchExpressions: []apiv1.NodeSelectorRequirement{
+											{
+												Key: "kubernetes.io/os",
+												Operator: "In",
+												Values: []string{TargetOs},
+											},
+											{
+												Key: "kubernetes.io/arch",
+												Operator: "In",
+												Values: []string{TargetArch},
+											},
+										},
+									},
 								},
 							},
 						},
@@ -171,5 +203,11 @@ func int32Ptr(i int32) *int32 {
 func init() {
 	if ns, ok := os.LookupEnv(DaprTestNamespaceEnvVar); ok {
 		DaprTestNamespace = ns
+	}
+	if os, ok := os.LookupEnv(TargetOsEnvVar); ok {
+		TargetOs = os
+	}
+	if arch, ok := os.LookupEnv(TargetArchEnvVar); ok {
+		TargetArch = arch
 	}
 }
