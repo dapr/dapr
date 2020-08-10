@@ -54,6 +54,10 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
+# Default docker container and e2e test targst.
+TARGET_OS ?= linux
+TARGET_ARCH ?= amd64
+
 ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
 GOLANGCI_LINT:=golangci-lint.exe
