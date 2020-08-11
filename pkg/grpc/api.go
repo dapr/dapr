@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -18,6 +17,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -220,30 +220,28 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		return &runtimev1pb.GetBulkStateResponse{}, err
 	}
 
-	var wg sync.WaitGroup
 	resp := &runtimev1pb.GetBulkStateResponse{}
+	limiter := concurrency.NewConcurrencyLimiter(int(in.Parallelism))
 
 	for _, k := range in.Keys {
-		wg.Add(1)
-
-		go func(k string) {
-			defer wg.Done()
-
+		fn := func(param interface{}) {
 			req := state.GetRequest{
-				Key: a.getModifiedStateKey(k),
+				Key: a.getModifiedStateKey(param.(string)),
 			}
 
 			r, err := store.Get(&req)
 			if err == nil && r != nil && r.Data != nil {
 				resp.Items = append(resp.Items, &runtimev1pb.BulkStateItem{
-					Key:  k,
+					Key:  param.(string),
 					Data: r.Data,
 					Etag: r.ETag,
 				})
 			}
-		}(k)
+		}
+
+		limiter.Execute(fn, k)
 	}
-	wg.Wait()
+	limiter.Wait()
 
 	return resp, nil
 }

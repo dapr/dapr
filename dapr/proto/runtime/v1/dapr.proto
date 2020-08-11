@@ -68,12 +68,16 @@ message GetBulkStateRequest {
   // The name of state store.
   string store_name = 1;
 
-  // The keys to get
+  // The keys to get.
   repeated string keys = 2;
+
+  // The number of parallel operations executed on the state store for a get operation.
+  int32 parallelism = 3;
 }
 
 // GetBulkStateResponse is the response conveying the list of state values.
 message GetBulkStateResponse {
+  // The list of items containing the keys to get values for.
   repeated BulkStateItem items = 1;
 }
 

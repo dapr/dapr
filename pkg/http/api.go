@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -331,31 +332,30 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 
 	bulkResp := []BulkGetResponse{}
-	var wg sync.WaitGroup
+	limiter := concurrency.NewConcurrencyLimiter(int(req.Parallelism))
 
 	for _, k := range req.Keys {
-		wg.Add(1)
-		go func(k string) {
-			defer wg.Done()
-
+		fn := func(param interface{}) {
 			gr := &state.GetRequest{
-				Key:      a.getModifiedStateKey(k),
+				Key:      a.getModifiedStateKey(param.(string)),
 				Metadata: metadata,
 			}
 
 			resp, err := store.Get(gr)
 			if err != nil {
-				log.Debugf("bulk get: error getting key %s: %s", k, err)
+				log.Debugf("bulk get: error getting key %s: %s", param.(string), err)
 			} else if resp != nil && resp.Data != nil {
 				bulkResp = append(bulkResp, BulkGetResponse{
-					Key:  k,
+					Key:  param.(string),
 					Data: jsoniter.RawMessage(resp.Data),
 					ETag: resp.ETag,
 				})
 			}
-		}(k)
+		}
+
+		limiter.Execute(fn, k)
 	}
-	wg.Wait()
+	limiter.Wait()
 
 	b, _ := a.json.Marshal(bulkResp)
 	respondWithJSON(reqCtx, 200, b)
