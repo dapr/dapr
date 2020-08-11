@@ -989,8 +989,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
-
-	if a.stateStores[storeName] == nil {
+	stateStore, ok := a.stateStores[storeName]
+	if !ok {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND:", fmt.Sprintf("state store name: %s", storeName))
 		respondWithError(reqCtx, 401, msg)
 		return
@@ -1009,7 +1009,6 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				Key:      a.getModifiedStateKey(request.Request.Key),
 				ETag:     request.Request.ETag,
 				Metadata: request.Request.Metadata,
-				Options:  state.DeleteStateOption(request.Request.Options),
 			}
 		case "upsert":
 			convertedRequest = state.SetRequest{
@@ -1017,7 +1016,6 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				Value:    request.Request.Value,
 				ETag:     request.Request.ETag,
 				Metadata: request.Request.Metadata,
-				Options:  state.SetStateOption(request.Request.Options),
 			}
 		default:
 			msg := NewErrorResponse("ERR_OPERATION_TYPE", fmt.Sprintf("%v", request.Operation))
@@ -1036,13 +1034,14 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
+	transactionalStore, ok := stateStore.(state.TransactionalStore)
 	if !ok {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf("state store name: %s", storeName))
 		respondWithError(reqCtx, 500, msg)
 		return
 	}
 
+	// TODO: add consistency and concurrency for transactional operation
 	err = transactionalStore.Multi(transactionalRequests)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())

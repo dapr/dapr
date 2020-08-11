@@ -2,8 +2,8 @@ module app
 
 go 1.14
 
-require github.com/dapr/dapr v0.8.1-0.20200617162410-8cf5820af38f
+require github.com/dapr/dapr v0.9.1-0.20200811173032-6c5899e12804
 
 replace k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 
-replace github.com/dapr/dapr => github.com/chinzhiweiblank/dapr 96e0963a61eba12b2fe5f3715ed2b530b212b1bc
+replace github.com/dapr/dapr => github.com/youngbupark/dapr v0.7.1-0.20200811203747-141d9ffe184c

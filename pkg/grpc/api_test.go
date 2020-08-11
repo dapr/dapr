@@ -752,21 +752,3 @@ func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOpt
 	}
 	return &testOptions, expected
 }
-
-func TestGetStateOptions(t *testing.T) {
-	mockAppChannel := new(channelt.MockAppChannel)
-	fakeAPI := &api{
-		id:         "fakeAPI",
-		appChannel: mockAppChannel,
-	}
-	stateOptionTestCase, expected := GenerateStateOptionsTestCase()
-	stateItemTestCase := commonv1pb.StateItem{
-		Key:     "key1",
-		Value:   []byte("1"),
-		Options: stateOptionTestCase,
-	}
-	t.Run("extract state options", func(t *testing.T) {
-		result := fakeAPI.getSetStateOptions(&stateItemTestCase)
-		assert.Equal(t, expected, result)
-	})
-}
