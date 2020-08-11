@@ -347,10 +347,10 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 			if err != nil {
 				log.Debugf("bulk get: error getting key %s: %s", k, err)
 			} else if resp != nil && resp.Data != nil {
-				fmt.Println(string(resp.Data))
 				bulkResp = append(bulkResp, BulkGetResponse{
 					Key:  k,
 					Data: jsoniter.RawMessage(resp.Data),
+					ETag: resp.ETag,
 				})
 			}
 		}(k)

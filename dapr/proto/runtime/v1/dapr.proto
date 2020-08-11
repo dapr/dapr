@@ -77,13 +77,18 @@ message GetBulkStateResponse {
   repeated BulkStateItem items = 1;
 }
 
-// GetStateResponse is the response conveying the state value and etag.
+// BulkStateItem is the response item for a bulk get operation.
+// Return values include the item key, data and etag.
 message BulkStateItem {
   // state item key
   string key = 1;
 
   // The byte array data
   bytes data = 2;
+
+  // The entity tag which represents the specific version of data.
+  // ETag format is defined by the corresponding data store.
+  string etag = 3;
 }
 
 // GetStateResponse is the response conveying the state value and etag.

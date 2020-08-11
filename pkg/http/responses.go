@@ -21,6 +21,7 @@ const (
 type BulkGetResponse struct {
 	Key  string              `json:"key"`
 	Data jsoniter.RawMessage `json:"data"`
+	ETag string              `json:"etag"`
 }
 
 // respondWithJSON overrides the content-type with application/json

@@ -238,6 +238,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				resp.Items = append(resp.Items, &runtimev1pb.BulkStateItem{
 					Key:  k,
 					Data: r.Data,
+					Etag: r.ETag,
 				})
 			}
 		}(k)
