@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -51,6 +52,7 @@ type API interface {
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
+	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
@@ -212,15 +214,54 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	return r, nil
 }
 
-func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
+func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		return &runtimev1pb.GetBulkStateResponse{}, err
+	}
+
+	var wg sync.WaitGroup
+	resp := &runtimev1pb.GetBulkStateResponse{}
+
+	for _, k := range in.Keys {
+		wg.Add(1)
+
+		go func(k string) {
+			defer wg.Done()
+
+			req := state.GetRequest{
+				Key: a.getModifiedStateKey(k),
+			}
+
+			r, err := store.Get(&req)
+			if err == nil && r != nil && r.Data != nil {
+				resp.Items = append(resp.Items, &runtimev1pb.BulkStateItem{
+					Key:  k,
+					Data: r.Data,
+				})
+			}
+		}(k)
+	}
+	wg.Wait()
+
+	return resp, nil
+}
+
+func (a *api) getStateStore(name string) (state.Store, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
 
-	storeName := in.StoreName
-
-	if a.stateStores[storeName] == nil {
+	if a.stateStores[name] == nil {
 		return nil, errors.New("ERR_STATE_STORE_NOT_FOUND")
+	}
+	return a.stateStores[name], nil
+}
+
+func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		return &runtimev1pb.GetStateResponse{}, err
 	}
 
 	req := state.GetRequest{
@@ -230,7 +271,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		},
 	}
 
-	getResponse, err := a.stateStores[storeName].Get(&req)
+	getResponse, err := store.Get(&req)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
@@ -244,14 +285,9 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 }
 
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
-	}
-
-	storeName := in.StoreName
-
-	if a.stateStores[storeName] == nil {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		return &empty.Empty{}, err
 	}
 
 	reqs := []state.SetRequest{}
@@ -271,7 +307,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		reqs = append(reqs, req)
 	}
 
-	err := a.stateStores[storeName].BulkSet(reqs)
+	err = store.BulkSet(reqs)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
 	}
@@ -279,14 +315,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 }
 
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
-	}
-
-	storeName := in.StoreName
-
-	if a.stateStores[storeName] == nil {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		return &empty.Empty{}, err
 	}
 
 	req := state.DeleteRequest{
@@ -300,7 +331,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		}
 	}
 
-	err := a.stateStores[storeName].Delete(&req)
+	err = store.Delete(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
 	}

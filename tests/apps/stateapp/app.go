@@ -16,6 +16,7 @@ import (
 	"path"
 	"time"
 
+	dapr_http "github.com/dapr/dapr/pkg/http"
 	"github.com/gorilla/mux"
 )
 
@@ -23,6 +24,7 @@ const appPort = 3000
 
 // statestore is the name of the store
 const stateURL = "http://localhost:3500/v1.0/state/statestore"
+const bulkStateURL = "http://localhost:3500/v1.0/state/statestore/bulk"
 
 // appState represents a state in this app.
 type appState struct {
@@ -128,6 +130,57 @@ func getAll(states []daprState) ([]daprState, error) {
 	return output, nil
 }
 
+func getBulk(states []daprState) ([]daprState, error) {
+	log.Printf("Processing get bulk request for %d states.", len(states))
+
+	var output = make([]daprState, 0, len(states))
+
+	url, err := createBulkStateURL()
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Fetching bulk state from %s", url)
+
+	req := dapr_http.BulkGetRequest{}
+	for _, s := range states {
+		req.Keys = append(req.Keys, s.Key)
+	}
+
+	b, err := json.Marshal(&req)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := http.Post(url, "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not load values for bulk get from Dapr: %s", err.Error())
+	}
+
+	var resp []dapr_http.BulkGetResponse
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("could not unmarshal bulk get response from Dapr: %s", err.Error())
+	}
+
+	for _, i := range resp {
+		output = append(output, daprState{
+			Key: i.Key,
+			Value: &appState{
+				Data: string(i.Data),
+			},
+		})
+	}
+
+	log.Printf("Result for bulk get request for %d states: %v", len(states), output)
+	return output, nil
+}
+
 func delete(key string) error {
 	log.Printf("Processing delete request for %s.", key)
 	url, err := createStateURL(key)
@@ -195,6 +248,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	case "get":
 		states, err = getAll(req.States)
 		res.States = states
+	case "getbulk":
+		states, err = getBulk(req.States)
+		res.States = states
 	case "delete":
 		err = deleteAll(req.States)
 	default:
@@ -226,6 +282,14 @@ func createStateURL(key string) (string, error) {
 	}
 
 	url.Path = path.Join(url.Path, key)
+	return url.String(), nil
+}
+
+func createBulkStateURL() (string, error) {
+	url, err := url.Parse(bulkStateURL)
+	if err != nil {
+		return "", fmt.Errorf("could not parse %s: %s", bulkStateURL, err.Error())
+	}
 	return url.String(), nil
 }
 

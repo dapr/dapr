@@ -114,7 +114,7 @@ func generateTestCases() []testCase {
 	return []testCase{
 		{
 			// No comma since this will become the name of the test without spaces.
-			"Test get save delete with empty request response for single app and single hop",
+			"Test get getbulk save delete with empty request response for single app and single hop",
 			[]testStep{
 				{
 					"get",
@@ -180,6 +180,11 @@ func generateTestCases() []testCase {
 				},
 				{
 					"get",
+					newRequest(testCaseManyKeys...),
+					newResponse(testCaseManyKeyValues...),
+				},
+				{
+					"getbulk",
 					newRequest(testCaseManyKeys...),
 					newResponse(testCaseManyKeyValues...),
 				},
