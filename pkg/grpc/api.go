@@ -367,7 +367,6 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				Key:      a.getModifiedStateKey(inputReq.States.Key),
 				Metadata: inputReq.States.Metadata,
 				Value:    string(inputReq.States.Value),
-				Options:  a.getSetStateOptions(inputReq.States),
 			}
 			req := state.TransactionalRequest{
 				Operation: state.Upsert,
@@ -379,7 +378,6 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			delReq := state.DeleteRequest{
 				Key:      a.getModifiedStateKey(inputReq.States.Key),
 				Metadata: inputReq.States.Metadata,
-				Options:  state.DeleteStateOption(a.getSetStateOptions(inputReq.States)),
 			}
 			req := state.TransactionalRequest{
 				Operation: state.Delete,
@@ -391,17 +389,10 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		}
 	}
 
+	// TODO: handle consistency and concurrency
 	err := transactionalStore.Multi(requests)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
 	}
 	return &empty.Empty{}, nil
-}
-
-func (a *api) getSetStateOptions(r *commonv1pb.StateItem) (o state.SetStateOption) {
-	if r.Options != nil {
-		o.Consistency = stateConsistencyToString(r.Options.Consistency)
-		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
-	}
-	return
 }
