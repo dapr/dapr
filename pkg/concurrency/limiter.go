@@ -23,7 +23,7 @@ type Limiter struct {
 	numInProgress int32
 }
 
-// NewConcurrencyLimiter allocates a new ConcurrencyLimiter
+// NewLimiter allocates a new ConcurrencyLimiter
 func NewLimiter(limit int) *Limiter {
 	if limit <= 0 {
 		limit = DefaultLimit

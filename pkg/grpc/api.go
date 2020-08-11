@@ -221,7 +221,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	resp := &runtimev1pb.GetBulkStateResponse{}
-	limiter := concurrency.NewConcurrencyLimiter(int(in.Parallelism))
+	limiter := concurrency.NewLimiter(int(in.Parallelism))
 
 	for _, k := range in.Keys {
 		fn := func(param interface{}) {
