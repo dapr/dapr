@@ -16,21 +16,21 @@ const (
 	DefaultLimit = 100
 )
 
-// ConcurrencyLimiter object
-type ConcurrencyLimiter struct {
+// Limiter object
+type Limiter struct {
 	limit         int
 	tickets       chan int
 	numInProgress int32
 }
 
 // NewConcurrencyLimiter allocates a new ConcurrencyLimiter
-func NewConcurrencyLimiter(limit int) *ConcurrencyLimiter {
+func NewLimiter(limit int) *Limiter {
 	if limit <= 0 {
 		limit = DefaultLimit
 	}
 
 	// allocate a limiter instance
-	c := &ConcurrencyLimiter{
+	c := &Limiter{
 		limit:   limit,
 		tickets: make(chan int, limit),
 	}
@@ -47,14 +47,13 @@ func NewConcurrencyLimiter(limit int) *ConcurrencyLimiter {
 // if num of go routines allocated by this instance is < limit
 // launch a new go routine to execute job
 // else wait until a go routine becomes available
-func (c *ConcurrencyLimiter) Execute(job func(param interface{}), param interface{}) int {
+func (c *Limiter) Execute(job func(param interface{}), param interface{}) int {
 	ticket := <-c.tickets
 	atomic.AddInt32(&c.numInProgress, 1)
 	go func(param interface{}) {
 		defer func() {
 			c.tickets <- ticket
 			atomic.AddInt32(&c.numInProgress, -1)
-
 		}()
 
 		// run the job
@@ -67,8 +66,8 @@ func (c *ConcurrencyLimiter) Execute(job func(param interface{}), param interfac
 //
 // IMPORTANT: calling the Wait function while keep calling Execute leads to
 //            un-desired race conditions
-func (c *ConcurrencyLimiter) Wait() {
+func (c *Limiter) Wait() {
 	for i := 0; i < c.limit; i++ {
-		_ = <-c.tickets
+		<-c.tickets
 	}
 }

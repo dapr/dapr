@@ -332,7 +332,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 
 	bulkResp := []BulkGetResponse{}
-	limiter := concurrency.NewConcurrencyLimiter(int(req.Parallelism))
+	limiter := concurrency.NewConcurrencyLimiter(req.Parallelism)
 
 	for _, k := range req.Keys {
 		fn := func(param interface{}) {
