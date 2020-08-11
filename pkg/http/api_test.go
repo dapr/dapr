@@ -1489,6 +1489,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 400, resp.StatusCode, "reading non-existing store should return 401")
 	})
+
 	t.Run("Get state - 204 No Content Found", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/bad-key", storeName)
 		// act
@@ -1496,6 +1497,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
 	})
+
 	t.Run("Get state - Good Key", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
@@ -1504,6 +1506,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
 		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
 	})
+
 	t.Run("Update state - No ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
@@ -1516,6 +1519,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 201, resp.StatusCode, "updating existing key without etag should succeed")
 	})
+
 	t.Run("Update state - Matching ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
@@ -1528,6 +1532,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 201, resp.StatusCode, "updating existing key with matching etag should succeed")
 	})
+
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
@@ -1540,6 +1545,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
+
 	t.Run("Delete state - No ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
@@ -1547,6 +1553,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "updating existing key without etag should succeed")
 	})
+
 	t.Run("Delete state - Matching ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
@@ -1554,6 +1561,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "updating existing key with matching etag should succeed")
 	})
+
 	t.Run("Delete state - Bad ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
@@ -1577,6 +1585,7 @@ func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
 
 	return nil
 }
+
 func (c fakeStateStore) BulkSet(req []state.SetRequest) error {
 	for _, s := range req {
 		err := c.Set(&s)
@@ -1587,6 +1596,7 @@ func (c fakeStateStore) BulkSet(req []state.SetRequest) error {
 
 	return nil
 }
+
 func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 	if req.Key == "good-key" {
 		if req.ETag != "" && req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
@@ -1596,6 +1606,7 @@ func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 	}
 	return errors.New("NOT FOUND")
 }
+
 func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
@@ -1605,10 +1616,12 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	}
 	return nil, nil
 }
+
 func (c fakeStateStore) Init(metadata state.Metadata) error {
 	c.counter = 0
 	return nil
 }
+
 func (c fakeStateStore) Set(req *state.SetRequest) error {
 	if req.Key == "good-key" {
 		if req.ETag != "" && req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
@@ -1617,6 +1630,10 @@ func (c fakeStateStore) Set(req *state.SetRequest) error {
 		return nil
 	}
 	return errors.New("NOT FOUND")
+}
+
+func (c fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
+	return nil
 }
 
 func TestV1SecretEndpoints(t *testing.T) {
@@ -1631,6 +1648,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
+
 	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
 		// act
@@ -1638,6 +1656,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 401, resp.StatusCode, "reading non-existing store should return 401")
 	})
+
 	t.Run("Get secret - 204 No Content Found", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", storeName)
 		// act
@@ -1645,6 +1664,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
 	})
+
 	t.Run("Get secret - Good Key", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", storeName)
 		// act
@@ -1665,6 +1685,7 @@ func (c fakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 	}
 	return secretstores.GetSecretResponse{Data: nil}, nil
 }
+
 func (c fakeSecretStore) Init(metadata secretstores.Metadata) error {
 	return nil
 }
@@ -1692,6 +1713,77 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestV1TransactionEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	fakeStore := fakeStateStore{}
+	fakeStores := map[string]state.Store{
+		"store1": fakeStore,
+	}
+	testAPI := &api{
+		stateStores: fakeStores,
+		json:        jsoniter.ConfigFastest,
+	}
+	fakeServer.StartServer(testAPI.constructStateEndpoints())
+	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
+	storeName := "store1"
+
+	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
+		testTransactionalOperations := []state.TransactionalRequest{
+			{
+				Operation: state.Upsert,
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
+			},
+			{
+				Operation: state.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
+
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 201, resp.StatusCode, "Dapr should return 201")
+	})
+
+	t.Run("Post non-existent state store - 401 No State Store Found", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "non-existent-store")
+		testTransactionalOperations := []state.TransactionalRequest{
+			{
+				Operation: state.Upsert,
+				Request: map[string]interface{}{
+					"key":   "fakeKey1",
+					"value": fakeBodyObject,
+				},
+			},
+			{
+				Operation: state.Delete,
+				Request: map[string]interface{}{
+					"key": "fakeKey1",
+				},
+			},
+		}
+
+		// act
+		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+		// assert
+		assert.Equal(t, 401, resp.StatusCode, "Accessing non-existent state store should return 401")
 	})
 
 	fakeServer.Shutdown()

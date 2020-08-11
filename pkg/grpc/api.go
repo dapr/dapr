@@ -35,8 +35,7 @@ import (
 )
 
 const (
-	daprSeparator = "||"
-
+	daprSeparator        = "||"
 	daprHTTPStatusHeader = "dapr-http-status"
 )
 
@@ -54,6 +53,7 @@ type API interface {
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
+	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -341,4 +341,67 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		response.Data = getResponse.Data
 	}
 	return response, nil
+}
+
+func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+	}
+
+	storeName := in.StoreName
+
+	if a.stateStores[storeName] == nil {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
+	}
+
+	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
+	if !ok {
+		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
+	}
+
+	requests := []state.TransactionalRequest{}
+	for _, inputReq := range in.Requests {
+		switch state.OperationType(inputReq.OperationType) {
+		case state.Upsert:
+			setReq := state.SetRequest{
+				Key:      a.getModifiedStateKey(inputReq.States.Key),
+				Metadata: inputReq.States.Metadata,
+				Value:    string(inputReq.States.Value),
+				Options:  a.getSetStateOptions(inputReq.States),
+			}
+			req := state.TransactionalRequest{
+				Operation: state.Upsert,
+				Request:   setReq,
+			}
+			requests = append(requests, req)
+
+		case state.Delete:
+			delReq := state.DeleteRequest{
+				Key:      a.getModifiedStateKey(inputReq.States.Key),
+				Metadata: inputReq.States.Metadata,
+				Options:  state.DeleteStateOption(a.getSetStateOptions(inputReq.States)),
+			}
+			req := state.TransactionalRequest{
+				Operation: state.Delete,
+				Request:   delReq,
+			}
+			requests = append(requests, req)
+		default:
+			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
+		}
+	}
+
+	err := transactionalStore.Multi(requests)
+	if err != nil {
+		return &empty.Empty{}, fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
+	}
+	return &empty.Empty{}, nil
+}
+
+func (a *api) getSetStateOptions(r *commonv1pb.StateItem) (o state.SetStateOption) {
+	if r.Options != nil {
+		o.Consistency = stateConsistencyToString(r.Options.Consistency)
+		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
+	}
+	return
 }
