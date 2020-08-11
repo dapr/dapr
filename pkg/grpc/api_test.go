@@ -29,7 +29,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
-	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
@@ -742,27 +741,14 @@ func TestExecuteStateTransaction(t *testing.T) {
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
-	retryPolicyOption := commonv1pb.StateRetryPolicy{
-		Threshold: 10,
-		Pattern:   commonv1pb.StateRetryPolicy_RETRY_EXPONENTIAL,
-		Interval: &durpb.Duration{
-			Seconds: 15,
-		},
-	}
 
 	testOptions := commonv1pb.StateOptions{
 		Concurrency: concurrencyOption,
 		Consistency: consistencyOption,
-		RetryPolicy: &retryPolicyOption,
 	}
 	expected := state.SetStateOption{
 		Concurrency: "first-write",
 		Consistency: "strong",
-		RetryPolicy: state.RetryPolicy{
-			Threshold: 10,
-			Pattern:   "exponential",
-			Interval:  time.Second * 15,
-		},
 	}
 	return &testOptions, expected
 }
