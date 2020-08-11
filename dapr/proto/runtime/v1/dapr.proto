@@ -167,8 +167,10 @@ message TransactionalStateRequest {
 
 // ExecuteStateTransactionRequest is the message to execute multiple operations on a specified store.
 message ExecuteStateTransactionRequest {
-  // Name of store
+  // Required. Name of store
   string storeName = 1;
-  // Array of TransactionalStateRequests
+  // Required. Array of TransactionalStateRequests
   repeated TransactionalStateRequest requests = 2;
+  // Options for concurrency and consistency to save the state.
+  common.v1.StateOptions options = 3;
 }
