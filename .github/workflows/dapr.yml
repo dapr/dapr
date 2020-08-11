@@ -71,6 +71,12 @@ jobs:
         with:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}
           path: ${{ env.ARCHIVE_OUTDIR }}
+      - name: upload artifacts - grafana dashboards
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr_grafana_dashboards
+          path: ./grafana/
       - name: docker login
         if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
         run: |
@@ -134,6 +140,11 @@ jobs:
         uses: actions/download-artifact@master
         with:
           name: dapr_darwin_amd64
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: download artifacts - dapr_grafana_dashboards
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_grafana_dashboards
           path: ${{ env.ARTIFACT_DIR }}
       - name: tar release binaries
         run: |
