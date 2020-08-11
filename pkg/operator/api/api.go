@@ -66,7 +66,7 @@ func (a *apiServer) Run(certChain *dapr_credentials.CertChain) {
 }
 
 func (a *apiServer) OnComponentUpdated(component *componentsapi.Component) {
-	a.updateChan <- component
+	// TODO: Process updates from components
 }
 
 // GetConfiguration returns a Dapr configuration
