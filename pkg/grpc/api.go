@@ -359,49 +359,51 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
 	}
 
-	requests := []state.TransactionalRequest{}
-	for _, inputReq := range in.Requests {
+	operations := []state.TransactionalStateOperation{}
+	for _, inputReq := range in.Operations {
+		var req state.TransactionalStateOperation
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
-				Key:      a.getModifiedStateKey(inputReq.States.Key),
-				Metadata: inputReq.States.Metadata,
-				Value:    string(inputReq.States.Value),
-				Options:  a.getSetStateOptions(inputReq.States),
+				Key:   a.getModifiedStateKey(inputReq.Request.Key),
+				Value: string(inputReq.Request.Value),
+				Options: state.SetStateOption{
+					Concurrency: stateConcurrencyToString(inputReq.Request.Options.Concurrency),
+					Consistency: stateConsistencyToString(inputReq.Request.Options.Consistency),
+				},
 			}
-			req := state.TransactionalRequest{
+			req = state.TransactionalStateOperation{
 				Operation: state.Upsert,
 				Request:   setReq,
 			}
-			requests = append(requests, req)
 
 		case state.Delete:
 			delReq := state.DeleteRequest{
-				Key:      a.getModifiedStateKey(inputReq.States.Key),
-				Metadata: inputReq.States.Metadata,
-				Options:  state.DeleteStateOption(a.getSetStateOptions(inputReq.States)),
+				Key: a.getModifiedStateKey(inputReq.Request.Key),
+				Options: state.DeleteStateOption{
+					Concurrency: stateConcurrencyToString(inputReq.Request.Options.Concurrency),
+					Consistency: stateConsistencyToString(inputReq.Request.Options.Consistency),
+				},
 			}
-			req := state.TransactionalRequest{
+			req = state.TransactionalStateOperation{
 				Operation: state.Delete,
 				Request:   delReq,
 			}
-			requests = append(requests, req)
+
 		default:
 			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
 		}
+
+		operations = append(operations, req)
 	}
 
-	err := transactionalStore.Multi(requests)
+	err := transactionalStore.Multi(&state.TransactionalStateRequest{
+		Operations: operations,
+		Metadata:   in.Metadata,
+	})
+
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
 	}
 	return &empty.Empty{}, nil
-}
-
-func (a *api) getSetStateOptions(r *commonv1pb.StateItem) (o state.SetStateOption) {
-	if r.Options != nil {
-		o.Consistency = stateConsistencyToString(r.Options.Consistency)
-		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
-	}
-	return
 }

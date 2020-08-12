@@ -710,10 +710,10 @@ func TestExecuteStateTransaction(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 	_, err := client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
-		Requests: []*runtimev1pb.TransactionalStateRequest{
+		Operations: []*runtimev1pb.TransactionalStateOperation{
 			{
 				OperationType: "upsert",
-				States: &commonv1pb.StateItem{
+				Request: &commonv1pb.StateItem{
 					Key:     "key1",
 					Value:   []byte("1"),
 					Options: stateOptions,
@@ -721,14 +721,14 @@ func TestExecuteStateTransaction(t *testing.T) {
 			},
 			{
 				OperationType: "upsert",
-				States: &commonv1pb.StateItem{
+				Request: &commonv1pb.StateItem{
 					Key:   "key2",
 					Value: []byte("1"),
 				},
 			},
 			{
 				OperationType: "delete",
-				States: &commonv1pb.StateItem{
+				Request: &commonv1pb.StateItem{
 					Key: "key1",
 				},
 			},

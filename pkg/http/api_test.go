@@ -1632,7 +1632,7 @@ func (c fakeStateStore) Set(req *state.SetRequest) error {
 	return errors.New("NOT FOUND")
 }
 
-func (c fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
+func (c fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	return nil
 }
 
@@ -1734,7 +1734,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		testTransactionalOperations := []state.TransactionalRequest{
+		testTransactionalOperations := []state.TransactionalStateOperation{
 			{
 				Operation: state.Upsert,
 				Request: map[string]interface{}{
@@ -1751,7 +1751,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+			Operations: testTransactionalOperations,
+		})
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
@@ -1762,7 +1764,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Post non-existent state store - 401 No State Store Found", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "non-existent-store")
-		testTransactionalOperations := []state.TransactionalRequest{
+		testTransactionalOperations := []state.TransactionalStateOperation{
 			{
 				Operation: state.Upsert,
 				Request: map[string]interface{}{
@@ -1779,7 +1781,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+			Operations: testTransactionalOperations,
+		})
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 		// assert
