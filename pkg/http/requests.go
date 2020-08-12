@@ -11,3 +11,10 @@ type OutputBindingRequest struct {
 	Data      interface{}       `json:"data"`
 	Operation string            `json:"operation"`
 }
+
+// BulkGetRequest is the request object to get a list of values for multiple keys from a state store
+type BulkGetRequest struct {
+	Metadata    map[string]string `json:"metadata"`
+	Keys        []string          `json:"keys"`
+	Parallelism int               `json:"parallelism"`
+}

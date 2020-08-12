@@ -2,6 +2,12 @@ module app
 
 go 1.14
 
-require github.com/dapr/dapr v0.8.1-0.20200617162410-8cf5820af38f
+require (
+	github.com/dapr/dapr v0.9.1-0.20200811173032-6c5899e12804
+	github.com/gorilla/mux v1.7.3
+	sigs.k8s.io/structured-merge-diff/v3 v3.0.0-20200116222232-67a7b8c61874 // indirect
+)
 
 replace k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
+
+replace github.com/dapr/dapr => github.com/yaron2/dapr v0.1.1-0.20200812002621-3d29d35c187a
