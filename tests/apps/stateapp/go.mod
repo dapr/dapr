@@ -8,3 +8,4 @@ require (
 )
 
 replace k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
+replace github.com/dapr/dapr => github.com/yaron2/dapr 3d29d35c187aa1edf893df76a0831bf65574e769
