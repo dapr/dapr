@@ -37,6 +37,13 @@ type daprState struct {
 	Value *appState `json:"value,omitempty"`
 }
 
+// bulkGetResponse is the response object from Dapr for a bulk get operation.
+type bulkGetResponse struct {
+	Key  string      `json:"key"`
+	Data interface{} `json:"data"`
+	ETag string      `json:"etag"`
+}
+
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
 	StartTime int         `json:"start_time,omitempty"`
@@ -162,18 +169,23 @@ func getBulk(states []daprState) ([]daprState, error) {
 		return nil, fmt.Errorf("could not load values for bulk get from Dapr: %s", err.Error())
 	}
 
-	var resp []dapr_http.BulkGetResponse
+	var resp []bulkGetResponse
 	err = json.Unmarshal(body, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal bulk get response from Dapr: %s", err.Error())
 	}
 
 	for _, i := range resp {
+		var as appState
+		b, err := json.Marshal(i.Data)
+		if err != nil {
+			return nil, fmt.Errorf("could not marshal return data: %s", err)
+		}
+		json.Unmarshal(b, &as)
+
 		output = append(output, daprState{
-			Key: i.Key,
-			Value: &appState{
-				Data: string(i.Data),
-			},
+			Key:   i.Key,
+			Value: &as,
 		})
 	}
 
