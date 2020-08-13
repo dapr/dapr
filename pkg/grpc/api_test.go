@@ -76,6 +76,10 @@ func (m *mockGRPCAPI) GetState(ctx context.Context, in *runtimev1pb.GetStateRequ
 	return &runtimev1pb.GetStateResponse{}, nil
 }
 
+func (m *mockGRPCAPI) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
+	return &runtimev1pb.GetBulkStateResponse{}, nil
+}
+
 func (m *mockGRPCAPI) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, nil
 }

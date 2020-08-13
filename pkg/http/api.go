@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -129,6 +130,12 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onDeleteState,
+		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "state/{storeName}/bulk",
+			Version: apiVersionV1,
+			Handler: a.onBulkGetState,
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
@@ -313,11 +320,58 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
+func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
+	store, err := a.getStateStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
+		return
+	}
+
+	var req BulkGetRequest
+	err = a.json.Unmarshal(reqCtx.PostBody(), &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(reqCtx, 400, msg)
+		return
+	}
+
+	metadata := getMetadataFromRequest(reqCtx)
+
+	bulkResp := []BulkGetResponse{}
+	limiter := concurrency.NewLimiter(req.Parallelism)
+
+	for _, k := range req.Keys {
+		fn := func(param interface{}) {
+			gr := &state.GetRequest{
+				Key:      a.getModifiedStateKey(param.(string)),
+				Metadata: metadata,
+			}
+
+			resp, err := store.Get(gr)
+			if err != nil {
+				log.Debugf("bulk get: error getting key %s: %s", param.(string), err)
+			} else if resp != nil && resp.Data != nil {
+				bulkResp = append(bulkResp, BulkGetResponse{
+					Key:  param.(string),
+					Data: jsoniter.RawMessage(resp.Data),
+					ETag: resp.ETag,
+				})
+			}
+		}
+
+		limiter.Execute(fn, k)
+	}
+	limiter.Wait()
+
+	b, _ := a.json.Marshal(bulkResp)
+	respondWithJSON(reqCtx, 200, b)
+}
+
+func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
 		respondWithError(reqCtx, 400, msg)
-		return
+		return nil, fmt.Errorf(msg.Message)
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
@@ -325,6 +379,15 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
 		respondWithError(reqCtx, 400, msg)
+		return nil, fmt.Errorf(msg.Message)
+	}
+	return a.stateStores[storeName], nil
+}
+
+func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
+	store, err := a.getStateStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
@@ -340,7 +403,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	resp, err := a.stateStores[storeName].Get(&req)
+	resp, err := store.Get(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
 		respondWithError(reqCtx, 400, msg)
@@ -354,17 +417,9 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
-		respondWithError(reqCtx, 400, msg)
-		return
-	}
-
-	storeName := reqCtx.UserValue(storeNameParam).(string)
-
-	if a.stateStores[storeName] == nil {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 401, msg)
+	store, err := a.getStateStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
@@ -383,7 +438,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		},
 	}
 
-	err := a.stateStores[storeName].Delete(&req)
+	err = store.Delete(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
 		respondWithError(reqCtx, 500, msg)
@@ -432,22 +487,14 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
-		respondWithError(reqCtx, 400, msg)
-		return
-	}
-
-	storeName := reqCtx.UserValue(storeNameParam).(string)
-
-	if a.stateStores[storeName] == nil {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 401, msg)
+	store, err := a.getStateStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
 	reqs := []state.SetRequest{}
-	err := a.json.Unmarshal(reqCtx.PostBody(), &reqs)
+	err = a.json.Unmarshal(reqCtx.PostBody(), &reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respondWithError(reqCtx, 400, msg)
@@ -458,7 +505,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		reqs[i].Key = a.getModifiedStateKey(r.Key)
 	}
 
-	err = a.stateStores[storeName].BulkSet(reqs)
+	err = store.BulkSet(reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_SAVE", err.Error())
 		respondWithError(reqCtx, 500, msg)
