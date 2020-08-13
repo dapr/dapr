@@ -6,13 +6,14 @@ package runtime
 import (
 	context "context"
 	fmt "fmt"
+	math "math"
+
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/golang/protobuf/proto"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -473,6 +474,7 @@ type PublishEventRequest struct {
 	Topic string `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	// The data which will be published to topic.
 	Data                 []byte   `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	PubsubName           string   `protobuf:"bytes,3,opt,name=pubsub_name,json=pubsubName,proto3" json:"pubsub_name,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -515,6 +517,13 @@ func (m *PublishEventRequest) GetData() []byte {
 		return m.Data
 	}
 	return nil
+}
+
+func (m *PublishEventRequest) GetPubsubName() string {
+	if m != nil {
+		return m.PubsubName
+	}
+	return ""
 }
 
 // InvokeBindingRequest is the message to send data to output bindings

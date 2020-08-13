@@ -36,8 +36,9 @@ type receivedMessagesResponse struct {
 }
 
 type subscription struct {
-	Topic string `json:"topic"`
-	Route string `json:"route"`
+	PubsubName string `json:"pubsubname"`
+	Topic      string `json:"topic"`
+	Route      string `json:"route"`
 }
 
 var receivedMessagesA []string
@@ -58,14 +59,18 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("configureSubscribeHandler called\n")
 
+	pubsubName := "messagebus"
+
 	t := []subscription{
 		{
-			Topic: pubsubA,
-			Route: pubsubA,
+			PubsubName: pubsubName,
+			Topic:      pubsubA,
+			Route:      pubsubA,
 		},
 		{
-			Topic: pubsubB,
-			Route: pubsubB,
+			PubsubName: pubsubName,
+			Topic:      pubsubB,
+			Route:      pubsubB,
 		},
 	}
 	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)

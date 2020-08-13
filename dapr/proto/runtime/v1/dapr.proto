@@ -141,6 +141,8 @@ message PublishEventRequest {
 
   // The data which will be published to topic.
   bytes data = 2;
+
+  string pubsub_name = 3;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings
