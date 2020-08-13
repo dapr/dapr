@@ -47,9 +47,13 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 
 	if appDesc.DaprEnabled {
 		annotationObject = map[string]string{
-			"dapr.io/enabled":  "true",
-			"dapr.io/app-id":   appDesc.AppName,
-			"dapr.io/app-port": fmt.Sprintf("%d", appDesc.AppPort),
+			"dapr.io/enabled":                "true",
+			"dapr.io/app-id":                 appDesc.AppName,
+			"dapr.io/app-port":               fmt.Sprintf("%d", appDesc.AppPort),
+			"dapr.io/sidecar-cpu-limit":      appDesc.DaprCPULimit,
+			"dapr.io/sidecar-cpu-request":    appDesc.DaprCPURequest,
+			"dapr.io/sidecar-memory-limit":   appDesc.DaprMemoryLimit,
+			"dapr.io/sidecar-memory-request": appDesc.DaprMemoryRequest,
 		}
 	}
 	if appDesc.AppProtocol != "" {

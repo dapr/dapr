@@ -16,9 +16,13 @@ import (
 )
 
 const (
-	defaultImageRegistry   = "docker.io/dapriotest"
-	defaultImageTag        = "latest"
-	disableTelemetryConfig = "disable-telemetry"
+	defaultImageRegistry        = "docker.io/dapriotest"
+	defaultImageTag             = "latest"
+	disableTelemetryConfig      = "disable-telemetry"
+	defaultSidecarCPULimit      = "4.0"
+	defaultSidecarMemoryLimit   = "512Mi"
+	defaultSidecarCPURequest    = "0.5"
+	defaultSidecarMemoryRequest = "250Mi"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
@@ -96,6 +100,11 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 			app.Config = disableTelemetryConfig
 		}
 
+		app.DaprCPULimit = c.cpuLimit()
+		app.DaprCPURequest = c.cpuRequest()
+		app.DaprMemoryLimit = c.memoryLimit()
+		app.DaprMemoryRequest = c.memoryRequest()
+
 		log.Printf("Adding app %v", app)
 		c.AppResources.Add(kube.NewAppManager(c.KubeClient, kube.DaprTestNamespace, app))
 	}
@@ -131,6 +140,38 @@ func (c *KubeTestPlatform) disableTelemetry() bool {
 		return false
 	}
 	return disable
+}
+
+func (c *KubeTestPlatform) cpuLimit() string {
+	cpu := os.Getenv("DAPR_SIDECAR_CPU_LIMIT")
+	if cpu != "" {
+		return cpu
+	}
+	return defaultSidecarCPULimit
+}
+
+func (c *KubeTestPlatform) cpuRequest() string {
+	cpu := os.Getenv("DAPR_SIDECAR_CPU_REQUEST")
+	if cpu != "" {
+		return cpu
+	}
+	return defaultSidecarCPURequest
+}
+
+func (c *KubeTestPlatform) memoryRequest() string {
+	mem := os.Getenv("DAPR_SIDECAR_MEMORY_REQUEST")
+	if mem != "" {
+		return mem
+	}
+	return defaultSidecarMemoryRequest
+}
+
+func (c *KubeTestPlatform) memoryLimit() string {
+	mem := os.Getenv("DAPR_SIDECAR_MEMORY_LIMIT")
+	if mem != "" {
+		return mem
+	}
+	return defaultSidecarMemoryLimit
 }
 
 // AcquireAppExternalURL returns the external url for 'name'.

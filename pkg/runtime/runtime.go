@@ -41,6 +41,7 @@ import (
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/logger"
@@ -207,6 +208,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return fmt.Errorf("failed to determine host address: %s", err)
+	}
+
+	if a.globalConfig.Spec.TracingSpec.Stdout {
+		trace.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
 
 	err = a.createAppChannel()
@@ -729,7 +734,7 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 
 			binding, err := registry.CreateInputBinding(c.Spec.Type)
 			if err != nil {
-				log.Errorf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				log.Warnf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
@@ -756,7 +761,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
 			if err != nil {
-				log.Errorf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				log.Warnf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
