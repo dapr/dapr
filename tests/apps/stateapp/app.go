@@ -16,7 +16,6 @@ import (
 	"path"
 	"time"
 
-	dapr_http "github.com/dapr/dapr/pkg/http"
 	"github.com/gorilla/mux"
 )
 
@@ -35,6 +34,13 @@ type appState struct {
 type daprState struct {
 	Key   string    `json:"key,omitempty"`
 	Value *appState `json:"value,omitempty"`
+}
+
+// bulkGetRequest is the bulk get request object for the test
+type bulkGetRequest struct {
+	Metadata    map[string]string `json:"metadata"`
+	Keys        []string          `json:"keys"`
+	Parallelism int               `json:"parallelism"`
 }
 
 // bulkGetResponse is the response object from Dapr for a bulk get operation.
@@ -148,7 +154,7 @@ func getBulk(states []daprState) ([]daprState, error) {
 	}
 	log.Printf("Fetching bulk state from %s", url)
 
-	req := dapr_http.BulkGetRequest{}
+	req := bulkGetRequest{}
 	for _, s := range states {
 		req.Keys = append(req.Keys, s.Key)
 	}
