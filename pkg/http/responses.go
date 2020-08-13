@@ -8,6 +8,7 @@ package http
 import (
 	"encoding/json"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/valyala/fasthttp"
 )
 
@@ -15,6 +16,13 @@ const (
 	jsonContentTypeHeader = "application/json"
 	etagHeader            = "ETag"
 )
+
+// BulkGetResponse is the response object for a state bulk get operation
+type BulkGetResponse struct {
+	Key  string              `json:"key"`
+	Data jsoniter.RawMessage `json:"data"`
+	ETag string              `json:"etag"`
+}
 
 // respondWithJSON overrides the content-type with application/json
 func respondWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte) {

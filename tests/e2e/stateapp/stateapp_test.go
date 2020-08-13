@@ -114,7 +114,7 @@ func generateTestCases() []testCase {
 	return []testCase{
 		{
 			// No comma since this will become the name of the test without spaces.
-			"Test get save delete with empty request response for single app and single hop",
+			"Test get getbulk save delete with empty request response for single app and single hop",
 			[]testStep{
 				{
 					"get",
@@ -184,6 +184,11 @@ func generateTestCases() []testCase {
 					newResponse(testCaseManyKeyValues...),
 				},
 				{
+					"getbulk",
+					newRequest(testCaseManyKeys...),
+					newResponse(testCaseManyKeyValues...),
+				},
+				{
 					"delete",
 					newRequest(testCaseManyKeys...),
 					emptyResponse,
@@ -241,8 +246,20 @@ func TestStateApp(t *testing.T) {
 
 				var appResp requestResponse
 				err = json.Unmarshal(resp, &appResp)
+
 				require.NoError(t, err)
-				require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
+
+				for _, er := range step.expectedResponse.States {
+					for _, ri := range appResp.States {
+						if er.Key == ri.Key {
+							require.True(t, reflect.DeepEqual(er.Key, ri.Key))
+
+							if er.Value != nil {
+								require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
+							}
+						}
+					}
+				}
 			}
 		})
 	}
