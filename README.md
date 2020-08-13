@@ -70,12 +70,10 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 
 See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
 
-## Samples
+## Quickstarts and Samples
 
-* [Run Dapr locally](https://github.com/dapr/samples/tree/master/1.hello-world)
-* [Run Dapr in Kubernetes](https://github.com/dapr/samples/tree/master/2.hello-kubernetes)
-
-See [Samples](https://github.com/dapr/samples) for additional samples.
+* See the [quickstarts repository](https://github.com/dapr/quickstarts) for code examples that can help you get started with Dapr. 
+* Explore additional samples in the Dapr [samples repository](https://github.com/dapr/samples). 
 
 ## Community
 We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls. Here is how to get involved:
@@ -136,7 +134,8 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 | [Dapr](https://github.com/dapr/dapr) | The main repository that you are currently in. Contains the Dapr runtime code and overview documentation.
 | [CLI](https://github.com/dapr/cli) | The Dapr CLI allows you to setup Dapr on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Dapr instances.
 | [Docs](https://github.com/dapr/docs) | The documentation repository for Dapr.
-| [Samples](https://github.com/dapr/samples) | This repository contains a series of samples that highlight Dapr capabilities.
+| [Quickstarts](https://github.com/dapr/quickstarts) | This repository contains a series of simple code samples that highlight the main Dapr capabilities
+| [Samples](https://github.com/dapr/samples) | This repository holds community maintained samples for various Dapr use cases.
 | [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications. 
 | [Dashboard ](https://github.com/dapr/dashboard) | General purpose dashboard for Dapr 
 | [Go-sdk](https://github.com/dapr/go-sdk) | Dapr SDK for Go

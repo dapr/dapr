@@ -2,8 +2,8 @@ Thank you for installing Dapr: High-performance, lightweight serverless runtime 
 
 Your release is named {{ .Release.Name }}.
 
-To get started with Dapr, we recommend using our samples page:
-https://github.com/dapr/samples
+To get started with Dapr, we recommend using our quickstarts:
+https://github.com/dapr/quickstarts
 
 For more information on running Dapr, visit:
 https://dapr.io
