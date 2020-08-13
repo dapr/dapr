@@ -3,7 +3,7 @@ module app
 go 1.14
 
 require (
-	github.com/dapr/dapr v0.9.1-0.20200811173032-6c5899e12804
+	github.com/dapr/dapr v0.9.1-0.20200812210155-e3f5ee0b162d
 	github.com/gorilla/mux v1.7.3
 )
 
