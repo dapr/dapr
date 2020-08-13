@@ -54,3 +54,7 @@ replace (
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )
 
+<<<<<<< HEAD
+=======
+replace github.com/dapr/components-contrib => ../components-contrib
+>>>>>>> Multi pubsub
