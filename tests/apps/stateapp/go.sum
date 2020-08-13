@@ -124,8 +124,8 @@ github.com/coreos/pkg v0.0.0-20160727233714-3ac0863d7acf/go.mod h1:E3G3o1h8I7cfc
 github.com/coreos/pkg v0.0.0-20180108230652-97fdf19511ea/go.mod h1:E3G3o1h8I7cfcXa63jLwjI0eiQQMgzzUDFVpN/nH/eA=
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
-github.com/dapr/components-contrib v0.2.5-0.20200724001326-5892feca63f7 h1:5wwh9jI5gIgmxhYfV/syl7/TRQah8z6hwRXeZpGf904=
-github.com/dapr/components-contrib v0.2.5-0.20200724001326-5892feca63f7/go.mod h1:JSMSHTHQEcLgv7MZKIbKbHXgudogZfIjEkZMmn7nJwQ=
+github.com/dapr/components-contrib v0.2.5-0.20200812172248-3efcb4043035 h1:BIu+ZvP/g4phWJ49f3VG4PVe4m80rY2ylgIBrIWCRKQ=
+github.com/dapr/components-contrib v0.2.5-0.20200812172248-3efcb4043035/go.mod h1:JSMSHTHQEcLgv7MZKIbKbHXgudogZfIjEkZMmn7nJwQ=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -577,8 +577,8 @@ github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c/go.mod h1:lB8K/P019DLNhe
 github.com/xdg/stringprep v1.0.0/go.mod h1:Jhud4/sHMO4oL310DaZAKk9ZaJ08SJfe+sJh0HrGL1Y=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77/go.mod h1:aYKd//L2LvnjZzWKhF00oedf4jCCReLcmhLdhm1A27Q=
-github.com/youngbupark/dapr v0.7.1-0.20200811203747-141d9ffe184c h1:tkGwfItEboPNiMtAxY/i9uGRPxiZOo6WibkXZNzJ+1A=
-github.com/youngbupark/dapr v0.7.1-0.20200811203747-141d9ffe184c/go.mod h1:0u4MhfYs0p/G6FuSwWwUvfCQj7YhFSmqu+6VkmvjWd4=
+github.com/youngbupark/dapr v0.7.1-0.20200813005231-957848d84da6 h1:IaCnMEwRpV/fUVjmhGCqpiWd2BwcCPwzhk2Hz+DgW54=
+github.com/youngbupark/dapr v0.7.1-0.20200813005231-957848d84da6/go.mod h1:D8KhLJ0ZlUIdVv5Zfhrj1/S5LrbiJIjchVPAY3Qn+KI=
 github.com/yuin/gopher-lua v0.0.0-20200603152657-dc2b0ca8b37e/go.mod h1:gqRgreBUhTSL0GeU64rtZ3Uq3wtjOa/TB2YfrtkCbVQ=
 github.com/zenazn/goji v0.9.0/go.mod h1:7S9M489iMyHBNxwZnk9/EHS098H4/F6TATF2mIxtB1Q=
 go.etcd.io/bbolt v1.3.3/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
