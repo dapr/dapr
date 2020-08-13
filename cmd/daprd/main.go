@@ -381,7 +381,7 @@ func main() {
 				return handler
 			}),
 			http_middleware_loader.New("oauth2clientcredentials", func(metadata middleware.Metadata) http_middleware.Middleware {
-				handler, _ := oauth2clientcredentials.NewOAuth2ClientCredentialsMiddleware().GetHandler(metadata)
+				handler, _ := oauth2clientcredentials.NewOAuth2ClientCredentialsMiddleware(log).GetHandler(metadata)
 				return handler
 			}),
 			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) http_middleware.Middleware {
