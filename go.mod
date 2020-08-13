@@ -7,6 +7,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
+	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dapr/components-contrib v0.2.5-0.20200724001326-5892feca63f7
 	github.com/fasthttp/router v1.0.4
 	github.com/fsnotify/fsnotify v1.4.7
@@ -19,7 +20,9 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.3.2
+	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/phayes/freeport v0.0.0-20171002181615-b8543db493a5
+	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/prometheus/client_golang v1.2.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
@@ -31,6 +34,8 @@ require (
 	go.uber.org/zap v1.13.0 // indirect
 	google.golang.org/genproto v0.0.0-20200122232147-0452cf42e150
 	google.golang.org/grpc v1.26.0
+	gopkg.in/couchbaselabs/gocbconnstr.v1 v1.0.4 // indirect
+	gopkg.in/couchbaselabs/jsonx.v1 v1.0.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.17.8
@@ -49,3 +54,5 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )
+
+replace github.com/dapr/components-contrib => ../components-contrib

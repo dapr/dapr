@@ -20,6 +20,7 @@ const (
 
 func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) []Subscription {
 	var subscriptions []Subscription
+
 	req := invokev1.NewInvokeMethodRequest("dapr/subscribe")
 	req.WithHTTPExtension(http.MethodGet, "")
 	req.WithRawData(nil, invokev1.JSONContentType)
@@ -43,6 +44,8 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) []Subsc
 	default:
 		log.Warnf("app returned http status code %v from subscription endpoint", resp.Status().Code)
 	}
+
+	log.Debugf("app responded with subscriptions %v", subscriptions)
 	return filterSubscriptions(subscriptions, log)
 }
 
@@ -68,8 +71,9 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 		} else {
 			for _, s := range resp.Subscriptions {
 				subscriptions = append(subscriptions, Subscription{
-					Topic:    s.GetTopic(),
-					Metadata: s.GetMetadata(),
+					PubsubName: s.PubsubName,
+					Topic:      s.GetTopic(),
+					Metadata:   s.GetMetadata(),
 				})
 			}
 		}

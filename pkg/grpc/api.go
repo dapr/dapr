@@ -137,18 +137,19 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	if in.Data != nil {
 		body = in.Data
 	}
-
+	pubsubName := in.PubsubName
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, body)
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
 	}
 
 	req := pubsub.PublishRequest{
-		Topic: topic,
-		Data:  b,
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Data:       b,
 	}
 
 	err = a.publishFn(&req)
