@@ -40,11 +40,16 @@ const (
 	TargetArchEnvVar = "TARGET_ARCH"
 )
 
-// DaprTestNamespace is the default Kubernetes namespace for e2e tests
-var DaprTestNamespace = "dapr-tests"
+var (
+	// DaprTestNamespace is the default Kubernetes namespace for e2e tests
+	DaprTestNamespace = "dapr-tests"
 
-var TargetOs = "linux"
-var TargetArch = "amd64"
+	// TargetOs is default os affinity for Kubernetes nodes
+	TargetOs = "linux"
+
+	// TargetArch is the default architecture affinity for Kubernetes nodes
+	TargetArch = "amd64"
+)
 
 // buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
 func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
