@@ -50,3 +50,4 @@ spec:
               fieldPath: metadata.namespace
         ports:
         - containerPort: 8080
+      serviceAccountName: dashboard-reader
