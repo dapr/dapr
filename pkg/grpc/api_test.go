@@ -15,6 +15,7 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/state"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -89,6 +90,10 @@ func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *runtimev1pb.DeleteSta
 
 func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	return &runtimev1pb.GetSecretResponse{}, nil
+}
+
+func (m *mockGRPCAPI) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
+	return &empty.Empty{}, nil
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
@@ -695,4 +700,59 @@ func TestInvokeBinding(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 	_, err := client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{})
 	assert.Nil(t, err)
+}
+
+func TestExecuteStateTransaction(t *testing.T) {
+	stateOptions, _ := GenerateStateOptionsTestCase()
+	port, _ := freeport.GetFreePort()
+
+	server := startTestServer(port)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	_, err := client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
+		Operations: []*runtimev1pb.TransactionalStateOperation{
+			{
+				OperationType: "upsert",
+				Request: &commonv1pb.StateItem{
+					Key:     "key1",
+					Value:   []byte("1"),
+					Options: stateOptions,
+				},
+			},
+			{
+				OperationType: "upsert",
+				Request: &commonv1pb.StateItem{
+					Key:   "key2",
+					Value: []byte("1"),
+				},
+			},
+			{
+				OperationType: "delete",
+				Request: &commonv1pb.StateItem{
+					Key: "key1",
+				},
+			},
+		},
+	})
+	server.Stop()
+	assert.Nil(t, err)
+}
+
+func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
+	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
+	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
+
+	testOptions := commonv1pb.StateOptions{
+		Concurrency: concurrencyOption,
+		Consistency: consistencyOption,
+	}
+	expected := state.SetStateOption{
+		Concurrency: "first-write",
+		Consistency: "strong",
+	}
+	return &testOptions, expected
 }
