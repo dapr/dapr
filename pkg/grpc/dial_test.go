@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/dapr/dapr/pkg/modes"
@@ -10,7 +11,11 @@ import (
 func TestGetDialAddress(t *testing.T) {
 	t.Run("kubernetes mode", func(t *testing.T) {
 		m := GetDialAddressPrefix(modes.KubernetesMode)
-		assert.Equal(t, "dns:///", m)
+		if runtime.GOOS != "windows" {
+			assert.Equal(t, "dns:///", m)
+		} else {
+			assert.Equal(t, "", m)
+		}
 	})
 
 	t.Run("self hosted mode", func(t *testing.T) {
