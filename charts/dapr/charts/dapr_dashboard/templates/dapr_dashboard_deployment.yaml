@@ -18,6 +18,7 @@ spec:
       labels:
         app: dapr-dashboard
     spec:
+      serviceAccountName: dashboard-reader
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
