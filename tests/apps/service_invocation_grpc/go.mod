@@ -3,7 +3,7 @@ module app
 go 1.14
 
 require (
-	github.com/dapr/dapr v0.9.1-0.20200812210155-e3f5ee0b162d
+	github.com/dapr/dapr v0.9.1-0.20200814002316-9d6fad285504
 	github.com/golang/protobuf v1.3.3
 	go.opencensus.io v0.22.3
 	google.golang.org/grpc v1.26.0
