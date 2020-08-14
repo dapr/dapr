@@ -73,6 +73,7 @@ const (
 	consistencyParam     = "consistency"
 	concurrencyParam     = "concurrency"
 	daprSeparator        = "||"
+	pubsubnameparam      = "pubsubname"
 )
 
 // NewAPI returns a new API
@@ -943,7 +944,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	pubsubName := reqCtx.UserValue("pubsubname").(string)
+	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	topic := reqCtx.UserValue(topicParam).(string)
 	body := reqCtx.PostBody()
 

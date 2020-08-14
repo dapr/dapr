@@ -366,7 +366,7 @@ func (a *DaprRuntime) beginPubSub() error {
 			for topic, _ := range v.routes {
 				allowed := a.isPubSubOperationAllowed(pubsubName, topic, a.scopedSubscriptions[pubsubName])
 				if !allowed {
-					log.Warnf("subscription to topic %s is not allowed", topic)
+					log.Warnf("subscription to topic %s on pubsub %s is not allowed", topic, pubsubName)
 					continue
 				}
 
@@ -862,7 +862,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 
 	for _, s := range subscriptions {
 		if _, ok := a.pubSubs[s.PubsubName]; !ok {
-			msg := fmt.Sprintf("cannot subscribe to pubsub %s - does not exist", s.PubsubName)
+			msg := fmt.Sprintf("cannot subscribe to pubsub %s - was a component for it created?", s.PubsubName)
 			return nil, errors.New(msg)
 		}
 
