@@ -43,7 +43,6 @@ const (
 // DaprTestNamespace is the default Kubernetes namespace for e2e tests
 var DaprTestNamespace = "dapr-tests"
 
-// Default to linux/amd64 nodes
 var TargetOs = "linux"
 var TargetArch = "amd64"
 
@@ -117,14 +116,14 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 									{
 										MatchExpressions: []apiv1.NodeSelectorRequirement{
 											{
-												Key: "kubernetes.io/os",
+												Key:      "kubernetes.io/os",
 												Operator: "In",
-												Values: []string{TargetOs},
+												Values:   []string{TargetOs},
 											},
 											{
-												Key: "kubernetes.io/arch",
+												Key:      "kubernetes.io/arch",
 												Operator: "In",
-												Values: []string{TargetArch},
+												Values:   []string{TargetArch},
 											},
 										},
 									},

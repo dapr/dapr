@@ -62,7 +62,7 @@ spec:
           runAsUser: 1000
 {{- end }}
         command:
-        - "./injector"
+        - "/injector"
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
