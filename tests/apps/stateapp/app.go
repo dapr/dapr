@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dapr/components-contrib/state"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
@@ -256,29 +255,18 @@ func deleteAll(states []daprState) error {
 	return nil
 }
 
-func ExecuteTransaction(states []daprState) error {
-	transactionalOperations := []state.TransactionalStateOperation{}
-	var operation state.OperationType
+func executeTransaction(states []daprState) error {
+	var transactionalOperations []map[string]interface{}
 
-	for _, daprState := range states {
-		switch daprState.OperationType {
-		case "upsert":
-			operation = state.Upsert
-		case "delete":
-			operation = state.Delete
-		default:
-			return fmt.Errorf("operation type %s not supported", daprState.OperationType)
-		}
-
-		transactionalRequest := state.TransactionalStateOperation{
-			Operation: operation,
-			Request:   daprState,
-		}
-		transactionalOperations = append(transactionalOperations, transactionalRequest)
+	for _, s := range states {
+		transactionalOperations = append(transactionalOperations, map[string]interface{}{
+			"operation": s.OperationType,
+			"request":   s,
+		})
 	}
 
-	jsonValue, err := json.Marshal(state.TransactionalStateRequest{
-		Operations: transactionalOperations,
+	jsonValue, err := json.Marshal(map[string]interface{}{
+		"operations": transactionalOperations,
 	})
 	if err != nil {
 		log.Printf("Could save transactional operations in Dapr: %s", err.Error())
@@ -332,7 +320,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	case "delete":
 		err = deleteAll(req.States)
 	case "transact":
-		err = ExecuteTransaction(req.States)
+		err = executeTransaction(req.States)
 	default:
 		err = fmt.Errorf("invalid URI: %s", uri)
 		statusCode = http.StatusBadRequest
@@ -418,11 +406,12 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.TransactionalStateOperation {
 	var transactionalStateRequests []*runtimev1pb.TransactionalStateOperation
 	for _, daprState := range daprStates {
+		val, _ := json.Marshal(daprState.Value)
 		transactionalStateRequests = append(transactionalStateRequests, &runtimev1pb.TransactionalStateOperation{
 			OperationType: daprState.OperationType,
 			Request: &commonv1pb.StateItem{
 				Key:   daprState.Key,
-				Value: []byte(daprState.Value.Data),
+				Value: val,
 			},
 		})
 	}
