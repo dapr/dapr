@@ -377,7 +377,7 @@ func TestStateTransactionApps(t *testing.T) {
 							require.True(t, reflect.DeepEqual(er.Key, ri.Key))
 
 							if er.Value != nil {
-								require.NotNil(ri.Value)
+								require.NotNil(t, ri.Value)
 								require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
 							}
 						}
