@@ -168,7 +168,7 @@ func (g *grpcMetrics) ClientRequestSent(ctx context.Context, method string, cont
 	if g.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method),
+			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method),
 			g.clientSentBytes.M(contentSize))
 	}
 
@@ -180,7 +180,7 @@ func (g *grpcMetrics) ClientRequestRecieved(ctx context.Context, method, status 
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			ctx,
-			diag_utils.WithTags(appIDKey, g.appID, KeyServerMethod, method, KeyServerStatus, status),
+			diag_utils.WithTags(appIDKey, g.appID, KeyClientMethod, method, KeyClientStatus, status),
 			g.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx, diag_utils.WithTags(appIDKey, g.appID),

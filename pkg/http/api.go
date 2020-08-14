@@ -140,6 +140,12 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onBulkGetState,
 		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "state/{storeName}/transaction",
+			Version: apiVersionV1,
+			Handler: a.onPostStateTransaction,
+		},
 	}
 }
 
@@ -1015,4 +1021,44 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	})
 
 	return metadata
+}
+
+func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
+	var err error
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
+		respondWithError(reqCtx, 400, msg)
+		return
+	}
+
+	storeName := reqCtx.UserValue(storeNameParam).(string)
+	stateStore, ok := a.stateStores[storeName]
+	if !ok {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND:", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(reqCtx, 401, msg)
+		return
+	}
+
+	transactionalStore, ok := stateStore.(state.TransactionalStore)
+	if !ok {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(reqCtx, 500, msg)
+		return
+	}
+
+	body := reqCtx.PostBody()
+	var request state.TransactionalStateRequest
+	if err = a.json.Unmarshal(body, &request); err != nil {
+		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
+		respondWithError(reqCtx, 400, msg)
+		return
+	}
+
+	err = transactionalStore.Multi(&request)
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
+		respondWithError(reqCtx, 500, msg)
+	} else {
+		respondEmpty(reqCtx, 201)
+	}
 }
