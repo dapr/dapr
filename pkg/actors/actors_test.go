@@ -68,7 +68,7 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
+func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	return nil
 }
 

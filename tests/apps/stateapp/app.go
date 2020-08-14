@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,16 +15,25 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"time"
 
+	"github.com/dapr/components-contrib/state"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+
 	"github.com/gorilla/mux"
+	"google.golang.org/grpc"
 )
 
-const appPort = 3000
+const (
+	appPort = 3000
 
-// statestore is the name of the store
-const stateURL = "http://localhost:3500/v1.0/state/statestore"
-const bulkStateURL = "http://localhost:3500/v1.0/state/statestore/bulk"
+	// statestore is the name of the store
+	stateURL            = "http://localhost:3500/v1.0/state/statestore"
+	bulkStateURL        = "http://localhost:3500/v1.0/state/statestore/bulk"
+	stateTransactionURL = "http://localhost:3500/v1.0/state/statestore/transaction"
+)
 
 // appState represents a state in this app.
 type appState struct {
@@ -32,8 +42,9 @@ type appState struct {
 
 // daprState represents a state in Dapr.
 type daprState struct {
-	Key   string    `json:"key,omitempty"`
-	Value *appState `json:"value,omitempty"`
+	Key           string    `json:"key,omitempty"`
+	Value         *appState `json:"value,omitempty"`
+	OperationType string    `json:"operationType,omitempty"`
 }
 
 // bulkGetRequest is the bulk get request object for the test
@@ -56,6 +67,10 @@ type requestResponse struct {
 	EndTime   int         `json:"end_time,omitempty"`
 	States    []daprState `json:"states,omitempty"`
 	Message   string      `json:"message,omitempty"`
+}
+
+type appResponse struct {
+	Message string `json:"message,omitempty"`
 }
 
 // indexHandler is the handler for root path
@@ -115,7 +130,12 @@ func get(key string) (*appState, error) {
 	// a key not found in Dapr will return 200 but an empty response.
 	err = json.Unmarshal(body, &state)
 	if err != nil {
-		return nil, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
+		var stateData string
+		stringMarshalErr := json.Unmarshal(body, &stateData)
+		if stringMarshalErr != nil {
+			return nil, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
+		}
+		state.Data = stateData
 	}
 
 	return state, nil
@@ -236,8 +256,48 @@ func deleteAll(states []daprState) error {
 	return nil
 }
 
-// handles all APIs
-func handler(w http.ResponseWriter, r *http.Request) {
+func ExecuteTransaction(states []daprState) error {
+	transactionalOperations := []state.TransactionalStateOperation{}
+	var operation state.OperationType
+
+	for _, daprState := range states {
+		switch daprState.OperationType {
+		case "upsert":
+			operation = state.Upsert
+		case "delete":
+			operation = state.Delete
+		default:
+			return fmt.Errorf("operation type %s not supported", daprState.OperationType)
+		}
+
+		transactionalRequest := state.TransactionalStateOperation{
+			Operation: operation,
+			Request:   daprState,
+		}
+		transactionalOperations = append(transactionalOperations, transactionalRequest)
+	}
+
+	jsonValue, err := json.Marshal(state.TransactionalStateRequest{
+		Operations: transactionalOperations,
+	})
+	if err != nil {
+		log.Printf("Could save transactional operations in Dapr: %s", err.Error())
+		return err
+	}
+
+	log.Printf("Posting state to %s with '%s'", stateTransactionURL, jsonValue)
+	res, err := http.Post(stateTransactionURL, "application/json", bytes.NewBuffer(jsonValue))
+	if err != nil {
+		return err
+	}
+
+	res.Body.Close()
+
+	return nil
+}
+
+// handles all APIs for HTTP calls
+func httpHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing request for %s", r.URL.RequestURI())
 
 	// Retrieve request body contents
@@ -271,6 +331,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		res.States = states
 	case "delete":
 		err = deleteAll(req.States)
+	case "transact":
+		err = ExecuteTransaction(req.States)
 	default:
 		err = fmt.Errorf("invalid URI: %s", uri)
 		statusCode = http.StatusBadRequest
@@ -291,6 +353,80 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(res)
+}
+
+// Handles State TransasctionRequest for GRPC
+func grpcHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Processing request for ", r.URL.RequestURI())
+	log.Println(fmt.Sprintf("%s", r.Body))
+	// Retrieve request body contents
+	var req requestResponse
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		log.Printf("Could not parse request body: %s", err.Error())
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(requestResponse{
+			Message: err.Error(),
+		})
+		return
+	}
+
+	var res requestResponse
+	res.StartTime = epoch()
+	var statusCode = http.StatusOK
+
+	daprPort := 50001
+	daprAddress := fmt.Sprintf("localhost:%s", strconv.Itoa(daprPort))
+	log.Printf("dapr grpc address is %s\n", daprAddress)
+	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
+
+	if err != nil {
+		log.Printf(err.Error())
+	}
+	defer conn.Close()
+
+	client := runtimev1pb.NewDaprClient(conn)
+	cmd := mux.Vars(r)["command"]
+	switch cmd {
+	case "transact":
+		_, err = client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
+			StoreName:  "statestore",
+			Operations: daprState2TransactionalStateRequest(req.States),
+		})
+		if err != nil {
+			statusCode = http.StatusInternalServerError
+			log.Printf("GRPC Execute State Transaction had error %s\n", err.Error())
+			res.Message = err.Error()
+		}
+	default:
+		statusCode = http.StatusInternalServerError
+		unsupportedCommandMessage := fmt.Sprintf("GRPC protocol command %s not supported", cmd)
+		log.Printf(unsupportedCommandMessage)
+		res.Message = unsupportedCommandMessage
+	}
+
+	res.EndTime = epoch()
+	if statusCode != http.StatusOK {
+		log.Printf("Error status code %v: %v", statusCode, res.Message)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(res)
+}
+
+func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.TransactionalStateOperation {
+	var transactionalStateRequests []*runtimev1pb.TransactionalStateOperation
+	for _, daprState := range daprStates {
+		transactionalStateRequests = append(transactionalStateRequests, &runtimev1pb.TransactionalStateOperation{
+			OperationType: daprState.OperationType,
+			Request: &commonv1pb.StateItem{
+				Key:   daprState.Key,
+				Value: []byte(daprState.Value.Data),
+			},
+		})
+	}
+	return transactionalStateRequests
 }
 
 func createStateURL(key string) (string, error) {
@@ -321,8 +457,8 @@ func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/test/{command}", handler).Methods("POST")
-
+	router.HandleFunc("/test/http/{command}", httpHandler).Methods("POST")
+	router.HandleFunc("/test/grpc/{command}", grpcHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

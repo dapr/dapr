@@ -86,7 +86,7 @@ spec:
             mountPath: /var/run/dapr/credentials
             readOnly: true
         command:
-        - "./sentry"
+        - "/sentry"
         args:
         - "--log-level"
         - {{ .Values.logLevel }}

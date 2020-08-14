@@ -374,7 +374,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
-	requests := []state.TransactionalRequest{}
+	operations := []state.TransactionalStateOperation{}
 	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
 	metadata := map[string]string{metadataPartitionKey: partitionKey}
 
@@ -387,7 +387,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 				return err
 			}
 			key := a.constructActorStateKey(req.ActorType, req.ActorID, upsert.Key)
-			requests = append(requests, state.TransactionalRequest{
+			operations = append(operations, state.TransactionalStateOperation{
 				Request: state.SetRequest{
 					Key:      key,
 					Value:    upsert.Value,
@@ -403,7 +403,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 			}
 
 			key := a.constructActorStateKey(req.ActorType, req.ActorID, delete.Key)
-			requests = append(requests, state.TransactionalRequest{
+			operations = append(operations, state.TransactionalStateOperation{
 				Request: state.DeleteRequest{
 					Key:      key,
 					Metadata: metadata,
@@ -420,7 +420,10 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		return errors.New(incompatibleStateStore)
 	}
 
-	err := transactionalStore.Multi(requests)
+	err := transactionalStore.Multi(&state.TransactionalStateRequest{
+		Operations: operations,
+		Metadata:   metadata,
+	})
 	return err
 }
 

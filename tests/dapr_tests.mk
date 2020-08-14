@@ -27,7 +27,7 @@ DAPR_TEST_REGISTRY=$(DAPR_REGISTRY)
 endif
 
 ifeq ($(DAPR_TEST_TAG),)
-DAPR_TEST_TAG=$(DAPR_TAG)
+DAPR_TEST_TAG=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 endif
 
 ifeq ($(DAPR_TEST_ENV),minikube)
@@ -124,7 +124,7 @@ setup-test-env-redis:
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) install dapr-kafka incubator/kafka --wait --timeout 10m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/kafka_override.yaml 
+	$(HELM) template dapr-kafka incubator/kafka --wait --timeout 10m0s -f ./tests/config/kafka_override.yaml | python3 ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis
