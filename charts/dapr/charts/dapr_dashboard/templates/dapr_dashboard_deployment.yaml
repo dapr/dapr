@@ -18,6 +18,7 @@ spec:
       labels:
         app: dapr-dashboard
     spec:
+      serviceAccountName: dashboard-reader
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -50,4 +51,3 @@ spec:
               fieldPath: metadata.namespace
         ports:
         - containerPort: 8080
-      serviceAccountName: dashboard-reader
