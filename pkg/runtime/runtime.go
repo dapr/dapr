@@ -862,8 +862,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 
 	for _, s := range subscriptions {
 		if _, ok := a.pubSubs[s.PubsubName]; !ok {
-			msg := fmt.Sprintf("cannot subscribe to pubsub %s - was a component for it created?", s.PubsubName)
-			return nil, errors.New(msg)
+			//msg := fmt.Sprintf("cannot subscribe to pubsub %s - was a component for it created?", s.PubsubName)
+			//return nil, errors.New(msg)
+			fmt.Printf("cannot subscribe to topics on pubsub %s - was a component for it created?\n", s.PubsubName)
+			continue
 		}
 
 		if _, ok := topicRoutes[s.PubsubName]; !ok {

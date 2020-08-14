@@ -948,8 +948,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	topic := reqCtx.UserValue(topicParam).(string)
 	body := reqCtx.PostBody()
 
-	log.Debugf("Publishing message to pubsub='%s', topic='%s'\n", pubsubName, topic)
-
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
