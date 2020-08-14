@@ -75,7 +75,7 @@ spec:
             mountPath: /var/run/dapr/credentials
             readOnly: true
         command:
-        - "./operator"
+        - "/operator"
         args:
         - "--log-level"
         - {{ .Values.logLevel }}
