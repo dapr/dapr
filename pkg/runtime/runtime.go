@@ -363,7 +363,7 @@ func (a *DaprRuntime) beginPubSub() error {
 		}
 
 		for pubsubName, v := range a.topicRoutes {
-			for topic, _ := range v.routes {
+			for topic := range v.routes {
 				allowed := a.isPubSubOperationAllowed(pubsubName, topic, a.scopedSubscriptions[pubsubName])
 				if !allowed {
 					log.Warnf("subscription to topic %s on pubsub %s is not allowed", topic, pubsubName)
