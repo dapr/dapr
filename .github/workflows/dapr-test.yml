@@ -12,24 +12,36 @@ on:
 
 jobs:
   test-e2e:
-    name: end-to-end tests
-    runs-on: ubuntu-latest
+    name: end-to-end  ${{ matrix.target_os }}_${{ matrix.target_arch }} tests
+    runs-on: ${{ matrix.os }}
     env:
       GOVER: 1.14.3
-      GOOS: linux
-      GOARCH: amd64
+      GOOS: ${{ matrix.target_os }}
+      GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       HELMVER: v3.2.1
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
+      TARGET_OS: ${{ matrix.target_os }}
+      TARGET_ARCH: ${{ matrix.target_arch }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        target_arch: [amd64]
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+          - os: windows-latest
+            target_os: windows
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
         run: |
           echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
           echo ::set-env name=CHECKOUT_REF::refs/heads/master
+        shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@0.3.0
@@ -64,6 +76,7 @@ jobs:
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
+        shell: bash
       - name: Add the test status comment to PR
         if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
         env:
@@ -95,7 +108,7 @@ jobs:
       - name: Build dapr and its docker image
         if: env.TEST_CLUSTER != ''
         run: |
-          make build-linux
+          make build
           make docker-build
       - name: Build e2e test apps
         if: env.TEST_CLUSTER != ''
