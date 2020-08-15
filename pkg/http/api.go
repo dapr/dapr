@@ -73,6 +73,9 @@ const (
 	consistencyParam     = "consistency"
 	concurrencyParam     = "concurrency"
 	daprSeparator        = "||"
+
+	traceparentHeader = "traceparent"
+	tracestateHeader  = "tracestate"
 )
 
 // NewAPI returns a new API
@@ -300,6 +303,18 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request data field: %s", err))
 		respondWithError(reqCtx, 500, msg)
 		return
+	}
+
+	// pass the trace context to output binding in metadata
+	if span := diag_utils.SpanFromContext(reqCtx); span != nil {
+		sc := span.SpanContext()
+		if req.Metadata == nil {
+			req.Metadata = map[string]string{}
+		}
+		req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
+		if sc.Tracestate != nil {
+			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
+		}
 	}
 
 	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
