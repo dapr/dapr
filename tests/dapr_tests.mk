@@ -124,7 +124,7 @@ setup-test-env-redis:
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) template dapr-kafka incubator/kafka --wait --timeout 10m0s -f ./tests/config/kafka_override.yaml | python3 ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
+	$(HELM) template dapr-kafka incubator/kafka --wait --timeout 10m0s -f ./tests/config/kafka_override.yaml | python ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis
