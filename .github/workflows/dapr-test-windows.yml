@@ -3,21 +3,20 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-name: dapr-perf
+name: dapr-test-windows
 
 on:
-  schedule:
-    - cron: '0 */2 * * *'
   repository_dispatch:
-    type: perf-test
+    type: e2e-test-windows
+
 
 jobs:
-  test-perf:
-    name: perf tests
-    runs-on: ubuntu-latest
+  test-e2e-windows:
+    name: end-to-end windows tests
+    runs-on: windows-latest
     env:
       GOVER: 1.14.3
-      GOOS: linux
+      GOOS: windows
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
@@ -25,16 +24,9 @@ jobs:
       HELMVER: v3.2.1
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
-      DAPR_PERF_QPS: 1000
-      DAPR_PERF_CONNECTIONS: 16
-      DAPR_TEST_DURATION: 1m
-      DAPR_PAYLOAD_SIZE_KB: 1
+      TARGET_OS: windows
+      TARGET_ARCH: amd64
     steps:
-      - name: Set up for scheduled test
-        if: github.event_name != 'repository_dispatch'
-        run: |
-          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
-          echo ::set-env name=CHECKOUT_REF::refs/heads/master
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@0.3.0
@@ -42,7 +34,7 @@ jobs:
           github-token: ${{secrets.DAPR_BOT_TOKEN}}
           script: |
             const testPayload = context.payload.client_payload;
-            if (testPayload && testPayload.command == "ok-to-perf") {
+            if (testPayload && testPayload.command == "ok-to-wintest") {
               // Set environment variables
               console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
               console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
@@ -69,6 +61,7 @@ jobs:
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
+        shell: bash
       - name: Add the test status comment to PR
         if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
         env:
@@ -100,27 +93,34 @@ jobs:
       - name: Build dapr and its docker image
         if: env.TEST_CLUSTER != ''
         run: |
-          make build-linux
+          make build
           make docker-build
-      - name: Build perf test apps
+      - name: Build e2e test apps
         if: env.TEST_CLUSTER != ''
-        run: make build-perf-app-all
+        run: make build-e2e-app-all
       - name: Push docker images to test dockerhub
         if: env.TEST_CLUSTER != ''
         run: |
           make docker-push
-          make push-perf-app-all
+          make push-e2e-app-all
       - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
         if: env.TEST_CLUSTER != ''
         run: |
           make setup-helm-init
+          make setup-test-env
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make docker-deploy-k8s
-      - name: Run Perf tests
+      - name: Deploy test components
         if: env.TEST_CLUSTER != ''
-        run: make test-perf-all
+        run: make setup-test-components
+      - name: Show dapr configurations
+        if: env.TEST_CLUSTER != ''
+        run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
+      - name: Run E2E tests
+        if: env.TEST_CLUSTER != ''
+        run: make test-e2e-all
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
         env:
@@ -138,11 +138,11 @@ jobs:
             var message = "";
             
             if (jobStatus == "cancelled") {
-              message = "Dapr Perf tests cancelled.";
+              message = "End-to-end tests cancelled.";
             } else if (jobStatus == "success") {
-              message = "All Dapr perf tests completed.";
+              message = "Congrats! All end-to-end tests have passed. Thanks for your contribution!";
             } else if (jobStatus == "failure") {
-              message = "Dapr Perf tests failed.";
+              message = "End-to-end tests failed.";
             }
             
             if (message) {
