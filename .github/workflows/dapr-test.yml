@@ -41,6 +41,7 @@ jobs:
         run: |
           echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
           echo ::set-env name=CHECKOUT_REF::refs/heads/master
+        shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@0.3.0
@@ -75,6 +76,7 @@ jobs:
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
+        shell: bash
       - name: Add the test status comment to PR
         if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
         env:
