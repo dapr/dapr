@@ -197,7 +197,7 @@ docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
 		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) \
-		--set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true $(HELM_CHART_DIR)
+		--set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true --set global.daprControlPlaneOs=$(TARGET_OS) $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #

@@ -73,6 +73,7 @@ type actorsRuntime struct {
 	config              Config
 	actorsTable         *sync.Map
 	activeTimers        *sync.Map
+	activeTimersLock    *sync.RWMutex
 	activeReminders     *sync.Map
 	remindersLock       *sync.RWMutex
 	activeRemindersLock *sync.RWMutex
@@ -117,6 +118,7 @@ func NewActors(
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
 		activeTimers:        &sync.Map{},
+		activeTimersLock:    &sync.RWMutex{},
 		activeReminders:     &sync.Map{},
 		remindersLock:       &sync.RWMutex{},
 		activeRemindersLock: &sync.RWMutex{},
@@ -372,7 +374,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 	if a.store == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
-	requests := []state.TransactionalRequest{}
+	operations := []state.TransactionalStateOperation{}
 	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
 	metadata := map[string]string{metadataPartitionKey: partitionKey}
 
@@ -385,7 +387,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 				return err
 			}
 			key := a.constructActorStateKey(req.ActorType, req.ActorID, upsert.Key)
-			requests = append(requests, state.TransactionalRequest{
+			operations = append(operations, state.TransactionalStateOperation{
 				Request: state.SetRequest{
 					Key:      key,
 					Value:    upsert.Value,
@@ -401,7 +403,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 			}
 
 			key := a.constructActorStateKey(req.ActorType, req.ActorID, delete.Key)
-			requests = append(requests, state.TransactionalRequest{
+			operations = append(operations, state.TransactionalStateOperation{
 				Request: state.DeleteRequest{
 					Key:      key,
 					Metadata: metadata,
@@ -418,7 +420,10 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		return errors.New(incompatibleStateStore)
 	}
 
-	err := transactionalStore.Multi(requests)
+	err := transactionalStore.Multi(&state.TransactionalStateRequest{
+		Operations: operations,
+		Metadata:   metadata,
+	})
 	return err
 }
 
@@ -838,7 +843,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		// Check if reminder is still active
 		select {
 		case <-stop:
-			log.Infof("Reminder: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
+			log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
 			return
 		default:
 			break
@@ -1012,6 +1017,8 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 }
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
+	a.activeTimersLock.Lock()
+	defer a.activeTimersLock.Unlock()
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := a.constructCompositeKey(actorKey, req.Name)
 
@@ -1040,6 +1047,20 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 			if err == nil {
 				time.Sleep(d)
 			}
+		}
+
+		// Check if timer is still active
+		select {
+		case <-stop:
+			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
+			return
+		default:
+			break
+		}
+
+		err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
+		if err != nil {
+			log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
 		}
 
 		actorKey := a.constructCompositeKey(actorType, actorID)

@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	appPort  = 3000
-	daprPort = 3500
+	appPort    = 3000
+	daprPort   = 3500
+	pubsubName = "messagebus"
 )
 
 type publishCommand struct {
@@ -74,7 +75,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// publish to dapr
-	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s", daprPort, commandBody.Topic)
+	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPort, pubsubName, commandBody.Topic)
 	log.Printf("Publishing using url %s and body '%s'", url, jsonValue)
 
 	postResp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonValue))

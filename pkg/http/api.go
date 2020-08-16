@@ -73,6 +73,9 @@ const (
 	consistencyParam     = "consistency"
 	concurrencyParam     = "concurrency"
 	daprSeparator        = "||"
+	pubsubnameparam      = "pubsubname"
+	traceparentHeader    = "traceparent"
+	tracestateHeader     = "tracestate"
 )
 
 // NewAPI returns a new API
@@ -137,6 +140,12 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onBulkGetState,
 		},
+		{
+			Methods: []string{fasthttp.MethodPost},
+			Route:   "state/{storeName}/transaction",
+			Version: apiVersionV1,
+			Handler: a.onPostStateTransaction,
+		},
 	}
 }
 
@@ -155,7 +164,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
-			Route:   "publish/{topic:*}",
+			Route:   "publish/{pubsubname}/{topic:*}",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
 		},
@@ -294,6 +303,18 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request data field: %s", err))
 		respondWithError(reqCtx, 500, msg)
 		return
+	}
+
+	// pass the trace context to output binding in metadata
+	if span := diag_utils.SpanFromContext(reqCtx); span != nil {
+		sc := span.SpanContext()
+		if req.Metadata == nil {
+			req.Metadata = map[string]string{}
+		}
+		req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
+		if sc.Tracestate != nil {
+			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
+		}
 	}
 
 	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
@@ -937,6 +958,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	topic := reqCtx.UserValue(topicParam).(string)
 	body := reqCtx.PostBody()
 
@@ -944,7 +966,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, body)
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
@@ -954,8 +976,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	req := pubsub.PublishRequest{
-		Topic: topic,
-		Data:  b,
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Data:       b,
 	}
 
 	err = a.publishFn(&req)
@@ -1000,4 +1023,44 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	})
 
 	return metadata
+}
+
+func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
+	var err error
+	if a.stateStores == nil || len(a.stateStores) == 0 {
+		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
+		respondWithError(reqCtx, 400, msg)
+		return
+	}
+
+	storeName := reqCtx.UserValue(storeNameParam).(string)
+	stateStore, ok := a.stateStores[storeName]
+	if !ok {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND:", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(reqCtx, 401, msg)
+		return
+	}
+
+	transactionalStore, ok := stateStore.(state.TransactionalStore)
+	if !ok {
+		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf("state store name: %s", storeName))
+		respondWithError(reqCtx, 500, msg)
+		return
+	}
+
+	body := reqCtx.PostBody()
+	var request state.TransactionalStateRequest
+	if err = a.json.Unmarshal(body, &request); err != nil {
+		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
+		respondWithError(reqCtx, 400, msg)
+		return
+	}
+
+	err = transactionalStore.Multi(&request)
+	if err != nil {
+		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
+		respondWithError(reqCtx, 500, msg)
+	} else {
+		respondEmpty(reqCtx, 201)
+	}
 }
