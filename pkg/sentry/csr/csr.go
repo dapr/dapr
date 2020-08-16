@@ -79,6 +79,7 @@ func GenerateIssuerCertCSR(cn string, publicKey interface{}, ttl time.Duration) 
 	cert.Subject = pkix.Name{
 		CommonName: cn,
 	}
+	cert.DNSNames = []string{cn}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
@@ -98,6 +99,7 @@ func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl time.Duratio
 		CommonName:   cn,
 		Organization: []string{org},
 	}
+	cert.DNSNames = []string{cn}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
@@ -123,7 +125,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, signin
 	}
 	cert.Issuer = signingCert.Issuer
 	cert.IsCA = isCA
-	cert.DNSNames = csr.DNSNames
+	cert.DNSNames = []string{subject}
 	cert.IPAddresses = csr.IPAddresses
 	cert.Extensions = csr.Extensions
 	cert.BasicConstraintsValid = true

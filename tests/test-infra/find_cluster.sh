@@ -10,10 +10,10 @@
 # The test cluster pool for e2e test
 # TODO: Add more aks test clusters
 testclusterpool=(
-    "dapr-aks-e2e-01"
-    "dapr-aks-e2e-02"
-    "dapr-aks-e2e-03"
-    "dapr-aks-e2e-04"
+    "dapr-aks-e2e-05"
+    "dapr-aks-e2e-06"
+    "dapr-aks-e2e-07"
+    "dapr-aks-e2e-08"
 )
 
 # Define max e2e test timeout, 1.5 hours
