@@ -74,8 +74,8 @@ const (
 	concurrencyParam     = "concurrency"
 	daprSeparator        = "||"
 	pubsubnameparam      = "pubsubname"
-	traceparentHeader = "traceparent"
-	tracestateHeader  = "tracestate"
+	traceparentHeader    = "traceparent"
+	tracestateHeader     = "tracestate"
 )
 
 // NewAPI returns a new API
