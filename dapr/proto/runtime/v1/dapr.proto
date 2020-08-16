@@ -136,11 +136,14 @@ message SaveStateRequest {
 
 // PublishEventRequest is the message to publish event data to pubsub topic
 message PublishEventRequest {
+  // The name of the pubsub component
+  string pubsub_name = 1;
+
   // The pubsub topic
-  string topic = 1;
+  string topic = 2;
 
   // The data which will be published to topic.
-  bytes data = 2;
+  bytes data = 3;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings

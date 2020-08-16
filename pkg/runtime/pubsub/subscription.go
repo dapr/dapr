@@ -1,7 +1,8 @@
 package pubsub
 
 type Subscription struct {
-	Topic    string            `json:"topic"`
-	Route    string            `json:"route"`
-	Metadata map[string]string `json:"metadata"`
+	PubsubName string            `json:"pubsubname"`
+	Topic      string            `json:"topic"`
+	Route      string            `json:"route"`
+	Metadata   map[string]string `json:"metadata"`
 }

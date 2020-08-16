@@ -73,9 +73,9 @@ const (
 	consistencyParam     = "consistency"
 	concurrencyParam     = "concurrency"
 	daprSeparator        = "||"
-
-	traceparentHeader = "traceparent"
-	tracestateHeader  = "tracestate"
+	pubsubnameparam      = "pubsubname"
+	traceparentHeader    = "traceparent"
+	tracestateHeader     = "tracestate"
 )
 
 // NewAPI returns a new API
@@ -164,7 +164,7 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
-			Route:   "publish/{topic:*}",
+			Route:   "publish/{pubsubname}/{topic:*}",
 			Version: apiVersionV1,
 			Handler: a.onPublish,
 		},
@@ -958,6 +958,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	topic := reqCtx.UserValue(topicParam).(string)
 	body := reqCtx.PostBody()
 
@@ -965,7 +966,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, body)
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
@@ -975,8 +976,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	req := pubsub.PublishRequest{
-		Topic: topic,
-		Data:  b,
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Data:       b,
 	}
 
 	err = a.publishFn(&req)
