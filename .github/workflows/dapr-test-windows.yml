@@ -7,7 +7,7 @@ name: dapr-test-windows
 
 on:
   repository_dispatch:
-    type: e2e-test-windows
+    type: [e2e-test-windows]
 
 
 jobs:
