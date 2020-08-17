@@ -12,5 +12,5 @@ RUN go build -o app.exe .
 
 FROM golang:1.14-nanoserver-1809
 WORKDIR /app
-COPY --from=servercore /app/app.exe /
+COPY --from=servercore /app/app.exe /app/app.exe
 CMD ["app.exe"]
