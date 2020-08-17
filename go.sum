@@ -216,10 +216,8 @@ github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f/go.mod h1:E3G3o1h8I7cfc
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
-github.com/dapr/components-contrib v0.2.5-0.20200812172248-3efcb4043035 h1:BIu+ZvP/g4phWJ49f3VG4PVe4m80rY2ylgIBrIWCRKQ=
-github.com/dapr/components-contrib v0.2.5-0.20200812172248-3efcb4043035/go.mod h1:JSMSHTHQEcLgv7MZKIbKbHXgudogZfIjEkZMmn7nJwQ=
-github.com/dapr/components-contrib v0.2.5-0.20200814180551-08d2538796ea h1:BNpUm5blDtpXxCP6dSsnfRsRwEMmd+1HdWycHqy+IvU=
-github.com/dapr/components-contrib v0.2.5-0.20200814180551-08d2538796ea/go.mod h1:JSMSHTHQEcLgv7MZKIbKbHXgudogZfIjEkZMmn7nJwQ=
+github.com/dapr/components-contrib v0.2.5-0.20200817143725-677e551844db h1:W0bPp6emcR31vXUcTUi8cEsniVLe+fniBZGnPZ57ebY=
+github.com/dapr/components-contrib v0.2.5-0.20200817143725-677e551844db/go.mod h1:s1z2QAiy9FwGNYYhLqMf13Iltr5ZbUzoAr3j8u/3m9U=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad h1:RKWoYovBc+B9ltvjtZLMnbu49stSucH8rZze3MeqyvQ=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad/go.mod h1:yeOIFBz6+BigHpk4ASJbgQDVjQ8+00oCWrFyOAFdob8=
@@ -766,7 +764,6 @@ github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c h1:Lgl0gzECD8GnQ5
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0 h1:cBOtyMzM9HTpWjXfbbunk26uA6nG3a8n06Wieeh0MwY=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
-github.com/patrickmn/go-cache v1.0.0 h1:3gD5McaYs9CxjyK5AXGcq8gdeCARtd/9gJDUvVeaZ0Y=
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
 github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=
 github.com/pborman/uuid v1.2.0/go.mod h1:X/NO0urCmaxf9VXbdlT7C2Yzkj2IKimNn4k+gtPdI/k=
