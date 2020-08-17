@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+from __future__ import print_function
 import sys
 
 # This is a quick and dirty hack (with no additional dependacies) to work around that fact that the kafka
