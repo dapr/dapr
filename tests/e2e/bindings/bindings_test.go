@@ -1,4 +1,4 @@
-// +build 123
+// +build e2e
 
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
