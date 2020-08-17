@@ -9,7 +9,7 @@ on:
   schedule:
     - cron: '0 */2 * * *'
   repository_dispatch:
-    type: [perf-test]
+    types: [perf-test]
 
 jobs:
   test-perf:
