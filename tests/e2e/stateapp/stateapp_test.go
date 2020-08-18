@@ -376,7 +376,7 @@ func TestStateTransactionApps(t *testing.T) {
 						if er.Key == ri.Key {
 							require.Equal(t, er.Key, ri.Key)
 							expected, _ := json.Marshal(er.Value)
-							require.Equal(t, expected, ri.Value.Data)
+							require.Equal(t, string(expected), ri.Value.Data)
 						}
 					}
 				}
