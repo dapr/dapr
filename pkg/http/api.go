@@ -1027,7 +1027,6 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	var err error
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
 		respondWithError(reqCtx, 400, msg)
@@ -1051,7 +1050,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	body := reqCtx.PostBody()
 	var req state.TransactionalStateRequest
-	if err = a.json.Unmarshal(body, &req); err != nil {
+	if err := a.json.Unmarshal(body, &req); err != nil {
 		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
 		respondWithError(reqCtx, 400, msg)
 		return
@@ -1091,7 +1090,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	err = transactionalStore.Multi(&state.TransactionalStateRequest{
+	err := transactionalStore.Multi(&state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   req.Metadata,
 	})
