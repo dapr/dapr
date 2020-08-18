@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-FROM golang:1.14-windowsservercore-1809
+FROM golang:1.15-windowsservercore-1809
 
 WORKDIR /app
 COPY . .

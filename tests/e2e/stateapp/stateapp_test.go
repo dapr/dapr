@@ -374,12 +374,9 @@ func TestStateTransactionApps(t *testing.T) {
 				for _, er := range step.expectedResponse.States {
 					for _, ri := range appResp.States {
 						if er.Key == ri.Key {
-							require.True(t, reflect.DeepEqual(er.Key, ri.Key))
-
-							if er.Value != nil {
-								require.NotNil(t, ri.Value)
-								require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
-							}
+							require.Equal(t, er.Key, ri.Key)
+							expected, _ := json.Marshal(er.Value)
+							require.Equal(t, string(expected), ri.Value.Data)
 						}
 					}
 				}

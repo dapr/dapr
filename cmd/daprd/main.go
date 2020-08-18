@@ -94,6 +94,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/http"
+	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/mqtt"
@@ -364,6 +365,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("twitter", func() bindings.OutputBinding {
 				return twitter.NewTwitter(logContrib)
+			}),
+			bindings_loader.NewOutput("influx", func() bindings.OutputBinding {
+				return influx.NewInflux(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

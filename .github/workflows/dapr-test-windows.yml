@@ -15,7 +15,7 @@ jobs:
     name: end-to-end windows tests
     runs-on: windows-latest
     env:
-      GOVER: 1.14.3
+      GOVER: 1.15
       GOOS: windows
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org

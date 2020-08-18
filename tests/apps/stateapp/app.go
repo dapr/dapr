@@ -14,8 +14,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
-	"strconv"
 	"time"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -259,9 +259,13 @@ func executeTransaction(states []daprState) error {
 	var transactionalOperations []map[string]interface{}
 
 	for _, s := range states {
+		val, _ := json.Marshal(s.Value)
 		transactionalOperations = append(transactionalOperations, map[string]interface{}{
 			"operation": s.OperationType,
-			"request":   s,
+			"request": map[string]interface{}{
+				"key":   s.Key,
+				"value": string(val),
+			},
 		})
 	}
 
@@ -363,8 +367,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	res.StartTime = epoch()
 	var statusCode = http.StatusOK
 
-	daprPort := 50001
-	daprAddress := fmt.Sprintf("localhost:%s", strconv.Itoa(daprPort))
+	daprPort, _ := os.LookupEnv("DAPR_GRPC_PORT")
+	daprAddress := fmt.Sprintf("127.0.0.1:%s", daprPort)
 	log.Printf("dapr grpc address is %s\n", daprAddress)
 	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
 

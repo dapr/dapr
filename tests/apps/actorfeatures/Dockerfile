@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-FROM golang:1.14
+FROM golang:1.15
 
 WORKDIR /app
 COPY . .
