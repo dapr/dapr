@@ -397,8 +397,13 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
-				Key:   a.getModifiedStateKey(req.Key),
-				Value: string(req.Value),
+				Key: a.getModifiedStateKey(req.Key),
+				// Limitation:
+				// type conversion is required because Multi of some statestore
+				// implementation cannot handle []byte properly.
+				Value:    string(req.Value),
+				Metadata: req.Metadata,
+				ETag:     req.Etag,
 			}
 
 			if req.Options != nil {
@@ -415,7 +420,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 		case state.Delete:
 			delReq := state.DeleteRequest{
-				Key: a.getModifiedStateKey(req.Key),
+				Key:      a.getModifiedStateKey(req.Key),
+				Metadata: req.Metadata,
+				ETag:     req.Etag,
 			}
 
 			if req.Options != nil {
