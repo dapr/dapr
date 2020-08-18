@@ -26,6 +26,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 )
@@ -141,7 +142,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Handler: a.onBulkGetState,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "state/{storeName}/transaction",
 			Version: apiVersionV1,
 			Handler: a.onPostStateTransaction,
@@ -1026,7 +1027,6 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	var err error
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
 		respondWithError(reqCtx, 400, msg)
@@ -1049,16 +1049,56 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	body := reqCtx.PostBody()
-	var request state.TransactionalStateRequest
-	if err = a.json.Unmarshal(body, &request); err != nil {
+	var req state.TransactionalStateRequest
+	if err := a.json.Unmarshal(body, &req); err != nil {
 		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
 		respondWithError(reqCtx, 400, msg)
 		return
 	}
 
-	err = transactionalStore.Multi(&request)
+	operations := []state.TransactionalStateOperation{}
+	for _, o := range req.Operations {
+		switch o.Operation {
+		case state.Upsert:
+			var upsertReq state.SetRequest
+			if err := mapstructure.Decode(o.Request, &upsertReq); err != nil {
+				msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
+				respondWithError(reqCtx, 400, msg)
+				return
+			}
+			upsertReq.Key = a.getModifiedStateKey(upsertReq.Key)
+			operations = append(operations, state.TransactionalStateOperation{
+				Request:   upsertReq,
+				Operation: state.Upsert,
+			})
+		case state.Delete:
+			var delReq state.DeleteRequest
+			if err := mapstructure.Decode(o.Request, &delReq); err != nil {
+				msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
+				respondWithError(reqCtx, 400, msg)
+				return
+			}
+			delReq.Key = a.getModifiedStateKey(delReq.Key)
+			operations = append(operations, state.TransactionalStateOperation{
+				Request:   delReq,
+				Operation: state.Delete,
+			})
+		default:
+			msg := NewErrorResponse(
+				"ERR_NOT_SUPPORTED_STATE_OPERATION",
+				fmt.Sprintf("operation type %s not supported", o.Operation))
+			respondWithError(reqCtx, 400, msg)
+			return
+		}
+	}
+
+	err := transactionalStore.Multi(&state.TransactionalStateRequest{
+		Operations: operations,
+		Metadata:   req.Metadata,
+	})
+
 	if err != nil {
-		msg := NewErrorResponse("ERR_STATE_TRANSACTION_SAVE", err.Error())
+		msg := NewErrorResponse("ERR_STATE_TRANSACTION", err.Error())
 		respondWithError(reqCtx, 500, msg)
 	} else {
 		respondEmpty(reqCtx, 201)
