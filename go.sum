@@ -217,8 +217,6 @@ github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwc
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/cyberdelia/templates v0.0.0-20141128023046-ca7fffd4298c/go.mod h1:GyV+0YP4qX0UQ7r2MoYZ+AvYDp12OF5yg4q8rGnyNh4=
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
-github.com/dapr/components-contrib v0.2.5-0.20200817143725-677e551844db h1:W0bPp6emcR31vXUcTUi8cEsniVLe+fniBZGnPZ57ebY=
-github.com/dapr/components-contrib v0.2.5-0.20200817143725-677e551844db/go.mod h1:s1z2QAiy9FwGNYYhLqMf13Iltr5ZbUzoAr3j8u/3m9U=
 github.com/dapr/components-contrib v0.2.5-0.20200817194558-467375c254e0 h1:MLscB9UF4SLBKQ9VYBSecI5sJmXjzPI21d9VThUunt8=
 github.com/dapr/components-contrib v0.2.5-0.20200817194558-467375c254e0/go.mod h1:lJZ6BNGYD/eVZ8t0qjUyvuW4wDhF2eyxffi/cWnCukk=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
