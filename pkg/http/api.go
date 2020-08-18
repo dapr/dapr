@@ -142,7 +142,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Handler: a.onBulkGetState,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "state/{storeName}/transaction",
 			Version: apiVersionV1,
 			Handler: a.onPostStateTransaction,
