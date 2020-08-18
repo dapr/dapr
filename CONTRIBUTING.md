@@ -74,14 +74,7 @@ A good way to communicate before investing too much time is to create a "Work-in
 
 ### Use of Third-party code
 
-- All third-party code must be placed in the `vendor/` folder.
-- `vendor/` folder is managed by Go modules and stores the source code of third-party Go dependencies. - The `vendor/` folder should not be modified manually.
 - Third-party code must include licenses.
-
-A non-exclusive list of code that must be places in `vendor/`:
-
-- Open source, free software, or commercially-licensed code.
-- Tools or libraries or protocols that are open source, free software, or commercially licensed.
 
 **Thank You!** - Your contributions to open source, large or small, make projects like this possible. Thank you for taking the time to contribute.
 
