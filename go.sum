@@ -217,8 +217,8 @@ github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwc
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/cyberdelia/templates v0.0.0-20141128023046-ca7fffd4298c/go.mod h1:GyV+0YP4qX0UQ7r2MoYZ+AvYDp12OF5yg4q8rGnyNh4=
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
-github.com/dapr/components-contrib v0.2.5-0.20200818184906-c6623da87eaa h1:RCPxPdHrzvKN9STqlEYk6kXiuwbK2rGM2kwWFEsdTKY=
-github.com/dapr/components-contrib v0.2.5-0.20200818184906-c6623da87eaa/go.mod h1:Y1QoBo3Ye7YIcuF/yAVeWy7/eKYoCZWqK4Kl56/SNVM=
+github.com/dapr/components-contrib v0.3.0 h1:Y5S2//gWHRcxwY9HwQklZacGjvGXEAJ+Ea123Sd/MzA=
+github.com/dapr/components-contrib v0.3.0/go.mod h1:Y1QoBo3Ye7YIcuF/yAVeWy7/eKYoCZWqK4Kl56/SNVM=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad/go.mod h1:yeOIFBz6+BigHpk4ASJbgQDVjQ8+00oCWrFyOAFdob8=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
