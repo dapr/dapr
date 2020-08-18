@@ -1066,6 +1066,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				respondWithError(reqCtx, 400, msg)
 				return
 			}
+			upsertReq.Key = a.getModifiedStateKey(upsertReq.Key)
 			operations = append(operations, state.TransactionalStateOperation{
 				Request:   upsertReq,
 				Operation: state.Upsert,
@@ -1077,6 +1078,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				respondWithError(reqCtx, 400, msg)
 				return
 			}
+			delReq.Key = a.getModifiedStateKey(delReq.Key)
 			operations = append(operations, state.TransactionalStateOperation{
 				Request:   delReq,
 				Operation: state.Delete,

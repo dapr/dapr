@@ -392,31 +392,40 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	operations := []state.TransactionalStateOperation{}
 	for _, inputReq := range in.Operations {
-		var req state.TransactionalStateOperation
+		var operation state.TransactionalStateOperation
+		var req = inputReq.Request
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
-				Key:   a.getModifiedStateKey(inputReq.Request.Key),
-				Value: string(inputReq.Request.Value),
-				Options: state.SetStateOption{
-					Concurrency: stateConcurrencyToString(inputReq.Request.Options.Concurrency),
-					Consistency: stateConsistencyToString(inputReq.Request.Options.Consistency),
-				},
+				Key:   a.getModifiedStateKey(req.Key),
+				Value: string(req.Value),
 			}
-			req = state.TransactionalStateOperation{
+
+			if req.Options != nil {
+				setReq.Options = state.SetStateOption{
+					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
+					Consistency: stateConsistencyToString(req.Options.Consistency),
+				}
+			}
+
+			operation = state.TransactionalStateOperation{
 				Operation: state.Upsert,
 				Request:   setReq,
 			}
 
 		case state.Delete:
 			delReq := state.DeleteRequest{
-				Key: a.getModifiedStateKey(inputReq.Request.Key),
-				Options: state.DeleteStateOption{
-					Concurrency: stateConcurrencyToString(inputReq.Request.Options.Concurrency),
-					Consistency: stateConsistencyToString(inputReq.Request.Options.Consistency),
-				},
+				Key: a.getModifiedStateKey(req.Key),
 			}
-			req = state.TransactionalStateOperation{
+
+			if req.Options != nil {
+				delReq.Options = state.DeleteStateOption{
+					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
+					Consistency: stateConsistencyToString(req.Options.Consistency),
+				}
+			}
+
+			operation = state.TransactionalStateOperation{
 				Operation: state.Delete,
 				Request:   delReq,
 			}
@@ -425,7 +434,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
 		}
 
-		operations = append(operations, req)
+		operations = append(operations, operation)
 	}
 
 	err := transactionalStore.Multi(&state.TransactionalStateRequest{
