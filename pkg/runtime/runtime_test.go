@@ -120,6 +120,26 @@ func getSubscriptionCustom(topic, route string) string {
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
+	pubsubComponents := []components_v1alpha1.Component{
+		{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: TestPubsubName,
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:     "pubsub.mockPubSub",
+				Metadata: getFakeMetadataItems(),
+			},
+		}, {
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: TestSecondPubsubName,
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:     "pubsub.mockPubSub2",
+				Metadata: getFakeMetadataItems(),
+			},
+		},
+	}
+
 	initMockPubSubForRuntime := func(rt *DaprRuntime) (*daprt.MockPubSub, *daprt.MockPubSub) {
 		mockPubSub := new(daprt.MockPubSub)
 
@@ -153,6 +173,8 @@ func TestInitPubSub(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
+		rt.topicRoutes = nil
+		rt.pubSubs = make(map[string]pubsub.PubSub)
 
 		return mockPubSub, mockPubSub2
 	}
@@ -177,18 +199,15 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
 
-		// act
-		err = rt.beginPubSub()
-
-		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
@@ -212,17 +231,14 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 
-		// act
-		err = rt.beginPubSub()
-
-		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -241,17 +257,14 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 
-		// act
-		err = rt.beginPubSub()
-
-		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -286,18 +299,15 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
 
-		// act
-		err = rt.beginPubSub()
-
-		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
@@ -319,18 +329,15 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
 
-		// act
-		err = rt.beginPubSub()
-
-		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
@@ -352,10 +359,12 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
 
@@ -382,18 +391,15 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
 
-		// act
-		err = rt.beginPubSub()
-
-		// assert
-		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
@@ -415,11 +421,13 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
-		assert.Nil(t, err)
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
-		err = rt.Publish(&pubsub.PublishRequest{
+		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
 		})
@@ -452,11 +460,13 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.initPubSub()
-		assert.Nil(t, err)
+		for _, comp := range pubsubComponents {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
-		err = rt.Publish(&pubsub.PublishRequest{
+		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 		})
@@ -516,12 +526,6 @@ func TestInitPubSub(t *testing.T) {
 }
 
 func TestInitSecretStores(t *testing.T) {
-	t.Run("init with no store", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		err := rt.initSecretStores()
-		assert.Nil(t, err)
-	})
-
 	t.Run("init with store", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		m := NewMockKubernetesStore()
@@ -530,7 +534,7 @@ func TestInitSecretStores(t *testing.T) {
 				return m
 			}))
 
-		rt.components = append(rt.components, components_v1alpha1.Component{
+		err := rt.processOneComponent(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -538,8 +542,6 @@ func TestInitSecretStores(t *testing.T) {
 				Type: "secretstores.kubernetesMock",
 			},
 		})
-
-		err := rt.initSecretStores()
 		assert.Nil(t, err)
 	})
 
@@ -549,10 +551,9 @@ func TestInitSecretStores(t *testing.T) {
 		rt.secretStoresRegistry.Register(
 			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
 				return m
-			}),
-		)
+			}))
 
-		rt.components = append(rt.components, components_v1alpha1.Component{
+		rt.processOneComponent(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -560,8 +561,6 @@ func TestInitSecretStores(t *testing.T) {
 				Type: "secretstores.kubernetesMock",
 			},
 		})
-
-		rt.initSecretStores()
 		assert.NotNil(t, rt.secretStores["kubernetesMock"])
 	})
 
@@ -574,7 +573,7 @@ func TestInitSecretStores(t *testing.T) {
 			}),
 		)
 
-		rt.components = append(rt.components, components_v1alpha1.Component{
+		rt.processOneComponent(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -583,7 +582,6 @@ func TestInitSecretStores(t *testing.T) {
 			},
 		})
 
-		rt.initSecretStores()
 		s := rt.getSecretStore("kubernetesMock")
 		assert.NotNil(t, s)
 	})
@@ -644,7 +642,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		)
 
 		// add Kubernetes component manually
-		rt.components = append(rt.components, components_v1alpha1.Component{
+		rt.processOneComponent(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetes",
 			},
@@ -653,10 +651,9 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		})
 
-		rt.initSecretStores()
-
-		mod := rt.processComponentSecrets(mockBinding)
+		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+		assert.Empty(t, unready)
 	})
 
 	t.Run("Kubernetes Mode", func(t *testing.T) {
@@ -675,11 +672,14 @@ func TestProcessComponentSecrets(t *testing.T) {
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		err := rt.initSecretStores()
-		assert.NoError(t, err)
+		for _, comp := range rt.builtinSecretStore() {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
-		mod := rt.processComponentSecrets(mockBinding)
+		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+		assert.Empty(t, unready)
 	})
 
 	t.Run("Look up name only", func(t *testing.T) {
@@ -697,11 +697,14 @@ func TestProcessComponentSecrets(t *testing.T) {
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		err := rt.initSecretStores()
-		assert.NoError(t, err)
+		for _, comp := range rt.builtinSecretStore() {
+			err := rt.processOneComponent(comp)
+			assert.Nil(t, err)
+		}
 
-		mod := rt.processComponentSecrets(mockBinding)
+		mod, unready := rt.processComponentSecrets(mockBinding)
 		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
+		assert.Empty(t, unready)
 	})
 }
 
@@ -733,7 +736,6 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 	}
 
 	rt := NewTestDaprRuntime(modes.KubernetesMode)
-	rt.components = append(rt.components, fakeSecretStoreWithAuth)
 
 	m := NewMockKubernetesStore()
 	rt.secretStoresRegistry.Register(
@@ -741,9 +743,12 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 			return m
 		}),
 	)
-
-	err := rt.initSecretStores()
-	assert.NoError(t, err)
+	for _, comp := range rt.builtinSecretStore() {
+		err := rt.processOneComponent(comp)
+		assert.Nil(t, err)
+	}
+	fakeSecretStoreWithAuth, _ = rt.processComponentSecrets(fakeSecretStoreWithAuth)
+	// initSecretStore appends Kubernetes component even if kubernetes component is not added
 	assert.Equal(t, "value1", fakeSecretStoreWithAuth.Spec.Metadata[0].Value)
 }
 
@@ -764,6 +769,9 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	fakeReq.WithRawData(testPubSubMessage.Data, pubsub.ContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	rt.topicRoutes = map[string]TopicRoute{}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
 
 	t.Run("succeeded to publish message to user app", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -859,32 +867,6 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		"")
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
-	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
-
-	// add 2 pubsubs
-	rt.components = []components_v1alpha1.Component{
-		{
-			ObjectMeta: meta_v1.ObjectMeta{
-				Name: TestPubsubName,
-			},
-			Spec: components_v1alpha1.ComponentSpec{
-				Type:     "pubsub.mockPubSub",
-				Metadata: getFakeMetadataItems(),
-			},
-		},
-		{
-			ObjectMeta: meta_v1.ObjectMeta{
-				Name: TestSecondPubsubName,
-			},
-			Spec: components_v1alpha1.ComponentSpec{
-				Type:     "pubsub.mockPubSub2",
-				Metadata: getFakeMetadataItems(),
-			},
-		},
-	}
-
 	return rt
 }
 
