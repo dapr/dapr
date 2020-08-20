@@ -1,9 +1,12 @@
 global:
   registry: docker.io/daprio
-  tag: "0.8.0"
+  tag: "0.9.0"
   logAsJson: false
   imagePullPolicy: Always
   imagePullSecrets: ""
+  ha:
+    enabled: false
+    replicaCount: 3
   prometheus:
     enabled: true
     port: 9090

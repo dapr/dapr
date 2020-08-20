@@ -32,10 +32,24 @@ const (
 
 	// DaprTestNamespaceEnvVar is the environment variable for setting the Kubernetes namespace for e2e tests
 	DaprTestNamespaceEnvVar = "DAPR_TEST_NAMESPACE"
+
+	// Environment variable for setting Kubernetes node affinity OS
+	TargetOsEnvVar = "TARGET_OS"
+
+	// Environment variable for setting Kubernetes node affinity ARCH
+	TargetArchEnvVar = "TARGET_ARCH"
 )
 
-// DaprTestNamespace is the default Kubernetes namespace for e2e tests
-var DaprTestNamespace = "dapr-tests"
+var (
+	// DaprTestNamespace is the default Kubernetes namespace for e2e tests
+	DaprTestNamespace = "dapr-tests"
+
+	// TargetOs is default os affinity for Kubernetes nodes
+	TargetOs = "linux"
+
+	// TargetArch is the default architecture affinity for Kubernetes nodes
+	TargetArch = "amd64"
+)
 
 // buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
 func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
@@ -47,16 +61,23 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 
 	if appDesc.DaprEnabled {
 		annotationObject = map[string]string{
-			"dapr.io/enabled": "true",
-			"dapr.io/id":      appDesc.AppName,
-			"dapr.io/port":    fmt.Sprintf("%d", appDesc.AppPort),
+			"dapr.io/enabled":                "true",
+			"dapr.io/app-id":                 appDesc.AppName,
+			"dapr.io/app-port":               fmt.Sprintf("%d", appDesc.AppPort),
+			"dapr.io/sidecar-cpu-limit":      appDesc.DaprCPULimit,
+			"dapr.io/sidecar-cpu-request":    appDesc.DaprCPURequest,
+			"dapr.io/sidecar-memory-limit":   appDesc.DaprMemoryLimit,
+			"dapr.io/sidecar-memory-request": appDesc.DaprMemoryRequest,
 		}
 	}
 	if appDesc.AppProtocol != "" {
-		annotationObject["dapr.io/protocol"] = appDesc.AppProtocol
+		annotationObject["dapr.io/app-protocol"] = appDesc.AppProtocol
 	}
 	if appDesc.MetricsPort != "" {
 		annotationObject["dapr.io/metrics-port"] = appDesc.MetricsPort
+	}
+	if appDesc.Config != "" {
+		annotationObject["dapr.io/config"] = appDesc.Config
 	}
 
 	return &appsv1.Deployment{
@@ -89,6 +110,28 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 									Name:          "http",
 									Protocol:      apiv1.ProtocolTCP,
 									ContainerPort: DefaultContainerPort,
+								},
+							},
+						},
+					},
+					Affinity: &apiv1.Affinity{
+						NodeAffinity: &apiv1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
+								NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+									{
+										MatchExpressions: []apiv1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/os",
+												Operator: "In",
+												Values:   []string{TargetOs},
+											},
+											{
+												Key:      "kubernetes.io/arch",
+												Operator: "In",
+												Values:   []string{TargetArch},
+											},
+										},
+									},
 								},
 							},
 						},
@@ -164,5 +207,11 @@ func int32Ptr(i int32) *int32 {
 func init() {
 	if ns, ok := os.LookupEnv(DaprTestNamespaceEnvVar); ok {
 		DaprTestNamespace = ns
+	}
+	if os, ok := os.LookupEnv(TargetOsEnvVar); ok {
+		TargetOs = os
+	}
+	if arch, ok := os.LookupEnv(TargetArchEnvVar); ok {
+		TargetArch = arch
 	}
 }

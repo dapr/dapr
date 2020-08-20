@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -18,6 +17,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -26,7 +26,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
@@ -37,10 +36,6 @@ import (
 )
 
 const (
-	// Range of a durpb.Duration in seconds, as specified in
-	// google/protobuf/duration.proto. This is about 10,000 years in seconds.
-	maxSeconds           = int64(10000 * 365.25 * 24 * 60 * 60)
-	minSeconds           = -maxSeconds
 	daprSeparator        = "||"
 	daprHTTPStatusHeader = "dapr-http-status"
 )
@@ -56,6 +51,7 @@ type API interface {
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
+	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
@@ -141,18 +137,19 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	if in.Data != nil {
 		body = in.Data
 	}
-
+	pubsubName := in.PubsubName
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, body)
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
 	}
 
 	req := pubsub.PublishRequest{
-		Topic: topic,
-		Data:  b,
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Data:       b,
 	}
 
 	err = a.publishFn(&req)
@@ -218,15 +215,53 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	return r, nil
 }
 
-func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
+func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		return &runtimev1pb.GetBulkStateResponse{}, err
+	}
+
+	resp := &runtimev1pb.GetBulkStateResponse{}
+	limiter := concurrency.NewLimiter(int(in.Parallelism))
+
+	for _, k := range in.Keys {
+		fn := func(param interface{}) {
+			req := state.GetRequest{
+				Key: a.getModifiedStateKey(param.(string)),
+			}
+
+			r, err := store.Get(&req)
+			if err == nil && r != nil && r.Data != nil {
+				resp.Items = append(resp.Items, &runtimev1pb.BulkStateItem{
+					Key:  param.(string),
+					Data: r.Data,
+					Etag: r.ETag,
+				})
+			}
+		}
+
+		limiter.Execute(fn, k)
+	}
+	limiter.Wait()
+
+	return resp, nil
+}
+
+func (a *api) getStateStore(name string) (state.Store, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
 	}
 
-	storeName := in.StoreName
-
-	if a.stateStores[storeName] == nil {
+	if a.stateStores[name] == nil {
 		return nil, errors.New("ERR_STATE_STORE_NOT_FOUND")
+	}
+	return a.stateStores[name], nil
+}
+
+func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		return &runtimev1pb.GetStateResponse{}, err
 	}
 
 	req := state.GetRequest{
@@ -236,7 +271,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		},
 	}
 
-	getResponse, err := a.stateStores[storeName].Get(&req)
+	getResponse, err := store.Get(&req)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
 	}
@@ -250,14 +285,9 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 }
 
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
-	}
-
-	storeName := in.StoreName
-
-	if a.stateStores[storeName] == nil {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		return &empty.Empty{}, err
 	}
 
 	reqs := []state.SetRequest{}
@@ -273,23 +303,11 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 				Consistency: stateConsistencyToString(s.Options.Consistency),
 				Concurrency: stateConcurrencyToString(s.Options.Concurrency),
 			}
-			if s.Options.RetryPolicy != nil {
-				req.Options.RetryPolicy = state.RetryPolicy{
-					Threshold: int(s.Options.RetryPolicy.Threshold),
-					Pattern:   retryPatternToString(s.Options.RetryPolicy.Pattern),
-				}
-				if s.Options.RetryPolicy.Interval != nil {
-					dur, err := duration(s.Options.RetryPolicy.Interval)
-					if err == nil {
-						req.Options.RetryPolicy.Interval = dur
-					}
-				}
-			}
 		}
 		reqs = append(reqs, req)
 	}
 
-	err := a.stateStores[storeName].BulkSet(reqs)
+	err = store.BulkSet(reqs)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
 	}
@@ -297,14 +315,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 }
 
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
-	}
-
-	storeName := in.StoreName
-
-	if a.stateStores[storeName] == nil {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		return &empty.Empty{}, err
 	}
 
 	req := state.DeleteRequest{
@@ -316,23 +329,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 			Concurrency: stateConcurrencyToString(in.Options.Concurrency),
 			Consistency: stateConsistencyToString(in.Options.Consistency),
 		}
-
-		if in.Options.RetryPolicy != nil {
-			retryPolicy := state.RetryPolicy{
-				Threshold: int(in.Options.RetryPolicy.Threshold),
-				Pattern:   retryPatternToString(in.Options.RetryPolicy.Pattern),
-			}
-			if in.Options.RetryPolicy.Interval != nil {
-				dur, err := duration(in.Options.RetryPolicy.Interval)
-				if err == nil {
-					retryPolicy.Interval = dur
-				}
-			}
-			req.Options.RetryPolicy = retryPolicy
-		}
 	}
 
-	err := a.stateStores[storeName].Delete(&req)
+	err = store.Delete(&req)
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
 	}
@@ -391,97 +390,67 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
 	}
 
-	requests := []state.TransactionalRequest{}
-	for _, inputReq := range in.Requests {
+	operations := []state.TransactionalStateOperation{}
+	for _, inputReq := range in.Operations {
+		var operation state.TransactionalStateOperation
+		var req = inputReq.Request
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
-				Key:      a.getModifiedStateKey(inputReq.States.Key),
-				Metadata: inputReq.States.Metadata,
-				Value:    string(inputReq.States.Value),
-				Options:  a.getSetStateOptions(inputReq.States),
+				Key: a.getModifiedStateKey(req.Key),
+				// Limitation:
+				// type conversion is required because Multi of some statestore
+				// implementation cannot handle []byte properly.
+				Value:    string(req.Value),
+				Metadata: req.Metadata,
+				ETag:     req.Etag,
 			}
-			req := state.TransactionalRequest{
+
+			if req.Options != nil {
+				setReq.Options = state.SetStateOption{
+					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
+					Consistency: stateConsistencyToString(req.Options.Consistency),
+				}
+			}
+
+			operation = state.TransactionalStateOperation{
 				Operation: state.Upsert,
 				Request:   setReq,
 			}
-			requests = append(requests, req)
 
 		case state.Delete:
 			delReq := state.DeleteRequest{
-				Key:      a.getModifiedStateKey(inputReq.States.Key),
-				Metadata: inputReq.States.Metadata,
-				Options:  state.DeleteStateOption(a.getSetStateOptions(inputReq.States)),
+				Key:      a.getModifiedStateKey(req.Key),
+				Metadata: req.Metadata,
+				ETag:     req.Etag,
 			}
-			req := state.TransactionalRequest{
+
+			if req.Options != nil {
+				delReq.Options = state.DeleteStateOption{
+					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
+					Consistency: stateConsistencyToString(req.Options.Consistency),
+				}
+			}
+
+			operation = state.TransactionalStateOperation{
 				Operation: state.Delete,
 				Request:   delReq,
 			}
-			requests = append(requests, req)
+
 		default:
 			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
 		}
+
+		operations = append(operations, operation)
 	}
 
-	err := transactionalStore.Multi(requests)
+	err := transactionalStore.Multi(&state.TransactionalStateRequest{
+		Operations: operations,
+		Metadata:   in.Metadata,
+	})
+
 	if err != nil {
 		return &empty.Empty{}, fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
 	}
 	return &empty.Empty{}, nil
-}
-
-func (a *api) getSetStateOptions(r *commonv1pb.StateItem) (o state.SetStateOption) {
-	if r.Options != nil {
-		o.Consistency = stateConsistencyToString(r.Options.Consistency)
-		o.Concurrency = stateConcurrencyToString(r.Options.Concurrency)
-
-		if r.Options.RetryPolicy != nil {
-			o.RetryPolicy = state.RetryPolicy{
-				Threshold: int(r.Options.RetryPolicy.Threshold),
-				Pattern:   retryPatternToString(r.Options.RetryPolicy.Pattern),
-			}
-
-			if r.Options.RetryPolicy.Interval != nil {
-				dur, err := duration(r.Options.RetryPolicy.Interval)
-				if err == nil {
-					o.RetryPolicy.Interval = dur
-				}
-			}
-		}
-	}
-	return
-}
-
-func duration(p *durpb.Duration) (time.Duration, error) {
-	if err := validateDuration(p); err != nil {
-		return 0, err
-	}
-	d := time.Duration(p.Seconds) * time.Second
-	if int64(d/time.Second) != p.Seconds {
-		return 0, fmt.Errorf("duration: %v is out of range for time.Duration", p)
-	}
-	if p.Nanos != 0 {
-		d += time.Duration(p.Nanos) * time.Nanosecond
-		if (d < 0) != (p.Nanos < 0) {
-			return 0, fmt.Errorf("duration: %v is out of range for time.Duration", p)
-		}
-	}
-	return d, nil
-}
-
-func validateDuration(d *durpb.Duration) error {
-	if d == nil {
-		return errors.New("duration: nil Duration")
-	}
-	if d.Seconds < minSeconds || d.Seconds > maxSeconds {
-		return fmt.Errorf("duration: %v: seconds out of range", d)
-	}
-	if d.Nanos <= -1e9 || d.Nanos >= 1e9 {
-		return fmt.Errorf("duration: %v: nanos out of range", d)
-	}
-	// Seconds and Nanos must have the same sign, unless d.Nanos is zero.
-	if (d.Seconds < 0 && d.Nanos > 0) || (d.Seconds > 0 && d.Nanos < 0) {
-		return fmt.Errorf("duration: %v: seconds and nanos have different signs", d)
-	}
-	return nil
 }

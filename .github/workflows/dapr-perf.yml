@@ -9,13 +9,14 @@ on:
   schedule:
     - cron: '0 */2 * * *'
   repository_dispatch:
+    types: [perf-test]
 
 jobs:
   test-perf:
     name: perf tests
     runs-on: ubuntu-latest
     env:
-      GOVER: 1.14.3
+      GOVER: 1.15
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org

@@ -35,7 +35,9 @@ import (
 )
 
 const (
-	TestRuntimeConfigID = "consumer0"
+	TestRuntimeConfigID  = "consumer0"
+	TestPubsubName       = "testpubsub"
+	TestSecondPubsubName = "testpubsub2"
 )
 
 var testCertRoot = `-----BEGIN CERTIFICATE-----
@@ -79,23 +81,37 @@ func TestNewRuntime(t *testing.T) {
 	assert.NotNil(t, r, "runtime must be initiated")
 }
 
-func getSubscriptionsJSONString(topics []string) string {
+// helper to populate subscription array for 2 pubsubs.
+// 'topics' are the topics for the first pubsub.
+// 'topics2' are the topics for the second pubsub.
+func getSubscriptionsJSONString(topics []string, topics2 []string) string {
 	s := []runtime_pubsub.Subscription{}
 	for _, t := range topics {
 		s = append(s, runtime_pubsub.Subscription{
-			Topic: t,
-			Route: t,
+			PubsubName: TestPubsubName,
+			Topic:      t,
+			Route:      t,
+		})
+	}
+
+	for _, t := range topics2 {
+		s = append(s, runtime_pubsub.Subscription{
+			PubsubName: TestSecondPubsubName,
+			Topic:      t,
+			Route:      t,
 		})
 	}
 	b, _ := json.Marshal(&s)
+
 	return string(b)
 }
 
 func getSubscriptionCustom(topic, route string) string {
 	s := []runtime_pubsub.Subscription{
 		{
-			Topic: topic,
-			Route: route,
+			PubsubName: TestPubsubName,
+			Topic:      topic,
+			Route:      route,
 		},
 	}
 	b, _ := json.Marshal(&s)
@@ -105,11 +121,18 @@ func getSubscriptionCustom(topic, route string) string {
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
-	initMockPubSubForRuntime := func(rt *DaprRuntime) *daprt.MockPubSub {
+	initMockPubSubForRuntime := func(rt *DaprRuntime) (*daprt.MockPubSub, *daprt.MockPubSub) {
 		mockPubSub := new(daprt.MockPubSub)
+
+		mockPubSub2 := new(daprt.MockPubSub)
+
 		rt.pubSubRegistry.Register(
 			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
 				return mockPubSub
+			}),
+
+			pubsub_loader.New("mockPubSub2", func() pubsub.PubSub {
+				return mockPubSub2
 			}),
 		)
 
@@ -123,14 +146,20 @@ func TestInitPubSub(t *testing.T) {
 			mock.AnythingOfType("pubsub.SubscribeRequest"),
 			mock.AnythingOfType("pubsub.Handler")).Return(nil)
 
+		mockPubSub2.On("Init", expectedMetadata).Return(nil)
+		mockPubSub2.On(
+			"Subscribe",
+			mock.AnythingOfType("pubsub.SubscribeRequest"),
+			mock.AnythingOfType("func(*pubsub.NewMessage) error")).Return(nil)
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		return mockPubSub
+		return mockPubSub, mockPubSub2
 	}
 
 	t.Run("subscribe 2 topics", func(t *testing.T) {
-		mockPubSub := initMockPubSubForRuntime(rt)
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -141,7 +170,9 @@ func TestInitPubSub(t *testing.T) {
 		fakeReq.WithRawData(nil, "application/json")
 
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"})
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"})           // second pubsub
 		fakeResp.WithRawData([]byte(subs), "application/json")
 
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
@@ -152,6 +183,7 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
 
 		// act
 		err = rt.beginPubSub()
@@ -159,11 +191,12 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
 	t.Run("subscribe to topic with custom route", func(t *testing.T) {
-		mockPubSub := initMockPubSubForRuntime(rt)
+		mockPubSub, _ := initMockPubSubForRuntime(rt)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -196,7 +229,7 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("subscribe 0 topics unless user app provides topic list", func(t *testing.T) {
-		mockPubSub := initMockPubSubForRuntime(rt)
+		mockPubSub, _ := initMockPubSubForRuntime(rt)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -232,13 +265,13 @@ func TestInitPubSub(t *testing.T) {
 
 	t.Run("publish adapter not nil, with pub sub component", func(t *testing.T) {
 		rt = NewTestDaprRuntime(modes.StandaloneMode)
-		rt.pubSub = initMockPubSubForRuntime(rt)
+		rt.pubSubs[TestPubsubName], _ = initMockPubSubForRuntime(rt)
 		a := rt.getPublishAdapter()
 		assert.NotNil(t, a)
 	})
 
 	t.Run("test subscribe, app allowed 1 topic", func(t *testing.T) {
-		mockPubSub := initMockPubSubForRuntime(rt)
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -249,7 +282,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		subs := getSubscriptionsJSONString([]string{"topic0"})
+		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic1"})
 		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
@@ -259,6 +292,7 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
 
 		// act
 		err = rt.beginPubSub()
@@ -266,10 +300,11 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
 	t.Run("test subscribe, app allowed 2 topic", func(t *testing.T) {
-		mockPubSub := initMockPubSubForRuntime(rt)
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -280,7 +315,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 2 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"})
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"}, []string{"topic0"})
 		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
@@ -290,6 +325,7 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
 
 		// act
 		err = rt.beginPubSub()
@@ -297,10 +333,11 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
 	t.Run("test subscribe, app not allowed 1 topic", func(t *testing.T) {
-		mockPubSub := initMockPubSubForRuntime(rt)
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -311,7 +348,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		subs := getSubscriptionsJSONString([]string{"topic3"})
+		subs := getSubscriptionsJSONString([]string{"topic3"}, []string{"topic5"})
 		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
@@ -322,10 +359,13 @@ func TestInitPubSub(t *testing.T) {
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
 	})
 
 	t.Run("test subscribe, app not allowed 1 topic, allowed one topic", func(t *testing.T) {
-		mockPubSub := initMockPubSubForRuntime(rt)
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -336,7 +376,9 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		subs := getSubscriptionsJSONString([]string{"topic0", "topic3"})
+
+		// topic0 is allowed, topic3 and topic5 are not
+		subs := getSubscriptionsJSONString([]string{"topic0", "topic3"}, []string{"topic0", "topic5"})
 		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
@@ -346,6 +388,7 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
 
 		// act
 		err = rt.beginPubSub()
@@ -353,6 +396,7 @@ func TestInitPubSub(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
 	t.Run("test publish, topic allowed", func(t *testing.T) {
@@ -367,7 +411,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		subs := getSubscriptionsJSONString([]string{"topic0"})
+		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic1"})
 		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
@@ -375,10 +419,20 @@ func TestInitPubSub(t *testing.T) {
 		err := rt.initPubSub()
 		assert.Nil(t, err)
 
-		rt.pubSub = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
 		err = rt.Publish(&pubsub.PublishRequest{
-			Topic: "topic0",
+			PubsubName: TestPubsubName,
+			Topic:      "topic0",
 		})
+
+		assert.Nil(t, err)
+
+		rt.pubSubs[TestSecondPubsubName] = &mockPublishPubSub{}
+		err = rt.Publish(&pubsub.PublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic1",
+		})
+
 		assert.Nil(t, err)
 	})
 
@@ -394,7 +448,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		subs := getSubscriptionsJSONString([]string{"topic0"})
+		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic0"})
 		fakeResp.WithRawData([]byte(subs), "application/json")
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReq).Return(fakeResp, nil)
 
@@ -402,53 +456,62 @@ func TestInitPubSub(t *testing.T) {
 		err := rt.initPubSub()
 		assert.Nil(t, err)
 
-		rt.pubSub = &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
 		err = rt.Publish(&pubsub.PublishRequest{
-			Topic: "topic5",
+			PubsubName: TestPubsubName,
+			Topic:      "topic5",
+		})
+		assert.NotNil(t, err)
+
+		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		err = rt.Publish(&pubsub.PublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic5",
 		})
 		assert.NotNil(t, err)
 	})
 
 	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = []string{"topic1"}
-		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
+		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = []string{"topic1"}
-		a := rt.isPubSubOperationAllowed("topic2", rt.scopedPublishings)
+		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", rt.scopedPublishings[TestPubsubName])
 		assert.False(t, a)
 	})
 
 	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = []string{"topic1"}
-		rt.scopedPublishings = []string{"topic1"}
-		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
+		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
+		rt.scopedPublishings = map[string][]string{TestPubsubName: {"topic1"}}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
 		assert.True(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
-		rt.allowedTopics = []string{"topic1"}
-		rt.scopedPublishings = []string{"topic2"}
-		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
+		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
+		rt.scopedPublishings = map[string][]string{TestPubsubName: {"topic2"}}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
 		assert.False(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
-		rt.allowedTopics = []string{"topic1"}
-		rt.scopedPublishings = []string{}
-		a := rt.isPubSubOperationAllowed("topic1", rt.scopedPublishings)
+		rt.allowedTopics = map[string][]string{TestPubsubName: {"topic1"}}
+		rt.scopedPublishings = map[string][]string{}
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", rt.scopedPublishings[TestPubsubName])
 		assert.True(t, a)
 	})
 
 	t.Run("topics A and B in allowed topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
-		rt.allowedTopics = []string{"A", "B"}
-		rt.scopedPublishings = []string{"A"}
-		a := rt.isPubSubOperationAllowed("A", rt.scopedPublishings)
+		rt.allowedTopics = map[string][]string{TestPubsubName: {"A", "B"}}
+		rt.scopedPublishings = map[string][]string{TestPubsubName: {"A"}}
+
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", rt.scopedPublishings[TestPubsubName])
 		assert.True(t, a)
 
-		b := rt.isPubSubOperationAllowed("B", rt.scopedPublishings)
+		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.scopedPublishings[TestPubsubName])
 		assert.False(t, b)
 	})
 }
@@ -686,9 +749,15 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 }
 
 func TestOnNewPublishedMessage(t *testing.T) {
+	topic := "topic1"
+
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestPubsubName, []byte("Test Message"))
+	b, err := json.Marshal(envelope)
+	assert.Nil(t, err)
+
 	testPubSubMessage := &pubsub.NewMessage{
-		Topic: "topic1",
-		Data:  []byte("Test Message"),
+		Topic: topic,
+		Data:  b,
 	}
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
@@ -791,15 +860,27 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		"")
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
-	rt.topicRoutes["topic1"] = "topic1"
+	rt.topicRoutes = map[string]TopicRoute{}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
 
+	// add 2 pubsubs
 	rt.components = []components_v1alpha1.Component{
 		{
 			ObjectMeta: meta_v1.ObjectMeta{
-				Name: "Components",
+				Name: TestPubsubName,
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub",
+				Metadata: getFakeMetadataItems(),
+			},
+		},
+		{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: TestSecondPubsubName,
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type:     "pubsub.mockPubSub2",
 				Metadata: getFakeMetadataItems(),
 			},
 		},

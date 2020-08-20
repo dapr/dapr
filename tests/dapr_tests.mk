@@ -27,7 +27,7 @@ DAPR_TEST_REGISTRY=$(DAPR_REGISTRY)
 endif
 
 ifeq ($(DAPR_TEST_TAG),)
-DAPR_TEST_TAG=$(DAPR_TAG)
+DAPR_TEST_TAG=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 endif
 
 ifeq ($(DAPR_TEST_ENV),minikube)
@@ -124,14 +124,18 @@ setup-test-env-redis:
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) install dapr-kafka incubator/kafka --wait --timeout 10m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/kafka_override.yaml 
+	$(HELM) template dapr-kafka incubator/kafka --wait --timeout 10m0s -f ./tests/config/kafka_override.yaml | python ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis
 
 # Apply default config yaml to turn mTLS off for testing (mTLS is enabled by default)
-setup-test-config:
+setup-disable-mtls:
 	$(KUBECTL) apply -f ./tests/config/dapr_mtls_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+
+# Apply default config yaml to turn tracing off for testing (tracing is enabled by default)
+setup-app-configurations:
+	$(KUBECTL) apply -f ./tests/config/dapr_telemetry_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 # Apply component yaml for state, secrets, pubsub, and bindings
 setup-test-components:

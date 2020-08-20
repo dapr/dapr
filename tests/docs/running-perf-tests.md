@@ -1,6 +1,6 @@
 # Running Performance Tests
 
-Performance tests are designed to let you evaluate the latency and processing times for Dapr in your environment for a given hardware. The following describes how to run performance tests in a local dev environment and run them through CI:
+Performance tests are designed to let you evaluate the latency, resource usage and processing times for Dapr in your environment for a given hardware. The following describes how to run performance tests in a local dev environment and run them through CI:
 
   - [Run Performance tests in local dev environment](#run-perf-tests-in-local-dev-environment)
   - [Run Performance tests through GitHub Actions](#run-perf-tests-through-github-actions)
@@ -34,10 +34,19 @@ Performance tests are designed to let you evaluate the latency and processing ti
     # DAPR_PERF_CONNECTIONS sets the number of client connections used to send requests to Dapr. Default is 1.
     # DAPR_TEST_DURATION sets the duration of the test. Default is "1m".
     # DAPR_PAYLOAD_SIZE_KB sets a payload size in kb to test with. default is 0.
+    # DAPR_SIDECAR_CPU_LIMIT sets the cpu resource limit on the Dapr sidecar. default is 4.0.
+    # DAPR_SIDECAR_MEMORY_LIMIT sets the memory resource limit on the Dapr sidecar. default is 512Mi.
+    # DAPR_SIDECAR_CPU_REQUEST sets the cpu resource request on the Dapr sidecar. default is 0.5.
+    # DAPR_SIDECAR_MEMORY_REQUEST sets the memory resource request on the Dapr sidecar. default is 250Mi.
     export DAPR_PERF_QPS
     export DAPR_PERF_CONNECTIONS
     export DAPR_TEST_DURATION
     export DAPR_PAYLOAD_SIZE_KB
+    export DAPR_SIDECAR_CPU_LIMIT
+    export DAPR_SIDECAR_MEMORY_LIMIT
+    export DAPR_SIDECAR_CPU_REQUEST
+    export DAPR_SIDECAR_MEMORY_REQUEST
+
     ```
 
 ### Deploy your dapr runtime change
@@ -58,10 +67,22 @@ make docker-push
 make docker-deploy-k8s
 ```
 
+### Register app configurations
+
+```bash
+make setup-app-configurations
+```
+
+### Optional: Disable tracing
+
+```bash
+export DAPR_DISABLE_TELEMETRY=true
+```
+
 ### Optional: Apply this configuration to disable mTLS
 
 ```bash
-make setup-test-config
+make setup-disable-mtls
 ```
 
 ### Build and push test apps to docker hub

@@ -5,7 +5,11 @@ metadata:
   labels:
     app: dapr-dashboard
 spec:
+{{- if eq .Values.global.ha.enabled true }}
+  replicas: {{ .Values.global.ha.replicaCount }}
+{{- else }}
   replicas: {{ .Values.replicaCount }}
+{{- end }}
   selector:
     matchLabels:
       app: dapr-dashboard
@@ -14,13 +18,31 @@ spec:
       labels:
         app: dapr-dashboard
     spec:
+      serviceAccountName: dashboard-reader
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                - key: kubernetes.io/os
+                  operator: In
+                  values:
+                  - {{ .Values.global.daprControlPlaneOs }}
+{{- if eq .Values.global.ha.enabled true }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-dashboard
+            topologyKey: "kubernetes.io/hostname"
+{{- end }}
       containers:
       - name: dapr-dashboard
-{{- if contains "/" .Values.image.name }}
-        image: "{{ .Values.image.name }}"
-{{- else }}
-        image: "{{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
-{{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         env:
         - name: NAMESPACE

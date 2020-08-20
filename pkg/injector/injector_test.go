@@ -250,7 +250,7 @@ func TestGetAppIDFromRequest(t *testing.T) {
 		fakePod := corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
-					"dapr.io/id": "fakeID",
+					"dapr.io/app-id": "fakeID",
 				},
 			},
 		}

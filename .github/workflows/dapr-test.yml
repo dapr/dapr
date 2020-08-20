@@ -9,13 +9,14 @@ on:
   schedule:
     - cron: '0 */2 * * *'
   repository_dispatch:
+    types: [e2e-test]
 
 jobs:
   test-e2e:
-    name: end-to-end tests
+    name: end-to-end linux tests
     runs-on: ubuntu-latest
     env:
-      GOVER: 1.14.3
+      GOVER: 1.15
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org
@@ -30,6 +31,7 @@ jobs:
         run: |
           echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
           echo ::set-env name=CHECKOUT_REF::refs/heads/master
+        shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@0.3.0
@@ -64,6 +66,7 @@ jobs:
       - name: Find the test cluster
         if: env.CHECKOUT_REPO != ''
         run: ./tests/test-infra/find_cluster.sh
+        shell: bash
       - name: Add the test status comment to PR
         if: github.event_name == 'repository_dispatch' && env.CHECKOUT_REPO != ''
         env:
@@ -95,7 +98,7 @@ jobs:
       - name: Build dapr and its docker image
         if: env.TEST_CLUSTER != ''
         run: |
-          make build-linux
+          make build
           make docker-build
       - name: Build e2e test apps
         if: env.TEST_CLUSTER != ''

@@ -1,6 +1,8 @@
 package scopes
 
-import "strings"
+import (
+	"strings"
+)
 
 const (
 	SubscriptionScopes = "subscriptionScopes"

@@ -26,7 +26,7 @@ service AppCallback {
   rpc ListTopicSubscriptions(google.protobuf.Empty) returns (ListTopicSubscriptionsResponse) {}
 
   // Subscribes events from Pubsub
-  rpc OnTopicEvent(TopicEventRequest) returns (google.protobuf.Empty) {}
+  rpc OnTopicEvent(TopicEventRequest) returns (TopicEventResponse) {}
 
   // Lists all input bindings subscribed by this app.
   rpc ListInputBindings(google.protobuf.Empty) returns (ListInputBindingsResponse) {}
@@ -67,6 +67,13 @@ message TopicEventRequest {
 
   // The pubsub topic which publisher sent to.
   string topic = 6;
+
+  // The name of the pubsub the publisher sent to.
+  string pubsub_name = 8;
+}
+
+// TopicEventResponse is response from app on published message
+message TopicEventResponse {
 }
 
 // BindingEventRequest represents input bindings event.
@@ -117,11 +124,14 @@ message ListTopicSubscriptionsResponse {
 
 // TopicSubscription represents topic and metadata.
 message TopicSubscription {
+  // Required. The name of the pubsub containing the topic below to subscribe to.
+  string pubsub_name = 1;
+
   // Required. The name of topic which will be subscribed
-  string topic = 1;
+  string topic = 2;
 
   // The optional properties used for this topic's subscribtion e.g. session id
-  map<string,string> metadata = 2;
+  map<string,string> metadata = 3;
 }
 
 // ListInputBindingsResponse is the message including the list of input bindings.

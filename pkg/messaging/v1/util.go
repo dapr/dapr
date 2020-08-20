@@ -360,7 +360,9 @@ func processHTTPToHTTPTraceHeaders(ctx context.Context, traceparentValue, traceS
 		diag.SpanContextToHTTPHeaders(span.SpanContext(), setHeader)
 	} else {
 		setHeader(traceparentHeader, traceparentValue)
-		setHeader(tracestateHeader, traceStateValue)
+		if traceStateValue != "" {
+			setHeader(tracestateHeader, traceStateValue)
+		}
 	}
 }
 
@@ -387,4 +389,13 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 			md.Set(tracebinMetadata, string(decoded))
 		}
 	}
+}
+
+func cloneBytes(data []byte) []byte {
+	if data == nil {
+		return nil
+	}
+	cloneData := make([]byte, len(data))
+	copy(cloneData, data)
+	return cloneData
 }

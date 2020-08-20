@@ -153,8 +153,8 @@ func (s *server) OnBindingEvent(ctx context.Context, in *pb.BindingEventRequest)
 	return &pb.BindingEventResponse{}, nil
 }
 
-// This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 0.3 envelope.
-func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*empty.Empty, error) {
+// This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 1.0 envelope.
+func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*pb.TopicEventResponse, error) {
 	fmt.Println("Topic message arrived")
-	return &empty.Empty{}, nil
+	return &pb.TopicEventResponse{}, nil
 }

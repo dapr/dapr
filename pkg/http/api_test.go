@@ -42,8 +42,6 @@ import (
 	"github.com/valyala/fasthttp/fasthttputil"
 )
 
-var retryCounter = 0
-
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
@@ -1571,41 +1569,6 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
-
-	t.Run("Delete state - With Retries", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/failed-key", storeName)
-		retryCounter = 0
-		// act
-		_ = fakeServer.DoRequest("DELETE", apiPath, nil, map[string]string{
-			"retryInterval":  "100",
-			"retryPattern":   "linear",
-			"retryThreshold": "3",
-		}, "BAD ETAG")
-		// assert
-		assert.Equal(t, 3, retryCounter, "should have tried 3 times")
-	})
-
-	t.Run("Set state - With Retries", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
-		retryCounter = 0
-		request := []state.SetRequest{{
-			Key:  "failed-key",
-			ETag: "BAD ETAG",
-			Options: state.SetStateOption{
-				RetryPolicy: state.RetryPolicy{
-					Interval:  100,
-					Pattern:   state.Linear,
-					Threshold: 5,
-				},
-			},
-		}}
-		b, _ := json.Marshal(request)
-
-		// act
-		_ = fakeServer.DoRequest("POST", apiPath, b, nil, "BAD ETAG")
-		// assert
-		assert.Equal(t, 5, retryCounter, "should have tried 5 times")
-	})
 }
 
 type fakeStateStore struct {
@@ -1640,14 +1603,6 @@ func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 			return errors.New("ETag mismatch")
 		}
 		return nil
-	} else if req.Key == "failed-key" {
-		return state.DeleteWithRetries(func(req *state.DeleteRequest) error {
-			retryCounter++
-			if retryCounter < 3 {
-				return errors.New("Simulated failure")
-			}
-			return nil
-		}, req)
 	}
 	return errors.New("NOT FOUND")
 }
@@ -1673,19 +1628,11 @@ func (c fakeStateStore) Set(req *state.SetRequest) error {
 			return errors.New("ETag mismatch")
 		}
 		return nil
-	} else if req.Key == "failed-key" {
-		return state.SetWithRetries(func(req *state.SetRequest) error {
-			retryCounter++
-			if retryCounter < 5 {
-				return errors.New("Simulated failure")
-			}
-			return nil
-		}, req)
 	}
 	return errors.New("NOT FOUND")
 }
 
-func (c fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
+func (c fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	return nil
 }
 
@@ -1787,7 +1734,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
-		testTransactionalOperations := []state.TransactionalRequest{
+		testTransactionalOperations := []state.TransactionalStateOperation{
 			{
 				Operation: state.Upsert,
 				Request: map[string]interface{}{
@@ -1804,7 +1751,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+			Operations: testTransactionalOperations,
+		})
 
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
@@ -1815,7 +1764,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	t.Run("Post non-existent state store - 401 No State Store Found", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", "non-existent-store")
-		testTransactionalOperations := []state.TransactionalRequest{
+		testTransactionalOperations := []state.TransactionalStateOperation{
 			{
 				Operation: state.Upsert,
 				Request: map[string]interface{}{
@@ -1832,7 +1781,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		}
 
 		// act
-		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
+		inputBodyBytes, err := json.Marshal(state.TransactionalStateRequest{
+			Operations: testTransactionalOperations,
+		})
 		assert.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 		// assert

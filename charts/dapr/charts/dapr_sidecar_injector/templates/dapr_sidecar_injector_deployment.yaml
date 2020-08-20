@@ -5,7 +5,9 @@ metadata:
   labels:
     app: dapr-sidecar-injector
 spec:
-  replicas: {{ .Values.replicaCount }}
+{{- if eq .Values.global.ha.enabled true }}
+  replicas: {{ .Values.global.ha.replicaCount }}
+{{- end }}
   selector:
     matchLabels:
       app: dapr-sidecar-injector
@@ -21,6 +23,18 @@ spec:
 {{- end }}
     spec:
       serviceAccountName: dapr-operator
+{{- if eq .Values.global.ha.enabled true }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-sidecar-injector
+            topologyKey: "kubernetes.io/hostname"
+{{- end }}
       containers:
       - name: dapr-sidecar-injector
         livenessProbe:
@@ -43,10 +57,12 @@ spec:
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsUser: 1000
+{{- end }}
         command:
-        - "./injector"
+        - "/injector"
         args:
         - "--log-level"
         - {{ .Values.logLevel }}

@@ -55,7 +55,7 @@ spec:
             protocol: TCP
 {{- end }}
         command:
-        - "./placement"
+        - "/placement"
         args:
         - "--log-level"
         - {{ .Values.logLevel }}

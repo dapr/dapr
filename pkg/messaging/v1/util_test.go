@@ -253,3 +253,23 @@ func TestErrorFromInternalStatus(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, expected, actual)
 }
+
+func TestCloneBytes(t *testing.T) {
+	t.Run("data is nil", func(t *testing.T) {
+		assert.Nil(t, cloneBytes(nil))
+	})
+
+	t.Run("data is empty", func(t *testing.T) {
+		orig := []byte{}
+
+		assert.Equal(t, orig, cloneBytes(orig))
+		assert.NotSame(t, orig, cloneBytes(orig))
+	})
+
+	t.Run("data is not empty", func(t *testing.T) {
+		orig := []byte("fakedata")
+
+		assert.Equal(t, orig, cloneBytes(orig))
+		assert.NotSame(t, orig, cloneBytes(orig))
+	})
+}

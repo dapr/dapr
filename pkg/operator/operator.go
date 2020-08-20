@@ -8,19 +8,20 @@ package operator
 import (
 	"context"
 
-	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
-	k8s "github.com/dapr/dapr/pkg/kubernetes"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator/api"
 	"github.com/dapr/dapr/pkg/operator/handlers"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime"
+	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -35,75 +36,85 @@ type Operator interface {
 }
 
 type operator struct {
-	kubeClient          kubernetes.Interface
-	daprClient          scheme.Interface
-	deploymentsInformer cache.SharedInformer
-	componentsInformer  cache.SharedInformer
-	ctx                 context.Context
-	daprHandler         handlers.Handler
-	apiServer           api.Server
-	config              *Config
+	ctx         context.Context
+	daprHandler handlers.Handler
+	apiServer   api.Server
+
+	configName    string
+	certChainPath string
+	config        *Config
+
+	mgr    ctrl.Manager
+	client client.Client
+}
+
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	_ = componentsapi.AddToScheme(scheme)
+	_ = configurationapi.AddToScheme(scheme)
 }
 
 // NewOperator returns a new Dapr Operator
-func NewOperator(kubeAPI *k8s.API, config *Config) Operator {
-	kubeClient := kubeAPI.GetKubeClient()
-	daprClient := kubeAPI.GetDaprClient()
-
-	o := &operator{
-		kubeClient: kubeClient,
-		daprClient: daprClient,
-		deploymentsInformer: k8s.DeploymentsIndexInformer(
-			kubeClient,
-			meta_v1.NamespaceAll,
-			nil,
-			nil,
-		),
-		componentsInformer: k8s.ComponentsIndexInformer(
-			daprClient,
-			meta_v1.NamespaceAll,
-			nil,
-			nil,
-		),
-		daprHandler: handlers.NewDaprHandler(kubeAPI),
-		config:      config,
+func NewOperator(config, certChainPath string, enableLeaderElection bool) Operator {
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:             scheme,
+		MetricsBindAddress: "0",
+		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   "operator.dapr.io",
+	})
+	if err != nil {
+		log.Fatal("unable to start manager")
+	}
+	daprHandler := handlers.NewDaprHandler(mgr)
+	if err := daprHandler.Init(); err != nil {
+		log.Fatalf("unable to initialize handler, err: %s", err)
 	}
 
-	o.deploymentsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: o.syncDeployment,
-		UpdateFunc: func(_, newObj interface{}) {
-			o.syncComponent(newObj)
-		},
-		DeleteFunc: o.syncDeletedDeployment,
-	})
-
-	o.componentsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: o.syncComponent,
-		UpdateFunc: func(_, newObj interface{}) {
-			o.syncComponent(newObj)
-		},
-	})
-
+	o := &operator{
+		daprHandler:   daprHandler,
+		mgr:           mgr,
+		client:        mgr.GetClient(),
+		configName:    config,
+		certChainPath: certChainPath,
+	}
+	o.apiServer = api.NewAPIServer(o.client)
+	if componentInfomer, err := mgr.GetCache().GetInformer(&componentsapi.Component{}); err != nil {
+		log.Fatalf("unable to get setup components informer, err: %s", err)
+	} else {
+		componentInfomer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: o.syncComponent,
+			UpdateFunc: func(_, newObj interface{}) {
+				o.syncComponent(newObj)
+			},
+		})
+	}
 	return o
 }
 
+func (o *operator) prepareConfig() {
+	var err error
+	o.config, err = LoadConfiguration(o.configName, o.client)
+	if err != nil {
+		log.Fatalf("unable to load configuration, config: %s, err: %s", o.configName, err)
+	}
+	o.config.Credentials = credentials.NewTLSCredentials(o.certChainPath)
+}
+
 func (o *operator) syncComponent(obj interface{}) {
-	c, ok := obj.(*v1alpha1.Component)
+	c, ok := obj.(*componentsapi.Component)
 	if ok {
+		log.Debugf("observed component to be synced, %s/%s", c.Namespace, c.Name)
 		o.apiServer.OnComponentUpdated(c)
 	}
 }
 
-func (o *operator) syncDeployment(obj interface{}) {
-	o.daprHandler.ObjectCreated(obj)
-}
-
-func (o *operator) syncDeletedDeployment(obj interface{}) {
-	o.daprHandler.ObjectDeleted(obj)
-}
-
 func (o *operator) Run(ctx context.Context) {
-	defer runtime.HandleCrash()
+	defer runtimeutil.HandleCrash()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	o.ctx = ctx
@@ -112,16 +123,18 @@ func (o *operator) Run(ctx context.Context) {
 		log.Infof("Dapr Operator is shutting down")
 	}()
 	log.Infof("Dapr Operator is started")
-	go func() {
-		o.deploymentsInformer.Run(ctx.Done())
-		cancel()
-	}()
-	go func() {
-		o.componentsInformer.Run(ctx.Done())
-		cancel()
-	}()
 
-	o.apiServer = api.NewAPIServer(o.daprClient)
+	go func() {
+		if err := o.mgr.Start(ctx.Done()); err != nil {
+			if err != nil {
+				log.Fatalf("failed to start controller manager, err: %s", err)
+			}
+		}
+	}()
+	if !o.mgr.GetCache().WaitForCacheSync(ctx.Done()) {
+		log.Fatalf("failed to wait for cache sync")
+	}
+	o.prepareConfig()
 
 	var certChain *credentials.CertChain
 	if o.config.MTLSEnabled {

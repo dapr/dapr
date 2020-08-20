@@ -16,12 +16,14 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	metrics "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // KubeClient holds instances of Kubernetes clientset
 // TODO: Add cluster management methods to clean up the old test apps
 type KubeClient struct {
 	ClientSet     kubernetes.Interface
+	MetricsClient metrics.Interface
 	DaprClientSet daprclient.Interface
 	clientConfig  *rest.Config
 }
@@ -43,7 +45,12 @@ func NewKubeClient(configPath string, clusterName string) (*KubeClient, error) {
 		return nil, err
 	}
 
-	return &KubeClient{ClientSet: kubecs, DaprClientSet: daprcs, clientConfig: config}, nil
+	metricscs, err := metrics.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &KubeClient{ClientSet: kubecs, DaprClientSet: daprcs, clientConfig: config, MetricsClient: metricscs}, nil
 }
 
 func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, error) {

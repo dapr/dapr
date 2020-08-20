@@ -2,8 +2,9 @@ replicaCount: 1
 logLevel: info
 
 image:
+  registry: docker.io/daprio
   name: dashboard
-  tag: "0.1.0"
+  tag: "0.2.0"
 
 nameOverride: ""
 fullnameOverride: ""

@@ -29,7 +29,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
-	durpb "github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
@@ -75,6 +74,10 @@ func (m *mockGRPCAPI) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeB
 
 func (m *mockGRPCAPI) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
 	return &runtimev1pb.GetStateResponse{}, nil
+}
+
+func (m *mockGRPCAPI) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
+	return &runtimev1pb.GetBulkStateResponse{}, nil
 }
 
 func (m *mockGRPCAPI) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
@@ -711,10 +714,10 @@ func TestExecuteStateTransaction(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 	_, err := client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
-		Requests: []*runtimev1pb.TransactionalStateRequest{
+		Operations: []*runtimev1pb.TransactionalStateOperation{
 			{
 				OperationType: "upsert",
-				States: &commonv1pb.StateItem{
+				Request: &commonv1pb.StateItem{
 					Key:     "key1",
 					Value:   []byte("1"),
 					Options: stateOptions,
@@ -722,14 +725,14 @@ func TestExecuteStateTransaction(t *testing.T) {
 			},
 			{
 				OperationType: "upsert",
-				States: &commonv1pb.StateItem{
+				Request: &commonv1pb.StateItem{
 					Key:   "key2",
 					Value: []byte("1"),
 				},
 			},
 			{
 				OperationType: "delete",
-				States: &commonv1pb.StateItem{
+				Request: &commonv1pb.StateItem{
 					Key: "key1",
 				},
 			},
@@ -742,45 +745,14 @@ func TestExecuteStateTransaction(t *testing.T) {
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
-	retryPolicyOption := commonv1pb.StateRetryPolicy{
-		Threshold: 10,
-		Pattern:   commonv1pb.StateRetryPolicy_RETRY_EXPONENTIAL,
-		Interval: &durpb.Duration{
-			Seconds: 15,
-		},
-	}
 
 	testOptions := commonv1pb.StateOptions{
 		Concurrency: concurrencyOption,
 		Consistency: consistencyOption,
-		RetryPolicy: &retryPolicyOption,
 	}
 	expected := state.SetStateOption{
 		Concurrency: "first-write",
 		Consistency: "strong",
-		RetryPolicy: state.RetryPolicy{
-			Threshold: 10,
-			Pattern:   "exponential",
-			Interval:  time.Second * 15,
-		},
 	}
 	return &testOptions, expected
-}
-
-func TestGetStateOptions(t *testing.T) {
-	mockAppChannel := new(channelt.MockAppChannel)
-	fakeAPI := &api{
-		id:         "fakeAPI",
-		appChannel: mockAppChannel,
-	}
-	stateOptionTestCase, expected := GenerateStateOptionsTestCase()
-	stateItemTestCase := commonv1pb.StateItem{
-		Key:     "key1",
-		Value:   []byte("1"),
-		Options: stateOptionTestCase,
-	}
-	t.Run("extract state options", func(t *testing.T) {
-		result := fakeAPI.getSetStateOptions(&stateItemTestCase)
-		assert.Equal(t, expected, result)
-	})
 }

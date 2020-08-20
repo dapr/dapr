@@ -18,8 +18,8 @@ spec:
         testapp: perf-tester
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/id: "tester"
-        dapr.io/port: "3001"
+        dapr.io/app-id: "tester"
+        dapr.io/app-port: "3001"
     spec:
       containers:
       - name: perf-tester

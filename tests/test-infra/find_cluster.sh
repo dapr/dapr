@@ -10,10 +10,10 @@
 # The test cluster pool for e2e test
 # TODO: Add more aks test clusters
 testclusterpool=(
-    "dapr-aks-e2e-01"
-    "dapr-aks-e2e-02"
-    "dapr-aks-e2e-03"
-    "dapr-aks-e2e-04"
+    "dapr-aks-e2e-05"
+    "dapr-aks-e2e-06"
+    "dapr-aks-e2e-07"
+    "dapr-aks-e2e-08"
 )
 
 # Define max e2e test timeout, 1.5 hours
@@ -55,6 +55,8 @@ for clustername in ${testclusterpool[@]}; do
         echo "::set-env name=TEST_CLUSTER::$clustername"
         echo "::set-env name=DAPR_TAG::$clustername"
         echo "::set-env name=DAPR_TEST_TAG::$clustername"
+        echo "::set-env name=TARGET_OS::$GOOS"
+        echo "::set-env name=TARGET_ARCH::$GOARCH"
         exit 0
     fi
 

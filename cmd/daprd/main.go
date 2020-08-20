@@ -30,6 +30,7 @@ import (
 	// State Stores
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/aerospike"
+	state_azure_blobstorage "github.com/dapr/components-contrib/state/azure/blobstorage"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
 	"github.com/dapr/components-contrib/state/cassandra"
@@ -41,6 +42,7 @@ import (
 	"github.com/dapr/components-contrib/state/hazelcast"
 	"github.com/dapr/components-contrib/state/memcached"
 	"github.com/dapr/components-contrib/state/mongodb"
+	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
@@ -88,9 +90,11 @@ import (
 	"github.com/dapr/components-contrib/bindings/azure/servicebusqueues"
 	"github.com/dapr/components-contrib/bindings/azure/signalr"
 	"github.com/dapr/components-contrib/bindings/azure/storagequeues"
+	"github.com/dapr/components-contrib/bindings/cron"
 	"github.com/dapr/components-contrib/bindings/gcp/bucket"
 	"github.com/dapr/components-contrib/bindings/gcp/pubsub"
 	"github.com/dapr/components-contrib/bindings/http"
+	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/mqtt"
@@ -105,6 +109,7 @@ import (
 	middleware "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
+	"github.com/dapr/components-contrib/middleware/http/oauth2clientcredentials"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -150,6 +155,9 @@ func main() {
 			state_loader.New("consul", func() state.Store {
 				return consul.NewConsulStateStore(logContrib)
 			}),
+			state_loader.New("azure.blobstorage", func() state.Store {
+				return state_azure_blobstorage.NewAzureBlobStorageStore(logContrib)
+			}),
 			state_loader.New("azure.cosmosdb", func() state.Store {
 				return state_cosmosdb.NewCosmosDBStateStore(logContrib)
 			}),
@@ -173,6 +181,9 @@ func main() {
 			}),
 			state_loader.New("gcp.firestore", func() state.Store {
 				return firestore.NewFirestoreStateStore(logContrib)
+			}),
+			state_loader.New("postgresql", func() state.Store {
+				return postgresql.NewPostgreSQLStateStore(logContrib)
 			}),
 			state_loader.New("sqlserver", func() state.Store {
 				return sqlserver.NewSQLServerStateStore(logContrib)
@@ -281,6 +292,9 @@ func main() {
 			bindings_loader.NewInput("twitter", func() bindings.InputBinding {
 				return twitter.NewTwitter(logContrib)
 			}),
+			bindings_loader.NewInput("cron", func() bindings.InputBinding {
+				return cron.NewCron(logContrib)
+			}),
 		),
 		runtime.WithOutputBindings(
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
@@ -346,6 +360,15 @@ func main() {
 			bindings_loader.NewOutput("azure.eventgrid", func() bindings.OutputBinding {
 				return eventgrid.NewAzureEventGrid(logContrib)
 			}),
+			bindings_loader.NewOutput("cron", func() bindings.OutputBinding {
+				return cron.NewCron(logContrib)
+			}),
+			bindings_loader.NewOutput("twitter", func() bindings.OutputBinding {
+				return twitter.NewTwitter(logContrib)
+			}),
+			bindings_loader.NewOutput("influx", func() bindings.OutputBinding {
+				return influx.NewInflux(logContrib)
+			}),
 		),
 		runtime.WithHTTPMiddleware(
 			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
@@ -359,6 +382,10 @@ func main() {
 			}),
 			http_middleware_loader.New("oauth2", func(metadata middleware.Metadata) http_middleware.Middleware {
 				handler, _ := oauth2.NewOAuth2Middleware().GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("oauth2clientcredentials", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := oauth2clientcredentials.NewOAuth2ClientCredentialsMiddleware(log).GetHandler(metadata)
 				return handler
 			}),
 			http_middleware_loader.New("ratelimit", func(metadata middleware.Metadata) http_middleware.Middleware {

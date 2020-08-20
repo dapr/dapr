@@ -5,7 +5,11 @@ metadata:
   labels:
     app: dapr-operator
 spec:
+{{- if eq .Values.global.ha.enabled true }}
+  replicas: {{ .Values.global.ha.replicaCount }}
+{{- else }}
   replicas: {{ .Values.replicaCount }}
+{{- end }}
   selector:
     matchLabels:
       app: dapr-operator
@@ -20,6 +24,18 @@ spec:
         prometheus.io/path: "/"
 {{- end }}
     spec:
+{{- if eq .Values.global.ha.enabled true }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-operator
+            topologyKey: "kubernetes.io/hostname"
+{{- end }}
       containers:
       - name: dapr-operator
         livenessProbe:
@@ -59,7 +75,7 @@ spec:
             mountPath: /var/run/dapr/credentials
             readOnly: true
         command:
-        - "./operator"
+        - "/operator"
         args:
         - "--log-level"
         - {{ .Values.logLevel }}

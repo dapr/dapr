@@ -14,13 +14,13 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
-	"strconv"
 	"time"
 
-	"github.com/dapr/components-contrib/state"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+
 	"github.com/gorilla/mux"
 	"google.golang.org/grpc"
 )
@@ -30,6 +30,7 @@ const (
 
 	// statestore is the name of the store
 	stateURL            = "http://localhost:3500/v1.0/state/statestore"
+	bulkStateURL        = "http://localhost:3500/v1.0/state/statestore/bulk"
 	stateTransactionURL = "http://localhost:3500/v1.0/state/statestore/transaction"
 )
 
@@ -43,6 +44,20 @@ type daprState struct {
 	Key           string    `json:"key,omitempty"`
 	Value         *appState `json:"value,omitempty"`
 	OperationType string    `json:"operationType,omitempty"`
+}
+
+// bulkGetRequest is the bulk get request object for the test
+type bulkGetRequest struct {
+	Metadata    map[string]string `json:"metadata"`
+	Keys        []string          `json:"keys"`
+	Parallelism int               `json:"parallelism"`
+}
+
+// bulkGetResponse is the response object from Dapr for a bulk get operation.
+type bulkGetResponse struct {
+	Key  string      `json:"key"`
+	Data interface{} `json:"data"`
+	ETag string      `json:"etag"`
 }
 
 // requestResponse represents a request or response for the APIs in this app.
@@ -147,6 +162,62 @@ func getAll(states []daprState) ([]daprState, error) {
 	return output, nil
 }
 
+func getBulk(states []daprState) ([]daprState, error) {
+	log.Printf("Processing get bulk request for %d states.", len(states))
+
+	var output = make([]daprState, 0, len(states))
+
+	url, err := createBulkStateURL()
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Fetching bulk state from %s", url)
+
+	req := bulkGetRequest{}
+	for _, s := range states {
+		req.Keys = append(req.Keys, s.Key)
+	}
+
+	b, err := json.Marshal(&req)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := http.Post(url, "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not load values for bulk get from Dapr: %s", err.Error())
+	}
+
+	var resp []bulkGetResponse
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("could not unmarshal bulk get response from Dapr: %s", err.Error())
+	}
+
+	for _, i := range resp {
+		var as appState
+		b, err := json.Marshal(i.Data)
+		if err != nil {
+			return nil, fmt.Errorf("could not marshal return data: %s", err)
+		}
+		json.Unmarshal(b, &as)
+
+		output = append(output, daprState{
+			Key:   i.Key,
+			Value: &as,
+		})
+	}
+
+	log.Printf("Result for bulk get request for %d states: %v", len(states), output)
+	return output, nil
+}
+
 func delete(key string) error {
 	log.Printf("Processing delete request for %s.", key)
 	url, err := createStateURL(key)
@@ -184,28 +255,23 @@ func deleteAll(states []daprState) error {
 	return nil
 }
 
-func ExecuteTransaction(states []daprState) error {
-	transactionalOperations := []state.TransactionalRequest{}
-	var operation state.OperationType
+func executeTransaction(states []daprState) error {
+	var transactionalOperations []map[string]interface{}
 
-	for _, daprState := range states {
-		switch daprState.OperationType {
-		case "upsert":
-			operation = state.Upsert
-		case "delete":
-			operation = state.Delete
-		default:
-			return fmt.Errorf("operation type %s not supported", daprState.OperationType)
-		}
-
-		transactionalRequest := state.TransactionalRequest{
-			Operation: operation,
-			Request:   daprState,
-		}
-		transactionalOperations = append(transactionalOperations, transactionalRequest)
+	for _, s := range states {
+		val, _ := json.Marshal(s.Value)
+		transactionalOperations = append(transactionalOperations, map[string]interface{}{
+			"operation": s.OperationType,
+			"request": map[string]interface{}{
+				"key":   s.Key,
+				"value": string(val),
+			},
+		})
 	}
 
-	jsonValue, err := json.Marshal(transactionalOperations)
+	jsonValue, err := json.Marshal(map[string]interface{}{
+		"operations": transactionalOperations,
+	})
 	if err != nil {
 		log.Printf("Could save transactional operations in Dapr: %s", err.Error())
 		return err
@@ -252,10 +318,13 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	case "get":
 		states, err = getAll(req.States)
 		res.States = states
+	case "getbulk":
+		states, err = getBulk(req.States)
+		res.States = states
 	case "delete":
 		err = deleteAll(req.States)
 	case "transact":
-		err = ExecuteTransaction(req.States)
+		err = executeTransaction(req.States)
 	default:
 		err = fmt.Errorf("invalid URI: %s", uri)
 		statusCode = http.StatusBadRequest
@@ -298,8 +367,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	res.StartTime = epoch()
 	var statusCode = http.StatusOK
 
-	daprPort := 50001
-	daprAddress := fmt.Sprintf("localhost:%s", strconv.Itoa(daprPort))
+	daprPort, _ := os.LookupEnv("DAPR_GRPC_PORT")
+	daprAddress := fmt.Sprintf("127.0.0.1:%s", daprPort)
 	log.Printf("dapr grpc address is %s\n", daprAddress)
 	conn, err := grpc.Dial(daprAddress, grpc.WithInsecure())
 
@@ -313,8 +382,8 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	switch cmd {
 	case "transact":
 		_, err = client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
-			StoreName: "statestore",
-			Requests:  daprState2TransactionalStateRequest(req.States),
+			StoreName:  "statestore",
+			Operations: daprState2TransactionalStateRequest(req.States),
 		})
 		if err != nil {
 			statusCode = http.StatusInternalServerError
@@ -338,14 +407,15 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
-func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.TransactionalStateRequest {
-	var transactionalStateRequests []*runtimev1pb.TransactionalStateRequest
+func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.TransactionalStateOperation {
+	var transactionalStateRequests []*runtimev1pb.TransactionalStateOperation
 	for _, daprState := range daprStates {
-		transactionalStateRequests = append(transactionalStateRequests, &runtimev1pb.TransactionalStateRequest{
+		val, _ := json.Marshal(daprState.Value)
+		transactionalStateRequests = append(transactionalStateRequests, &runtimev1pb.TransactionalStateOperation{
 			OperationType: daprState.OperationType,
-			States: &commonv1pb.StateItem{
+			Request: &commonv1pb.StateItem{
 				Key:   daprState.Key,
-				Value: []byte(daprState.Value.Data),
+				Value: val,
 			},
 		})
 	}
@@ -359,6 +429,14 @@ func createStateURL(key string) (string, error) {
 	}
 
 	url.Path = path.Join(url.Path, key)
+	return url.String(), nil
+}
+
+func createBulkStateURL() (string, error) {
+	url, err := url.Parse(bulkStateURL)
+	if err != nil {
+		return "", fmt.Errorf("could not parse %s: %s", bulkStateURL, err.Error())
+	}
 	return url.String(), nil
 }
 

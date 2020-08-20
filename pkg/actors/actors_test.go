@@ -68,25 +68,33 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 	return nil
 }
 
-func (f *fakeStateStore) Multi(reqs []state.TransactionalRequest) error {
+func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 	return nil
 }
 
-func newTestActorsRuntime() *actorsRuntime {
-	mockAppChannel := new(channelt.MockAppChannel)
-	spec := config.TracingSpec{SamplingRate: "1"}
+func newTestActorsRuntimeWithMock(mockAppChannel *channelt.MockAppChannel) *actorsRuntime {
+	if mockAppChannel == nil {
+		mockAppChannel = new(channelt.MockAppChannel)
+	}
 	fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-	mockAppChannel.On("GetBaseAddress").Return("http://127.0.0.1", nil)
 	mockAppChannel.On(
 		"InvokeMethod",
 		mock.AnythingOfType("*context.emptyCtx"),
 		mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil)
 
+	mockAppChannel.On("GetBaseAddress").Return("http://127.0.0.1", nil)
+
+	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false)
 	a := NewActors(store, mockAppChannel, nil, config, nil, spec)
 
 	return a.(*actorsRuntime)
+}
+
+func newTestActorsRuntime() *actorsRuntime {
+	mockAppChannel := new(channelt.MockAppChannel)
+	return newTestActorsRuntimeWithMock(mockAppChannel)
 }
 
 func getTestActorTypeAndID() (string, string) {
@@ -282,6 +290,91 @@ func TestOverrideReminder(t *testing.T) {
 	})
 }
 
+func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		testActorsRuntime := newTestActorsRuntimeWithMock(mockAppChannel)
+		actorType, actorID := getTestActorTypeAndID()
+		reminderName := "reminder1"
+
+		reminder := createReminderData(actorID, actorType, reminderName, "10s", "1s", "a")
+		err := testActorsRuntime.CreateReminder(ctx, &reminder)
+		assert.Nil(t, err)
+
+		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "b")
+		testActorsRuntime.CreateReminder(ctx, &reminder2)
+		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+		// Check reminder is updated
+		assert.Equal(t, "9s", reminders[0].Period)
+		assert.Equal(t, "1s", reminders[0].DueTime)
+		assert.Equal(t, "b", reminders[0].Data)
+
+		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "2s", "b")
+		testActorsRuntime.CreateReminder(ctx, &reminder3)
+		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+		// Check reminder is updated
+		assert.Equal(t, "8s", reminders[0].Period)
+		assert.Equal(t, "2s", reminders[0].DueTime)
+		assert.Equal(t, "b", reminders[0].Data)
+
+		time.Sleep(2 * time.Second)
+
+		// Test only the last reminder update fires
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+}
+
+func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		testActorsRuntime := newTestActorsRuntimeWithMock(mockAppChannel)
+		actorType, actorID := getTestActorTypeAndID()
+		reminderName := "reminder1"
+
+		reminder := createReminderData(actorID, actorType, reminderName, "10s", "3s", "a")
+		err := testActorsRuntime.CreateReminder(ctx, &reminder)
+		assert.Nil(t, err)
+
+		time.Sleep(50 * time.Millisecond)
+
+		reminder2 := createReminderData(actorID, actorType, reminderName, "8s", "4s", "b")
+		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "4s", "c")
+		go testActorsRuntime.CreateReminder(ctx, &reminder2)
+		go testActorsRuntime.CreateReminder(ctx, &reminder3)
+
+		time.Sleep(2 * time.Second)
+
+		// Check reminder is updated
+		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+		// The statestore could have either reminder2 or reminder3 based on the timing.
+		// Therefore, not verifying data field
+		assert.Equal(t, "8s", reminders[0].Period)
+		assert.Equal(t, "4s", reminders[0].DueTime)
+
+		time.Sleep(50 * time.Millisecond)
+
+		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "d")
+		testActorsRuntime.CreateReminder(ctx, &reminder4)
+		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
+		assert.Nil(t, err)
+
+		time.Sleep(2*time.Second + 100*time.Millisecond)
+
+		// Check reminder is updated
+		assert.Equal(t, "7s", reminders[0].Period)
+		assert.Equal(t, "2s", reminders[0].DueTime)
+		assert.Equal(t, "d", reminders[0].Data)
+
+		// Test only the last reminder update fires
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+}
+
 func TestDeleteReminder(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
@@ -341,6 +434,64 @@ func TestDeleteTimer(t *testing.T) {
 
 	_, ok = testActorsRuntime.activeTimers.Load(timerKey)
 	assert.False(t, ok)
+}
+
+func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		testActorsRuntime := newTestActorsRuntimeWithMock(mockAppChannel)
+		actorType, actorID := getTestActorTypeAndID()
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+		timerName := "timer1"
+
+		timer := createTimerData(actorID, actorType, timerName, "10s", "1s", "callback1", "a")
+		err := testActorsRuntime.CreateTimer(ctx, &timer)
+		assert.Nil(t, err)
+
+		timer2 := createTimerData(actorID, actorType, timerName, "9s", "1s", "callback2", "b")
+		testActorsRuntime.CreateTimer(ctx, &timer2)
+
+		timer3 := createTimerData(actorID, actorType, timerName, "8s", "2s", "callback3", "c")
+		testActorsRuntime.CreateTimer(ctx, &timer3)
+
+		time.Sleep(5 * time.Second)
+
+		// Test only the last reminder update fires
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+}
+
+func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		testActorsRuntime := newTestActorsRuntimeWithMock(mockAppChannel)
+		actorType, actorID := getTestActorTypeAndID()
+		timerName := "timer1"
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+
+		timer := createTimerData(actorID, actorType, timerName, "10s", "3s", "callback1", "a")
+		err := testActorsRuntime.CreateTimer(ctx, &timer)
+		assert.Nil(t, err)
+
+		time.Sleep(50 * time.Millisecond)
+
+		timer2 := createTimerData(actorID, actorType, timerName, "8s", "4s", "callback2", "b")
+		timer3 := createTimerData(actorID, actorType, timerName, "8s", "4s", "callback3", "c")
+		go testActorsRuntime.CreateTimer(ctx, &timer2)
+		go testActorsRuntime.CreateTimer(ctx, &timer3)
+
+		time.Sleep(2 * time.Second)
+
+		timer4 := createTimerData(actorID, actorType, timerName, "7s", "2s", "callback4", "d")
+		testActorsRuntime.CreateTimer(ctx, &timer4)
+
+		time.Sleep(2*time.Second + 100*time.Millisecond)
+
+		// Test only the last reminder update fires
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
 }
 
 func TestReminderFires(t *testing.T) {

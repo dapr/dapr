@@ -41,6 +41,7 @@ import (
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/logger"
@@ -71,6 +72,10 @@ const (
 
 var log = logger.NewLogger("dapr.runtime")
 
+type TopicRoute struct {
+	routes map[string]string
+}
+
 // DaprRuntime holds all the core components of the runtime
 type DaprRuntime struct {
 	runtimeConfig          *Config
@@ -91,7 +96,7 @@ type DaprRuntime struct {
 	outputBindings         map[string]bindings.OutputBinding
 	secretStores           map[string]secretstores.SecretStore
 	pubSubRegistry         pubsub_loader.Registry
-	pubSub                 pubsub.PubSub
+	pubSubs                map[string]pubsub.PubSub
 	nameResolver           nr.Resolver
 	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
@@ -100,12 +105,12 @@ type DaprRuntime struct {
 	actorStateStoreCount   int
 	authenticator          security.Authenticator
 	namespace              string
-	scopedSubscriptions    []string
-	scopedPublishings      []string
-	allowedTopics          []string
+	scopedSubscriptions    map[string][]string
+	scopedPublishings      map[string][]string
+	allowedTopics          map[string][]string
 	daprHTTPAPI            http.API
 	operatorClient         operatorv1pb.OperatorClient
-	topicRoutes            map[string]string
+	topicRoutes            map[string]TopicRoute
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
@@ -119,6 +124,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		outputBindings:         map[string]bindings.OutputBinding{},
 		secretStores:           map[string]secretstores.SecretStore{},
 		stateStores:            map[string]state.Store{},
+		pubSubs:                map[string]pubsub.PubSub{},
 		stateStoreRegistry:     state_loader.NewRegistry(),
 		bindingsRegistry:       bindings_loader.NewRegistry(),
 		pubSubRegistry:         pubsub_loader.NewRegistry(),
@@ -126,7 +132,11 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		exporterRegistry:       exporter_loader.NewRegistry(),
 		nameResolutionRegistry: nr_loader.NewRegistry(),
 		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
-		topicRoutes:            map[string]string{},
+
+		scopedSubscriptions: map[string][]string{},
+		scopedPublishings:   map[string][]string{},
+		allowedTopics:       map[string][]string{},
+		topicRoutes:         map[string]TopicRoute{},
 	}
 }
 
@@ -207,6 +217,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return fmt.Errorf("failed to determine host address: %s", err)
+	}
+
+	if a.globalConfig.Spec.TracingSpec.Stdout {
+		trace.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
 
 	err = a.createAppChannel()
@@ -341,21 +355,29 @@ func (a *DaprRuntime) beginPubSub() error {
 		publishFunc = a.publishMessageGRPC
 	}
 
-	if a.pubSub != nil && a.appChannel != nil {
-		a.topicRoutes = a.getTopicRoutes()
+	var err error
+	if len(a.pubSubs) != 0 && a.appChannel != nil {
+		a.topicRoutes, err = a.getTopicRoutes()
+		if err != nil {
+			return err
+		}
 
-		for t := range a.topicRoutes {
-			allowed := a.isPubSubOperationAllowed(t, a.scopedSubscriptions)
-			if !allowed {
-				log.Warnf("subscription to topic %s is not allowed", t)
-				continue
-			}
+		for pubsubName, v := range a.topicRoutes {
+			for topic := range v.routes {
+				allowed := a.isPubSubOperationAllowed(pubsubName, topic, a.scopedSubscriptions[pubsubName])
+				if !allowed {
+					log.Warnf("subscription to topic %s on pubsub %s is not allowed", topic, pubsubName)
+					continue
+				}
 
-			err := a.pubSub.Subscribe(pubsub.SubscribeRequest{
-				Topic: t,
-			}, publishFunc)
-			if err != nil {
-				log.Warnf("failed to subscribe to topic %s: %s", t, err)
+				log.Debugf("subscribing to topic=%s on pubsub=%s", topic, pubsubName)
+
+				err = a.pubSubs[pubsubName].Subscribe(pubsub.SubscribeRequest{
+					Topic: topic,
+				}, publishFunc)
+				if err != nil {
+					log.Warnf("failed to subscribe to topic %s: %s", topic, err)
+				}
 			}
 		}
 	}
@@ -671,9 +693,10 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
-	if a.pubSub == nil {
+	if a.pubSubs == nil || len(a.pubSubs) == 0 {
 		return nil
 	}
+
 	return a.Publish
 }
 
@@ -729,7 +752,7 @@ func (a *DaprRuntime) initInputBindings(registry bindings_loader.Registry) error
 
 			binding, err := registry.CreateInputBinding(c.Spec.Type)
 			if err != nil {
-				log.Errorf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				log.Warnf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
@@ -756,7 +779,7 @@ func (a *DaprRuntime) initOutputBindings(registry bindings_loader.Registry) erro
 		if strings.Index(c.Spec.Type, "bindings") == 0 {
 			binding, err := registry.CreateOutputBinding(c.Spec.Type)
 			if err != nil {
-				log.Errorf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
+				log.Warnf("failed to create output binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
 				diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 				continue
 			}
@@ -822,10 +845,11 @@ func (a *DaprRuntime) initState(registry state_loader.Registry) error {
 	return nil
 }
 
-func (a *DaprRuntime) getTopicRoutes() map[string]string {
-	topicRoutes := map[string]string{}
+func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
+	var topicRoutes map[string]TopicRoute = make(map[string]TopicRoute)
+
 	if a.appChannel == nil {
-		return topicRoutes
+		return topicRoutes, nil
 	}
 
 	var subscriptions []runtime_pubsub.Subscription
@@ -837,17 +861,28 @@ func (a *DaprRuntime) getTopicRoutes() map[string]string {
 	}
 
 	for _, s := range subscriptions {
-		topicRoutes[s.Topic] = s.Route
+		if _, ok := a.pubSubs[s.PubsubName]; !ok {
+			log.Errorf("cannot subscribe to topics on pubsub %s - was a component for it created?\n", s.PubsubName)
+			continue
+		}
+
+		if _, ok := topicRoutes[s.PubsubName]; !ok {
+			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]string)}
+		}
+
+		topicRoutes[s.PubsubName].routes[s.Topic] = s.Route
 	}
 
 	if len(topicRoutes) > 0 {
-		topics := []string{}
-		for t := range topicRoutes {
-			topics = append(topics, t)
+		for pubsubName, v := range topicRoutes {
+			topics := []string{}
+			for topic := range v.routes {
+				topics = append(topics, topic)
+			}
+			log.Infof("app is subscribed to the following topics: %v through pubsub=%s", topics, pubsubName)
 		}
-		log.Infof("app is subscribed to the following topics: %v", topics)
 	}
-	return topicRoutes
+	return topicRoutes, nil
 }
 
 func (a *DaprRuntime) initExporters() error {
@@ -898,13 +933,14 @@ func (a *DaprRuntime) initPubSub() error {
 				continue
 			}
 
-			a.scopedSubscriptions = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
-			a.scopedPublishings = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
-			a.allowedTopics = scopes.GetAllowedTopics(properties)
+			pubsubName := c.ObjectMeta.Name
 
-			a.pubSub = pubSub
+			a.scopedSubscriptions[pubsubName] = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
+			a.scopedPublishings[pubsubName] = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
+			a.allowedTopics[pubsubName] = scopes.GetAllowedTopics(properties)
+
+			a.pubSubs[pubsubName] = pubSub
 			diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
-			break
 		}
 	}
 
@@ -915,18 +951,23 @@ func (a *DaprRuntime) initPubSub() error {
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
-	if allowed := a.isPubSubOperationAllowed(req.Topic, a.scopedPublishings); !allowed {
+	if _, ok := a.pubSubs[req.PubsubName]; !ok {
+		return errors.New("pubsub not found")
+	}
+
+	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, a.scopedPublishings[req.PubsubName]); !allowed {
 		return fmt.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
 	}
-	return a.pubSub.Publish(req)
+
+	return a.pubSubs[req.PubsubName].Publish(req)
 }
 
-func (a *DaprRuntime) isPubSubOperationAllowed(topic string, scopedTopics []string) bool {
+func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
 	inAllowedTopics := false
 
 	// first check if allowedTopics contain it
-	if len(a.allowedTopics) > 0 {
-		for _, t := range a.allowedTopics {
+	if len(a.allowedTopics[pubsubName]) > 0 {
+		for _, t := range a.allowedTopics[pubsubName] {
 			if t == topic {
 				inAllowedTopics = true
 				break
@@ -995,7 +1036,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMes
 		subject = cloudEvent.Subject
 	}
 
-	route := a.topicRoutes[msg.Topic]
+	route := a.topicRoutes[cloudEvent.PubsubName].routes[msg.Topic]
 	req := invokev1.NewInvokeMethodRequest(route)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
@@ -1040,6 +1081,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMes
 		Type:            cloudEvent.Type,
 		SpecVersion:     cloudEvent.SpecVersion,
 		Topic:           msg.Topic,
+		PubsubName:      cloudEvent.PubsubName,
 	}
 
 	if cloudEvent.Data != nil {
@@ -1129,6 +1171,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	if err != nil {
 		return err
 	}
+
 	a.components = a.getAuthorizedComponents(comps)
 
 	// Register and initialize secret stores
@@ -1151,6 +1194,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 		}(&wg, c, i)
 	}
 	wg.Wait()
+
 	return nil
 }
 
