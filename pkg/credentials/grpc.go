@@ -19,20 +19,19 @@ func GetServerOptions(certChain *CertChain) ([]grpc.ServerOption, error) {
 	cp := x509.NewCertPool()
 	cp.AppendCertsFromPEM(certChain.RootCA)
 
-	if certChain != nil {
-		cert, err := tls.X509KeyPair(certChain.Cert, certChain.Key)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create server certificate: %s", err)
-		}
-
-		config := &tls.Config{
-			ClientCAs: cp,
-			// Require cert verification
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			Certificates: []tls.Certificate{cert},
-		}
-		opts = append(opts, grpc.Creds(credentials.NewTLS(config)))
+	cert, err := tls.X509KeyPair(certChain.Cert, certChain.Key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create server certificate: %s", err)
 	}
+
+	config := &tls.Config{
+		ClientCAs: cp,
+		// Require cert verification
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		Certificates: []tls.Certificate{cert},
+	}
+	opts = append(opts, grpc.Creds(credentials.NewTLS(config)))
+
 	return opts, nil
 }
 
