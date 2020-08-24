@@ -6,6 +6,7 @@
 package placement
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -52,17 +53,11 @@ func NewPlacementService() *Service {
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts
 func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
-	p.hostsLock.Lock()
-	md, _ := metadata.FromIncomingContext(srv.Context())
-	v := md.Get("id")
-	if len(v) == 0 {
-		return errors.New("id header not found in metadata")
-	}
 
-	id := v[0]
-	p.hosts = append(p.hosts, srv)
-	log.Infof("host added: %s", id)
-	p.hostsLock.Unlock()
+	id, err := p.getIdFromContext(ctx, srv)
+	if err != nil {
+		return err
+	}
 
 	// send the current placements
 	p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
@@ -79,16 +74,35 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 
 		req, err := srv.Recv()
 		if err != nil {
-			p.hostsLock.Lock()
-			p.RemoveHost(srv)
-			p.ProcessRemovedHost(id)
-			log.Infof("host removed: %s", id)
-			p.hostsLock.Unlock()
+			func() {
+				p.hostsLock.Lock()
+				p.RemoveHost(srv)
+				p.ProcessRemovedHost(id)
+				log.Infof("host removed: %s", id)
+				p.hostsLock.Unlock()
+			}()
 			continue
 		}
 
 		p.ProcessHost(req)
 	}
+}
+
+func (p *Service) getIdFromContext(ctx context.Context, srv placementv1pb.Placement_ReportDaprStatusServer) (string, error) {
+	p.hostsLock.Lock()
+	defer p.hostsLock.Unlock()
+
+	md, _ := metadata.FromIncomingContext(ctx)
+	v := md.Get("id")
+	if len(v) == 0 {
+		return "", errors.New("id header not found in metadata")
+	}
+
+	id := v[0]
+	p.hosts = append(p.hosts, srv)
+	log.Infof("host added: %s", id)
+
+	return id, nil
 }
 
 // RemoveHost removes the host from the hosts list
@@ -176,19 +190,24 @@ func (p *Service) PerformTablesUpdate(hosts []placementv1pb.Placement_ReportDapr
 func (p *Service) ProcessRemovedHost(id string) {
 	updateRequired := false
 
-	p.hostsEntitiesLock.RLock()
-	entities := p.hostsEntities[id]
-	delete(p.hostsEntities, id)
-	p.hostsEntitiesLock.RUnlock()
+	var entities []string
+	func() {
+		p.hostsEntitiesLock.RLock()
+		defer p.hostsEntitiesLock.RUnlock()
+		entities = p.hostsEntities[id]
+		delete(p.hostsEntities, id)
+	}()
 
-	p.entriesLock.Lock()
-	for _, e := range entities {
-		if _, ok := p.entries[e]; ok {
-			p.entries[e].Remove(id)
-			updateRequired = true
+	func() {
+		p.entriesLock.Lock()
+		defer p.entriesLock.Unlock()
+		for _, e := range entities {
+			if _, ok := p.entries[e]; ok {
+				p.entries[e].Remove(id)
+				updateRequired = true
+			}
 		}
-	}
-	p.entriesLock.Unlock()
+	}()
 
 	if updateRequired {
 		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
@@ -200,17 +219,19 @@ func (p *Service) ProcessHost(host *placementv1pb.Host) {
 	updateRequired := false
 
 	for _, e := range host.Entities {
-		p.entriesLock.Lock()
-		if _, ok := p.entries[e]; !ok {
-			p.entries[e] = NewConsistentHash()
-		}
+		func() {
+			p.entriesLock.Lock()
+			defer p.entriesLock.Unlock()
+			if _, ok := p.entries[e]; !ok {
+				p.entries[e] = NewConsistentHash()
+			}
 
-		exists := p.entries[e].Add(host.Name, host.Id, host.Port)
-		if !exists {
-			updateRequired = true
-			monitoring.RecordPerActorTypeReplicasCount(e, host.Name)
-		}
-		p.entriesLock.Unlock()
+			exists := p.entries[e].Add(host.Name, host.Id, host.Port)
+			if !exists {
+				updateRequired = true
+				monitoring.RecordPerActorTypeReplicasCount(e, host.Name)
+			}
+		}()
 	}
 
 	monitoring.RecordActorTypesCount(len(p.entries))
@@ -220,9 +241,11 @@ func (p *Service) ProcessHost(host *placementv1pb.Host) {
 		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
 	}
 
-	p.hostsEntitiesLock.Lock()
-	p.hostsEntities[host.Name] = host.Entities
-	p.hostsEntitiesLock.Unlock()
+	func() {
+		p.hostsEntitiesLock.Lock()
+		defer p.hostsEntitiesLock.Unlock()
+		p.hostsEntities[host.Name] = host.Entities
+	}()
 }
 
 // Run starts the placement service gRPC server
