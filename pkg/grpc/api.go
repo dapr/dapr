@@ -306,7 +306,6 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 				Concurrency: stateConcurrencyToString(s.Options.Concurrency),
 			}
 		}
-		req.Metadata = in.Metadata
 		reqs = append(reqs, req)
 	}
 

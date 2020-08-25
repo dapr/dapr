@@ -141,9 +141,6 @@ message SaveStateRequest {
 
   // The array of the state key values.
   repeated common.v1.StateItem states = 2;
-
-  // The metadata which will be sent to state store components.
-  map<string,string> metadata = 3;
 }
 
 // PublishEventRequest is the message to publish event data to pubsub topic
