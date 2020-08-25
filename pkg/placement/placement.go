@@ -54,7 +54,7 @@ func NewPlacementService() *Service {
 func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 
-	id, err := p.getIdFromContextAndSaveHost(ctx, srv)
+	id, err := p.addHost(ctx, srv)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 	}
 }
 
-func (p *Service) getIdFromContextAndSaveHost(ctx context.Context, srv placementv1pb.Placement_ReportDaprStatusServer) (string, error) {
+func (p *Service) addHost(ctx context.Context, srv placementv1pb.Placement_ReportDaprStatusServer) (string, error) {
 	p.hostsLock.Lock()
 	defer p.hostsLock.Unlock()
 
