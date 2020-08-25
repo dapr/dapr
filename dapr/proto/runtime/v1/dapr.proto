@@ -79,6 +79,9 @@ message GetBulkStateRequest {
 
   // The number of parallel operations executed on the state store for a get operation.
   int32 parallelism = 3;
+
+  // The metadata which will be sent to state store components.
+  map<string,string> metadata = 4;
 }
 
 // GetBulkStateResponse is the response conveying the list of state values.
@@ -126,6 +129,9 @@ message DeleteStateRequest {
   // State operation options which includes concurrency/
   // consistency/retry_policy.
   common.v1.StateOptions options = 4;
+
+  // The metadata which will be sent to state store components.
+  map<string,string> metadata = 5;
 }
 
 // SaveStateRequest is the message to save multiple states into state store.
@@ -135,6 +141,9 @@ message SaveStateRequest {
 
   // The array of the state key values.
   repeated common.v1.StateItem states = 2;
+
+  // The metadata which will be sent to state store components.
+  map<string,string> metadata = 3;
 }
 
 // PublishEventRequest is the message to publish event data to pubsub topic
