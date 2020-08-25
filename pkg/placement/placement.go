@@ -53,7 +53,7 @@ func NewPlacementService() *Service {
 func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 	p.hostsLock.Lock()
-	md, _ := metadata.FromIncomingContext(srv.Context())
+	md, _ := metadata.FromIncomingContext(ctx)
 	v := md.Get("id")
 	if len(v) == 0 {
 		return errors.New("id header not found in metadata")
