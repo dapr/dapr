@@ -64,6 +64,9 @@ message GetStateRequest {
 
   // The read consistency of the state store.
   common.v1.StateOptions.StateConsistency consistency = 3;
+
+  // The metadata which will be sent to state store components.
+  map<string,string> metadata = 4;
 }
 
 // GetBulkStateRequest is the message to get a list of key-value states from specific state store.

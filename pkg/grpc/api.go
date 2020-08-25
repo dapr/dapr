@@ -265,7 +265,8 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	}
 
 	req := state.GetRequest{
-		Key: a.getModifiedStateKey(in.Key),
+		Key:      a.getModifiedStateKey(in.Key),
+		Metadata: in.Metadata,
 		Options: state.GetStateOption{
 			Consistency: stateConsistencyToString(in.Consistency),
 		},
