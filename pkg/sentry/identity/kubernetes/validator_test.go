@@ -1,9 +1,9 @@
 package kubernetes
 
 import (
-	"fmt"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	kauthapi "k8s.io/api/authentication/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,7 +27,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		err := v.Validate("a1:ns1", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: invalid token: bad token", errPrefix), err)
+		assert.Equal(t, errors.Errorf("%s: invalid token: bad token", errPrefix), err)
 	})
 
 	t.Run("unauthenticated", func(t *testing.T) {
@@ -45,7 +45,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		err := v.Validate("a1:ns1", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: authentication failed", errPrefix), err)
+		assert.Equal(t, errors.Errorf("%s: authentication failed", errPrefix), err)
 	})
 
 	t.Run("bad token structure", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		err := v.Validate("a1:ns1", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: provided token is not a properly structured service account token", errPrefix), err)
+		assert.Equal(t, errors.Errorf("%s: provided token is not a properly structured service account token", errPrefix), err)
 	})
 
 	t.Run("token id mismatch", func(t *testing.T) {
@@ -81,7 +81,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		err := v.Validate("a1:ns2", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: token/id mismatch. received id: a1:ns2", errPrefix), err)
+		assert.Equal(t, errors.Errorf("%s: token/id mismatch. received id: a1:ns2", errPrefix), err)
 	})
 
 	t.Run("empty token", func(t *testing.T) {
@@ -92,7 +92,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		err := v.Validate("a1:ns1", "")
-		expectedErr := fmt.Errorf("%s: token field in request must not be empty", errPrefix)
+		expectedErr := errors.Errorf("%s: token field in request must not be empty", errPrefix)
 		assert.Equal(t, expectedErr, err)
 	})
 
@@ -104,7 +104,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		err := v.Validate("", "a1:ns1")
-		expectedErr := fmt.Errorf("%s: id field in request must not be empty", errPrefix)
+		expectedErr := errors.Errorf("%s: id field in request must not be empty", errPrefix)
 		assert.Equal(t, expectedErr, err)
 	})
 }
