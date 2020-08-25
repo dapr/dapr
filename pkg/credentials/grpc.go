@@ -21,7 +21,7 @@ func GetServerOptions(certChain *CertChain) ([]grpc.ServerOption, error) {
 
 	cert, err := tls.X509KeyPair(certChain.Cert, certChain.Key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create server certificate: %s", err)
+		return opts, nil
 	}
 
 	config := &tls.Config{
