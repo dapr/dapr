@@ -145,7 +145,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		err := fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
+		err = fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -211,7 +211,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	r := &runtimev1pb.InvokeBindingResponse{}
 	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		err := fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
+		err = fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
 		apiServerLogger.Debug(err)
 		return r, err
 	}
@@ -270,6 +270,7 @@ func (a *api) getStateStore(name string) (state.Store, error) {
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 
@@ -282,7 +283,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	getResponse, err := store.Get(&req)
 	if err != nil {
-		err := fmt.Errorf("ERR_STATE_GET: %s", err)
+		err = fmt.Errorf("ERR_STATE_GET: %s", err)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -321,7 +322,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		err := fmt.Errorf("ERR_STATE_SAVE: %s", err)
+		err = fmt.Errorf("ERR_STATE_SAVE: %s", err)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -348,7 +349,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	err = store.Delete(&req)
 	if err != nil {
-		err := fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
+		err = fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
