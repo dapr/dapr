@@ -15,7 +15,7 @@ import (
 type Disposable interface {
 	Name() string
 	Init() error
-	Dispose() error
+	Dispose(wait bool) error
 }
 
 // TestResources holds initial resources and active resources
@@ -91,7 +91,7 @@ func (r *TestResources) setup() error {
 func (r *TestResources) tearDown() (retErr error) {
 	retErr = nil
 	for dr := r.popActiveResource(); dr != nil; dr = r.popActiveResource() {
-		err := dr.Dispose()
+		err := dr.Dispose(false)
 		if err != nil {
 			retErr = err
 			fmt.Fprintf(os.Stderr, "Failed to tear down %s. got: %q", dr.Name(), err)
