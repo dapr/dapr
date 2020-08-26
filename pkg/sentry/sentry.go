@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/sentry/ca"
@@ -13,6 +12,7 @@ import (
 	k8s "github.com/dapr/dapr/pkg/sentry/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
+	"github.com/pkg/errors"
 )
 
 var log = logger.NewLogger("dapr.sentry")
@@ -85,7 +85,7 @@ func createValidator() (identity.Validator, error) {
 		// we're in Kubernetes, create client and init a new serviceaccount token validator
 		kubeClient, err := k8s.GetClient()
 		if err != nil {
-			return nil, fmt.Errorf("failed to create kubernetes client: %s", err)
+			return nil, errors.Wrap(err, "failed to create kubernetes client")
 		}
 		return kubernetes.NewValidator(kubeClient), nil
 	}
