@@ -128,7 +128,9 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
-		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
+		err := errors.New("ERR_PUBSUB_NOT_FOUND")
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	topic := in.Topic
@@ -143,7 +145,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
+		err := fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	req := pubsub.PublishRequest{
@@ -154,7 +158,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	err = a.publishFn(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
+		err := fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
 }
@@ -205,7 +211,9 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	r := &runtimev1pb.InvokeBindingResponse{}
 	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		return r, fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
+		err := fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
+		apiServerLogger.Debug(err)
+		return r, err
 	}
 
 	if resp != nil {
@@ -218,6 +226,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetBulkStateResponse{}, err
 	}
 
@@ -273,7 +282,9 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	getResponse, err := store.Get(&req)
 	if err != nil {
-		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
+		err := fmt.Errorf("ERR_STATE_GET: %s", err)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetStateResponse{}, err
 	}
 
 	response := &runtimev1pb.GetStateResponse{}
@@ -287,6 +298,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
@@ -309,7 +321,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
+		err := fmt.Errorf("ERR_STATE_SAVE: %s", err)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
 }
@@ -317,6 +331,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
@@ -333,7 +348,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	err = store.Delete(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
+		err := fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
 }
@@ -347,13 +364,17 @@ func (a *api) getModifiedStateKey(key string) string {
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
-		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
+		err := errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
 	secretStoreName := in.StoreName
 
 	if a.secretStores[secretStoreName] == nil {
-		return nil, errors.New("ERR_SECRET_STORE_NOT_FOUND")
+		err := errors.New("ERR_SECRET_STORE_NOT_FOUND")
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
 	req := secretstores.GetSecretRequest{
@@ -364,7 +385,9 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 
 	if err != nil {
-		return nil, fmt.Errorf("ERR_SECRET_GET: %s", err)
+		err = fmt.Errorf("ERR_SECRET_GET: %s", err)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
 	response := &runtimev1pb.GetSecretResponse{}
@@ -376,18 +399,24 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+		err := errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	storeName := in.StoreName
 
 	if a.stateStores[storeName] == nil {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
+		err := errors.New("ERR_STATE_STORE_NOT_FOUND")
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
+		err := errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	operations := []state.TransactionalStateOperation{}
@@ -438,7 +467,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			}
 
 		default:
-			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
+			err := fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
+			apiServerLogger.Debug(err)
+			return &empty.Empty{}, err
 		}
 
 		operations = append(operations, operation)
@@ -450,7 +481,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	})
 
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
+		err = fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
 }
