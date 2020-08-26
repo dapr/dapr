@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -74,11 +75,11 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
 	var config configurationapi.Configuration
 	if err := a.Client.Get(ctx, key, &config); err != nil {
-		return nil, fmt.Errorf("error getting configuration: %s", err)
+		return nil, errors.Wrap(err, "error getting configuration")
 	}
 	b, err := json.Marshal(&config)
 	if err != nil {
-		return nil, fmt.Errorf("error marshalling configuration: %s", err)
+		return nil, errors.Wrap(err, "error marshalling configuration")
 	}
 	return &operatorv1pb.GetConfigurationResponse{
 		Configuration: b,
@@ -89,7 +90,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 func (a *apiServer) ListComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components); err != nil {
-		return nil, fmt.Errorf("error getting components: %s", err)
+		return nil, errors.Wrap(err, "error getting components")
 	}
 	resp := &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{},

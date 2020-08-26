@@ -20,6 +20,7 @@ require (
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.3.2
 	github.com/phayes/freeport v0.0.0-20171002181615-b8543db493a5
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.2.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
