@@ -57,7 +57,7 @@ func FromConfigName(configName string) (SentryConfig, error) {
 
 	conf, err := confGetterFn(configName)
 	if err != nil {
-		err = errors.Errorf("loading default config. couldn't find config name: %s", configName)
+		err = errors.Wrapf(err, "loading default config. couldn't find config name: %s", configName)
 		conf = getDefaultConfig()
 	}
 
