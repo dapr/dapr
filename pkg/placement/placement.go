@@ -7,7 +7,6 @@ package placement
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -16,6 +15,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
