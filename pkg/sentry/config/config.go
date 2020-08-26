@@ -2,8 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -11,6 +9,7 @@ import (
 	dapr_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/utils"
+	"github.com/pkg/errors"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -58,7 +57,7 @@ func FromConfigName(configName string) (SentryConfig, error) {
 
 	conf, err := confGetterFn(configName)
 	if err != nil {
-		err = fmt.Errorf("loading default config. couldn't find config name: %s", configName)
+		err = errors.Wrapf(err, "loading default config. couldn't find config name: %s", configName)
 		conf = getDefaultConfig()
 	}
 
@@ -139,7 +138,7 @@ func parseConfiguration(conf SentryConfig, daprConfig *dapr_config.Configuration
 	if daprConfig.Spec.MTLSSpec.WorkloadCertTTL != "" {
 		d, err := time.ParseDuration(daprConfig.Spec.MTLSSpec.WorkloadCertTTL)
 		if err != nil {
-			return conf, fmt.Errorf("error parsing WorkloadCertTTL duration: %s", err)
+			return conf, errors.Wrap(err, "error parsing WorkloadCertTTL duration")
 		}
 
 		conf.WorkloadCertTTL = d
@@ -148,7 +147,7 @@ func parseConfiguration(conf SentryConfig, daprConfig *dapr_config.Configuration
 	if daprConfig.Spec.MTLSSpec.AllowedClockSkew != "" {
 		d, err := time.ParseDuration(daprConfig.Spec.MTLSSpec.AllowedClockSkew)
 		if err != nil {
-			return conf, fmt.Errorf("error parsing AllowedClockSkew duration: %s", err)
+			return conf, errors.Wrap(err, "error parsing AllowedClockSkew duration")
 		}
 
 		conf.AllowedClockSkew = d

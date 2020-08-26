@@ -7,11 +7,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"fmt"
 	"math/big"
 	"time"
 
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -25,17 +25,17 @@ const (
 func GenerateCSR(org string, pkcs8 bool) ([]byte, []byte, error) {
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to generate private keys: %s", err)
+		return nil, nil, errors.Wrap(err, "unable to generate private keys")
 	}
 
 	templ, err := genCSRTemplate(org)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error generating csr template: %s", err)
+		return nil, nil, errors.Wrap(err, "error generating csr template")
 	}
 
 	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, templ, crypto.PrivateKey(key))
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create CSR: %s", err)
+		return nil, nil, errors.Wrap(err, "failed to create CSR")
 	}
 
 	crtPem, keyPem, err := encode(true, csrBytes, key, pkcs8)
@@ -111,7 +111,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, signin
 	ttl time.Duration, isCA bool) ([]byte, error) {
 	cert, err := generateBaseCert(ttl, publicKey)
 	if err != nil {
-		return nil, fmt.Errorf("error generating csr certificate: %s", err)
+		return nil, errors.Wrap(err, "error generating csr certificate")
 	}
 	if isCA {
 		cert.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign
@@ -162,7 +162,7 @@ func newSerialNumber() (*big.Int, error) {
 	serialNumLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNum, err := rand.Int(rand.Reader, serialNumLimit)
 	if err != nil {
-		return nil, fmt.Errorf("error generating serial number: %s", err)
+		return nil, errors.Wrap(err, "error generating serial number")
 	}
 	return serialNum, nil
 }
