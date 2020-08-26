@@ -158,7 +158,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	err = a.publishFn(&req)
 	if err != nil {
-		err := fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
+		err = fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
