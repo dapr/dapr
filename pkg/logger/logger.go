@@ -112,8 +112,8 @@ func NewLogger(name string) Logger {
 
 	logger, ok := globalLoggers[name]
 	if !ok {
-		globalLoggers[name] = newDaprLogger(name)
-		logger = globalLoggers[name]
+		logger = newDaprLogger(name)
+		globalLoggers[name] = logger
 	}
 
 	return logger
