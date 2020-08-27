@@ -452,6 +452,8 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	concurrency := string(reqCtx.QueryArgs().Peek(concurrencyParam))
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 
+	metadata := getMetadataFromRequest(reqCtx)
+
 	req := state.DeleteRequest{
 		Key:  a.getModifiedStateKey(key),
 		ETag: etag,
@@ -459,6 +461,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 			Concurrency: concurrency,
 			Consistency: consistency,
 		},
+		Metadata: metadata,
 	}
 
 	err = store.Delete(&req)
