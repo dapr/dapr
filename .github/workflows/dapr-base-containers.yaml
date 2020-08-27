@@ -1,0 +1,51 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-base-containers
+
+on:
+  repository_dispatch:
+    types: [windows-base]
+jobs:
+  build:
+    name: Build base windows images
+    runs-on: windows-latest
+    env:
+      WINDOWS_VERSION: 1809
+      TARGET_OS: windows
+      DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+    steps:
+      - name: Parse event payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@0.3.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "windows-base") {
+              // Set environment variables
+              console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
+              console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
+            }
+      - name: Check out dapr
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: docker login
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
+      - name: Build docker windows base images
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          echo "Build docker image..."
+          make docker-windows-base-build
+      - name: Push docker windows base images
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          echo "Build docker image..."
+          make docker-windows-base-push
