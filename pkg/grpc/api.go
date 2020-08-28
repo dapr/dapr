@@ -241,13 +241,19 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			}
 
 			r, err := store.Get(&req)
-			if err == nil && r != nil && r.Data != nil {
+			item := &runtimev1pb.BulkStateItem{
+				Key: param.(string),
+			}
+			if err != nil {
+				item.Error = err.Error()
+			} else if r != nil {
 				resp.Items = append(resp.Items, &runtimev1pb.BulkStateItem{
 					Key:  param.(string),
 					Data: r.Data,
 					Etag: r.ETag,
 				})
 			}
+			resp.Items = append(resp.Items, item)
 		}
 
 		limiter.Execute(fn, k)
