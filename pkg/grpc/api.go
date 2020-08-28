@@ -247,11 +247,8 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			if err != nil {
 				item.Error = err.Error()
 			} else if r != nil {
-				resp.Items = append(resp.Items, &runtimev1pb.BulkStateItem{
-					Key:  param.(string),
-					Data: r.Data,
-					Etag: r.ETag,
-				})
+				item.Data = r.Data
+				item.Etag = r.ETag
 			}
 			resp.Items = append(resp.Items, item)
 		}
