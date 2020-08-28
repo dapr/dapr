@@ -236,7 +236,8 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	for _, k := range in.Keys {
 		fn := func(param interface{}) {
 			req := state.GetRequest{
-				Key: a.getModifiedStateKey(param.(string)),
+				Key:      a.getModifiedStateKey(param.(string)),
+				Metadata: in.Metadata,
 			}
 
 			r, err := store.Get(&req)
@@ -275,7 +276,8 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	}
 
 	req := state.GetRequest{
-		Key: a.getModifiedStateKey(in.Key),
+		Key:      a.getModifiedStateKey(in.Key),
+		Metadata: in.Metadata,
 		Options: state.GetStateOption{
 			Consistency: stateConsistencyToString(in.Consistency),
 		},
@@ -337,8 +339,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	}
 
 	req := state.DeleteRequest{
-		Key:  a.getModifiedStateKey(in.Key),
-		ETag: in.Etag,
+		Key:      a.getModifiedStateKey(in.Key),
+		Metadata: in.Metadata,
+		ETag:     in.Etag,
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
