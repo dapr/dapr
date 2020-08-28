@@ -355,16 +355,19 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 				Metadata: metadata,
 			}
 
+			r := BulkGetResponse{
+				Key: param.(string),
+			}
+
 			resp, err := store.Get(gr)
 			if err != nil {
 				log.Debugf("bulk get: error getting key %s: %s", param.(string), err)
-			} else if resp != nil && resp.Data != nil {
-				bulkResp = append(bulkResp, BulkGetResponse{
-					Key:  param.(string),
-					Data: jsoniter.RawMessage(resp.Data),
-					ETag: resp.ETag,
-				})
+				r.Error = err.Error()
+			} else if resp != nil {
+				r.Data = jsoniter.RawMessage(resp.Data)
+				r.ETag = resp.ETag
 			}
+			bulkResp = append(bulkResp, r)
 		}
 
 		limiter.Execute(fn, k)
