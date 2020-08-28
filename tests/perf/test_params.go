@@ -7,7 +7,7 @@ const (
 	QPSEnvVar                = "DAPR_PERF_QPS"
 	ClientConnectionsEnvVar  = "DAPR_PERF_CONNECTIONS"
 	TestDurationEnvVar       = "DAPR_TEST_DURATION"
-	PayloadSizeEnvVar        = "DAPR_PAYLOAD_SIZE_KB"
+	PayloadSizeEnvVar        = "DAPR_PAYLOAD_SIZE"
 )
 
 type TestParameters struct {
