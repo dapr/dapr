@@ -16,6 +16,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/pkg/errors"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -154,7 +155,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
 		if ar.Request.Kind.Kind != "Pod" {
-			err = fmt.Errorf("invalid kind for review: %s", ar.Kind)
+			err = errors.Wrapf(err, "invalid kind for review: %s", ar.Kind)
 			log.Error(err)
 		} else {
 			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.kubeClient, i.daprClient)
