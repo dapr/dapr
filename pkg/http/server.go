@@ -33,16 +33,18 @@ type Server interface {
 type server struct {
 	config      ServerConfig
 	tracingSpec config.TracingSpec
+	metricSpec  config.MetricSpec
 	pipeline    http_middleware.Pipeline
 	api         API
 }
 
 // NewServer returns a new HTTP server
-func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pipeline http_middleware.Pipeline) Server {
+func NewServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, pipeline http_middleware.Pipeline) Server {
 	return &server{
 		api:         api,
 		config:      config,
 		tracingSpec: tracingSpec,
+		metricSpec:  metricSpec,
 		pipeline:    pipeline,
 	}
 }
@@ -79,8 +81,10 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 }
 
 func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	if diag.DefaultHTTPMonitoring.IsEnabled() {
+	if s.metricSpec.Enabled {
 		log.Infof("enabled metrics http middleware")
+		diag.DefaultHTTPMonitoring.Enable()
+		diag.DefaultMonitoring.Enable()
 		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
 	}
 	return next

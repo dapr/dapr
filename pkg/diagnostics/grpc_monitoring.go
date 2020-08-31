@@ -77,7 +77,6 @@ func newGRPCMetrics() *grpcMetrics {
 
 func (g *grpcMetrics) Init(appID string) error {
 	g.appID = appID
-	g.enabled = true
 
 	views := []*view.View{
 		{
@@ -135,8 +134,14 @@ func (g *grpcMetrics) Init(appID string) error {
 	return view.Register(views...)
 }
 
+// IsEnabled to check if monitoring is enabled or not
 func (g *grpcMetrics) IsEnabled() bool {
 	return g.enabled
+}
+
+// Enable to enable monitoring
+func (g *grpcMetrics) Enable() {
+	g.enabled = true
 }
 
 func (g *grpcMetrics) ServerRequestReceived(ctx context.Context, method string, contentSize int64) time.Time {
