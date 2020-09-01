@@ -859,6 +859,10 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		respondWithError(reqCtx, 500, msg)
 		log.Debug(msg)
 	} else {
+		if resp == nil || resp.Data == nil {
+			respondEmpty(reqCtx, 204)
+			return
+		}
 		respondWithJSON(reqCtx, 200, resp.Data)
 	}
 }

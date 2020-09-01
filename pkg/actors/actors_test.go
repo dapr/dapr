@@ -330,7 +330,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		assert.Equal(t, "2s", reminders[0].DueTime)
 		assert.Equal(t, "b", reminders[0].Data)
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(3 * time.Second)
 
 		// Test only the last reminder update fires
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
