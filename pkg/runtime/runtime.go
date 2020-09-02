@@ -1051,16 +1051,30 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
 	}
 
+	statusCode := int(resp.Status().Code)
+
 	if span != nil {
 		m := diag.ConstructSubscriptionSpanAttributes(msg.Topic)
 		diag.AddAttributesToSpan(span, m)
-		diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
+		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
 		span.End()
 	}
 
-	if resp.Status().Code != nethttp.StatusOK {
+	if (statusCode != nethttp.StatusOK) && (statusCode != nethttp.StatusNoContent) {
 		_, errorMsg := resp.RawData()
-		return fmt.Errorf("error returned from app while processing pub/sub event: %s. status code returned: %v", errorMsg, resp.Status().Code)
+
+		if (statusCode >= 500) && (statusCode <= 599) && (statusCode != nethttp.StatusServiceUnavailable) {
+			// 503 means the app chose not to process the message *yet*, do not log warning.
+			log.Warnf("retriable error returned from app while processing pub/sub event: %s. status code returned: %v", errorMsg, statusCode)
+		}
+
+		if (statusCode < 500) || (statusCode > 599) {
+			// Any error that is not 5xx will *not* be retried, log error.
+			log.Errorf("non-retriable error returned from app while processing pub/sub event: %s. status code returned: %v", errorMsg, statusCode)
+			return nil
+		}
+
+		return fmt.Errorf("error returned from app while processing pub/sub event: %s. status code returned: %v", errorMsg, statusCode)
 	}
 
 	return nil
