@@ -78,7 +78,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				p.hostsLock.Lock()
 				p.RemoveHost(srv)
 				p.ProcessRemovedHost(id)
-				log.Infof("host removed: %s", id)
+				log.Debugf("host removed: %s", id)
 				p.hostsLock.Unlock()
 			}()
 			continue
@@ -100,7 +100,7 @@ func (p *Service) addHost(ctx context.Context, srv placementv1pb.Placement_Repor
 
 	id := v[0]
 	p.hosts = append(p.hosts, srv)
-	log.Infof("host added: %s", id)
+	log.Debugf("host added: %s", id)
 
 	return id, nil
 }
