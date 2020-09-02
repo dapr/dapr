@@ -49,7 +49,12 @@ func main() {
 		}
 	}()
 
-	injector.NewInjector(cfg, daprClient, kubeClient).Run(ctx)
+	uid, err := injector.ReplicasetAccountUID(kubeClient)
+	if err != nil {
+		log.Fatalf("failed to get authentication uid from service account: %s", err)
+	}
+
+	injector.NewInjector(uid, cfg, daprClient, kubeClient).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
