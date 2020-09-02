@@ -43,9 +43,9 @@ func main() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		err := healthzServer.Run(ctx, healthzPort)
-		if err != nil {
-			log.Fatalf("failed to start healthz server: %s", err)
+		healthzErr := healthzServer.Run(ctx, healthzPort)
+		if healthzErr != nil {
+			log.Fatalf("failed to start healthz server: %s", healthzErr)
 		}
 	}()
 
