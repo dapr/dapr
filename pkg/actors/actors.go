@@ -49,8 +49,6 @@ type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
-	SaveState(ctx context.Context, req *SaveStateRequest) error
-	DeleteState(ctx context.Context, req *DeleteStateRequest) error
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
@@ -431,35 +429,6 @@ func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedReque
 	key := a.constructCompositeKey(req.ActorType, req.ActorID)
 	_, exists := a.actorsTable.Load(key)
 	return exists
-}
-
-func (a *actorsRuntime) SaveState(ctx context.Context, req *SaveStateRequest) error {
-	if a.store == nil {
-		return errors.New("actors: state store does not exist or incorrectly configured")
-	}
-	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
-
-	partitionKey := a.constructCompositeKey(a.config.AppID, req.ActorType, req.ActorID)
-	metadata := map[string]string{metadataPartitionKey: partitionKey}
-
-	err := a.store.Set(&state.SetRequest{
-		Value:    req.Value,
-		Key:      key,
-		Metadata: metadata,
-	})
-	return err
-}
-
-func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest) error {
-	if a.store == nil {
-		return errors.New("actors: state store does not exist or incorrectly configured")
-	}
-	key := a.constructActorStateKey(req.ActorType, req.ActorID, req.Key)
-
-	err := a.store.Delete(&state.DeleteRequest{
-		Key: key,
-	})
-	return err
 }
 
 func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) string {

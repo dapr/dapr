@@ -107,6 +107,17 @@ ifeq ($(LATEST_RELEASE),true)
 	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)
 endif
 
+check-windows-version:
+ifeq ($(WINDOWS_VERSION),)
+	$(error WINDOWS_VERSION environment variable must be set)
+endif
+
+docker-windows-base-build: check-windows-version
+	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base . -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
+
+docker-windows-base-push: check-windows-version
+	$(DOCKER) push $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
+
 ################################################################################
 # Target: build-dev-container, push-dev-container                              #
 ################################################################################
