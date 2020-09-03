@@ -90,7 +90,7 @@ func (d *directMessaging) requestNamespace(targetAppID string) (string, error) {
 	if len(items) == 1 {
 		return d.namespace, nil
 	} else if len(items) == 2 {
-		return items[0], nil
+		return items[1], nil
 	} else {
 		return "", fmt.Errorf("invalid app id %s", targetAppID)
 	}
