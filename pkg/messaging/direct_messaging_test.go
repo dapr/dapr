@@ -65,7 +65,7 @@ func TestKubernetesNamespace(t *testing.T) {
 	})
 
 	t.Run("with namespace", func(t *testing.T) {
-		appID := "ns1.app1"
+		appID := "app1.ns1"
 
 		dm := newDirectMessaging()
 		ns, err := dm.requestNamespace(appID)
@@ -75,7 +75,7 @@ func TestKubernetesNamespace(t *testing.T) {
 	})
 
 	t.Run("invalid namespace", func(t *testing.T) {
-		appID := "ns1.ns2.app1"
+		appID := "app1.ns1.ns2"
 
 		dm := newDirectMessaging()
 		_, err := dm.requestNamespace(appID)
