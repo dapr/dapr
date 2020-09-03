@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
@@ -58,6 +59,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 	if err != nil {
 		return err
 	}
+	log.Debugf("host added: %s", id)
 
 	// send the current placements
 	p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
@@ -78,8 +80,10 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				p.hostsLock.Lock()
 				p.RemoveHost(srv)
 				p.ProcessRemovedHost(id)
-				log.Infof("host removed: %s", id)
 				p.hostsLock.Unlock()
+
+				time.Sleep(time.Millisecond * 500)
+				log.Debugf("host removed: %s", id)
 			}()
 			continue
 		}
@@ -100,7 +104,6 @@ func (p *Service) addHost(ctx context.Context, srv placementv1pb.Placement_Repor
 
 	id := v[0]
 	p.hosts = append(p.hosts, srv)
-	log.Infof("host added: %s", id)
 
 	return id, nil
 }
