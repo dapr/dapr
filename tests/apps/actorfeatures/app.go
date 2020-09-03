@@ -392,9 +392,9 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			return errors.New("expected 0 length reponse")
 		}
 
-		// query a non-existing actor.  This should return 404.
+		// query a non-existing actor.  This should return 400.
 		url = fmt.Sprintf(actorGetStateURLFormat, actorType, "actoriddoesnotexist", "keynotpresent")
-		body, err = httpCall("GET", url, nil, 404)
+		body, err = httpCall("GET", url, nil, 400)
 		if err != nil {
 			log.Printf("actor state call failed: %s", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)

@@ -700,7 +700,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(reqCtx, 404, msg)
+		respondWithError(reqCtx, 400, msg)
 		log.Debug(msg)
 		return
 	}
@@ -854,7 +854,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(reqCtx, 404, msg)
+		respondWithError(reqCtx, 400, msg)
 		log.Debug(msg)
 		return
 	}
