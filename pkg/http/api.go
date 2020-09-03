@@ -700,7 +700,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, 404, msg)
 		log.Debug(msg)
 		return
 	}
@@ -846,6 +846,18 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
+
+	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
+		respondWithError(reqCtx, 404, msg)
+		log.Debug(msg)
+		return
+	}
 
 	req := actors.GetStateRequest{
 		ActorType: actorType,
