@@ -29,6 +29,8 @@ if [ -z "$DAPR_TEST_NAMESPACE" ]; then
     fi
 fi
 
+Reg Query "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" || true
+
 echo "Selected Dapr Test Resource group: $DAPR_TEST_RESOURCE_GROUP"
 echo "Selected Kubernetes Namespace: $DAPR_TEST_NAMESPACE"
 
