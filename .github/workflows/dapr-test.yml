@@ -13,18 +13,29 @@ on:
 
 jobs:
   test-e2e:
-    name: end-to-end linux tests
-    runs-on: ubuntu-latest
+    name: end-to-end ${{ matrix.target_os }} tests
+    runs-on: ${{ matrix.os }}
     env:
       GOVER: 1.15
-      GOOS: linux
-      GOARCH: amd64
+      GOOS: ${{ matrix.target_os }}
+      GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       HELMVER: v3.2.1
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
+      TARGET_OS: ${{ matrix.target_os }}
+      TARGET_ARCH: ${{ matrix.target_arch }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        target_arch: [amd64]
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+          - os: windows-latest
+            target_os: windows
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -78,11 +89,12 @@ jobs:
             const payload = context.payload;
             const testPayload = payload.client_payload;
             const testCluster = process.env.TEST_CLUSTER;
+            const targetOs = process.env.TARGET_OS;
 
             if (!testCluster) {
               message = "All test clusters are occupied by the other tests. Please try to test later.";
             } else {
-              message = `Found the available test cluster - ${testCluster}. Please wait until test is done.`;
+              message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please wait until test is done.`;
             }
             
             await github.issues.createComment({
@@ -137,17 +149,18 @@ jobs:
             const testPayload = context.payload.client_payload;
             const jobContext = JSON.parse(process.env.JOB_CONTEXT);
             const jobStatus = jobContext.status.toLowerCase();
+            const targetOs = process.env.TARGET_OS;
 
             console.log(`Current Job Status: ${jobStatus}`);
 
             var message = "";
             
             if (jobStatus == "cancelled") {
-              message = "End-to-end tests cancelled.";
+              message = `End-to-end tests cancelled on ${targetOs}.`;
             } else if (jobStatus == "success") {
-              message = "Congrats! All end-to-end tests have passed. Thanks for your contribution!";
+              message = `Congrats! All end-to-end tests have passed on ${targetOs}. Thanks for your contribution!`;
             } else if (jobStatus == "failure") {
-              message = "End-to-end tests failed.";
+              message = `End-to-end tests failed on ${targetOs}.`;
             }
             
             if (message) {

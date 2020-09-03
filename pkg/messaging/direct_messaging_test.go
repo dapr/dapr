@@ -52,3 +52,34 @@ func TestForwardedHeaders(t *testing.T) {
 		assert.Equal(t, "for=1;by=1;host=2", md.Values[0])
 	})
 }
+
+func TestKubernetesNamespace(t *testing.T) {
+	t.Run("no namespace", func(t *testing.T) {
+		appID := "app1"
+
+		dm := newDirectMessaging()
+		ns, err := dm.requestNamespace(appID)
+
+		assert.NoError(t, err)
+		assert.Empty(t, ns)
+	})
+
+	t.Run("with namespace", func(t *testing.T) {
+		appID := "app1.ns1"
+
+		dm := newDirectMessaging()
+		ns, err := dm.requestNamespace(appID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "ns1", ns)
+	})
+
+	t.Run("invalid namespace", func(t *testing.T) {
+		appID := "app1.ns1.ns2"
+
+		dm := newDirectMessaging()
+		_, err := dm.requestNamespace(appID)
+
+		assert.Error(t, err)
+	})
+}
