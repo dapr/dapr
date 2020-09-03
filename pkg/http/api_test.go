@@ -363,6 +363,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Data: fakeData,
 		}, nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		// act
@@ -515,6 +520,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		}).Return(&actors.StateResponse{
 			Data: fakeData,
 		}, nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
 
 		testAPI.actor = mockActors
 
