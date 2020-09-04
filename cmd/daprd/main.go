@@ -58,7 +58,7 @@ import (
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
 	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
-	"github.com/dapr/components-contrib/pubsub/nats"
+	"github.com/dapr/components-contrib/pubsub/natsstreaming"
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
@@ -209,8 +209,8 @@ func main() {
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
 			}),
-			pubsub_loader.New("nats", func() pubs.PubSub {
-				return nats.NewNATSPubSub(logContrib)
+			pubsub_loader.New("natsstreaming", func() pubs.PubSub {
+				return natsstreaming.NewNATSStreamingPubSub(logContrib)
 			}),
 			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
 				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
