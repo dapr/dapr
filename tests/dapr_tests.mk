@@ -80,6 +80,14 @@ push-perf-app-$(1): check-e2e-env
 	$(DOCKER) push $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
 endef
 
+create-test-namespace:
+	kubectl create namespace $(DAPR_TEST_NAMESPACE)
+
+delete-test-namespace:
+	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
+
+e2e-build-deploy-run: create-test-namespace setup-helm-init setup-test-env-redis setup-test-env-kafka build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
+
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
 
