@@ -106,33 +106,6 @@ jobs:
                   
                   console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
                 }
-              } else if (commentBody.indexOf("/ok-to-wintest") == 0) {
-                // Get pull request
-                const pull = await github.pulls.get({
-                  owner: issue.owner,
-                  repo: issue.repo,
-                  pull_number: issue.number
-                });
-
-                if (pull && pull.data) {
-                  // Get commit id and repo from pull head
-                  const testPayload = {
-                    pull_head_ref: pull.data.head.sha,
-                    pull_head_repo: pull.data.head.repo.full_name,
-                    command: "ok-to-wintest",
-                    issue: issue,
-                  };
-
-                  // Fire repository_dispatch event to trigger e2e test
-                  await github.repos.createDispatchEvent({
-                    owner: issue.owner,
-                    repo: issue.repo,
-                    event_type: "e2e-test-windows",
-                    client_payload: testPayload,
-                  });
-
-                  console.log(`Trigger E2E test for windows ${JSON.stringify(testPayload)}`);
-                }
               } else if (commentBody.indexOf("/build-windows-base") == 0) {
                 // Get pull request
                 const pull = await github.pulls.get({
