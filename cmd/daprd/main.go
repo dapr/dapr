@@ -58,7 +58,6 @@ import (
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
 	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
-	"github.com/dapr/components-contrib/pubsub/nats"
 	"github.com/dapr/components-contrib/pubsub/natsstreaming"
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
@@ -209,9 +208,6 @@ func main() {
 		runtime.WithPubSubs(
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
-			}),
-			pubsub_loader.New("nats", func() pubs.PubSub {
-				return nats.NewNATSPubSub(logContrib)
 			}),
 			pubsub_loader.New("natsstreaming", func() pubs.PubSub {
 				return natsstreaming.NewNATSStreamingPubSub(logContrib)
