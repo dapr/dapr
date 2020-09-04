@@ -29,6 +29,7 @@ type Configuration struct {
 
 type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	GRPCPipelineSpec PipelineSpec `json:"grpcPipeline,omitempty" yaml:"grpcPipeline,omitempty"`
 	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
 }

@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
+	grpc_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/grpc"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -47,6 +48,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	dapr_grpc_middleware "github.com/dapr/dapr/pkg/middleware/grpc"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -100,6 +102,7 @@ type DaprRuntime struct {
 	nameResolver           nr.Resolver
 	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
+	grpcMiddlewareRegistry grpc_middleware_loader.Registry
 	hostAddress            string
 	actorStateStoreName    string
 	actorStateStoreCount   int
@@ -132,11 +135,11 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		exporterRegistry:       exporter_loader.NewRegistry(),
 		nameResolutionRegistry: nr_loader.NewRegistry(),
 		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
-
-		scopedSubscriptions: map[string][]string{},
-		scopedPublishings:   map[string][]string{},
-		allowedTopics:       map[string][]string{},
-		topicRoutes:         map[string]TopicRoute{},
+		grpcMiddlewareRegistry: grpc_middleware_loader.NewRegistry(),
+		scopedSubscriptions:    map[string][]string{},
+		scopedPublishings:      map[string][]string{},
+		allowedTopics:          map[string][]string{},
+		topicRoutes:            map[string]TopicRoute{},
 	}
 }
 
@@ -271,14 +274,21 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	// Register and initialize HTTP middleware
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
-	pipeline, err := a.buildHTTPPipeline()
+	httpPipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
+	// Register and initialize gRPC middleware
+	a.grpcMiddlewareRegistry.Register(opts.grpcMiddleware...)
+	grpcPipeline, err := a.buildGRPCPipeline()
+	if err != nil {
+		log.Warnf("failed to build GRPC pipeline: %s", err)
+	}
+
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
-	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
+	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort, grpcPipeline)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
@@ -291,10 +301,33 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.InternalGRPCPort)
 
 	// Start HTTP Server
-	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
+	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, httpPipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	return nil
+}
+func (a *DaprRuntime) buildGRPCPipeline() (dapr_grpc_middleware.Pipeline, error) {
+	var interceptors []dapr_grpc_middleware.Middleware
+
+	if a.globalConfig != nil {
+		for i := 0; i < len(a.globalConfig.Spec.GRPCPipelineSpec.Handlers); i++ {
+			middlewareSpec := a.globalConfig.Spec.GRPCPipelineSpec.Handlers[i]
+			component := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
+			if component == nil {
+				return dapr_grpc_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware component with name %s and type %s",
+					middlewareSpec.Name,
+					middlewareSpec.Type)
+			}
+			interceptor, err := a.grpcMiddlewareRegistry.Create(middlewareSpec.Type,
+				middleware.Metadata{Properties: a.convertMetadataItemsToProperties(component.Spec.Metadata)})
+			if err != nil {
+				return dapr_grpc_middleware.Pipeline{}, err
+			}
+			log.Infof("enabled %s gRPC middleware", middlewareSpec.Type)
+			interceptors = append(interceptors, interceptor)
+		}
+	}
+	return dapr_grpc_middleware.Pipeline{Interceptors: interceptors}, nil
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -681,9 +714,9 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	return err
 }
 
-func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int, pipeline dapr_grpc_middleware.Pipeline) error {
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
 	err := server.StartNonBlocking()
 	return err
 }

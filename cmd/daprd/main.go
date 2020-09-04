@@ -115,6 +115,7 @@ import (
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/valyala/fasthttp"
+	//gRPC Middleware
 )
 
 var (
@@ -401,6 +402,7 @@ func main() {
 				return handler
 			}),
 		),
+		runtime.WithGRPCMiddleware(),
 	)
 	if err != nil {
 		log.Fatalf("fatal error from runtime: %s", err)

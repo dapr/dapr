@@ -16,6 +16,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/logger"
+	dapr_grpc_middleware "github.com/dapr/dapr/pkg/middleware/grpc"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
@@ -53,13 +54,14 @@ type server struct {
 	logger             logger.Logger
 	maxConnectionAge   *time.Duration
 	authToken          string
+	pipeline           dapr_grpc_middleware.Pipeline
 }
 
 var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
 var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
 
 // NewAPIServer returns a new user facing gRPC API server
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, pipeline dapr_grpc_middleware.Pipeline) Server {
 	return &server{
 		api:         api,
 		config:      config,
@@ -67,6 +69,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) 
 		kind:        apiServer,
 		logger:      apiServerLogger,
 		authToken:   auth.GetAPIToken(),
+		pipeline:    pipeline,
 	}
 }
 
@@ -152,6 +155,8 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 		s.logger.Info("enabled token authentication on gRPC server")
 		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
 	}
+
+	intr = append(intr, s.pipeline.Apply()...)
 
 	chain := grpc_middleware.ChainUnaryServer(
 		intr...,

@@ -3,6 +3,7 @@ package runtime
 import (
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/exporters"
+	"github.com/dapr/dapr/pkg/components/middleware/grpc"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
@@ -21,6 +22,7 @@ type (
 		inputBindings   []bindings.InputBinding
 		outputBindings  []bindings.OutputBinding
 		httpMiddleware  []http.Middleware
+		grpcMiddleware  []grpc.Middleware
 	}
 
 	// Option is a function that customizes the runtime.
@@ -80,5 +82,12 @@ func WithOutputBindings(outputBindings ...bindings.OutputBinding) Option {
 func WithHTTPMiddleware(httpMiddleware ...http.Middleware) Option {
 	return func(o *runtimeOpts) {
 		o.httpMiddleware = append(o.httpMiddleware, httpMiddleware...)
+	}
+}
+
+// WithGRPCMiddleware adds gRPC middleware components to the runtime.
+func WithGRPCMiddleware(grpcMiddleware ...grpc.Middleware) Option {
+	return func(o *runtimeOpts) {
+		o.grpcMiddleware = append(o.grpcMiddleware, grpcMiddleware...)
 	}
 }
