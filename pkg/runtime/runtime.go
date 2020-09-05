@@ -58,6 +58,8 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
 	"go.opencensus.io/trace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -991,24 +993,41 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		span.End()
 	}
 
-	if (statusCode != nethttp.StatusOK) && (statusCode != nethttp.StatusNoContent) {
-		_, errorMsg := resp.RawData()
+	_, body := resp.RawData()
 
-		if (statusCode >= 500) && (statusCode <= 599) && (statusCode != nethttp.StatusServiceUnavailable) {
-			// 503 means the app chose not to process the message *yet*, do not log warning.
-			log.Warnf("retriable error returned from app while processing pub/sub event: %s. status code returned: %v", errorMsg, statusCode)
-		}
-
-		if (statusCode < 500) || (statusCode > 599) {
-			// Any error that is not 5xx will *not* be retried, log error.
-			log.Errorf("non-retriable error returned from app while processing pub/sub event: %s. status code returned: %v", errorMsg, statusCode)
+	if (statusCode >= 200) && (statusCode <= 299) {
+		// Any 2xx is considered a success.
+		var appResponse pubsub.AppResponse
+		err := a.json.Unmarshal(body, &appResponse)
+		if err != nil {
+			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent.ID)
+			// Return no error so message does not get reprocessed.
 			return nil
 		}
 
-		return fmt.Errorf("error returned from app while processing pub/sub event: %s. status code returned: %v", errorMsg, statusCode)
+		switch appResponse.Status {
+		case pubsub.Success:
+			return nil
+		case pubsub.Retry:
+			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		case pubsub.Drop:
+			log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
+			return nil
+		}
+		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, appResponse.Status)
 	}
 
-	return nil
+	if statusCode == nethttp.StatusNotFound {
+		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
+		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
+		// https://cloud.google.com/apis/design/errors#handling_errors
+		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
+		return nil
+	}
+
+	// Every error from now on is a retriable error.
+	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
+	return fmt.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
 }
 
 func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
@@ -1049,7 +1068,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 
 	// call appcallback
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-	_, err = clientV1.OnTopicEvent(ctx, envelope)
+	res, err := clientV1.OnTopicEvent(ctx, envelope)
 
 	if span != nil {
 		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
@@ -1059,8 +1078,25 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	}
 
 	if err != nil {
-		err = fmt.Errorf("error from app while processing pub/sub event: %s", err)
+		errStatus, hasErrStatus := status.FromError(err)
+		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
+			// DROP
+			log.Warn("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
+			return nil
+		}
+
+		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
 		log.Debug(err)
+	}
+
+	switch res.GetStatus() {
+	case runtimev1pb.TopicEventResponse_SUCCESS:
+		return nil
+	case runtimev1pb.TopicEventResponse_RETRY:
+		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+	case runtimev1pb.TopicEventResponse_DROP:
+		log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		return nil
 	}
 
 	return err
