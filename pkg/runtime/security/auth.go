@@ -16,6 +16,7 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -103,7 +104,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		grpc.WithUnaryInterceptor(unaryClientInterceptor))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
-		return nil, fmt.Errorf("error establishing connection to sentry: %s", err)
+		return nil, errors.Wrap(err, "error establishing connection to sentry")
 	}
 	defer conn.Close()
 
@@ -115,7 +116,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
-		return nil, fmt.Errorf("error from sentry SignCertificate: %s", err)
+		return nil, errors.Wrap(err, "error from sentry SignCertificate")
 	}
 
 	workloadCert := resp.GetWorkloadCertificate()
@@ -123,7 +124,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	expiry, err := ptypes.Timestamp(validTimestamp)
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
-		return nil, fmt.Errorf("error parsing ValidUntil: %s", err)
+		return nil, errors.Wrap(err, "error parsing ValidUntil")
 	}
 
 	trustChain := x509.NewCertPool()
@@ -131,7 +132,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		ok := trustChain.AppendCertsFromPEM(c)
 		if !ok {
 			diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("chaining")
-			return nil, fmt.Errorf("failed adding trust chain cert to x509 CertPool: %s", err)
+			return nil, errors.Wrap(err, "failed adding trust chain cert to x509 CertPool")
 		}
 	}
 

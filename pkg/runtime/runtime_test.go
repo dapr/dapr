@@ -828,7 +828,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
-		assert.Equal(t, expectedClientError, err)
+		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -868,7 +868,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		expectedClientError := fmt.Errorf("unknown status returned from app while processing pub/sub event %v: not_valid", cloudEvent.ID)
-		assert.Equal(t, expectedClientError, err)
+		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -890,7 +890,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		expectedClientError := fmt.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
-		assert.Equal(t, expectedClientError, err)
+		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 }
