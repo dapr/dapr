@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/pkg/errors"
 )
 
 type State struct {
@@ -52,7 +53,7 @@ func (s *stateStoreRegistry) CreateStateStore(name string) (state.Store, error) 
 	if method, ok := s.stateStores[name]; ok {
 		return method(), nil
 	}
-	return nil, fmt.Errorf("couldn't find state store %s", name)
+	return nil, errors.Errorf("couldn't find state store %s", name)
 }
 
 func createFullName(name string) string {

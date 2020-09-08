@@ -10,6 +10,7 @@ import (
 
 	middleware "github.com/dapr/components-contrib/middleware"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -57,7 +58,7 @@ func (p *httpMiddlewareRegistry) Create(name string, metadata middleware.Metadat
 	if method, ok := p.middleware[name]; ok {
 		return method(metadata), nil
 	}
-	return nil, fmt.Errorf("HTTP middleware %s has not been registered", name)
+	return nil, errors.Errorf("HTTP middleware %s has not been registered", name)
 }
 
 func createFullName(name string) string {

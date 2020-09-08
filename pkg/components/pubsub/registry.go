@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/dapr/components-contrib/pubsub"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -56,7 +57,7 @@ func (p *pubSubRegistry) Create(name string) (pubsub.PubSub, error) {
 	if method, ok := p.messageBuses[name]; ok {
 		return method(), nil
 	}
-	return nil, fmt.Errorf("couldn't find message bus %s", name)
+	return nil, errors.Errorf("couldn't find message bus %s", name)
 }
 
 func createFullName(name string) string {
