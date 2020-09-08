@@ -8,7 +8,6 @@ package runtime
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -57,6 +56,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -205,7 +205,7 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
 		if err != nil {
-			return nil, fmt.Errorf("error creating operator client: %s", err)
+			return nil, errors.Wrap(err, "error creating operator client")
 		}
 		return client, nil
 	}
@@ -227,7 +227,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
-		return fmt.Errorf("failed to determine host address: %s", err)
+		return errors.Wrap(err, "failed to determine host address")
 	}
 
 	if a.globalConfig.Spec.TracingSpec.Stdout {
@@ -309,7 +309,7 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
 			component := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if component == nil {
-				return http_middleware.Pipeline{}, fmt.Errorf("couldn't find middleware component with name %s and type %s",
+				return http_middleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s",
 					middlewareSpec.Name,
 					middlewareSpec.Type)
 			}
@@ -467,9 +467,9 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		for _, o := range ops {
 			supported = append(supported, string(o))
 		}
-		return nil, fmt.Errorf("binding %s does not support operation %s. supported operations:%s", name, req.Operation, strings.Join(supported, " "))
+		return nil, errors.Errorf("binding %s does not support operation %s. supported operations:%s", name, req.Operation, strings.Join(supported, " "))
 	}
-	return nil, fmt.Errorf("couldn't find output binding %s", name)
+	return nil, errors.Errorf("couldn't find output binding %s", name)
 }
 
 func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
@@ -524,7 +524,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
-			return fmt.Errorf("error invoking app: %s", err)
+			return errors.Wrap(err, "error invoking app")
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
@@ -566,7 +566,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
-			return fmt.Errorf("error invoking app: %s", err)
+			return errors.Wrap(err, "error invoking app")
 		}
 
 		if span != nil {
@@ -579,7 +579,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if resp.Status().Code != nethttp.StatusOK {
-			return fmt.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
+			return errors.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
 		}
 
 		// TODO: Do we need to check content-type?
@@ -889,7 +889,7 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	}
 
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, a.scopedPublishings[req.PubsubName]); !allowed {
-		return fmt.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
+		return errors.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
 	}
 
 	return a.pubSubs[req.PubsubName].Publish(req)
@@ -942,7 +942,7 @@ func (a *DaprRuntime) initNameResolution() error {
 			nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
 		}
 	default:
-		return fmt.Errorf("remote calls not supported for %s mode", string(a.runtimeConfig.Mode))
+		return errors.Errorf("remote calls not supported for %s mode", string(a.runtimeConfig.Mode))
 	}
 
 	if err != nil {
@@ -981,7 +981,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
-		return fmt.Errorf("error from app channel while sending pub/sub event to app: %s", err)
+		return errors.Wrap(err, "error from app channel while sending pub/sub event to app")
 	}
 
 	statusCode := int(resp.Status().Code)
@@ -1009,12 +1009,12 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		case pubsub.Success:
 			return nil
 		case pubsub.Retry:
-			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
 		case pubsub.Drop:
 			log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
 			return nil
 		}
-		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, appResponse.Status)
+		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, appResponse.Status)
 	}
 
 	if statusCode == nethttp.StatusNotFound {
@@ -1027,7 +1027,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 
 	// Every error from now on is a retriable error.
 	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
-	return fmt.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
+	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
 }
 
 func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
@@ -1085,7 +1085,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 			return nil
 		}
 
-		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
+		err = errors.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
 		log.Debug(err)
 	}
 
@@ -1093,7 +1093,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	case runtimev1pb.TopicEventResponse_SUCCESS:
 		return nil
 	case runtimev1pb.TopicEventResponse_RETRY:
-		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
 	case runtimev1pb.TopicEventResponse_DROP:
 		log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
 		return nil
@@ -1145,7 +1145,7 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	case modes.StandaloneMode:
 		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	default:
-		return fmt.Errorf("components loader for mode %s not found", a.runtimeConfig.Mode)
+		return errors.Errorf("components loader for mode %s not found", a.runtimeConfig.Mode)
 	}
 
 	comps, err := loader.LoadComponents()
@@ -1400,7 +1400,7 @@ func (a *DaprRuntime) createAppChannel() error {
 		case HTTPProtocol:
 			channelCreatorFn = http_channel.CreateLocalChannel
 		default:
-			return fmt.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
+			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
 		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec)
