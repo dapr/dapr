@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -56,7 +57,7 @@ func (s *nameResolutionRegistry) Create(name string) (nr.Resolver, error) {
 	if method, ok := s.resolvers[createFullName(name)]; ok {
 		return method(), nil
 	}
-	return nil, fmt.Errorf("couldn't find name resolver %s", name)
+	return nil, errors.Errorf("couldn't find name resolver %s", name)
 }
 
 func createFullName(name string) string {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/dapr/components-contrib/exporters"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -56,7 +57,7 @@ func (p *exporterRegistry) Create(name string) (exporters.Exporter, error) {
 	if method, ok := p.exporters[name]; ok {
 		return method(), nil
 	}
-	return nil, fmt.Errorf("couldn't find exporter %s", name)
+	return nil, errors.Errorf("couldn't find exporter %s", name)
 }
 
 func createFullName(name string) string {
