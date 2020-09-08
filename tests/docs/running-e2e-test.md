@@ -12,18 +12,19 @@ E2E tests are designed for verifying the functional correctness by replicating e
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
   - [Install the latest Helm v3](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#using-helm-advanced).
 * Create your DockerHub ID
-* Create dapr-tests namespace
-    ```bash
-    kubectl create namespace dapr-tests
-    ```
 * Set the environment variables
     ```bash
     export DAPR_REGISTRY=docker.io/your_dockerhub_id
     export DAPR_TAG=dev
     export DAPR_NAMESPACE=dapr-tests
-    # If you want to run tests against windows or arm, uncomment and set these
+    # If you want to run tests against Windows or arm kubernetes clusters, uncomment and set these
     # export TARGET_OS=linux
     # export TARGET_ARCH=amd64
+ 
+    # If you are cross compiling (building on MacOS/Windows and running against a Linux Kubernetes cluster 
+    # or vice versa) uncomment and set these
+    # export GOOS=linux
+    # export GOARCH=amd64
 
     # Do not set DAPR_TEST_ENV if you do not use minikube
     export DAPR_TEST_ENV=minikube
@@ -32,16 +33,40 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # export DAPR_TEST_REGISTRY=docker.io/your_dockerhub_id
     # export DARP_TEST_TAG=dev
     ```
-* Install redis and kafka for state, pubsub, and binding building block
-    ```bash
-    make setup-helm-init
-    make setup-test-env-redis
 
-    # This may take a few minutes.  You can skip kafka install if you do not use bindings for your tests.
-    make setup-test-env-kafka
-    ```
+### Option 1: Build, deploy, and run Dapr and e2e tests
 
-### Deploy your dapr runtime change
+If you are starting from scratch and just want to build dapr, deploy it, and run the e2e tests to your kubernetes cluster, do the following:
+
+1. Remove the test namespace, if it exists.
+*Make sure you have DAPR_NAMESPACE set properly before you do this!*
+```bash
+make delete-test-namespace
+```
+2. Build, deploy, run tests from start to finish
+```bash
+make e2e-build-deploy-run
+```
+
+### Option 2: Step by step guide
+
+We also have individual targets to allow for quick iteration on parts of deployment and testing. To follow all or part of these steps individually, do the following:
+
+Create dapr-tests namespace
+
+```bash
+make create-test-namespace
+```
+
+Install redis and kafka for state, pubsub, and binding building block
+
+```bash
+make setup-helm-init
+make setup-test-env-redis
+
+# This may take a few minutes.  You can skip kafka install if you do not use bindings for your tests.
+make setup-test-env-kafka
+```
 
 Run the below commands to build and deploy dapr from your local disk
 
@@ -92,8 +117,19 @@ Run end-to-end tests
 make test-e2e-all
 ```
 
+## Cleanup local enviornment
+
+To completely remove Dapr, test dependancies, and any lingering e2e test apps:
+*Make sure you have DAPR_NAMESPACE set properly before you do this!*
+```bash
+make delete-test-namespace
+```
+
+
 ## Run E2E tests through GitHub Actions
 
 To keep the build infrastructure simple, Dapr uses [dapr-test GitHub Actions Workflow](https://github.com/dapr/dapr/actions?query=workflow%3Adapr-test) to run e2e tests using one of [AKS clusters](https://github.com/dapr/dapr/blob/4cd61680a3129f729deae24a51da241d0701376c/tests/test-infra/find_cluster.sh#L12-L17).
 
 Once a contributor creates pull request, maintainer can start E2E tests by adding `/ok-to-test` comment to Pull Request.
+
+
