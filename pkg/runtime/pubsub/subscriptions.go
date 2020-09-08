@@ -42,7 +42,8 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) []Subsc
 		log.Debug(noSubscriptionsError)
 
 	default:
-		log.Warnf("app returned http status code %v from subscription endpoint", resp.Status().Code)
+		// Unexpected response: both GRPC and HTTP have to log the same level.
+		log.Errorf("app returned http status code %v from subscription endpoint", resp.Status().Code)
 	}
 
 	log.Debugf("app responded with subscriptions %v", subscriptions)
@@ -64,6 +65,7 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 
 	resp, err := channel.ListTopicSubscriptions(context.Background(), &empty.Empty{})
 	if err != nil {
+		// Unexpected response: both GRPC and HTTP have to log the same level.
 		log.Errorf(getTopicsError, err)
 	} else {
 		if resp == nil || resp.Subscriptions == nil || len(resp.Subscriptions) == 0 {

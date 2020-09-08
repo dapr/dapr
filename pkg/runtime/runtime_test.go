@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -773,7 +774,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
 	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
 
-	t.Run("succeeded to publish message to user app", func(t *testing.T) {
+	t.Run("succeeded to publish message to user app with non-json response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
@@ -791,7 +792,87 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
-	t.Run("failed to publish message to user app", func(t *testing.T) {
+	t.Run("succeeded to publish message to user app with status", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData([]byte("{ \"status\": \"SUCCESS\"}"), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		assert.Nil(t, err)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("succeeded to publish message to user app but app ask for retry", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData([]byte("{ \"status\": \"RETRY\"}"), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		var cloudEvent pubsub.CloudEventsEnvelope
+		json := jsoniter.ConfigFastest
+		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
+		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		assert.Equal(t, expectedClientError.Error(), err.Error())
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("succeeded to publish message to user app but app ask to drop", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData([]byte("{ \"status\": \"DROP\"}"), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		assert.Nil(t, err)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("succeeded to publish message to user app but app returned unknown status code", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData([]byte("{ \"status\": \"not_valid\"}"), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		var cloudEvent pubsub.CloudEventsEnvelope
+		json := jsoniter.ConfigFastest
+		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
+		expectedClientError := fmt.Errorf("unknown status returned from app while processing pub/sub event %v: not_valid", cloudEvent.ID)
+		assert.Equal(t, expectedClientError.Error(), err.Error())
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("failed to publish message to user app with 500", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
@@ -805,8 +886,11 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
-		expectedClientError := fmt.Errorf("error returned from app while processing pub/sub event: Internal Error. status code returned: 500")
-		assert.Equal(t, expectedClientError, err)
+		var cloudEvent pubsub.CloudEventsEnvelope
+		json := jsoniter.ConfigFastest
+		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
+		expectedClientError := fmt.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
+		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 }
