@@ -135,6 +135,12 @@ jobs:
       - name: Show dapr configurations
         if: env.TEST_CLUSTER != ''
         run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
+      - name: Set windows TCP timeouts
+        if: matrix.target_os == 'windows'
+        run: |
+          netsh interface tcp set global initialRto=3000
+          netsh interface tcp set global maxSynRetransmissions=8
+          netsh interface tcp show global
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
