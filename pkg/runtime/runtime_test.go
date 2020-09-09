@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -123,6 +124,9 @@ func getSubscriptionCustom(topic, route string) string {
 
 func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
+		TypeMeta: v1.TypeMeta{
+			Kind: "Subscription",
+		},
 		Spec: subscriptionsapi.SubscriptionSpec{
 			Topic:      "topic1",
 			Route:      "myroute",

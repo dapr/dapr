@@ -9,6 +9,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/ghodss/yaml"
 	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var log = logger.NewLogger("dapr.test")
@@ -37,6 +38,9 @@ func TestFilterSubscriptions(t *testing.T) {
 
 func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
+		TypeMeta: v1.TypeMeta{
+			Kind: "Subscription",
+		},
 		Spec: subscriptionsapi.SubscriptionSpec{
 			Topic:      "topic1",
 			Route:      "myroute",
@@ -55,11 +59,14 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
 
-		filePath := "sub.yaml"
-		writeSubscriptionToDisk(s, filePath)
-		defer os.RemoveAll(filePath)
+		dir := "./components"
+		os.Mkdir(dir, 0777)
+		defer os.RemoveAll(dir)
 
-		subs := DeclarativeSelfHosted(".", log)
+		filePath := "./components/sub.yaml"
+		writeSubscriptionToDisk(s, filePath)
+
+		subs := DeclarativeSelfHosted(dir, log)
 		assert.Len(t, subs, 1)
 		assert.Equal(t, "topic1", subs[0].Topic)
 		assert.Equal(t, "myroute", subs[0].Route)
