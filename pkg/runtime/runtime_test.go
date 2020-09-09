@@ -137,7 +137,7 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
-	ioutil.WriteFile(filePath, b, 0644)
+	ioutil.WriteFile(filePath, b, 0600)
 }
 
 func TestInitPubSub(t *testing.T) {
