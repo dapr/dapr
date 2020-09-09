@@ -40,21 +40,13 @@ func (a *API) GetDeployment(name, namespace string) (*appsv1.Deployment, error) 
 // UpdateDeployment updates an existing deployment
 func (a *API) UpdateDeployment(deployment *appsv1.Deployment) error {
 	_, err := a.kubeClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Update(deployment)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // CreateService creates a new service
 func (a *API) CreateService(service *corev1.Service, namespace string) error {
 	_, err := a.kubeClient.CoreV1().Services(namespace).Create(service)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // Delete a service
