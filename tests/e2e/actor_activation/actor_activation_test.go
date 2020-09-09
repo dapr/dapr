@@ -109,8 +109,10 @@ func TestActorActivation(t *testing.T) {
 		_, err = utils.HTTPPost(invokeURL, []byte{})
 		require.NoError(t, err)
 
-		fmt.Printf("getting logs, the current time is %s\n", time.Now())
+		fmt.Printf("getting logs, the current time is %s:\n", time.Now())
 		resp, err := utils.HTTPGet(logsURL)
+
+		fmt.Printf("Logs:\n%s\n", resp)
 		require.NoError(t, err)
 
 		// there is no longer an activate message
@@ -141,6 +143,7 @@ func TestActorActivation(t *testing.T) {
 
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
+		fmt.Printf("Logs:\n%s\n", resp)
 
 		// there is no longer an activate message
 		require.False(t, findActorActivation(resp, actorId))
@@ -151,6 +154,7 @@ func TestActorActivation(t *testing.T) {
 		time.Sleep(secondsToCheckActorRemainsActive * time.Second)
 
 		resp, err = utils.HTTPGet(logsURL)
+		fmt.Printf("Logs:\n%s\n", resp)
 		require.NoError(t, err)
 
 		// there is no longer an activate message
