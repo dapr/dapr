@@ -13,6 +13,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -102,6 +103,26 @@ func (a *apiServer) ListComponents(ctx context.Context, in *empty.Empty) (*opera
 			continue
 		}
 		resp.Components = append(resp.Components, b)
+	}
+	return resp, nil
+}
+
+// ListSubscriptions returns a list of Dapr pub/sub subscriptions
+func (a *apiServer) ListSubscriptions(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
+	var subs subscriptionsapi.SubscriptionList
+	if err := a.Client.List(ctx, &subs); err != nil {
+		return nil, errors.Wrap(err, "error getting subscriptions")
+	}
+	resp := &operatorv1pb.ListSubscriptionsResponse{
+		Subscriptions: [][]byte{},
+	}
+	for _, s := range subs.Items {
+		b, err := json.Marshal(&s)
+		if err != nil {
+			log.Warnf("error marshalling subscription: %s", err)
+			continue
+		}
+		resp.Subscriptions = append(resp.Subscriptions, b)
 	}
 	return resp, nil
 }

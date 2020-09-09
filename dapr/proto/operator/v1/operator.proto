@@ -18,6 +18,8 @@ service Operator {
   rpc ListComponents (google.protobuf.Empty) returns (ListComponentResponse) {}
   // Returns a given configuration by name
   rpc GetConfiguration (GetConfigurationRequest) returns (GetConfigurationResponse) {}
+  // Returns a list of pub/sub subscriptions
+  rpc ListSubscriptions (google.protobuf.Empty) returns (ListSubscriptionsResponse) {}
 }
 
 // ComponentUpdateEvent includes the updated component event.
@@ -25,7 +27,7 @@ message ComponentUpdateEvent {
   bytes component = 1;
 }
 
-// ListComponentResponse includes the list of available components 
+// ListComponentResponse includes the list of available components.
 message ListComponentResponse {
   repeated bytes components = 1;
 }
@@ -39,4 +41,9 @@ message GetConfigurationRequest {
 // GetConfigurationResponse includes the requested configuration.
 message GetConfigurationResponse {
   bytes configuration = 1;
+}
+
+// ListSubscriptionsResponse includes pub/sub subscriptions.
+message ListSubscriptionsResponse {
+  repeated bytes subscriptions = 1;
 }

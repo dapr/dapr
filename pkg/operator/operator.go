@@ -10,6 +10,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
@@ -57,6 +58,7 @@ func init() {
 
 	_ = componentsapi.AddToScheme(scheme)
 	_ = configurationapi.AddToScheme(scheme)
+	_ = subscriptionsapi.AddToScheme(scheme)
 }
 
 // NewOperator returns a new Dapr Operator

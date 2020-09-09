@@ -3,12 +3,18 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
+	"os"
 
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/ghodss/yaml"
 	"github.com/golang/protobuf/ptypes/empty"
 )
 
@@ -16,6 +22,7 @@ const (
 	getTopicsError         = "error getting topic list from app: %s"
 	deserializeTopicsError = "error getting topics from app: %s"
 	noSubscriptionsError   = "user app did not subscribe to any topic"
+	subscriptionKind       = "Subscription"
 )
 
 func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger) []Subscription {
@@ -81,4 +88,87 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 		}
 	}
 	return subscriptions
+}
+
+// DeclarativeSelfHosted loads subscriptions from the given components path
+func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscription {
+	var subs []Subscription
+
+	if _, err := os.Stat(componentsPath); os.IsNotExist(err) {
+		return subs
+	}
+
+	files, err := ioutil.ReadDir(componentsPath)
+	if err != nil {
+		log.Errorf("failed to read subscriptions from path %s: %s", err)
+		return subs
+	}
+
+	for _, f := range files {
+		if !f.IsDir() {
+			filePath := fmt.Sprintf("%s/%s", componentsPath, f.Name())
+			b, err := ioutil.ReadFile(filePath)
+			if err != nil {
+				log.Errorf("failed to read file %s: %s", filePath, err)
+				continue
+			}
+
+			subs, err = appendSubscription(subs, b)
+			if err != nil {
+				log.Warnf("failed to add subscription from file %s: %s", filePath, err)
+				continue
+			}
+		}
+	}
+	return subs
+}
+
+func marshalSubscription(b []byte) (*Subscription, error) {
+	var sub subscriptionsapi.Subscription
+	err := yaml.Unmarshal(b, &sub)
+	if err != nil {
+		return nil, err
+	}
+
+	if sub.Kind != subscriptionKind {
+		return nil, nil
+	}
+
+	return &Subscription{
+		Topic:      sub.Spec.Topic,
+		PubsubName: sub.Spec.Pubsubname,
+		Route:      sub.Spec.Route,
+		Scopes:     sub.Scopes,
+	}, nil
+}
+
+// DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes
+func DeclarativeKubernetes(client operatorv1pb.OperatorClient, log logger.Logger) []Subscription {
+	var subs []Subscription
+	resp, err := client.ListSubscriptions(context.TODO(), &empty.Empty{})
+	if err != nil {
+		log.Errorf("failed to list subscriptions from operator: %s", err)
+		return subs
+	}
+
+	for _, s := range resp.Subscriptions {
+		subs, err = appendSubscription(subs, s)
+		if err != nil {
+			log.Warnf("failed to add subscription from operator: %s", err)
+			continue
+		}
+	}
+	return subs
+}
+
+func appendSubscription(list []Subscription, subBytes []byte) ([]Subscription, error) {
+	sub, err := marshalSubscription(subBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if sub != nil {
+		list = append(list, *sub)
+	}
+	return list, nil
 }
