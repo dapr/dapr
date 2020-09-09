@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -55,13 +56,13 @@ func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePat
 }
 
 func TestDeclarativeSubscriptions(t *testing.T) {
+	dir := "./components"
+	os.Mkdir(dir, 0777)
+	defer os.RemoveAll(dir)
+
 	t.Run("load single valid subscription", func(t *testing.T) {
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
-
-		dir := "./components"
-		os.Mkdir(dir, 0777)
-		defer os.RemoveAll(dir)
 
 		filePath := "./components/sub.yaml"
 		writeSubscriptionToDisk(s, filePath)
@@ -72,5 +73,40 @@ func TestDeclarativeSubscriptions(t *testing.T) {
 		assert.Equal(t, "myroute", subs[0].Route)
 		assert.Equal(t, "pubsub", subs[0].PubsubName)
 		assert.Equal(t, "scope1", subs[0].Scopes[0])
+	})
+
+	t.Run("load multiple subscriptions", func(t *testing.T) {
+		for i := 0; i < 1; i++ {
+			s := testDeclarativeSubscription()
+			s.Spec.Topic = fmt.Sprintf("%v", i)
+			s.Spec.Route = fmt.Sprintf("%v", i)
+			s.Spec.Pubsubname = fmt.Sprintf("%v", i)
+			s.Spec.Topic = fmt.Sprintf("%v", i)
+			s.Scopes = []string{fmt.Sprintf("%v", i)}
+
+			writeSubscriptionToDisk(s, fmt.Sprintf("%s/%v", dir, i))
+		}
+
+		subs := DeclarativeSelfHosted(dir, log)
+		assert.Len(t, subs, 2)
+
+		for i := 0; i < 1; i++ {
+			assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
+			assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Route)
+			assert.Equal(t, fmt.Sprintf("%v", i), subs[i].PubsubName)
+			assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Scopes[0])
+		}
+	})
+
+	t.Run("no subscriptions loaded", func(t *testing.T) {
+		os.RemoveAll(dir)
+
+		s := testDeclarativeSubscription()
+		s.Scopes = []string{"scope1"}
+
+		writeSubscriptionToDisk(s, dir)
+
+		subs := DeclarativeSelfHosted(dir, log)
+		assert.Len(t, subs, 0)
 	})
 }
