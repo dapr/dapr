@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -28,10 +30,12 @@ import (
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/ghodss/yaml"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -116,6 +120,24 @@ func getSubscriptionCustom(topic, route string) string {
 	}
 	b, _ := json.Marshal(&s)
 	return string(b)
+}
+
+func testDeclarativeSubscription() subscriptionsapi.Subscription {
+	return subscriptionsapi.Subscription{
+		TypeMeta: v1.TypeMeta{
+			Kind: "Subscription",
+		},
+		Spec: subscriptionsapi.SubscriptionSpec{
+			Topic:      "topic1",
+			Route:      "myroute",
+			Pubsubname: "pubsub",
+		},
+	}
+}
+
+func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
+	b, _ := yaml.Marshal(subscription)
+	ioutil.WriteFile(filePath, b, 0600)
 }
 
 func TestInitPubSub(t *testing.T) {
@@ -281,6 +303,69 @@ func TestInitPubSub(t *testing.T) {
 		rt.pubSubs[TestPubsubName], _ = initMockPubSubForRuntime(rt)
 		a := rt.getPublishAdapter()
 		assert.NotNil(t, a)
+	})
+
+	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
+		dir := "./components"
+
+		rt = NewTestDaprRuntime(modes.StandaloneMode)
+
+		os.Mkdir(dir, 0777)
+		defer os.RemoveAll(dir)
+
+		s := testDeclarativeSubscription()
+
+		filePath := "./components/sub.yaml"
+		writeSubscriptionToDisk(s, filePath)
+
+		rt.runtimeConfig.Standalone.ComponentsPath = dir
+		subs := rt.getDeclarativeSubscriptions()
+		assert.Len(t, subs, 1)
+		assert.Equal(t, "topic1", subs[0].Topic)
+		assert.Equal(t, "myroute", subs[0].Route)
+		assert.Equal(t, "pubsub", subs[0].PubsubName)
+	})
+
+	t.Run("load declarative subscription, in scopes", func(t *testing.T) {
+		dir := "./components"
+
+		rt = NewTestDaprRuntime(modes.StandaloneMode)
+
+		os.Mkdir(dir, 0777)
+		defer os.RemoveAll(dir)
+
+		s := testDeclarativeSubscription()
+		s.Scopes = []string{TestRuntimeConfigID}
+
+		filePath := "./components/sub.yaml"
+		writeSubscriptionToDisk(s, filePath)
+
+		rt.runtimeConfig.Standalone.ComponentsPath = dir
+		subs := rt.getDeclarativeSubscriptions()
+		assert.Len(t, subs, 1)
+		assert.Equal(t, "topic1", subs[0].Topic)
+		assert.Equal(t, "myroute", subs[0].Route)
+		assert.Equal(t, "pubsub", subs[0].PubsubName)
+		assert.Equal(t, TestRuntimeConfigID, subs[0].Scopes[0])
+	})
+
+	t.Run("load declarative subscription, not in scopes", func(t *testing.T) {
+		dir := "./components"
+
+		rt = NewTestDaprRuntime(modes.StandaloneMode)
+
+		os.Mkdir(dir, 0777)
+		defer os.RemoveAll(dir)
+
+		s := testDeclarativeSubscription()
+		s.Scopes = []string{"scope1"}
+
+		filePath := "./components/sub.yaml"
+		writeSubscriptionToDisk(s, filePath)
+
+		rt.runtimeConfig.Standalone.ComponentsPath = dir
+		subs := rt.getDeclarativeSubscriptions()
+		assert.Len(t, subs, 0)
 	})
 
 	t.Run("test subscribe, app allowed 1 topic", func(t *testing.T) {
