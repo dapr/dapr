@@ -3,9 +3,8 @@ package credentials
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
-	"fmt"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -45,7 +44,7 @@ func GetClientOptions(certChain *CertChain, serverName string) ([]grpc.DialOptio
 		}
 		config, err := TLSConfigFromCertAndKey(certChain.Cert, certChain.Key, serverName, cp)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
+			return nil, errors.Wrap(err, "failed to create tls config from cert and key")
 		}
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)))
 	} else {
