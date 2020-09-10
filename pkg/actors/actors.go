@@ -72,6 +72,7 @@ type actorsRuntime struct {
 	config              Config
 	actorsTable         *sync.Map
 	activeTimers        *sync.Map
+	activeTimersLock    *sync.RWMutex
 	activeReminders     *sync.Map
 	remindersLock       *sync.RWMutex
 	activeRemindersLock *sync.RWMutex
@@ -116,6 +117,7 @@ func NewActors(
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
 		activeTimers:        &sync.Map{},
+		activeTimersLock:    &sync.RWMutex{},
 		activeReminders:     &sync.Map{},
 		remindersLock:       &sync.RWMutex{},
 		activeRemindersLock: &sync.RWMutex{},
@@ -811,7 +813,7 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		// Check if reminder is still active
 		select {
 		case <-stop:
-			log.Infof("Reminder: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
+			log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, reminder.DueTime, reminder.Period, reminder.Data)
 			return
 		default:
 			break
@@ -985,6 +987,8 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 }
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
+	a.activeTimersLock.Lock()
+	defer a.activeTimersLock.Unlock()
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := a.constructCompositeKey(actorKey, req.Name)
 
@@ -1013,6 +1017,20 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 			if err == nil {
 				time.Sleep(d)
 			}
+		}
+
+		// Check if timer is still active
+		select {
+		case <-stop:
+			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
+			return
+		default:
+			break
+		}
+
+		err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
+		if err != nil {
+			log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
 		}
 
 		actorKey := a.constructCompositeKey(actorType, actorID)

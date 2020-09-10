@@ -446,6 +446,64 @@ func TestDeleteTimer(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		testActorsRuntime := newTestActorsRuntimeWithMock(mockAppChannel)
+		actorType, actorID := getTestActorTypeAndID()
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+		timerName := "timer1"
+
+		timer := createTimerData(actorID, actorType, timerName, "10s", "1s", "callback1", "a")
+		err := testActorsRuntime.CreateTimer(ctx, &timer)
+		assert.Nil(t, err)
+
+		timer2 := createTimerData(actorID, actorType, timerName, "9s", "1s", "callback2", "b")
+		testActorsRuntime.CreateTimer(ctx, &timer2)
+
+		timer3 := createTimerData(actorID, actorType, timerName, "8s", "2s", "callback3", "c")
+		testActorsRuntime.CreateTimer(ctx, &timer3)
+
+		time.Sleep(5 * time.Second)
+
+		// Test only the last reminder update fires
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+}
+
+func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		testActorsRuntime := newTestActorsRuntimeWithMock(mockAppChannel)
+		actorType, actorID := getTestActorTypeAndID()
+		timerName := "timer1"
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+
+		timer := createTimerData(actorID, actorType, timerName, "10s", "3s", "callback1", "a")
+		err := testActorsRuntime.CreateTimer(ctx, &timer)
+		assert.Nil(t, err)
+
+		time.Sleep(50 * time.Millisecond)
+
+		timer2 := createTimerData(actorID, actorType, timerName, "8s", "4s", "callback2", "b")
+		timer3 := createTimerData(actorID, actorType, timerName, "8s", "4s", "callback3", "c")
+		go testActorsRuntime.CreateTimer(ctx, &timer2)
+		go testActorsRuntime.CreateTimer(ctx, &timer3)
+
+		time.Sleep(2 * time.Second)
+
+		timer4 := createTimerData(actorID, actorType, timerName, "7s", "2s", "callback4", "d")
+		testActorsRuntime.CreateTimer(ctx, &timer4)
+
+		time.Sleep(2*time.Second + 100*time.Millisecond)
+
+		// Test only the last reminder update fires
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+}
+
 func TestReminderFires(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
