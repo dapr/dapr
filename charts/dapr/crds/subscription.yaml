@@ -1,0 +1,15 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: subscriptions.dapr.io
+spec:
+  group: dapr.io
+  version: v1alpha1
+  names:
+    kind: Subscription
+    plural: subscriptions
+    singular: subscription
+    categories:
+    - all
+    - dapr
+  scope: Namespaced

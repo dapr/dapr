@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -34,6 +35,21 @@ func (o *mockOperator) ListComponents(ctx context.Context, in *empty.Empty) (*op
 
 	return &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{b},
+	}, nil
+}
+
+func (o *mockOperator) ListSubscriptions(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
+	subscription := subscriptions.Subscription{}
+	subscription.ObjectMeta.Name = "test"
+	subscription.Spec = subscriptions.SubscriptionSpec{
+		Topic:      "topic",
+		Route:      "route",
+		Pubsubname: "pubsub",
+	}
+	b, _ := json.Marshal(&subscription)
+
+	return &operatorv1pb.ListSubscriptionsResponse{
+		Subscriptions: [][]byte{b},
 	}, nil
 }
 

@@ -782,6 +782,37 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 	return nil
 }
 
+func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscription {
+	var subs []runtime_pubsub.Subscription
+
+	switch a.runtimeConfig.Mode {
+	case modes.KubernetesMode:
+		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, log)
+	case modes.StandaloneMode:
+		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
+	}
+
+	// only return valid subscriptions for this app id
+	for i := len(subs) - 1; i >= 0; i-- {
+		s := subs[i]
+		if len(s.Scopes) == 0 {
+			continue
+		}
+
+		found := false
+		for _, scope := range s.Scopes {
+			if scope == a.runtimeConfig.ID {
+				found = true
+			}
+		}
+
+		if !found {
+			subs = append(subs[:i], subs[i+1:]...)
+		}
+	}
+	return subs
+}
+
 func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	if a.topicRoutes != nil {
 		return a.topicRoutes, nil
@@ -794,11 +825,33 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	}
 
 	var subscriptions []runtime_pubsub.Subscription
+
+	// handle app subscriptions
 	if a.runtimeConfig.ApplicationProtocol == HTTPProtocol {
 		subscriptions = runtime_pubsub.GetSubscriptionsHTTP(a.appChannel, log)
 	} else if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
 		subscriptions = runtime_pubsub.GetSubscriptionsGRPC(client, log)
+	}
+
+	// handle declarative subscriptions
+	ds := a.getDeclarativeSubscriptions()
+	for _, s := range ds {
+		skip := false
+
+		// don't register duplicate subscriptions
+		for _, sub := range subscriptions {
+			if sub.Route == s.Route && sub.PubsubName == s.PubsubName && sub.Topic == s.Topic {
+				log.Warnf("two identical subscriptions found (sources: declarative, app endpoint). topic: %s, route: %s, pubsubname: %s",
+					s.Topic, s.Route, s.PubsubName)
+				skip = true
+				break
+			}
+		}
+
+		if !skip {
+			subscriptions = append(subscriptions, s)
+		}
 	}
 
 	for _, s := range subscriptions {
