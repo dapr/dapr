@@ -8,12 +8,13 @@ package actors
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	nethttp "net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/channel"
@@ -189,7 +190,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	if resp.Status().Code != nethttp.StatusOK {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, fmt.Sprintf("status_code_%d", resp.Status().Code))
 		_, body := resp.RawData()
-		return fmt.Errorf("error from actor service: %s", string(body))
+		return errors.Errorf("error from actor service: %s", string(body))
 	}
 
 	actorKey := a.constructCompositeKey(actorType, actorID)
@@ -241,7 +242,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	actor := req.Actor()
 	targetActorAddress, appID := a.lookupActorAddress(actor.GetActorType(), actor.GetActorId())
 	if targetActorAddress == "" {
-		return nil, fmt.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
+		return nil, errors.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
 	}
 
 	var resp *invokev1.InvokeMethodResponse
@@ -283,7 +284,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		}
 		return resp, err
 	}
-	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
+	return nil, errors.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
 }
 
 func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
@@ -312,7 +313,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	_, respData := resp.RawData()
 
 	if resp.Status().Code != nethttp.StatusOK {
-		return nil, fmt.Errorf("error from actor service: %s", string(respData))
+		return nil, errors.Errorf("error from actor service: %s", string(respData))
 	}
 
 	return resp, nil
@@ -409,7 +410,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 				Operation: state.Delete,
 			})
 		default:
-			return fmt.Errorf("operation type %s not supported", o.Operation)
+			return errors.Errorf("operation type %s not supported", o.Operation)
 		}
 	}
 
@@ -752,32 +753,32 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 
 	registeredTime, err := time.Parse(time.RFC3339, reminder.RegisteredTime)
 	if err != nil {
-		return nextInvokeTime, fmt.Errorf("error parsing reminder registered time: %s", err)
+		return nextInvokeTime, errors.Wrap(err, "error parsing reminder registered time")
 	}
 
 	dueTime, err := time.ParseDuration(reminder.DueTime)
 	if err != nil {
-		return nextInvokeTime, fmt.Errorf("error parsing reminder due time: %s", err)
+		return nextInvokeTime, errors.Wrap(err, "error parsing reminder due time")
 	}
 
 	key := a.constructCompositeKey(reminder.ActorType, reminder.ActorID)
 	track, err := a.getReminderTrack(key, reminder.Name)
 	if err != nil {
-		return nextInvokeTime, fmt.Errorf("error getting reminder track: %s", err)
+		return nextInvokeTime, errors.Wrap(err, "error getting reminder track")
 	}
 
 	var lastFiredTime time.Time
 	if track != nil && track.LastFiredTime != "" {
 		lastFiredTime, err = time.Parse(time.RFC3339, track.LastFiredTime)
 		if err != nil {
-			return nextInvokeTime, fmt.Errorf("error parsing reminder last fired time: %s", err)
+			return nextInvokeTime, errors.Wrap(err, "error parsing reminder last fired time")
 		}
 	}
 
 	if reminder.Period != "" {
 		period, err := time.ParseDuration(reminder.Period)
 		if err != nil {
-			return nextInvokeTime, fmt.Errorf("error parsing reminder period: %s", err)
+			return nextInvokeTime, errors.Wrap(err, "error parsing reminder period")
 		}
 
 		if !lastFiredTime.IsZero() {
@@ -993,7 +994,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 	_, exists := a.actorsTable.Load(actorKey)
 	if !exists {
-		return fmt.Errorf("can't create timer for actor %s: actor not activated", actorKey)
+		return errors.Errorf("can't create timer for actor %s: actor not activated", actorKey)
 	}
 
 	stopChan, exists := a.activeTimers.Load(timerKey)

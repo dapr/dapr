@@ -80,6 +80,14 @@ push-perf-app-$(1): check-e2e-env
 	$(DOCKER) push $(DAPR_TEST_REGISTRY)/perf-$(1):$(DAPR_TEST_TAG)
 endef
 
+create-test-namespace:
+	kubectl create namespace $(DAPR_TEST_NAMESPACE)
+
+delete-test-namespace:
+	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
+
+e2e-build-deploy-run: create-test-namespace setup-helm-init setup-test-env-redis setup-test-env-kafka build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
+
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
 
@@ -111,11 +119,11 @@ test-e2e-all: check-e2e-env
 	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
-	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 2 -count=1 -v -tags=e2e ./tests/e2e/...
+	GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 2 -count=1 -v -tags=e2e ./tests/e2e/...
 
 # start all perf tests
 test-perf-all: check-e2e-env
-	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=perf ./tests/perf/...
+	GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=perf ./tests/perf/...
 
 # add required helm repo
 setup-helm-init:
@@ -129,7 +137,9 @@ setup-test-env-redis:
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) template dapr-kafka incubator/kafka --wait --timeout 10m0s -f ./tests/config/kafka_override.yaml | python ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
+	$(HELM) template dapr-kafka incubator/kafka -f ./tests/config/kafka_override.yaml | python ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
+	echo "Waiting for kafka config job to complete"
+	kubectl wait --timeout=10m --for=condition=complete job `kubectl get jobs  -n $(DAPR_TEST_NAMESPACE) | awk '/dapr-kafka-config/ {print $$1}'` -n $(DAPR_TEST_NAMESPACE)
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis

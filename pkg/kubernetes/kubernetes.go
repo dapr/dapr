@@ -9,7 +9,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 )
@@ -29,7 +29,7 @@ func NewAPI(kubeClient kubernetes.Interface, daprClient scheme.Interface) *API {
 
 // GetDeployment gets a deployment
 func (a *API) GetDeployment(name, namespace string) (*appsv1.Deployment, error) {
-	dep, err := a.kubeClient.AppsV1().Deployments(namespace).Get(name, meta_v1.GetOptions{})
+	dep, err := a.kubeClient.AppsV1().Deployments(namespace).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -40,37 +40,29 @@ func (a *API) GetDeployment(name, namespace string) (*appsv1.Deployment, error) 
 // UpdateDeployment updates an existing deployment
 func (a *API) UpdateDeployment(deployment *appsv1.Deployment) error {
 	_, err := a.kubeClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Update(deployment)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // CreateService creates a new service
 func (a *API) CreateService(service *corev1.Service, namespace string) error {
 	_, err := a.kubeClient.CoreV1().Services(namespace).Create(service)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // Delete a service
 func (a *API) DeleteService(serviceName string, namespace string) error {
-	return a.kubeClient.CoreV1().Services(namespace).Delete(serviceName, &meta_v1.DeleteOptions{})
+	return a.kubeClient.CoreV1().Services(namespace).Delete(serviceName, &metav1.DeleteOptions{})
 }
 
 // ServiceExists checks if a service already exists
 func (a *API) ServiceExists(name, namespace string) bool {
-	_, err := a.kubeClient.CoreV1().Services(namespace).Get(name, meta_v1.GetOptions{})
+	_, err := a.kubeClient.CoreV1().Services(namespace).Get(name, metav1.GetOptions{})
 	return err == nil
 }
 
 // GetEndpoints returns a list of service endpoints
 func (a *API) GetEndpoints(name, namespace string) (*corev1.Endpoints, error) {
-	endpoints, err := a.kubeClient.CoreV1().Endpoints(namespace).Get(name, meta_v1.GetOptions{})
+	endpoints, err := a.kubeClient.CoreV1().Endpoints(namespace).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -79,10 +71,10 @@ func (a *API) GetEndpoints(name, namespace string) (*corev1.Endpoints, error) {
 }
 
 // GetDeploymentsBySelector returns a deployment by a selector
-func (a *API) GetDeploymentsBySelector(selector meta_v1.LabelSelector) ([]appsv1.Deployment, error) {
+func (a *API) GetDeploymentsBySelector(selector metav1.LabelSelector) ([]appsv1.Deployment, error) {
 	s := labels.SelectorFromSet(selector.MatchLabels)
 
-	dep, err := a.kubeClient.AppsV1().Deployments(meta_v1.NamespaceAll).List(meta_v1.ListOptions{
+	dep, err := a.kubeClient.AppsV1().Deployments(metav1.NamespaceAll).List(metav1.ListOptions{
 		LabelSelector: s.String(),
 	})
 	if err != nil {

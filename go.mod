@@ -7,7 +7,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
-	github.com/dapr/components-contrib v0.3.1-0.20200904015834-26b085baba4c
+	github.com/dapr/components-contrib v0.3.1-0.20200904195943-fbd04241b023
 	github.com/fasthttp/router v1.3.1
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0

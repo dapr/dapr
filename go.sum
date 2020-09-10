@@ -221,6 +221,8 @@ github.com/cyberdelia/templates v0.0.0-20141128023046-ca7fffd4298c/go.mod h1:GyV
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
 github.com/dapr/components-contrib v0.3.1-0.20200904015834-26b085baba4c h1:hlCwhbna+ehL6ugpAcKZf3/6FdiQv7HALGL6QOb8tDw=
 github.com/dapr/components-contrib v0.3.1-0.20200904015834-26b085baba4c/go.mod h1:h2nhjbQyn6DgoNQxOdJXOb1CDwnuJjSx1oZ3NG8sgRo=
+github.com/dapr/components-contrib v0.3.1-0.20200904195943-fbd04241b023 h1:R89MMyWh9doq9fg/g4OIunGstT0KXB/0UsUGqlF2orc=
+github.com/dapr/components-contrib v0.3.1-0.20200904195943-fbd04241b023/go.mod h1:h2nhjbQyn6DgoNQxOdJXOb1CDwnuJjSx1oZ3NG8sgRo=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad/go.mod h1:yeOIFBz6+BigHpk4ASJbgQDVjQ8+00oCWrFyOAFdob8=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
