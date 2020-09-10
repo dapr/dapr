@@ -845,7 +845,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 				log.Warnf("two identical subscriptions found (sources: declarative, app endpoint). topic: %s, route: %s, pubsubname: %s",
 					s.Topic, s.Route, s.PubsubName)
 				skip = true
-				continue
+				break
 			}
 		}
 
