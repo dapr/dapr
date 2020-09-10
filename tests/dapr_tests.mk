@@ -122,7 +122,7 @@ test-e2e-all: check-e2e-env
 	netsh interface tcp set global initialRto=3000 || true
 	netsh interface tcp set global maxSynRetransmissions=8 || true
 	netsh interface tcp show global || true
-	GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 2 -count=1 -v -tags=e2e ./tests/e2e/...
+	GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=e2e ./tests/e2e/...
 
 # start all perf tests
 test-perf-all: check-e2e-env
