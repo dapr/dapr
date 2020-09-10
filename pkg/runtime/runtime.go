@@ -1174,6 +1174,7 @@ func (a *DaprRuntime) processOneComponent(comp components_v1alpha1.Component) er
 
 	a.appendOrReplaceComponents(comp)
 	diag.DefaultMonitoring.ComponentLoaded()
+	log.Info("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
 	return nil
 }
 
