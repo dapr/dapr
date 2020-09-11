@@ -27,12 +27,18 @@ type validator struct {
 	auth   kauth.AuthenticationV1Interface
 }
 
-func (v *validator) Validate(id, token string) error {
+func (v *validator) Validate(id, token, namespace, trustDomain string) error {
 	if id == "" {
 		return errors.Errorf("%s: id field in request must not be empty", errPrefix)
 	}
 	if token == "" {
 		return errors.Errorf("%s: token field in request must not be empty", errPrefix)
+	}
+	if namespace == "" {
+		return errors.Errorf("%s: namespace field in request must not be empty", errPrefix)
+	}
+	if trustDomain == "" {
+		return errors.Errorf("%s: trustDomain field in request must not be empty", errPrefix)
 	}
 
 	review, err := v.auth.TokenReviews().Create(&kauthapi.TokenReview{Spec: kauthapi.TokenReviewSpec{Token: token}})
@@ -54,6 +60,10 @@ func (v *validator) Validate(id, token string) error {
 
 	podSa := prts[3]
 	podNs := prts[2]
+	if podNs != namespace {
+		return errors.Errorf("%s: namespace mismatch. received namespace: %s", errPrefix, namespace)
+	}
+
 	if id != fmt.Sprintf("%s:%s", podSa, podNs) {
 		return errors.Errorf("%s: token/id mismatch. received id: %s", errPrefix, id)
 	}
