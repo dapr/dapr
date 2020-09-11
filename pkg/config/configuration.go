@@ -69,7 +69,7 @@ type MTLSSpec struct {
 	AllowedClockSkew string `json:"allowedClockSkew"`
 }
 
-// LoadDefaultConfiguration returns the default config with tracing disabled
+// LoadDefaultConfiguration returns the default config
 func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
@@ -77,7 +77,7 @@ func LoadDefaultConfiguration() *Configuration {
 				SamplingRate: "",
 			},
 			MetricSpec: MetricSpec{
-				Enabled: false,
+				Enabled: true,
 			},
 		},
 	}
