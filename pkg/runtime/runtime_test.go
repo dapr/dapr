@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -57,9 +58,13 @@ Iklq0JnMgJU7nS+VpVvlgBN8
 -----END CERTIFICATE-----`
 
 type MockKubernetesStateStore struct {
+	callback func()
 }
 
 func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
+	if m.callback != nil {
+		m.callback()
+	}
 	return nil
 }
 
@@ -75,6 +80,10 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 
 func NewMockKubernetesStore() secretstores.SecretStore {
 	return &MockKubernetesStateStore{}
+}
+
+func NewMockKubernetesStoreWithInitCallback(cb func()) secretstores.SecretStore {
+	return &MockKubernetesStateStore{callback: cb}
 }
 
 func TestNewRuntime(t *testing.T) {
@@ -792,6 +801,50 @@ func TestProcessComponentSecrets(t *testing.T) {
 		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value)
 		assert.Empty(t, unready)
 	})
+}
+
+// Test that flushOutstandingComponents waits for components
+func TestFlushOutstandingComponent(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	wasCalled := false
+	m := NewMockKubernetesStoreWithInitCallback(func() {
+		time.Sleep(100 * time.Millisecond)
+		wasCalled = true
+	})
+	rt.secretStoresRegistry.Register(
+		secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+			return m
+		}))
+
+	go rt.processComponents()
+	rt.pendingComponents <- components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "kubernetesMock",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type: "secretstores.kubernetesMock",
+		},
+	}
+	rt.flushOutstandingComponents()
+	assert.True(t, wasCalled)
+
+	// Make sure that the goroutine was restarted and can flush a second time
+	wasCalled = false
+	rt.secretStoresRegistry.Register(
+		secretstores_loader.New("kubernetesMock2", func() secretstores.SecretStore {
+			return m
+		}))
+
+	rt.pendingComponents <- components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "kubernetesMock2",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type: "secretstores.kubernetesMock",
+		},
+	}
+	rt.flushOutstandingComponents()
+	assert.True(t, wasCalled)
 }
 
 // Test InitSecretStore if secretstore.* refers to Kubernetes secret store
