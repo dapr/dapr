@@ -60,11 +60,12 @@ func (v *validator) Validate(id, token, namespace, trustDomain string) error {
 
 	podSa := prts[3]
 	podNs := prts[2]
+
 	if podNs != namespace {
 		return errors.Errorf("%s: namespace mismatch. received namespace: %s", errPrefix, namespace)
 	}
 
-	if id != fmt.Sprintf("%s:%s", podSa, podNs) {
+	if id != fmt.Sprintf("%s:%s", podNs, podSa) {
 		return errors.Errorf("%s: token/id mismatch. received id: %s", errPrefix, id)
 	}
 	return nil

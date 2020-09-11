@@ -157,7 +157,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 			return nil, errors.Wrap(err, "failed to marshal asn1 raw value for spiffe id")
 		}
 
-		cert.ExtraExtensions = append(cert.Extensions, pkix.Extension{
+		cert.ExtraExtensions = append(cert.ExtraExtensions, pkix.Extension{
 			Id:       oidSubjectAlternativeName,
 			Value:    b,
 			Critical: false,
