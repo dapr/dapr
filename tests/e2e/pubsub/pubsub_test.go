@@ -60,6 +60,7 @@ type appResponse struct {
 type receivedMessagesResponse struct {
 	ReceivedByTopicA []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC []string `json:"pubsub-c-topic"`
 }
 
 var receivedMessages []string
@@ -116,9 +117,14 @@ func sendToPublishApp(t *testing.T, publisherExternalURL string) receivedMessage
 	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic")
 	require.NoError(t, err)
 
+	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic")
+	require.NoError(t, err)
+
 	return receivedMessagesResponse{
 		ReceivedByTopicA: sentTopicAMessages,
-		ReceivedByTopicB: sentTopicBMessages}
+		ReceivedByTopicB: sentTopicBMessages,
+		ReceivedByTopicC: sentTopicCMessages,
+	}
 }
 
 func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {
@@ -133,13 +139,15 @@ func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL st
 	err = json.Unmarshal(resp, &appResp)
 	require.NoError(t, err)
 
-	log.Printf("subscriber receieved %d messages on pubsub-a-topic and %d on pubsub-b-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB))
+	log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC))
 
 	// Sort messages first because the delivered messages cannot be ordered.
 	sort.Strings(sentMessages.ReceivedByTopicA)
 	sort.Strings(appResp.ReceivedByTopicA)
 	sort.Strings(sentMessages.ReceivedByTopicB)
 	sort.Strings(appResp.ReceivedByTopicB)
+	sort.Strings(sentMessages.ReceivedByTopicC)
+	sort.Strings(appResp.ReceivedByTopicC)
 
 	if !reflect.DeepEqual(sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA) {
 		for i := 0; i < len(sentMessages.ReceivedByTopicA); i++ {
@@ -148,6 +156,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL st
 	}
 	require.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA)
 	require.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB)
+	require.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC)
 }
 
 func TestMain(m *testing.M) {
