@@ -134,6 +134,7 @@ type DaprRuntime struct {
 	topicRoutes            map[string]TopicRoute
 
 	pendingComponents          chan components_v1alpha1.Component
+	pendingComponentsDone      chan bool
 	pendingComponentDependents map[string][]components_v1alpha1.Component
 }
 
@@ -166,6 +167,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		allowedTopics:       map[string][]string{},
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
+		pendingComponentsDone:      make(chan bool),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 	}
 }
@@ -265,6 +267,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
 	}
+
+	a.flushOutstandingComponents()
 
 	a.initDirectMessaging(a.nameResolver)
 
@@ -1233,11 +1237,28 @@ func (a *DaprRuntime) figureOutComponentCategory(component components_v1alpha1.C
 }
 
 func (a *DaprRuntime) processComponents() {
-	for comp := range a.pendingComponents {
+	for {
+		comp, more := <-a.pendingComponents
+		if !more {
+			a.pendingComponentsDone <- true
+			return
+		}
 		if err := a.processOneComponent(comp); err != nil {
 			log.Errorf("process component %s error, %s", comp.Name, err)
 		}
 	}
+}
+
+func (a *DaprRuntime) flushOutstandingComponents() {
+	// We flush by stopping the processComponents goroutine, waiting for it to finish, and then restart it
+	log.Info("waiting for all outstanding components to be processed")
+	close(a.pendingComponents)
+
+	<-a.pendingComponentsDone
+	log.Info("all outstanding components processed")
+
+	a.pendingComponents = make(chan components_v1alpha1.Component)
+	go a.processComponents()
 }
 
 func (a *DaprRuntime) processOneComponent(comp components_v1alpha1.Component) error {
