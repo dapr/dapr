@@ -20,9 +20,9 @@ const (
 // BulkGetResponse is the response object for a state bulk get operation
 type BulkGetResponse struct {
 	Key   string              `json:"key"`
-	Data  jsoniter.RawMessage `json:"data"`
-	ETag  string              `json:"etag"`
-	Error string              `json:"error"`
+	Data  jsoniter.RawMessage `json:"data,omitempty"`
+	ETag  string              `json:"etag,omitempty"`
+	Error string              `json:"error,omitempty"`
 }
 
 // respondWithJSON overrides the content-type with application/json
