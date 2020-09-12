@@ -22,6 +22,7 @@ const (
 	appPort = 3000
 	pubsubA = "pubsub-a-topic"
 	pubsubB = "pubsub-b-topic"
+	pubsubC = "pubsub-c-topic"
 )
 
 type appResponse struct {
@@ -33,6 +34,7 @@ type appResponse struct {
 type receivedMessagesResponse struct {
 	ReceivedByTopicA []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC []string `json:"pubsub-c-topic"`
 }
 
 type subscription struct {
@@ -43,6 +45,7 @@ type subscription struct {
 
 var receivedMessagesA []string
 var receivedMessagesB []string
+var receivedMessagesC []string
 
 var lock sync.Mutex
 
@@ -71,6 +74,11 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 			PubsubName: pubsubName,
 			Topic:      pubsubB,
 			Route:      pubsubB,
+		},
+		{
+			PubsubName: pubsubName,
+			Topic:      pubsubC,
+			Route:      pubsubC,
 		},
 	}
 	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
@@ -122,6 +130,8 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesA = append(receivedMessagesA, msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubB) {
 		receivedMessagesB = append(receivedMessagesB, msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubC) {
+		receivedMessagesC = append(receivedMessagesC, msg)
 	} else {
 		errorMessage := fmt.Sprintf("Unexpected message from %s", r.URL.String())
 		log.Print(errorMessage)
@@ -161,7 +171,9 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 
 	response := receivedMessagesResponse{
 		ReceivedByTopicA: receivedMessagesA,
-		ReceivedByTopicB: receivedMessagesB}
+		ReceivedByTopicB: receivedMessagesB,
+		ReceivedByTopicC: receivedMessagesC,
+	}
 
 	log.Printf("receivedMessagesResponse=%s", response)
 
@@ -182,6 +194,7 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/"+pubsubA, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubB, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubC, subscribeHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

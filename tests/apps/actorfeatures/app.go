@@ -378,7 +378,7 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 		}
 
 		// query a non-existing key.  This should return 204 with 0 length response.
-		url = fmt.Sprintf(actorGetStateURLFormat, actorType, "999", "keynotpresent")
+		url = fmt.Sprintf(actorGetStateURLFormat, actorType, id, "keynotpresent")
 		body, err = httpCall("GET", url, nil, 204)
 		if err != nil {
 			log.Printf("actor state call failed: %s", err.Error())
@@ -392,6 +392,14 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 			return errors.New("expected 0 length reponse")
 		}
 
+		// query a non-existing actor.  This should return 400.
+		url = fmt.Sprintf(actorGetStateURLFormat, actorType, "actoriddoesnotexist", "keynotpresent")
+		body, err = httpCall("GET", url, nil, 400)
+		if err != nil {
+			log.Printf("actor state call failed: %s", err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			return err
+		}
 	} else if testName == "savestatetest2" {
 		// perform another transaction including a delete
 		url := fmt.Sprintf(actorSaveStateURLFormat, actorType, id)

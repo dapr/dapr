@@ -6,11 +6,11 @@
 package exporters
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/dapr/components-contrib/exporters"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -54,10 +54,10 @@ func TestCreateExporter(t *testing.T) {
 		const ExporterName = "fakeExporter"
 
 		// act
-		p, e := testRegistry.Create(createFullName(ExporterName))
-
+		p, actualError := testRegistry.Create(createFullName(ExporterName))
+		expectedError := errors.Errorf("couldn't find exporter %s", createFullName(ExporterName))
 		// assert
 		assert.Nil(t, p)
-		assert.Equal(t, fmt.Errorf("couldn't find exporter %s", createFullName(ExporterName)), e)
+		assert.Equal(t, expectedError.Error(), actualError.Error())
 	})
 }

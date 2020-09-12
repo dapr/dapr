@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -81,7 +82,7 @@ func (b *bindingsRegistry) CreateInputBinding(name string) (bindings.InputBindin
 	if method, ok := b.inputBindings[name]; ok {
 		return method(), nil
 	}
-	return nil, fmt.Errorf("couldn't find input binding %s", name)
+	return nil, errors.Errorf("couldn't find input binding %s", name)
 }
 
 // Create instantiates an output binding based on `name`.
@@ -89,7 +90,7 @@ func (b *bindingsRegistry) CreateOutputBinding(name string) (bindings.OutputBind
 	if method, ok := b.outputBindings[name]; ok {
 		return method(), nil
 	}
-	return nil, fmt.Errorf("couldn't find output binding %s", name)
+	return nil, errors.Errorf("couldn't find output binding %s", name)
 }
 
 func createFullName(name string) string {

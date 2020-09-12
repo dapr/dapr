@@ -74,6 +74,18 @@ message TopicEventRequest {
 
 // TopicEventResponse is response from app on published message
 message TopicEventResponse {
+  // TopicEventResponseStatus allows apps to have finer control over handling of the message.
+  enum TopicEventResponseStatus {
+    // SUCCESS is the default behavior: message is acknowledged and not retried or logged.
+    SUCCESS = 0;
+    // RETRY status signals Dapr to retry the message as part of an expected scenario (no warning is logged).
+    RETRY = 1;
+    // DROP status signals Dapr to drop the message as part of an unexpected scenario (warning is logged).
+    DROP = 2;
+  }
+
+  // The list of output bindings.
+  TopicEventResponseStatus status = 1;
 }
 
 // BindingEventRequest represents input bindings event.

@@ -2,22 +2,22 @@ package fswatcher
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/pkg/errors"
 )
 
 func Watch(ctx context.Context, dir string, eventCh chan<- struct{}) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return fmt.Errorf("failed to create watcher: %s", err)
+		return errors.Wrap(err, "failed to create watcher")
 	}
 	defer watcher.Close()
 
 	if err := watcher.Add(dir); err != nil {
-		return fmt.Errorf("watcher error: %s", err)
+		return errors.Wrap(err, "watcher error")
 	}
 
 LOOP:
