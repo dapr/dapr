@@ -10,7 +10,7 @@ import (
 // CreateSPIFFEID returns a SPIFFE standard unique id for the given trust domain, namespace and appID.
 func CreateSPIFFEID(trustDomain, namespace, appID string) (string, error) {
 	if trustDomain == "" {
-		return "", errors.New("can't create spiffe id: trustDomain is empty")
+		return "", errors.New("can't create spiffe id: trust domain is empty")
 	}
 	if namespace == "" {
 		return "", errors.New("can't create spiffe id: namespace is empty")
