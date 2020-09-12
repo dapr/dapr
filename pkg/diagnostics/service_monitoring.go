@@ -119,7 +119,7 @@ func newServiceMetrics() *serviceMetrics {
 // Init initialize metrics views for metrics
 func (s *serviceMetrics) Init(appID string) error {
 	s.appID = appID
-
+	s.enabled = true
 	return view.Register(
 		diag_utils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
 		diag_utils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
@@ -138,16 +138,6 @@ func (s *serviceMetrics) Init(appID string) error {
 		diag_utils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.LastValue()),
 	)
-}
-
-// IsEnabled to check if monitoring is enabled or not
-func (s *serviceMetrics) IsEnabled() bool {
-	return s.enabled
-}
-
-// Enable to enable monitoring
-func (s *serviceMetrics) Enable() {
-	s.enabled = true
 }
 
 // ComponentLoaded records metric when component is loaded successfully

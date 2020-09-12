@@ -148,8 +148,6 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	}
 
 	if s.metricSpec.Enabled {
-		diag.DefaultGRPCMonitoring.Enable()
-		diag.DefaultMonitoring.Enable()
 		s.logger.Info("enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 	}

@@ -84,14 +84,8 @@ func newHTTPMetrics() *httpMetrics {
 	}
 }
 
-// IsEnabled to check if monitoring is enabled or not
 func (h *httpMetrics) IsEnabled() bool {
 	return h.enabled
-}
-
-// Enable to enable monitoring
-func (h *httpMetrics) Enable() {
-	h.enabled = true
 }
 
 func (h *httpMetrics) ServerRequestReceived(ctx context.Context, method, path string, contentSize int64) {
@@ -141,6 +135,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 
 func (h *httpMetrics) Init(appID string) error {
 	h.appID = appID
+	h.enabled = true
 
 	views := []*view.View{
 		{

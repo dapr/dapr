@@ -24,7 +24,6 @@ func TestFastHTTPMiddleware(t *testing.T) {
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	testHTTP.Init("fakeID")
-	testHTTP.Enable()
 
 	handler := testHTTP.FastHTTPMiddleware(fakeHandler)
 
@@ -60,7 +59,7 @@ func TestFastHTTPMiddleware(t *testing.T) {
 	assert.True(t, (rows[0].Data).(*view.DistributionData).Min >= 100.0)
 }
 
-func TestFastHTTPMiddlewareWhenNoMetricsRegistered(t *testing.T) {
+func TestFastHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	requestBody := "fake_requestDaprBody"
 	responseBody := "fake_responseDaprBody"
 
@@ -73,6 +72,7 @@ func TestFastHTTPMiddlewareWhenNoMetricsRegistered(t *testing.T) {
 
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
 
 	testHTTP.Init("fakeID")
 	v := view.Find("http/server/request_count")

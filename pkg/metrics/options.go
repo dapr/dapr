@@ -11,7 +11,7 @@ import (
 
 const (
 	defaultMetricsPort    = "9090"
-	defaultMetricsEnabled = false
+	defaultMetricsEnabled = true
 )
 
 // Options defines the sets of options for Dapr logging
