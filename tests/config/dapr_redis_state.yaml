@@ -11,7 +11,9 @@ spec:
   type: state.redis
   metadata:
   - name: redisHost
-    value: dapr-redis-master:6379
+    secretKeyRef:
+      name: redissecret
+      key: host
   - name: redisPassword
     value: ""
   - name: actorStateStore

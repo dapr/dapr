@@ -16,6 +16,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/pkg/errors"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,6 +40,7 @@ type injector struct {
 	server       *http.Server
 	kubeClient   *kubernetes.Clientset
 	daprClient   scheme.Interface
+	authUID      string
 }
 
 // toAdmissionResponse is a helper function to create an AdmissionResponse
@@ -71,7 +73,7 @@ func getAppIDFromRequest(req *v1beta1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config
-func NewInjector(config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
+func NewInjector(authUID string, config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
 	mux := http.NewServeMux()
 
 	i := &injector{
@@ -85,10 +87,19 @@ func NewInjector(config Config, daprClient scheme.Interface, kubeClient *kuberne
 		},
 		kubeClient: kubeClient,
 		daprClient: daprClient,
+		authUID:    authUID,
 	}
 
 	mux.HandleFunc("/mutate", i.handleRequest)
 	return i
+}
+
+func ReplicasetAccountUID(kubeClient *kubernetes.Clientset) (string, error) {
+	r, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get("replicaset-controller", metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return string(r.ObjectMeta.UID), nil
 }
 
 func (i *injector) Run(ctx context.Context) {
@@ -153,8 +164,11 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if _, _, err = i.deserializer.Decode(body, nil, &ar); err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-		if ar.Request.Kind.Kind != "Pod" {
-			err = fmt.Errorf("invalid kind for review: %s", ar.Kind)
+		if ar.Request.UserInfo.UID != i.authUID {
+			err = errors.Wrapf(err, "unauthorized request")
+			log.Error(err)
+		} else if ar.Request.Kind.Kind != "Pod" {
+			err = errors.Wrapf(err, "invalid kind for review: %s", ar.Kind)
 			log.Error(err)
 		} else {
 			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.kubeClient, i.daprClient)

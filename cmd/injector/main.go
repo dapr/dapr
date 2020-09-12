@@ -43,13 +43,18 @@ func main() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		err := healthzServer.Run(ctx, healthzPort)
-		if err != nil {
-			log.Fatalf("failed to start healthz server: %s", err)
+		healthzErr := healthzServer.Run(ctx, healthzPort)
+		if healthzErr != nil {
+			log.Fatalf("failed to start healthz server: %s", healthzErr)
 		}
 	}()
 
-	injector.NewInjector(cfg, daprClient, kubeClient).Run(ctx)
+	uid, err := injector.ReplicasetAccountUID(kubeClient)
+	if err != nil {
+		log.Fatalf("failed to get authentication uid from service account: %s", err)
+	}
+
+	injector.NewInjector(uid, cfg, daprClient, kubeClient).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)

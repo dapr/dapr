@@ -56,6 +56,6 @@ func (do *DaprComponent) Init() error {
 	return err
 }
 
-func (do *DaprComponent) Dispose() error {
+func (do *DaprComponent) Dispose(wait bool) error {
 	return do.deleteComponent()
 }

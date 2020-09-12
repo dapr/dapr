@@ -209,22 +209,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Handler: a.onDirectActorMessage,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
-			Route:   "actors/{actorType}/{actorId}/state/{key}",
-			Version: apiVersionV1,
-			Handler: a.onSaveActorState,
-		},
-		{
 			Methods: []string{fasthttp.MethodGet},
 			Route:   "actors/{actorType}/{actorId}/state/{key}",
 			Version: apiVersionV1,
 			Handler: a.onGetActorState,
-		},
-		{
-			Methods: []string{fasthttp.MethodDelete},
-			Route:   "actors/{actorType}/{actorId}/state/{key}",
-			Version: apiVersionV1,
-			Handler: a.onDeleteActorState,
 		},
 		{
 			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
@@ -367,16 +355,19 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 				Metadata: metadata,
 			}
 
+			r := BulkGetResponse{
+				Key: param.(string),
+			}
+
 			resp, err := store.Get(gr)
 			if err != nil {
 				log.Debugf("bulk get: error getting key %s: %s", param.(string), err)
-			} else if resp != nil && resp.Data != nil {
-				bulkResp = append(bulkResp, BulkGetResponse{
-					Key:  param.(string),
-					Data: jsoniter.RawMessage(resp.Data),
-					ETag: resp.ETag,
-				})
+				r.Error = err.Error()
+			} else if resp != nil {
+				r.Data = jsoniter.RawMessage(resp.Data)
+				r.ETag = resp.ETag
 			}
+			bulkResp = append(bulkResp, r)
 		}
 
 		limiter.Execute(fn, k)
@@ -844,7 +835,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, statusCode, body)
 }
 
-func (a *api) onSaveActorState(reqCtx *fasthttp.RequestCtx) {
+func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
 		respondWithError(reqCtx, 400, msg)
@@ -855,7 +846,6 @@ func (a *api) onSaveActorState(reqCtx *fasthttp.RequestCtx) {
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
-	body := reqCtx.PostBody()
 
 	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
 		ActorType: actorType,
@@ -868,46 +858,6 @@ func (a *api) onSaveActorState(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-
-	// Deserialize body to validate JSON compatible body
-	// and remove useless characters before saving
-	var val interface{}
-	err := a.json.Unmarshal(body, &val)
-	if err != nil {
-		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
-		respondWithError(reqCtx, 400, msg)
-		log.Debug(msg)
-		return
-	}
-
-	req := actors.SaveStateRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Key:       key,
-		Value:     val,
-	}
-
-	err = a.actor.SaveState(reqCtx, &req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_STATE_SAVE", err.Error())
-		respondWithError(reqCtx, 500, msg)
-		log.Debug(msg)
-	} else {
-		respondEmpty(reqCtx, 201)
-	}
-}
-
-func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
-		log.Debug(msg)
-		return
-	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	key := reqCtx.UserValue(stateKeyParam).(string)
 
 	req := actors.GetStateRequest{
 		ActorType: actorType,
@@ -921,47 +871,11 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		respondWithError(reqCtx, 500, msg)
 		log.Debug(msg)
 	} else {
+		if resp == nil || resp.Data == nil {
+			respondEmpty(reqCtx, 204)
+			return
+		}
 		respondWithJSON(reqCtx, 200, resp.Data)
-	}
-}
-
-func (a *api) onDeleteActorState(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
-		log.Debug(msg)
-		return
-	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	key := reqCtx.UserValue(stateKeyParam).(string)
-
-	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-	})
-
-	if !hosted {
-		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(reqCtx, 400, msg)
-		log.Debug(msg)
-		return
-	}
-
-	req := actors.DeleteStateRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Key:       key,
-	}
-
-	err := a.actor.DeleteState(reqCtx, &req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_STATE_DELETE", err.Error())
-		respondWithError(reqCtx, 500, msg)
-		log.Debug(msg)
-	} else {
-		respondEmpty(reqCtx, 200)
 	}
 }
 

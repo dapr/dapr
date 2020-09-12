@@ -9,7 +9,6 @@ package http
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -341,7 +340,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		testAPI.actor = nil
 
-		testMethods := []string{"POST", "PUT", "GET", "DELETE"}
+		testMethods := []string{"GET"}
 
 		for _, method := range testMethods {
 			// act
@@ -350,157 +349,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
 			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
-		}
-	})
-
-	t.Run("Save actor state - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
-		mockActors.On("SaveState", &actors.SaveStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-			Value:     fakeBodyObject,
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		testMethods := []string{"POST", "PUT"}
-		for _, method := range testMethods {
-			mockActors.Calls = nil
-
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
-
-			// assert
-			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
-		}
-	})
-
-	t.Run("Save byte array state value - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
-
-		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
-
-		serializedByteArray, _ := json.Marshal(fakeBodyArray)
-		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
-		base64Encoded := make([]byte, encodedLen)
-		base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
-
-		assert.Equal(t, base64Encoded, serializedByteArray[1:len(serializedByteArray)-1], "serialized byte array must be base64-encoded data")
-
-		mockActors := new(daprt.MockActors)
-		mockActors.On("SaveState", &actors.SaveStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "bytearray",
-			Value:     string(base64Encoded),
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		testMethods := []string{"POST", "PUT"}
-		for _, method := range testMethods {
-			mockActors.Calls = nil
-
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
-
-			// assert
-			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
-		}
-	})
-
-	t.Run("Save object which has byte-array member - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
-
-		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
-
-		fakeResp := map[string]interface{}{
-			"data":  "fakeData",
-			"data2": fakeBodyArray,
-		}
-
-		serializedByteArray, _ := json.Marshal(fakeResp)
-
-		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
-		base64Encoded := make([]byte, encodedLen)
-		base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
-
-		expectedObj := map[string]interface{}{
-			"data":  "fakeData",
-			"data2": string(base64Encoded),
-		}
-
-		mockActors := new(daprt.MockActors)
-		mockActors.On("SaveState", &actors.SaveStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "bytearray",
-			Value:     expectedObj,
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		testMethods := []string{"POST", "PUT"}
-		for _, method := range testMethods {
-			mockActors.Calls = nil
-
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
-
-			// assert
-			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
-		}
-	})
-
-	t.Run("Save actor state - 400 deserialization error", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		nonJSONFakeData := []byte("{\"key\":}")
-
-		mockActors := new(daprt.MockActors)
-		mockActors.On("SaveState", &actors.SaveStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-			Value:     nonJSONFakeData,
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		testMethods := []string{"POST", "PUT"}
-		for _, method := range testMethods {
-			mockActors.Calls = nil
-
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData, nil)
-
-			// assert
-			assert.Equal(t, 400, resp.StatusCode)
-			mockActors.AssertNumberOfCalls(t, "SaveState", 0)
 		}
 	})
 
@@ -515,6 +363,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Data: fakeData,
 		}, nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		// act
@@ -524,30 +377,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fakeData, resp.RawBody)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
-	})
-
-	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
-		mockActors.On("DeleteState", &actors.DeleteStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
-
-		// assert
-		assert.Equal(t, 200, resp.StatusCode)
-		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})
 
 	t.Run("Transaction - 201 Accepted", func(t *testing.T) {
@@ -667,7 +496,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		testAPI.actor = nil
 
-		testMethods := []string{"POST", "PUT", "GET", "DELETE"}
+		testMethods := []string{"GET"}
 
 		for _, method := range testMethods {
 			buffer = ""
@@ -677,161 +506,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
 			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
-		}
-	})
-
-	t.Run("Save actor state - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
-		mockActors.On("SaveState", &actors.SaveStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-			Value:     fakeBodyObject,
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		testMethods := []string{"POST", "PUT"}
-		for _, method := range testMethods {
-			buffer = ""
-			mockActors.Calls = nil
-
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
-
-			// assert
-			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
-		}
-	})
-
-	t.Run("Save byte array state value - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
-
-		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
-
-		serializedByteArray, _ := json.Marshal(fakeBodyArray)
-		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
-		base64Encoded := make([]byte, encodedLen)
-		base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
-
-		assert.Equal(t, base64Encoded, serializedByteArray[1:len(serializedByteArray)-1], "serialized byte array must be base64-encoded data")
-
-		mockActors := new(daprt.MockActors)
-		mockActors.On("SaveState", &actors.SaveStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "bytearray",
-			Value:     string(base64Encoded),
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		testMethods := []string{"POST", "PUT"}
-		for _, method := range testMethods {
-			buffer = ""
-			mockActors.Calls = nil
-
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
-
-			// assert
-			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
-		}
-	})
-
-	t.Run("Save object which has byte-array member - 200 OK", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/bytearray"
-
-		fakeBodyArray := []byte{0x01, 0x02, 0x03, 0x06, 0x10}
-
-		fakeObj := map[string]interface{}{
-			"data":  "fakeData",
-			"data2": fakeBodyArray,
-		}
-
-		serializedByteArray, _ := json.Marshal(fakeObj)
-
-		encodedLen := base64.StdEncoding.EncodedLen(len(fakeBodyArray))
-		base64Encoded := make([]byte, encodedLen)
-		base64.StdEncoding.Encode(base64Encoded, fakeBodyArray)
-
-		expectedObj := map[string]interface{}{
-			"data":  "fakeData",
-			"data2": string(base64Encoded),
-		}
-
-		mockActors := new(daprt.MockActors)
-		mockActors.On("SaveState", &actors.SaveStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "bytearray",
-			Value:     expectedObj,
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		testMethods := []string{"POST", "PUT"}
-		for _, method := range testMethods {
-			buffer = ""
-			mockActors.Calls = nil
-
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, serializedByteArray, nil)
-
-			// assert
-			assert.Equal(t, 201, resp.StatusCode, "failed to save state key with %s", method)
-			mockActors.AssertNumberOfCalls(t, "SaveState", 1)
-		}
-	})
-
-	t.Run("Save actor state - 400 deserialization error", func(t *testing.T) {
-		buffer = ""
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		nonJSONFakeData := []byte("{\"key\":}")
-
-		mockActors := new(daprt.MockActors)
-		mockActors.On("SaveState", &actors.SaveStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-			Value:     nonJSONFakeData,
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		testMethods := []string{"POST", "PUT"}
-		for _, method := range testMethods {
-			mockActors.Calls = nil
-
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, nonJSONFakeData, nil)
-
-			// assert
-			assert.Equal(t, 400, resp.StatusCode)
-			mockActors.AssertNumberOfCalls(t, "SaveState", 0)
 		}
 	})
 
@@ -847,6 +521,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			Data: fakeData,
 		}, nil)
 
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
 		testAPI.actor = mockActors
 
 		// act
@@ -856,31 +535,6 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fakeData, resp.RawBody)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
-	})
-
-	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
-		buffer = ""
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		mockActors := new(daprt.MockActors)
-		mockActors.On("DeleteState", &actors.DeleteStateRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-			Key:       "key1",
-		}).Return(nil)
-
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
-			ActorID:   "fakeActorID",
-			ActorType: "fakeActorType",
-		}).Return(true)
-
-		testAPI.actor = mockActors
-
-		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
-
-		// assert
-		assert.Equal(t, 200, resp.StatusCode)
-		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})
 
 	t.Run("Transaction - 201 Accepted", func(t *testing.T) {

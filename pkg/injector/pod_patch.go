@@ -17,6 +17,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/utils"
+	"github.com/pkg/errors"
 	"k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -90,7 +91,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
-		log.Errorf("could not unmarshal raw object: %v", err)
+		errors.Wrap(err, "could not unmarshal raw object")
 		return nil, err
 	}
 
@@ -364,7 +365,7 @@ func getInt32Annotation(annotations map[string]string, key string) (int32, error
 	}
 	value, err := strconv.ParseInt(s, 10, 32)
 	if err != nil {
-		return -1, fmt.Errorf("error parsing %s int value %s: %s", key, s, err)
+		return -1, errors.Wrapf(err, "error parsing %s int value %s ", key, s)
 	}
 	return int32(value), nil
 }
@@ -404,7 +405,7 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 	if ok {
 		list, err := appendQuantityToResourceList(cpuLimit, corev1.ResourceCPU, r.Limits)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sidecar cpu limit: %s", err)
+			return nil, errors.Wrap(err, "error parsing sidecar cpu limit")
 		}
 		r.Limits = *list
 	}
@@ -412,7 +413,7 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 	if ok {
 		list, err := appendQuantityToResourceList(memLimit, corev1.ResourceMemory, r.Limits)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sidecar memory limit: %s", err)
+			return nil, errors.Wrap(err, "error parsing sidecar memory limit")
 		}
 		r.Limits = *list
 	}
@@ -420,7 +421,7 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 	if ok {
 		list, err := appendQuantityToResourceList(cpuRequest, corev1.ResourceCPU, r.Requests)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sidecar cpu request: %s", err)
+			return nil, errors.Wrap(err, "error parsing sidecar cpu request")
 		}
 		r.Requests = *list
 	}
@@ -428,7 +429,7 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 	if ok {
 		list, err := appendQuantityToResourceList(memRequest, corev1.ResourceMemory, r.Requests)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sidecar memory request: %s", err)
+			return nil, errors.Wrap(err, "error parsing sidecar memory request")
 		}
 		r.Requests = *list
 	}

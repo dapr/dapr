@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	guuid "github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -130,6 +131,23 @@ func TestActorFeatures(t *testing.T) {
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
+
+	t.Run("Actor state.", func(t *testing.T) {
+		// Each test needs to have a different actorID
+		actorID := guuid.New().String()
+
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "savestatetest"), []byte{})
+		require.NoError(t, err)
+
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "getstatetest"), []byte{})
+		require.NoError(t, err)
+
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "savestatetest2"), []byte{})
+		require.NoError(t, err)
+
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "getstatetest2"), []byte{})
+		require.NoError(t, err)
+	})
 
 	t.Run("Actor reminder.", func(t *testing.T) {
 		// Each test needs to have a different actorID

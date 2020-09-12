@@ -8,13 +8,13 @@ package config
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
 
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -114,7 +114,7 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient operat
 		return nil, err
 	}
 	if resp.GetConfiguration() == nil {
-		return nil, fmt.Errorf("configuration %s not found", config)
+		return nil, errors.Errorf("configuration %s not found", config)
 	}
 	var conf Configuration
 	err = json.Unmarshal(resp.GetConfiguration(), &conf)

@@ -106,7 +106,7 @@ jobs:
                   
                   console.log(`Trigger E2E test for ${JSON.stringify(testPayload)}`);
                 }
-              } else if (commentBody.indexOf("/ok-to-wintest") == 0) {
+              } else if (commentBody.indexOf("/build-windows-base") == 0) {
                 // Get pull request
                 const pull = await github.pulls.get({
                   owner: issue.owner,
@@ -119,7 +119,7 @@ jobs:
                   const testPayload = {
                     pull_head_ref: pull.data.head.sha,
                     pull_head_repo: pull.data.head.repo.full_name,
-                    command: "ok-to-wintest",
+                    command: "windows-base",
                     issue: issue,
                   };
 
@@ -127,11 +127,11 @@ jobs:
                   await github.repos.createDispatchEvent({
                     owner: issue.owner,
                     repo: issue.repo,
-                    event_type: "e2e-test-windows",
+                    event_type: "windows-base",
                     client_payload: testPayload,
                   });
 
-                  console.log(`Trigger E2E test for windows ${JSON.stringify(testPayload)}`);
+                  console.log(`Trigger a build of the windows base image ${JSON.stringify(testPayload)}`);
                 }
               } else if (commentBody.indexOf("/ok-to-perf") == 0) {
                 // Get pull request

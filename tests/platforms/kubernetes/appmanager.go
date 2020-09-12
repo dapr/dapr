@@ -69,7 +69,7 @@ func (m *AppManager) Init() error {
 	}
 
 	// TODO: Dispose app if option is required
-	if err := m.Dispose(); err != nil {
+	if err := m.Dispose(true); err != nil {
 		return err
 	}
 
@@ -99,12 +99,8 @@ func (m *AppManager) Init() error {
 }
 
 // Dispose deletes deployment and service
-func (m *AppManager) Dispose() error {
+func (m *AppManager) Dispose(wait bool) error {
 	if err := m.DeleteDeployment(true); err != nil {
-		return err
-	}
-
-	if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDeleted); err != nil {
 		return err
 	}
 
@@ -112,8 +108,14 @@ func (m *AppManager) Dispose() error {
 		return err
 	}
 
-	if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
-		return err
+	if wait {
+		if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDeleted); err != nil {
+			return err
+		}
+
+		if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
+			return err
+		}
 	}
 
 	if m.forwarder != nil {

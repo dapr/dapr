@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -57,7 +58,7 @@ func (s *secretStoreRegistry) Create(name string) (secretstores.SecretStore, err
 		return method(), nil
 	}
 
-	return nil, fmt.Errorf("couldn't find secret store %s", name)
+	return nil, errors.Errorf("couldn't find secret store %s", name)
 }
 
 func createFullName(name string) string {

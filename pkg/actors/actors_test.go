@@ -69,6 +69,16 @@ func (f *fakeStateStore) BulkSet(req []state.SetRequest) error {
 }
 
 func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
+	for _, o := range request.Operations {
+		if o.Operation == state.Upsert {
+			req := o.Request.(state.SetRequest)
+			b, _ := json.Marshal(req.Value)
+			f.items[req.Key] = b
+		} else if o.Operation == state.Delete {
+			req := o.Request.(state.DeleteRequest)
+			delete(f.items, req.Key)
+		}
+	}
 	return nil
 }
 
@@ -320,7 +330,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		assert.Equal(t, "2s", reminders[0].DueTime)
 		assert.Equal(t, "b", reminders[0].Data)
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(3 * time.Second)
 
 		// Test only the last reminder update fires
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
@@ -589,37 +599,6 @@ func TestConstructActorStateKey(t *testing.T) {
 	assert.Equal(t, TestKeyName, keys[3])
 }
 
-func TestSaveState(t *testing.T) {
-	testActorRuntime := newTestActorsRuntime()
-	actorType, actorID := getTestActorTypeAndID()
-	ctx := context.Background()
-	fakeData := strconv.Quote("fakeData")
-
-	var val interface{}
-	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
-
-	// act
-	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
-
-	err := testActorRuntime.SaveState(ctx, &SaveStateRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Key:       TestKeyName,
-		Value:     val,
-	})
-	assert.NoError(t, err)
-
-	// assert
-	response, err := testActorRuntime.GetState(ctx, &GetStateRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Key:       TestKeyName,
-	})
-
-	assert.NoError(t, err)
-	assert.Equal(t, fakeData, string(response.Data))
-}
-
 func TestGetState(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 	actorType, actorID := getTestActorTypeAndID()
@@ -631,11 +610,18 @@ func TestGetState(t *testing.T) {
 
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 
-	testActorRuntime.SaveState(ctx, &SaveStateRequest{
-		ActorID:   actorID,
+	testActorRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 		ActorType: actorType,
-		Key:       TestKeyName,
-		Value:     val,
+		ActorID:   actorID,
+		Operations: []TransactionalOperation{
+			{
+				Operation: Upsert,
+				Request: TransactionalUpsert{
+					Key:   TestKeyName,
+					Value: val,
+				},
+			},
+		},
 	})
 
 	// act
@@ -659,41 +645,56 @@ func TestDeleteState(t *testing.T) {
 	var val interface{}
 	jsoniter.ConfigFastest.Unmarshal([]byte(fakeData), &val)
 
-	// save test state
 	fakeCallAndActivateActor(testActorRuntime, actorType, actorID)
 
-	testActorRuntime.SaveState(ctx, &SaveStateRequest{
-		ActorID:   actorID,
+	// insert state
+	testActorRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 		ActorType: actorType,
-		Key:       TestKeyName,
-		Value:     val,
+		ActorID:   actorID,
+		Operations: []TransactionalOperation{
+			{
+				Operation: Upsert,
+				Request: TransactionalUpsert{
+					Key:   TestKeyName,
+					Value: val,
+				},
+			},
+		},
 	})
 
-	// make sure that state is stored.
+	// save state
 	response, err := testActorRuntime.GetState(ctx, &GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       TestKeyName,
 	})
 
+	// make sure that state is stored.
 	assert.NoError(t, err)
 	assert.Equal(t, fakeData, string(response.Data))
 
-	// act
-	err = testActorRuntime.DeleteState(ctx, &DeleteStateRequest{
-		ActorID:   actorID,
+	// delete state
+	testActorRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
 		ActorType: actorType,
-		Key:       TestKeyName,
+		ActorID:   actorID,
+		Operations: []TransactionalOperation{
+			{
+				Operation: Delete,
+				Request: TransactionalUpsert{
+					Key: TestKeyName,
+				},
+			},
+		},
 	})
-	assert.NoError(t, err)
 
-	// assert
+	// act
 	response, err = testActorRuntime.GetState(ctx, &GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       TestKeyName,
 	})
 
+	// assert
 	assert.NoError(t, err)
 	assert.Nil(t, response.Data)
 }

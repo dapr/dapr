@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
@@ -82,6 +83,17 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 		return d.invokeLocal(ctx, req)
 	}
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, targetAppID, d.invokeRemote, req)
+}
+
+func (d *directMessaging) requestNamespace(targetAppID string) (string, error) {
+	items := strings.Split(targetAppID, ".")
+	if len(items) == 1 {
+		return d.namespace, nil
+	} else if len(items) == 2 {
+		return items[1], nil
+	} else {
+		return "", fmt.Errorf("invalid app id %s", targetAppID)
+	}
 }
 
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures
@@ -194,6 +206,11 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 }
 
 func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {
-	request := nr.ResolveRequest{ID: appID, Namespace: d.namespace, Port: d.grpcPort}
+	namespace, err := d.requestNamespace(appID)
+	if err != nil {
+		return "", err
+	}
+
+	request := nr.ResolveRequest{ID: appID, Namespace: namespace, Port: d.grpcPort}
 	return d.resolver.ResolveID(request)
 }

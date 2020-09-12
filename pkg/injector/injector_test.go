@@ -21,7 +21,7 @@ const (
 )
 
 func TestConfigCorrectValues(t *testing.T) {
-	i := NewInjector(Config{
+	i := NewInjector("", Config{
 		TLSCertFile:            "a",
 		TLSKeyFile:             "b",
 		SidecarImage:           "c",
