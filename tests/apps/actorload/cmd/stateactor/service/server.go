@@ -53,7 +53,7 @@ func NewActorService(port int, config *actor_rt.DaprConfig) *ActorService {
 	}
 
 	return &ActorService{
-		address:             fmt.Sprintf(":%d", port),
+		address:             fmt.Sprintf("127.0.0.1:%d", port),
 		server:              nil,
 		actorClient:         http_client.NewClient(),
 		invocationMap:       map[string]ActorInvokeFn{},
@@ -187,7 +187,7 @@ func actorMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), "actorType", actorType)
 		ctx = context.WithValue(ctx, "actorID", actorID)
 
-		log.Printf("%s, %s.%s, %s", r.URL.EscapedPath(), actorType, actorID, hostname)
+		log.Printf("%s.%s, %s, %s", actorType, actorID, hostname, r.URL.EscapedPath())
 		w.Header().Add("Content-Type", "application/json")
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

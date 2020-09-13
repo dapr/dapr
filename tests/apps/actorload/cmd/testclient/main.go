@@ -207,7 +207,7 @@ func getFlagOptions() *actorLoadTestOptions {
 	qps := flag.Float64("qps", 100.0, "QPS per thread.")
 	numThreads := flag.Int("c", 10, "Number of parallel simultaneous connections.")
 	duration := flag.Duration("t", time.Minute*1, "How long to run the test.")
-	actorType := flag.String("a", defaultActorType, "Actor Type")
+	actorType := flag.String("a", defaultActorType, "Target test actor type")
 	numActors := flag.Int("numactors", 10, "Number of randomly generated actors.")
 	writePayloadSize := flag.Int("s", 1024, "The size of save state value.")
 
