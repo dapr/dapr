@@ -6,6 +6,7 @@
 package main
 
 import (
+	actor_cl "actorload/actor/client"
 	http_client "actorload/actor/client/http"
 	"errors"
 	"flag"
@@ -29,7 +30,9 @@ const (
 type actorLoadTestOptions struct {
 	periodic.RunnerOptions
 
-	NumActors        int
+	// Number of actors used for test
+	NumActors int
+	// The size of payload that test runner calls actor method with this payload
 	WritePayloadSize int
 }
 
@@ -44,10 +47,7 @@ func generatePayload(length int) []byte {
 	return payload
 }
 
-func activateTestActors(maxActor int) []string {
-	client := http_client.NewClient()
-	defer client.Close()
-
+func activateRandomActors(client actor_cl.ActorClient, maxActor int) []string {
 	var activatedActors = []string{}
 	for i := 0; i < maxActor; i++ {
 		actorID := strings.Replace(uuid.New().String(), "-", "", -1)
@@ -67,80 +67,97 @@ func activateTestActors(maxActor int) []string {
 	return activatedActors
 }
 
-func startLoadTest(opt *actorLoadTestOptions) (*actorLoadTestResult, error) {
-	// Activate all test actors
-	activatedActors := activateTestActors(opt.NumActors)
+func startLoadTest(opt *actorLoadTestOptions) (*ActorLoadTestRunnable, error) {
+	client := http_client.NewClient()
+	defer client.Close()
+
+	// Wait until Dapr runtime endpoint is available.
+	if err := client.WaitUntilDaprIsReady(); err != nil {
+		return nil, err
+	}
+
+	// Test prep: Activate randomly generated test actors.
+	// Each test runnable will invoke actor method by iterating generated
+	// test actors in a round-robin manner.
+	activatedActors := activateRandomActors(client, opt.NumActors)
 	activatedActorsLen := len(activatedActors)
 	if activatedActorsLen == 0 {
 		return nil, errors.New("no actor is activated")
 	}
-	log.Infof("activated actors: %d", activatedActorsLen)
+	log.Infof("Activated actors: %d", activatedActorsLen)
 
+	// Generate randome payload by the given payload size.
 	payload := generatePayload(opt.WritePayloadSize)
-	log.Infof("random payload: %s", payload)
+	log.Infof("Random payload: %s", payload)
 
-	// Setup Fortio load test runner
+	// Set up Fortio load test runner
 	r := periodic.NewPeriodicRunner(&opt.RunnerOptions)
 	defer r.Options().Abort()
 
-	actorstate := make([]actorLoadTestResult, opt.NumThreads)
+	testRunnable := make([]ActorLoadTestRunnable, opt.NumThreads)
 
-	total := actorLoadTestResult{
+	// Create Test runnable to store the aggregated test results from each test thread
+	aggResult := ActorLoadTestRunnable{
 		RetCodes: map[int]int64{},
 		sizes:    stats.NewHistogram(0, 100),
 	}
 
+	// Set up parallel test threads.
 	for i := 0; i < opt.NumThreads; i++ {
-		r.Options().Runners[i] = &actorstate[i]
-		actorstate[i].client = http_client.NewClient()
-		actorstate[i].actors = activatedActors
-		actorstate[i].currentActorIndex = rand.Intn(activatedActorsLen)
-		actorstate[i].payload = payload
-		actorstate[i].sizes = total.sizes.Clone()
-		actorstate[i].RetCodes = map[int]int64{}
+		r.Options().Runners[i] = &testRunnable[i]
+		testRunnable[i].client = http_client.NewClient()
+		testRunnable[i].actors = activatedActors
+		testRunnable[i].actorMethod = "setActorState"
+		testRunnable[i].currentActorIndex = rand.Intn(activatedActorsLen)
+		testRunnable[i].payload = payload
+		testRunnable[i].sizes = aggResult.sizes.Clone()
+		testRunnable[i].RetCodes = map[int]int64{}
 	}
 
-	total.RunnerResults = r.Run()
+	// Start test
+	aggResult.RunnerResults = r.Run()
 
+	// Aggregate results from each test
 	statusCodes := []int{}
 	for i := 0; i < opt.NumThreads; i++ {
-		actorstate[i].client.Close()
-		for k := range actorstate[i].RetCodes {
-			if _, exists := total.RetCodes[k]; !exists {
+		testRunnable[i].client.Close()
+		for k := range testRunnable[i].RetCodes {
+			if _, exists := aggResult.RetCodes[k]; !exists {
 				statusCodes = append(statusCodes, k)
 			}
-			total.RetCodes[k] += actorstate[i].RetCodes[k]
+			aggResult.RetCodes[k] += testRunnable[i].RetCodes[k]
 		}
-		total.sizes.Transfer(actorstate[i].sizes)
+		aggResult.sizes.Transfer(testRunnable[i].sizes)
 	}
 
 	// Stop test
 	r.Options().ReleaseRunners()
+
+	// Export test result
 	sort.Ints(statusCodes)
-	totalCount := float64(total.DurationHistogram.Count)
+	aggResultCount := float64(aggResult.DurationHistogram.Count)
 	out := r.Options().Out
-
-	// Aggregate the test results
-	fmt.Fprintf(out, "Jitter: %t\n", total.Jitter)
+	fmt.Fprintf(out, "Jitter: %t\n", aggResult.Jitter)
 	for _, k := range statusCodes {
-		fmt.Fprintf(out, "Code %3d : %d (%.1f %%)\n", k, total.RetCodes[k], 100.*float64(total.RetCodes[k])/totalCount)
+		fmt.Fprintf(out, "Code %3d : %d (%.1f %%)\n", k, aggResult.RetCodes[k], 100.*float64(aggResult.RetCodes[k])/aggResultCount)
 	}
 
-	total.Sizes = total.sizes.Export()
+	aggResult.Sizes = aggResult.sizes.Export()
 	if log.LogVerbose() {
-		total.Sizes.Print(out, "Response Body/Total Sizes Histogram")
+		aggResult.Sizes.Print(out, "Response Body/Total Sizes Histogram")
 	} else if log.Log(log.Warning) {
-		total.sizes.Counter.Print(out, "Response Body/Total Sizes")
+		aggResult.sizes.Counter.Print(out, "Response Body/Total Sizes")
 	}
 
-	return &total, nil
+	return &aggResult, nil
 }
 
 func getFlagOptions() *actorLoadTestOptions {
 	qps := flag.Float64("qps", 100.0, "QPS per thread.")
-	numThreads := flag.Int("nthreads", 10, "Number of Threads.")
-	numActors := flag.Int("nactors", 10, "Number of randomly generated actors.")
-	writePayloadSize := flag.Int("write-payload-size", 1024, "The size of save state value")
+	numThreads := flag.Int("c", 10, "Number of parallel simultaneous connections.")
+	duration := flag.Duration("t", time.Minute*1, "How long to run the test.")
+	numActors := flag.Int("numactors", 10, "Number of randomly generated actors.")
+	writePayloadSize := flag.Int("s", 1024, "The size of save state value.")
 
 	flag.Parse()
 
@@ -148,6 +165,7 @@ func getFlagOptions() *actorLoadTestOptions {
 		RunnerOptions: periodic.RunnerOptions{
 			RunType:    "actor",
 			QPS:        *qps,
+			Duration:   *duration,
 			NumThreads: *numThreads,
 		},
 		NumActors:        *numActors,
@@ -165,9 +183,6 @@ func main() {
 		testOptions.RunnerOptions.NumThreads,
 		testOptions.NumActors)
 	log.Infof("Write Payload Size: %d Bytes", testOptions.WritePayloadSize)
-	log.Infof("Test will start in 5 seconds.")
-
-	time.Sleep(time.Second * 5)
 
 	if _, err := startLoadTest(testOptions); err != nil {
 		log.Fatalf("Test is failed: %q", err)

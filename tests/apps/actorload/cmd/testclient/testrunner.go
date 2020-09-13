@@ -14,14 +14,16 @@ import (
 	"fortio.org/fortio/stats"
 )
 
-type actorLoadTestResult struct {
+// ActorLoadTestRunnable has test execution code and test result stats.
+type ActorLoadTestRunnable struct {
 	periodic.RunnerResults
 
 	client            cl.ActorClient
 	currentActorIndex int
 
-	payload []byte
-	actors  []string
+	payload     []byte
+	actors      []string
+	actorMethod string
 
 	RetCodes map[int]int64
 	// internal type/data
@@ -31,7 +33,9 @@ type actorLoadTestResult struct {
 	aborter *periodic.Aborter
 }
 
-func (lt *actorLoadTestResult) Run(t int) {
+// Run is the runnable function executed by one thread.
+// This iterates the preactivated actors to call each activated actor in a round-robin manner.
+func (lt *ActorLoadTestRunnable) Run(t int) {
 	log.Debugf("Calling in %d", t)
 	body := []byte("dummy")
 	size := len(body)
@@ -39,7 +43,7 @@ func (lt *actorLoadTestResult) Run(t int) {
 
 	_, err := lt.client.InvokeMethod(
 		"StateActor", lt.actors[lt.currentActorIndex],
-		"setActorState",
+		lt.actorMethod,
 		"application/json", lt.payload)
 	if err != nil {
 		if actorErr, ok := err.(*http_client.DaprActorClientError); ok {

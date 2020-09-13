@@ -8,10 +8,12 @@ package http
 import (
 	cl "actorload/actor/client"
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"time"
 )
 
 const (
@@ -132,6 +134,18 @@ func (c *httpClient) GetState(actorType, actorID, name string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+func (c *httpClient) WaitUntilDaprIsReady() error {
+	for i := 0; i < 10; i++ {
+		resp, err := c.client.Get(fmt.Sprintf("%s/%s", c.address, "v1.0/healthz"))
+		if err == nil && resp.StatusCode == 200 {
+			return nil
+		}
+		time.Sleep(time.Millisecond * 500)
+	}
+
+	return errors.New("dapr is unavailable")
 }
 
 func (c *httpClient) Close() {
