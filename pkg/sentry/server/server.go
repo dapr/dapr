@@ -139,7 +139,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, err
 	}
 
-	err = s.validator.Validate(req.GetId(), req.GetToken(), req.GetNamespace(), req.GetTrustDomain())
+	err = s.validator.Validate(req.GetId(), req.GetToken(), req.GetNamespace())
 	if err != nil {
 		err = errors.Wrap(err, "error validating requester identity")
 		log.Error(err)

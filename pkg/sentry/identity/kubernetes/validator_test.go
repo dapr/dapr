@@ -26,7 +26,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2", "ns2", "td")
+		err := v.Validate("a1:ns1", "a2:ns2", "ns2")
 		assert.Equal(t, errors.Errorf("%s: invalid token: bad token", errPrefix).Error(), err.Error())
 	})
 
@@ -44,7 +44,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2", "ns", "td")
+		err := v.Validate("a1:ns1", "a2:ns2", "ns")
 		expectedErr := errors.Errorf("%s: authentication failed", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -63,7 +63,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2", "ns2", "td")
+		err := v.Validate("a1:ns1", "a2:ns2", "ns2")
 		expectedErr := errors.Errorf("%s: provided token is not a properly structured service account token", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -82,7 +82,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("ns2:a1", "ns2:a2", "ns1", "td")
+		err := v.Validate("ns2:a1", "ns2:a2", "ns1")
 		expectedErr := errors.Errorf("%s: token/id mismatch. received id: ns2:a1", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -94,7 +94,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "", "ns", "td")
+		err := v.Validate("a1:ns1", "", "ns")
 		expectedErr := errors.Errorf("%s: token field in request must not be empty", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -106,7 +106,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("", "a1:ns1", "ns", "td")
+		err := v.Validate("", "a1:ns1", "ns")
 		expectedErr := errors.Errorf("%s: id field in request must not be empty", errPrefix)
 		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
@@ -125,7 +125,7 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("ns1:a1", "ns1:a1", "ns1", "td")
+		err := v.Validate("ns1:a1", "ns1:a1", "ns1")
 		assert.NoError(t, err)
 	})
 }
