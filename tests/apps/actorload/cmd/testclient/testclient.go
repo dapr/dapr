@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	// actorType is Actor Type Name for test.
-	actorType = "StateActor"
+	// defaultActorType is Actor Type Name for test.
+	defaultActorType  = "StateActor"
+	initialStateValue = "state"
 )
 
 type actorLoadTestOptions struct {
@@ -34,6 +35,7 @@ type actorLoadTestOptions struct {
 	NumActors int
 	// The size of payload that test runner calls actor method with this payload
 	WritePayloadSize int
+	TestActorType    string
 }
 
 func generatePayload(length int) []byte {
@@ -47,7 +49,7 @@ func generatePayload(length int) []byte {
 	return payload
 }
 
-func activateRandomActors(client actor_cl.ActorClient, maxActor int) []string {
+func activateRandomActors(client actor_cl.ActorClient, actorType string, maxActor int) []string {
 	var activatedActors = []string{}
 	for i := 0; i < maxActor; i++ {
 		actorID := strings.Replace(uuid.New().String(), "-", "", -1)
@@ -55,7 +57,7 @@ func activateRandomActors(client actor_cl.ActorClient, maxActor int) []string {
 		_, err := client.InvokeMethod(
 			actorType, actorID,
 			"setActorState",
-			"application/json", []byte("state"))
+			"application/json", []byte(initialStateValue))
 		if err != nil {
 			log.Infof("failed to activate actor - %s.%s: %q", actorType, actorID, err)
 			continue
@@ -79,7 +81,7 @@ func startLoadTest(opt *actorLoadTestOptions) (*ActorLoadTestRunnable, error) {
 	// Test prep: Activate randomly generated test actors.
 	// Each test runnable will invoke actor method by iterating generated
 	// test actors in a round-robin manner.
-	activatedActors := activateRandomActors(client, opt.NumActors)
+	activatedActors := activateRandomActors(client, opt.TestActorType, opt.NumActors)
 	activatedActorsLen := len(activatedActors)
 	if activatedActorsLen == 0 {
 		return nil, errors.New("no actor is activated")
@@ -156,6 +158,7 @@ func getFlagOptions() *actorLoadTestOptions {
 	qps := flag.Float64("qps", 100.0, "QPS per thread.")
 	numThreads := flag.Int("c", 10, "Number of parallel simultaneous connections.")
 	duration := flag.Duration("t", time.Minute*1, "How long to run the test.")
+	actorType := flag.String("a", defaultActorType, "Actor Type")
 	numActors := flag.Int("numactors", 10, "Number of randomly generated actors.")
 	writePayloadSize := flag.Int("s", 1024, "The size of save state value.")
 
@@ -170,6 +173,7 @@ func getFlagOptions() *actorLoadTestOptions {
 		},
 		NumActors:        *numActors,
 		WritePayloadSize: *writePayloadSize,
+		TestActorType:    *actorType,
 	}
 }
 
@@ -182,11 +186,12 @@ func main() {
 		testOptions.RunnerOptions.QPS,
 		testOptions.RunnerOptions.NumThreads,
 		testOptions.NumActors)
+	log.Infof("Actor type: %s", testOptions.TestActorType)
 	log.Infof("Write Payload Size: %d Bytes", testOptions.WritePayloadSize)
 
 	if _, err := startLoadTest(testOptions); err != nil {
-		log.Fatalf("Test is failed: %q", err)
+		log.Fatalf("Dapr Actor Load Test is failed: %q", err)
 	}
 
-	log.Infof("Test is done")
+	log.Infof("Dapr Actor Load Test is done")
 }
