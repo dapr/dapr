@@ -141,7 +141,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 	if identityBundle != nil {
 		spiffeID, err := identity.CreateSPIFFEID(identityBundle.TrustDomain, identityBundle.Namespace, identityBundle.ID)
 		if err != nil {
-			return nil, errors.Wrap(err, "error genrating spiffe id")
+			return nil, errors.Wrap(err, "error generating spiffe id")
 		}
 
 		rv := []asn1.RawValue{
