@@ -7,6 +7,7 @@ package main
 
 import (
 	actor_cl "actorload/actor/client"
+	cl "actorload/actor/client"
 	http_client "actorload/actor/client/http"
 	"errors"
 	"flag"
@@ -27,6 +28,54 @@ const (
 	defaultActorType  = "StateActor"
 	initialStateValue = "state"
 )
+
+// actorLoadTestRunnable has test execution code and test result stats.
+type actorLoadTestRunnable struct {
+	periodic.RunnerResults
+
+	client            cl.ActorClient
+	currentActorIndex int
+
+	payload     []byte
+	actors      []string
+	actorMethod string
+
+	RetCodes map[int]int64
+	// internal type/data
+	sizes *stats.Histogram
+	// exported result
+	Sizes   *stats.HistogramData
+	aborter *periodic.Aborter
+}
+
+// Run is the runnable function executed by one thread.
+// This iterates the preactivated actors to call each activated actor in a round-robin manner.
+func (lt *actorLoadTestRunnable) Run(t int) {
+	log.Debugf("Calling in %d", t)
+	body := []byte("dummy")
+	size := len(body)
+	code := 200
+
+	_, err := lt.client.InvokeMethod(
+		"StateActor", lt.actors[lt.currentActorIndex],
+		lt.actorMethod,
+		"application/json", lt.payload)
+	if err != nil {
+		if actorErr, ok := err.(*http_client.DaprActorClientError); ok {
+			code = actorErr.Code
+		} else {
+			code = 500
+		}
+	}
+
+	log.Debugf("got, code: %3d, size: %d", code, size)
+
+	lt.RetCodes[code]++
+	lt.sizes.Record(float64(size))
+
+	// Invoke each actor in a round-robin manner
+	lt.currentActorIndex = (lt.currentActorIndex + 1) % len(lt.actors)
+}
 
 type actorLoadTestOptions struct {
 	periodic.RunnerOptions
@@ -69,7 +118,7 @@ func activateRandomActors(client actor_cl.ActorClient, actorType string, maxActo
 	return activatedActors
 }
 
-func startLoadTest(opt *actorLoadTestOptions) (*ActorLoadTestRunnable, error) {
+func startLoadTest(opt *actorLoadTestOptions) (*actorLoadTestRunnable, error) {
 	client := http_client.NewClient()
 	defer client.Close()
 
@@ -96,10 +145,10 @@ func startLoadTest(opt *actorLoadTestOptions) (*ActorLoadTestRunnable, error) {
 	r := periodic.NewPeriodicRunner(&opt.RunnerOptions)
 	defer r.Options().Abort()
 
-	testRunnable := make([]ActorLoadTestRunnable, opt.NumThreads)
+	testRunnable := make([]actorLoadTestRunnable, opt.NumThreads)
 
 	// Create Test runnable to store the aggregated test results from each test thread
-	aggResult := ActorLoadTestRunnable{
+	aggResult := actorLoadTestRunnable{
 		RetCodes: map[int]int64{},
 		sizes:    stats.NewHistogram(0, 100),
 	}
