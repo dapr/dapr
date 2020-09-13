@@ -7,7 +7,6 @@ package grpc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -145,7 +145,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		err = fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
+		err = errors.Wrap(err, "ERR_PUBSUB_CLOUD_EVENTS_SER")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -158,7 +158,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	err = a.publishFn(&req)
 	if err != nil {
-		err = fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
+		err = errors.Wrap(err, "ERR_PUBSUB_PUBLISH_MESSAGE")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -211,7 +211,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	r := &runtimev1pb.InvokeBindingResponse{}
 	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		err = fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
+		err = errors.Wrap(err, "ERR_INVOKE_OUTPUT_BINDING")
 		apiServerLogger.Debug(err)
 		return r, err
 	}
@@ -288,7 +288,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	getResponse, err := store.Get(&req)
 	if err != nil {
-		err = fmt.Errorf("ERR_STATE_GET: %s", err)
+		err = errors.Wrap(err, "ERR_STATE_GET")
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -327,7 +327,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		err = fmt.Errorf("ERR_STATE_SAVE: %s", err)
+		err = errors.Wrap(err, "ERR_STATE_SAVE")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -355,7 +355,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	err = store.Delete(&req)
 	if err != nil {
-		err = fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
+		err = errors.Wrapf(err, "ERR_STATE_DELETE: failed deleting state with key %s", in.Key)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -392,7 +392,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 
 	if err != nil {
-		err = fmt.Errorf("ERR_SECRET_GET: %s", err)
+		err = errors.Wrap(err, "ERR_SECRET_GET")
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -474,7 +474,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			}
 
 		default:
-			err := fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
+			err := errors.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
 			apiServerLogger.Debug(err)
 			return &empty.Empty{}, err
 		}

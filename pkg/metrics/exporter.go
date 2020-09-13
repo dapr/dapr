@@ -1,12 +1,12 @@
 package metrics
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"go.opencensus.io/stats/view"
 )
@@ -74,7 +74,7 @@ func (m *promMetricsExporter) Init() error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to create Prometheus exporter: %v", err)
+		return errors.Errorf("failed to create Prometheus exporter: %v", err)
 	}
 
 	// register exporter to view
