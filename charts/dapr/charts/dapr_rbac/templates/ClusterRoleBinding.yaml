@@ -8,8 +8,27 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: cluster-admin
+  name: dapr-operator-admin
   apiGroup: rbac.authorization.k8s.io
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-operator-admin
+  namespace: default
+rules:
+- apiGroups: ["", "dapr.io"]
+  resources: ["serviceaccounts", "deployments", "services", "components", "configurations"]
+  verbs: ["get"]
+- apiGroups: ["", "dapr.io"]
+  resources: ["deployments", "services", "components", "configurations"]
+  verbs: ["list", "watch"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: [update", "delete"]
+- apiGroups: [""]
+  resources: ["deployments", "services"]
+  verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
