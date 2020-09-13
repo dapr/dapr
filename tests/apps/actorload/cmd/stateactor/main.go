@@ -12,10 +12,10 @@ import (
 	"os"
 	"strings"
 
-	cl "actorload/actor/client"
-	http_client "actorload/actor/client/http"
-	rt "actorload/actor/runtime"
 	serve "actorload/cmd/stateactor/service"
+	cl "actorload/pkg/actor/client"
+	http_client "actorload/pkg/actor/client/http"
+	rt "actorload/pkg/actor/runtime"
 )
 
 const (

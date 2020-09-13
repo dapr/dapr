@@ -35,7 +35,7 @@ Usage of ./stateactor:
 
 ```
 # Target QPS: 1000 qps, Number of test actors: 200, Duration: 30 mins
-% dapr run --app-id testclient -- ./dist/testclient -qps 1000 -numactor 200 -t 30m
+% dapr run --app-id testclient -- ./dist/testclient -qps 1000 -numactors 200 -t 30m
 
 % ./testclient --help
 Usage of ./testclient:

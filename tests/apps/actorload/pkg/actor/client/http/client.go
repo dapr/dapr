@@ -6,7 +6,7 @@
 package http
 
 import (
-	cl "actorload/actor/client"
+	cl "actorload/pkg/actor/client"
 	"bytes"
 	"errors"
 	"fmt"

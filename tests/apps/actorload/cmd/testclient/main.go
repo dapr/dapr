@@ -6,9 +6,10 @@
 package main
 
 import (
-	actor_cl "actorload/actor/client"
-	cl "actorload/actor/client"
-	http_client "actorload/actor/client/http"
+	actor_cl "actorload/pkg/actor/client"
+	cl "actorload/pkg/actor/client"
+	http_client "actorload/pkg/actor/client/http"
+
 	"errors"
 	"flag"
 	"fmt"
@@ -21,6 +22,8 @@ import (
 	"fortio.org/fortio/periodic"
 	"fortio.org/fortio/stats"
 	"github.com/google/uuid"
+
+	telemetry "actorload/pkg/telemetry"
 )
 
 const (
@@ -36,9 +39,11 @@ type actorLoadTestRunnable struct {
 	client            cl.ActorClient
 	currentActorIndex int
 
-	payload     []byte
-	actors      []string
-	actorMethod string
+	payload []byte
+	actors  []string
+
+	testActorType   string
+	testActorMethod string
 
 	RetCodes map[int]int64
 	// internal type/data
@@ -46,19 +51,23 @@ type actorLoadTestRunnable struct {
 	// exported result
 	Sizes   *stats.HistogramData
 	aborter *periodic.Aborter
+
+	telemetryClient *telemetry.TelemetryClient
 }
 
 // Run is the runnable function executed by one thread.
 // This iterates the preactivated actors to call each activated actor in a round-robin manner.
 func (lt *actorLoadTestRunnable) Run(t int) {
 	log.Debugf("Calling in %d", t)
-	body := []byte("dummy")
-	size := len(body)
+	size := len(lt.payload)
 	code := 200
 
+	start := time.Now()
+
+	actorID := lt.actors[lt.currentActorIndex]
 	_, err := lt.client.InvokeMethod(
-		"StateActor", lt.actors[lt.currentActorIndex],
-		lt.actorMethod,
+		lt.testActorType, actorID,
+		lt.testActorMethod,
 		"application/json", lt.payload)
 	if err != nil {
 		if actorErr, ok := err.(*http_client.DaprActorClientError); ok {
@@ -69,6 +78,10 @@ func (lt *actorLoadTestRunnable) Run(t int) {
 	}
 
 	log.Debugf("got, code: %3d, size: %d", code, size)
+
+	elasped := time.Since(start)
+
+	lt.telemetryClient.RecordLoadRequestCount(lt.testActorType, actorID, elasped, code)
 
 	lt.RetCodes[code]++
 	lt.sizes.Record(float64(size))
@@ -118,7 +131,7 @@ func activateRandomActors(client actor_cl.ActorClient, actorType string, maxActo
 	return activatedActors
 }
 
-func startLoadTest(opt *actorLoadTestOptions) (*actorLoadTestRunnable, error) {
+func startLoadTest(opt *actorLoadTestOptions, telemetryClient *telemetry.TelemetryClient) (*actorLoadTestRunnable, error) {
 	client := http_client.NewClient()
 	defer client.Close()
 
@@ -158,7 +171,9 @@ func startLoadTest(opt *actorLoadTestOptions) (*actorLoadTestRunnable, error) {
 		r.Options().Runners[i] = &testRunnable[i]
 		testRunnable[i].client = http_client.NewClient()
 		testRunnable[i].actors = activatedActors
-		testRunnable[i].actorMethod = "setActorState"
+		testRunnable[i].testActorType = opt.TestActorType
+		testRunnable[i].testActorMethod = "setActorState"
+		testRunnable[i].telemetryClient = telemetryClient
 		testRunnable[i].currentActorIndex = rand.Intn(activatedActorsLen)
 		testRunnable[i].payload = payload
 		testRunnable[i].sizes = aggResult.sizes.Clone()
@@ -227,6 +242,9 @@ func getFlagOptions() *actorLoadTestOptions {
 }
 
 func main() {
+	telemetry := telemetry.NewTelemetryClient()
+	telemetry.Init()
+
 	rand.Seed(time.Now().UnixNano())
 	testOptions := getFlagOptions()
 
@@ -238,7 +256,7 @@ func main() {
 	log.Infof("Actor type: %s", testOptions.TestActorType)
 	log.Infof("Write Payload Size: %d Bytes", testOptions.WritePayloadSize)
 
-	if _, err := startLoadTest(testOptions); err != nil {
+	if _, err := startLoadTest(testOptions, telemetry); err != nil {
 		log.Fatalf("Dapr Actor Load Test is failed: %q", err)
 	}
 

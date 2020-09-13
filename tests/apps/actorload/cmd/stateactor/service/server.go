@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
-	cl "actorload/actor/client"
-	http_client "actorload/actor/client/http"
-	actor_rt "actorload/actor/runtime"
+	cl "actorload/pkg/actor/client"
+	http_client "actorload/pkg/actor/client/http"
+	actor_rt "actorload/pkg/actor/runtime"
 
 	"github.com/go-chi/chi"
 )
