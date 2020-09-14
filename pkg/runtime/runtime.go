@@ -134,7 +134,6 @@ type DaprRuntime struct {
 	topicRoutes            map[string]TopicRoute
 
 	pendingComponents          chan components_v1alpha1.Component
-	pendingComponentsDone      chan bool
 	pendingComponentDependents map[string][]components_v1alpha1.Component
 }
 
@@ -167,7 +166,6 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		allowedTopics:       map[string][]string{},
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
-		pendingComponentsDone:      make(chan bool),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 	}
 }
@@ -1237,31 +1235,23 @@ func (a *DaprRuntime) figureOutComponentCategory(component components_v1alpha1.C
 }
 
 func (a *DaprRuntime) processComponents() {
-	for {
-		comp, more := <-a.pendingComponents
-		if !more {
-			a.pendingComponentsDone <- true
-			return
+	for comp := range a.pendingComponents {
+		if comp.Name == "" {
+			continue
 		}
-		if err := a.processOneComponent(comp); err != nil {
-			log.Errorf("process component %s error, %s", comp.Name, err)
-		}
+		a.processComponentAndDependents(comp)
 	}
 }
 
 func (a *DaprRuntime) flushOutstandingComponents() {
-	// We flush by stopping the processComponents goroutine, waiting for it to finish, and then restart it
 	log.Info("waiting for all outstanding components to be processed")
-	close(a.pendingComponents)
-
-	<-a.pendingComponentsDone
+	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
+	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
+	a.pendingComponents <- components_v1alpha1.Component{}
 	log.Info("all outstanding components processed")
-
-	a.pendingComponents = make(chan components_v1alpha1.Component)
-	go a.processComponents()
 }
 
-func (a *DaprRuntime) processOneComponent(comp components_v1alpha1.Component) error {
+func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Component) error {
 	res := a.preprocessOneComponent(&comp)
 	if res.unreadyDependency != "" {
 		a.pendingComponentDependents[res.unreadyDependency] = append(a.pendingComponentDependents[res.unreadyDependency], comp)
@@ -1270,21 +1260,24 @@ func (a *DaprRuntime) processOneComponent(comp components_v1alpha1.Component) er
 
 	compCategory := a.figureOutComponentCategory(comp)
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
+		log.Errorf("process component %s error, %s", comp.Name, err)
 		return err
 	}
+
+	log.Infof("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
+	a.appendOrReplaceComponents(comp)
+	diag.DefaultMonitoring.ComponentLoaded()
+
 	dependency := componentDependency(compCategory, comp.Name)
 	if deps, ok := a.pendingComponentDependents[dependency]; ok {
 		delete(a.pendingComponentDependents, dependency)
-		go func(dependents []components_v1alpha1.Component) {
-			for _, dependent := range dependents {
-				a.pendingComponents <- dependent
+		for _, dependent := range deps {
+			if err := a.processComponentAndDependents(dependent); err != nil {
+				return err
 			}
-		}(deps)
+		}
 	}
 
-	a.appendOrReplaceComponents(comp)
-	diag.DefaultMonitoring.ComponentLoaded()
-	log.Infof("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
 	return nil
 }
 
