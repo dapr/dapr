@@ -20,6 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/version"
+	"github.com/pkg/errors"
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance
@@ -59,6 +60,10 @@ func FromFlags() (*DaprRuntime, error) {
 	if *runtimeVersion {
 		fmt.Println(version.Version())
 		os.Exit(0)
+	}
+
+	if *appID == "" {
+		return nil, errors.New("app-id parameter cannot be empty")
 	}
 
 	// Apply options to all loggers
