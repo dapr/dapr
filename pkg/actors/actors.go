@@ -235,14 +235,14 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 }
 
 func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	if a.placementBlock {
-		<-a.placementSignal
-	}
-
 	actor := req.Actor()
 	targetActorAddress, appID := a.lookupActorAddress(actor.GetActorType(), actor.GetActorId())
 	if targetActorAddress == "" {
 		return nil, errors.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
+	}
+
+	if a.placementBlock {
+		<-a.placementSignal
 	}
 
 	var resp *invokev1.InvokeMethodResponse
@@ -573,9 +573,6 @@ func (a *actorsRuntime) unblockPlacements() {
 }
 
 func (a *actorsRuntime) updatePlacements(in *placementv1pb.PlacementTables) {
-	a.placementTableLock.Lock()
-	defer a.placementTableLock.Unlock()
-
 	if in.Version != a.placementTables.Version {
 		for k, v := range in.Entries {
 			loadMap := map[string]*placement.Host{}
@@ -591,7 +588,7 @@ func (a *actorsRuntime) updatePlacements(in *placementv1pb.PlacementTables) {
 
 		log.Info("actors: placement tables updated")
 
-		a.evaluateReminders()
+		go a.evaluateReminders()
 	}
 }
 
@@ -708,9 +705,9 @@ func (a *actorsRuntime) evaluateReminders() {
 }
 
 func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) (string, string) {
-	if a.placementTables == nil {
-		return "", ""
-	}
+	// read lock for table map
+	a.placementTableLock.RLock()
+	defer a.placementTableLock.RUnlock()
 
 	t := a.placementTables.Entries[actorType]
 	if t == nil {
