@@ -190,7 +190,6 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			admissionResponse = toAdmissionResponse(err)
 		} else {
-			log.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
 			admissionResponse = &v1beta1.AdmissionResponse{
 				Allowed: true,
 				Patch:   patchBytes,
