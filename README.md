@@ -99,7 +99,7 @@ Every two weeks we host a community call to showcase new features, review upcomi
 - Tuesday August 4th 10am Pacific Time (PST)
 - Tuesday August 18th 10am Pacific Time (PST)
 - Tuesday September 1st 10am Pacific Time (PST)
-- Tuesday September 15th 10am Pacific Time (PST)
+- Wednesday September 16th 10am Pacific Time (PST)
 - Tuesday September 29th 10am Pacific Time (PST)
 
 | Asset | Link        |
