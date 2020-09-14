@@ -148,7 +148,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 			{
 				Bytes: []byte(spiffeID),
 				Class: asn1.ClassContextSpecific,
-				Tag:   6,
+				Tag:   asn1.TagOID,
 			},
 		}
 
