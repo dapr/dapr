@@ -17,6 +17,11 @@ spec:
     metadata:
       labels:
         app: dapr-dashboard
+        app.kubernetes.io/name: {{ .Release.Name }}
+        app.kubernetes.io/version: {{ .Values.global.tag }}
+        app.kubernetes.io/component: dashboard
+        app.kubernetes.io/part-of: "dapr"
+        app.kubernetes.io/managed-by: "helm"
     spec:
       serviceAccountName: dashboard-reader
       affinity:
