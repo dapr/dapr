@@ -370,13 +370,15 @@ func TestStateTransactionApps(t *testing.T) {
 				err = json.Unmarshal(resp, &appResp)
 
 				require.NoError(t, err)
+				require.Equal(t, len(step.expectedResponse.States), len(appResp.States))
 
 				for _, er := range step.expectedResponse.States {
 					for _, ri := range appResp.States {
 						if er.Key == ri.Key {
 							require.Equal(t, er.Key, ri.Key)
-							expected, _ := json.Marshal(er.Value)
-							require.Equal(t, string(expected), ri.Value.Data)
+							if er.Value != nil {
+								require.True(t, reflect.DeepEqual(er.Value.Data, ri.Value.Data))
+							}
 						}
 					}
 				}
