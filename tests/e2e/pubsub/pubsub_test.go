@@ -104,6 +104,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 
 			return nil, err
 		}
+		postResp.Body.Close()
 	}
 
 	return sentMessages, nil
