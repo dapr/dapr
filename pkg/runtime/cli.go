@@ -53,6 +53,7 @@ func FromFlags() (*DaprRuntime, error) {
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
+	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
 
