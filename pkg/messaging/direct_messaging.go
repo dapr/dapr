@@ -85,10 +85,15 @@ func NewDirectMessaging(
 
 // Invoke takes a message requests and invokes an app, either local or remote
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	if targetAppID == d.appID {
+	remoteApp, err := d.getRemoteApp(targetAppID)
+	if err != nil {
+		return nil, err
+	}
+
+	if remoteApp.id == d.appID {
 		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, targetAppID, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, remoteApp, d.invokeRemote, req)
 }
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
@@ -110,15 +115,10 @@ func (d *directMessaging) invokeWithRetry(
 	ctx context.Context,
 	numRetries int,
 	backoffInterval time.Duration,
-	targetID string,
+	app remoteApp,
 	fn func(ctx context.Context, appID, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		app, err := d.getRemoteApp(targetID)
-		if err != nil {
-			return nil, err
-		}
-
 		resp, err := fn(ctx, app.id, app.address, req)
 		if err == nil {
 			return resp, nil
@@ -135,7 +135,7 @@ func (d *directMessaging) invokeWithRetry(
 		}
 		return resp, err
 	}
-	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetID, numRetries)
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
