@@ -53,7 +53,9 @@ func FromFlags() (*DaprRuntime, error) {
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
+	// attaching only metrics-port option
+	metricsExporter.Options().AttachCmdFlag(flag.StringVar)
 
 	flag.Parse()
 
@@ -76,13 +78,12 @@ func FromFlags() (*DaprRuntime, error) {
 	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
 
 	// Initialize dapr metrics exporter
-	if metricsExporter.Options().MetricsEnabled {
-		if err := metricsExporter.Init(); err != nil {
-			log.Fatal(err)
-		}
-		if err := diagnostics.InitMetrics(*appID); err != nil {
-			log.Fatal(err)
-		}
+	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := diagnostics.InitMetrics(*appID); err != nil {
+		log.Fatal(err)
 	}
 
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)

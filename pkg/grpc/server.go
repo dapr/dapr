@@ -42,6 +42,7 @@ type server struct {
 	api                API
 	config             ServerConfig
 	tracingSpec        config.TracingSpec
+	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
 	listener           net.Listener
 	srv                *grpc_go.Server
@@ -59,11 +60,12 @@ var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
 var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
 
 // NewAPIServer returns a new user facing gRPC API server
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec) Server {
 	return &server{
 		api:         api,
 		config:      config,
 		tracingSpec: tracingSpec,
+		metricSpec:  metricSpec,
 		kind:        apiServer,
 		logger:      apiServerLogger,
 		authToken:   auth.GetAPIToken(),
@@ -71,11 +73,12 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) 
 }
 
 // NewInternalServer returns a new gRPC server for Dapr to Dapr communications
-func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
+func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, authenticator auth.Authenticator) Server {
 	return &server{
 		api:              api,
 		config:           config,
 		tracingSpec:      tracingSpec,
+		metricSpec:       metricSpec,
 		authenticator:    authenticator,
 		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
@@ -144,7 +147,7 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
+	if s.metricSpec.Enabled {
 		s.logger.Info("enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 	}
