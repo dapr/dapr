@@ -259,12 +259,11 @@ func executeTransaction(states []daprState) error {
 	var transactionalOperations []map[string]interface{}
 
 	for _, s := range states {
-		val, _ := json.Marshal(s.Value)
 		transactionalOperations = append(transactionalOperations, map[string]interface{}{
 			"operation": s.OperationType,
 			"request": map[string]interface{}{
 				"key":   s.Key,
-				"value": string(val),
+				"value": s.Value,
 			},
 		})
 	}
