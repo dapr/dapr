@@ -62,4 +62,20 @@ func TestOptions(t *testing.T) {
 
 		assert.Equal(t, defaultPort, o.MetricsPort())
 	})
+
+	t.Run("attaching single metrics related cmd flag", func(t *testing.T) {
+		o := defaultMetricOptions()
+
+		metricsPortAsserted := false
+		testStringVarFn := func(p *string, name string, value string, usage string) {
+			if name == "metrics-port" && value == defaultMetricsPort {
+				metricsPortAsserted = true
+			}
+		}
+
+		o.AttachCmdFlag(testStringVarFn)
+
+		// assert
+		assert.True(t, metricsPortAsserted)
+	})
 }
