@@ -13,9 +13,15 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	guuid "github.com/google/uuid"
+)
+
+var (
+	doOnce        sync.Once
+	defaultClient http.Client
 )
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
@@ -65,14 +71,18 @@ func GenerateRandomStringKeyValues(num int) []SimpleKeyValue {
 }
 
 func newHTTPClient() http.Client {
-	return http.Client{
-		Transport: &http.Transport{
-			// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
-			Dial: (&net.Dialer{
-				Timeout: 5 * time.Minute,
-			}).Dial,
-		},
-	}
+	doOnce.Do(func() {
+		defaultClient = http.Client{
+			Transport: &http.Transport{
+				// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
+				Dial: (&net.Dialer{
+					Timeout: 5 * time.Minute,
+				}).Dial,
+			},
+		}
+	})
+
+	return defaultClient
 }
 
 // HTTPGetNTimes calls the url n times and returns the first success or last error.
