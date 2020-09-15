@@ -85,14 +85,15 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, targetAppID, d.invokeRemote, req)
 }
 
-func (d *directMessaging) requestNamespace(targetAppID string) (string, error) {
+// requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
+func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, string, error) {
 	items := strings.Split(targetAppID, ".")
 	if len(items) == 1 {
-		return d.namespace, nil
+		return targetAppID, d.namespace, nil
 	} else if len(items) == 2 {
-		return items[1], nil
+		return items[0], items[1], nil
 	} else {
-		return "", fmt.Errorf("invalid app id %s", targetAppID)
+		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
 	}
 }
 
@@ -206,11 +207,11 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 }
 
 func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {
-	namespace, err := d.requestNamespace(appID)
+	id, namespace, err := d.requestAppIDAndNamespace(appID)
 	if err != nil {
 		return "", err
 	}
 
-	request := nr.ResolveRequest{ID: appID, Namespace: namespace, Port: d.grpcPort}
+	request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
 	return d.resolver.ResolveID(request)
 }
