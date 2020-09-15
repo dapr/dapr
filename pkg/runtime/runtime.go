@@ -618,20 +618,20 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
-	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, pipeline)
+	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
 	server.StartNonBlocking()
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
-	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.authenticator)
+	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
 }
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec)
 	err := server.StartNonBlocking()
 	return err
 }
