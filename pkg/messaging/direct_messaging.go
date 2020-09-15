@@ -90,7 +90,7 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 		return nil, err
 	}
 
-	if remoteApp.id == d.appID {
+	if remoteApp.id == d.appID && remoteApp.namespace == d.namespace {
 		return d.invokeLocal(ctx, req)
 	}
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, remoteApp, d.invokeRemote, req)
