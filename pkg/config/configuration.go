@@ -42,7 +42,7 @@ type Configuration struct {
 // AccessControlList is an in-memory access control list config for fast lookup
 type AccessControlList struct {
 	DefaultAction string
-	Policy        *AppPolicySpec
+	PolicySpec    map[string]AppPolicySpec
 }
 
 type ConfigurationSpec struct {
@@ -252,21 +252,14 @@ func containsKey(s []string, key string) bool {
 // TranslateAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
 func TranslateAccessControlSpec(accessControlSpec AccessControlSpec, id string) AccessControlList {
 	var accessControlList AccessControlList
+	accessControlList.PolicySpec = make(map[string]AppPolicySpec)
+	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
+	var log = logger.NewLogger("dapr.configuration")
+	log.Infof("@@@@@ Translating policy spec....")
 
-	switch strings.ToLower(accessControlSpec.DefaultAction) {
-	case "allow":
-		accessControlList.DefaultAction = AccessControlActionAllow
-	case "deny":
-		accessControlList.DefaultAction = AccessControlActionDeny
-	default:
-		accessControlList.DefaultAction = AccessControlActionDeny
-	}
-
-	for _, appPolicy := range accessControlSpec.AppPolicies {
-		if appPolicy.AppName == id {
-			accessControlList.Policy = &appPolicy
-			break
-		}
+	for _, appPolicySpec := range accessControlSpec.AppPolicies {
+		log.Infof("@@@@@ name: %s spec: %s", appPolicySpec.AppName, appPolicySpec)
+		accessControlList.PolicySpec[appPolicySpec.AppName] = appPolicySpec
 	}
 
 	return accessControlList
@@ -314,14 +307,25 @@ func TryGetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
-func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, operation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) bool {
+func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, operation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) bool {
 	var log = logger.NewLogger("dapr.configuration")
-	log.Infof("Checking access control policy for target method: %v, verb: %v", operation, httpVerb)
+	log.Infof("@@@@ Dumping all policy specs....")
+	for key, spec := range accessControlList.PolicySpec {
+		log.Infof("key: %s, value: %s", key, spec)
+	}
+	log.Infof("Checking access control policy for invocation by %v, operation: %v, httpVerb: %v", srcAppID, operation, httpVerb)
 	action := accessControlList.DefaultAction
-	policy := accessControlList.Policy
-	if policy == nil {
+
+	if accessControlList == nil {
 		// No access control list is provided. Do nothing
 		return true
+	}
+
+	policy, found := accessControlList.PolicySpec[srcAppID]
+	log.Infof("@@@@ Using policy spec: %v", policy)
+
+	if !found {
+		return isActionAllowed(action)
 	}
 
 	action = policy.DefaultAction
@@ -330,6 +334,7 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, operation string, htt
 		log.Errorf("Unable to verify spiffe id of the client. Will apply default access control policy")
 	} else {
 		if policy.TrustDomain != "*" && policy.TrustDomain != id.trustDomain {
+			log.Infof("Trust Domain mismatch does not allow request")
 			return false
 		}
 
@@ -339,11 +344,12 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, operation string, htt
 		// Check the operation specific policy
 		for _, policyOperation := range policy.AppOperationActions {
 			if strings.HasPrefix(policyOperation.Operation, inputOperation) {
+				log.Infof("Found operation: %v. checking http verbs", inputOperation)
 				if httpVerb != common.HTTPExtension_NONE {
 					for _, policyVerb := range policyOperation.HTTPVerb {
 						if policyVerb == httpVerb.String() || policyVerb == "*" {
 							action = policyOperation.Action
-							log.Infof("Applying action: %v for operation: %v, verb: %v", action, inputOperation, policyVerb)
+							log.Infof("Applying action: %v for srcAppId: %s operation: %v, verb: %v", srcAppID, action, inputOperation, policyVerb)
 							break
 						}
 					}
@@ -356,9 +362,12 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, operation string, htt
 	}
 
 	log.Infof("Applying access control policy action: %v", action)
-	if action == AccessControlActionAllow {
+	return isActionAllowed(action)
+}
+
+func isActionAllowed(action string) bool {
+	if strings.ToLower(action) == AccessControlActionAllow {
 		return true
 	}
-
 	return false
 }

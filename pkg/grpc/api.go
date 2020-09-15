@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -114,16 +115,19 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
-	invokeMethod := req.Message().Method
+	targetOperation := req.Message().Method
 	var httpVerb common.HTTPExtension_Verb
+
+	srcID := req.Metadata()[v1.SourceIDHeader].Values[0]
+
 	httpExt := req.Message().GetHttpExtension()
 	if httpExt != nil {
 		httpVerb = httpExt.GetVerb()
 	}
-	callAllowed := a.applyAccessControlPolicies(ctx, invokeMethod, httpVerb)
+	callAllowed := a.applyAccessControlPolicies(ctx, srcID, targetOperation, httpVerb)
 
 	if !callAllowed {
-		return nil, fmt.Errorf("Access Control Policy has denied access to target app: %s, method: %v: %s", a.id, invokeMethod)
+		return nil, fmt.Errorf("Access Control Policy has denied access to target app: %s, method: %v: %s", a.id, targetOperation)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -134,7 +138,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, targetAppMethod string, httpVerb common.HTTPExtension_Verb) bool {
+func (a *api) applyAccessControlPolicies(ctx context.Context, srcApp string, targetOperation string, httpVerb common.HTTPExtension_Verb) bool {
 	// Apply access control list filter
 	spiffeID, err := config.TryGetAndParseSpiffeID(ctx)
 
@@ -143,7 +147,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, targetAppMethod st
 		log.Errorf("Error while reading client cert: %v.", err.Error())
 	}
 
-	return config.IsOperationAllowedByAccessControlPolicy(spiffeID, targetAppMethod, httpVerb, a.accessControlList)
+	return config.IsOperationAllowedByAccessControlPolicy(spiffeID, srcApp, targetOperation, httpVerb, a.accessControlList)
 }
 
 // CallActor invokes a virtual actor
