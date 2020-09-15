@@ -100,6 +100,7 @@ type TopicRoute struct {
 type DaprRuntime struct {
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
+	accessControlList      *config.AccessControlList
 	components             []components_v1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
@@ -144,10 +145,11 @@ type componentPreprocessRes struct {
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
-func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *DaprRuntime {
+func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList) *DaprRuntime {
 	return &DaprRuntime{
 		runtimeConfig:          runtimeConfig,
 		globalConfig:           globalConfig,
+		accessControlList:      accessControlList,
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
 		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
@@ -651,7 +653,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList)
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {

@@ -156,6 +156,8 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
+	var accessControlList global_config.AccessControlList
+
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
 		case modes.KubernetesMode:
@@ -169,6 +171,8 @@ func FromFlags() (*DaprRuntime, error) {
 		case modes.StandaloneMode:
 			globalConfig, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
+
+		accessControlList = global_config.TranslateAccessControlSpec(globalConfig.Spec.AccessControlSpec, runtimeConfig.ID)
 	}
 
 	if configErr != nil {
@@ -178,5 +182,6 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Info("loading default configuration")
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig), nil
+
+	return NewDaprRuntime(runtimeConfig, globalConfig, &accessControlList), nil
 }

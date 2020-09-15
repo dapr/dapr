@@ -20,8 +20,10 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/proto/common/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -34,6 +36,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+var log = logger.NewLogger("dapr.api-grpc")
 
 const (
 	daprSeparator        = "||"
@@ -69,6 +73,7 @@ type api struct {
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
+	accessControlList     *config.AccessControlList
 }
 
 // NewAPI returns a new gRPC API
@@ -81,7 +86,8 @@ func NewAPI(
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec) API {
+	tracingSpec config.TracingSpec,
+	accessControlList *config.AccessControlList) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -93,6 +99,7 @@ func NewAPI(
 		secretsConfiguration:  secretsConfiguration,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		tracingSpec:           tracingSpec,
+		accessControlList:     accessControlList,
 	}
 }
 
@@ -107,12 +114,36 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
+	invokeMethod := req.Message().Method
+	var httpVerb common.HTTPExtension_Verb
+	httpExt := req.Message().GetHttpExtension()
+	if httpExt != nil {
+		httpVerb = httpExt.GetVerb()
+	}
+	callAllowed := a.applyAccessControlPolicies(ctx, invokeMethod, httpVerb)
+
+	if !callAllowed {
+		return nil, fmt.Errorf("Access Control Policy has denied access to target app: %s, method: %v: %s", a.id, invokeMethod)
+	}
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 	return resp.Proto(), err
+}
+
+func (a *api) applyAccessControlPolicies(ctx context.Context, targetAppMethod string, httpVerb common.HTTPExtension_Verb) bool {
+	// Apply access control list filter
+	spiffeID, err := config.TryGetAndParseSpiffeID(ctx)
+
+	if err != nil {
+		// Apply the default action
+		log.Errorf("Error while reading client cert: %v.", err.Error())
+	}
+
+	return config.IsOperationAllowedByAccessControlPolicy(spiffeID, targetAppMethod, httpVerb, a.accessControlList)
 }
 
 // CallActor invokes a virtual actor

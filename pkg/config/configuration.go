@@ -14,9 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/proto/common/v1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/peer"
 	yaml "gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -26,10 +29,20 @@ const (
 	operatorMaxRetries  = 100
 	AllowAccess         = "allow"
 	DenyAccess          = "deny"
+	// AccessControlActionAllow defines the allow action for an operation
+	AccessControlActionAllow = "allow"
+	// AccessControlActionDeny defines the deny action for an operation
+	AccessControlActionDeny = "deny"
 )
 
 type Configuration struct {
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
+}
+
+// AccessControlList is an in-memory access control list config for fast lookup
+type AccessControlList struct {
+	DefaultAction string
+	Policy        *AppPolicySpec
 }
 
 type ConfigurationSpec struct {
@@ -38,6 +51,7 @@ type ConfigurationSpec struct {
 	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
 	MetricSpec       MetricSpec   `json:"metric,omitempty" yaml:"metric,omitempty"`
 	Secrets          SecretsSpec  `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -81,10 +95,38 @@ type MetricSpec struct {
 	Enabled bool `json:"enabled" yaml:"enabled"`
 }
 
+// AppPolicySpec defines the policy data structure for each app
+type AppPolicySpec struct {
+	AppName             string         `json:"app" yaml:"app"`
+	DefaultAction       string         `json:"defaultAction" yaml:"defaultAction"`
+	TrustDomain         string         `json:"trustDomain" yaml:"trustDomain"`
+	AppOperationActions []AppOperation `json:"operations" yaml:"operations"`
+}
+
+// AppOperation defines the data structure for each app operation
+type AppOperation struct {
+	Operation string   `json:"name" yaml:"name"`
+	HTTPVerb  []string `json:"httpVerb" yaml:"httpVerb"`
+	Action    string   `json:"action" yaml:"action"`
+}
+
+// AccessControlSpec is the spec object in ConfigurationSpec
+type AccessControlSpec struct {
+	DefaultAction string          `json:"defaultAction" yaml:"defaultAction"`
+	AppPolicies   []AppPolicySpec `json:"policies" yaml:"policies"`
+}
+
 type MTLSSpec struct {
 	Enabled          bool   `json:"enabled"`
 	WorkloadCertTTL  string `json:"workloadCertTTL"`
 	AllowedClockSkew string `json:"allowedClockSkew"`
+}
+
+// SpiffeID represents the separated fields in a spiffe id
+type SpiffeID struct {
+	trustDomain string
+	namespace   string
+	appID       string
 }
 
 // LoadDefaultConfiguration returns the default config
@@ -205,4 +247,118 @@ func containsKey(s []string, key string) bool {
 	index := sort.SearchStrings(s, key)
 
 	return index < len(s) && s[index] == key
+}
+
+// TranslateAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
+func TranslateAccessControlSpec(accessControlSpec AccessControlSpec, id string) AccessControlList {
+	var accessControlList AccessControlList
+
+	switch strings.ToLower(accessControlSpec.DefaultAction) {
+	case "allow":
+		accessControlList.DefaultAction = AccessControlActionAllow
+	case "deny":
+		accessControlList.DefaultAction = AccessControlActionDeny
+	default:
+		accessControlList.DefaultAction = AccessControlActionDeny
+	}
+
+	for _, appPolicy := range accessControlSpec.AppPolicies {
+		if appPolicy.AppName == id {
+			accessControlList.Policy = &appPolicy
+			break
+		}
+	}
+
+	return accessControlList
+}
+
+// TryGetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
+func TryGetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
+	peer, ok := peer.FromContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("could not retrieve spiffe id from the grpc context")
+	}
+
+	fmt.Println(peer)
+
+	// if peer.AuthInfo == nil {
+	// 	return nil, fmt.Errorf("could not retrieve auth info from grpc context tls info")
+	// }
+
+	// tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
+
+	// if tlsInfo.State.HandshakeComplete == false {
+	// 	return nil, fmt.Errorf("tls handshake is not complete")
+	// }
+
+	// certChain := tlsInfo.State.VerifiedChains
+	// t := reflect.TypeOf(certChain)
+	// fmt.Println(t)
+	// if certChain == nil || len(certChain[0]) == 0 {
+	// 	return nil, fmt.Errorf("could not retrieve read client cert info")
+	// }
+
+	// TODO: Remove hardcoding for testing
+	// spiffeID := string(certChain[0][0].ExtraExtensions[0].Value)
+	spiffeID := "spiffe://a/ns/b/pythonapp"
+	fmt.Printf("spiffe id :- %v\n", spiffeID)
+
+	// The SPIFFE Id will be of the format: spiffe://<trust-domain/ns/<namespace>/<app-id>
+	parts := strings.Split(spiffeID, "/")
+	var id SpiffeID
+	id.trustDomain = parts[2]
+	id.namespace = parts[4]
+	id.appID = parts[5]
+
+	return &id, nil
+}
+
+// IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
+func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, operation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) bool {
+	var log = logger.NewLogger("dapr.configuration")
+	log.Infof("Checking access control policy for target method: %v, verb: %v", operation, httpVerb)
+	action := accessControlList.DefaultAction
+	policy := accessControlList.Policy
+	if policy == nil {
+		// No access control list is provided. Do nothing
+		return true
+	}
+
+	action = policy.DefaultAction
+
+	if id == nil {
+		log.Errorf("Unable to verify spiffe id of the client. Will apply default access control policy")
+	} else {
+		if policy.TrustDomain != "*" && policy.TrustDomain != id.trustDomain {
+			return false
+		}
+
+		// TODO: Check namespace if needed
+
+		inputOperation := "/" + operation
+		// Check the operation specific policy
+		for _, policyOperation := range policy.AppOperationActions {
+			if strings.HasPrefix(policyOperation.Operation, inputOperation) {
+				if httpVerb != common.HTTPExtension_NONE {
+					for _, policyVerb := range policyOperation.HTTPVerb {
+						if policyVerb == httpVerb.String() || policyVerb == "*" {
+							action = policyOperation.Action
+							log.Infof("Applying action: %v for operation: %v, verb: %v", action, inputOperation, policyVerb)
+							break
+						}
+					}
+				} else {
+					log.Infof("Applying action: %v for operation: %v", action, inputOperation)
+					action = policyOperation.Action
+				}
+			}
+		}
+	}
+
+	log.Infof("Applying access control policy action: %v", action)
+	if action == AccessControlActionAllow {
+		return true
+	}
+
+	return false
 }
