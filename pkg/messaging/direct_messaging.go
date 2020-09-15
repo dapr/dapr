@@ -53,6 +53,12 @@ type directMessaging struct {
 	hostName            string
 }
 
+type remoteApp struct {
+	id        string
+	namespace string
+	address   string
+}
+
 // NewDirectMessaging returns a new direct messaging api
 func NewDirectMessaging(
 	appID, namespace string,
@@ -79,10 +85,15 @@ func NewDirectMessaging(
 
 // Invoke takes a message requests and invokes an app, either local or remote
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	if targetAppID == d.appID {
+	app, err := d.getRemoteApp(targetAppID)
+	if err != nil {
+		return nil, err
+	}
+
+	if app.id == d.appID && app.namespace == d.namespace {
 		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, targetAppID, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
 }
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
@@ -104,11 +115,11 @@ func (d *directMessaging) invokeWithRetry(
 	ctx context.Context,
 	numRetries int,
 	backoffInterval time.Duration,
-	targetID string,
-	fn func(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
+	app remoteApp,
+	fn func(ctx context.Context, appID, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, targetID, req)
+		resp, err := fn(ctx, app.id, app.address, req)
 		if err == nil {
 			return resp, nil
 		}
@@ -116,11 +127,7 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			address, adderr := d.getAddressFromMessageRequest(targetID)
-			if adderr != nil {
-				return nil, adderr
-			}
-			_, connerr := d.connectionCreatorFn(address, targetID, false, true)
+			_, connerr := d.connectionCreatorFn(app.address, app.id, false, true)
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -128,7 +135,7 @@ func (d *directMessaging) invokeWithRetry(
 		}
 		return resp, err
 	}
-	return nil, fmt.Errorf("failed to invoke target %s after %v retries", targetID, numRetries)
+	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
@@ -139,13 +146,8 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 	return d.appChannel.InvokeMethod(ctx, req)
 }
 
-func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	address, err := d.getAddressFromMessageRequest(targetID)
-	if err != nil {
-		return nil, err
-	}
-
-	conn, err := d.connectionCreatorFn(address, targetID, false, false)
+func (d *directMessaging) invokeRemote(ctx context.Context, appID, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	conn, err := d.connectionCreatorFn(appAddress, appID, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +162,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, targetID string, req
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	d.addForwardedHeadersToMetadata(req)
-	d.addDestinationAppIDHeaderToMetadata(targetID, req)
+	d.addDestinationAppIDHeaderToMetadata(appID, req)
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
@@ -206,12 +208,21 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 	}
 }
 
-func (d *directMessaging) getAddressFromMessageRequest(appID string) (string, error) {
+func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 	id, namespace, err := d.requestAppIDAndNamespace(appID)
 	if err != nil {
-		return "", err
+		return remoteApp{}, err
 	}
 
 	request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
-	return d.resolver.ResolveID(request)
+	address, err := d.resolver.ResolveID(request)
+	if err != nil {
+		return remoteApp{}, err
+	}
+
+	return remoteApp{
+		namespace: namespace,
+		id:        id,
+		address:   address,
+	}, nil
 }

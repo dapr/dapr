@@ -55,3 +55,13 @@ func (o *Options) AttachCmdFlags(
 		defaultMetricsEnabled,
 		"Enable prometheus metric")
 }
+
+// AttachCmdFlag attaches single metrics option to command flags
+func (o *Options) AttachCmdFlag(
+	stringVar func(p *string, name string, value string, usage string)) {
+	stringVar(
+		&o.metricsPort,
+		"metrics-port",
+		defaultMetricsPort,
+		"The port for the metrics server")
+}

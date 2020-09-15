@@ -31,6 +31,7 @@ type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
+	MetricSpec       MetricSpec   `json:"metric,omitempty" yaml:"metric,omitempty"`
 }
 
 type PipelineSpec struct {
@@ -57,18 +58,26 @@ type TracingSpec struct {
 	Stdout       bool   `json:"stdout" yaml:"stdout"`
 }
 
+// MetricSpec configuration for metrics
+type MetricSpec struct {
+	Enabled bool `json:"enabled" yaml:"enabled"`
+}
+
 type MTLSSpec struct {
 	Enabled          bool   `json:"enabled"`
 	WorkloadCertTTL  string `json:"workloadCertTTL"`
 	AllowedClockSkew string `json:"allowedClockSkew"`
 }
 
-// LoadDefaultConfiguration returns the default config with tracing disabled
+// LoadDefaultConfiguration returns the default config
 func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
 				SamplingRate: "",
+			},
+			MetricSpec: MetricSpec{
+				Enabled: true,
 			},
 		},
 	}
