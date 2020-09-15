@@ -85,15 +85,15 @@ func NewDirectMessaging(
 
 // Invoke takes a message requests and invokes an app, either local or remote
 func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	remoteApp, err := d.getRemoteApp(targetAppID)
+	app, err := d.getRemoteApp(targetAppID)
 	if err != nil {
 		return nil, err
 	}
 
-	if remoteApp.id == d.appID && remoteApp.namespace == d.namespace {
+	if app.id == d.appID && app.namespace == d.namespace {
 		return d.invokeLocal(ctx, req)
 	}
-	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, remoteApp, d.invokeRemote, req)
+	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
 }
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
