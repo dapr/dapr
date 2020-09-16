@@ -94,7 +94,7 @@ jobs:
             if (!testCluster) {
               message = "All test clusters are occupied by the other tests. Please try to test later.";
             } else {
-              message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please wait until test is done.`;
+              message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please check the [build status](https://github.com/dapr/dapr/runs/${context.run_id}).`;
             }
             
             await github.issues.createComment({
