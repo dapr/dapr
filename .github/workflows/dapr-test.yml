@@ -94,7 +94,7 @@ jobs:
             if (!testCluster) {
               message = "All test clusters are occupied by the other tests. Please try to test later.";
             } else {
-              const checkLink = `https://github.com/${process.env.GITHUB_REPOSITORY}/runs/${process.env.GITHUB_RUN_ID}`;
+              const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/runs/${process.env.GITHUB_RUN_ID}`;
               message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please check the [build status](${checkLink}).`;
             }
             
@@ -161,7 +161,7 @@ jobs:
 
             var message = "";
             
-            const checkLink = `https://github.com/${process.env.GITHUB_REPOSITORY}/runs/${process.env.GITHUB_RUN_ID}`;
+            const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/runs/${process.env.GITHUB_RUN_ID}`;
             
             if (jobStatus == "cancelled") {
               message = `End-to-end tests cancelled on ${targetOs}. Please check the [build logs](${checkLink})`;
