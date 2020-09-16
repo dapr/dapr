@@ -107,19 +107,11 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: Build dapr and its docker image
+      - name: Build dapr and its docker image and push them to test registry
         if: env.TEST_CLUSTER != ''
         run: |
           make build
-          make docker-build
-      - name: Build e2e test apps
-        if: env.TEST_CLUSTER != ''
-        run: make build-e2e-app-all
-      - name: Push docker images to test dockerhub
-        if: env.TEST_CLUSTER != ''
-        run: |
           make docker-push
-          make push-e2e-app-all
       - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
         if: env.TEST_CLUSTER != ''
         run: |
@@ -141,6 +133,13 @@ jobs:
           netsh interface tcp set global initialRto=3000
           netsh interface tcp set global maxSynRetransmissions=8
           netsh interface tcp show global
+      - name: Build e2e test apps
+        if: env.TEST_CLUSTER != ''
+        run: make build-e2e-app-all
+      - name: Push e2e app images to test dockerhub
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make push-e2e-app-all
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
