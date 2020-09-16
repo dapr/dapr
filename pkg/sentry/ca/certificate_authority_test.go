@@ -6,15 +6,18 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -124,7 +127,7 @@ func TestSignCSR(t *testing.T) {
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
 
-		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*24, false)
+		resp, err := certAuth.SignCSR(certPem, "test-subject", nil, time.Hour*24, false)
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, time.Now().UTC().Add(time.Hour*24+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
@@ -142,7 +145,7 @@ func TestSignCSR(t *testing.T) {
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
 
-		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*-1, false)
+		resp, err := certAuth.SignCSR(certPem, "test-subject", nil, time.Hour*-1, false)
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, time.Now().UTC().Add(workloadCertTTL+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
@@ -157,7 +160,55 @@ func TestSignCSR(t *testing.T) {
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
 
-		_, err := certAuth.SignCSR(certPem, "", time.Hour*24, false)
+		_, err := certAuth.SignCSR(certPem, "", nil, time.Hour*24, false)
 		assert.NotNil(t, err)
+	})
+
+	t.Run("valid identity", func(t *testing.T) {
+		writeTestCredentialsToDisk()
+		defer cleanupCredentials()
+
+		csr := getTestCSR("test.a.com")
+		pk, _ := getECDSAPrivateKey()
+		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+
+		certAuth := getTestCertAuth()
+		certAuth.LoadOrStoreTrustBundle()
+
+		bundle := identity.NewBundle("app", "default", "public")
+		resp, err := certAuth.SignCSR(certPem, "test-subject", bundle, time.Hour*24, false)
+		assert.Nil(t, err)
+		assert.NotNil(t, resp)
+
+		oidSubjectAlternativeName := asn1.ObjectIdentifier{2, 5, 29, 17}
+
+		extFound := false
+		for _, ext := range resp.Certificate.Extensions {
+			if ext.Id.Equal(oidSubjectAlternativeName) {
+				var sequence asn1.RawValue
+				val, err := asn1.Unmarshal(ext.Value, &sequence)
+				assert.NoError(t, err)
+				assert.True(t, true, len(val) != 0)
+
+				for bytes := sequence.Bytes; len(bytes) > 0; {
+					var rawValue asn1.RawValue
+					var err error
+
+					bytes, err = asn1.Unmarshal(bytes, &rawValue)
+					assert.NoError(t, err)
+
+					id := string(rawValue.Bytes)
+					if strings.HasPrefix(id, "spiffe://") {
+						assert.Equal(t, "spiffe://public/ns/default/app", id)
+						extFound = true
+					}
+				}
+			}
+		}
+
+		if !extFound {
+			t.Error("SAN extension not found in certificate")
+		}
 	})
 }
