@@ -125,7 +125,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	mtlsEnabled := mTLSEnabled(daprClient)
 	if mtlsEnabled {
 		trustAnchors, certChain, certKey = getTrustAnchorsAndCertChain(kubeClient, namespace)
-		identity = fmt.Sprintf("%s:%s", pod.Spec.ServiceAccountName, req.Namespace)
+		identity = fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName)
 	}
 
 	tokenMount := getTokenVolumeMount(pod)

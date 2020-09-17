@@ -33,7 +33,7 @@ spec:
                 - key: kubernetes.io/os
                   operator: In
                   values:
-                  - {{ .Values.global.daprControlPlaneOs }}
+                  - linux
 {{- if eq .Values.global.ha.enabled true }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

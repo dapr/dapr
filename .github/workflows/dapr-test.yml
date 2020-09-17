@@ -94,7 +94,8 @@ jobs:
             if (!testCluster) {
               message = "All test clusters are occupied by the other tests. Please try to test later.";
             } else {
-              message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please wait until test is done.`;
+              const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+              message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please check the [build status](${checkLink}).`;
             }
             
             await github.issues.createComment({
@@ -107,19 +108,11 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: Build dapr and its docker image
+      - name: Build dapr and its docker image and push them to test registry
         if: env.TEST_CLUSTER != ''
         run: |
           make build
-          make docker-build
-      - name: Build e2e test apps
-        if: env.TEST_CLUSTER != ''
-        run: make build-e2e-app-all
-      - name: Push docker images to test dockerhub
-        if: env.TEST_CLUSTER != ''
-        run: |
           make docker-push
-          make push-e2e-app-all
       - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
         if: env.TEST_CLUSTER != ''
         run: |
@@ -141,6 +134,13 @@ jobs:
           netsh interface tcp set global initialRto=3000
           netsh interface tcp set global maxSynRetransmissions=8
           netsh interface tcp show global
+      - name: Build e2e test apps
+        if: env.TEST_CLUSTER != ''
+        run: make build-e2e-app-all
+      - name: Push e2e app images to test dockerhub
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make push-e2e-app-all
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
@@ -161,12 +161,14 @@ jobs:
 
             var message = "";
             
+            const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            
             if (jobStatus == "cancelled") {
-              message = `End-to-end tests cancelled on ${targetOs}.`;
+              message = `End-to-end tests cancelled on ${targetOs}. Please check the [build logs](${checkLink})`;
             } else if (jobStatus == "success") {
-              message = `Congrats! All end-to-end tests have passed on ${targetOs}. Thanks for your contribution!`;
+              message = `Congrats! All [end-to-end tests](${checkLink}) have passed on ${targetOs}. Thanks for your contribution!`;
             } else if (jobStatus == "failure") {
-              message = `End-to-end tests failed on ${targetOs}.`;
+              message = `End-to-end tests failed on ${targetOs}. Please check the [build logs](${checkLink})`;
             }
             
             if (message) {
