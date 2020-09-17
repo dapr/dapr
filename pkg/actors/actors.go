@@ -93,7 +93,6 @@ type ActiveActorsCount struct {
 }
 
 const (
-	idHeader               = "id"
 	lockOperation          = "lock"
 	unlockOperation        = "unlock"
 	updateOperation        = "update"
