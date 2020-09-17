@@ -1,10 +1,6 @@
 FROM golang:latest
 ARG TARGETPLATFORM
 ARG PKG_FILES
-ADD . /dist
-RUN if [ $TARGETPLATFORM = linux/amd64 ]; then mkdir -p /dist/linux/amd64 && mv /dist/linux_amd64/debug /dist/linux/amd64/; fi
-RUN if [ $TARGETPLATFORM = linux/arm/v7 ]; then mkdir -p /dist/linux/arm/v7 && mv /dist/linux_arm/debug /dist/linux/arm/v7/; fi
-RUN cp /dist/$TARGETPLATFORM/debug/$PKG_FILES /
-RUN rm -rf /dist
-
 WORKDIR /
+COPY /$PKG_FILES /
+
