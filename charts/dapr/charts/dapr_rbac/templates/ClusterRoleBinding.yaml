@@ -11,6 +11,19 @@ roleRef:
   name: dapr-operator-admin
   apiGroup: rbac.authorization.k8s.io
 ---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: role-tokenreview-binding
+subjects:
+- kind: ServiceAccount
+  name: dapr-operator
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -21,8 +34,11 @@ rules:
   resources: ["serviceaccounts", "deployments", "services", "configmaps", "components", "configurations"]
   verbs: ["get"]
 - apiGroups: ["", "dapr.io"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions"]
+  verbs: ["list"]
+- apiGroups: ["", "dapr.io"]
   resources: ["deployments", "services", "components", "configurations"]
-  verbs: ["list", "watch"]
+  verbs: ["watch"]
 - apiGroups: [""]
   resources: ["services", "secrets"]
   verbs: ["update"]
@@ -30,7 +46,7 @@ rules:
   resources: ["services"]
   verbs: ["delete"]
 - apiGroups: [""]
-  resources: ["deployments", "services"]
+  resources: ["deployments", "services", "configmaps"]
   verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
