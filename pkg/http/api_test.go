@@ -1292,7 +1292,7 @@ func (c fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 
 func TestV1SecretEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	fakeStore := fakeSecretStore{}
+	fakeStore := daprt.FakeSecretStore{}
 	fakeStores := map[string]secretstores.SecretStore{
 		"store1": fakeStore,
 		"store2": fakeStore,
@@ -1391,22 +1391,6 @@ func TestV1SecretEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
 	})
-}
-
-type fakeSecretStore struct {
-}
-
-func (c fakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
-	if req.Name == "good-key" {
-		return secretstores.GetSecretResponse{
-			Data: map[string]string{"good-key": "life is good"},
-		}, nil
-	}
-	return secretstores.GetSecretResponse{Data: nil}, nil
-}
-
-func (c fakeSecretStore) Init(metadata secretstores.Metadata) error {
-	return nil
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {

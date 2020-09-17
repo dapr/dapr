@@ -15,6 +15,7 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
@@ -621,6 +622,118 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 		assert.Equal(t, "invoke/service", errInfo.GetResourceName())
 		assert.Equal(t, "Dapr", errInfo.GetOwner())
 	})
+}
+
+func TestGetSecret(t *testing.T) {
+	fakeStore := daprt.FakeSecretStore{}
+	fakeStores := map[string]secretstores.SecretStore{
+		"store1": fakeStore,
+		"store2": fakeStore,
+		"store3": fakeStore,
+	}
+	defaultAccessSecretStores := map[string]string{
+		"store1": "allow",
+		"store2": "deny",
+		"store3": "allow",
+	}
+	denyList := map[string]map[string]struct{}{
+		"store1": {
+			"not-allowed": {},
+		},
+	}
+	allowList := map[string]map[string]struct{}{
+		"store2": {
+			"good-key": {},
+		},
+		"store3": {
+			"good-key": {},
+		},
+	}
+	expectedResponse := "life is good"
+	storeName := "store1"
+	deniedStoreName := "store2"
+	restrictedStore := "store3"
+
+	testSteps := []struct {
+		testName         string
+		storeName        string
+		key              string
+		errorExcepted    bool
+		expectedResponse string
+	}{
+		{
+			testName:         "Good Key default access",
+			storeName:        storeName,
+			key:              "good-key",
+			errorExcepted:    false,
+			expectedResponse: expectedResponse,
+		},
+		{
+			testName:         "Good Key restricted store access",
+			storeName:        restrictedStore,
+			key:              "good-key",
+			errorExcepted:    false,
+			expectedResponse: expectedResponse,
+		},
+		{
+			testName:         "Random Key restricted store access",
+			storeName:        restrictedStore,
+			key:              "random",
+			errorExcepted:    true,
+			expectedResponse: "",
+		},
+		{
+			testName:         "Random Key accessing a store denied access by default",
+			storeName:        deniedStoreName,
+			key:              "random",
+			errorExcepted:    true,
+			expectedResponse: "",
+		},
+		{
+			testName:         "Random Key accessing a store denied access by default",
+			storeName:        deniedStoreName,
+			key:              "random",
+			errorExcepted:    true,
+			expectedResponse: "",
+		},
+	}
+	// Setup Dapr API server
+	fakeAPI := &api{
+		id:                  "fakeAPI",
+		secretStores:        fakeStores,
+		defaultSecretAccess: defaultAccessSecretStores,
+		deniedSecrets:       denyList,
+		allowedSecrets:      allowList,
+	}
+	// Run test server
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	// Create gRPC test client
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	// act
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	for _, tt := range testSteps {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetSecretRequest{
+				StoreName: tt.storeName,
+				Key:       tt.key,
+			}
+			resp, err := client.GetSecret(context.Background(), req)
+
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
+			} else {
+				assert.Error(t, err, "Expected error")
+			}
+
+		})
+	}
 }
 
 func TestSaveState(t *testing.T) {
