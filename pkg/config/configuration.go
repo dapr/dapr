@@ -326,12 +326,12 @@ func getSpiffeID(ctx context.Context) (string, error) {
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
-func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, operation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) bool {
+func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, operation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) (bool, string) {
 	var log = logger.NewLogger("dapr.configuration")
 
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
-		return true
+		return true, ""
 	}
 
 	log.Infof("@@@@ Dumping all policy specs....")
@@ -342,26 +342,24 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, oper
 	action := accessControlList.DefaultAction
 
 	if srcAppID == "" {
-		log.Errorf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
-		return isActionAllowed(action)
+		return isActionAllowed(action), fmt.Sprintf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
 	}
 
 	policy, found := accessControlList.PolicySpec[srcAppID]
 	log.Infof("@@@@ Using policy spec: %v", policy)
 
 	if !found {
-		log.Errorf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
-		return isActionAllowed(action)
+		return isActionAllowed(action), fmt.Sprintf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
 	}
 
+	var logMessage string
 	if id == nil {
-		log.Errorf("Unable to verify spiffe id of the client. Will apply default global action")
+		logMessage = fmt.Sprintf("Unable to verify spiffe id of the client. Will apply default global action")
 	} else {
 		action = policy.DefaultAction
 
 		if policy.TrustDomain != "*" && policy.TrustDomain != id.trustDomain {
-			log.Infof("Trust Domain mismatch. Apply global default action")
-			return isActionAllowed(action)
+			return isActionAllowed(action), fmt.Sprintf("Trust Domain mismatch. Apply global default action")
 		}
 
 		// TODO: Check namespace if needed
@@ -375,20 +373,22 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, oper
 					for _, policyVerb := range policyOperation.HTTPVerb {
 						if policyVerb == httpVerb.String() || policyVerb == "*" {
 							action = policyOperation.Action
-							log.Infof("Applying action: %v for srcAppId: %s operation: %v, verb: %v", srcAppID, action, inputOperation, policyVerb)
+							logMessage = fmt.Sprintf("Applying action: %v for srcAppId: %s operation: %v, verb: %v", srcAppID, action, inputOperation, policyVerb)
 							break
 						}
 					}
 				} else {
-					log.Infof("Applying action: %v for operation: %v", action, inputOperation)
+					logMessage = fmt.Sprintf("Http Verb not specified. Applying action: %v for operation: %v", action, inputOperation)
 					action = policyOperation.Action
 				}
 			}
 		}
 	}
 
-	log.Infof("Applying access control policy action: %v", action)
-	return isActionAllowed(action)
+	if logMessage == "" {
+		log.Infof("Applying access control policy action: %v", action)
+	}
+	return isActionAllowed(action), logMessage
 }
 
 func isActionAllowed(action string) bool {

@@ -341,7 +341,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			namespace:   "ns1",
 			appID:       srcAppID,
 		}
-		isAllowed := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, nil)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, nil)
 		// Action = Allow the operation since no ACL is defined
 		assert.True(t, isAllowed)
 	})
@@ -354,7 +354,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			namespace:   "ns1",
 			appID:       srcAppID,
 		}
-		isAllowed := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
 	})
@@ -367,7 +367,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			namespace:   "ns1",
 			appID:       srcAppID,
 		}
-		isAllowed := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
 		// Action = Default action for the specific app
 		assert.True(t, isAllowed)
 	})
@@ -375,7 +375,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when spiffe id is nil", func(t *testing.T) {
 		srcAppID := "app1"
 		accessControlList := initializeAccessControlList()
-		isAllowed := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
 	})
@@ -383,7 +383,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when src app id is empty", func(t *testing.T) {
 		srcAppID := ""
 		accessControlList := initializeAccessControlList()
-		isAllowed := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
 	})
@@ -396,7 +396,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			namespace:   "ns1",
 			appID:       srcAppID,
 		}
-		isAllowed := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_POST, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_POST, &accessControlList)
 		// Action = Action for the specific verb in the app. If verb not found, default action for the specific app
 		assert.True(t, isAllowed)
 	})
@@ -409,7 +409,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			namespace:   "ns1",
 			appID:       srcAppID,
 		}
-		isAllowed := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_PUT, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_PUT, &accessControlList)
 		// Action = Default action for the specific app
 		assert.False(t, isAllowed)
 	})
@@ -422,7 +422,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			namespace:   "ns1",
 			appID:       srcAppID,
 		}
-		isAllowed := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op2", common.HTTPExtension_PUT, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op2", common.HTTPExtension_PUT, &accessControlList)
 		// Action = Default action for the specific verb
 		assert.False(t, isAllowed)
 	})
@@ -435,7 +435,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			namespace:   "ns1",
 			appID:       srcAppID,
 		}
-		isAllowed := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op3", common.HTTPExtension_PUT, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op3", common.HTTPExtension_PUT, &accessControlList)
 		// Action = Default action for the specific verb
 		assert.False(t, isAllowed)
 	})

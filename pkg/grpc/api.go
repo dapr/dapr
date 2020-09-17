@@ -128,10 +128,10 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
-	callAllowed := a.applyAccessControlPolicies(ctx, srcID, targetOperation, httpVerb)
+	callAllowed, additionalInfo := a.applyAccessControlPolicies(ctx, srcID, targetOperation, httpVerb)
 
 	if !callAllowed {
-		return nil, status.Errorf(codes.PermissionDenied, "Access Control Policy has denied access to appId: %s, method: %s: %s", srcID, targetOperation, err.Error())
+		return nil, status.Errorf(codes.PermissionDenied, "Access Control Policy has denied access to appId: %s, operation: %s verb: %s: %s", srcID, targetOperation, httpVerb, additionalInfo)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -142,7 +142,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, srcApp string, targetOperation string, httpVerb common.HTTPExtension_Verb) bool {
+func (a *api) applyAccessControlPolicies(ctx context.Context, srcApp string, targetOperation string, httpVerb common.HTTPExtension_Verb) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := config.TryGetAndParseSpiffeID(ctx)
 

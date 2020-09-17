@@ -246,73 +246,72 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 }
 
 func TestCallLocal(t *testing.T) {
-	// t.Run("appchannel is not ready", func(t *testing.T) {
-	// 	port, _ := freeport.GetFreePort()
+	t.Run("appchannel is not ready", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
 
-	// 	fakeAPI := &api{
-	// 		id:         "fakeAPI",
-	// 		appChannel: nil,
-	// 	}
-	// 	server := startInternalServer(port, fakeAPI)
-	// 	defer server.Stop()
-	// 	clientConn := createTestClient(port)
-	// 	defer clientConn.Close()
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: nil,
+		}
+		server := startInternalServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
 
-	// 	client := internalv1pb.NewServiceInvocationClient(clientConn)
-	// 	request := invokev1.NewInvokeMethodRequest("method").Proto()
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
+		request := invokev1.NewInvokeMethodRequest("method").Proto()
 
-	// 	_, err := client.CallLocal(context.Background(), request)
-	// 	assert.Equal(t, codes.Internal, status.Code(err))
-	// })
+		_, err := client.CallLocal(context.Background(), request)
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
 
-	// t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
-	// 	port, _ := freeport.GetFreePort()
+	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
 
-	// 	mockAppChannel := new(channelt.MockAppChannel)
-	// 	fakeAPI := &api{
-	// 		id:         "fakeAPI",
-	// 		appChannel: mockAppChannel,
-	// 	}
-	// 	server := startInternalServer(port, fakeAPI)
-	// 	defer server.Stop()
-	// 	clientConn := createTestClient(port)
-	// 	defer clientConn.Close()
+		mockAppChannel := new(channelt.MockAppChannel)
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: mockAppChannel,
+		}
+		server := startInternalServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
 
-	// 	client := internalv1pb.NewServiceInvocationClient(clientConn)
-	// 	request := &internalv1pb.InternalInvokeRequest{
-	// 		Message: nil,
-	// 	}
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
+		request := &internalv1pb.InternalInvokeRequest{
+			Message: nil,
+		}
 
-	// 	_, err := client.CallLocal(context.Background(), request)
-	// 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	// })
+		_, err := client.CallLocal(context.Background(), request)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
 
-	// t.Run("invokemethod returns error", func(t *testing.T) {
-	// 	port, _ := freeport.GetFreePort()
+	t.Run("invokemethod returns error", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
 
-	// 	mockAppChannel := new(channelt.MockAppChannel)
-	// 	mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(nil, status.Error(codes.Unknown, "unknown error"))
-	// 	fakeAPI := &api{
-	// 		id:         "fakeAPI",
-	// 		appChannel: mockAppChannel,
-	// 	}
-	// 	server := startInternalServer(port, fakeAPI)
-	// 	defer server.Stop()
-	// 	clientConn := createTestClient(port)
-	// 	defer clientConn.Close()
+		mockAppChannel := new(channelt.MockAppChannel)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(nil, status.Error(codes.Unknown, "unknown error"))
+		fakeAPI := &api{
+			id:         "fakeAPI",
+			appChannel: mockAppChannel,
+		}
+		server := startInternalServer(port, fakeAPI)
+		defer server.Stop()
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
 
-	// 	client := internalv1pb.NewServiceInvocationClient(clientConn)
-	// 	request := invokev1.NewInvokeMethodRequest("method").Proto()
+		client := internalv1pb.NewServiceInvocationClient(clientConn)
+		request := invokev1.NewInvokeMethodRequest("method").Proto()
 
-	// 	_, err := client.CallLocal(context.Background(), request)
-	// 	assert.Equal(t, codes.Unknown, status.Code(err))
-	// })
+		_, err := client.CallLocal(context.Background(), request)
+		assert.Equal(t, codes.Unknown, status.Code(err))
+	})
 
 	t.Run("access control policy denied access", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		// mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(nil, status.Error(codes.Unknown, "unknown error"))
 		accessControlList := initializeAccessControlList()
 		fakeAPI := &api{
 			id:                "fakeAPI",
