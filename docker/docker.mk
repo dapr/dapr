@@ -13,14 +13,21 @@ DAPR_RUNTIME_IMAGE_NAME=daprd
 DAPR_PLACEMENT_IMAGE_NAME=placement
 DAPR_SENTRY_IMAGE_NAME=sentry
 
+# build docker image for linux
+BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
+
 ifeq ($(TARGET_OS), windows)
   DOCKERFILE:=Dockerfile-windows
+  BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(origin DEBUG), undefined)
   DOCKERFILE:=Dockerfile
+  BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(DEBUG),0)
   DOCKERFILE:=Dockerfile
+  BIN_PATH := $(BIN_PATH)/release
 else
   DOCKERFILE:=Dockerfile-debug
+  BIN_PATH := $(BIN_PATH)/debug
 endif
 
 # Supported docker image architecture
@@ -64,8 +71,6 @@ ifeq ($(TARGET_ARCH),)
 	$(error TARGET_ARCH environment variable must be set)
 endif
 
-# build docker image for linux
-BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)/release
 
 docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
