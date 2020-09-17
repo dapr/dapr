@@ -27,7 +27,7 @@ type validator struct {
 	auth   kauth.AuthenticationV1Interface
 }
 
-func (v *validator) Validate(id, token string) error {
+func (v *validator) Validate(id, token, namespace string) error {
 	if id == "" {
 		return errors.Errorf("%s: id field in request must not be empty", errPrefix)
 	}
@@ -54,7 +54,14 @@ func (v *validator) Validate(id, token string) error {
 
 	podSa := prts[3]
 	podNs := prts[2]
-	if id != fmt.Sprintf("%s:%s", podSa, podNs) {
+
+	if namespace != "" {
+		if podNs != namespace {
+			return errors.Errorf("%s: namespace mismatch. received namespace: %s", errPrefix, namespace)
+		}
+	}
+
+	if id != fmt.Sprintf("%s:%s", podNs, podSa) {
 		return errors.Errorf("%s: token/id mismatch. received id: %s", errPrefix, id)
 	}
 	return nil

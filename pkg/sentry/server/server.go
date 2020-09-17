@@ -99,7 +99,7 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
 	serverCertTTL := issuerExp.Sub(now)
 
-	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), serverCertTTL, false)
+	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), nil, serverCertTTL, false)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, err
 	}
 
-	err = s.validator.Validate(req.GetId(), req.GetToken())
+	err = s.validator.Validate(req.GetId(), req.GetToken(), req.GetNamespace())
 	if err != nil {
 		err = errors.Wrap(err, "error validating requester identity")
 		log.Error(err)
@@ -147,7 +147,8 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, err
 	}
 
-	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, -1, false)
+	identity := identity.NewBundle(req.GetId(), req.GetNamespace(), req.GetTrustDomain())
+	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, identity, -1, false)
 	if err != nil {
 		err = errors.Wrap(err, "error signing csr")
 		log.Error(err)
