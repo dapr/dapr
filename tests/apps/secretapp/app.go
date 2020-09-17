@@ -48,7 +48,7 @@ func get(key string) (*map[string]string, int, error) {
 	log.Printf("Processing get request for %s.", key)
 	url, err := createSecretURL(key)
 	if err != nil {
-		return nil, 500, err
+		return nil, http.StatusInternalServerError, err
 	}
 
 	log.Printf("Fetching state from %s", url)
@@ -56,15 +56,15 @@ func get(key string) (*map[string]string, int, error) {
 	/* #nosec */
 	res, err := http.Get(url)
 	if err != nil {
-		return nil, 500, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
+		return nil, http.StatusInternalServerError, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
 
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, 500, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
+		return nil, http.StatusInternalServerError, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
-	if res.StatusCode != 200 {
+	if res.StatusCode != http.StatusOK {
 		log.Printf("Non 200 StatusCode: %d\n", res.StatusCode)
 
 		return nil, res.StatusCode, fmt.Errorf("Got err response for key %s from Dapr: %s", key, body)
@@ -74,20 +74,20 @@ func get(key string) (*map[string]string, int, error) {
 
 	var state = map[string]string{}
 	if len(body) == 0 {
-		return nil, 200, nil
+		return nil, http.StatusOK, nil
 	}
 
 	// a key not found in Dapr will return 200 but an empty response.
 	err = json.Unmarshal(body, &state)
 	if err != nil {
-		return nil, 500, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
+		return nil, http.StatusInternalServerError, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
 	}
 
-	return &state, 200, nil
+	return &state, http.StatusOK, nil
 }
 
 func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
-	statusCode := 200
+	statusCode := http.StatusOK
 	log.Printf("Processing get request for %d states.", len(secrets))
 
 	var output = make([]daprSecret, 0, len(secrets))
@@ -138,7 +138,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	case "get":
 		secrets, statusCode, err = getAll(req.Secrets)
 		res.Secrets = secrets
-		if statusCode != 200 {
+		if statusCode != http.StatusOK {
 			res.Message = err.Error()
 		}
 	default:
@@ -146,11 +146,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusBadRequest
 		res.Message = err.Error()
 	}
-
-	// if err != nil && statusCode == http.StatusOK {
-	// 	statusCode = http.StatusInternalServerError
-	// 	res.Message = err.Error()
-	// }
 
 	res.EndTime = epoch()
 

@@ -631,22 +631,24 @@ func TestGetSecret(t *testing.T) {
 		"store2": fakeStore,
 		"store3": fakeStore,
 	}
-	defaultAccessSecretStores := map[string]string{
-		"store1": "allow",
-		"store2": "deny",
-		"store3": "allow",
-	}
-	denyList := map[string]map[string]struct{}{
+	secretsConfiguration := map[string]*config.ParsedSecretsConfiguration{
 		"store1": {
-			"not-allowed": {},
+			DefaultAccess: config.AllowAccess,
+			DeniedSecrets: map[string]struct{}{
+				"not-allowed": {},
+			},
 		},
-	}
-	allowList := map[string]map[string]struct{}{
 		"store2": {
-			"good-key": {},
+			DefaultAccess: config.DenyAccess,
+			AllowedSecrets: map[string]struct{}{
+				"good-key": {},
+			},
 		},
 		"store3": {
-			"good-key": {},
+			DefaultAccess: config.AllowAccess,
+			AllowedSecrets: map[string]struct{}{
+				"good-key": {},
+			},
 		},
 	}
 	expectedResponse := "life is good"
@@ -654,7 +656,7 @@ func TestGetSecret(t *testing.T) {
 	deniedStoreName := "store2"
 	restrictedStore := "store3"
 
-	testSteps := []struct {
+	testCases := []struct {
 		testName         string
 		storeName        string
 		key              string
@@ -703,11 +705,9 @@ func TestGetSecret(t *testing.T) {
 	}
 	// Setup Dapr API server
 	fakeAPI := &api{
-		id:                  "fakeAPI",
-		secretStores:        fakeStores,
-		defaultSecretAccess: defaultAccessSecretStores,
-		deniedSecrets:       denyList,
-		allowedSecrets:      allowList,
+		id:                   "fakeAPI",
+		secretStores:         fakeStores,
+		secretsConfiguration: secretsConfiguration,
 	}
 	// Run test server
 	port, _ := freeport.GetFreePort()
@@ -721,7 +721,7 @@ func TestGetSecret(t *testing.T) {
 	// act
 	client := runtimev1pb.NewDaprClient(clientConn)
 
-	for _, tt := range testSteps {
+	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
 			req := &runtimev1pb.GetSecretRequest{
 				StoreName: tt.storeName,

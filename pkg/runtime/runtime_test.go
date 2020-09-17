@@ -729,10 +729,10 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 
 		//verify
 		assert.NotNil(t, rt.secretStores["testMock"])
-		assert.Contains(t, rt.defaultSecretAccess, "testMock", "Expected testMock secret store to be populated")
-		assert.Equal(t, config.AllowAccess, rt.defaultSecretAccess["testMock"], "Expected default allow acess")
-		assert.NotContains(t, rt.deniedSecrets, "testMock", "Expected testMock deniedSecrets to not be populated")
-		assert.NotContains(t, rt.allowedSecrets, "testMock", "Expected testMock allowedSecrets to not be populated")
+		assert.Contains(t, rt.secretsConfiguration, "testMock", "Expected testMock secret store configuration to be populated")
+		assert.Equal(t, config.AllowAccess, rt.secretsConfiguration["testMock"].DefaultAccess, "Expected default allow acess")
+		assert.Empty(t, rt.secretsConfiguration["testMock"].DeniedSecrets, "Expected testMock deniedSecrets to not be populated")
+		assert.NotContains(t, rt.secretsConfiguration["testMock"].AllowedSecrets, "Expected testMock allowedSecrets to not be populated")
 	})
 }
 

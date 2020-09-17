@@ -133,9 +133,7 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
 
-	defaultSecretAccess map[string]string
-	allowedSecrets      map[string]map[string]struct{}
-	deniedSecrets       map[string]map[string]struct{}
+	secretsConfiguration map[string]*config.ParsedSecretsConfiguration
 
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentsDone      chan bool
@@ -170,9 +168,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		scopedPublishings:   map[string][]string{},
 		allowedTopics:       map[string][]string{},
 
-		defaultSecretAccess: map[string]string{},
-		allowedSecrets:      map[string]map[string]struct{}{},
-		deniedSecrets:       map[string]map[string]struct{}{},
+		secretsConfiguration: map[string]*config.ParsedSecretsConfiguration{},
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentsDone:      make(chan bool),
@@ -319,30 +315,26 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	for name := range a.secretStores {
 		// This is added for the scenario where secret store component is added, but
 		// no restrictive configuration is defined.
-		a.defaultSecretAccess[name] = config.AllowAccess
+		a.secretsConfiguration[name] = &config.ParsedSecretsConfiguration{
+			DefaultAccess: config.AllowAccess,
+		}
+		// a.defaultSecretAccess[name] = config.AllowAccess
 		for _, storeInList := range a.globalConfig.Spec.Secrets.Scopes {
 			if storeInList.StoreName == name {
-				// Accept only "allow" or "deny" strings or default to "allow".
-				switch strings.ToLower(storeInList.DefaultAccess) {
-				case config.AllowAccess:
-					a.defaultSecretAccess[name] = config.AllowAccess
-				case config.DenyAccess:
-					a.defaultSecretAccess[name] = config.DenyAccess
-				default:
-					a.defaultSecretAccess[name] = config.AllowAccess
-				}
+				c := a.secretsConfiguration[name]
+				c.ParseSecretsDefaultAccess(storeInList.DefaultAccess)
 				// if deny, break. Eg: kubernetes is put as deny access with no allowed list.
 				// This scenario also ignores only deniedSecrets being populated if the defaultAccess is deny.
-				if a.defaultSecretAccess[name] == config.DenyAccess && storeInList.AllowedSecrets == nil {
+				if c.DefaultAccess == config.DenyAccess && storeInList.AllowedSecrets == nil {
 					break
 				}
 				if storeInList.AllowedSecrets != nil {
 					//Convert to a Set like access for easy lookup.
-					a.allowedSecrets[name] = convertToMap(storeInList.AllowedSecrets)
+					c.AllowedSecrets = convertToMap(storeInList.AllowedSecrets)
 				}
 				if storeInList.DeniedSecrets != nil {
 					//Convert to a Set like access for easy lookup.
-					a.deniedSecrets[name] = convertToMap(storeInList.DeniedSecrets)
+					c.DeniedSecrets = convertToMap(storeInList.DeniedSecrets)
 				}
 			}
 		}
@@ -660,8 +652,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores,
-		a.defaultSecretAccess, a.allowedSecrets, a.deniedSecrets,
-		a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
@@ -683,8 +674,8 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.defaultSecretAccess,
-		a.allowedSecrets, a.deniedSecrets, a.getPublishAdapter(), a.directMessaging, a.actor,
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
+		a.getPublishAdapter(), a.directMessaging, a.actor,
 		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 }
 

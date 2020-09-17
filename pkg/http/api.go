@@ -7,6 +7,7 @@ package http
 
 import (
 	"fmt"
+	net_http "net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,9 +44,7 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
-	defaultSecretAccess   map[string]string
-	allowedSecrets        map[string]map[string]struct{}
-	deniedSecrets         map[string]map[string]struct{}
+	secretsConfiguration  map[string]*config.ParsedSecretsConfiguration
 	json                  jsoniter.API
 	actor                 actors.Actors
 	publishFn             func(req *pubsub.PublishRequest) error
@@ -89,9 +88,7 @@ func NewAPI(
 	directMessaging messaging.DirectMessaging,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
-	defaultSecretAccess map[string]string,
-	allowedSecrets map[string]map[string]struct{},
-	deniedSecrets map[string]map[string]struct{},
+	secretsConfiguration map[string]*config.ParsedSecretsConfiguration,
 	publishFn func(*pubsub.PublishRequest) error,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
@@ -101,9 +98,7 @@ func NewAPI(
 		directMessaging:       directMessaging,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
-		defaultSecretAccess:   defaultSecretAccess,
-		allowedSecrets:        allowedSecrets,
-		deniedSecrets:         deniedSecrets,
+		secretsConfiguration:  secretsConfiguration,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
 		publishFn:             publishFn,
@@ -508,7 +503,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse(
 			"ERR_PERMISSION_DENIED",
 			fmt.Sprintf("Access denied by policy to get %s from %s", key, secretStoreName))
-		respondWithError(reqCtx, 403, msg)
+		respondWithError(reqCtx, net_http.StatusForbidden, msg)
 		return
 	}
 
@@ -1104,6 +1099,5 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
-	return config.IsSecretAllowed(storeName, key, a.defaultSecretAccess[storeName],
-		a.allowedSecrets, a.deniedSecrets)
+	return a.secretsConfiguration[storeName].IsSecretAllowed(key)
 }

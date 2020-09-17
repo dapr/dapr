@@ -1298,30 +1298,30 @@ func TestV1SecretEndpoints(t *testing.T) {
 		"store2": fakeStore,
 		"store3": fakeStore,
 	}
-	defaultAccessSecretStores := map[string]string{
-		"store1": "allow",
-		"store2": "deny",
-		"store3": "allow",
-	}
-	denyList := map[string]map[string]struct{}{
+	secretsConfiguration := map[string]*config.ParsedSecretsConfiguration{
 		"store1": {
-			"not-allowed": {},
+			DefaultAccess: config.AllowAccess,
+			DeniedSecrets: map[string]struct{}{
+				"not-allowed": {},
+			},
 		},
-	}
-	allowList := map[string]map[string]struct{}{
 		"store2": {
-			"good-key": {},
+			DefaultAccess: config.DenyAccess,
+			AllowedSecrets: map[string]struct{}{
+				"good-key": {},
+			},
 		},
 		"store3": {
-			"good-key": {},
+			DefaultAccess: config.AllowAccess,
+			AllowedSecrets: map[string]struct{}{
+				"good-key": {},
+			},
 		},
 	}
 	testAPI := &api{
-		allowedSecrets:      allowList,
-		deniedSecrets:       denyList,
-		defaultSecretAccess: defaultAccessSecretStores,
-		secretStores:        fakeStores,
-		json:                jsoniter.ConfigFastest,
+		secretsConfiguration: secretsConfiguration,
+		secretStores:         fakeStores,
+		json:                 jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"

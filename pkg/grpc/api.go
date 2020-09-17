@@ -64,9 +64,7 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
-	defaultSecretAccess   map[string]string
-	allowedSecrets        map[string]map[string]struct{}
-	deniedSecrets         map[string]map[string]struct{}
+	secretsConfiguration  map[string]*config.ParsedSecretsConfiguration
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -78,9 +76,7 @@ func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
-	defaultSecretAccess map[string]string,
-	allowedSecrets map[string]map[string]struct{},
-	deniedSecrets map[string]map[string]struct{},
+	secretsConfiguration map[string]*config.ParsedSecretsConfiguration,
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
@@ -94,9 +90,7 @@ func NewAPI(
 		publishFn:             publishFn,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
-		defaultSecretAccess:   defaultSecretAccess,
-		allowedSecrets:        allowedSecrets,
-		deniedSecrets:         deniedSecrets,
+		secretsConfiguration:  secretsConfiguration,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		tracingSpec:           tracingSpec,
 	}
@@ -394,7 +388,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	}
 
 	if !a.isSecretAllowed(in.StoreName, in.Key) {
-		err := status.Errorf(codes.PermissionDenied, "Access denied by policy to get %s from %s", in.Key, in.StoreName)
+		err := status.Errorf(codes.PermissionDenied, "Access denied by policy to get %q from %q", in.Key, in.StoreName)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -511,6 +505,5 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
-	return config.IsSecretAllowed(storeName, key, a.defaultSecretAccess[storeName],
-		a.allowedSecrets, a.deniedSecrets)
+	return a.secretsConfiguration[storeName].IsSecretAllowed(key)
 }

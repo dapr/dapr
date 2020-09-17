@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -38,6 +39,8 @@ type ConfigurationSpec struct {
 }
 
 type SecretsSpec struct {
+	// In the secret scopes list, if the storeName is repeated, the last configuration with the same storeName will
+	// replace the previously specified configurations.
 	Scopes []SecretsScope `json:"scopes"`
 }
 
@@ -139,25 +142,39 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient operat
 	return &conf, nil
 }
 
-func IsSecretAllowed(storeName, key, defaultSecretAccess string, allowedSecrets, deniedSecrets map[string]map[string]struct{}) bool {
+type ParsedSecretsConfiguration struct {
+	DefaultAccess  string
+	AllowedSecrets map[string]struct{}
+	DeniedSecrets  map[string]struct{}
+}
+
+func (c *ParsedSecretsConfiguration) ParseSecretsDefaultAccess(input string) {
+	// Accept only "allow" or "deny" strings or default to "allow".
+	switch strings.ToLower(input) {
+	case AllowAccess:
+		c.DefaultAccess = AllowAccess
+	case DenyAccess:
+		c.DefaultAccess = DenyAccess
+	default:
+		c.DefaultAccess = AllowAccess
+	}
+}
+
+func (c *ParsedSecretsConfiguration) IsSecretAllowed(key string) bool {
 	// By default if the store has a record in allowedSecrets map, allow access.
 
 	// If the allowedSecrets list is not empty then check if the access is specifically allowed for this key.
-	if m, ok := allowedSecrets[storeName]; ok {
-		if len(m) != 0 {
-			_, allow := m[key]
-			return allow
-		}
+	if len(c.AllowedSecrets) != 0 {
+		_, allow := c.AllowedSecrets[key]
+		return allow
 	}
 
 	// If deny list is present for the secret store.
-	if m, ok := deniedSecrets[storeName]; ok {
-		_, deny := m[key]
-		// If the specific key is denied, then alone deny access.
-		if deny {
-			return !deny
-		}
+	_, deny := c.DeniedSecrets[key]
+	// If the specific key is denied, then alone deny access.
+	if deny {
+		return !deny
 	}
 
-	return defaultSecretAccess == AllowAccess
+	return c.DefaultAccess == AllowAccess
 }
