@@ -1,16 +1,18 @@
 # API-012: Content Type
 
 ## Status
-Rejected
+Accepted
 
 ## Context
-Adding content-type to state store, pubsub and bindings.
+Not adding content-type to state store, pubsub and bindings.
 
 ## Decisions
 
 * We will not add content-type since it is a persisted metadata and it can cause problems such as:
   * Long term support since metadata persisted previously would need to be supported indefinetely.
   * Added requirement for components to implement, leading to potentially hacky implementations to persist metadata side-by-side with data.
+
+Original issue and discussion: https://github.com/dapr/dapr/issues/2026
 
 ## Consequences
 
