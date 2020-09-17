@@ -731,7 +731,6 @@ func TestGetSecret(t *testing.T) {
 			} else {
 				assert.Error(t, err, "Expected error")
 			}
-
 		})
 	}
 }
