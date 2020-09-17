@@ -8,9 +8,11 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"sort"
+	"reflect"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 	yaml "gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -250,7 +253,7 @@ func containsKey(s []string, key string) bool {
 }
 
 // TranslateAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
-func TranslateAccessControlSpec(accessControlSpec AccessControlSpec, id string) AccessControlList {
+func TranslateAccessControlSpec(accessControlSpec AccessControlSpec) AccessControlList {
 	var accessControlList AccessControlList
 	accessControlList.PolicySpec = make(map[string]AppPolicySpec)
 	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
@@ -267,33 +270,19 @@ func TranslateAccessControlSpec(accessControlSpec AccessControlSpec, id string) 
 
 // TryGetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
 func TryGetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
-	peer, ok := peer.FromContext(ctx)
-	if !ok {
-		return nil, fmt.Errorf("could not retrieve spiffe id from the grpc context")
-	}
-
-	fmt.Println(peer)
-
-	// if peer.AuthInfo == nil {
-	// 	return nil, fmt.Errorf("could not retrieve auth info from grpc context tls info")
-	// }
-
-	// tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
-
-	// if tlsInfo.State.HandshakeComplete == false {
-	// 	return nil, fmt.Errorf("tls handshake is not complete")
-	// }
-
-	// certChain := tlsInfo.State.VerifiedChains
-	// t := reflect.TypeOf(certChain)
-	// fmt.Println(t)
-	// if certChain == nil || len(certChain[0]) == 0 {
-	// 	return nil, fmt.Errorf("could not retrieve read client cert info")
-	// }
-
 	// TODO: Remove hardcoding for testing
-	// spiffeID := string(certChain[0][0].ExtraExtensions[0].Value)
+	// spiffeID, err := getSpiffeID(ctx)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
 	spiffeID := "spiffe://a/ns/b/pythonapp"
+	fmt.Printf("spiffe id :- %v\n", spiffeID)
+	id := parseSpiffeID(spiffeID)
+	return id, nil
+}
+
+func parseSpiffeID(spiffeID string) *SpiffeID {
 	fmt.Printf("spiffe id :- %v\n", spiffeID)
 
 	// The SPIFFE Id will be of the format: spiffe://<trust-domain/ns/<namespace>/<app-id>
@@ -303,12 +292,48 @@ func TryGetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 	id.namespace = parts[4]
 	id.appID = parts[5]
 
-	return &id, nil
+	return &id
+}
+
+func getSpiffeID(ctx context.Context) (string, error) {
+	peer, ok := peer.FromContext(ctx)
+	if !ok {
+		return "", fmt.Errorf("could not retrieve spiffe id from the grpc context")
+	}
+
+	fmt.Println(peer)
+
+	if peer.AuthInfo == nil {
+		return "", fmt.Errorf("could not retrieve auth info from grpc context tls info")
+	}
+
+	tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
+
+	if tlsInfo.State.HandshakeComplete == false {
+		return "", fmt.Errorf("tls handshake is not complete")
+	}
+
+	certChain := tlsInfo.State.VerifiedChains
+	t := reflect.TypeOf(certChain)
+	fmt.Println(t)
+	if certChain == nil || len(certChain[0]) == 0 {
+		return "", fmt.Errorf("could not retrieve read client cert info")
+	}
+
+	spiffeID := string(certChain[0][0].ExtraExtensions[0].Value)
+
+	return spiffeID, nil
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
 func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, operation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) bool {
 	var log = logger.NewLogger("dapr.configuration")
+
+	if accessControlList == nil {
+		// No access control list is provided. Do nothing
+		return true
+	}
+
 	log.Infof("@@@@ Dumping all policy specs....")
 	for key, spec := range accessControlList.PolicySpec {
 		log.Infof("key: %s, value: %s", key, spec)
@@ -316,26 +341,27 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, oper
 	log.Infof("Checking access control policy for invocation by %v, operation: %v, httpVerb: %v", srcAppID, operation, httpVerb)
 	action := accessControlList.DefaultAction
 
-	if accessControlList == nil {
-		// No access control list is provided. Do nothing
-		return true
+	if srcAppID == "" {
+		log.Errorf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
+		return isActionAllowed(action)
 	}
 
 	policy, found := accessControlList.PolicySpec[srcAppID]
 	log.Infof("@@@@ Using policy spec: %v", policy)
 
 	if !found {
+		log.Errorf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
 		return isActionAllowed(action)
 	}
 
-	action = policy.DefaultAction
-
 	if id == nil {
-		log.Errorf("Unable to verify spiffe id of the client. Will apply default access control policy")
+		log.Errorf("Unable to verify spiffe id of the client. Will apply default global action")
 	} else {
+		action = policy.DefaultAction
+
 		if policy.TrustDomain != "*" && policy.TrustDomain != id.trustDomain {
-			log.Infof("Trust Domain mismatch does not allow request")
-			return false
+			log.Infof("Trust Domain mismatch. Apply global default action")
+			return isActionAllowed(action)
 		}
 
 		// TODO: Check namespace if needed

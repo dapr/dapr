@@ -118,16 +118,20 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	targetOperation := req.Message().Method
 	var httpVerb common.HTTPExtension_Verb
 
-	srcID := req.Metadata()[v1.SourceIDHeader].Values[0]
+	var srcID string
+	if req.Metadata() != nil && len(req.Metadata()) > 0 {
+		srcID = req.Metadata()[v1.SourceIDHeader].Values[0]
 
-	httpExt := req.Message().GetHttpExtension()
-	if httpExt != nil {
-		httpVerb = httpExt.GetVerb()
+		httpExt := req.Message().GetHttpExtension()
+		if httpExt != nil {
+			httpVerb = httpExt.GetVerb()
+		}
 	}
+
 	callAllowed := a.applyAccessControlPolicies(ctx, srcID, targetOperation, httpVerb)
 
 	if !callAllowed {
-		return nil, fmt.Errorf("Access Control Policy has denied access to target app: %s, method: %v: %s", a.id, targetOperation)
+		return nil, status.Errorf(codes.PermissionDenied, "Access Control Policy has denied access to appId: %s, method: %s: %s", srcID, targetOperation, err.Error())
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
