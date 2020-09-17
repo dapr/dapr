@@ -1295,13 +1295,38 @@ func TestV1SecretEndpoints(t *testing.T) {
 	fakeStore := fakeSecretStore{}
 	fakeStores := map[string]secretstores.SecretStore{
 		"store1": fakeStore,
+		"store2": fakeStore,
+		"store3": fakeStore,
+	}
+	defaultAccessSecretStores := map[string]string{
+		"store1": "allow",
+		"store2": "deny",
+		"store3": "allow",
+	}
+	denyList := map[string]map[string]struct{}{
+		"store1": {
+			"not-allowed": {},
+		},
+	}
+	allowList := map[string]map[string]struct{}{
+		"store2": {
+			"good-key": {},
+		},
+		"store3": {
+			"good-key": {},
+		},
 	}
 	testAPI := &api{
-		secretStores: fakeStores,
-		json:         jsoniter.ConfigFastest,
+		allowedSecrets:      allowList,
+		deniedSecrets:       denyList,
+		defaultSecretAccess: defaultAccessSecretStores,
+		secretStores:        fakeStores,
+		json:                jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
+	deniedStoreName := "store2"
+	restrictedStore := "store3"
 
 	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
@@ -1319,7 +1344,47 @@ func TestV1SecretEndpoints(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
 	})
 
-	t.Run("Get secret - Good Key", func(t *testing.T) {
+	t.Run("Get secret - 403 Permission denied ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/not-allowed", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 403, resp.StatusCode, "reading not allowed key should return 403")
+	})
+
+	t.Run("Get secret - 403 Permission denied ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/random", deniedStoreName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 403, resp.StatusCode, "reading random key from store with default deny access should return 403")
+	})
+
+	t.Run("Get secret - 403 Permission denied ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/random", restrictedStore)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 403, resp.StatusCode, "reading random key from store with restricted allow access should return 403")
+	})
+
+	t.Run("Get secret - 200 Good Ket restricted store ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", restrictedStore)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading good-key key from store with restricted allow access should return 200")
+	})
+
+	t.Run("Get secret - 200 Good Key allowed access ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", deniedStoreName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading allowed good-key key from store with default deny access should return 200")
+	})
+
+	t.Run("Get secret - Good Key default allow", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", storeName)
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)

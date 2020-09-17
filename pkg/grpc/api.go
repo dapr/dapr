@@ -64,6 +64,9 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
+	defaultSecretAccess   map[string]string
+	allowedSecrets        map[string]map[string]struct{}
+	deniedSecrets         map[string]map[string]struct{}
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -75,6 +78,9 @@ func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
+	defaultSecretAccess map[string]string,
+	allowedSecrets map[string]map[string]struct{},
+	deniedSecrets map[string]map[string]struct{},
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
@@ -88,6 +94,9 @@ func NewAPI(
 		publishFn:             publishFn,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
+		defaultSecretAccess:   defaultSecretAccess,
+		allowedSecrets:        allowedSecrets,
+		deniedSecrets:         deniedSecrets,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		tracingSpec:           tracingSpec,
 	}
@@ -384,6 +393,12 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
+	if !a.isSecretAllowed(in.StoreName, in.Key) {
+		err := status.Errorf(codes.PermissionDenied, "Access denied by policy to get %s from %s", in.Key, in.StoreName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
+	}
+
 	req := secretstores.GetSecretRequest{
 		Name:     in.Key,
 		Metadata: in.Metadata,
@@ -493,4 +508,27 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) isSecretAllowed(storeName, key string) bool {
+	// By default if the store has a record in allowedSecrets map, allow access.
+
+	// If the allowedSecrets list is not empty then check if the access is specifically allowed for this key.
+	if m, ok := a.allowedSecrets[storeName]; ok {
+		if len(m) != 0 {
+			_, allow := m[key]
+			return allow
+		}
+	}
+
+	// If deny list is present for the secret store.
+	if m, ok := a.deniedSecrets[storeName]; ok {
+		_, deny := m[key]
+		// If the specific key is denied, then alone deny access.
+		if deny {
+			return !deny
+		}
+	}
+
+	return a.defaultSecretAccess[storeName] == "allow"
 }

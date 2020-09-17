@@ -44,11 +44,11 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func get(key string) (*map[string]string, error) {
+func get(key string) (*map[string]string, int, error) {
 	log.Printf("Processing get request for %s.", key)
 	url, err := createSecretURL(key)
 	if err != nil {
-		return nil, err
+		return nil, 500, err
 	}
 
 	log.Printf("Fetching state from %s", url)
@@ -56,40 +56,46 @@ func get(key string) (*map[string]string, error) {
 	/* #nosec */
 	res, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
+		return nil, 500, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
 
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
+		return nil, 500, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
+	}
+	if res.StatusCode != 200 {
+		log.Printf("Non 200 StatusCode: %d\n", res.StatusCode)
+
+		return nil, res.StatusCode, fmt.Errorf("Got err response for key %s from Dapr: %s", key, body)
 	}
 
 	log.Printf("Found state for key %s: %s", key, body)
 
 	var state = map[string]string{}
 	if len(body) == 0 {
-		return nil, nil
+		return nil, 200, nil
 	}
 
 	// a key not found in Dapr will return 200 but an empty response.
 	err = json.Unmarshal(body, &state)
 	if err != nil {
-		return nil, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
+		return nil, 500, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
 	}
 
-	return &state, nil
+	return &state, 200, nil
 }
 
-func getAll(secrets []daprSecret) ([]daprSecret, error) {
+func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
+	statusCode := 200
 	log.Printf("Processing get request for %d states.", len(secrets))
 
 	var output = make([]daprSecret, 0, len(secrets))
 	for _, secret := range secrets {
-		value, err := get(secret.Key)
+		value, statusCode, err := get(secret.Key)
 
 		if err != nil {
-			return nil, err
+			return nil, statusCode, err
 		}
 
 		log.Printf("Result for get request for key %s: %v", secret.Key, value)
@@ -100,7 +106,8 @@ func getAll(secrets []daprSecret) ([]daprSecret, error) {
 	}
 
 	log.Printf("Result for get request for %d secrets: %v", len(secrets), output)
-	return output, nil
+
+	return output, statusCode, nil
 }
 
 // handles all APIs
@@ -129,18 +136,21 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	cmd := mux.Vars(r)["command"]
 	switch cmd {
 	case "get":
-		secrets, err = getAll(req.Secrets)
+		secrets, statusCode, err = getAll(req.Secrets)
 		res.Secrets = secrets
+		if statusCode != 200 {
+			res.Message = err.Error()
+		}
 	default:
 		err = fmt.Errorf("invalid URI: %s", uri)
 		statusCode = http.StatusBadRequest
 		res.Message = err.Error()
 	}
 
-	if err != nil && statusCode == http.StatusOK {
-		statusCode = http.StatusInternalServerError
-		res.Message = err.Error()
-	}
+	// if err != nil && statusCode == http.StatusOK {
+	// 	statusCode = http.StatusInternalServerError
+	// 	res.Message = err.Error()
+	// }
 
 	res.EndTime = epoch()
 

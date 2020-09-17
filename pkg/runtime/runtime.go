@@ -133,6 +133,10 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
 
+	defaultSecretAccess map[string]string
+	allowedSecrets      map[string]map[string]struct{}
+	deniedSecrets       map[string]map[string]struct{}
+
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentsDone      chan bool
 	pendingComponentDependents map[string][]components_v1alpha1.Component
@@ -165,6 +169,10 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		scopedSubscriptions: map[string][]string{},
 		scopedPublishings:   map[string][]string{},
 		allowedTopics:       map[string][]string{},
+
+		defaultSecretAccess: map[string]string{},
+		allowedSecrets:      map[string]map[string]struct{}{},
+		deniedSecrets:       map[string]map[string]struct{}{},
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentsDone:      make(chan bool),
@@ -284,6 +292,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
+	// Setup allow list for secrets
+	a.populateAllowLists()
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
 	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
@@ -303,6 +313,32 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	return nil
+}
+
+func (a *DaprRuntime) populateAllowLists() {
+	for name := range a.secretStores {
+		a.defaultSecretAccess[name] = "allow"
+		for _, storeInList := range a.globalConfig.Spec.Secrets.Scopes {
+			if storeInList.StoreName == name {
+				if storeInList.DefaultAccess != "" {
+					a.defaultSecretAccess[name] = strings.ToLower(storeInList.DefaultAccess)
+				}
+				// if deny, remove  from allowSecrets map. Eg: kubernetes is put as deny access with no allowed list.
+				if a.defaultSecretAccess[name] == "deny" && storeInList.AllowedSecrets == nil {
+					delete(a.allowedSecrets, name)
+					delete(a.deniedSecrets, name)
+
+					break
+				}
+				if storeInList.AllowedSecrets != nil {
+					a.allowedSecrets[name] = convertToMap(storeInList.AllowedSecrets)
+				}
+				if storeInList.DeniedSecrets != nil {
+					a.deniedSecrets[name] = convertToMap(storeInList.DeniedSecrets)
+				}
+			}
+		}
+	}
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -615,7 +651,9 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores,
+		a.defaultSecretAccess, a.allowedSecrets, a.deniedSecrets,
+		a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
@@ -637,7 +675,9 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.defaultSecretAccess,
+		a.allowedSecrets, a.deniedSecrets, a.getPublishAdapter(), a.directMessaging, a.actor,
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
@@ -1501,6 +1541,8 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 	// Preload Kubernetes secretstore
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
+		a.allowedSecrets["kubernetes"] = map[string]struct{}{}
+		a.deniedSecrets["kubernetes"] = map[string]struct{}{}
 		return []components_v1alpha1.Component{{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetes",
@@ -1516,7 +1558,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type)
 	if err != nil {
-		log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
+		log.Warnf("failed creating secret store %s: %s", c.Spec.Type, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 		return err
 	}
@@ -1577,4 +1619,12 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
+}
+
+func convertToMap(list []string) map[string]struct{} {
+	m := make(map[string]struct{})
+	for _, item := range list {
+		m[item] = struct{}{}
+	}
+	return m
 }

@@ -32,6 +32,19 @@ type ConfigurationSpec struct {
 	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
 	MetricSpec       MetricSpec   `json:"metric,omitempty" yaml:"metric,omitempty"`
+	Secrets          SecretsSpec  `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+}
+
+type SecretsSpec struct {
+	Scopes []SecretsScope `json:"scopes"`
+}
+
+// SecretsScope defines the scope for secrets
+type SecretsScope struct {
+	DefaultAccess  string   `json:"defaultAccess,omitempty" yaml:"defaultAccess,omitempty"`
+	StoreName      string   `json:"storeName" yaml:"storeName"`
+	AllowedSecrets []string `json:"allowedSecrets,omitempty" yaml:"allowedSecrets,omitempty"`
+	DeniedSecrets  []string `json:"deniedSecrets,omitempty" yaml:"deniedSecrets,omitempty"`
 }
 
 type PipelineSpec struct {

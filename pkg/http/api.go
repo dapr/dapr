@@ -43,6 +43,9 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
+	defaultSecretAccess   map[string]string
+	allowedSecrets        map[string]map[string]struct{}
+	deniedSecrets         map[string]map[string]struct{}
 	json                  jsoniter.API
 	actor                 actors.Actors
 	publishFn             func(req *pubsub.PublishRequest) error
@@ -80,12 +83,27 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error), tracingSpec config.TracingSpec) API {
+func NewAPI(
+	appID string,
+	appChannel channel.AppChannel,
+	directMessaging messaging.DirectMessaging,
+	stateStores map[string]state.Store,
+	secretStores map[string]secretstores.SecretStore,
+	defaultSecretAccess map[string]string,
+	allowedSecrets map[string]map[string]struct{},
+	deniedSecrets map[string]map[string]struct{},
+	publishFn func(*pubsub.PublishRequest) error,
+	actor actors.Actors,
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
+	tracingSpec config.TracingSpec) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
+		defaultSecretAccess:   defaultSecretAccess,
+		allowedSecrets:        allowedSecrets,
+		deniedSecrets:         deniedSecrets,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
 		publishFn:             publishFn,
@@ -485,6 +503,15 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 
 	key := reqCtx.UserValue(secretNameParam).(string)
+
+	if !a.isSecretAllowed(secretStoreName, key) {
+		msg := NewErrorResponse(
+			"ERR_PERMISSION_DENIED",
+			fmt.Sprintf("Access denied by policy to get %s from %s", key, secretStoreName))
+		respondWithError(reqCtx, 403, msg)
+		return
+	}
+
 	req := secretstores.GetSecretRequest{
 		Name:     key,
 		Metadata: metadata,
@@ -1074,4 +1101,27 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(reqCtx, 201)
 	}
+}
+
+func (a *api) isSecretAllowed(storeName, key string) bool {
+	// By default if the store has a record in allowedSecrets map, allow access.
+
+	// If the allowedSecrets list is not empty then check if the access is specifically allowed for this key.
+	if m, ok := a.allowedSecrets[storeName]; ok {
+		if len(m) != 0 {
+			_, allow := m[key]
+			return allow
+		}
+	}
+
+	// If deny list is present for the secret store.
+	if m, ok := a.deniedSecrets[storeName]; ok {
+		_, deny := m[key]
+		// If the specific key is denied, then alone deny access.
+		if deny {
+			return !deny
+		}
+	}
+
+	return a.defaultSecretAccess[storeName] == "allow"
 }
