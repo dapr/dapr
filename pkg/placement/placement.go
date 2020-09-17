@@ -8,17 +8,15 @@ package placement
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
-	"time"
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -55,57 +53,53 @@ func NewPlacementService() *Service {
 func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 
-	id, err := p.addHost(ctx, srv)
-	if err != nil {
-		return err
-	}
-	log.Debugf("host added: %s", id)
-
-	// send the current placements
-	p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
-		placementOptions{incrementGeneration: false})
-
-	monitoring.RecordHostsCount(len(p.hosts))
+	var registeredMemberID = ""
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
 		req, err := srv.Recv()
-		if err != nil {
-			func() {
-				p.hostsLock.Lock()
-				p.RemoveHost(srv)
-				p.ProcessRemovedHost(id)
-				p.hostsLock.Unlock()
+		switch err {
+		case nil:
+			if registeredMemberID == "" {
+				registeredMemberID = req.Name
+				p.addHost(ctx, srv)
+				p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
+					placementOptions{incrementGeneration: false})
+				log.Debugf("New member is added: %s", registeredMemberID)
+				monitoring.RecordHostsCount(len(p.hosts))
+			}
 
-				time.Sleep(time.Millisecond * 500)
-				log.Debugf("host removed: %s", id)
-			}()
-			continue
+			p.ProcessHost(req)
+
+		default:
+			if registeredMemberID == "" {
+				log.Debug("stream is disconnected before member is added")
+				return nil
+			}
+
+			p.hostsLock.Lock()
+			p.RemoveHost(srv)
+
+			// TODO: Need the robust fail-over handling by the intermittent
+			// network outage to prevent from rebalancing actors.
+			p.ProcessRemovedHost(registeredMemberID)
+			p.hostsLock.Unlock()
+
+			if err == io.EOF {
+				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
+			} else {
+				log.Debugf("Member is removed with error: %s, %v", registeredMemberID, err)
+			}
+
+			return nil
 		}
-
-		p.ProcessHost(req)
 	}
 }
 
-func (p *Service) addHost(ctx context.Context, srv placementv1pb.Placement_ReportDaprStatusServer) (string, error) {
+func (p *Service) addHost(ctx context.Context, srv placementv1pb.Placement_ReportDaprStatusServer) {
 	p.hostsLock.Lock()
 	defer p.hostsLock.Unlock()
 
-	md, _ := metadata.FromIncomingContext(ctx)
-	v := md.Get("id")
-	if len(v) == 0 {
-		return "", errors.New("id header not found in metadata")
-	}
-
-	id := v[0]
 	p.hosts = append(p.hosts, srv)
-
-	return id, nil
 }
 
 // RemoveHost removes the host from the hosts list
@@ -222,19 +216,19 @@ func (p *Service) ProcessHost(host *placementv1pb.Host) {
 	updateRequired := false
 
 	for _, e := range host.Entities {
-		func() {
-			p.entriesLock.Lock()
-			defer p.entriesLock.Unlock()
-			if _, ok := p.entries[e]; !ok {
-				p.entries[e] = NewConsistentHash()
-			}
+		p.entriesLock.Lock()
 
-			exists := p.entries[e].Add(host.Name, host.Id, host.Port)
-			if !exists {
-				updateRequired = true
-				monitoring.RecordPerActorTypeReplicasCount(e, host.Name)
-			}
-		}()
+		if _, ok := p.entries[e]; !ok {
+			p.entries[e] = NewConsistentHash()
+		}
+
+		exists := p.entries[e].Add(host.Name, host.Id, host.Port)
+		if !exists {
+			updateRequired = true
+			monitoring.RecordPerActorTypeReplicasCount(e, host.Name)
+		}
+
+		p.entriesLock.Unlock()
 	}
 
 	monitoring.RecordActorTypesCount(len(p.entries))
@@ -242,13 +236,11 @@ func (p *Service) ProcessHost(host *placementv1pb.Host) {
 
 	if updateRequired {
 		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
-	}
 
-	func() {
 		p.hostsEntitiesLock.Lock()
-		defer p.hostsEntitiesLock.Unlock()
 		p.hostsEntities[host.Name] = host.Entities
-	}()
+		p.hostsEntitiesLock.Unlock()
+	}
 }
 
 // Run starts the placement service gRPC server
