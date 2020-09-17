@@ -292,8 +292,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
-	// Setup allow list for secrets
-	a.populateAllowLists()
+	// Setup allow/deny list for secrets
+	a.populateSecretsConfiguration()
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
 	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
@@ -315,25 +315,33 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	return nil
 }
 
-func (a *DaprRuntime) populateAllowLists() {
+func (a *DaprRuntime) populateSecretsConfiguration() {
 	for name := range a.secretStores {
-		a.defaultSecretAccess[name] = "allow"
+		// This is added for the scenario where secret store component is added, but
+		// no restrictive configuration is defined.
+		a.defaultSecretAccess[name] = config.AllowAccess
 		for _, storeInList := range a.globalConfig.Spec.Secrets.Scopes {
 			if storeInList.StoreName == name {
-				if storeInList.DefaultAccess != "" {
-					a.defaultSecretAccess[name] = strings.ToLower(storeInList.DefaultAccess)
+				// Accept only "allow" or "deny" strings or default to "allow".
+				switch strings.ToLower(storeInList.DefaultAccess) {
+				case config.AllowAccess:
+					a.defaultSecretAccess[name] = config.AllowAccess
+				case config.DenyAccess:
+					a.defaultSecretAccess[name] = config.DenyAccess
+				default:
+					a.defaultSecretAccess[name] = config.AllowAccess
 				}
-				// if deny, remove  from allowSecrets map. Eg: kubernetes is put as deny access with no allowed list.
-				if a.defaultSecretAccess[name] == "deny" && storeInList.AllowedSecrets == nil {
-					delete(a.allowedSecrets, name)
-					delete(a.deniedSecrets, name)
-
+				// if deny, break. Eg: kubernetes is put as deny access with no allowed list.
+				// This scenario also ignores only deniedSecrets being populated if the defaultAccess is deny.
+				if a.defaultSecretAccess[name] == config.DenyAccess && storeInList.AllowedSecrets == nil {
 					break
 				}
 				if storeInList.AllowedSecrets != nil {
+					//Convert to a Set like access for easy lookup.
 					a.allowedSecrets[name] = convertToMap(storeInList.AllowedSecrets)
 				}
 				if storeInList.DeniedSecrets != nil {
+					//Convert to a Set like access for easy lookup.
 					a.deniedSecrets[name] = convertToMap(storeInList.DeniedSecrets)
 				}
 			}
@@ -1541,8 +1549,6 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 	// Preload Kubernetes secretstore
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
-		a.allowedSecrets["kubernetes"] = map[string]struct{}{}
-		a.deniedSecrets["kubernetes"] = map[string]struct{}{}
 		return []components_v1alpha1.Component{{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetes",
@@ -1621,6 +1627,7 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 
+// Function to convert string list into Map for easy lookup. (Set alternative)
 func convertToMap(list []string) map[string]struct{} {
 	m := make(map[string]struct{})
 	for _, item := range list {

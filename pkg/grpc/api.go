@@ -511,24 +511,6 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
-	// By default if the store has a record in allowedSecrets map, allow access.
-
-	// If the allowedSecrets list is not empty then check if the access is specifically allowed for this key.
-	if m, ok := a.allowedSecrets[storeName]; ok {
-		if len(m) != 0 {
-			_, allow := m[key]
-			return allow
-		}
-	}
-
-	// If deny list is present for the secret store.
-	if m, ok := a.deniedSecrets[storeName]; ok {
-		_, deny := m[key]
-		// If the specific key is denied, then alone deny access.
-		if deny {
-			return !deny
-		}
-	}
-
-	return a.defaultSecretAccess[storeName] == "allow"
+	return config.IsSecretAllowed(storeName, key, a.defaultSecretAccess[storeName],
+		a.allowedSecrets, a.deniedSecrets)
 }

@@ -660,6 +660,7 @@ func TestGetSecret(t *testing.T) {
 		key              string
 		errorExcepted    bool
 		expectedResponse string
+		expectedError    codes.Code
 	}{
 		{
 			testName:         "Good Key default access",
@@ -681,6 +682,7 @@ func TestGetSecret(t *testing.T) {
 			key:              "random",
 			errorExcepted:    true,
 			expectedResponse: "",
+			expectedError:    codes.PermissionDenied,
 		},
 		{
 			testName:         "Random Key accessing a store denied access by default",
@@ -688,6 +690,7 @@ func TestGetSecret(t *testing.T) {
 			key:              "random",
 			errorExcepted:    true,
 			expectedResponse: "",
+			expectedError:    codes.PermissionDenied,
 		},
 		{
 			testName:         "Random Key accessing a store denied access by default",
@@ -695,6 +698,7 @@ func TestGetSecret(t *testing.T) {
 			key:              "random",
 			errorExcepted:    true,
 			expectedResponse: "",
+			expectedError:    codes.PermissionDenied,
 		},
 	}
 	// Setup Dapr API server
@@ -730,6 +734,7 @@ func TestGetSecret(t *testing.T) {
 				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
 			} else {
 				assert.Error(t, err, "Expected error")
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
 			}
 		})
 	}

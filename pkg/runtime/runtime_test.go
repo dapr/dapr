@@ -682,6 +682,16 @@ func TestInitSecretStores(t *testing.T) {
 	})
 }
 
+func TestConvertToMap(t *testing.T) {
+	items := []string{"a", "b", "c"}
+	m := convertToMap(items)
+	assert.Equal(t, 3, len(m))
+	for _, item := range items {
+		_, ok := m[item]
+		assert.True(t, ok)
+	}
+}
+
 func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	items := []components_v1alpha1.MetadataItem{
@@ -693,6 +703,37 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	m := rt.convertMetadataItemsToProperties(items)
 	assert.Equal(t, 1, len(m))
 	assert.Equal(t, "b", m["a"])
+}
+
+func TestPopulateSecretsConfiguration(t *testing.T) {
+	t.Run("secret store configuration is populated", func(t *testing.T) {
+		//setup
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		m := NewMockKubernetesStore()
+
+		//act
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New("testMock", func() secretstores.SecretStore {
+				return m
+			}))
+
+		rt.processOneComponent(components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "testMock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.testMock",
+			},
+		})
+		rt.populateSecretsConfiguration()
+
+		//verify
+		assert.NotNil(t, rt.secretStores["testMock"])
+		assert.Contains(t, rt.defaultSecretAccess, "testMock", "Expected testMock secret store to be populated")
+		assert.Equal(t, config.AllowAccess, rt.defaultSecretAccess["testMock"], "Expected default allow acess")
+		assert.NotContains(t, rt.deniedSecrets, "testMock", "Expected testMock deniedSecrets to not be populated")
+		assert.NotContains(t, rt.allowedSecrets, "testMock", "Expected testMock allowedSecrets to not be populated")
+	})
 }
 
 func TestProcessComponentSecrets(t *testing.T) {

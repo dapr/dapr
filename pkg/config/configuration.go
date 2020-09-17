@@ -21,6 +21,8 @@ import (
 const (
 	operatorCallTimeout = time.Second * 5
 	operatorMaxRetries  = 100
+	AllowAccess         = "allow"
+	DenyAccess          = "deny"
 )
 
 type Configuration struct {
@@ -135,4 +137,27 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient operat
 		return nil, err
 	}
 	return &conf, nil
+}
+
+func IsSecretAllowed(storeName, key, defaultSecretAccess string, allowedSecrets, deniedSecrets map[string]map[string]struct{}) bool {
+	// By default if the store has a record in allowedSecrets map, allow access.
+
+	// If the allowedSecrets list is not empty then check if the access is specifically allowed for this key.
+	if m, ok := allowedSecrets[storeName]; ok {
+		if len(m) != 0 {
+			_, allow := m[key]
+			return allow
+		}
+	}
+
+	// If deny list is present for the secret store.
+	if m, ok := deniedSecrets[storeName]; ok {
+		_, deny := m[key]
+		// If the specific key is denied, then alone deny access.
+		if deny {
+			return !deny
+		}
+	}
+
+	return defaultSecretAccess == AllowAccess
 }
