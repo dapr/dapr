@@ -7,6 +7,7 @@ package config
 
 import (
 	"context"
+	"encoding/asn1"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -27,6 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+var log = logger.NewLogger("dapr.configuration")
+
 const (
 	operatorCallTimeout = time.Second * 5
 	operatorMaxRetries  = 100
@@ -36,6 +39,7 @@ const (
 	AccessControlActionAllow = "allow"
 	// AccessControlActionDeny defines the deny action for an operation
 	AccessControlActionDeny = "deny"
+	DefaultTrustDomain      = "public"
 )
 
 type Configuration struct {
@@ -45,6 +49,7 @@ type Configuration struct {
 // AccessControlList is an in-memory access control list config for fast lookup
 type AccessControlList struct {
 	DefaultAction string
+	TrustDomain   string
 	PolicySpec    map[string]AppPolicySpec
 }
 
@@ -116,6 +121,7 @@ type AppOperation struct {
 // AccessControlSpec is the spec object in ConfigurationSpec
 type AccessControlSpec struct {
 	DefaultAction string          `json:"defaultAction" yaml:"defaultAction"`
+	TrustDomain   string          `json:"trustDomain" yaml:"trustDomain"`
 	AppPolicies   []AppPolicySpec `json:"policies" yaml:"policies"`
 }
 
@@ -257,9 +263,17 @@ func TranslateAccessControlSpec(accessControlSpec AccessControlSpec) AccessContr
 	var accessControlList AccessControlList
 	accessControlList.PolicySpec = make(map[string]AppPolicySpec)
 	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
+
+	if accessControlSpec.TrustDomain != "" {
+		accessControlList.TrustDomain = accessControlSpec.TrustDomain
+	} else {
+
+		accessControlList.TrustDomain = DefaultTrustDomain
+	}
+
 	var log = logger.NewLogger("dapr.configuration")
 	log.Infof("@@@@@ Translating policy spec....")
-
+	log.Infof("@@@@@@ global default action: %s, trust domain: %s", accessControlList.DefaultAction, accessControlList.TrustDomain)
 	for _, appPolicySpec := range accessControlSpec.AppPolicies {
 		log.Infof("@@@@@ name: %s spec: %s", appPolicySpec.AppName, appPolicySpec)
 		accessControlList.PolicySpec[appPolicySpec.AppName] = appPolicySpec
@@ -271,19 +285,23 @@ func TranslateAccessControlSpec(accessControlSpec AccessControlSpec) AccessContr
 // TryGetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
 func TryGetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 	// TODO: Remove hardcoding for testing
-	// spiffeID, err := getSpiffeID(ctx)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	spiffeID, err := getSpiffeID(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	spiffeID := "spiffe://a/ns/b/pythonapp"
-	fmt.Printf("spiffe id :- %v\n", spiffeID)
+	// spiffeID = "spiffe://a/ns/b/pythonapp"
+	log.Infof("spiffe id :- %v\n", spiffeID)
 	id := parseSpiffeID(spiffeID)
 	return id, nil
 }
 
 func parseSpiffeID(spiffeID string) *SpiffeID {
-	fmt.Printf("spiffe id :- %v\n", spiffeID)
+	if spiffeID == "" {
+		log.Infof("Input spiffe id string is empty")
+		return nil
+	}
+	log.Infof("input spiffe id string :- %v\n", spiffeID)
 
 	// The SPIFFE Id will be of the format: spiffe://<trust-domain/ns/<namespace>/<app-id>
 	parts := strings.Split(spiffeID, "/")
@@ -301,13 +319,15 @@ func getSpiffeID(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("could not retrieve spiffe id from the grpc context")
 	}
 
-	fmt.Println(peer)
+	log.Info(peer)
 
 	if peer.AuthInfo == nil {
 		return "", fmt.Errorf("could not retrieve auth info from grpc context tls info")
 	}
 
 	tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
+
+	log.Infof("@@@@ Peer TLS info: %v", tlsInfo)
 
 	if tlsInfo.State.HandshakeComplete == false {
 		return "", fmt.Errorf("tls handshake is not complete")
@@ -320,14 +340,39 @@ func getSpiffeID(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("could not retrieve read client cert info")
 	}
 
-	spiffeID := string(certChain[0][0].ExtraExtensions[0].Value)
+	log.Infof("@@@@@ Dump certChain[0][0].Extensions[0].Value: %v", certChain[0][0].Extensions[0].Value)
+	oidSubjectAlternativeName := asn1.ObjectIdentifier{2, 5, 29, 17}
+	var spiffeID string
+	for i, ext := range certChain[0][0].Extensions {
+		log.Infof("@@@@ Dumping extension: %v: %v", i, ext)
+		if ext.Id.Equal(oidSubjectAlternativeName) {
+			log.Infof("Matched oidSubjectAlternativeName")
+			var sequence asn1.RawValue
+			_, _ = asn1.Unmarshal(ext.Value, &sequence)
+
+			for bytes := sequence.Bytes; len(bytes) > 0; {
+				var rawValue asn1.RawValue
+
+				bytes, _ = asn1.Unmarshal(bytes, &rawValue)
+
+				id := string(rawValue.Bytes)
+				log.Infof("id: %s", id)
+				log.Infof("id slice string: %s", string(rawValue.Bytes[:]))
+				if strings.HasPrefix(id, "spiffe://") {
+					log.Infof("Found spiffe id in cert: %s", id)
+					spiffeID = id
+				}
+			}
+		}
+	}
+
+	// spiffeID := string(certChain[0][0].Extensions[0].Value[:])
 
 	return spiffeID, nil
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
-func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, operation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) (bool, string) {
-	var log = logger.NewLogger("dapr.configuration")
+func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string, operation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) (bool, string) {
 
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
@@ -335,6 +380,7 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, oper
 	}
 
 	log.Infof("@@@@ Dumping all policy specs....")
+	log.Infof("Default action: %s, TrustDomain: %s", accessControlList.DefaultAction, accessControlList.TrustDomain)
 	for key, spec := range accessControlList.PolicySpec {
 		log.Infof("key: %s, value: %s", key, spec)
 	}
@@ -346,19 +392,19 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, oper
 	}
 
 	policy, found := accessControlList.PolicySpec[srcAppID]
-	log.Infof("@@@@ Using policy spec: %v", policy)
+	log.Infof("@@@@ Using policy spec for srcAppId: %s: %v", srcAppID, policy)
 
 	if !found {
 		return isActionAllowed(action), fmt.Sprintf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
 	}
 
 	var logMessage string
-	if id == nil {
+	if spiffeID == nil {
 		logMessage = fmt.Sprintf("Unable to verify spiffe id of the client. Will apply default global action")
 	} else {
 		action = policy.DefaultAction
 
-		if policy.TrustDomain != "*" && policy.TrustDomain != id.trustDomain {
+		if policy.TrustDomain != "*" && policy.TrustDomain != spiffeID.trustDomain {
 			return isActionAllowed(action), fmt.Sprintf("Trust Domain mismatch. Apply global default action")
 		}
 
@@ -373,7 +419,7 @@ func IsOperationAllowedByAccessControlPolicy(id *SpiffeID, srcAppID string, oper
 					for _, policyVerb := range policyOperation.HTTPVerb {
 						if policyVerb == httpVerb.String() || policyVerb == "*" {
 							action = policyOperation.Action
-							logMessage = fmt.Sprintf("Applying action: %v for srcAppId: %s operation: %v, verb: %v", srcAppID, action, inputOperation, policyVerb)
+							logMessage = fmt.Sprintf("Applying action for srcAppId: %s operation: %v, verb: %v action: %v", srcAppID, inputOperation, policyVerb, action)
 							break
 						}
 					}

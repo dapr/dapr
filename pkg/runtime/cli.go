@@ -172,6 +172,11 @@ func FromFlags() (*DaprRuntime, error) {
 			globalConfig, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
 
+		if configErr != nil {
+			log.Infof("@@@@@ Config error: %v", configErr)
+		}
+		log.Infof("@@@@@ Dumping global config: %v", globalConfig)
+
 		accessControlList = global_config.TranslateAccessControlSpec(globalConfig.Spec.AccessControlSpec)
 		log.Infof("Built in-memory ACL rules: %v", accessControlList)
 	}
