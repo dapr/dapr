@@ -60,8 +60,12 @@ jobs:
         if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
         run: make lint
       - name: Run make test
+        env:	
+          COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
         if: matrix.target_arch != 'arm'
         run: make test
+      - name: Codecov
+        uses: codecov/codecov-action@v1
       - name: Run make release to build and archive binaries
         run: |
           mkdir -p ${{ env.ARCHIVE_OUTDIR }}
