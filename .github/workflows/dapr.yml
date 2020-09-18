@@ -60,8 +60,13 @@ jobs:
         if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
         run: make lint
       - name: Run make test
+        env:
+          COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
         if: matrix.target_arch != 'arm'
         run: make test
+      - name: Codecov
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        uses: codecov/codecov-action@v1
       - name: Run make release to build and archive binaries
         run: |
           mkdir -p ${{ env.ARCHIVE_OUTDIR }}
@@ -161,7 +166,7 @@ jobs:
               tar xzvf $tgzfile -C $RELEASE_DIR
             done
           done
-          
+
       - name: publish binaries to github
         if: startswith(github.ref, 'refs/tags/v')
         run: |
@@ -259,5 +264,5 @@ jobs:
             git config --global user.email "daprweb@microsoft.com"
             git config --global user.name "dapr-bot"
             git add --all
-            git commit -m "Release - $daprVersion"  
+            git commit -m "Release - $daprVersion"
             git push
