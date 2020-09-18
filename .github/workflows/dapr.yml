@@ -65,6 +65,7 @@ jobs:
         if: matrix.target_arch != 'arm'
         run: make test
       - name: Codecov
+        if: matrix.target_arch != 'arm'
         uses: codecov/codecov-action@v1
       - name: Run make release to build and archive binaries
         run: |
