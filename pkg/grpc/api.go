@@ -435,9 +435,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			setReq := state.SetRequest{
 				Key: a.getModifiedStateKey(req.Key),
 				// Limitation:
-				// type conversion is required because Multi of some statestore
-				// implementation cannot handle []byte properly.
-				Value:    string(req.Value),
+				// components that cannot handle byte array need to deserialize/serialize in
+				// component sepcific way in components-contrib repo.
+				Value:    req.Value,
 				Metadata: req.Metadata,
 				ETag:     req.Etag,
 			}

@@ -51,6 +51,8 @@ kubectl delete -f service.yaml
 
 A test driver is a typical Go test with `e2e` build tag under [/tests/e2e/](../e2e/). It can deploy test apps to a test cluster, run the tests, and clean up all test apps and any resources. We provides test runner framework to manage the test app's lifecycle during the test so that you do not need to manage the test apps by yourself. We plan to add more functionalities to test runner later, such as the log collection of test app POD.
 
+> *Note:* Any test app you deploy should have a name unique to your test driver. Multiple test drivers may be run at the same time by the automated E2E test runner, so if you have an app name which is not unique, you may collide with another test app. Also, make sure that any stateful resources (pubsub topics, statestores, secrets, etc.) have names unique to your test driver.
+
 ### Writing test app
 
 1. Create new test directory under [/tests/e2e/](../e2e).
