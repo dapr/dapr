@@ -203,9 +203,6 @@ func (c SecretsScope) IsSecretAllowed(key string) bool {
 // Runs Binary Search on a sorted list of strings to find a key.
 func containsKey(s []string, key string) bool {
 	index := sort.SearchStrings(s, key)
-	if index < len(s) && s[index] == key {
-		return true
-	}
 
-	return false
+	return index < len(s) && s[index] == key
 }

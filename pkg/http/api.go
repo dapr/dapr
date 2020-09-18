@@ -1100,10 +1100,9 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
-	config, ok := a.secretsConfiguration[storeName]
-	if !ok {
-		// By default if a configuration is not defined for a secret store, return true.
-		return true
+	if config, ok := a.secretsConfiguration[storeName]; ok {
+		return config.IsSecretAllowed(key)
 	}
-	return config.IsSecretAllowed(key)
+	// By default if a configuration is not defined for a secret store, return true.
+	return true
 }
