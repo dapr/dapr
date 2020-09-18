@@ -5,7 +5,9 @@
 
 package logger
 
-import "fmt"
+import (
+	"github.com/pkg/errors"
+)
 
 const (
 	defaultJSONOutput  = false
@@ -28,7 +30,7 @@ type Options struct {
 // SetOutputLevel sets the log output level
 func (o *Options) SetOutputLevel(outputLevel string) error {
 	if toLogLevel(outputLevel) == UndefinedLevel {
-		return fmt.Errorf("undefined Log Output Level:%s", outputLevel)
+		return errors.Errorf("undefined Log Output Level: %s", outputLevel)
 	}
 	o.OutputLevel = outputLevel
 	return nil
@@ -79,7 +81,7 @@ func ApplyOptionsToLoggers(options *Options) error {
 
 	daprLogLevel := toLogLevel(options.OutputLevel)
 	if daprLogLevel == UndefinedLevel {
-		return fmt.Errorf("invalid value for --log-level: %s", options.OutputLevel)
+		return errors.Errorf("invalid value for --log-level: %s", options.OutputLevel)
 	}
 
 	for _, v := range internalLoggers {
