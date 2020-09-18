@@ -1297,27 +1297,23 @@ func TestV1SecretEndpoints(t *testing.T) {
 		"store1": fakeStore,
 		"store2": fakeStore,
 		"store3": fakeStore,
+		"store4": fakeStore,
 	}
-	secretsConfiguration := map[string]*config.ParsedSecretsConfiguration{
+	secretsConfiguration := map[string]config.SecretsScope{
 		"store1": {
 			DefaultAccess: config.AllowAccess,
-			DeniedSecrets: map[string]struct{}{
-				"not-allowed": {},
-			},
+			DeniedSecrets: []string{"not-allowed"},
 		},
 		"store2": {
-			DefaultAccess: config.DenyAccess,
-			AllowedSecrets: map[string]struct{}{
-				"good-key": {},
-			},
+			DefaultAccess:  config.DenyAccess,
+			AllowedSecrets: []string{"good-key"},
 		},
 		"store3": {
-			DefaultAccess: config.AllowAccess,
-			AllowedSecrets: map[string]struct{}{
-				"good-key": {},
-			},
+			DefaultAccess:  config.AllowAccess,
+			AllowedSecrets: []string{"good-key"},
 		},
 	}
+
 	testAPI := &api{
 		secretsConfiguration: secretsConfiguration,
 		secretStores:         fakeStores,
@@ -1327,6 +1323,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	storeName := "store1"
 	deniedStoreName := "store2"
 	restrictedStore := "store3"
+	unrestrictedStore := "store4" // No configuration defined for the store
 
 	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
@@ -1386,6 +1383,14 @@ func TestV1SecretEndpoints(t *testing.T) {
 
 	t.Run("Get secret - Good Key default allow", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
+	})
+
+	t.Run("Get secret - Good Key from unrestricted store", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert

@@ -16,7 +16,7 @@ func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 			Data: map[string]string{"good-key": "life is good"},
 		}, nil
 	}
-	return secretstores.GetSecretResponse{Data: nil}, nil
+	return secretstores.GetSecretResponse{}, nil
 }
 
 func (c FakeSecretStore) Init(metadata secretstores.Metadata) error {

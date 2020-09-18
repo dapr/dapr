@@ -64,7 +64,7 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
-	secretsConfiguration  map[string]*config.ParsedSecretsConfiguration
+	secretsConfiguration  map[string]config.SecretsScope
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -76,7 +76,7 @@ func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
-	secretsConfiguration map[string]*config.ParsedSecretsConfiguration,
+	secretsConfiguration map[string]config.SecretsScope,
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
@@ -505,5 +505,10 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
-	return a.secretsConfiguration[storeName].IsSecretAllowed(key)
+	config, ok := a.secretsConfiguration[storeName]
+	if !ok {
+		// By default if a configuration is not defined for a secret store, return true.
+		return true
+	}
+	return config.IsSecretAllowed(key)
 }

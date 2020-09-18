@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const (
@@ -39,8 +41,6 @@ type ConfigurationSpec struct {
 }
 
 type SecretsSpec struct {
-	// In the secret scopes list, if the storeName is repeated, the last configuration with the same storeName will
-	// replace the previously specified configurations.
 	Scopes []SecretsScope `json:"scopes"`
 }
 
@@ -118,6 +118,10 @@ func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = sortAndValidateSecretsConfiguration(&conf)
+	if err != nil {
+		return nil, err
+	}
 
 	return &conf, nil
 }
@@ -139,42 +143,69 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient operat
 	if err != nil {
 		return nil, err
 	}
+
+	err = sortAndValidateSecretsConfiguration(&conf)
+	if err != nil {
+		return nil, err
+	}
+
 	return &conf, nil
 }
 
-type ParsedSecretsConfiguration struct {
-	DefaultAccess  string
-	AllowedSecrets map[string]struct{}
-	DeniedSecrets  map[string]struct{}
-}
+// Validate the secrets configuration and sort the allow and deny lists if present.
+func sortAndValidateSecretsConfiguration(conf *Configuration) error {
+	scopes := conf.Spec.Secrets.Scopes
+	set := sets.NewString()
+	for _, scope := range scopes {
+		// validate scope
+		if set.Has(scope.StoreName) {
+			return errors.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
+		}
+		if scope.DefaultAccess != "" &&
+			!strings.EqualFold(scope.DefaultAccess, AllowAccess) &&
+			!strings.EqualFold(scope.DefaultAccess, DenyAccess) {
+			return errors.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
+		}
+		set.Insert(scope.StoreName)
 
-func (c *ParsedSecretsConfiguration) ParseSecretsDefaultAccess(input string) {
-	// Accept only "allow" or "deny" strings or default to "allow".
-	switch strings.ToLower(input) {
-	case AllowAccess:
-		c.DefaultAccess = AllowAccess
-	case DenyAccess:
-		c.DefaultAccess = DenyAccess
-	default:
-		c.DefaultAccess = AllowAccess
+		// modify scope
+		sort.Strings(scope.AllowedSecrets)
+		sort.Strings(scope.DeniedSecrets)
 	}
+
+	return nil
 }
 
-func (c *ParsedSecretsConfiguration) IsSecretAllowed(key string) bool {
-	// By default if the store has a record in allowedSecrets map, allow access.
+// Check if the secret is allowed to be accessed.
+func (c SecretsScope) IsSecretAllowed(key string) bool {
+	// By default set allow access for the secret store.
+	var access string = AllowAccess
+	// Check and set deny access.
+	if strings.EqualFold(c.DefaultAccess, DenyAccess) {
+		access = DenyAccess
+	}
 
 	// If the allowedSecrets list is not empty then check if the access is specifically allowed for this key.
 	if len(c.AllowedSecrets) != 0 {
-		_, allow := c.AllowedSecrets[key]
-		return allow
+		return containsKey(c.AllowedSecrets, key)
 	}
 
-	// If deny list is present for the secret store.
-	_, deny := c.DeniedSecrets[key]
+	// Check key in deny list if deny list is present for the secret store.
 	// If the specific key is denied, then alone deny access.
-	if deny {
+	if deny := containsKey(c.DeniedSecrets, key); deny {
 		return !deny
 	}
 
-	return c.DefaultAccess == AllowAccess
+	// Check if defined default access is allow.
+	return access == AllowAccess
+}
+
+// Runs Binary Search on a sorted list of strings to find a key.
+func containsKey(s []string, key string) bool {
+	index := sort.SearchStrings(s, key)
+	if index < len(s) && s[index] == key {
+		return true
+	}
+
+	return false
 }

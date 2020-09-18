@@ -133,7 +133,7 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
 
-	secretsConfiguration map[string]*config.ParsedSecretsConfiguration
+	secretsConfiguration map[string]config.SecretsScope
 
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentsDone      chan bool
@@ -168,7 +168,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		scopedPublishings:   map[string][]string{},
 		allowedTopics:       map[string][]string{},
 
-		secretsConfiguration: map[string]*config.ParsedSecretsConfiguration{},
+		secretsConfiguration: map[string]config.SecretsScope{},
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentsDone:      make(chan bool),
@@ -312,32 +312,9 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 }
 
 func (a *DaprRuntime) populateSecretsConfiguration() {
-	for name := range a.secretStores {
-		// This is added for the scenario where secret store component is added, but
-		// no restrictive configuration is defined.
-		a.secretsConfiguration[name] = &config.ParsedSecretsConfiguration{
-			DefaultAccess: config.AllowAccess,
-		}
-		// a.defaultSecretAccess[name] = config.AllowAccess
-		for _, storeInList := range a.globalConfig.Spec.Secrets.Scopes {
-			if storeInList.StoreName == name {
-				c := a.secretsConfiguration[name]
-				c.ParseSecretsDefaultAccess(storeInList.DefaultAccess)
-				// if deny, break. Eg: kubernetes is put as deny access with no allowed list.
-				// This scenario also ignores only deniedSecrets being populated if the defaultAccess is deny.
-				if c.DefaultAccess == config.DenyAccess && storeInList.AllowedSecrets == nil {
-					break
-				}
-				if storeInList.AllowedSecrets != nil {
-					//Convert to a Set like access for easy lookup.
-					c.AllowedSecrets = convertToMap(storeInList.AllowedSecrets)
-				}
-				if storeInList.DeniedSecrets != nil {
-					//Convert to a Set like access for easy lookup.
-					c.DeniedSecrets = convertToMap(storeInList.DeniedSecrets)
-				}
-			}
-		}
+	// Populate in a map for easy lookup by store name.
+	for _, scope := range a.globalConfig.Spec.Secrets.Scopes {
+		a.secretsConfiguration[scope.StoreName] = scope
 	}
 }
 
@@ -1616,13 +1593,4 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
-}
-
-// Function to convert string list into Map for easy lookup. (Set alternative)
-func convertToMap(list []string) map[string]struct{} {
-	m := make(map[string]struct{})
-	for _, item := range list {
-		m[item] = struct{}{}
-	}
-	return m
 }

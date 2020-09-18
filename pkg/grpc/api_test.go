@@ -630,31 +630,27 @@ func TestGetSecret(t *testing.T) {
 		"store1": fakeStore,
 		"store2": fakeStore,
 		"store3": fakeStore,
+		"store4": fakeStore,
 	}
-	secretsConfiguration := map[string]*config.ParsedSecretsConfiguration{
+	secretsConfiguration := map[string]config.SecretsScope{
 		"store1": {
 			DefaultAccess: config.AllowAccess,
-			DeniedSecrets: map[string]struct{}{
-				"not-allowed": {},
-			},
+			DeniedSecrets: []string{"not-allowed"},
 		},
 		"store2": {
-			DefaultAccess: config.DenyAccess,
-			AllowedSecrets: map[string]struct{}{
-				"good-key": {},
-			},
+			DefaultAccess:  config.DenyAccess,
+			AllowedSecrets: []string{"good-key"},
 		},
 		"store3": {
-			DefaultAccess: config.AllowAccess,
-			AllowedSecrets: map[string]struct{}{
-				"good-key": {},
-			},
+			DefaultAccess:  config.AllowAccess,
+			AllowedSecrets: []string{"good-key"},
 		},
 	}
 	expectedResponse := "life is good"
 	storeName := "store1"
 	deniedStoreName := "store2"
 	restrictedStore := "store3"
+	unrestrictedStore := "store4" // No configuration defined for the store
 
 	testCases := []struct {
 		testName         string
@@ -664,6 +660,13 @@ func TestGetSecret(t *testing.T) {
 		expectedResponse string
 		expectedError    codes.Code
 	}{
+		{
+			testName:         "Good Key from unrestricted store",
+			storeName:        unrestrictedStore,
+			key:              "good-key",
+			errorExcepted:    false,
+			expectedResponse: expectedResponse,
+		},
 		{
 			testName:         "Good Key default access",
 			storeName:        storeName,
