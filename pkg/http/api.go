@@ -27,6 +27,7 @@ import (
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 )
@@ -383,7 +384,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
 		respondWithError(reqCtx, 400, msg)
 		log.Debug(msg)
-		return nil, fmt.Errorf(msg.Message)
+		return nil, errors.New(msg.Message)
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
@@ -392,7 +393,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
 		respondWithError(reqCtx, 400, msg)
 		log.Debug(msg)
-		return nil, fmt.Errorf(msg.Message)
+		return nil, errors.New(msg.Message)
 	}
 	return a.stateStores[storeName], nil
 }
