@@ -11,7 +11,7 @@ metadata:
   labels:
     app: stateactor
 spec:
-  replicas: 1
+  replicas: 50
   selector:
     matchLabels:
       app: stateactor

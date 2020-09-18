@@ -11,7 +11,7 @@ metadata:
   labels:
     app: loadtestclient
 spec:
-  replicas: 1
+  replicas: 10
   selector:
     matchLabels:
       app: loadtestclient
@@ -34,13 +34,13 @@ spec:
                 - key: agentpool
                   operator: In
                   values:
-                  - agentpool
+                  - loadgen
                   # - loadgen
       containers:
       - name: loadtestclient
         image: youngp/stateactor:latest
         command: ["./testclient"]
-        args: ["-a", "StateActor", "-c", "10", "-numactors", "1024", "-s", "1024", "-t", "1m"]
+        args: ["-a", "StateActor", "-c", "10", "-numactors", "2048", "-s", "1024", "-t", "1h", "-qps", "1024"]
         ports:
         - containerPort: 3000
         imagePullPolicy: Always

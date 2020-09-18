@@ -1,0 +1,31 @@
+# helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+# helm install dapr-prom prometheus-community/prometheus -n dapr-monitoring -f ./prom-override.yml
+# helm install grafana grafana/grafana -n dapr-monitoring -f ./grafana-override.yml
+
+alertmanager:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: agentpool
+              operator: In
+              values:
+              - loadgen
+  persistentVolume:
+    enable: false
+pushgateway:
+  persistentVolume:
+    enabled: false
+server:
+  persistentVolume:
+    enabled: false
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: agentpool
+              operator: In
+              values:
+              - loadgen
