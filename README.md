@@ -72,8 +72,8 @@ See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
 
 ## Quickstarts and Samples
 
-* See the [quickstarts repository](https://github.com/dapr/quickstarts) for code examples that can help you get started with Dapr. 
-* Explore additional samples in the Dapr [samples repository](https://github.com/dapr/samples). 
+* See the [quickstarts repository](https://github.com/dapr/quickstarts) for code examples that can help you get started with Dapr.
+* Explore additional samples in the Dapr [samples repository](https://github.com/dapr/samples).
 
 ## Community
 We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls. Here is how to get involved:
@@ -84,7 +84,7 @@ Reach out with any questions you may have and we'll make sure to answer then as 
 
 | Platform  | Link        |
 |:----------|:------------|
-| 💬 Instant Message Chat (preferred) | https://gitter.im/Dapr/community 
+| 💬 Instant Message Chat (preferred) | https://gitter.im/Dapr/community
 | 📧 Mailing List | https://groups.google.com/forum/#!forum/dapr-dev
 | 🐤 Twitter | [@daprdev](https://twitter.com/daprdev)
 
@@ -114,8 +114,8 @@ Every two weeks we host a community call to showcase new features, review upcomi
 |:-----------|:------------|
 | 📺 Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
 | 🌎 Conferences | - [Dapr, Rudr, OAM: Mark Russinovich presents next gen app development & deployment](https://www.youtube.com/watch?v=eJCu6a-x9uo)<br>- [Mark Russinovich presents "The Future of Cloud Native Applications with OAM and Dapr"](https://myignite.techcommunity.microsoft.com/sessions/82059)<br>- [Build 2020: Mark Fussell presents Dapr](https://channel9.msdn.com/Events/Build/2020/INT118)
-| 🎤 Hanselminutes | [Dapr Distributed Application Runtime with Mark Russinovich](https://hanselminutes.com/718/dapr-distributed-application-runtime-with-azure-cto-mark-russinovich) 
-| 💻 Azure Community Live | [Build microservice applications using DAPR with Mark Fussell ](https://www.youtube.com/watch?v=CgqI7nen-Ng) 
+| 🎤 Hanselminutes | [Dapr Distributed Application Runtime with Mark Russinovich](https://hanselminutes.com/718/dapr-distributed-application-runtime-with-azure-cto-mark-russinovich)
+| 💻 Azure Community Live | [Build microservice applications using DAPR with Mark Fussell ](https://www.youtube.com/watch?v=CgqI7nen-Ng)
 
 ### Contributing to Dapr
 
@@ -131,13 +131,13 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 
 | Repo | Description |
 |:-----|:------------|
-| [Dapr](https://github.com/dapr/dapr) | The main repository that you are currently in. Contains the Dapr runtime code and overview documentation.
+| [Dapr](https://github.com/dapr/dapr)[![codecov](https://codecov.io/gh/dapr/dapr/branch/master/graph/badge.svg)](https://codecov.io/gh/dapr/dapr) | The main repository that you are currently in. Contains the Dapr runtime code and overview documentation.
 | [CLI](https://github.com/dapr/cli) | The Dapr CLI allows you to setup Dapr on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Dapr instances.
 | [Docs](https://github.com/dapr/docs) | The documentation repository for Dapr.
 | [Quickstarts](https://github.com/dapr/quickstarts) | This repository contains a series of simple code samples that highlight the main Dapr capabilities
 | [Samples](https://github.com/dapr/samples) | This repository holds community maintained samples for various Dapr use cases.
-| [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications. 
-| [Dashboard ](https://github.com/dapr/dashboard) | General purpose dashboard for Dapr 
+| [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications.
+| [Dashboard ](https://github.com/dapr/dashboard) | General purpose dashboard for Dapr
 | [Go-sdk](https://github.com/dapr/go-sdk) | Dapr SDK for Go
 | [Java-sdk](https://github.com/dapr/java-sdk) | Dapr SDK for Java
 | [JS-sdk](https://github.com/dapr/js-sdk) | Dapr SDK for JavaScript
