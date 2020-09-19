@@ -72,7 +72,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 
 		default:
 			if registeredMemberID == "" {
-				log.Debug("stream is disconnected before member is added")
+				log.Debugf("stream is disconnected before member is added: %v", err)
 				return nil
 			}
 
