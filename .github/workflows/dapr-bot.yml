@@ -30,7 +30,8 @@ jobs:
               "wcs1only",
               "orizohar",
               "pruthvidhodda",
-              "mchmarny"
+              "mchmarny",
+              "tcnghia"
             ];
 
             const payload = context.payload;
