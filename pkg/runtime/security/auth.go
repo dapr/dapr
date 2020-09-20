@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"sync"
@@ -86,7 +85,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 
 	config, err := dapr_credentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
+		return nil, errors.Wrap(err, "failed to create tls config from cert and key")
 	}
 
 	unaryClientInterceptor := grpc_retry.UnaryClientInterceptor()
