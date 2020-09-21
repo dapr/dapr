@@ -30,6 +30,24 @@ type ConfigurationSpec struct {
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
 	// +optional
 	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
+	// +optional
+	Secrets SecretsSpec `json:"secrets,omitempty"`
+}
+
+// SecretsSpec is the spec for secrets configuration
+type SecretsSpec struct {
+	Scopes []SecretsScope `json:"scopes"`
+}
+
+// SecretsScope defines the scope for secrets
+type SecretsScope struct {
+	// +optional
+	DefaultAccess string `json:"defaultAccess,omitempty"`
+	StoreName     string `json:"storeName"`
+	// +optional
+	AllowedSecrets []string `json:"allowedSecrets,omitempty"`
+	// +optional
+	DeniedSecrets []string `json:"deniedSecrets,omitempty"`
 }
 
 // PipelineSpec defines the middleware pipeline

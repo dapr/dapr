@@ -133,6 +133,8 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
 
+	secretsConfiguration map[string]config.SecretsScope
+
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentDependents map[string][]components_v1alpha1.Component
 }
@@ -164,6 +166,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		scopedSubscriptions: map[string][]string{},
 		scopedPublishings:   map[string][]string{},
 		allowedTopics:       map[string][]string{},
+
+		secretsConfiguration: map[string]config.SecretsScope{},
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
@@ -282,6 +286,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
+	// Setup allow/deny list for secrets
+	a.populateSecretsConfiguration()
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
 	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
@@ -301,6 +307,13 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	return nil
+}
+
+func (a *DaprRuntime) populateSecretsConfiguration() {
+	// Populate in a map for easy lookup by store name.
+	for _, scope := range a.globalConfig.Spec.Secrets.Scopes {
+		a.secretsConfiguration[scope.StoreName] = scope
+	}
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -613,7 +626,8 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores,
+		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
@@ -635,7 +649,9 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
+		a.getPublishAdapter(), a.directMessaging, a.actor,
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
@@ -1509,7 +1525,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type)
 	if err != nil {
-		log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
+		log.Warnf("failed creating secret store %s: %s", c.Spec.Type, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 		return err
 	}
