@@ -7,6 +7,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/asn1"
 	"fmt"
 	"strconv"
 
@@ -34,7 +35,9 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -108,6 +111,49 @@ func NewAPI(
 func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	if a.appChannel == nil {
 		return nil, status.Error(codes.Internal, "app channel is not initialized")
+	}
+
+	fmt.Println("@@@@ call arrived")
+	peer, ok := peer.FromContext(ctx)
+	if ok {
+		tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
+		fmt.Println(len(tlsInfo.State.PeerCertificates))
+
+		oid := asn1.ObjectIdentifier{2, 5, 29, 17}
+
+		for _, crt := range tlsInfo.State.PeerCertificates {
+			for _, ext := range crt.Extensions {
+				if ext.Id.Equal(oid) {
+					fmt.Println("@@@@ OID found")
+
+					var sequence asn1.RawValue
+					if rest, err := asn1.Unmarshal(ext.Value, &sequence); err != nil {
+						fmt.Println(err)
+						continue
+					} else if len(rest) != 0 {
+						fmt.Println("the SAN extension is incorrectly encoded")
+						continue
+					}
+
+					if !sequence.IsCompound || sequence.Tag != asn1.TagSequence || sequence.Class != asn1.ClassUniversal {
+						fmt.Println("the SAN extension is incorrectly encoded")
+						continue
+					}
+
+					for bytes := sequence.Bytes; len(bytes) > 0; {
+						var rawValue asn1.RawValue
+						var err error
+
+						bytes, err = asn1.Unmarshal(bytes, &rawValue)
+						if err != nil {
+							return nil, err
+						}
+
+						fmt.Println("@@@@ Value: " + string(rawValue.Bytes))
+					}
+				}
+			}
+		}
 	}
 
 	req, err := invokev1.InternalInvokeRequest(in)

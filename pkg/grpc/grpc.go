@@ -77,7 +77,6 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 	}
 
 	opts := []grpc.DialOption{
-		grpc.WithBlock(),
 		grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 
@@ -92,8 +91,13 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 			return nil, errors.Errorf("error generating x509 Key Pair: %s", err)
 		}
 
+		var serverName string
+		if id != "cluster.local" {
+			serverName = fmt.Sprintf("%s.default.svc.cluster.local", id)
+		}
+
 		ta := credentials.NewTLS(&tls.Config{
-			ServerName:   id,
+			ServerName:   serverName,
 			Certificates: []tls.Certificate{cert},
 			RootCAs:      signedCert.TrustChain,
 		})
@@ -102,11 +106,11 @@ func (g *Manager) GetGRPCConnection(address, id string, skipTLS, recreateIfExist
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
-	defer cancel()
+	//ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
+	//defer cancel()
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
-	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
+	conn, err := grpc.DialContext(context.TODO(), dialPrefix+address, opts...)
 	if err != nil {
 		g.lock.Unlock()
 		return nil, err
