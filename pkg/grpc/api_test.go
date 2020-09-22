@@ -939,7 +939,7 @@ func initializeAccessControlList() config.AccessControlList {
 			},
 		},
 	}
-	accessControlList := config.TranslateAccessControlSpec(inputSpec)
+	accessControlList, _ := config.ParseAccessControlSpec(inputSpec)
 
 	return accessControlList
 }

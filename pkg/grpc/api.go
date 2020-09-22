@@ -148,7 +148,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, targetOperation st
 		log.Errorf("Error while reading client cert: %v.", err.Error())
 	}
 
-	return config.IsOperationAllowedByAccessControlPolicy(spiffeID, targetOperation, spiffeID.AppID, httpVerb, a.accessControlList)
+	return config.IsOperationAllowedByAccessControlPolicy(spiffeID, spiffeID.AppID, targetOperation, httpVerb, a.accessControlList)
 }
 
 // CallActor invokes a virtual actor

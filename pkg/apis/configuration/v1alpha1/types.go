@@ -92,6 +92,7 @@ type AppPolicySpec struct {
 	AppName             string               `json:"app" yaml:"app"`
 	DefaultAction       string               `json:"defaultAction" yaml:"defaultAction"`
 	TrustDomain         string               `json:"trustDomain" yaml:"trustDomain"`
+	Namespace           string               `json:"namespace" yaml:"namespace"`
 	AppOperationActions []AppOperationAction `json:"operations" yaml:"operations"`
 }
 

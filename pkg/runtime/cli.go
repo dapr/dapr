@@ -188,7 +188,10 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	log.Infof("@@@@ Calling TranslateAccessControlSpec....")
-	accessControlList = global_config.TranslateAccessControlSpec(globalConfig.Spec.AccessControlSpec, namespace)
+	accessControlList, err = global_config.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
 	log.Infof("Built in-memory ACL rules: %v", accessControlList)
 	return NewDaprRuntime(runtimeConfig, globalConfig, &accessControlList), nil
 }
