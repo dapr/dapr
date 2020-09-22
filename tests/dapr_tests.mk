@@ -139,7 +139,8 @@ setup-test-env-redis:
 setup-test-env-kafka:
 	$(HELM) template dapr-kafka incubator/kafka -f ./tests/config/kafka_override.yaml | python ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
 	echo "Waiting for kafka config job to complete"
-	kubectl wait --timeout=10m --for=condition=complete job `kubectl get jobs  -n $(DAPR_TEST_NAMESPACE) | awk '/dapr-kafka-config/ {print $$1}'` -n $(DAPR_TEST_NAMESPACE)
+	kubectl wait --timeout=10m --for=condition=complete job -n $(DAPR_TEST_NAMESPACE) \
+	  -l app.kubernetes.io/component=kafka-config,app.kubernetes.io/instance=dapr-kafka
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis
