@@ -7,7 +7,6 @@ package runtime
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -33,6 +32,7 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/ghodss/yaml"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1073,7 +1073,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent pubsub.CloudEventsEnvelope
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1113,7 +1113,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent pubsub.CloudEventsEnvelope
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := fmt.Errorf("unknown status returned from app while processing pub/sub event %v: not_valid", cloudEvent.ID)
+		expectedClientError := errors.Errorf("unknown status returned from app while processing pub/sub event %v: not_valid", cloudEvent.ID)
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1135,7 +1135,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent pubsub.CloudEventsEnvelope
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := fmt.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
+		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})

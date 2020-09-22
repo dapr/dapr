@@ -497,7 +497,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	})
 
 	if err != nil {
-		err = fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
+		err = errors.Wrap(err, "ERR_STATE_TRANSACTION")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
