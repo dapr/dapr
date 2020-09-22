@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/logger"
@@ -125,11 +126,10 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
-	callAllowed, additionalInfo := a.applyAccessControlPolicies(ctx, targetOperation, httpVerb)
+	callAllowed := a.applyAccessControlPolicies(ctx, targetOperation, httpVerb)
 
-	log.Infof("Access Control Policy details: %s", additionalInfo)
 	if !callAllowed {
-		return nil, status.Errorf(codes.PermissionDenied, "Access Control Policy has denied access to appId: %s, operation: %s verb: %s: %s", srcAppID, targetOperation, httpVerb, additionalInfo)
+		return nil, status.Errorf(codes.PermissionDenied, "Access Control Policy has denied access to appId: %s, operation: %s verb: %s", srcAppID, targetOperation, httpVerb)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -140,7 +140,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, targetOperation string, httpVerb common.HTTPExtension_Verb) (bool, string) {
+func (a *api) applyAccessControlPolicies(ctx context.Context, targetOperation string, httpVerb common.HTTPExtension_Verb) bool {
 	// Apply access control list filter
 	spiffeID, err := config.TryGetAndParseSpiffeID(ctx)
 	if err != nil {
@@ -148,7 +148,9 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, targetOperation st
 		log.Errorf("Error while reading client cert: %v.", err.Error())
 	}
 
-	return config.IsOperationAllowedByAccessControlPolicy(spiffeID, spiffeID.AppID, targetOperation, httpVerb, a.accessControlList)
+	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, spiffeID.AppID, targetOperation, httpVerb, a.accessControlList)
+	emitACLMetrics(actionPolicy, spiffeID.AppID, spiffeID.TrustDomain, spiffeID.Namespace, targetOperation, httpVerb.String(), action)
+	return action
 }
 
 // CallActor invokes a virtual actor
@@ -546,4 +548,20 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 	}
 	// By default if a configuration is not defined for a secret store, return true.
 	return true
+}
+
+func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb string, action bool) {
+	if action {
+		if actionPolicy == config.ActionPolicyApp {
+			diagnostics.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+		} else if actionPolicy == config.ActionPolicyGlobal {
+			diagnostics.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+		}
+	} else {
+		if actionPolicy == config.ActionPolicyApp {
+			diagnostics.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+		} else if actionPolicy == config.ActionPolicyGlobal {
+			diagnostics.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+		}
+	}
 }

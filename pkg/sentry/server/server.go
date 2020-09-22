@@ -126,8 +126,6 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	csr, err := certs.ParsePemCSR(csrPem)
 
-	fmt.Println("@@@@@ incoming sign csr req trustdomain: " + req.GetTrustDomain() + " namespace: " + req.GetNamespace())
-
 	if err != nil {
 		err = errors.Wrap(err, "cannot parse certificate signing request pem")
 		log.Error(err)

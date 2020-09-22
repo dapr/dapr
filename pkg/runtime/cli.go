@@ -174,9 +174,8 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 
 		if configErr != nil {
-			log.Infof("@@@@@ Config error: %v", configErr)
+			log.Infof("Config error: %v", configErr)
 		}
-		log.Infof("@@@@@ Dumping global config: %v", globalConfig)
 	}
 
 	if configErr != nil {
@@ -187,7 +186,6 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
-	log.Infof("@@@@ Calling TranslateAccessControlSpec....")
 	accessControlList, err = global_config.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec)
 	if err != nil {
 		log.Fatalf(err.Error())

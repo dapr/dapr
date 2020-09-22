@@ -40,6 +40,8 @@ const (
 	AccessControlActionDeny = "deny"
 	DefaultTrustDomain      = "public"
 	DefaultNamespace        = "default"
+	ActionPolicyApp         = "app"
+	ActionPolicyGlobal      = "global"
 )
 
 type Configuration struct {
@@ -156,7 +158,6 @@ type SpiffeID struct {
 
 // LoadDefaultConfiguration returns the default config
 func LoadDefaultConfiguration() *Configuration {
-	fmt.Println("@@@@ Loading default config...")
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
@@ -286,15 +287,11 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
 
 	if accessControlSpec.TrustDomain != "" {
-		fmt.Println("@@@@@@ TranslateAccessControlSpec - Trust domain: ")
 		accessControlList.TrustDomain = accessControlSpec.TrustDomain
 	} else {
-		fmt.Println("@@@@@@ TranslateAccessControlSpec - Default domain: ")
 		accessControlList.TrustDomain = DefaultTrustDomain
 	}
 
-	var log = logger.NewLogger("dapr.configuration")
-	log.Infof("@@@@@ Translating policy spec....")
 	var invalidTrustDomain []string
 	var invalidNamespace []string
 	accessControlList.PolicySpec = make(map[string]AccessControlListPolicySpec)
@@ -393,7 +390,6 @@ func parseSpiffeID(spiffeID string) *SpiffeID {
 func getSpiffeID(ctx context.Context) (string, error) {
 
 	var spiffeID string
-	fmt.Println("@@@@ call arrived")
 	peer, ok := peer.FromContext(ctx)
 	if ok {
 		tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
@@ -404,8 +400,6 @@ func getSpiffeID(ctx context.Context) (string, error) {
 		for _, crt := range tlsInfo.State.PeerCertificates {
 			for _, ext := range crt.Extensions {
 				if ext.Id.Equal(oid) {
-					fmt.Println("@@@@ OID found")
-
 					var sequence asn1.RawValue
 					if rest, err := asn1.Unmarshal(ext.Value, &sequence); err != nil {
 						fmt.Println(err)
@@ -429,7 +423,6 @@ func getSpiffeID(ctx context.Context) (string, error) {
 							return "", err
 						}
 
-						fmt.Println("@@@@ Value: " + string(rawValue.Bytes))
 						spiffeID = string(rawValue.Bytes)
 						if strings.HasPrefix(spiffeID, "spiffe://") {
 							fmt.Printf("Found spiffe id: %s\n", spiffeID)
@@ -449,50 +442,40 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
-		return true, ""
+		return isActionAllowed(AccessControlActionAllow), ""
 	}
 
-	log.Infof("@@@@ Dumping all policy specs....")
-	log.Infof("Default action: %s, TrustDomain: %s", accessControlList.DefaultAction, accessControlList.TrustDomain)
-	for key, spec := range accessControlList.PolicySpec {
-		log.Infof("key: %s, value: %s", key, spec)
-	}
-
-	log.Infof("Checking access control policy for invocation by %v, operation: %v, httpVerb: %v", srcAppID, inputOperation, httpVerb)
 	action := accessControlList.DefaultAction
+	actionPolicy := ActionPolicyGlobal
 
 	if srcAppID == "" {
-		return isActionAllowed(action), fmt.Sprintf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
+		return isActionAllowed(action), actionPolicy
 	}
 
 	appPolicy, found := accessControlList.PolicySpec[srcAppID]
 
 	if !found {
-		return isActionAllowed(action), fmt.Sprintf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
+		return isActionAllowed(action), actionPolicy
 	}
 
-	log.Infof("@@@@ Using policy spec for srcAppId: %s: %v", srcAppID, appPolicy)
-	var logMessage string
 	if spiffeID == nil {
-		logMessage = fmt.Sprintf("Unable to verify spiffe id of the client. Will apply default global action")
-		return isActionAllowed(action), ""
+		return isActionAllowed(action), actionPolicy
 	}
-
-	log.Infof("@@@@ App policy spec found. Trying to match policy spec for srcAppId: %s: %v", srcAppID, appPolicy)
 
 	// Match trust domain
 	if appPolicy.TrustDomain != spiffeID.TrustDomain {
-		return isActionAllowed(action), fmt.Sprintf("Trust Domain mismatch. Apply global default action")
+		return isActionAllowed(action), actionPolicy
 	}
 
 	// Match namespace
 	if appPolicy.Namespace != spiffeID.Namespace {
-		return isActionAllowed(action), fmt.Sprintf("Namespace mismatch. Apply global default action")
+		return isActionAllowed(action), actionPolicy
 	}
 
 	if appPolicy.DefaultAction != "" {
 		// This point onwards, default action is the default action specified in the spec for the app
 		action = appPolicy.DefaultAction
+		actionPolicy = ActionPolicyApp
 	}
 
 	// The acl may specify the operation in a format invoke/*, get and match only the prefix first
@@ -509,8 +492,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 	if found {
 		// Match postfix
 		if operationPolicy.OperationPostFix != "/*" && !strings.HasPrefix(operationPolicy.OperationPostFix, inputOperationPostfix) {
-			logMessage = fmt.Sprintf("Could not match operation post fix. Applying default action for srcAppId: %s operation: %v, verb: %v action: %v", srcAppID, inputOperation, httpVerb, action)
-			return isActionAllowed(action), logMessage
+			return isActionAllowed(action), actionPolicy
 		}
 
 		log.Infof("Found operation: %v. checking http verbs", inputOperation)
@@ -518,25 +500,18 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 			verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
 			if found {
 				action = verbAction
-				logMessage = fmt.Sprintf("Applying action for srcAppId: %s operation: %v, verb: %v action: %v", srcAppID, inputOperation, httpVerb, action)
-				// break
 			} else {
 				verbAction, found = operationPolicy.VerbAction["*"]
 				if found {
 					action = verbAction
-					logMessage = fmt.Sprintf("Matched wildcard httpverb. Applying action for srcAppId: %s operation: %v, verb: %v action: %v", srcAppID, inputOperation, httpVerb, action)
 				}
 			}
 		} else {
-			logMessage = fmt.Sprintf("Http Verb not specified. Applying default action for the app: %v for operation: %v", action, inputOperation)
 			action = appPolicy.DefaultAction
 		}
 	}
 
-	if logMessage == "" {
-		log.Infof("Applying access control policy action: %v", action)
-	}
-	return isActionAllowed(action), logMessage
+	return isActionAllowed(action), actionPolicy
 }
 
 func isActionAllowed(action string) bool {
