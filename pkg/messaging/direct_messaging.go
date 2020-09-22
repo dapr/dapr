@@ -147,7 +147,6 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	fmt.Println("@@@@ 1")
 	conn, err := d.connectionCreatorFn(appAddress, appID, false, false)
 	if err != nil {
 		fmt.Println(err)
@@ -162,29 +161,20 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appAddress st
 
 	d.addForwardedHeadersToMetadata(req)
 	d.addDestinationAppIDHeaderToMetadata(appID, req)
-	d.addSourceAppIDHeaderToMetadata(d.appID, req)
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
-	fmt.Println("@@@@ 2")
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
 
-	fmt.Println("@@@@ 3")
 	return invokev1.InternalInvokeResponse(resp)
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
 	req.Metadata()[v1.DestinationIDHeader] = &internalv1pb.ListStringValue{
-		Values: []string{appID},
-	}
-}
-
-func (d *directMessaging) addSourceAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
-	req.Metadata()[v1.SourceIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{appID},
 	}
 }

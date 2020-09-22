@@ -157,6 +157,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	var accessControlList global_config.AccessControlList
+	var namespace string
 
 	if *config != "" {
 		switch modes.DaprMode(*mode) {
@@ -166,8 +167,8 @@ func FromFlags() (*DaprRuntime, error) {
 				return nil, clientErr
 			}
 			defer conn.Close()
-
-			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, os.Getenv("NAMESPACE"), client)
+			namespace = os.Getenv("NAMESPACE")
+			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, client)
 		case modes.StandaloneMode:
 			globalConfig, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
@@ -176,9 +177,6 @@ func FromFlags() (*DaprRuntime, error) {
 			log.Infof("@@@@@ Config error: %v", configErr)
 		}
 		log.Infof("@@@@@ Dumping global config: %v", globalConfig)
-
-		accessControlList = global_config.TranslateAccessControlSpec(globalConfig.Spec.AccessControlSpec)
-		log.Infof("Built in-memory ACL rules: %v", accessControlList)
 	}
 
 	if configErr != nil {
@@ -189,5 +187,8 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
+	log.Infof("@@@@ Calling TranslateAccessControlSpec....")
+	accessControlList = global_config.TranslateAccessControlSpec(globalConfig.Spec.AccessControlSpec, namespace)
+	log.Infof("Built in-memory ACL rules: %v", accessControlList)
 	return NewDaprRuntime(runtimeConfig, globalConfig, &accessControlList), nil
 }

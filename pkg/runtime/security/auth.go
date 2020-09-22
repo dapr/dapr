@@ -108,13 +108,16 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	defer conn.Close()
 
 	c := sentryv1pb.NewCAClient(conn)
-	resp, err := c.SignCertificate(context.Background(), &sentryv1pb.SignCertificateRequest{
-		CertificateSigningRequest: certPem,
-		Id:                        getSentryIdentifier(id),
-		Token:                     getToken(),
-		TrustDomain:               trustDomain,
-		Namespace:                 namespace,
-	}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
+
+	resp, err := c.SignCertificate(context.Background(),
+		&sentryv1pb.SignCertificateRequest{
+			CertificateSigningRequest: certPem,
+			Id:                        getSentryIdentifier(id),
+			Token:                     getToken(),
+			TrustDomain:               trustDomain,
+			Namespace:                 namespace,
+		}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
+
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, errors.Wrap(err, "error from sentry SignCertificate")

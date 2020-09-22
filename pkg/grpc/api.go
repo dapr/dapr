@@ -7,7 +7,6 @@ package grpc
 
 import (
 	"context"
-	"encoding/asn1"
 	"fmt"
 	"strconv"
 
@@ -24,7 +23,6 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -35,9 +33,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -113,49 +109,6 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Error(codes.Internal, "app channel is not initialized")
 	}
 
-	fmt.Println("@@@@ call arrived")
-	peer, ok := peer.FromContext(ctx)
-	if ok {
-		tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
-		fmt.Println(len(tlsInfo.State.PeerCertificates))
-
-		oid := asn1.ObjectIdentifier{2, 5, 29, 17}
-
-		for _, crt := range tlsInfo.State.PeerCertificates {
-			for _, ext := range crt.Extensions {
-				if ext.Id.Equal(oid) {
-					fmt.Println("@@@@ OID found")
-
-					var sequence asn1.RawValue
-					if rest, err := asn1.Unmarshal(ext.Value, &sequence); err != nil {
-						fmt.Println(err)
-						continue
-					} else if len(rest) != 0 {
-						fmt.Println("the SAN extension is incorrectly encoded")
-						continue
-					}
-
-					if !sequence.IsCompound || sequence.Tag != asn1.TagSequence || sequence.Class != asn1.ClassUniversal {
-						fmt.Println("the SAN extension is incorrectly encoded")
-						continue
-					}
-
-					for bytes := sequence.Bytes; len(bytes) > 0; {
-						var rawValue asn1.RawValue
-						var err error
-
-						bytes, err = asn1.Unmarshal(bytes, &rawValue)
-						if err != nil {
-							return nil, err
-						}
-
-						fmt.Println("@@@@ Value: " + string(rawValue.Bytes))
-					}
-				}
-			}
-		}
-	}
-
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
@@ -166,15 +119,13 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 	var srcAppID string
 	if req.Metadata() != nil && len(req.Metadata()) > 0 {
-		srcAppID = req.Metadata()[v1.SourceIDHeader].Values[0]
-
 		httpExt := req.Message().GetHttpExtension()
 		if httpExt != nil {
 			httpVerb = httpExt.GetVerb()
 		}
 	}
 
-	callAllowed, additionalInfo := a.applyAccessControlPolicies(ctx, srcAppID, targetOperation, httpVerb)
+	callAllowed, additionalInfo := a.applyAccessControlPolicies(ctx, targetOperation, httpVerb)
 
 	log.Infof("Access Control Policy details: %s", additionalInfo)
 	if !callAllowed {
@@ -189,16 +140,15 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, srcApp string, targetOperation string, httpVerb common.HTTPExtension_Verb) (bool, string) {
+func (a *api) applyAccessControlPolicies(ctx context.Context, targetOperation string, httpVerb common.HTTPExtension_Verb) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := config.TryGetAndParseSpiffeID(ctx)
-
 	if err != nil {
 		// Apply the default action
 		log.Errorf("Error while reading client cert: %v.", err.Error())
 	}
 
-	return config.IsOperationAllowedByAccessControlPolicy(spiffeID, srcApp, targetOperation, httpVerb, a.accessControlList)
+	return config.IsOperationAllowedByAccessControlPolicy(spiffeID, targetOperation, spiffeID.AppID, httpVerb, a.accessControlList)
 }
 
 // CallActor invokes a virtual actor

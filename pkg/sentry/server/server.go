@@ -123,7 +123,11 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	monitoring.CertSignRequestRecieved()
 
 	csrPem := req.GetCertificateSigningRequest()
+
 	csr, err := certs.ParsePemCSR(csrPem)
+
+	fmt.Println("@@@@@ incoming sign csr req trustdomain: " + req.GetTrustDomain() + " namespace: " + req.GetNamespace())
+
 	if err != nil {
 		err = errors.Wrap(err, "cannot parse certificate signing request pem")
 		log.Error(err)
@@ -147,7 +151,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, err
 	}
 
-	identity := identity.NewBundle(req.GetId(), req.GetNamespace(), req.GetTrustDomain())
+	identity := identity.NewBundle(csr.Subject.CommonName, req.GetNamespace(), req.GetTrustDomain())
 	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, identity, -1, false)
 	if err != nil {
 		err = errors.Wrap(err, "error signing csr")

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -249,11 +250,13 @@ func TestContainsKey(t *testing.T) {
 func initializeAccessControlList() AccessControlList {
 	inputSpec := AccessControlSpec{
 		DefaultAction: "deny",
+		TrustDomain:   "public",
 		AppPolicies: []AppPolicySpec{
 			{
 				AppName:       "app1",
 				DefaultAction: "allow",
 				TrustDomain:   "public",
+				Namespace:     "ns1",
 				AppOperationActions: []AppOperation{
 					{
 						Action:    "allow",
@@ -270,7 +273,7 @@ func initializeAccessControlList() AccessControlList {
 			{
 				AppName:       "app2",
 				DefaultAction: "deny",
-				TrustDomain:   "*",
+				Namespace:     "ns2",
 				AppOperationActions: []AppOperation{
 					{
 						Action:    "deny",
@@ -286,7 +289,7 @@ func initializeAccessControlList() AccessControlList {
 			},
 		},
 	}
-	accessControlList := TranslateAccessControlSpec(inputSpec)
+	accessControlList := TranslateAccessControlSpec(inputSpec, "myNamespace")
 
 	return accessControlList
 }
@@ -296,6 +299,8 @@ func TestTranslateAccessControlSpec(t *testing.T) {
 		accessControlList := initializeAccessControlList()
 
 		assert.Equal(t, "deny", accessControlList.DefaultAction)
+		assert.Equal(t, "myNamespace", accessControlList.NameSpace)
+		assert.Equal(t, "public", accessControlList.TrustDomain)
 
 		// appName
 		appName := "app1"
@@ -327,9 +332,9 @@ func TestSpiffeID(t *testing.T) {
 	t.Run("test parse spiffe id", func(t *testing.T) {
 		spiffeID := "spiffe://mydomain/ns/mynamespace/myappid"
 		id := parseSpiffeID(spiffeID)
-		assert.Equal(t, "mydomain", id.trustDomain)
-		assert.Equal(t, "mynamespace", id.namespace)
-		assert.Equal(t, "myappid", id.appID)
+		assert.Equal(t, "mydomain", id.TrustDomain)
+		assert.Equal(t, "mynamespace", id.Namespace)
+		assert.Equal(t, "myappid", id.AppID)
 	})
 }
 
@@ -337,9 +342,9 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when no acl specified", func(t *testing.T) {
 		srcAppID := "app1"
 		spiffeID := SpiffeID{
-			trustDomain: "*",
-			namespace:   "ns1",
-			appID:       srcAppID,
+			TrustDomain: "*",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
 		}
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, nil)
 		// Action = Allow the operation since no ACL is defined
@@ -350,9 +355,9 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := "app3"
 		accessControlList := initializeAccessControlList()
 		spiffeID := SpiffeID{
-			trustDomain: "*",
-			namespace:   "ns1",
-			appID:       srcAppID,
+			TrustDomain: "*",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
 		}
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
 		// Action = Default global action
@@ -363,13 +368,26 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := "app1"
 		accessControlList := initializeAccessControlList()
 		spiffeID := SpiffeID{
-			trustDomain: "private",
-			namespace:   "ns1",
-			appID:       srcAppID,
+			TrustDomain: "private",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
 		}
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
-		// Action = Default action for the specific app
-		assert.True(t, isAllowed)
+		// Action = Ignore policy and apply global default action
+		assert.False(t, isAllowed)
+	})
+
+	t.Run("test when namespace does not match", func(t *testing.T) {
+		srcAppID := "app1"
+		accessControlList := initializeAccessControlList()
+		spiffeID := SpiffeID{
+			TrustDomain: "public",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
+		// Action = Ignore policy and apply global default action
+		assert.False(t, isAllowed)
 	})
 
 	t.Run("test when spiffe id is nil", func(t *testing.T) {
@@ -388,26 +406,13 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		assert.False(t, isAllowed)
 	})
 
-	t.Run("test when trust domain matches *", func(t *testing.T) {
-		srcAppID := "app2"
-		accessControlList := initializeAccessControlList()
-		spiffeID := SpiffeID{
-			trustDomain: "private",
-			namespace:   "ns1",
-			appID:       srcAppID,
-		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_POST, &accessControlList)
-		// Action = Action for the specific verb in the app. If verb not found, default action for the specific app
-		assert.True(t, isAllowed)
-	})
-
 	t.Run("test when http verb is not found", func(t *testing.T) {
 		srcAppID := "app2"
 		accessControlList := initializeAccessControlList()
 		spiffeID := SpiffeID{
-			trustDomain: "private",
-			namespace:   "ns1",
-			appID:       srcAppID,
+			TrustDomain: "private",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
 		}
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_PUT, &accessControlList)
 		// Action = Default action for the specific app
@@ -418,9 +423,9 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := "app1"
 		accessControlList := initializeAccessControlList()
 		spiffeID := SpiffeID{
-			trustDomain: "public",
-			namespace:   "ns1",
-			appID:       srcAppID,
+			TrustDomain: "public",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
 		}
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op2", common.HTTPExtension_PUT, &accessControlList)
 		// Action = Default action for the specific verb
@@ -431,9 +436,9 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := "app2"
 		accessControlList := initializeAccessControlList()
 		spiffeID := SpiffeID{
-			trustDomain: "public",
-			namespace:   "ns1",
-			appID:       srcAppID,
+			TrustDomain: "public",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
 		}
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op3", common.HTTPExtension_PUT, &accessControlList)
 		// Action = Default action for the specific verb

@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"os"
 	"sort"
-	"reflect"
 	"strings"
 	"time"
 
@@ -40,6 +39,7 @@ const (
 	// AccessControlActionDeny defines the deny action for an operation
 	AccessControlActionDeny = "deny"
 	DefaultTrustDomain      = "public"
+	DefaultNamespace        = "default"
 )
 
 type Configuration struct {
@@ -50,15 +50,16 @@ type Configuration struct {
 type AccessControlList struct {
 	DefaultAction string
 	TrustDomain   string
+	NameSpace     string
 	PolicySpec    map[string]AppPolicySpec
 }
 
 type ConfigurationSpec struct {
-	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
-	TracingSpec      TracingSpec  `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec         MTLSSpec     `json:"mtls,omitempty"`
-	MetricSpec       MetricSpec   `json:"metric,omitempty" yaml:"metric,omitempty"`
-	Secrets          SecretsSpec  `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+	HTTPPipelineSpec  PipelineSpec      `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	TracingSpec       TracingSpec       `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	MTLSSpec          MTLSSpec          `json:"mtls,omitempty"`
+	MetricSpec        MetricSpec        `json:"metric,omitempty" yaml:"metric,omitempty"`
+	Secrets           SecretsSpec       `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
 }
 
@@ -108,6 +109,7 @@ type AppPolicySpec struct {
 	AppName             string         `json:"app" yaml:"app"`
 	DefaultAction       string         `json:"defaultAction" yaml:"defaultAction"`
 	TrustDomain         string         `json:"trustDomain" yaml:"trustDomain"`
+	Namespace           string         `json:"namespace" yaml:"namespace"`
 	AppOperationActions []AppOperation `json:"operations" yaml:"operations"`
 }
 
@@ -133,13 +135,14 @@ type MTLSSpec struct {
 
 // SpiffeID represents the separated fields in a spiffe id
 type SpiffeID struct {
-	trustDomain string
-	namespace   string
-	appID       string
+	TrustDomain string
+	Namespace   string
+	AppID       string
 }
 
 // LoadDefaultConfiguration returns the default config
 func LoadDefaultConfiguration() *Configuration {
+	fmt.Println("@@@@ Loading default config...")
 	return &Configuration{
 		Spec: ConfigurationSpec{
 			TracingSpec: TracingSpec{
@@ -147,6 +150,10 @@ func LoadDefaultConfiguration() *Configuration {
 			},
 			MetricSpec: MetricSpec{
 				Enabled: true,
+			},
+			AccessControlSpec: AccessControlSpec{
+				DefaultAction: "allow",
+				TrustDomain:   "public",
 			},
 		},
 	}
@@ -259,16 +266,23 @@ func containsKey(s []string, key string) bool {
 }
 
 // TranslateAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
-func TranslateAccessControlSpec(accessControlSpec AccessControlSpec) AccessControlList {
+func TranslateAccessControlSpec(accessControlSpec AccessControlSpec, namespace string) AccessControlList {
 	var accessControlList AccessControlList
 	accessControlList.PolicySpec = make(map[string]AppPolicySpec)
 	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
 
 	if accessControlSpec.TrustDomain != "" {
+		fmt.Println("@@@@@@ TranslateAccessControlSpec - Trust domain: ")
 		accessControlList.TrustDomain = accessControlSpec.TrustDomain
 	} else {
-
+		fmt.Println("@@@@@@ TranslateAccessControlSpec - Default domain: ")
 		accessControlList.TrustDomain = DefaultTrustDomain
+	}
+
+	if namespace != "" {
+		accessControlList.NameSpace = namespace
+	} else {
+		accessControlList.NameSpace = DefaultNamespace
 	}
 
 	var log = logger.NewLogger("dapr.configuration")
@@ -306,69 +320,65 @@ func parseSpiffeID(spiffeID string) *SpiffeID {
 	// The SPIFFE Id will be of the format: spiffe://<trust-domain/ns/<namespace>/<app-id>
 	parts := strings.Split(spiffeID, "/")
 	var id SpiffeID
-	id.trustDomain = parts[2]
-	id.namespace = parts[4]
-	id.appID = parts[5]
+	id.TrustDomain = parts[2]
+	id.Namespace = parts[4]
+	id.AppID = parts[5]
 
 	return &id
 }
 
 func getSpiffeID(ctx context.Context) (string, error) {
-	peer, ok := peer.FromContext(ctx)
-	if !ok {
-		return "", fmt.Errorf("could not retrieve spiffe id from the grpc context")
-	}
 
-	log.Info(peer)
-
-	if peer.AuthInfo == nil {
-		return "", fmt.Errorf("could not retrieve auth info from grpc context tls info")
-	}
-
-	tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
-
-	log.Infof("@@@@ Peer TLS info: %v", tlsInfo)
-
-	if tlsInfo.State.HandshakeComplete == false {
-		return "", fmt.Errorf("tls handshake is not complete")
-	}
-
-	certChain := tlsInfo.State.VerifiedChains
-	t := reflect.TypeOf(certChain)
-	fmt.Println(t)
-	if certChain == nil || len(certChain[0]) == 0 {
-		return "", fmt.Errorf("could not retrieve read client cert info")
-	}
-
-	log.Infof("@@@@@ Dump certChain[0][0].Extensions[0].Value: %v", certChain[0][0].Extensions[0].Value)
-	oidSubjectAlternativeName := asn1.ObjectIdentifier{2, 5, 29, 17}
 	var spiffeID string
-	for i, ext := range certChain[0][0].Extensions {
-		log.Infof("@@@@ Dumping extension: %v: %v", i, ext)
-		if ext.Id.Equal(oidSubjectAlternativeName) {
-			log.Infof("Matched oidSubjectAlternativeName")
-			var sequence asn1.RawValue
-			_, _ = asn1.Unmarshal(ext.Value, &sequence)
+	fmt.Println("@@@@ call arrived")
+	peer, ok := peer.FromContext(ctx)
+	if ok {
+		tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
+		fmt.Println(len(tlsInfo.State.PeerCertificates))
 
-			for bytes := sequence.Bytes; len(bytes) > 0; {
-				var rawValue asn1.RawValue
+		oid := asn1.ObjectIdentifier{2, 5, 29, 17}
 
-				bytes, _ = asn1.Unmarshal(bytes, &rawValue)
+		for _, crt := range tlsInfo.State.PeerCertificates {
+			for _, ext := range crt.Extensions {
+				if ext.Id.Equal(oid) {
+					fmt.Println("@@@@ OID found")
 
-				id := string(rawValue.Bytes)
-				log.Infof("id: %s", id)
-				log.Infof("id slice string: %s", string(rawValue.Bytes[:]))
-				if strings.HasPrefix(id, "spiffe://") {
-					log.Infof("Found spiffe id in cert: %s", id)
-					spiffeID = id
+					var sequence asn1.RawValue
+					if rest, err := asn1.Unmarshal(ext.Value, &sequence); err != nil {
+						fmt.Println(err)
+						continue
+					} else if len(rest) != 0 {
+						fmt.Println("the SAN extension is incorrectly encoded")
+						continue
+					}
+
+					if !sequence.IsCompound || sequence.Tag != asn1.TagSequence || sequence.Class != asn1.ClassUniversal {
+						fmt.Println("the SAN extension is incorrectly encoded")
+						continue
+					}
+
+					for bytes := sequence.Bytes; len(bytes) > 0; {
+						var rawValue asn1.RawValue
+						var err error
+
+						bytes, err = asn1.Unmarshal(bytes, &rawValue)
+						if err != nil {
+							return "", err
+						}
+
+						fmt.Println("@@@@ Value: " + string(rawValue.Bytes))
+						spiffeID = string(rawValue.Bytes)
+						if strings.HasPrefix(spiffeID, "spiffe://") {
+							fmt.Printf("Found spiffe id: %s\n", spiffeID)
+							return spiffeID, nil
+						}
+					}
 				}
 			}
 		}
 	}
 
-	// spiffeID := string(certChain[0][0].Extensions[0].Value[:])
-
-	return spiffeID, nil
+	return "", nil
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
@@ -392,23 +402,26 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 	}
 
 	policy, found := accessControlList.PolicySpec[srcAppID]
-	log.Infof("@@@@ Using policy spec for srcAppId: %s: %v", srcAppID, policy)
 
 	if !found {
 		return isActionAllowed(action), fmt.Sprintf("Unable to find policy spec for srcAppId: %s. Applying default action", srcAppID)
 	}
 
+	log.Infof("@@@@ Using policy spec for srcAppId: %s: %v", srcAppID, policy)
 	var logMessage string
 	if spiffeID == nil {
 		logMessage = fmt.Sprintf("Unable to verify spiffe id of the client. Will apply default global action")
 	} else {
-		action = policy.DefaultAction
-
-		if policy.TrustDomain != "*" && policy.TrustDomain != spiffeID.trustDomain {
+		// Match trust domain
+		if policy.TrustDomain != spiffeID.TrustDomain {
 			return isActionAllowed(action), fmt.Sprintf("Trust Domain mismatch. Apply global default action")
 		}
 
-		// TODO: Check namespace if needed
+		// Match namespace
+		if accessControlList.NameSpace != spiffeID.Namespace {
+			return isActionAllowed(action), fmt.Sprintf("Namespace mismatch. Apply global default action")
+		}
+		action = policy.DefaultAction
 
 		inputOperation := "/" + operation
 		// Check the operation specific policy
