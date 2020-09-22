@@ -695,6 +695,28 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	assert.Equal(t, "b", m["a"])
 }
 
+func TestPopulateSecretsConfiguration(t *testing.T) {
+	t.Run("secret store configuration is populated", func(t *testing.T) {
+		//setup
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.globalConfig.Spec.Secrets.Scopes = []config.SecretsScope{
+			{
+				StoreName:     "testMock",
+				DefaultAccess: "allow",
+			},
+		}
+
+		//act
+		rt.populateSecretsConfiguration()
+
+		//verify
+		assert.Contains(t, rt.secretsConfiguration, "testMock", "Expected testMock secret store configuration to be populated")
+		assert.Equal(t, config.AllowAccess, rt.secretsConfiguration["testMock"].DefaultAccess, "Expected default access as allow")
+		assert.Empty(t, rt.secretsConfiguration["testMock"].DeniedSecrets, "Expected testMock deniedSecrets to not be populated")
+		assert.NotContains(t, rt.secretsConfiguration["testMock"].AllowedSecrets, "Expected testMock allowedSecrets to not be populated")
+	})
+}
+
 func TestProcessComponentSecrets(t *testing.T) {
 	mockBinding := components_v1alpha1.Component{
 		ObjectMeta: meta_v1.ObjectMeta{
