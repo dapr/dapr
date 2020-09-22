@@ -20,14 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const appName = "secretapp"    // App name in Dapr.
-const numHealthChecks = 60     // Number of get calls before starting tests.
-const testManyEntriesCount = 5 // Anything between 1 and the number above (inclusive).
-
-type testCommandRequest struct {
-	RemoteApp string `json:"remoteApp,omitempty"`
-	Method    string `json:"method,omitempty"`
-}
+const appName = "secretapp" // App name in Dapr.
+const numHealthChecks = 60  // Number of get calls before starting tests.
 
 // daprSecret represents a secret in Dapr.
 type daprSecret struct {
@@ -45,6 +39,8 @@ type testStep struct {
 	command          string
 	request          requestResponse
 	expectedResponse requestResponse
+	errorExpected    bool
+	statusCode       int
 }
 
 type testCase struct {
@@ -101,6 +97,7 @@ func generateTestCases() []testCase {
 	}
 
 	testCase1Key := "daprsecret"
+	testCase2Key := "daprsecret2"
 	testCase1Value := "admin"
 
 	return []testCase{
@@ -112,6 +109,8 @@ func generateTestCases() []testCase {
 					"get",
 					emptyRequest,
 					emptyResponse,
+					false,
+					200,
 				},
 			},
 		},
@@ -123,6 +122,21 @@ func generateTestCases() []testCase {
 					"get",
 					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
 					newResponse(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
+					false,
+					200,
+				},
+			},
+		},
+		{
+			// No comma since this will become the name of the test without spaces.
+			"Test unallowed secret",
+			[]testStep{
+				{
+					"get",
+					newRequest(utils.SimpleKeyValue{testCase2Key, ""}),
+					newResponse(utils.SimpleKeyValue{testCase2Key, ""}),
+					true,
+					403,
 				},
 			},
 		},
@@ -136,6 +150,7 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
+			Config:         "secretappconfig",
 			AppName:        appName,
 			DaprEnabled:    true,
 			ImageName:      "e2e-secretapp",
@@ -167,13 +182,17 @@ func TestSecretApp(t *testing.T) {
 
 				url := fmt.Sprintf("%s/test/%s", externalURL, step.command)
 
-				resp, err := utils.HTTPPost(url, body)
-				require.NoError(t, err)
+				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
+				if !step.errorExpected {
+					require.NoError(t, err)
 
-				var appResp requestResponse
-				err = json.Unmarshal(resp, &appResp)
-				require.NoError(t, err)
-				require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
+					var appResp requestResponse
+					err = json.Unmarshal(resp, &appResp)
+					require.NoError(t, err)
+					require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
+				} else {
+					require.Equal(t, step.statusCode, statusCode, "Expected statusCode to be equal")
+				}
 			}
 		})
 	}
