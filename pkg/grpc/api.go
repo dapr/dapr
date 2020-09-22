@@ -145,7 +145,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, targetOperation st
 	spiffeID, err := config.TryGetAndParseSpiffeID(ctx)
 	if err != nil {
 		// Apply the default action
-		log.Errorf("Error while reading client cert: %v.", err.Error())
+		log.Warnf("Error while reading client cert: %v. Applying default global policy action", err.Error())
 	}
 
 	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, spiffeID.AppID, targetOperation, httpVerb, a.accessControlList)

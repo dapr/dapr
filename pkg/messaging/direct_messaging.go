@@ -149,7 +149,6 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	conn, err := d.connectionCreatorFn(appAddress, appID, false, false)
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 
@@ -166,7 +165,6 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appAddress st
 
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 

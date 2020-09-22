@@ -34,14 +34,11 @@ const (
 	operatorMaxRetries  = 100
 	AllowAccess         = "allow"
 	DenyAccess          = "deny"
-	// AccessControlActionAllow defines the allow action for an operation
-	AccessControlActionAllow = "allow"
 	// AccessControlActionDeny defines the deny action for an operation
-	AccessControlActionDeny = "deny"
-	DefaultTrustDomain      = "public"
-	DefaultNamespace        = "default"
-	ActionPolicyApp         = "app"
-	ActionPolicyGlobal      = "global"
+	DefaultTrustDomain = "public"
+	DefaultNamespace   = "default"
+	ActionPolicyApp    = "app"
+	ActionPolicyGlobal = "global"
 )
 
 type Configuration struct {
@@ -167,7 +164,7 @@ func LoadDefaultConfiguration() *Configuration {
 				Enabled: true,
 			},
 			AccessControlSpec: AccessControlSpec{
-				DefaultAction: "allow",
+				DefaultAction: AllowAccess,
 				TrustDomain:   "public",
 			},
 		},
@@ -286,9 +283,8 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 	accessControlList.PolicySpec = make(map[string]AccessControlListPolicySpec)
 	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
 
-	if accessControlSpec.TrustDomain != "" {
-		accessControlList.TrustDomain = accessControlSpec.TrustDomain
-	} else {
+	accessControlList.TrustDomain = accessControlSpec.TrustDomain
+	if accessControlSpec.TrustDomain == "" {
 		accessControlList.TrustDomain = DefaultTrustDomain
 	}
 
@@ -366,16 +362,20 @@ func TryGetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 
 	// spiffeID = "spiffe://a/ns/b/pythonapp"
 	log.Infof("spiffe id :- %v\n", spiffeID)
-	id := parseSpiffeID(spiffeID)
-	return id, nil
+	id, err := parseSpiffeID(spiffeID)
+	return id, err
 }
 
-func parseSpiffeID(spiffeID string) *SpiffeID {
+func parseSpiffeID(spiffeID string) (*SpiffeID, error) {
 	if spiffeID == "" {
-		log.Infof("Input spiffe id string is empty")
-		return nil
+		err := fmt.Errorf("Input spiffe id string is empty")
+		return nil, err
 	}
-	log.Infof("input spiffe id string :- %v\n", spiffeID)
+
+	if !strings.HasPrefix(spiffeID, "spiffe://") {
+		err := fmt.Errorf("Input spiffe id: %s is invalid", spiffeID)
+		return nil, err
+	}
 
 	// The SPIFFE Id will be of the format: spiffe://<trust-domain/ns/<namespace>/<app-id>
 	parts := strings.Split(spiffeID, "/")
@@ -384,7 +384,7 @@ func parseSpiffeID(spiffeID string) *SpiffeID {
 	id.Namespace = parts[4]
 	id.AppID = parts[5]
 
-	return &id
+	return &id, nil
 }
 
 func getSpiffeID(ctx context.Context) (string, error) {
@@ -442,7 +442,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
-		return isActionAllowed(AccessControlActionAllow), ""
+		return isActionAllowed(AllowAccess), ""
 	}
 
 	action := accessControlList.DefaultAction
@@ -515,7 +515,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 }
 
 func isActionAllowed(action string) bool {
-	if strings.ToLower(action) == AccessControlActionAllow {
+	if strings.ToLower(action) == AllowAccess {
 		return true
 	}
 	return false

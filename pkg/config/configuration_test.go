@@ -431,10 +431,23 @@ func TestParseAccessControlSpec(t *testing.T) {
 func TestSpiffeID(t *testing.T) {
 	t.Run("test parse spiffe id", func(t *testing.T) {
 		spiffeID := "spiffe://mydomain/ns/mynamespace/myappid"
-		id := parseSpiffeID(spiffeID)
+		id, err := parseSpiffeID(spiffeID)
 		assert.Equal(t, "mydomain", id.TrustDomain)
 		assert.Equal(t, "mynamespace", id.Namespace)
 		assert.Equal(t, "myappid", id.AppID)
+		assert.Nil(t, err)
+	})
+
+	t.Run("test parse invalid spiffe id", func(t *testing.T) {
+		spiffeID := "abcd"
+		_, err := parseSpiffeID(spiffeID)
+		assert.NotNil(t, err)
+	})
+
+	t.Run("test empty spiffe id", func(t *testing.T) {
+		spiffeID := ""
+		_, err := parseSpiffeID(spiffeID)
+		assert.NotNil(t, err)
 	})
 }
 

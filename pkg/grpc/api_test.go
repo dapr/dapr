@@ -307,28 +307,6 @@ func TestCallLocal(t *testing.T) {
 		_, err := client.CallLocal(context.Background(), request)
 		assert.Equal(t, codes.Unknown, status.Code(err))
 	})
-
-	t.Run("access control policy denied access", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		accessControlList := initializeAccessControlList()
-		fakeAPI := &api{
-			id:                "fakeAPI",
-			appChannel:        mockAppChannel,
-			accessControlList: &accessControlList,
-		}
-		server := startInternalServer(port, fakeAPI)
-		defer server.Stop()
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := internalv1pb.NewServiceInvocationClient(clientConn)
-		request := invokev1.NewInvokeMethodRequest("method").Proto()
-
-		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.PermissionDenied, status.Code(err))
-	})
 }
 
 func mustMarshalAny(msg proto.Message) *any.Any {
