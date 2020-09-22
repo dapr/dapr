@@ -290,9 +290,13 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 
 	var invalidTrustDomain []string
 	var invalidNamespace []string
+	var invalidAppName bool
 	accessControlList.PolicySpec = make(map[string]AccessControlListPolicySpec)
 	for _, appPolicySpec := range accessControlSpec.AppPolicies {
 		invalid := false
+		if appPolicySpec.AppName == "" {
+			invalidAppName = true
+		}
 		if appPolicySpec.TrustDomain == "" {
 			invalidTrustDomain = append(invalidTrustDomain, appPolicySpec.AppName)
 			invalid = true
@@ -302,7 +306,7 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 			invalid = true
 		}
 
-		if invalid {
+		if invalid || invalidAppName {
 			// An invalid config was found for this app. No need to continue parsing the spec for this app
 			continue
 		}
@@ -342,10 +346,11 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 		accessControlList.PolicySpec[aclPolicySpec.AppName] = aclPolicySpec
 	}
 
-	if len(invalidTrustDomain) > 0 || len(invalidNamespace) > 0 {
-		err := fmt.Errorf("Invalid Access Control Spec. %s, %s",
+	if len(invalidTrustDomain) > 0 || len(invalidNamespace) > 0 || invalidAppName {
+		err := fmt.Errorf("Invalid Access Control Spec. %s, %s %s",
 			fmt.Sprintf("Missing TrustDomain for apps: %v", invalidTrustDomain),
-			fmt.Sprintf("Missing Namespace for apps: %v", invalidNamespace))
+			fmt.Sprintf("Missing Namespace for apps: %v", invalidNamespace),
+			fmt.Sprintf("Missing app name on at least one of the app policies: %v", invalidAppName))
 		return accessControlList, err
 	}
 

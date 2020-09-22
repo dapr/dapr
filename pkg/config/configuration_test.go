@@ -420,11 +420,28 @@ func TestParseAccessControlSpec(t *testing.T) {
 						},
 					},
 				},
+				{
+					AppName:       "",
+					DefaultAction: "deny",
+					TrustDomain:   "domain1",
+					AppOperationActions: []AppOperation{
+						{
+							Action:    "allow",
+							HTTPVerb:  []string{"PUT", "GET"},
+							Operation: "/op3/a/*",
+						},
+						{
+							Action:    "allow",
+							HTTPVerb:  []string{"POST"},
+							Operation: "/op4",
+						},
+					},
+				},
 			},
 		}
 
 		_, err := ParseAccessControlSpec(invalidAccessControlSpec)
-		assert.Error(t, err, "Invalid Access Control Spec. Missing TrustDomain for apps: [app1], Missing Namespace for apps: [app2]")
+		assert.Error(t, err, "Invalid Access Control Spec. Missing TrustDomain for apps: [app1], Missing Namespace for apps: [app2], Missing app name on at least one of the app policies: true")
 	})
 }
 
