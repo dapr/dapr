@@ -7,7 +7,6 @@ package messaging
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/utils"
+	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -104,7 +104,7 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	} else if len(items) == 2 {
 		return items[0], items[1], nil
 	} else {
-		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
+		return "", "", errors.Errorf("invalid app id %s", targetAppID)
 	}
 }
 
@@ -135,7 +135,7 @@ func (d *directMessaging) invokeWithRetry(
 		}
 		return resp, err
 	}
-	return nil, fmt.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
+	return nil, errors.Errorf("failed to invoke target %s after %v retries", app.id, numRetries)
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {

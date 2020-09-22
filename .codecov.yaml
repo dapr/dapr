@@ -1,0 +1,6 @@
+ignore:
+  - "**/zz_generated*.go" # Ignore generated files.
+  - "**/pkg/apis/**"      # CRD related files including generated ones.
+  - "**/pkg/proto/**"     # GRPC Protobuf client for dapr.
+  - "**/pkg/testing/**"   # testing mock.
+  - "**/testdata/**"      # Ignore test resources folder.

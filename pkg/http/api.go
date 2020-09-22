@@ -7,6 +7,7 @@ package http
 
 import (
 	"fmt"
+	net_http "net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 )
@@ -43,6 +45,7 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
+	secretsConfiguration  map[string]config.SecretsScope
 	json                  jsoniter.API
 	actor                 actors.Actors
 	publishFn             func(req *pubsub.PublishRequest) error
@@ -80,12 +83,23 @@ const (
 )
 
 // NewAPI returns a new API
-func NewAPI(appID string, appChannel channel.AppChannel, directMessaging messaging.DirectMessaging, stateStores map[string]state.Store, secretStores map[string]secretstores.SecretStore, publishFn func(*pubsub.PublishRequest) error, actor actors.Actors, sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error), tracingSpec config.TracingSpec) API {
+func NewAPI(
+	appID string,
+	appChannel channel.AppChannel,
+	directMessaging messaging.DirectMessaging,
+	stateStores map[string]state.Store,
+	secretStores map[string]secretstores.SecretStore,
+	secretsConfiguration map[string]config.SecretsScope,
+	publishFn func(*pubsub.PublishRequest) error,
+	actor actors.Actors,
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
+	tracingSpec config.TracingSpec) API {
 	api := &api{
 		appChannel:            appChannel,
 		directMessaging:       directMessaging,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
+		secretsConfiguration:  secretsConfiguration,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
 		publishFn:             publishFn,
@@ -383,7 +397,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
 		respondWithError(reqCtx, 400, msg)
 		log.Debug(msg)
-		return nil, fmt.Errorf(msg.Message)
+		return nil, errors.New(msg.Message)
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
@@ -392,7 +406,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
 		respondWithError(reqCtx, 400, msg)
 		log.Debug(msg)
-		return nil, fmt.Errorf(msg.Message)
+		return nil, errors.New(msg.Message)
 	}
 	return a.stateStores[storeName], nil
 }
@@ -485,6 +499,15 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 
 	key := reqCtx.UserValue(secretNameParam).(string)
+
+	if !a.isSecretAllowed(secretStoreName, key) {
+		msg := NewErrorResponse(
+			"ERR_PERMISSION_DENIED",
+			fmt.Sprintf("Access denied by policy to get %s from %s", key, secretStoreName))
+		respondWithError(reqCtx, net_http.StatusForbidden, msg)
+		return
+	}
+
 	req := secretstores.GetSecretRequest{
 		Name:     key,
 		Metadata: metadata,
@@ -1074,4 +1097,12 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	} else {
 		respondEmpty(reqCtx, 201)
 	}
+}
+
+func (a *api) isSecretAllowed(storeName, key string) bool {
+	if config, ok := a.secretsConfiguration[storeName]; ok {
+		return config.IsSecretAllowed(key)
+	}
+	// By default if a configuration is not defined for a secret store, return true.
+	return true
 }
