@@ -38,6 +38,7 @@ const (
 	DefaultNamespace    = "default"
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
+	SpiffeIDPrefix      = "spiffe://"
 )
 
 type Configuration struct {
@@ -373,7 +374,7 @@ func parseSpiffeID(spiffeID string) (*SpiffeID, error) {
 		return nil, err
 	}
 
-	if !strings.HasPrefix(spiffeID, "spiffe://") {
+	if !strings.HasPrefix(spiffeID, SpiffeIDPrefix) {
 		err := fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
 		return nil, err
 	}
@@ -397,8 +398,12 @@ func getSpiffeID(ctx context.Context) (string, error) {
 	var spiffeID string
 	peer, ok := peer.FromContext(ctx)
 	if ok {
+		if peer == nil || peer.AuthInfo == nil {
+			err := fmt.Errorf("unable to retrieve peer auth info")
+			return "", err
+		}
+
 		tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
-		fmt.Println(len(tlsInfo.State.PeerCertificates))
 
 		oid := asn1.ObjectIdentifier{2, 5, 29, 17}
 
@@ -410,12 +415,12 @@ func getSpiffeID(ctx context.Context) (string, error) {
 						log.Error(err)
 						continue
 					} else if len(rest) != 0 {
-						fmt.Println("the SAN extension is incorrectly encoded")
+						log.Error("the SAN extension is incorrectly encoded")
 						continue
 					}
 
 					if !sequence.IsCompound || sequence.Tag != asn1.TagSequence || sequence.Class != asn1.ClassUniversal {
-						fmt.Println("the SAN extension is incorrectly encoded")
+						log.Error("the SAN extension is incorrectly encoded")
 						continue
 					}
 
@@ -429,8 +434,8 @@ func getSpiffeID(ctx context.Context) (string, error) {
 						}
 
 						spiffeID = string(rawValue.Bytes)
-						if strings.HasPrefix(spiffeID, "spiffe://") {
-							fmt.Printf("Found spiffe id: %s\n", spiffeID)
+						if strings.HasPrefix(spiffeID, SpiffeIDPrefix) {
+							log.Errorf("Found spiffe id: %s\n", spiffeID)
 							return spiffeID, nil
 						}
 					}
@@ -453,16 +458,20 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 	actionPolicy := ActionPolicyGlobal
 
 	if srcAppID == "" {
+		// Did not receive the src app id correctly
 		return isActionAllowed(action), actionPolicy
 	}
 
+	// Look up the src app id in the in-memory table
 	appPolicy, found := accessControlList.PolicySpec[srcAppID]
 
 	if !found {
+		// no policies found for this src app id. Apply global default action
 		return isActionAllowed(action), actionPolicy
 	}
 
 	if spiffeID == nil {
+		// Could not retrieve spiffe id or it is invalid. Apply global default action
 		return isActionAllowed(action), actionPolicy
 	}
 
@@ -477,39 +486,44 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 	}
 
 	if appPolicy.DefaultAction != "" {
-		// This point onwards, default action is the default action specified in the spec for the app
+		// Since the app has specified a default action, this point onwards,
+		// default action is the default action specified in the spec for the app
 		action = appPolicy.DefaultAction
 		actionPolicy = ActionPolicyApp
 	}
 
-	// The acl may specify the operation in a format invoke/*, get and match only the prefix first
-
+	// the in-memory table has operations stored in the format "/operation name".
+	// Prepend a "/" in case missing so that the match works
 	if !strings.HasPrefix(inputOperation, "/") {
 		inputOperation = "/" + inputOperation
 	}
 
 	inputOperationPrefix, inputOperationPostfix := getOperationPrefixAndPostfix(inputOperation)
 
-	// Check the operation specific policy
-	// for operation, policyOperation := range policy.AppOperationActions {
+	// The acl may specify the operation in a format /invoke/*, get and match only the prefix first
 	operationPolicy, found := appPolicy.AppOperationActions[inputOperationPrefix]
 	if found {
+		// The ACL might have the operation specified as /invoke/*. Here "/*" is stored as the postfix.
 		// Match postfix
 		if operationPolicy.OperationPostFix != "/*" && !strings.HasPrefix(operationPolicy.OperationPostFix, inputOperationPostfix) {
 			return isActionAllowed(action), actionPolicy
 		}
 
+		// Operation prefix and postfix match. Now check the operation specific policy
 		if httpVerb != common.HTTPExtension_NONE {
 			verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
 			if found {
+				// An action for a specific verb is matched
 				action = verbAction
 			} else {
 				verbAction, found = operationPolicy.VerbAction["*"]
 				if found {
+					// The verb matched the wildcard "*"
 					action = verbAction
 				}
 			}
 		} else {
+			// No matching verb found in the operation specific policies.
 			action = appPolicy.DefaultAction
 		}
 	}
