@@ -353,11 +353,11 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 	}
 
 	if len(invalidTrustDomain) > 0 || len(invalidNamespace) > 0 || invalidAppName {
-		err := fmt.Errorf("invalid access control spec. %s, %s %s",
-			fmt.Sprintf("missing trustdomain for apps: %v", invalidTrustDomain),
-			fmt.Sprintf("missing namespace for apps: %v", invalidNamespace),
-			fmt.Sprintf("missing app name on at least one of the app policies: %v", invalidAppName))
-		return accessControlList, err
+		return accessControlList, errors.New(fmt.Sprintf(
+			"invalid access control spec. missing trustdomain for apps: %v, missing namespace for apps: %v, missing app name on at least one of the app policies: %v",
+			invalidTrustDomain,
+			invalidNamespace,
+			invalidAppName))
 	}
 
 	return accessControlList, nil
@@ -376,20 +376,17 @@ func GetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 
 func parseSpiffeID(spiffeID string) (*SpiffeID, error) {
 	if spiffeID == "" {
-		err := fmt.Errorf("input spiffe id string is empty")
-		return nil, err
+		return nil, errors.New("input spiffe id string is empty")
 	}
 
 	if !strings.HasPrefix(spiffeID, SpiffeIDPrefix) {
-		err := fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
-		return nil, err
+		return nil, errors.New(fmt.Sprintf("input spiffe id: %s is invalid", spiffeID))
 	}
 
 	// The SPIFFE Id will be of the format: spiffe://<trust-domain/ns/<namespace>/<app-id>
 	parts := strings.Split(spiffeID, "/")
 	if len(parts) < 6 {
-		err := fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
-		return nil, err
+		return nil, errors.New(fmt.Sprintf("input spiffe id: %s is invalid", spiffeID))
 	}
 
 	var id SpiffeID
@@ -405,8 +402,7 @@ func getSpiffeID(ctx context.Context) (string, error) {
 	peer, ok := peer.FromContext(ctx)
 	if ok {
 		if peer == nil || peer.AuthInfo == nil {
-			err := fmt.Errorf("unable to retrieve peer auth info")
-			return "", err
+			return "", errors.New("unable to retrieve peer auth info")
 		}
 
 		tlsInfo := peer.AuthInfo.(credentials.TLSInfo)

@@ -565,15 +565,17 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 
 func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb string, action bool) {
 	if action {
-		if actionPolicy == config.ActionPolicyApp {
+		switch actionPolicy {
+		case config.ActionPolicyApp:
 			diagnostics.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
-		} else if actionPolicy == config.ActionPolicyGlobal {
+		case config.ActionPolicyGlobal:
 			diagnostics.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	} else {
-		if actionPolicy == config.ActionPolicyApp {
+		switch actionPolicy {
+		case config.ActionPolicyApp:
 			diagnostics.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
-		} else if actionPolicy == config.ActionPolicyGlobal {
+		case config.ActionPolicyGlobal:
 			diagnostics.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	}
