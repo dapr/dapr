@@ -34,11 +34,10 @@ const (
 	operatorMaxRetries  = 100
 	AllowAccess         = "allow"
 	DenyAccess          = "deny"
-	// AccessControlActionDeny defines the deny action for an operation
-	DefaultTrustDomain = "public"
-	DefaultNamespace   = "default"
-	ActionPolicyApp    = "app"
-	ActionPolicyGlobal = "global"
+	DefaultTrustDomain  = "public"
+	DefaultNamespace    = "default"
+	ActionPolicyApp     = "app"
+	ActionPolicyGlobal  = "global"
 )
 
 type Configuration struct {
@@ -373,12 +372,12 @@ func TryGetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 
 func parseSpiffeID(spiffeID string) (*SpiffeID, error) {
 	if spiffeID == "" {
-		err := fmt.Errorf("Input spiffe id string is empty")
+		err := fmt.Errorf("input spiffe id string is empty")
 		return nil, err
 	}
 
 	if !strings.HasPrefix(spiffeID, "spiffe://") {
-		err := fmt.Errorf("Input spiffe id: %s is invalid", spiffeID)
+		err := fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
 		return nil, err
 	}
 
@@ -393,7 +392,6 @@ func parseSpiffeID(spiffeID string) (*SpiffeID, error) {
 }
 
 func getSpiffeID(ctx context.Context) (string, error) {
-
 	var spiffeID string
 	peer, ok := peer.FromContext(ctx)
 	if ok {
@@ -444,7 +442,6 @@ func getSpiffeID(ctx context.Context) (string, error) {
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
 func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string, inputOperation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) (bool, string) {
-
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
 		return isActionAllowed(AllowAccess), ""
@@ -520,10 +517,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 }
 
 func isActionAllowed(action string) bool {
-	if strings.EqualFold(action, AllowAccess) {
-		return true
-	}
-	return false
+	return strings.EqualFold(action, AllowAccess)
 }
 
 // getOperationPrefixAndPostfix returns an app operation prefix and postfix

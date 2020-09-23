@@ -223,7 +223,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default allow with specific allow secrets",
 			scope: SecretsScope{
 				StoreName:      "testName",
-				DefaultAccess:  "allow",
+				DefaultAccess:  AllowAccess,
 				AllowedSecrets: []string{"key1"},
 			},
 			secretKey:      "key2",
@@ -233,7 +233,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default allow with specific deny secrets",
 			scope: SecretsScope{
 				StoreName:     "testName",
-				DefaultAccess: "allow",
+				DefaultAccess: AllowAccess,
 				DeniedSecrets: []string{"key1"},
 			},
 			secretKey:      "key1",
@@ -260,12 +260,12 @@ func initializeAccessControlList() (AccessControlList, error) {
 		AppPolicies: []AppPolicySpec{
 			{
 				AppName:       app1,
-				DefaultAction: "allow",
+				DefaultAction: AllowAccess,
 				TrustDomain:   "public",
 				Namespace:     "ns1",
 				AppOperationActions: []AppOperation{
 					{
-						Action:    "allow",
+						Action:    AllowAccess,
 						HTTPVerb:  []string{"POST", "GET"},
 						Operation: "/op1",
 					},
@@ -283,12 +283,12 @@ func initializeAccessControlList() (AccessControlList, error) {
 				Namespace:     "ns2",
 				AppOperationActions: []AppOperation{
 					{
-						Action:    "allow",
+						Action:    AllowAccess,
 						HTTPVerb:  []string{"PUT", "GET"},
 						Operation: "/op3/a/*",
 					},
 					{
-						Action:    "allow",
+						Action:    AllowAccess,
 						HTTPVerb:  []string{"POST"},
 						Operation: "/op4",
 					},
@@ -300,7 +300,7 @@ func initializeAccessControlList() (AccessControlList, error) {
 				Namespace:   "ns1",
 				AppOperationActions: []AppOperation{
 					{
-						Action:    "allow",
+						Action:    AllowAccess,
 						HTTPVerb:  []string{"POST"},
 						Operation: "/op5",
 					},
@@ -325,7 +325,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 		// appName
 		appName := app1
 		assert.Equal(t, appName, accessControlList.PolicySpec[appName].AppName)
-		assert.Equal(t, "allow", accessControlList.PolicySpec[appName].DefaultAction)
+		assert.Equal(t, AllowAccess, accessControlList.PolicySpec[appName].DefaultAction)
 		assert.Equal(t, "public", accessControlList.PolicySpec[appName].TrustDomain)
 		assert.Equal(t, "ns1", accessControlList.PolicySpec[appName].Namespace)
 
@@ -333,8 +333,8 @@ func TestParseAccessControlSpec(t *testing.T) {
 			OperationPostFix: "/",
 			VerbAction:       make(map[string]string),
 		}
-		op1Actions.VerbAction["POST"] = "allow"
-		op1Actions.VerbAction["GET"] = "allow"
+		op1Actions.VerbAction["POST"] = AllowAccess
+		op1Actions.VerbAction["GET"] = AllowAccess
 
 		op2Actions := AccessControlListOperationAction{
 			OperationPostFix: "/",
@@ -357,14 +357,14 @@ func TestParseAccessControlSpec(t *testing.T) {
 			OperationPostFix: "/a/*",
 			VerbAction:       make(map[string]string),
 		}
-		op3Actions.VerbAction["PUT"] = "allow"
-		op3Actions.VerbAction["GET"] = "allow"
+		op3Actions.VerbAction["PUT"] = AllowAccess
+		op3Actions.VerbAction["GET"] = AllowAccess
 
 		op4Actions := AccessControlListOperationAction{
 			OperationPostFix: "/",
 			VerbAction:       make(map[string]string),
 		}
-		op4Actions.VerbAction["POST"] = "allow"
+		op4Actions.VerbAction["POST"] = AllowAccess
 		assert.Equal(t, 2, len(accessControlList.PolicySpec[appName].AppOperationActions["/op3"].VerbAction))
 		assert.Equal(t, op3Actions, accessControlList.PolicySpec[appName].AppOperationActions["/op3"])
 		assert.Equal(t, 1, len(accessControlList.PolicySpec[appName].AppOperationActions["/op4"].VerbAction))
@@ -381,7 +381,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 			OperationPostFix: "/",
 			VerbAction:       make(map[string]string),
 		}
-		op5Actions.VerbAction["POST"] = "allow"
+		op5Actions.VerbAction["POST"] = AllowAccess
 
 		assert.Equal(t, 1, len(accessControlList.PolicySpec[appName].AppOperationActions["/op5"].VerbAction))
 		assert.Equal(t, op5Actions, accessControlList.PolicySpec[appName].AppOperationActions["/op5"])
@@ -394,11 +394,11 @@ func TestParseAccessControlSpec(t *testing.T) {
 			AppPolicies: []AppPolicySpec{
 				{
 					AppName:       app1,
-					DefaultAction: "allow",
+					DefaultAction: AllowAccess,
 					Namespace:     "ns1",
 					AppOperationActions: []AppOperation{
 						{
-							Action:    "allow",
+							Action:    AllowAccess,
 							HTTPVerb:  []string{"POST", "GET"},
 							Operation: "/op1",
 						},
@@ -415,12 +415,12 @@ func TestParseAccessControlSpec(t *testing.T) {
 					TrustDomain:   "domain1",
 					AppOperationActions: []AppOperation{
 						{
-							Action:    "allow",
+							Action:    AllowAccess,
 							HTTPVerb:  []string{"PUT", "GET"},
 							Operation: "/op3/a/*",
 						},
 						{
-							Action:    "allow",
+							Action:    AllowAccess,
 							HTTPVerb:  []string{"POST"},
 							Operation: "/op4",
 						},
@@ -432,12 +432,12 @@ func TestParseAccessControlSpec(t *testing.T) {
 					TrustDomain:   "domain1",
 					AppOperationActions: []AppOperation{
 						{
-							Action:    "allow",
+							Action:    AllowAccess,
 							HTTPVerb:  []string{"PUT", "GET"},
 							Operation: "/op3/a/*",
 						},
 						{
-							Action:    "allow",
+							Action:    AllowAccess,
 							HTTPVerb:  []string{"POST"},
 							Operation: "/op4",
 						},
