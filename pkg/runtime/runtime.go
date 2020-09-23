@@ -653,7 +653,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList)
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol))
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {

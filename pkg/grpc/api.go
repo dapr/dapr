@@ -72,6 +72,7 @@ type api struct {
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
+	appProtocol           string
 }
 
 // NewAPI returns a new gRPC API
@@ -85,7 +86,8 @@ func NewAPI(
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
-	accessControlList *config.AccessControlList) API {
+	accessControlList *config.AccessControlList,
+	appProtocol string) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -98,6 +100,7 @@ func NewAPI(
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		tracingSpec:           tracingSpec,
 		accessControlList:     accessControlList,
+		appProtocol:           appProtocol,
 	}
 }
 
@@ -112,20 +115,22 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
-	operation := req.Message().Method
-	var httpVerb common.HTTPExtension_Verb
-
-	if req.Metadata() != nil && len(req.Metadata()) > 0 {
-		httpExt := req.Message().GetHttpExtension()
-		if httpExt != nil {
-			httpVerb = httpExt.GetVerb()
+	if a.accessControlList != nil {
+		// An access control policy has been specified for the app. Apply the policies.
+		operation := req.Message().Method
+		var httpVerb common.HTTPExtension_Verb
+		// Get the http verb in case the application protocol is http
+		if a.appProtocol == config.HttpProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
+			httpExt := req.Message().GetHttpExtension()
+			if httpExt != nil {
+				httpVerb = httpExt.GetVerb()
+			}
 		}
-	}
+		callAllowed, errMsg := a.applyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol)
 
-	callAllowed, errMsg := a.applyAccessControlPolicies(ctx, operation, httpVerb)
-
-	if !callAllowed {
-		return nil, status.Errorf(codes.PermissionDenied, errMsg)
+		if !callAllowed {
+			return nil, status.Errorf(codes.PermissionDenied, errMsg)
+		}
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -136,7 +141,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb) (bool, string) {
+func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb, appProtocol string) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
 	if err != nil {
@@ -149,7 +154,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 		namespace = spiffeID.Namespace
 		trustDomain = spiffeID.TrustDomain
 	}
-	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, a.accessControlList)
+	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
 	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
 
 	var errMessage string

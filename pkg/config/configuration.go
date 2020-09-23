@@ -39,6 +39,8 @@ const (
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
 	SpiffeIDPrefix      = "spiffe://"
+	HttpProtocol        = "http"
+	GrpcProtocol        = "grpc"
 )
 
 type Configuration struct {
@@ -65,6 +67,7 @@ type AccessControlListPolicySpec struct {
 type AccessControlListOperationAction struct {
 	VerbAction       map[string]string
 	OperationPostFix string
+	OperationAction  string
 }
 
 type ConfigurationSpec struct {
@@ -334,6 +337,9 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 				operationActions.VerbAction[verb] = appPolicy.Action
 			}
 
+			// Store the operation action for grpc invocations where no http verb is specified
+			operationActions.OperationAction = appPolicy.Action
+
 			operationPolicy[operationPrefix] = operationActions
 		}
 		aclPolicySpec := AccessControlListPolicySpec{
@@ -448,7 +454,7 @@ func getSpiffeID(ctx context.Context) (string, error) {
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
-func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string, inputOperation string, httpVerb common.HTTPExtension_Verb, accessControlList *AccessControlList) (bool, string) {
+func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string, inputOperation string, httpVerb common.HTTPExtension_Verb, appProtocol string, accessControlList *AccessControlList) (bool, string) {
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
 		return isActionAllowed(AllowAccess), ""
@@ -510,21 +516,26 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 		}
 
 		// Operation prefix and postfix match. Now check the operation specific policy
-		if httpVerb != common.HTTPExtension_NONE {
-			verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
-			if found {
-				// An action for a specific verb is matched
-				action = verbAction
-			} else {
-				verbAction, found = operationPolicy.VerbAction["*"]
+		if appProtocol == HttpProtocol {
+			if httpVerb != common.HTTPExtension_NONE {
+				verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
 				if found {
-					// The verb matched the wildcard "*"
+					// An action for a specific verb is matched
 					action = verbAction
+				} else {
+					verbAction, found = operationPolicy.VerbAction["*"]
+					if found {
+						// The verb matched the wildcard "*"
+						action = verbAction
+					}
 				}
+			} else {
+				// No matching verb found in the operation specific policies.
+				action = appPolicy.DefaultAction
 			}
-		} else {
-			// No matching verb found in the operation specific policies.
-			action = appPolicy.DefaultAction
+		} else if appProtocol == GrpcProtocol {
+			// No http verb match is needed.
+			action = operationPolicy.OperationAction
 		}
 	}
 
