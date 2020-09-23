@@ -115,10 +115,9 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
-	targetOperation := req.Message().Method
+	operation := req.Message().Method
 	var httpVerb common.HTTPExtension_Verb
 
-	var srcAppID string
 	if req.Metadata() != nil && len(req.Metadata()) > 0 {
 		httpExt := req.Message().GetHttpExtension()
 		if httpExt != nil {
@@ -126,10 +125,10 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
-	callAllowed := a.applyAccessControlPolicies(ctx, targetOperation, httpVerb)
+	callAllowed := a.applyAccessControlPolicies(ctx, operation, httpVerb)
 
 	if !callAllowed {
-		return nil, status.Errorf(codes.PermissionDenied, "Access Control Policy has denied access to appId: %s, operation: %s verb: %s", srcAppID, targetOperation, httpVerb)
+		return nil, status.Errorf(codes.PermissionDenied, "Access Control Policy has denied access: operation: %s verb: %s", operation, httpVerb)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -140,16 +139,21 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, targetOperation string, httpVerb common.HTTPExtension_Verb) bool {
+func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb) bool {
 	// Apply access control list filter
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
 	if err != nil {
 		// Apply the default action
-		log.Warnf("Error while reading client cert: %v. Applying default global policy action", err.Error())
+		log.Warnf("Error while reading spiffe id from client cert: %v. Applying default global policy action", err.Error())
 	}
-
-	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, spiffeID.AppID, targetOperation, httpVerb, a.accessControlList)
-	emitACLMetrics(actionPolicy, spiffeID.AppID, spiffeID.TrustDomain, spiffeID.Namespace, targetOperation, httpVerb.String(), action)
+	var appID, trustDomain, namespace string
+	if spiffeID != nil {
+		appID = spiffeID.AppID
+		namespace = spiffeID.Namespace
+		trustDomain = spiffeID.TrustDomain
+	}
+	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, a.accessControlList)
+	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
 	return action
 }
 

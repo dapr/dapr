@@ -190,6 +190,5 @@ func FromFlags() (*DaprRuntime, error) {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	log.Infof("Built in-memory ACL rules: %v", accessControlList)
 	return NewDaprRuntime(runtimeConfig, globalConfig, &accessControlList), nil
 }
