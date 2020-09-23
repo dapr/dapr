@@ -169,7 +169,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 		cert.ExtraExtensions = append(cert.ExtraExtensions, pkix.Extension{
 			Id:       oidSubjectAlternativeName,
 			Value:    b,
-			Critical: true,
+			Critical: true, // According to x509 and SPIFFE specs, a SubjAltName extension must be critical if subject name and DNS are not present.
 		})
 	}
 
