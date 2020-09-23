@@ -467,6 +467,12 @@ func TestSpiffeID(t *testing.T) {
 		assert.NotNil(t, err)
 	})
 
+	t.Run("test parse spiffe id with not all fields", func(t *testing.T) {
+		spiffeID := "spiffe://mydomain/ns/myappid"
+		_, err := parseSpiffeID(spiffeID)
+		assert.NotNil(t, err)
+	})
+
 	t.Run("test empty spiffe id", func(t *testing.T) {
 		spiffeID := ""
 		_, err := parseSpiffeID(spiffeID)

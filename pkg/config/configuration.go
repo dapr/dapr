@@ -356,8 +356,8 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 	return accessControlList, nil
 }
 
-// TryGetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
-func TryGetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
+// GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
+func GetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 	// TODO: Remove hardcoding for testing
 	spiffeID, err := getSpiffeID(ctx)
 	if err != nil {
@@ -383,6 +383,11 @@ func parseSpiffeID(spiffeID string) (*SpiffeID, error) {
 
 	// The SPIFFE Id will be of the format: spiffe://<trust-domain/ns/<namespace>/<app-id>
 	parts := strings.Split(spiffeID, "/")
+	if len(parts) < 6 {
+		err := fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
+		return nil, err
+	}
+
 	var id SpiffeID
 	id.TrustDomain = parts[2]
 	id.Namespace = parts[4]
@@ -405,7 +410,7 @@ func getSpiffeID(ctx context.Context) (string, error) {
 				if ext.Id.Equal(oid) {
 					var sequence asn1.RawValue
 					if rest, err := asn1.Unmarshal(ext.Value, &sequence); err != nil {
-						fmt.Println(err)
+						log.Error(err)
 						continue
 					} else if len(rest) != 0 {
 						fmt.Println("the SAN extension is incorrectly encoded")
