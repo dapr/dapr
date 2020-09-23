@@ -295,7 +295,7 @@ func initializeAccessControlList() (AccessControlList, error) {
 				},
 			},
 			{
-				AppName:     "app3",
+				AppName:     app3,
 				TrustDomain: "domain1",
 				Namespace:   "ns1",
 				AppOperationActions: []AppOperation{
@@ -322,12 +322,11 @@ func TestParseAccessControlSpec(t *testing.T) {
 		assert.Equal(t, "deny", accessControlList.DefaultAction)
 		assert.Equal(t, "public", accessControlList.TrustDomain)
 
-		// appName
-		appName := app1
-		assert.Equal(t, appName, accessControlList.PolicySpec[appName].AppName)
-		assert.Equal(t, AllowAccess, accessControlList.PolicySpec[appName].DefaultAction)
-		assert.Equal(t, "public", accessControlList.PolicySpec[appName].TrustDomain)
-		assert.Equal(t, "ns1", accessControlList.PolicySpec[appName].Namespace)
+		// App1
+		assert.Equal(t, app2, accessControlList.PolicySpec[app1].AppName)
+		assert.Equal(t, AllowAccess, accessControlList.PolicySpec[app1].DefaultAction)
+		assert.Equal(t, "public", accessControlList.PolicySpec[app1].TrustDomain)
+		assert.Equal(t, "ns1", accessControlList.PolicySpec[app1].Namespace)
 
 		op1Actions := AccessControlListOperationAction{
 			OperationPostFix: "/",
@@ -341,17 +340,16 @@ func TestParseAccessControlSpec(t *testing.T) {
 			VerbAction:       make(map[string]string),
 		}
 		op2Actions.VerbAction["*"] = "deny"
-		assert.Equal(t, 2, len(accessControlList.PolicySpec[appName].AppOperationActions["/op1"].VerbAction))
-		assert.Equal(t, op1Actions, accessControlList.PolicySpec[appName].AppOperationActions["/op1"])
-		assert.Equal(t, 1, len(accessControlList.PolicySpec[appName].AppOperationActions["/op2"].VerbAction))
-		assert.Equal(t, op2Actions, accessControlList.PolicySpec[appName].AppOperationActions["/op2"])
+		assert.Equal(t, 2, len(accessControlList.PolicySpec[app1].AppOperationActions["/op1"].VerbAction))
+		assert.Equal(t, op1Actions, accessControlList.PolicySpec[app1].AppOperationActions["/op1"])
+		assert.Equal(t, 1, len(accessControlList.PolicySpec[app1].AppOperationActions["/op2"].VerbAction))
+		assert.Equal(t, op2Actions, accessControlList.PolicySpec[app1].AppOperationActions["/op2"])
 
 		// App2
-		appName = app2
-		assert.Equal(t, appName, accessControlList.PolicySpec[appName].AppName)
-		assert.Equal(t, "deny", accessControlList.PolicySpec[appName].DefaultAction)
-		assert.Equal(t, "domain1", accessControlList.PolicySpec[appName].TrustDomain)
-		assert.Equal(t, "ns2", accessControlList.PolicySpec[appName].Namespace)
+		assert.Equal(t, app2, accessControlList.PolicySpec[app2].AppName)
+		assert.Equal(t, "deny", accessControlList.PolicySpec[app2].DefaultAction)
+		assert.Equal(t, "domain1", accessControlList.PolicySpec[app2].TrustDomain)
+		assert.Equal(t, "ns2", accessControlList.PolicySpec[app2].Namespace)
 
 		op3Actions := AccessControlListOperationAction{
 			OperationPostFix: "/a/*",
@@ -365,17 +363,16 @@ func TestParseAccessControlSpec(t *testing.T) {
 			VerbAction:       make(map[string]string),
 		}
 		op4Actions.VerbAction["POST"] = AllowAccess
-		assert.Equal(t, 2, len(accessControlList.PolicySpec[appName].AppOperationActions["/op3"].VerbAction))
-		assert.Equal(t, op3Actions, accessControlList.PolicySpec[appName].AppOperationActions["/op3"])
-		assert.Equal(t, 1, len(accessControlList.PolicySpec[appName].AppOperationActions["/op4"].VerbAction))
-		assert.Equal(t, op4Actions, accessControlList.PolicySpec[appName].AppOperationActions["/op4"])
+		assert.Equal(t, 2, len(accessControlList.PolicySpec[app2].AppOperationActions["/op3"].VerbAction))
+		assert.Equal(t, op3Actions, accessControlList.PolicySpec[app2].AppOperationActions["/op3"])
+		assert.Equal(t, 1, len(accessControlList.PolicySpec[app2].AppOperationActions["/op4"].VerbAction))
+		assert.Equal(t, op4Actions, accessControlList.PolicySpec[app2].AppOperationActions["/op4"])
 
 		// App3
-		appName = "app3"
-		assert.Equal(t, appName, accessControlList.PolicySpec[appName].AppName)
-		assert.Equal(t, "", accessControlList.PolicySpec[appName].DefaultAction)
-		assert.Equal(t, "domain1", accessControlList.PolicySpec[appName].TrustDomain)
-		assert.Equal(t, "ns1", accessControlList.PolicySpec[appName].Namespace)
+		assert.Equal(t, app3, accessControlList.PolicySpec[app3].AppName)
+		assert.Equal(t, "", accessControlList.PolicySpec[app3].DefaultAction)
+		assert.Equal(t, "domain1", accessControlList.PolicySpec[app3].TrustDomain)
+		assert.Equal(t, "ns1", accessControlList.PolicySpec[app3].Namespace)
 
 		op5Actions := AccessControlListOperationAction{
 			OperationPostFix: "/",
@@ -383,8 +380,8 @@ func TestParseAccessControlSpec(t *testing.T) {
 		}
 		op5Actions.VerbAction["POST"] = AllowAccess
 
-		assert.Equal(t, 1, len(accessControlList.PolicySpec[appName].AppOperationActions["/op5"].VerbAction))
-		assert.Equal(t, op5Actions, accessControlList.PolicySpec[appName].AppOperationActions["/op5"])
+		assert.Equal(t, 1, len(accessControlList.PolicySpec[app3].AppOperationActions["/op5"].VerbAction))
+		assert.Equal(t, op5Actions, accessControlList.PolicySpec[app3].AppOperationActions["/op5"])
 	})
 
 	t.Run("test when no trust domain and namespace specified in app policy", func(t *testing.T) {
@@ -494,7 +491,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when no matching app in acl found", func(t *testing.T) {
-		srcAppID := app3
+		srcAppID := "appX"
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
@@ -548,6 +545,19 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		assert.False(t, isAllowed)
 	})
 
+	t.Run("test when operation is not found in the policy spec", func(t *testing.T) {
+		srcAppID := app1
+		accessControlList, _ := initializeAccessControlList()
+		spiffeID := SpiffeID{
+			TrustDomain: "public",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "opX", common.HTTPExtension_POST, &accessControlList)
+		// Action = Ignore policy and apply default action for app
+		assert.True(t, isAllowed)
+	})
+
 	t.Run("test when http verb is not found", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList()
@@ -562,7 +572,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when default action for app is not specified and no matching http verb found", func(t *testing.T) {
-		srcAppID := "app3"
+		srcAppID := app3
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",

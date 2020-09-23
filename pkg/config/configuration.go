@@ -405,6 +405,7 @@ func getSpiffeID(ctx context.Context) (string, error) {
 
 		tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
 
+		// https://www.ietf.org/rfc/rfc3280.txt
 		oid := asn1.ObjectIdentifier{2, 5, 29, 17}
 
 		for _, crt := range tlsInfo.State.PeerCertificates {
