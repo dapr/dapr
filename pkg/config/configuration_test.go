@@ -13,6 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	app1 = "app1"
+	app2 = "app2"
+	app3 = "app3"
+)
+
 func TestLoadStandaloneConfiguration(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -98,11 +104,11 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 						Scopes: []SecretsScope{
 							{
 								StoreName:     "testStore",
-								DefaultAccess: "allow",
+								DefaultAccess: AllowAccess,
 							},
 							{
 								StoreName:     "testStore",
-								DefaultAccess: "deny",
+								DefaultAccess: DenyAccess,
 							},
 						},
 					},
@@ -118,7 +124,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 						Scopes: []SecretsScope{
 							{
 								StoreName:      "testStore",
-								DefaultAccess:  "deny",
+								DefaultAccess:  DenyAccess,
 								AllowedSecrets: []string{"Z", "b", "a", "c"},
 							},
 						},
@@ -135,7 +141,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 						Scopes: []SecretsScope{
 							{
 								StoreName:      "testStore",
-								DefaultAccess:  "DeNY",
+								DefaultAccess:  DenyAccess,
 								AllowedSecrets: []string{"Z", "b", "a", "c"},
 							},
 						},
@@ -180,7 +186,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default deny all secrets empty key",
 			scope: SecretsScope{
 				StoreName:     "testName",
-				DefaultAccess: "DeNy", // check case-insensitivity
+				DefaultAccess: DenyAccess, // check case-insensitivity
 			},
 			secretKey:      "",
 			expectedResult: false,
@@ -189,7 +195,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default allow all secrets empty key",
 			scope: SecretsScope{
 				StoreName:     "testName",
-				DefaultAccess: "AllOw", // check case-insensitivity
+				DefaultAccess: AllowAccess, // check case-insensitivity
 			},
 			secretKey:      "",
 			expectedResult: true,
@@ -198,7 +204,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default deny all secrets",
 			scope: SecretsScope{
 				StoreName:     "testName",
-				DefaultAccess: "deny",
+				DefaultAccess: DenyAccess,
 			},
 			secretKey:      "random",
 			expectedResult: false,
@@ -207,7 +213,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default deny with specific allow secrets",
 			scope: SecretsScope{
 				StoreName:      "testName",
-				DefaultAccess:  "deny",
+				DefaultAccess:  DenyAccess,
 				AllowedSecrets: []string{"key1"},
 			},
 			secretKey:      "key1",
@@ -253,7 +259,7 @@ func initializeAccessControlList() (AccessControlList, error) {
 		TrustDomain:   "public",
 		AppPolicies: []AppPolicySpec{
 			{
-				AppName:       "app1",
+				AppName:       app1,
 				DefaultAction: "allow",
 				TrustDomain:   "public",
 				Namespace:     "ns1",
@@ -271,7 +277,7 @@ func initializeAccessControlList() (AccessControlList, error) {
 				},
 			},
 			{
-				AppName:       "app2",
+				AppName:       app2,
 				DefaultAction: "deny",
 				TrustDomain:   "domain1",
 				Namespace:     "ns2",
@@ -317,7 +323,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 		assert.Equal(t, "public", accessControlList.TrustDomain)
 
 		// appName
-		appName := "app1"
+		appName := app1
 		assert.Equal(t, appName, accessControlList.PolicySpec[appName].AppName)
 		assert.Equal(t, "allow", accessControlList.PolicySpec[appName].DefaultAction)
 		assert.Equal(t, "public", accessControlList.PolicySpec[appName].TrustDomain)
@@ -341,7 +347,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 		assert.Equal(t, op2Actions, accessControlList.PolicySpec[appName].AppOperationActions["/op2"])
 
 		// App2
-		appName = "app2"
+		appName = app2
 		assert.Equal(t, appName, accessControlList.PolicySpec[appName].AppName)
 		assert.Equal(t, "deny", accessControlList.PolicySpec[appName].DefaultAction)
 		assert.Equal(t, "domain1", accessControlList.PolicySpec[appName].TrustDomain)
@@ -387,7 +393,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 			TrustDomain:   "public",
 			AppPolicies: []AppPolicySpec{
 				{
-					AppName:       "app1",
+					AppName:       app1,
 					DefaultAction: "allow",
 					Namespace:     "ns1",
 					AppOperationActions: []AppOperation{
@@ -404,7 +410,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 					},
 				},
 				{
-					AppName:       "app2",
+					AppName:       app2,
 					DefaultAction: "deny",
 					TrustDomain:   "domain1",
 					AppOperationActions: []AppOperation{
@@ -441,7 +447,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 		}
 
 		_, err := ParseAccessControlSpec(invalidAccessControlSpec)
-		assert.Error(t, err, "Invalid Access Control Spec. Missing TrustDomain for apps: [app1], Missing Namespace for apps: [app2], Missing app name on at least one of the app policies: true")
+		assert.Error(t, err, "invalid access control spec. missing trustdomain for apps: [%s], missing namespace for apps: [%s], missing app name on at least one of the app policies: true", app1, app2)
 	})
 }
 
@@ -470,7 +476,7 @@ func TestSpiffeID(t *testing.T) {
 
 func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when no acl specified", func(t *testing.T) {
-		srcAppID := "app1"
+		srcAppID := app1
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
@@ -482,7 +488,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when no matching app in acl found", func(t *testing.T) {
-		srcAppID := "app3"
+		srcAppID := app3
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
@@ -495,7 +501,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when trust domain does not match", func(t *testing.T) {
-		srcAppID := "app1"
+		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "private",
@@ -508,7 +514,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when namespace does not match", func(t *testing.T) {
-		srcAppID := "app1"
+		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
@@ -521,7 +527,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when spiffe id is nil", func(t *testing.T) {
-		srcAppID := "app1"
+		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList()
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, &accessControlList)
 		// Action = Default global action
@@ -537,7 +543,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when http verb is not found", func(t *testing.T) {
-		srcAppID := "app2"
+		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
@@ -563,7 +569,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when http verb matches *", func(t *testing.T) {
-		srcAppID := "app1"
+		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
@@ -576,7 +582,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when http verb matches a specific verb", func(t *testing.T) {
-		srcAppID := "app2"
+		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
@@ -589,7 +595,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when matching operation post fix is specified in policy spec", func(t *testing.T) {
-		srcAppID := "app2"
+		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
@@ -602,7 +608,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	})
 
 	t.Run("test when non-matching operation post fix is specified in policy spec", func(t *testing.T) {
-		srcAppID := "app2"
+		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList()
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",

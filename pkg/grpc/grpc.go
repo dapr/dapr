@@ -10,7 +10,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
 	grpc_channel "github.com/dapr/dapr/pkg/channel/grpc"
@@ -26,7 +25,6 @@ import (
 const (
 	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
-	dialTimeout       = time.Second * 5
 )
 
 // Manager is a wrapper around gRPC connection pooling

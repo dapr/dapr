@@ -347,10 +347,10 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 	}
 
 	if len(invalidTrustDomain) > 0 || len(invalidNamespace) > 0 || invalidAppName {
-		err := fmt.Errorf("Invalid Access Control Spec. %s, %s %s",
-			fmt.Sprintf("Missing TrustDomain for apps: %v", invalidTrustDomain),
-			fmt.Sprintf("Missing Namespace for apps: %v", invalidNamespace),
-			fmt.Sprintf("Missing app name on at least one of the app policies: %v", invalidAppName))
+		err := fmt.Errorf("invalid access control spec. %s, %s %s",
+			fmt.Sprintf("missing trustdomain for apps: %v", invalidTrustDomain),
+			fmt.Sprintf("missing namespace for apps: %v", invalidNamespace),
+			fmt.Sprintf("missing app name on at least one of the app policies: %v", invalidAppName))
 		return accessControlList, err
 	}
 
@@ -520,7 +520,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 }
 
 func isActionAllowed(action string) bool {
-	if strings.ToLower(action) == AllowAccess {
+	if strings.EqualFold(action, AllowAccess) {
 		return true
 	}
 	return false
