@@ -225,8 +225,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	a.blockUntilAppIsReady()
-
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return errors.Wrap(err, "failed to determine host address")
@@ -235,13 +233,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.globalConfig.Spec.TracingSpec.Stdout {
 		trace.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
-
-	err = a.createAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
-	}
-
-	a.loadAppConfiguration()
 
 	// Register and initialize name resolution for service discovery.
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
@@ -272,11 +263,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.initDirectMessaging(a.nameResolver)
 
-	err = a.initActors()
-	if err != nil {
-		log.Warnf("failed to init actors: %s", err)
-	}
-
 	// Register and initialize HTTP middleware
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 	pipeline, err := a.buildHTTPPipeline()
@@ -301,7 +287,19 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
+	err = a.createAppChannel()
+	if err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+	}
 
+	a.blockUntilAppIsReady()
+
+	a.loadAppConfiguration()
+
+	err = a.initActors()
+	if err != nil {
+		log.Warnf("failed to init actors: %s", err)
+	}
 	return nil
 }
 
@@ -1193,18 +1191,24 @@ func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.C
 	return authorized
 }
 
-func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
+func (a *DaprRuntime) getComponentsLoader() (components.ComponentLoader, error) {
 	var loader components.ComponentLoader
-
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.operatorClient)
 	case modes.StandaloneMode:
 		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	default:
-		return errors.Errorf("components loader for mode %s not found", a.runtimeConfig.Mode)
+		return nil, errors.Errorf("components loader for mode %s not found", a.runtimeConfig.Mode)
 	}
+	return loader, nil
+}
 
+func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
+	loader, err := a.getComponentsLoader()
+	if err != nil {
+		return err
+	}
 	comps, err := loader.LoadComponents()
 	if err != nil {
 		return err
