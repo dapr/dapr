@@ -174,7 +174,7 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 
 		if configErr != nil {
-			log.Infof("Config error: %v", configErr)
+			log.Debugf("Config error: %v", configErr)
 		}
 	}
 

@@ -141,7 +141,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 						Scopes: []SecretsScope{
 							{
 								StoreName:      "testStore",
-								DefaultAccess:  DenyAccess,
+								DefaultAccess:  "DeNY",
 								AllowedSecrets: []string{"Z", "b", "a", "c"},
 							},
 						},
@@ -186,7 +186,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default deny all secrets empty key",
 			scope: SecretsScope{
 				StoreName:     "testName",
-				DefaultAccess: DenyAccess, // check case-insensitivity
+				DefaultAccess: "DeNy", // check case-insensitivity
 			},
 			secretKey:      "",
 			expectedResult: false,
@@ -195,7 +195,7 @@ func TestIsSecretAllowed(t *testing.T) {
 			name: "default allow all secrets empty key",
 			scope: SecretsScope{
 				StoreName:     "testName",
-				DefaultAccess: AllowAccess, // check case-insensitivity
+				DefaultAccess: "AllOw", // check case-insensitivity
 			},
 			secretKey:      "",
 			expectedResult: true,

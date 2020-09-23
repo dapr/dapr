@@ -21,7 +21,6 @@ import (
 	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
@@ -37,8 +36,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
-
-var log = logger.NewLogger("dapr.api-grpc")
 
 const (
 	daprSeparator        = "||"
@@ -125,10 +122,10 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		}
 	}
 
-	callAllowed := a.applyAccessControlPolicies(ctx, operation, httpVerb)
+	callAllowed, errMsg := a.applyAccessControlPolicies(ctx, operation, httpVerb)
 
 	if !callAllowed {
-		return nil, status.Errorf(codes.PermissionDenied, "Access Control Policy has denied access: operation: %s verb: %s", operation, httpVerb)
+		return nil, status.Errorf(codes.PermissionDenied, errMsg)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -139,12 +136,12 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb) bool {
+func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
 	if err != nil {
 		// Apply the default action
-		log.Warnf("Error while reading spiffe id from client cert: %v. Applying default global policy action", err.Error())
+		apiServerLogger.Warnf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
 	}
 	var appID, trustDomain, namespace string
 	if spiffeID != nil {
@@ -154,7 +151,14 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 	}
 	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, a.accessControlList)
 	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
-	return action
+
+	var errMessage string
+	if !action {
+		errMessage := fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
+		apiServerLogger.Debugf(errMessage)
+	}
+
+	return action, errMessage
 }
 
 // CallActor invokes a virtual actor

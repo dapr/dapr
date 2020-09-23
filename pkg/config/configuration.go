@@ -412,15 +412,15 @@ func getSpiffeID(ctx context.Context) (string, error) {
 				if ext.Id.Equal(oid) {
 					var sequence asn1.RawValue
 					if rest, err := asn1.Unmarshal(ext.Value, &sequence); err != nil {
-						log.Error(err)
+						log.Debug(err)
 						continue
 					} else if len(rest) != 0 {
-						log.Error("the SAN extension is incorrectly encoded")
+						log.Debug("the SAN extension is incorrectly encoded")
 						continue
 					}
 
 					if !sequence.IsCompound || sequence.Tag != asn1.TagSequence || sequence.Class != asn1.ClassUniversal {
-						log.Error("the SAN extension is incorrectly encoded")
+						log.Debug("the SAN extension is incorrectly encoded")
 						continue
 					}
 
