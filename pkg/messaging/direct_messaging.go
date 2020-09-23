@@ -156,13 +156,15 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appAddress st
 
 	// TODO: Use built-in grpc client timeout instead of using context timeout
 	// no ops if span context is empty
+	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
+	defer cancel()
+
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	d.addForwardedHeadersToMetadata(req)
 	d.addDestinationAppIDHeaderToMetadata(appID, req)
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
-
 	resp, err := clientV1.CallLocal(ctx, req.Proto())
 	if err != nil {
 		return nil, err

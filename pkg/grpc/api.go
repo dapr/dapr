@@ -142,7 +142,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 func (a *api) applyAccessControlPolicies(ctx context.Context, targetOperation string, httpVerb common.HTTPExtension_Verb) bool {
 	// Apply access control list filter
-	spiffeID, err := config.TryGetAndParseSpiffeID(ctx)
+	spiffeID, err := config.GetAndParseSpiffeID(ctx)
 	if err != nil {
 		// Apply the default action
 		log.Warnf("Error while reading client cert: %v. Applying default global policy action", err.Error())

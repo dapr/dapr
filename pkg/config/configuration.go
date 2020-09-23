@@ -358,14 +358,11 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 
 // GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
 func GetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
-	// TODO: Remove hardcoding for testing
 	spiffeID, err := getSpiffeID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// spiffeID = "spiffe://a/ns/b/pythonapp"
-	log.Infof("spiffe id :- %v\n", spiffeID)
 	id, err := parseSpiffeID(spiffeID)
 	return id, err
 }
@@ -502,7 +499,6 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 			return isActionAllowed(action), actionPolicy
 		}
 
-		log.Infof("Found operation: %v. checking http verbs", inputOperation)
 		if httpVerb != common.HTTPExtension_NONE {
 			verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
 			if found {
