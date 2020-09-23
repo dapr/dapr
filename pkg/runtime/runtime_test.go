@@ -7,7 +7,6 @@ package runtime
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -33,6 +32,7 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/ghodss/yaml"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -232,7 +232,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -264,7 +264,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -290,7 +290,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -395,7 +395,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -425,7 +425,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -455,7 +455,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -487,7 +487,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -517,7 +517,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -556,7 +556,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -629,7 +629,7 @@ func TestInitSecretStores(t *testing.T) {
 				return m
 			}))
 
-		err := rt.processOneComponent(components_v1alpha1.Component{
+		err := rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -648,7 +648,7 @@ func TestInitSecretStores(t *testing.T) {
 				return m
 			}))
 
-		rt.processOneComponent(components_v1alpha1.Component{
+		rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -668,7 +668,7 @@ func TestInitSecretStores(t *testing.T) {
 			}),
 		)
 
-		rt.processOneComponent(components_v1alpha1.Component{
+		rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -693,6 +693,28 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	m := rt.convertMetadataItemsToProperties(items)
 	assert.Equal(t, 1, len(m))
 	assert.Equal(t, "b", m["a"])
+}
+
+func TestPopulateSecretsConfiguration(t *testing.T) {
+	t.Run("secret store configuration is populated", func(t *testing.T) {
+		//setup
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		rt.globalConfig.Spec.Secrets.Scopes = []config.SecretsScope{
+			{
+				StoreName:     "testMock",
+				DefaultAccess: "allow",
+			},
+		}
+
+		//act
+		rt.populateSecretsConfiguration()
+
+		//verify
+		assert.Contains(t, rt.secretsConfiguration, "testMock", "Expected testMock secret store configuration to be populated")
+		assert.Equal(t, config.AllowAccess, rt.secretsConfiguration["testMock"].DefaultAccess, "Expected default access as allow")
+		assert.Empty(t, rt.secretsConfiguration["testMock"].DeniedSecrets, "Expected testMock deniedSecrets to not be populated")
+		assert.NotContains(t, rt.secretsConfiguration["testMock"].AllowedSecrets, "Expected testMock allowedSecrets to not be populated")
+	})
 }
 
 func TestProcessComponentSecrets(t *testing.T) {
@@ -737,7 +759,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 		)
 
 		// add Kubernetes component manually
-		rt.processOneComponent(components_v1alpha1.Component{
+		rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetes",
 			},
@@ -768,7 +790,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
 		for _, comp := range rt.builtinSecretStore() {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -793,7 +815,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
 		for _, comp := range rt.builtinSecretStore() {
-			err := rt.processOneComponent(comp)
+			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
 
@@ -805,46 +827,132 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 // Test that flushOutstandingComponents waits for components
 func TestFlushOutstandingComponent(t *testing.T) {
-	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	wasCalled := false
-	m := NewMockKubernetesStoreWithInitCallback(func() {
-		time.Sleep(100 * time.Millisecond)
-		wasCalled = true
+	t.Run("We can call flushOustandingComponents more than once", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		wasCalled := false
+		m := NewMockKubernetesStoreWithInitCallback(func() {
+			time.Sleep(100 * time.Millisecond)
+			wasCalled = true
+		})
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+				return m
+			}))
+
+		go rt.processComponents()
+		rt.pendingComponents <- components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetesMock",
+			},
+		}
+		rt.flushOutstandingComponents()
+		assert.True(t, wasCalled)
+
+		// Make sure that the goroutine was restarted and can flush a second time
+		wasCalled = false
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New("kubernetesMock2", func() secretstores.SecretStore {
+				return m
+			}))
+
+		rt.pendingComponents <- components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMock2",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetesMock",
+			},
+		}
+		rt.flushOutstandingComponents()
+		assert.True(t, wasCalled)
 	})
-	rt.secretStoresRegistry.Register(
-		secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
-			return m
-		}))
+	t.Run("flushOutstandingComponents blocks for components with outstanding dependanices", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		wasCalled := false
+		wasCalledChild := false
+		wasCalledGrandChild := false
+		m := NewMockKubernetesStoreWithInitCallback(func() {
+			time.Sleep(100 * time.Millisecond)
+			wasCalled = true
+		})
+		mc := NewMockKubernetesStoreWithInitCallback(func() {
+			time.Sleep(100 * time.Millisecond)
+			wasCalledChild = true
+		})
+		mgc := NewMockKubernetesStoreWithInitCallback(func() {
+			time.Sleep(100 * time.Millisecond)
+			wasCalledGrandChild = true
+		})
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New("kubernetesMock", func() secretstores.SecretStore {
+				return m
+			}))
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New("kubernetesMockChild", func() secretstores.SecretStore {
+				return mc
+			}))
+		rt.secretStoresRegistry.Register(
+			secretstores_loader.New("kubernetesMockGrandChild", func() secretstores.SecretStore {
+				return mgc
+			}))
 
-	go rt.processComponents()
-	rt.pendingComponents <- components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: "kubernetesMock",
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type: "secretstores.kubernetesMock",
-		},
-	}
-	rt.flushOutstandingComponents()
-	assert.True(t, wasCalled)
-
-	// Make sure that the goroutine was restarted and can flush a second time
-	wasCalled = false
-	rt.secretStoresRegistry.Register(
-		secretstores_loader.New("kubernetesMock2", func() secretstores.SecretStore {
-			return m
-		}))
-
-	rt.pendingComponents <- components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: "kubernetesMock2",
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type: "secretstores.kubernetesMock",
-		},
-	}
-	rt.flushOutstandingComponents()
-	assert.True(t, wasCalled)
+		go rt.processComponents()
+		rt.pendingComponents <- components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMockGrandChild",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetesMockGrandChild",
+				Metadata: []components_v1alpha1.MetadataItem{
+					{
+						Name: "a",
+						SecretKeyRef: components_v1alpha1.SecretKeyRef{
+							Key:  "key1",
+							Name: "name1",
+						},
+					},
+				},
+			},
+			Auth: components_v1alpha1.Auth{
+				SecretStore: "kubernetesMockChild",
+			},
+		}
+		rt.pendingComponents <- components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMockChild",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetesMockChild",
+				Metadata: []components_v1alpha1.MetadataItem{
+					{
+						Name: "a",
+						SecretKeyRef: components_v1alpha1.SecretKeyRef{
+							Key:  "key1",
+							Name: "name1",
+						},
+					},
+				},
+			},
+			Auth: components_v1alpha1.Auth{
+				SecretStore: "kubernetesMock",
+			},
+		}
+		rt.pendingComponents <- components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "kubernetesMock",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "secretstores.kubernetesMock",
+			},
+		}
+		rt.flushOutstandingComponents()
+		assert.True(t, wasCalled)
+		assert.True(t, wasCalledChild)
+		assert.True(t, wasCalledGrandChild)
+	})
 }
 
 // Test InitSecretStore if secretstore.* refers to Kubernetes secret store
@@ -883,7 +991,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		}),
 	)
 	for _, comp := range rt.builtinSecretStore() {
-		err := rt.processOneComponent(comp)
+		err := rt.processComponentAndDependents(comp)
 		assert.Nil(t, err)
 	}
 	fakeSecretStoreWithAuth, _ = rt.processComponentSecrets(fakeSecretStoreWithAuth)
@@ -965,7 +1073,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent pubsub.CloudEventsEnvelope
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1005,7 +1113,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent pubsub.CloudEventsEnvelope
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := fmt.Errorf("unknown status returned from app while processing pub/sub event %v: not_valid", cloudEvent.ID)
+		expectedClientError := errors.Errorf("unknown status returned from app while processing pub/sub event %v: not_valid", cloudEvent.ID)
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1027,7 +1135,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent pubsub.CloudEventsEnvelope
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := fmt.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
+		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})

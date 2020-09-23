@@ -64,6 +64,7 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
+	secretsConfiguration  map[string]config.SecretsScope
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -75,6 +76,7 @@ func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
+	secretsConfiguration map[string]config.SecretsScope,
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
@@ -88,6 +90,7 @@ func NewAPI(
 		publishFn:             publishFn,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
+		secretsConfiguration:  secretsConfiguration,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		tracingSpec:           tracingSpec,
 	}
@@ -384,6 +387,12 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
+	if !a.isSecretAllowed(in.StoreName, in.Key) {
+		err := status.Errorf(codes.PermissionDenied, "Access denied by policy to get %q from %q", in.Key, in.StoreName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
+	}
+
 	req := secretstores.GetSecretRequest{
 		Name:     in.Key,
 		Metadata: in.Metadata,
@@ -488,9 +497,17 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	})
 
 	if err != nil {
-		err = fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
+		err = errors.Wrap(err, "ERR_STATE_TRANSACTION")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) isSecretAllowed(storeName, key string) bool {
+	if config, ok := a.secretsConfiguration[storeName]; ok {
+		return config.IsSecretAllowed(key)
+	}
+	// By default if a configuration is not defined for a secret store, return true.
+	return true
 }

@@ -88,29 +88,29 @@ func FromFlags() (*DaprRuntime, error) {
 
 	daprHTTP, err := strconv.Atoi(*daprHTTPPort)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing dapr-http-port flag: %s", err)
+		return nil, errors.Wrap(err, "error parsing dapr-http-port flag")
 	}
 
 	daprAPIGRPC, err := strconv.Atoi(*daprAPIGRPCPort)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing dapr-grpc-port flag: %s", err)
+		return nil, errors.Wrap(err, "error parsing dapr-grpc-port flag")
 	}
 
 	profPort, err := strconv.Atoi(*profilePort)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing profile-port flag: %s", err)
+		return nil, errors.Wrap(err, "error parsing profile-port flag")
 	}
 
 	var daprInternalGRPC int
 	if *daprInternalGRPCPort != "" {
 		daprInternalGRPC, err = strconv.Atoi(*daprInternalGRPCPort)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing dapr-internal-grpc-port: %s", err)
+			return nil, errors.Wrap(err, "error parsing dapr-internal-grpc-port")
 		}
 	} else {
 		daprInternalGRPC, err = grpc.GetFreePort()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get free port for internal grpc server: %s", err)
+			return nil, errors.Wrap(err, "failed to get free port for internal grpc server")
 		}
 	}
 
@@ -118,7 +118,7 @@ func FromFlags() (*DaprRuntime, error) {
 	if *appPort != "" {
 		applicationPort, err = strconv.Atoi(*appPort)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing app-port: %s", err)
+			return nil, errors.Wrap(err, "error parsing app-port")
 		}
 	}
 
