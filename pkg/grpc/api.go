@@ -141,7 +141,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
 	if err != nil {
 		// Apply the default action
-		apiServerLogger.Warnf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
+		apiServerLogger.Debugf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
 	}
 	var appID, trustDomain, namespace string
 	if spiffeID != nil {
@@ -154,7 +154,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 
 	var errMessage string
 	if !action {
-		errMessage := fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
+		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
 		apiServerLogger.Debugf(errMessage)
 	}
 
