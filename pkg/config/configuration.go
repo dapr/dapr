@@ -39,8 +39,8 @@ const (
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
 	SpiffeIDPrefix      = "spiffe://"
-	HttpProtocol        = "http"
-	GrpcProtocol        = "grpc"
+	HTTPProtocol        = "http"
+	GRPCProtocol        = "grpc"
 )
 
 type Configuration struct {
@@ -512,7 +512,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 		}
 
 		// Operation prefix and postfix match. Now check the operation specific policy
-		if appProtocol == HttpProtocol {
+		if appProtocol == HTTPProtocol {
 			if httpVerb != common.HTTPExtension_NONE {
 				verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
 				if found {
@@ -529,7 +529,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 				// No matching verb found in the operation specific policies.
 				action = appPolicy.DefaultAction
 			}
-		} else if appProtocol == GrpcProtocol {
+		} else if appProtocol == GRPCProtocol {
 			// No http verb match is needed.
 			action = operationPolicy.OperationAction
 		}

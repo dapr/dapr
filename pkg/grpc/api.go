@@ -120,7 +120,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		operation := req.Message().Method
 		var httpVerb common.HTTPExtension_Verb
 		// Get the http verb in case the application protocol is http
-		if a.appProtocol == config.HttpProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
+		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
 				httpVerb = httpExt.GetVerb()
