@@ -435,7 +435,6 @@ func getSpiffeID(ctx context.Context) (string, error) {
 
 						spiffeID = string(rawValue.Bytes)
 						if strings.HasPrefix(spiffeID, SpiffeIDPrefix) {
-							log.Errorf("Found spiffe id: %s\n", spiffeID)
 							return spiffeID, nil
 						}
 					}
