@@ -492,7 +492,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns1",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, HttpProtocol, nil)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, nil)
 		// Action = Allow the operation since no ACL is defined
 		assert.True(t, isAllowed)
 	})
@@ -505,7 +505,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns1",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, &accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
 	})
@@ -518,7 +518,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns1",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, &accessControlList)
 		// Action = Ignore policy and apply global default action
 		assert.False(t, isAllowed)
 	})
@@ -531,7 +531,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "abcd",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, &accessControlList)
 		// Action = Ignore policy and apply global default action
 		assert.False(t, isAllowed)
 	})
@@ -539,7 +539,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when spiffe id is nil", func(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList()
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, &accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
 	})
@@ -547,7 +547,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when src app id is empty", func(t *testing.T) {
 		srcAppID := ""
 		accessControlList, _ := initializeAccessControlList()
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, &accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
 	})
@@ -560,7 +560,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns1",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "opX", common.HTTPExtension_POST, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "opX", common.HTTPExtension_POST, HTTPProtocol, &accessControlList)
 		// Action = Ignore policy and apply default action for app
 		assert.True(t, isAllowed)
 	})
@@ -573,7 +573,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns2",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_PUT, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_PUT, HTTPProtocol, &accessControlList)
 		// Action = Default action for the specific app
 		assert.False(t, isAllowed)
 	})
@@ -586,7 +586,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns1",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op5", common.HTTPExtension_PUT, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op5", common.HTTPExtension_PUT, HTTPProtocol, &accessControlList)
 		// Action = Global Default action
 		assert.False(t, isAllowed)
 	})
@@ -599,7 +599,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns1",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op2", common.HTTPExtension_PUT, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op2", common.HTTPExtension_PUT, HTTPProtocol, &accessControlList)
 		// Action = Default action for the specific verb
 		assert.False(t, isAllowed)
 	})
@@ -612,7 +612,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns2",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_POST, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_POST, HTTPProtocol, &accessControlList)
 		// Action = Default action for the specific verb
 		assert.True(t, isAllowed)
 	})
@@ -625,7 +625,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns2",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op4", common.HTTPExtension_POST, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op4", common.HTTPExtension_POST, HTTPProtocol, &accessControlList)
 		// Action = Default action for the specific verb
 		assert.True(t, isAllowed)
 	})
@@ -638,7 +638,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns2",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_NONE, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_NONE, HTTPProtocol, &accessControlList)
 		// Action = Default action for the app
 		assert.False(t, isAllowed)
 	})
@@ -651,7 +651,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns2",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/a", common.HTTPExtension_PUT, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/a", common.HTTPExtension_PUT, HTTPProtocol, &accessControlList)
 		// Action = Default action for the specific verb
 		assert.True(t, isAllowed)
 	})
@@ -664,7 +664,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns2",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/a/b", common.HTTPExtension_PUT, HttpProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/a/b", common.HTTPExtension_PUT, HTTPProtocol, &accessControlList)
 		// Action = Default action for the app
 		assert.False(t, isAllowed)
 	})
@@ -677,7 +677,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns2",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_NONE, GrpcProtocol, &accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "op4", common.HTTPExtension_NONE, GRPCProtocol, &accessControlList)
 		// Action = Default action for the app
 		assert.True(t, isAllowed)
 	})
