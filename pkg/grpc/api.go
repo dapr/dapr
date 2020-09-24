@@ -187,13 +187,26 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &empty.Empty{}, err
 	}
 
+	pubsubName := in.PubsubName
+	if pubsubName == "" {
+		err := errors.New("ERR_PUBSUB_NAME_EMPTY")
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
 	topic := in.Topic
+	if topic == "" {
+		err := errors.New("ERR_TOPIC_EMPTY")
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
 	body := []byte{}
 
 	if in.Data != nil {
 		body = in.Data
 	}
-	pubsubName := in.PubsubName
+
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
