@@ -34,11 +34,10 @@ spec:
                 - key: agentpool
                   operator: In
                   values:
-                  - agentpool
-                  # - loadgen
+                  - loadgen
       containers:
       - name: loadtestclient
-        image: youngp/stateactor:latest
+        image: [USE ACTOR TEST APP IMAGE]
         command: ["./testclient"]
         args: ["-a", "StateActor", "-c", "10", "-numactors", "1024", "-s", "1024", "-t", "1m"]
         ports:

@@ -38,7 +38,7 @@ spec:
                   - agentpool
       containers:
       - name: stateactor
-        image: youngp/stateactor:latest
+        image: [USE ACTOR TEST APP IMAGE]
         command: ["./stateactor"]
         args: ["-actors", "StateActor", "-p", "3000"]
         ports:

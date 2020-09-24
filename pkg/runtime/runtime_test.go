@@ -88,7 +88,7 @@ func NewMockKubernetesStoreWithInitCallback(cb func()) secretstores.SecretStore 
 
 func TestNewRuntime(t *testing.T) {
 	// act
-	r := NewDaprRuntime(&Config{}, &config.Configuration{})
+	r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
 
 	// assert
 	assert.NotNil(t, r, "runtime must be initiated")
@@ -1196,7 +1196,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		false,
 		"")
 
-	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{})
+	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 	return rt
 }
 

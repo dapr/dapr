@@ -31,7 +31,7 @@ const (
 type Authenticator interface {
 	GetTrustAnchors() *x509.CertPool
 	GetCurrentSignedCert() *SignedCertificate
-	CreateSignedWorkloadCert(id string) (*SignedCertificate, error)
+	CreateSignedWorkloadCert(id, namespace, trustDomain string) (*SignedCertificate, error)
 }
 
 type authenticator struct {
@@ -76,7 +76,7 @@ func (a *authenticator) GetCurrentSignedCert() *SignedCertificate {
 
 // CreateSignedWorkloadCert returns a signed workload certificate, the PEM encoded private key
 // And the duration of the signed cert.
-func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate, error) {
+func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain string) (*SignedCertificate, error) {
 	csrb, pkPem, err := a.genCSRFunc(id)
 	if err != nil {
 		return nil, err
@@ -108,11 +108,16 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	defer conn.Close()
 
 	c := sentryv1pb.NewCAClient(conn)
-	resp, err := c.SignCertificate(context.Background(), &sentryv1pb.SignCertificateRequest{
-		CertificateSigningRequest: certPem,
-		Id:                        getSentryIdentifier(id),
-		Token:                     getToken(),
-	}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
+
+	resp, err := c.SignCertificate(context.Background(),
+		&sentryv1pb.SignCertificateRequest{
+			CertificateSigningRequest: certPem,
+			Id:                        getSentryIdentifier(id),
+			Token:                     getToken(),
+			TrustDomain:               trustDomain,
+			Namespace:                 namespace,
+		}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
+
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, errors.Wrap(err, "error from sentry SignCertificate")

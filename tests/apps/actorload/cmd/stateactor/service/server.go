@@ -85,9 +85,15 @@ func (s *ActorService) onConfig(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(s.config)
 }
 
+func (s *ActorService) onHealthz(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(""))
+}
+
 func (s *ActorService) router() http.Handler {
 	var r = chi.NewRouter()
 	r.Get("/dapr/config", s.onConfig)
+	r.Get("/healthz", s.onHealthz)
 
 	r.Route("/actors/{actorType}/{actorID}", func(r chi.Router) {
 		r.Use(actorMiddleware)

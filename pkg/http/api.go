@@ -944,6 +944,13 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	topic := reqCtx.UserValue(topicParam).(string)
+	if topic == "/" {
+		msg := NewErrorResponse("ERR_TOPIC_EMPTY", "")
+		respondWithError(reqCtx, 404, msg)
+		log.Debug(msg)
+		return
+	}
+
 	body := reqCtx.PostBody()
 
 	// Extract trace context from context.
