@@ -1007,8 +1007,9 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	assert.Nil(t, err)
 
 	testPubSubMessage := &pubsub.NewMessage{
-		Topic: topic,
-		Data:  b,
+		Topic:    topic,
+		Data:     b,
+		Metadata: map[string]string{pubsubName: TestPubsubName},
 	}
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)

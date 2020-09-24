@@ -70,6 +70,7 @@ const (
 	// output bindings concurrency
 	bindingsConcurrnecyParallel   = "parallel"
 	bindingsConcurrnecySequential = "sequential"
+	pubsubName                    = "pubsubName"
 )
 
 type ComponentCategory string
@@ -382,7 +383,14 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic: topic,
-		}, publishFunc); err != nil {
+		}, func(msg *pubsub.NewMessage) error {
+			if msg.Metadata == nil {
+				msg.Metadata = make(map[string]string, 1)
+			}
+
+			msg.Metadata[pubsubName] = name
+			return publishFunc(msg)
+		}); err != nil {
 			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
@@ -1042,7 +1050,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		subject = cloudEvent.Subject
 	}
 
-	route := a.topicRoutes[cloudEvent.PubsubName].routes[msg.Topic]
+	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
 	req := invokev1.NewInvokeMethodRequest(route)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
@@ -1118,7 +1126,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		Type:            cloudEvent.Type,
 		SpecVersion:     cloudEvent.SpecVersion,
 		Topic:           msg.Topic,
-		PubsubName:      cloudEvent.PubsubName,
+		PubsubName:      msg.Metadata[pubsubName],
 	}
 
 	if cloudEvent.Data != nil {
