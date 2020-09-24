@@ -15,6 +15,7 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
@@ -142,11 +143,15 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 }
 
 func startTestServer(port int) *grpc_go.Server {
+	return startTestServerAPI(port, &mockGRPCAPI{})
+}
+
+func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc_go.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	server := grpc_go.NewServer()
 	go func() {
-		runtimev1pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		runtimev1pb.RegisterDaprServer(server, srv)
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -797,14 +802,29 @@ func TestDeleteState(t *testing.T) {
 func TestPublishTopic(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	server := startTestServer(port)
+	srv := &api{
+		publishFn: func(req *pubsub.PublishRequest) error { return nil },
+	}
+	server := startTestServerAPI(port, srv)
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
+
 	_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
+	assert.Error(t, err, "Expected error")
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+	})
+	assert.Error(t, err, "Expected error")
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+		Topic:      "topic",
+	})
 	assert.Nil(t, err)
 }
 

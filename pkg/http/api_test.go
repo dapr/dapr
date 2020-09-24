@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
@@ -40,6 +41,94 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
 )
+
+func TestPubSubEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		publishFn: func(req *pubsub.PublishRequest) error { return nil },
+		json:      jsoniter.ConfigFastest,
+	}
+	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
+
+	t.Run("Publish successfully - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubName/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+		}
+	})
+
+	t.Run("Publish multi path successfully - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubName/A/B/C", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubName", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubName/", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic name ending in // - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubName//", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic or pubsub name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic or pubsub name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	fakeServer.Shutdown()
+}
 
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
