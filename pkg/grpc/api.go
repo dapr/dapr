@@ -18,10 +18,12 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/proto/common/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -69,6 +71,8 @@ type api struct {
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
+	accessControlList     *config.AccessControlList
+	appProtocol           string
 }
 
 // NewAPI returns a new gRPC API
@@ -81,7 +85,9 @@ func NewAPI(
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec) API {
+	tracingSpec config.TracingSpec,
+	accessControlList *config.AccessControlList,
+	appProtocol string) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -93,6 +99,8 @@ func NewAPI(
 		secretsConfiguration:  secretsConfiguration,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		tracingSpec:           tracingSpec,
+		accessControlList:     accessControlList,
+		appProtocol:           appProtocol,
 	}
 }
 
@@ -107,12 +115,55 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
+	if a.accessControlList != nil {
+		// An access control policy has been specified for the app. Apply the policies.
+		operation := req.Message().Method
+		var httpVerb common.HTTPExtension_Verb
+		// Get the http verb in case the application protocol is http
+		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
+			httpExt := req.Message().GetHttpExtension()
+			if httpExt != nil {
+				httpVerb = httpExt.GetVerb()
+			}
+		}
+		callAllowed, errMsg := a.applyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol)
+
+		if !callAllowed {
+			return nil, status.Errorf(codes.PermissionDenied, errMsg)
+		}
+	}
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 	return resp.Proto(), err
+}
+
+func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb, appProtocol string) (bool, string) {
+	// Apply access control list filter
+	spiffeID, err := config.GetAndParseSpiffeID(ctx)
+	if err != nil {
+		// Apply the default action
+		apiServerLogger.Debugf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
+	}
+	var appID, trustDomain, namespace string
+	if spiffeID != nil {
+		appID = spiffeID.AppID
+		namespace = spiffeID.Namespace
+		trustDomain = spiffeID.TrustDomain
+	}
+	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
+	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
+
+	var errMessage string
+	if !action {
+		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
+		apiServerLogger.Debugf(errMessage)
+	}
+
+	return action, errMessage
 }
 
 // CallActor invokes a virtual actor
@@ -510,4 +561,22 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 	}
 	// By default if a configuration is not defined for a secret store, return true.
 	return true
+}
+
+func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb string, action bool) {
+	if action {
+		switch actionPolicy {
+		case config.ActionPolicyApp:
+			diagnostics.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+		case config.ActionPolicyGlobal:
+			diagnostics.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+		}
+	} else {
+		switch actionPolicy {
+		case config.ActionPolicyApp:
+			diagnostics.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+		case config.ActionPolicyGlobal:
+			diagnostics.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+		}
+	}
 }
