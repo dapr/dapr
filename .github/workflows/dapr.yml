@@ -244,8 +244,8 @@ jobs:
       - name: Checkout Helm Charts Repo
         uses: actions/checkout@v2
         env:
-              DAPR_HELM_REPO: dapr/dapr-helm-charts.io
-              DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
+              DAPR_HELM_REPO: dapr/helm-charts
+              DAPR_HELM_REPO_CODE_PATH: helm-charts
         with:
           repository: ${{ env.DAPR_HELM_REPO }}
           ref: refs/heads/master
@@ -253,8 +253,8 @@ jobs:
           path: ${{ env.DAPR_HELM_REPO_CODE_PATH }}
       - name: Upload helm charts to Helm Repo
         env:
-              DAPR_HELM_REPO_CODE_PATH: dapr-helm-charts
-              DAPR_HELM_REPO: https://github.com/dapr/dapr-helm-charts.io/
+              DAPR_HELM_REPO_CODE_PATH: helm-charts
+              DAPR_HELM_REPO: https://dapr.github.io/helm-charts/
         run: |
             daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
             cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
