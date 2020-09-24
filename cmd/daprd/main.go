@@ -99,6 +99,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/mqtt"
+	"github.com/dapr/components-contrib/bindings/postgres"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
 	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
@@ -373,6 +374,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("influx", func() bindings.OutputBinding {
 				return influx.NewInflux(logContrib)
+			}),
+			bindings_loader.NewOutput("postgres", func() bindings.OutputBinding {
+				return postgres.NewPostgres(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
