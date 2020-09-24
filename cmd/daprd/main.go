@@ -45,6 +45,7 @@ import (
 	"github.com/dapr/components-contrib/state/mongodb"
 	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
+	"github.com/dapr/components-contrib/state/rethinkdb"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
@@ -102,6 +103,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/postgres"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
+	"github.com/dapr/components-contrib/bindings/rethinkdb/statechange"
 	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
 	"github.com/dapr/components-contrib/bindings/twilio/sms"
 	"github.com/dapr/components-contrib/bindings/twitter"
@@ -206,6 +208,9 @@ func main() {
 			state_loader.New("aerospike", func() state.Store {
 				return aerospike.NewAerospikeStateStore(logContrib)
 			}),
+			state_loader.New("rethinkdb", func() state.Store {
+				return rethinkdb.NewRethinkDBStateStore(logContrib)
+			}),
 		),
 		runtime.WithPubSubs(
 			pubsub_loader.New("redis", func() pubs.PubSub {
@@ -300,6 +305,9 @@ func main() {
 			}),
 			bindings_loader.NewInput("cron", func() bindings.InputBinding {
 				return cron.NewCron(logContrib)
+			}),
+			bindings_loader.NewInput("rethinkdb.statechange", func() bindings.InputBinding {
+				return statechange.NewRethinkDBStateChangeBinding(logContrib)
 			}),
 		),
 		runtime.WithOutputBindings(
