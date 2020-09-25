@@ -83,12 +83,6 @@ var serviceinvocationTests = []struct {
 		"opDeny",
 		"rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
 	},
-	{
-		"Test deny with callee side grpc",
-		"allowlists-callee-grpc",
-		"httptogrpctest",
-		"rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httptogrpctest verb: NONE",
-	},
 }
 
 var moreServiceinvocationTests = []struct {
@@ -97,11 +91,17 @@ var moreServiceinvocationTests = []struct {
 	appMethod        string
 	expectedResponse string
 }{
+	// {
+	// 	"Test allow with callee side grpc",
+	// 	"allowlists-callee-grpc",
+	// 	"grpctogrpctest",
+	// 	"success",
+	// },
 	{
-		"Test allow with callee side grpc",
+		"Test deny with callee side grpc",
 		"allowlists-callee-grpc",
-		"grpctogrpctest",
-		"success",
+		"httptogrpctest",
+		"rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httptogrpctest verb: NONE",
 	},
 }
 
@@ -116,26 +116,26 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 
 	t.Logf("externalURL is '%s'\n", externalURL)
 
-	for _, tt := range serviceinvocationTests {
-		t.Run(tt.in, func(t *testing.T) {
-			body, err := json.Marshal(testCommandRequest{
-				RemoteApp: tt.remoteApp,
-				Method:    tt.appMethod,
-			})
-			require.NoError(t, err)
+	// for _, tt := range serviceinvocationTests {
+	// 	t.Run(tt.in, func(t *testing.T) {
+	// 		body, err := json.Marshal(testCommandRequest{
+	// 			RemoteApp: tt.remoteApp,
+	// 			Method:    tt.appMethod,
+	// 		})
+	// 		require.NoError(t, err)
 
-			resp, err := utils.HTTPPost(
-				fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
-			t.Log("checking err...")
-			require.NoError(t, err)
+	// 		resp, err := utils.HTTPPost(
+	// 			fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
+	// 		t.Log("checking err...")
+	// 		require.NoError(t, err)
 
-			var appResp appResponse
-			t.Logf("unmarshalling..%s\n", string(resp))
-			err = json.Unmarshal(resp, &appResp)
-			require.NoError(t, err)
-			require.Equal(t, tt.expectedResponse, appResp.Message)
-		})
-	}
+	// 		var appResp appResponse
+	// 		t.Logf("unmarshalling..%s\n", string(resp))
+	// 		err = json.Unmarshal(resp, &appResp)
+	// 		require.NoError(t, err)
+	// 		require.Equal(t, tt.expectedResponse, appResp.Message)
+	// 	})
+	// }
 
 	for _, tt := range moreServiceinvocationTests {
 		t.Run(tt.in, func(t *testing.T) {
