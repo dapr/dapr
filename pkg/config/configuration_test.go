@@ -581,8 +581,8 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList()
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, accessControlList)
-		// Action = Allow
-		assert.True(t, isAllowed)
+		// Action = Default global action
+		assert.False(t, isAllowed)
 	})
 
 	t.Run("test when src app id is empty", func(t *testing.T) {
