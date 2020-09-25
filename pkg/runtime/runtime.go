@@ -645,14 +645,22 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, a.accessControlList.TrustDomain)
+	var trustDomain string
+	if a.accessControlList != nil {
+		trustDomain = a.accessControlList.TrustDomain
+	}
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, trustDomain)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
 }
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, a.accessControlList.TrustDomain)
+	var trustDomain string
+	if a.accessControlList != nil {
+		trustDomain = a.accessControlList.TrustDomain
+	}
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, trustDomain)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec)
 	err := server.StartNonBlocking()
 	return err

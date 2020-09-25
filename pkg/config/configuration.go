@@ -281,7 +281,15 @@ func containsKey(s []string, key string) bool {
 }
 
 // ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
-func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlList, error) {
+func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControlList, error) {
+	if accessControlSpec.TrustDomain == "" &&
+		accessControlSpec.DefaultAction == "" &&
+		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
+		// No ACL has been specified
+		log.Debugf("No Access control policy specified")
+		return nil, nil
+	}
+
 	var accessControlList AccessControlList
 	accessControlList.PolicySpec = make(map[string]AccessControlListPolicySpec)
 	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
@@ -289,6 +297,18 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 	accessControlList.TrustDomain = accessControlSpec.TrustDomain
 	if accessControlSpec.TrustDomain == "" {
 		accessControlList.TrustDomain = DefaultTrustDomain
+	}
+
+	accessControlList.DefaultAction = accessControlSpec.DefaultAction
+	if accessControlSpec.DefaultAction == "" {
+		if accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) > 0 {
+			// Some app level policies have been specified but not default global action is set. Default to more secure option - Deny
+			log.Warnf("No global default action has been specified. Setting default global action as Deny")
+			accessControlList.DefaultAction = DenyAccess
+		} else {
+			// An empty ACL has been specified. Set default global action to Allow
+			accessControlList.DefaultAction = AllowAccess
+		}
 	}
 
 	var invalidTrustDomain []string
@@ -353,14 +373,14 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (AccessControlL
 	}
 
 	if len(invalidTrustDomain) > 0 || len(invalidNamespace) > 0 || invalidAppName {
-		return accessControlList, errors.New(fmt.Sprintf(
+		return nil, errors.New(fmt.Sprintf(
 			"invalid access control spec. missing trustdomain for apps: %v, missing namespace for apps: %v, missing app name on at least one of the app policies: %v",
 			invalidTrustDomain,
 			invalidNamespace,
 			invalidAppName))
 	}
 
-	return accessControlList, nil
+	return &accessControlList, nil
 }
 
 // GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it
@@ -451,7 +471,7 @@ func getSpiffeID(ctx context.Context) (string, error) {
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
 func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string, inputOperation string, httpVerb common.HTTPExtension_Verb, appProtocol string, accessControlList *AccessControlList) (bool, string) {
-	if accessControlList == nil || spiffeID == nil {
+	if accessControlList == nil {
 		// No access control list is provided. Do nothing
 		return isActionAllowed(AllowAccess), ""
 	}
@@ -469,6 +489,11 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 	if !found {
 		// no policies found for this src app id. Apply global default action
+		return isActionAllowed(action), actionPolicy
+	}
+
+	if spiffeID == nil {
+		// Could not retrieve spiffe id or it is invalid. Apply global default action
 		return isActionAllowed(action), actionPolicy
 	}
 
