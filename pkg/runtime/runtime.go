@@ -70,6 +70,7 @@ const (
 	// output bindings concurrency
 	bindingsConcurrnecyParallel   = "parallel"
 	bindingsConcurrnecySequential = "sequential"
+	pubsubName                    = "pubsubName"
 )
 
 type ComponentCategory string
@@ -100,6 +101,7 @@ type TopicRoute struct {
 type DaprRuntime struct {
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
+	accessControlList      *config.AccessControlList
 	components             []components_v1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
@@ -144,10 +146,11 @@ type componentPreprocessRes struct {
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
-func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *DaprRuntime {
+func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList) *DaprRuntime {
 	return &DaprRuntime{
 		runtimeConfig:          runtimeConfig,
 		globalConfig:           globalConfig,
+		accessControlList:      accessControlList,
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
 		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
@@ -378,7 +381,14 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic: topic,
-		}, publishFunc); err != nil {
+		}, func(msg *pubsub.NewMessage) error {
+			if msg.Metadata == nil {
+				msg.Metadata = make(map[string]string, 1)
+			}
+
+			msg.Metadata[pubsubName] = name
+			return publishFunc(msg)
+		}); err != nil {
 			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
@@ -633,14 +643,14 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, a.accessControlList.TrustDomain)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
 }
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
+	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, a.accessControlList.TrustDomain)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec)
 	err := server.StartNonBlocking()
 	return err
@@ -649,7 +659,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol))
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
@@ -1038,7 +1048,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		subject = cloudEvent.Subject
 	}
 
-	route := a.topicRoutes[cloudEvent.PubsubName].routes[msg.Topic]
+	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
 	req := invokev1.NewInvokeMethodRequest(route)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
@@ -1114,7 +1124,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		Type:            cloudEvent.Type,
 		SpecVersion:     cloudEvent.SpecVersion,
 		Topic:           msg.Topic,
-		PubsubName:      cloudEvent.PubsubName,
+		PubsubName:      msg.Metadata[pubsubName],
 	}
 
 	if cloudEvent.Data != nil {

@@ -33,7 +33,7 @@ import (
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(address, id string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
+type messageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
 
 // DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
@@ -116,10 +116,10 @@ func (d *directMessaging) invokeWithRetry(
 	numRetries int,
 	backoffInterval time.Duration,
 	app remoteApp,
-	fn func(ctx context.Context, appID, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
+	fn func(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error),
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	for i := 0; i < numRetries; i++ {
-		resp, err := fn(ctx, app.id, app.address, req)
+		resp, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
 			return resp, nil
 		}
@@ -127,7 +127,7 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, connerr := d.connectionCreatorFn(app.address, app.id, false, true)
+			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true)
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -146,8 +146,8 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 	return d.appChannel.InvokeMethod(ctx, req)
 }
 
-func (d *directMessaging) invokeRemote(ctx context.Context, appID, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := d.connectionCreatorFn(appAddress, appID, false, false)
+func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -155,10 +155,10 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appAddress st
 	span := diag_utils.SpanFromContext(ctx)
 
 	// TODO: Use built-in grpc client timeout instead of using context timeout
+	// no ops if span context is empty
 	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
 	defer cancel()
 
-	// no ops if span context is empty
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	d.addForwardedHeadersToMetadata(req)
