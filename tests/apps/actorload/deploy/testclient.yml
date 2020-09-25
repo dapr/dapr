@@ -11,7 +11,7 @@ metadata:
   labels:
     app: loadtestclient
 spec:
-  replicas: 10
+  replicas: 40
   selector:
     matchLabels:
       app: loadtestclient
@@ -23,8 +23,9 @@ spec:
         dapr.io/enabled: "true"
         dapr.io/id: "loadtestclient"
         dapr.io/log-as-json: "true"
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9988"
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '9988'
     spec:
       affinity:
         nodeAffinity:
@@ -38,9 +39,11 @@ spec:
                   # - loadgen
       containers:
       - name: loadtestclient
-        image: youngp/stateactor:latest
+        image: youngp/stateactor_nolog:nolog
+        #image: youngp/stateactornop:20200921
         command: ["./testclient"]
-        args: ["-a", "StateActor", "-c", "10", "-numactors", "2048", "-s", "1024", "-t", "1h", "-qps", "1024"]
+        args: ["-a", "StateActor", "-c", "10", "-numactors", "2048", "-s", "1024", "-t", "3h", "-qps", "2000"]
         ports:
         - containerPort: 3000
+        - containerPort: 9988
         imagePullPolicy: Always

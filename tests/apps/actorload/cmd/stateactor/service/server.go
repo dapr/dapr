@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 
@@ -193,12 +192,12 @@ func actorMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		actorType := chi.URLParam(r, "actorType")
 		actorID := chi.URLParam(r, "actorID")
-		hostname, _ := os.Hostname()
+		//hostname, _ := os.Hostname()
 
 		ctx := context.WithValue(r.Context(), "actorType", actorType)
 		ctx = context.WithValue(ctx, "actorID", actorID)
 
-		log.Printf("%s.%s, %s, %s", actorType, actorID, hostname, r.URL.EscapedPath())
+		//log.Printf("%s.%s, %s, %s", actorType, actorID, hostname, r.URL.EscapedPath())
 		w.Header().Add("Content-Type", "application/json")
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

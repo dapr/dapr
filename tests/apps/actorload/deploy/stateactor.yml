@@ -11,7 +11,7 @@ metadata:
   labels:
     app: stateactor
 spec:
-  replicas: 50
+  replicas: 100
   selector:
     matchLabels:
       app: stateactor
@@ -24,8 +24,9 @@ spec:
         dapr.io/id: "stateactor"
         dapr.io/port: "3000"
         dapr.io/log-as-json: "true"
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9988"
+        prometheus.io/scrape: 'true'
+        prometheus.io/path: '/metrics'
+        prometheus.io/port: '9988'
     spec:
       affinity:
         nodeAffinity:
@@ -35,12 +36,14 @@ spec:
                 - key: agentpool
                   operator: In
                   values:
-                  - agentpool
+                  - testapp
       containers:
       - name: stateactor
-        image: youngp/stateactor:latest
+        image: youngp/stateactor_nolog:nolog
+        #image: youngp/stateactornop:20200921
         command: ["./stateactor"]
         args: ["-actors", "StateActor", "-p", "3000"]
         ports:
         - containerPort: 3000
+        - containerPort: 9988
         imagePullPolicy: Always

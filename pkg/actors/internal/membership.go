@@ -210,7 +210,6 @@ func (am *ActorMembership) onPlacementOrder(in *placementv1pb.PlacementOrder) {
 			// current implemenation is distributed two-phase locking algorithm.
 			// If placement experiences intermitently outage during updateplacement,
 			// user application will face 5 second blocking even if it can avoid deadlock.
-			// It can impact the entire system.
 			time.Sleep(time.Second * 5)
 			am.unblockPlacements()
 		}()

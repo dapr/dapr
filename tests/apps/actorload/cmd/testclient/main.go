@@ -172,7 +172,7 @@ func startLoadTest(opt *actorLoadTestOptions, telemetryClient *telemetry.Telemet
 		testRunnable[i].client = http_client.NewClient()
 		testRunnable[i].actors = activatedActors
 		testRunnable[i].testActorType = opt.TestActorType
-		testRunnable[i].testActorMethod = "setActorState"
+		testRunnable[i].testActorMethod = "nop"
 		testRunnable[i].telemetryClient = telemetryClient
 		testRunnable[i].currentActorIndex = rand.Intn(activatedActorsLen)
 		testRunnable[i].payload = payload
