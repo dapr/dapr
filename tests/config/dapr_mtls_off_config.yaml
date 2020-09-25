@@ -4,6 +4,6 @@ metadata:
   name: daprsystem
 spec:
   mtls:
-    enabled: "false"
+    enabled: false
     workloadCertTTL: "1h"
     allowedClockSkew: "20m"
