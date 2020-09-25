@@ -239,7 +239,7 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 			return c.Spec.MTLSSpec.Enabled
 		}
 	}
-	log.Info("Dapr system configuration is not found, use default value %t for mTLSEnabled", defaultMtlsEnabled)
+	log.Infof("Dapr system configuration is not found, use default value %t for mTLSEnabled", defaultMtlsEnabled)
 	return defaultMtlsEnabled
 }
 
