@@ -451,7 +451,7 @@ func getSpiffeID(ctx context.Context) (string, error) {
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app
 func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string, inputOperation string, httpVerb common.HTTPExtension_Verb, appProtocol string, accessControlList *AccessControlList) (bool, string) {
-	if accessControlList == nil {
+	if accessControlList == nil || spiffeID == nil {
 		// No access control list is provided. Do nothing
 		return isActionAllowed(AllowAccess), ""
 	}
@@ -469,11 +469,6 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 	if !found {
 		// no policies found for this src app id. Apply global default action
-		return isActionAllowed(action), actionPolicy
-	}
-
-	if spiffeID == nil {
-		// Could not retrieve spiffe id or it is invalid. Apply global default action
 		return isActionAllowed(action), actionPolicy
 	}
 
