@@ -492,7 +492,6 @@ func TestParseAccessControlSpec(t *testing.T) {
 
 		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec)
 		assert.Equal(t, accessControlList.DefaultAction, DenyAccess)
-
 	})
 }
 
