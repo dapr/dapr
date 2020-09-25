@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        target_arch: [arm, amd64]
+        target_arch: [arm, arm64, amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
@@ -41,15 +41,19 @@ jobs:
         exclude:
           - os: windows-latest
             target_arch: arm
+          - os: windows-latest
+            target_arch: arm64
           - os: macOS-latest
             target_arch: arm
+          - os: macOS-latest
+            target_arch: arm64
     steps:
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v2-beta
         with:
           go-version: ${{ env.GOVER }}
       - name: Install golangci-lint
-        if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: |
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v${{ env.GOLANGCILINT_VER }}
       - name: Check out code into the Go module directory
@@ -57,10 +61,10 @@ jobs:
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
-        if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: make lint
       - name: Run make test
-        if: matrix.target_arch != 'arm'
+        if: matrix.target_arch == 'amd64'
         run: make test
       - name: Run make release to build and archive binaries
         run: |
@@ -130,6 +134,11 @@ jobs:
         uses: actions/download-artifact@master
         with:
           name: dapr_linux_arm
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: download artifacts - dapr_linux_arm64
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm64
           path: ${{ env.ARTIFACT_DIR }}
       - name: download artifacts - dapr_windows_amd64
         uses: actions/download-artifact@master
