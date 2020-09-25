@@ -4,7 +4,7 @@ logLevel: info
 image:
   registry: docker.io/daprio
   name: dashboard
-  tag: "0.2.0"
+  tag: "0.3.0-rc.0"
 
 nameOverride: ""
 fullnameOverride: ""
@@ -13,4 +13,4 @@ ports:
   protocol: TCP
   port: 8080
   targetPort: 8080
-  
+
