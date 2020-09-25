@@ -24,7 +24,7 @@ For more details on initializing helm, Go [here](https://helm.sh/docs/)
 
 1. Add Azure Container Registry as an helm repo
     ```
-    helm repo add dapr https://daprio.azurecr.io/helm/v1/repo
+    helm repo add dapr https://dapr.github.io/helm-charts/
     helm repo update
     ```
 
