@@ -233,8 +233,6 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/opAllow", opAllowHandler).Methods("POST")
 	router.HandleFunc("/opDeny", opDenyHandler).Methods("POST")
-	router.HandleFunc("/opAllowGrpc", opAllowGrpcHandler).Methods("POST")
-	// router.HandleFunc("/opDenyGrpc", opDenyGrpcHandler).Methods("POST")
 
 	router.HandleFunc("/tests/invoke_test", testHandler)
 
