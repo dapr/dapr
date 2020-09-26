@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        target_arch: [arm, amd64]
+        target_arch: [arm, arm64, amd64]
         include:
           - os: ubuntu-latest
             target_os: linux
@@ -41,15 +41,31 @@ jobs:
         exclude:
           - os: windows-latest
             target_arch: arm
+          - os: windows-latest
+            target_arch: arm64
           - os: macOS-latest
             target_arch: arm
+          - os: macOS-latest
+            target_arch: arm64
     steps:
       - name: Set up Go ${{ env.GOVER }}
         uses: actions/setup-go@v2-beta
         with:
           go-version: ${{ env.GOVER }}
+      - name: Install Docker CE for buildx
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        run: |
+          sudo apt update
+          sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+          sudo apt update
+          sudo apt install docker-ce
+          docker -v
+          sudo docker buildx create --use --name daprbuild
+          sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
       - name: Install golangci-lint
-        if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: |
           curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v${{ env.GOLANGCILINT_VER }}
       - name: Check out code into the Go module directory
@@ -57,12 +73,12 @@ jobs:
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
       - name: Run make lint
-        if: matrix.target_arch != 'arm' && matrix.target_os != 'windows'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: make lint
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
-        if: matrix.target_arch != 'arm'
+        if: matrix.target_arch == 'amd64'
         run: make test
       - name: Codecov
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
@@ -136,6 +152,11 @@ jobs:
         with:
           name: dapr_linux_arm
           path: ${{ env.ARTIFACT_DIR }}
+      - name: download artifacts - dapr_linux_arm64
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm64
+          path: ${{ env.ARTIFACT_DIR }}
       - name: download artifacts - dapr_windows_amd64
         uses: actions/download-artifact@master
         with:
@@ -153,7 +174,7 @@ jobs:
           path: ${{ env.ARTIFACT_DIR }}
       - name: tar release binaries
         run: |
-          IMAGE_ARCHS=(amd64 arm)
+          IMAGE_ARCHS=(amd64 arm arm64)
 
           for img_arch in "${IMAGE_ARCHS[@]}"; do
             echo "Preparing linux_${img_arch} image..."
