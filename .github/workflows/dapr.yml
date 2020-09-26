@@ -54,8 +54,6 @@ jobs:
           go-version: ${{ env.GOVER }}
       - name: Install Docker CE for buildx
         if: matrix.target_os == 'linux'
-        env:
-          DOCKER_CLI_EXPERIMENTAL: enabled
         run: |
           sudo apt update
           sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
@@ -64,8 +62,8 @@ jobs:
           sudo apt update
           sudo apt install docker-ce
           docker -v
-          sudo docker buildx create --use --name daprbuild
-          sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          DOCKER_CLI_EXPERIMENTAL=enabled sudo docker buildx create --use --name daprbuild
+          DOCKER_CLI_EXPERIMENTAL=enabled sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
       - name: Install golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: |
