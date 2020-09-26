@@ -1,10 +1,10 @@
 package utils
 
 import (
-	"errors"
-	"fmt"
 	"net"
 	"os"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -25,7 +25,7 @@ func GetHostAddress() (string, error) {
 		// Could not find one via a  UDP connection, so we fallback to the "old" way: try first non-loopback IPv4:
 		addrs, err := net.InterfaceAddrs()
 		if err != nil {
-			return "", fmt.Errorf("error getting interface IP addresses: %s", err)
+			return "", errors.Wrap(err, "error getting interface IP addresses")
 		}
 
 		for _, addr := range addrs {

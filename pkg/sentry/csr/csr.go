@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -127,12 +128,15 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 		cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth)
 	}
 
-	cert.Subject = pkix.Name{
-		CommonName: subject,
+	if subject == "cluster.local" {
+		cert.Subject = pkix.Name{
+			CommonName: subject,
+		}
+		cert.DNSNames = []string{subject}
 	}
+
 	cert.Issuer = signingCert.Issuer
 	cert.IsCA = isCA
-	cert.DNSNames = []string{subject}
 	cert.IPAddresses = csr.IPAddresses
 	cert.Extensions = csr.Extensions
 	cert.BasicConstraintsValid = true
@@ -150,6 +154,11 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 				Class: asn1.ClassContextSpecific,
 				Tag:   asn1.TagOID,
 			},
+			{
+				Bytes: []byte(fmt.Sprintf("%s.%s.svc.cluster.local", subject, identityBundle.Namespace)),
+				Class: asn1.ClassContextSpecific,
+				Tag:   2,
+			},
 		}
 
 		b, err := asn1.Marshal(rv)
@@ -160,7 +169,7 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identi
 		cert.ExtraExtensions = append(cert.ExtraExtensions, pkix.Extension{
 			Id:       oidSubjectAlternativeName,
 			Value:    b,
-			Critical: false,
+			Critical: true, // According to x509 and SPIFFE specs, a SubjAltName extension must be critical if subject name and DNS are not present.
 		})
 	}
 

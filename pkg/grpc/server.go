@@ -20,6 +20,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/pkg/errors"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -121,15 +122,15 @@ func (s *server) StartNonBlocking() error {
 
 func (s *server) generateWorkloadCert() error {
 	s.logger.Info("sending workload csr request to sentry")
-	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID)
+	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
 	if err != nil {
-		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %s", err)
+		return errors.Wrap(err, "error from authenticator CreateSignedWorkloadCert")
 	}
 	s.logger.Info("certificate signed successfully")
 
 	tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 	if err != nil {
-		return fmt.Errorf("error creating x509 Key Pair: %s", err)
+		return errors.Wrap(err, "error creating x509 Key Pair")
 	}
 
 	s.signedCert = signedCert
