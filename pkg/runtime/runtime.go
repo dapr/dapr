@@ -659,7 +659,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
-	var trustDomain string
+	trustDomain := config.DefaultTrustDomain
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
