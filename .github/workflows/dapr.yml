@@ -53,7 +53,7 @@ jobs:
         with:
           go-version: ${{ env.GOVER }}
       - name: Install Docker CE for buildx
-        # if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        if: matrix.target_os == 'linux'
         run: |
           sudo apt update
           sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
