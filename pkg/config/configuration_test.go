@@ -20,6 +20,7 @@ const (
 	key1 = "app1_ns1"
 	key2 = "app2_ns2"
 	key3 = "app3_ns1"
+	key4 = "app1_ns4"
 )
 
 func TestLoadStandaloneConfiguration(t *testing.T) {
@@ -309,6 +310,19 @@ func initializeAccessControlList() (*AccessControlList, error) {
 					},
 				},
 			},
+			{
+				AppName:       app1, // Duplicate app id with a different namespace
+				DefaultAction: AllowAccess,
+				TrustDomain:   "public",
+				Namespace:     "ns4",
+				AppOperationActions: []AppOperation{
+					{
+						Action:    AllowAccess,
+						HTTPVerb:  []string{"*"},
+						Operation: "/op6",
+					},
+				},
+			},
 		},
 	}
 	accessControlList, err := ParseAccessControlSpec(inputSpec)
@@ -392,6 +406,22 @@ func TestParseAccessControlSpec(t *testing.T) {
 
 		assert.Equal(t, 1, len(accessControlList.PolicySpec[key3].AppOperationActions["/op5"].VerbAction))
 		assert.Equal(t, op5Actions, accessControlList.PolicySpec[key3].AppOperationActions["/op5"])
+
+		// App1 with a different namespace
+		assert.Equal(t, app1, accessControlList.PolicySpec[key4].AppName)
+		assert.Equal(t, AllowAccess, accessControlList.PolicySpec[key4].DefaultAction)
+		assert.Equal(t, "public", accessControlList.PolicySpec[key4].TrustDomain)
+		assert.Equal(t, "ns4", accessControlList.PolicySpec[key4].Namespace)
+
+		op6Actions := AccessControlListOperationAction{
+			OperationPostFix: "/",
+			VerbAction:       make(map[string]string),
+		}
+		op6Actions.VerbAction["*"] = AllowAccess
+		op6Actions.OperationAction = AllowAccess
+
+		assert.Equal(t, 1, len(accessControlList.PolicySpec[key4].AppOperationActions["/op6"].VerbAction))
+		assert.Equal(t, op6Actions, accessControlList.PolicySpec[key4].AppOperationActions["/op6"])
 	})
 
 	t.Run("test when no trust domain and namespace specified in app policy", func(t *testing.T) {
