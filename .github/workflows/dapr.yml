@@ -62,8 +62,6 @@ jobs:
           sudo apt update
           sudo apt install docker-ce
           docker -v
-          DOCKER_CLI_EXPERIMENTAL=enabled sudo docker buildx create --use --name daprbuild
-          DOCKER_CLI_EXPERIMENTAL=enabled sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
       - name: Install golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: |
@@ -103,7 +101,7 @@ jobs:
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: Build and push docker images
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
+        if: matrix.target_os != 'darwin'
         run: |
           echo "Build docker image and push image..."
           make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }} DAPR_TAG=${{ env.REL_VERSION }}
