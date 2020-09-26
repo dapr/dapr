@@ -53,7 +53,7 @@ jobs:
         with:
           go-version: ${{ env.GOVER }}
       - name: Install Docker CE for buildx
-        if: matrix.target_os == 'linux'
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
         run: |
           sudo apt update
           sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
@@ -101,7 +101,7 @@ jobs:
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: Build and push docker images
-        if: matrix.target_os != 'darwin'
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request'
         run: |
           echo "Build docker image and push image..."
           make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }} DAPR_TAG=${{ env.REL_VERSION }}
