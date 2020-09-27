@@ -15,6 +15,6 @@ for app in $installed_apps; do
 done
 
 echo "Trying to delete namespace..."
-kubectl delete namespace $1
+kubectl delete namespace $1 --timeout=5m
 
 exit 0
