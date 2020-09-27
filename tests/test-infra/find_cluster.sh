@@ -49,7 +49,7 @@ for clustername in ${testclusterpool[@]}; do
     # this script tries to create the namespace. If it is failed, we can assume 
     # that this cluster is being used by the other tests.
     echo "Trying to create ${DAPR_TEST_NAMESPACE} namespace..."
-    kubectl create namespace ${DAPR_TEST_NAMESPACE}
+    kubectl create namespace ${DAPR_TEST_NAMESPACE} --timeout=10m
     if [ $? -eq 0 ]; then
         echo "Created ${DAPR_TEST_NAMESPACE} successfully and use $clustername cluster"
         echo "::set-env name=TEST_CLUSTER::$clustername"
