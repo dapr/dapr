@@ -156,7 +156,7 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	var accessControlList global_config.AccessControlList
+	var accessControlList *global_config.AccessControlList
 	var namespace string
 
 	if *config != "" {
@@ -190,5 +190,5 @@ func FromFlags() (*DaprRuntime, error) {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	return NewDaprRuntime(runtimeConfig, globalConfig, &accessControlList), nil
+	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList), nil
 }
