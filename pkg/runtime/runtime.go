@@ -659,7 +659,9 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
-	var trustDomain string
+	// Use the trust domain value from the access control policy spec to generate the cert
+	// If no access control policy has been specified, use a default value
+	trustDomain := config.DefaultTrustDomain
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
