@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-var serviceinvocationTests = []struct {
+var allowlistsServiceinvocationTests = []struct {
 	in               string
 	remoteApp        string
 	appMethod        string
@@ -87,7 +87,7 @@ var serviceinvocationTests = []struct {
 	},
 }
 
-var moreServiceinvocationTests = []struct {
+var moreAllowlistsServiceinvocationTests = []struct {
 	in               string
 	remoteApp        string
 	appMethod        string
@@ -120,7 +120,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 
 	t.Logf("externalURL is '%s'\n", externalURL)
 
-	for _, tt := range serviceinvocationTests {
+	for _, tt := range allowlistsServiceinvocationTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
 				RemoteApp: tt.remoteApp,
@@ -141,7 +141,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 		})
 	}
 
-	for _, tt := range moreServiceinvocationTests {
+	for _, tt := range moreAllowlistsServiceinvocationTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
 				RemoteApp: tt.remoteApp,
