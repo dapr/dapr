@@ -371,7 +371,7 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControl
 		}
 
 		// The policy spec can have the same appID which belongs to different namespaces
-		key := aclPolicySpec.AppName + "_" + aclPolicySpec.Namespace
+		key := getKeyForAppID(aclPolicySpec.AppName, aclPolicySpec.Namespace)
 		accessControlList.PolicySpec[key] = aclPolicySpec
 	}
 
@@ -493,7 +493,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 	}
 
 	// Look up the src app id in the in-memory table. The key is appID_namespace
-	key := srcAppID + "_" + spiffeID.Namespace
+	key := getKeyForAppID(srcAppID, spiffeID.Namespace)
 	appPolicy, found := accessControlList.PolicySpec[key]
 
 	if !found {
@@ -564,6 +564,11 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 func isActionAllowed(action string) bool {
 	return strings.EqualFold(action, AllowAccess)
+}
+
+func getKeyForAppID(appID, namespace string) string {
+	key := appID + "_" + namespace
+	return key
 }
 
 // getOperationPrefixAndPostfix returns an app operation prefix and postfix
