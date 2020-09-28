@@ -119,6 +119,10 @@ func get(key string) (*appState, error) {
 		return nil, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
 
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return nil, fmt.Errorf("fail to get value for key %s from Dapr: %s", key, body)
+	}
+
 	log.Printf("Found state for key %s: %s", key, body)
 
 	var state = new(appState)
