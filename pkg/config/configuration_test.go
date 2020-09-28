@@ -17,10 +17,10 @@ const (
 	app1    = "app1"
 	app2    = "app2"
 	app3    = "app3"
-	app1Ns1 = "app1_ns1"
-	app2Ns2 = "app2_ns2"
-	app3Ns1 = "app3_ns1"
-	app1Ns4 = "app1_ns4"
+	app1Ns1 = "app1||ns1"
+	app2Ns2 = "app2||ns2"
+	app3Ns1 = "app3||ns1"
+	app1Ns4 = "app1||ns4"
 )
 
 func TestLoadStandaloneConfiguration(t *testing.T) {

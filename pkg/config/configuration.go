@@ -492,7 +492,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 		return isActionAllowed(action), actionPolicy
 	}
 
-	// Look up the src app id in the in-memory table. The key is appID_namespace
+	// Look up the src app id in the in-memory table. The key is appID||namespace
 	key := getKeyForAppID(srcAppID, spiffeID.Namespace)
 	appPolicy, found := accessControlList.PolicySpec[key]
 
@@ -567,7 +567,7 @@ func isActionAllowed(action string) bool {
 }
 
 func getKeyForAppID(appID, namespace string) string {
-	key := appID + "_" + namespace
+	key := appID + "||" + namespace
 	return key
 }
 
