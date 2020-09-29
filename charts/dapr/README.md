@@ -52,7 +52,7 @@ helm uninstall dapr -n dapr-system
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Global Dapr docker image registry                                       | `docker.io/daprio`      |
-| `global.tag`                              | Global Dapr docker image version tag                                    | `0.10.0`                |
+| `global.tag`                              | Global Dapr docker image version tag                                    | `0.11.0`                |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `Always`                |
 | `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
