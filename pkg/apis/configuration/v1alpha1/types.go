@@ -106,6 +106,7 @@ type AppOperationAction struct {
 // AccessControlSpec is the spec object in ConfigurationSpec
 type AccessControlSpec struct {
 	DefaultAction string          `json:"defaultAction" yaml:"defaultAction"`
+	TrustDomain   string          `json:"trustDomain" yaml:"trustDomain"`
 	AppPolicies   []AppPolicySpec `json:"policies" yaml:"policies"`
 }
 
