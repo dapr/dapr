@@ -122,7 +122,7 @@ type MetricSpec struct {
 
 // AppPolicySpec defines the policy data structure for each app
 type AppPolicySpec struct {
-	AppName             string         `json:"app" yaml:"app"`
+	AppName             string         `json:"appId" yaml:"appId"`
 	DefaultAction       string         `json:"defaultAction" yaml:"defaultAction"`
 	TrustDomain         string         `json:"trustDomain" yaml:"trustDomain"`
 	Namespace           string         `json:"namespace" yaml:"namespace"`
