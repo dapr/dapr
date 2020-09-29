@@ -49,7 +49,7 @@ helm uninstall dapr -n dapr-system
 
 ## Upgrade the charts
 
-Before upgrading Dapr, ensure that existing certs in the cluster need to be exported. Follow the upgrade instruction in [Upgrading Dapr with Helm](https://github.com/dapr/docs/blob/master/howto/deploy-k8s-prod/README.md#upgrading-dapr-with-helm).
+Before upgrading Dapr, make sure to export existing certs. Follow the upgrade instruction in [Upgrading Dapr with Helm](https://github.com/dapr/docs/blob/master/howto/deploy-k8s-prod/README.md#upgrading-dapr-with-helm).
 
 
 ## Configuration
