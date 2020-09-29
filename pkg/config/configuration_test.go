@@ -260,7 +260,7 @@ func TestContainsKey(t *testing.T) {
 func initializeAccessControlList() (*AccessControlList, error) {
 	inputSpec := AccessControlSpec{
 		DefaultAction: DenyAccess,
-		TrustDomain:   "public",
+		TrustDomain:   "abcd",
 		AppPolicies: []AppPolicySpec{
 			{
 				AppName:       app1,
@@ -337,7 +337,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 		assert.Nil(t, err)
 
 		assert.Equal(t, DenyAccess, accessControlList.DefaultAction)
-		assert.Equal(t, "public", accessControlList.TrustDomain)
+		assert.Equal(t, "abcd", accessControlList.TrustDomain)
 
 		// App1
 		assert.Equal(t, app1, accessControlList.PolicySpec[app1Ns1].AppName)
@@ -485,6 +485,36 @@ func TestParseAccessControlSpec(t *testing.T) {
 
 		_, err := ParseAccessControlSpec(invalidAccessControlSpec)
 		assert.Error(t, err, "invalid access control spec. missing trustdomain for apps: [%s], missing namespace for apps: [%s], missing app name on at least one of the app policies: true", app1, app2)
+	})
+
+	t.Run("test when no trust domain is specified for the app", func(t *testing.T) {
+		accessControlSpec := AccessControlSpec{
+			DefaultAction: DenyAccess,
+			TrustDomain:   "",
+			AppPolicies: []AppPolicySpec{
+				{
+					AppName:       app1,
+					DefaultAction: AllowAccess,
+					TrustDomain:   "public",
+					Namespace:     "ns1",
+					AppOperationActions: []AppOperation{
+						{
+							Action:    AllowAccess,
+							HTTPVerb:  []string{"POST", "GET"},
+							Operation: "/op1",
+						},
+						{
+							Action:    DenyAccess,
+							HTTPVerb:  []string{"*"},
+							Operation: "/op2",
+						},
+					},
+				},
+			},
+		}
+
+		accessControlList, _ := ParseAccessControlSpec(accessControlSpec)
+		assert.Equal(t, "public", accessControlList.PolicySpec[app1Ns1].TrustDomain)
 	})
 
 	t.Run("test when no access control policy has been specified", func(t *testing.T) {
