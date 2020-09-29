@@ -1,16 +1,21 @@
 # Introduction
+
 This chart bootstraps all of Dapr Operator components on a Kubernetes cluster using the Helm package manager.
 
 ## Chart Details
+
 This chart installs multiple Dapr components via "child-charts":
 
 * Dapr Component and Configuration Kubernetes CRDs
 * Dapr Operator
+* Dapr Sidecar injector
+* Dapr Sentry
 * Dapr Placement
 * Dapr Dashboard
 
 ## Prerequisites
-* Kubernetes 1.9 or newer cluster with RBAC (Role-Based Access Control) enabled is required
+
+* Kubernetes cluster with RBAC (Role-Based Access Control) enabled is required
 * Helm 3.0.2 or newer
 
 ## Resources Required
