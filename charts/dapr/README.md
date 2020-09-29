@@ -99,8 +99,16 @@ The Helm chart has the follow configuration options that can be supplied:
 
 ## Example of highly available configuration of the control plane
 
-This command will run three replicas of each control plane pod with the exception of the Placement pod in the dapr-system namespace.
+This command will run three replicas of each control plane pod with the exception of the Placement pod in the dapr-system namespace:
 
 ```
 helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true
+```
+
+## Example of installing edge version of Dapr
+
+This command will deploy the `edge` version of Dapr to `dapr-system` namespace:
+
+```
+helm install dapr dapr/dapr --namespace dapr-system --set-string global.tag=edge
 ```
