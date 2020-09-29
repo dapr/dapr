@@ -16,7 +16,7 @@ This chart installs multiple Dapr components via "child-charts":
 ## Resources Required
 The chart deploys pods that consume minimum resources as specified in the resources configuration parameter.
 
-## Installing the Chart
+## Install the Chart
 
 Make sure helm is initialized in your running kubernetes cluster.
 
@@ -40,12 +40,17 @@ Once the chart installation is done, verify the Dapr operator pods are running i
 kubectl get pods --namespace dapr-system
 ```
 
-## Uninstalling the Chart
+## Uninstall the Chart
 
 To uninstall/delete the `dapr` release:
 ```
 helm uninstall dapr -n dapr-system
 ```
+
+## Upgrade the charts
+
+Before upgrading Dapr, ensure that existing certs in the cluster need to be exported. Follow the upgrade instruction in [Upgrading Dapr with Helm](https://github.com/dapr/docs/blob/master/howto/deploy-k8s-prod/README.md#upgrading-dapr-with-helm).
+
 
 ## Configuration
 
