@@ -18,6 +18,8 @@ PERF_TESTAPP_DIR=./tests/apps/perf
 
 KUBECTL=kubectl
 
+DAPR_E2E_TEST_PARALLELISM=2
+
 ifeq ($(DAPR_TEST_NAMESPACE),)
 DAPR_TEST_NAMESPACE=$(DAPR_NAMESPACE)
 endif
@@ -32,6 +34,7 @@ endif
 
 ifeq ($(DAPR_TEST_ENV),minikube)
 MINIKUBE_NODE_IP=$(shell minikube ip)
+DAPR_E2E_TEST_PARALLELISM=1
 ifeq ($(MINIKUBE_NODE_IP),)
 $(error cannot find get minikube node ip address. ensure that you have minikube environment.)
 endif
@@ -118,8 +121,8 @@ test-e2e-all: check-e2e-env
 	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
 	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
-	# test
-	GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 2 -count=1 -v -tags=e2e ./tests/e2e/...
+	# test. Minikube runs with -p 1 due to limitation in local resources.
+	GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p $(DAPR_E2E_TEST_PARALLELISM) -timeout 20m -count=1 -v -tags=e2e ./tests/e2e/...
 
 # start all perf tests
 test-perf-all: check-e2e-env
@@ -133,7 +136,7 @@ setup-helm-init:
 
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) install dapr-redis stable/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
+	$(HELM) install dapr-redis stable/redis --wait --timeout 10m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
 
 # install kafka to the cluster
 setup-test-env-kafka:
@@ -170,3 +173,14 @@ setup-test-components:
 # Clean up test environment
 clean-test-env:
 	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
+
+minikube-start: minikube-start-$(TARGET_OS_LOCAL)
+
+minikube-start-linux:
+	minikube start --cpus=4 --memory=4g --insecure-registry "10.0.0.0/24"
+	minikube addons enable registry
+
+minikube-start-darwin:
+	minikube start --cpus=4 --memory=4g --driver=hyperkit --insecure-registry "10.0.0.0/24"
+	minikube addons enable registry
+	docker run -d --name registry_proxy --network=host alpine ash -c "apk add socat && socat TCP-LISTEN:5000,reuseaddr,fork TCP:$(minikube ip):5000"

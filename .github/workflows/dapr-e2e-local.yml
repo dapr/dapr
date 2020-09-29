@@ -1,0 +1,92 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-e2e-local
+
+on:
+  push:
+    branches:
+      - master
+      - release-*
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - master
+      - release-*
+jobs:
+  build:
+    name: Run E2E tests locally on ubuntu-latest
+    runs-on: ubuntu-latest
+    env:
+      GOVER: 1.15
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: https://proxy.golang.org
+      ARCHIVE_OUTDIR: dist/archives
+      DAPR_REGISTRY:
+      DAPR_TAG: dev
+      DAPR_NAMESPACE: dapr-tests
+      DAPR_TEST_ENV: minikube
+    steps:
+      - name: Set up Go ${{ env.GOVER }}
+        uses: actions/setup-go@v2-beta
+        with:
+          go-version: ${{ env.GOVER }}
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Install kapp
+        run: |
+          brew tap k14s/tap
+          brew install ytt kbld kapp imgpkg kwt vendir
+      - name: Run make release
+        run: make release
+      - name: Setup Minikube
+        uses: manusa/actions-setup-minikube@v2.0.0
+        with:
+          minikube version: 'v1.13.1'
+          kubernetes version: 'v1.19.2'
+          start args: --cpus=2 --memory=4g --extra-config=kubeadm.ignore-preflight-errors=NumCPU --insecure-registry=10.1.0.0/16
+      - name: Set DAPR_REGISTRY
+        run: echo "::set-env name=DAPR_REGISTRY::$(minikube ip):30777"
+      - name: Check DAPR_REGISTRY
+        run: echo $DAPR_REGISTRY
+      - name: Update Docker registry
+        run: |
+          echo "Before:"
+          cat /etc/docker/daemon.json
+          contents="$(jq '. + { "insecure-registries":["${{ env.DAPR_REGISTRY }}"] }' /etc/docker/daemon.json)" && \
+          echo "${contents}" | sudo tee /etc/docker/daemon.json
+          echo "After:"
+          cat /etc/docker/daemon.json
+      - name: Restart Docker
+        run: |
+          sudo systemctl restart docker
+          sleep 30 # Wait for Docker to be up and running.
+      - name: Deploy local registry
+        run: curl 'https://raw.githubusercontent.com/k14s/kbld/525caacaf9435de625beb3bda8bfe3e95568ae16/test/e2e/assets/minikube-local-registry.yml' | kapp deploy -a reg -f - -y
+      - name: Random command
+        run: |
+          echo 'FROM alpine:latest as alpine' > /tmp/Dockerfile && docker build -f /tmp/Dockerfile . -t ${{ env.DAPR_REGISTRY }}/test:latest && docker push ${{ env.DAPR_REGISTRY }}/test:latest
+      - name: Run make create-test-namespace
+        run: make create-test-namespace
+      - name: Run make setup-helm-init
+        run: make setup-helm-init
+      - name: Run make setup-test-env-redis
+        run: make setup-test-env-redis
+      - name: Run make setup-test-env-kafka
+        run: make setup-test-env-kafka
+      - name: Run make build docker-push
+        run: make docker-push
+      - name: Run make docker-deploy-k8s
+        run: make docker-deploy-k8s
+      - name: Run make setup-test-components
+        run: make setup-test-components
+      - name: Run make build-e2e-app-all
+        run: make build-e2e-app-all
+      - name: Run make push-e2e-app-all
+        run: make push-e2e-app-all
+      - name: Run make test-e2e-all
+        run: make test-e2e-all
