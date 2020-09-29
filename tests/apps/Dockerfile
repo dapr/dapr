@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-FROM golang:1.15
+FROM debian:buster-slim
 
 WORKDIR /app
 COPY . .
