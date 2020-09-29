@@ -3,7 +3,7 @@
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
-FROM mcr.microsoft.com/windows/nanoserver:2004
+FROM mcr.microsoft.com/windows/nanoserver:1809
 
 WORKDIR /app
 COPY . .
