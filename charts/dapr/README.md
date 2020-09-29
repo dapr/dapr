@@ -57,6 +57,7 @@ helm uninstall dapr -n dapr-system
 *Before* upgrading Dapr, make sure you have exported the existing certs. Follow the upgrade HowTo instructions in [Upgrading Dapr with Helm](https://github.com/dapr/docs/blob/master/howto/deploy-k8s-prod/README.md#upgrading-dapr-with-helm).
 
 ## Configuration
+
 The Helm chart has the follow configuration options that can be supplied:
 
 | Parameter                                 | Description                                                             | Default                 |
@@ -66,8 +67,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `Always`                |
 | `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
-| `global.ha.enabled`                       | High Availability mode enabled for control plane service                | `false`                 |
-| `global.ha.replicaCount`                  | Number of replicas of control plane services in High Availability mode  | `3`                     |
+| `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`                 |
+| `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                     |
 | `global.prometheus.enabled`               | Prometheus metrics enablement for control plane services                | `true`                  |
 | `global.prometheus.port`                  | Prometheus scrape http endpoint port                                    | `9090`                  |
 | `global.mtls.enabled`                     | Mutual TLS enablement                                                   | `true`                  |
@@ -95,3 +96,11 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.image.registry`           | Dapr Dashboard docker registry                                          | `docker.io/daprio`      |
 | `dapr_dashboard.image.name`               | Dapr Dashboard docker image name                                        | `dashboard`             |
 | `dapr_dashboard.image.tag`                | Dapr Dashboard docker image tag                                         | `"0.2.0"`               |
+
+## Example of highly available configuration of the control plane
+
+This command will run three replicas of each control plane pod with the exception of the Placement pod in the dapr-system namespace.
+
+```
+helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true
+```
