@@ -51,7 +51,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
 
 	t.Run("Publish successfully - 200 OK", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubName/topic", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -62,7 +62,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish multi path successfully - 200 OK", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubName/A/B/C", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/A/B/C", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -73,7 +73,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish without topic name - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubName", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/publish/pubsubname", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -84,7 +84,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish without topic name ending in / - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubName/", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -95,7 +95,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish without topic name ending in // - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubName//", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/publish/pubsubname//", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
