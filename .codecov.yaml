@@ -1,0 +1,23 @@
+coverage:
+  # Commit status https://docs.codecov.io/docs/commit-status are used
+  # to block PR based on coverage threshold.
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      # Disable the coverage threshold of the patch, so that PRs are
+      # only failing because of overall project coverage threshold.
+      # See https://docs.codecov.io/docs/commit-status#disabling-a-status.
+      default: false
+comment:
+  # Delete old comment and post new one for new coverage information.
+  # This is so that the code coverage info is closer to the newly push
+  # commits on GitHub PR UI.
+  behavior: new
+ignore:
+  # Configure what to ignore.
+  - "**/zz_generated*.go" # - Generated files.
+  - "pkg/apis"            # - CRD related files including generated ones.
+  - "pkg/proto"           # - GRPC Protobuf client for dapr.
+  - "pkg/testing"         # - Testing mock.

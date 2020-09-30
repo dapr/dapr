@@ -6,7 +6,6 @@
 package main
 
 import (
-	actor_cl "actorload/pkg/actor/client"
 	cl "actorload/pkg/actor/client"
 	http_client "actorload/pkg/actor/client/http"
 
@@ -98,6 +97,9 @@ type actorLoadTestOptions struct {
 	// The size of payload that test runner calls actor method with this payload
 	WritePayloadSize int
 	TestActorType    string
+
+	// actor method that will be called during the test
+	ActorMethod string
 }
 
 func generatePayload(length int) []byte {
@@ -111,7 +113,7 @@ func generatePayload(length int) []byte {
 	return payload
 }
 
-func activateRandomActors(client actor_cl.ActorClient, actorType string, maxActor int) []string {
+func activateRandomActors(client cl.ActorClient, actorType string, maxActor int) []string {
 	var activatedActors = []string{}
 	for i := 0; i < maxActor; i++ {
 		actorID := strings.Replace(uuid.New().String(), "-", "", -1)
@@ -172,7 +174,7 @@ func startLoadTest(opt *actorLoadTestOptions, telemetryClient *telemetry.Telemet
 		testRunnable[i].client = http_client.NewClient()
 		testRunnable[i].actors = activatedActors
 		testRunnable[i].testActorType = opt.TestActorType
-		testRunnable[i].testActorMethod = "nop"
+		testRunnable[i].testActorMethod = opt.ActorMethod
 		testRunnable[i].telemetryClient = telemetryClient
 		testRunnable[i].currentActorIndex = rand.Intn(activatedActorsLen)
 		testRunnable[i].payload = payload
@@ -225,6 +227,7 @@ func getFlagOptions() *actorLoadTestOptions {
 	actorType := flag.String("a", defaultActorType, "Target test actor type")
 	numActors := flag.Int("numactors", 10, "Number of randomly generated actors.")
 	writePayloadSize := flag.Int("s", 1024, "The size of save state value.")
+	actorMethod := flag.String("m", "setActorState", "test actor method that will be called during test. e.g. nop, setActorState, getActorState")
 
 	flag.Parse()
 
@@ -238,6 +241,7 @@ func getFlagOptions() *actorLoadTestOptions {
 		NumActors:        *numActors,
 		WritePayloadSize: *writePayloadSize,
 		TestActorType:    *actorType,
+		ActorMethod:      *actorMethod,
 	}
 }
 
@@ -254,6 +258,7 @@ func main() {
 		testOptions.RunnerOptions.NumThreads,
 		testOptions.NumActors)
 	log.Infof("Actor type: %s", testOptions.TestActorType)
+	log.Infof("Actor method: %s", testOptions.ActorMethod)
 	log.Infof("Write Payload Size: %d Bytes", testOptions.WritePayloadSize)
 
 	if _, err := startLoadTest(testOptions, telemetry); err != nil {

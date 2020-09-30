@@ -30,6 +30,26 @@ type ConfigurationSpec struct {
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
 	// +optional
 	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
+	// +optional
+	Secrets SecretsSpec `json:"secrets,omitempty"`
+	// +optional
+	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty"`
+}
+
+// SecretsSpec is the spec for secrets configuration
+type SecretsSpec struct {
+	Scopes []SecretsScope `json:"scopes"`
+}
+
+// SecretsScope defines the scope for secrets
+type SecretsScope struct {
+	// +optional
+	DefaultAccess string `json:"defaultAccess,omitempty"`
+	StoreName     string `json:"storeName"`
+	// +optional
+	AllowedSecrets []string `json:"allowedSecrets,omitempty"`
+	// +optional
+	DeniedSecrets []string `json:"deniedSecrets,omitempty"`
 }
 
 // PipelineSpec defines the middleware pipeline
@@ -65,6 +85,28 @@ type SelectorField struct {
 // TracingSpec is the spec object in ConfigurationSpec
 type TracingSpec struct {
 	SamplingRate string `json:"samplingRate"`
+}
+
+// AppPolicySpec defines the policy data structure for each app
+type AppPolicySpec struct {
+	AppName             string               `json:"app" yaml:"app"`
+	DefaultAction       string               `json:"defaultAction" yaml:"defaultAction"`
+	TrustDomain         string               `json:"trustDomain" yaml:"trustDomain"`
+	Namespace           string               `json:"namespace" yaml:"namespace"`
+	AppOperationActions []AppOperationAction `json:"operations" yaml:"operations"`
+}
+
+// AppOperationAction defines the data structure for each app operation
+type AppOperationAction struct {
+	Operation string   `json:"name" yaml:"name"`
+	HTTPVerb  []string `json:"httpVerb" yaml:"httpVerb"`
+	Action    string   `json:"action" yaml:"action"`
+}
+
+// AccessControlSpec is the spec object in ConfigurationSpec
+type AccessControlSpec struct {
+	DefaultAction string          `json:"defaultAction" yaml:"defaultAction"`
+	AppPolicies   []AppPolicySpec `json:"policies" yaml:"policies"`
 }
 
 // +kubebuilder:object:root=true

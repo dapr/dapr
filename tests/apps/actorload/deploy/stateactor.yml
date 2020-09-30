@@ -39,8 +39,7 @@ spec:
                   - testapp
       containers:
       - name: stateactor
-        image: youngp/stateactor_nolog:nolog
-        #image: youngp/stateactornop:20200921
+        image: [USE ACTOR TEST APP IMAGE]
         command: ["./stateactor"]
         args: ["-actors", "StateActor", "-p", "3000"]
         ports:

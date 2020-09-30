@@ -70,6 +70,7 @@ const (
 	// output bindings concurrency
 	bindingsConcurrnecyParallel   = "parallel"
 	bindingsConcurrnecySequential = "sequential"
+	pubsubName                    = "pubsubName"
 )
 
 type ComponentCategory string
@@ -100,6 +101,7 @@ type TopicRoute struct {
 type DaprRuntime struct {
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
+	accessControlList      *config.AccessControlList
 	components             []components_v1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
@@ -133,8 +135,9 @@ type DaprRuntime struct {
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
 
+	secretsConfiguration map[string]config.SecretsScope
+
 	pendingComponents          chan components_v1alpha1.Component
-	pendingComponentsDone      chan bool
 	pendingComponentDependents map[string][]components_v1alpha1.Component
 }
 
@@ -143,10 +146,11 @@ type componentPreprocessRes struct {
 }
 
 // NewDaprRuntime returns a new runtime with the given runtime config and global config
-func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *DaprRuntime {
+func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList) *DaprRuntime {
 	return &DaprRuntime{
 		runtimeConfig:          runtimeConfig,
 		globalConfig:           globalConfig,
+		accessControlList:      accessControlList,
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
 		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
@@ -166,8 +170,9 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		scopedPublishings:   map[string][]string{},
 		allowedTopics:       map[string][]string{},
 
+		secretsConfiguration: map[string]config.SecretsScope{},
+
 		pendingComponents:          make(chan components_v1alpha1.Component),
-		pendingComponentsDone:      make(chan bool),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 	}
 }
@@ -284,6 +289,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
+	// Setup allow/deny list for secrets
+	a.populateSecretsConfiguration()
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
 	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
@@ -303,6 +310,13 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	return nil
+}
+
+func (a *DaprRuntime) populateSecretsConfiguration() {
+	// Populate in a map for easy lookup by store name.
+	for _, scope := range a.globalConfig.Spec.Secrets.Scopes {
+		a.secretsConfiguration[scope.StoreName] = scope
+	}
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
@@ -369,7 +383,14 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic: topic,
-		}, publishFunc); err != nil {
+		}, func(msg *pubsub.NewMessage) error {
+			if msg.Metadata == nil {
+				msg.Metadata = make(map[string]string, 1)
+			}
+
+			msg.Metadata[pubsubName] = name
+			return publishFunc(msg)
+		}); err != nil {
 			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
 		}
 	}
@@ -615,7 +636,8 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores,
+		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
@@ -623,21 +645,31 @@ func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins stri
 }
 
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
+	serverConf := a.getNewServerConfig(port)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator)
 	err := server.StartNonBlocking()
 	return err
 }
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
-	serverConf := grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port)
+	serverConf := a.getNewServerConfig(port)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec)
 	err := server.StartNonBlocking()
 	return err
 }
 
+func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
+	var trustDomain string
+	if a.accessControlList != nil {
+		trustDomain = a.accessControlList.TrustDomain
+	}
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, trustDomain)
+}
+
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.getPublishAdapter(), a.directMessaging, a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
+		a.getPublishAdapter(), a.directMessaging, a.actor,
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol))
 }
 
 func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
@@ -1026,7 +1058,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		subject = cloudEvent.Subject
 	}
 
-	route := a.topicRoutes[cloudEvent.PubsubName].routes[msg.Topic]
+	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
 	req := invokev1.NewInvokeMethodRequest(route)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
@@ -1102,7 +1134,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		Type:            cloudEvent.Type,
 		SpecVersion:     cloudEvent.SpecVersion,
 		Topic:           msg.Topic,
-		PubsubName:      cloudEvent.PubsubName,
+		PubsubName:      msg.Metadata[pubsubName],
 	}
 
 	if cloudEvent.Data != nil {
@@ -1237,31 +1269,23 @@ func (a *DaprRuntime) figureOutComponentCategory(component components_v1alpha1.C
 }
 
 func (a *DaprRuntime) processComponents() {
-	for {
-		comp, more := <-a.pendingComponents
-		if !more {
-			a.pendingComponentsDone <- true
-			return
+	for comp := range a.pendingComponents {
+		if comp.Name == "" {
+			continue
 		}
-		if err := a.processOneComponent(comp); err != nil {
-			log.Errorf("process component %s error, %s", comp.Name, err)
-		}
+		a.processComponentAndDependents(comp)
 	}
 }
 
 func (a *DaprRuntime) flushOutstandingComponents() {
-	// We flush by stopping the processComponents goroutine, waiting for it to finish, and then restart it
 	log.Info("waiting for all outstanding components to be processed")
-	close(a.pendingComponents)
-
-	<-a.pendingComponentsDone
+	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
+	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
+	a.pendingComponents <- components_v1alpha1.Component{}
 	log.Info("all outstanding components processed")
-
-	a.pendingComponents = make(chan components_v1alpha1.Component)
-	go a.processComponents()
 }
 
-func (a *DaprRuntime) processOneComponent(comp components_v1alpha1.Component) error {
+func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Component) error {
 	res := a.preprocessOneComponent(&comp)
 	if res.unreadyDependency != "" {
 		a.pendingComponentDependents[res.unreadyDependency] = append(a.pendingComponentDependents[res.unreadyDependency], comp)
@@ -1270,21 +1294,24 @@ func (a *DaprRuntime) processOneComponent(comp components_v1alpha1.Component) er
 
 	compCategory := a.figureOutComponentCategory(comp)
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
+		log.Errorf("process component %s error, %s", comp.Name, err)
 		return err
 	}
+
+	log.Infof("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
+	a.appendOrReplaceComponents(comp)
+	diag.DefaultMonitoring.ComponentLoaded()
+
 	dependency := componentDependency(compCategory, comp.Name)
 	if deps, ok := a.pendingComponentDependents[dependency]; ok {
 		delete(a.pendingComponentDependents, dependency)
-		go func(dependents []components_v1alpha1.Component) {
-			for _, dependent := range dependents {
-				a.pendingComponents <- dependent
+		for _, dependent := range deps {
+			if err := a.processComponentAndDependents(dependent); err != nil {
+				return err
 			}
-		}(deps)
+		}
 	}
 
-	a.appendOrReplaceComponents(comp)
-	diag.DefaultMonitoring.ComponentLoaded()
-	log.Infof("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
 	return nil
 }
 
@@ -1516,7 +1543,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type)
 	if err != nil {
-		log.Warnf("failed creating state store %s: %s", c.Spec.Type, err)
+		log.Warnf("failed creating secret store %s: %s", c.Spec.Type, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
 		return err
 	}

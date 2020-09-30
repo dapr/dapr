@@ -36,11 +36,9 @@ spec:
                   operator: In
                   values:
                   - loadgen
-                  # - loadgen
       containers:
       - name: loadtestclient
-        image: youngp/stateactor_nolog:nolog
-        #image: youngp/stateactornop:20200921
+        image: [USE ACTOR TEST APP IMAGE]
         command: ["./testclient"]
         args: ["-a", "StateActor", "-c", "10", "-numactors", "2048", "-s", "1024", "-t", "3h", "-qps", "2000"]
         ports:

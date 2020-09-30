@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -23,6 +22,7 @@ import (
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
@@ -35,11 +35,100 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
 )
+
+func TestPubSubEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+	testAPI := &api{
+		publishFn: func(req *pubsub.PublishRequest) error { return nil },
+		json:      jsoniter.ConfigFastest,
+	}
+	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
+
+	t.Run("Publish successfully - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+		}
+	})
+
+	t.Run("Publish multi path successfully - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/A/B/C", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubname", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic name ending in // - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubname//", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic or pubsub name - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	t.Run("Publish without topic or pubsub name ending in / - 404", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+		}
+	})
+
+	fakeServer.Shutdown()
+}
 
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
@@ -1292,16 +1381,38 @@ func (c fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 
 func TestV1SecretEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	fakeStore := fakeSecretStore{}
+	fakeStore := daprt.FakeSecretStore{}
 	fakeStores := map[string]secretstores.SecretStore{
 		"store1": fakeStore,
+		"store2": fakeStore,
+		"store3": fakeStore,
+		"store4": fakeStore,
 	}
+	secretsConfiguration := map[string]config.SecretsScope{
+		"store1": {
+			DefaultAccess: config.AllowAccess,
+			DeniedSecrets: []string{"not-allowed"},
+		},
+		"store2": {
+			DefaultAccess:  config.DenyAccess,
+			AllowedSecrets: []string{"good-key"},
+		},
+		"store3": {
+			DefaultAccess:  config.AllowAccess,
+			AllowedSecrets: []string{"good-key"},
+		},
+	}
+
 	testAPI := &api{
-		secretStores: fakeStores,
-		json:         jsoniter.ConfigFastest,
+		secretsConfiguration: secretsConfiguration,
+		secretStores:         fakeStores,
+		json:                 jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
+	deniedStoreName := "store2"
+	restrictedStore := "store3"
+	unrestrictedStore := "store4" // No configuration defined for the store
 
 	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/bad-key", "notexistStore")
@@ -1319,29 +1430,61 @@ func TestV1SecretEndpoints(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
 	})
 
-	t.Run("Get secret - Good Key", func(t *testing.T) {
+	t.Run("Get secret - 403 Permission denied ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/not-allowed", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 403, resp.StatusCode, "reading not allowed key should return 403")
+	})
+
+	t.Run("Get secret - 403 Permission denied ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/random", deniedStoreName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 403, resp.StatusCode, "reading random key from store with default deny access should return 403")
+	})
+
+	t.Run("Get secret - 403 Permission denied ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/random", restrictedStore)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 403, resp.StatusCode, "reading random key from store with restricted allow access should return 403")
+	})
+
+	t.Run("Get secret - 200 Good Ket restricted store ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", restrictedStore)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading good-key key from store with restricted allow access should return 200")
+	})
+
+	t.Run("Get secret - 200 Good Key allowed access ", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", deniedStoreName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading allowed good-key key from store with default deny access should return 200")
+	})
+
+	t.Run("Get secret - Good Key default allow", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", storeName)
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
 	})
-}
 
-type fakeSecretStore struct {
-}
-
-func (c fakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
-	if req.Name == "good-key" {
-		return secretstores.GetSecretResponse{
-			Data: map[string]string{"good-key": "life is good"},
-		}, nil
-	}
-	return secretstores.GetSecretResponse{Data: nil}, nil
-}
-
-func (c fakeSecretStore) Init(metadata secretstores.Metadata) error {
-	return nil
+	t.Run("Get secret - Good Key from unrestricted store", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
+	})
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {
