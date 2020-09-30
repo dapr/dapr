@@ -22,5 +22,9 @@ for template in stdin_contents.split("---")[1:]:
                   operator: In
                   values:
                   - linux
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                  - amd64
 """)
 
