@@ -230,6 +230,7 @@ func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace str
 func mTLSEnabled(daprClient scheme.Interface) bool {
 	resp, err := daprClient.ConfigurationV1alpha1().Configurations(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {
+		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
 	}
 
@@ -238,6 +239,7 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 			return c.Spec.MTLSSpec.Enabled
 		}
 	}
+	log.Infof("Dapr system configuration (%s) is not found, use default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
 }
 
