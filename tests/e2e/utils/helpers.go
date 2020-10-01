@@ -20,10 +20,14 @@ import (
 )
 
 var (
-	doOnce             sync.Once
-	defaultClient      http.Client
-	defaultProbeClient http.Client
+	doOnce        sync.Once
+	defaultClient http.Client
 )
+
+// DefaultProbeTimeout is the a timeout used in HTTPGetNTimes() and
+// HTTPGetRawNTimes() to avoid cases where early requests hang and
+// block all subsequent requests.
+const DefaultProbeTimeout = 30 * time.Second
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
 type SimpleKeyValue struct {
@@ -71,9 +75,6 @@ func GenerateRandomStringKeyValues(num int) []SimpleKeyValue {
 	return GenerateRandomStringValues(keys)
 }
 
-// We use this http.Client for the single-shot HTTPxxx()
-// calls. Currently it specifies no timeout since some tests have
-// really long running requests.
 func newHTTPClient() http.Client {
 	doOnce.Do(func() {
 		defaultClient = http.Client{
@@ -89,36 +90,17 @@ func newHTTPClient() http.Client {
 	return defaultClient
 }
 
-// We use this http.Client for the HTTPxxxNTimes() calls. It specifies
-// a shorter timeout, to avoid having early requests blocking
-// subsequent ones if they hang.
-func newHTTPProbeClient() http.Client {
-	doOnce.Do(func() {
-		defaultProbeClient = http.Client{
-			Transport: &http.Transport{
-				// Sometimes, the first connection to ingress endpoint takes longer than 1 minute (e.g. AKS)
-				Dial: (&net.Dialer{
-					Timeout: 5 * time.Minute,
-				}).Dial,
-			},
-			Timeout: 10 * time.Second,
-		}
-	})
-
-	return defaultProbeClient
-}
-
 // HTTPGetNTimes calls the url n times and returns the first success
 // or last error.
 //
-// It is intended to use for probing until a server is up and
-// receiving traffic, hence setting a shorter timeout to avoid early
-// requests from hanging and block the rest of them.
+// Since this is used to probe when servers are starting up, we want
+// to use a smaller timeout value here to avoid early requests, if
+// hanging, from blocking all subsequent ones.
 func HTTPGetNTimes(url string, n int) ([]byte, error) {
 	var res []byte
 	var err error
 	for i := n - 1; i >= 0; i-- {
-		res, err = httpGet(newHTTPProbeClient(), url)
+		res, err = httpGet(url, DefaultProbeTimeout)
 		if i == 0 {
 			break
 		}
@@ -134,31 +116,31 @@ func HTTPGetNTimes(url string, n int) ([]byte, error) {
 }
 
 // httpGet is a helper to make GET request call to url
-func httpGet(client http.Client, url string) ([]byte, error) {
-	resp, err := httpGetRaw(client, url)
+func httpGet(url string, timeout time.Duration) ([]byte, error) {
+	resp, err := httpGetRaw(url, timeout) //nolint
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+
 	return extractBody(resp.Body)
 }
 
 // HTTPGet is a helper to make GET request call to url
 func HTTPGet(url string) ([]byte, error) {
-	return httpGet(newHTTPClient(), url)
+	return httpGet(url, 0 /* no timeout */)
 }
 
 // HTTPGetRawNTimes calls the url n times and returns the first
 // success or last error.
 //
-// It is intended to use for probing until a server is up and
-// receiving traffic, hence setting a shorter timeout to avoid early
-// requests from hanging and block the rest of them.
+// Since this is used to probe when servers are starting up, we want
+// to use a smaller timeout value here to avoid early requests, if
+// hanging, from blocking all subsequent ones.
 func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 	var res *http.Response
 	var err error
 	for i := n - 1; i >= 0; i-- {
-		res, err = httpGetRaw(newHTTPProbeClient(), url)
+		res, err = httpGetRaw(url, DefaultProbeTimeout)
 		if i == 0 {
 			break
 		}
@@ -173,19 +155,22 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 	return res, err
 }
 
-// httpGetRaw is a helper to make GET request call to url
-func httpGetRaw(client http.Client, url string) (*http.Response, error) {
+// HTTPGetRaw is a helper to make GET request call to url
+func httpGetRaw(url string, t time.Duration) (*http.Response, error) {
+	client := newHTTPClient()
+	if t != 0 {
+		client.Timeout = t
+	}
 	resp, err := client.Get(sanitizeHTTPURL(url))
 	if err != nil {
 		return nil, err
 	}
-
 	return resp, nil
 }
 
 // HTTPGetRaw is a helper to make GET request call to url
 func HTTPGetRaw(url string) (*http.Response, error) {
-	return httpGetRaw(newHTTPClient(), url)
+	return httpGetRaw(url, 0)
 }
 
 // HTTPPost is a helper to make POST request call to url
