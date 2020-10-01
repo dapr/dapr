@@ -15,13 +15,17 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
+	comp_exporters "github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/components/exporters"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
+	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
@@ -147,6 +151,167 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 func writeSubscriptionToDisk(subscription subscriptionsapi.Subscription, filePath string) {
 	b, _ := yaml.Marshal(subscription)
 	ioutil.WriteFile(filePath, b, 0600)
+}
+
+func TestProcessComponentsAndDependents(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	incorrectComponentType := components_v1alpha1.Component{
+
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsubs.mockPubSub",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	t.Run("test incorrect type", func(t *testing.T) {
+		err := rt.processComponentAndDependents(incorrectComponentType)
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, "incorrect type pubsubs.mockPubSub", err.Error(), "expected error strings to match")
+	})
+}
+
+func TestDoProcessComponent(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	pubsubComponent := components_v1alpha1.Component{
+
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	exportersComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: "testexporter",
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "exporters.mockExporter",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	t.Run("test error on pubsub init", func(t *testing.T) {
+		// setup
+		mockPubSub := new(daprt.MockPubSub)
+
+		rt.pubSubRegistry.Register(
+			pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+				return mockPubSub
+			}),
+		)
+		expectedMetadata := pubsub.Metadata{
+			Properties: getFakeProperties(),
+		}
+
+		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
+
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("pubsub"), pubsubComponent)
+
+		// assert
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
+
+	t.Run("test error on exporter init", func(t *testing.T) {
+		// setup
+		mockExporter := new(daprt.MockExporter)
+
+		rt.exporterRegistry.Register(
+			exporters.New("mockExporter", func() comp_exporters.Exporter {
+				return mockExporter
+			}),
+		)
+		mockExporter.On("Init", TestRuntimeConfigID, "", comp_exporters.Metadata{
+			Properties: getFakeProperties(),
+			Buffer:     nil,
+		}).Return(assert.AnError)
+
+		// act
+		err := rt.doProcessOneComponent(exporterComponent, exportersComponent)
+
+		// assert
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
+
+	t.Run("test invalid category componen", func(t *testing.T) {
+		// act
+		err := rt.doProcessOneComponent(ComponentCategory("invalid"), pubsubComponent)
+
+		// assert
+		assert.NoError(t, err, "no error expected")
+	})
+}
+
+func TestInitState(t *testing.T) {
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	mockStateComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type: "state.mockState",
+			Metadata: []components_v1alpha1.MetadataItem{
+				{
+					Name:  "actorStateStore",
+					Value: "true",
+				},
+			},
+		},
+	}
+
+	initMockStateStoreForRuntime := func(rt *DaprRuntime, e error) *daprt.MockStateStore {
+		mockStateStore := new(daprt.MockStateStore)
+
+		rt.stateStoreRegistry.Register(
+			state_loader.New("mockState", func() state.Store {
+				return mockStateStore
+			}),
+		)
+
+		expectedMetadata := state.Metadata{
+			Properties: map[string]string{
+				actorStateStore: "true",
+			},
+		}
+
+		mockStateStore.On("Init", expectedMetadata).Return(e)
+
+		return mockStateStore
+	}
+
+	t.Run("test init state store", func(t *testing.T) {
+		// setup
+		initMockStateStoreForRuntime(rt, nil)
+
+		// act
+		err := rt.initState(mockStateComponent)
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init state store error", func(t *testing.T) {
+		// setup
+		initMockStateStoreForRuntime(rt, assert.AnError)
+
+		// act
+		err := rt.initState(mockStateComponent)
+
+		// assert
+		assert.Error(t, err, "expected error")
+		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
 }
 
 func TestInitPubSub(t *testing.T) {
@@ -852,7 +1017,6 @@ func TestExtractComponentCategory(t *testing.T) {
 					Type: tt.specType,
 				},
 			}
-
 			assert.Equal(t, string(rt.extractComponentCategory(fakeComp)), tt.category)
 		})
 	}
