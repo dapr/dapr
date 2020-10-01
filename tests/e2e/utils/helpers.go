@@ -139,6 +139,7 @@ func httpGet(client http.Client, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	return extractBody(resp.Body)
 }
 
@@ -184,13 +185,7 @@ func httpGetRaw(client http.Client, url string) (*http.Response, error) {
 
 // HTTPGetRaw is a helper to make GET request call to url
 func HTTPGetRaw(url string) (*http.Response, error) {
-	client := newHTTPClient()
-	resp, err := client.Get(sanitizeHTTPURL(url))
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+	return httpGetRaw(newHTTPClient(), url)
 }
 
 // HTTPPost is a helper to make POST request call to url
