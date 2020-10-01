@@ -9,7 +9,9 @@ package runtime_e2e
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"testing"
 
@@ -47,9 +49,15 @@ func getAPIResponse(t *testing.T, testName, runtimeExternalURL string) (*daprAPI
 	// this is the publish app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/%s", runtimeExternalURL, testName)
 
-	body, err := utils.HTTPGet(url)
+	resp, err := utils.HTTPGetRaw(url)
 	require.NoError(t, err)
+	require.Equal(t, resp.StatusCode, http.StatusOK)
 
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 	var appResp daprAPIResponse
 	err = json.Unmarshal(body, &appResp)
 	require.NoError(t, err)
