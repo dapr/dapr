@@ -122,7 +122,7 @@ type MetricSpec struct {
 
 // AppPolicySpec defines the policy data structure for each app
 type AppPolicySpec struct {
-	AppName             string         `json:"app" yaml:"app"`
+	AppName             string         `json:"appId" yaml:"appId"`
 	DefaultAction       string         `json:"defaultAction" yaml:"defaultAction"`
 	TrustDomain         string         `json:"trustDomain" yaml:"trustDomain"`
 	Namespace           string         `json:"namespace" yaml:"namespace"`
@@ -369,7 +369,10 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControl
 			Namespace:           appPolicySpec.Namespace,
 			AppOperationActions: operationPolicy,
 		}
-		accessControlList.PolicySpec[aclPolicySpec.AppName] = aclPolicySpec
+
+		// The policy spec can have the same appID which belongs to different namespaces
+		key := getKeyForAppID(aclPolicySpec.AppName, aclPolicySpec.Namespace)
+		accessControlList.PolicySpec[key] = aclPolicySpec
 	}
 
 	if len(invalidTrustDomain) > 0 || len(invalidNamespace) > 0 || invalidAppName {
@@ -484,16 +487,17 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 		return isActionAllowed(action), actionPolicy
 	}
 
-	// Look up the src app id in the in-memory table
-	appPolicy, found := accessControlList.PolicySpec[srcAppID]
-
-	if !found {
-		// no policies found for this src app id. Apply global default action
+	if spiffeID == nil {
+		// Could not retrieve spiffe id or it is invalid. Apply global default action
 		return isActionAllowed(action), actionPolicy
 	}
 
-	if spiffeID == nil {
-		// Could not retrieve spiffe id or it is invalid. Apply global default action
+	// Look up the src app id in the in-memory table. The key is appID||namespace
+	key := getKeyForAppID(srcAppID, spiffeID.Namespace)
+	appPolicy, found := accessControlList.PolicySpec[key]
+
+	if !found {
+		// no policies found for this src app id. Apply global default action
 		return isActionAllowed(action), actionPolicy
 	}
 
@@ -560,6 +564,11 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 func isActionAllowed(action string) bool {
 	return strings.EqualFold(action, AllowAccess)
+}
+
+func getKeyForAppID(appID, namespace string) string {
+	key := appID + "||" + namespace
+	return key
 }
 
 // getOperationPrefixAndPostfix returns an app operation prefix and postfix

@@ -113,6 +113,18 @@ func putHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(appResponse{Message: s})
 }
 
+func opAllowHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	response := "opAllow is called"
+	json.NewEncoder(w).Encode(appResponse{Message: response})
+}
+
+func opDenyHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	response := "opDeny is called"
+	json.NewEncoder(w).Encode(appResponse{Message: response})
+}
+
 // Handles a delete request.  Extracts s string from the input json and returns in it an appResponse.
 func deleteHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("deleteHandler called \n")
@@ -218,6 +230,9 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/singlehop", singlehopHandler).Methods("POST")
 	router.HandleFunc("/multihop", multihopHandler).Methods("POST")
+
+	router.HandleFunc("/opAllow", opAllowHandler).Methods("POST")
+	router.HandleFunc("/opDeny", opDenyHandler).Methods("POST")
 
 	router.HandleFunc("/tests/invoke_test", testHandler)
 
