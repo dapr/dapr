@@ -25,7 +25,7 @@ To upgrade to this release of Dapr, follow the steps here to ensure a smooth upg
 
 ### Local Machine / Self-hosted
 
-Uninstall Dapr using the CLI you currently have installed. Note that this will remove the default $HOME/.dapr directory, binaries and all containers dapr_redis, dapr_placement and dapr_zipkin. Linux users need to run sudo if they have installed binary in default path /usr/local/bin/ or have docker command needing sudo:
+Uninstall Dapr using the CLI you currently have installed. Note that this will remove the default $HOME/.dapr directory, binaries and all containers dapr_redis, dapr_placement and dapr_zipkin. Linux users need to run sudo if docker command needs sudo:
 
 ```bash
 dapr uninstall --all
