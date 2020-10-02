@@ -138,5 +138,5 @@ clusters.
 
 Once a contributor creates a pull request, E2E tests on KinD clusters
 are automatically executed for faster feedback. In order to run the
-E2E tests on AKS, ask a maintainer to add `/ok-to-test` comment to
+E2E tests on AKS, ask a maintainer or approver to add `/ok-to-test` comment to
 the Pull Request.
