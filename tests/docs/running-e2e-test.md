@@ -136,7 +136,7 @@ clusters](https://github.com/dapr/dapr/blob/4cd61680a3129f729deae24a51da241d0701
 separate workflow also runs E2E in [KinD](https://kind.sigs.k8s.io/)
 clusters.
 
-Once a contributor creates pull request, E2E tests on KinD clusters
+Once a contributor creates a pull request, E2E tests on KinD clusters
 are automatically executed for faster feedback. In order to run the
 E2E tests on AKS, ask a maintainer to add `/ok-to-test` comment to
 the Pull Request.
