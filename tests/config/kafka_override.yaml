@@ -25,6 +25,7 @@ affinity:
             values:
             - linux
 zookeeper:
+  replicaCount: 1
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
