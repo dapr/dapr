@@ -826,55 +826,80 @@ func TestProcessComponentSecrets(t *testing.T) {
 }
 
 func TestExtractComponentCategory(t *testing.T) {
-	compCategoryTests := []struct {
-		specType string
-		category string
-	}{
-		{"pubsub.redis", "pubsub"},
-		{"pubsubs.redis", ""},
-		{"secretstores.azure.keyvault", "secretstores"},
-		{"secretstore.azure.keyvault", ""},
-		{"exporters.zipkin", "exporters"},
-		{"exporter.zipkin", ""},
-		{"state.redis", "state"},
-		{"states.redis", ""},
-		{"bindings.kafka", "bindings"},
-		{"binding.kafka", ""},
-		{"this.is.invalid.category", ""},
-	}
 
-	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	t.Run("category result", func(t *testing.T) {
+		compCategoryTests := []struct {
+			specType string
+			category string
+		}{
+			{"pubsub.redis", "pubsub"},
+			{"pubsubs.redis", ""},
+			{"secretstores.azure.keyvault", "secretstores"},
+			{"secretstore.azure.keyvault", ""},
+			{"exporters.zipkin", "exporters"},
+			{"exporter.zipkin", ""},
+			{"state.redis", "state"},
+			{"states.redis", ""},
+			{"bindings.kafka", "bindings"},
+			{"binding.kafka", ""},
+			{"this.is.invalid.category", ""},
+		}
+	
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+	
+		for _, tt := range compCategoryTests {
+			t.Run(tt.specType, func(t *testing.T) {
+				fakeComp := components_v1alpha1.Component{
+					Spec: components_v1alpha1.ComponentSpec{
+						Type: tt.specType,
+					},
+				}
+	
+				res, _ := rt.extractComponentCategory(fakeComp)
+				assert.Equal(t, string(res), tt.category)
+			})
+		}	
+	})
 
-	for _, tt := range compCategoryTests {
-		t.Run(tt.specType, func(t *testing.T) {
-			fakeComp := components_v1alpha1.Component{
-				Spec: components_v1alpha1.ComponentSpec{
-					Type: tt.specType,
-				},
-			}
-
-			assert.Equal(t, string(rt.extractComponentCategory(fakeComp)), tt.category)
-		})
-	}
+	t.Run("error messages", func(t *testing.T) {
+		compCategoryTests := []struct {
+			specType string
+			errorMsg string
+		}{
+			{"pubsubs.redis", "invalid component category: pubsubs"},
+			{"exporter", "invalid component category: exporter"},
+			{"this.is.invalid.category", "invalid component category: this"},
+		}
+	
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+	
+		for _, tt := range compCategoryTests {
+			t.Run(tt.specType, func(t *testing.T) {
+				fakeComp := components_v1alpha1.Component{
+					Spec: components_v1alpha1.ComponentSpec{
+						Type: tt.specType,
+					},
+				}
+	
+				_, err := rt.extractComponentCategory(fakeComp)
+				assert.Equal(t, tt.errorMsg, err.Error())
+			})
+		}
+	})
 }
 
-// Test that doProcessOneComponent raises an error when the component category is empty
-func TestDoProcessOneComponentRaisesErrorWhenCategoryIsEmpty(t *testing.T) {
-	t.Run("An error is raised when the component category is empty", func(t *testing.T) {
+func TestProcessComponentWithInvalidCategory(t *testing.T) {
+	t.Run("Raise error when category is invalid", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		category := (ComponentCategory)("")
-		comp := components_v1alpha1.Component{
+		err := rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
-				Name: "invalidComponent",
+				Name: "myComponent",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "thisCategoryDoesNotExist.foo",
+				Type: "invalidCategory.foo",
 			},
-		}
-		err := rt.doProcessOneComponent(category, comp)
-		expectedError := errors.Errorf("invalid component type: %s", comp.Spec.Type)
-		assert.NotNil(t, err)
-		assert.Equal(t, expectedError.Error(), err.Error())
+		})
+		assert.Equal(t, "invalid component category: invalidCategory", err.Error())
 	})
 }
 

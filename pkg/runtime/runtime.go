@@ -1261,13 +1261,14 @@ func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Co
 	}
 }
 
-func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Component) ComponentCategory {
+func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Component) (ComponentCategory, error) {
+	compCategory := strings.Split(component.Spec.Type, ".")[0]
 	for _, category := range componentCategoriesNeedProcess {
-		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
-			return category
+		if compCategory == fmt.Sprintf("%s", category) {
+			return category, nil
 		}
 	}
-	return ""
+	return "", errors.Errorf("invalid component category: %s", compCategory)
 }
 
 func (a *DaprRuntime) processComponents() {
@@ -1294,7 +1295,12 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 		return nil
 	}
 
-	compCategory := a.extractComponentCategory(comp)
+	compCategory, err := a.extractComponentCategory(comp)
+	if err != nil {
+		log.Errorf("component %s error, %s", comp.Name, err)
+		return err
+	}
+
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
 		log.Errorf("process component %s error, %s", comp.Name, err)
 		return err
@@ -1330,7 +1336,7 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 	case stateComponent:
 		return a.initState(comp)
 	}
-	return errors.Errorf("invalid component type: %s", comp.Spec.Type)
+	return nil
 }
 
 func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component) componentPreprocessRes {
