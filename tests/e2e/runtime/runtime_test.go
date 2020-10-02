@@ -49,12 +49,11 @@ func getAPIResponse(t *testing.T, testName, runtimeExternalURL string) (*daprAPI
 	// this is the publish app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/%s", runtimeExternalURL, testName)
 
-	resp, err := http.Get(url)
-	defer resp.Body.Close()
-
+	resp, err := utils.HTTPGetRaw(url)
 	require.NoError(t, err)
 	require.Equal(t, resp.StatusCode, http.StatusOK)
 
+	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
