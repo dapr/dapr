@@ -825,6 +825,39 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 }
 
+func TestExtractComponentCategory(t *testing.T) {
+	compCategoryTests := []struct {
+		specType string
+		category string
+	}{
+		{"pubsub.redis", "pubsub"},
+		{"pubsubs.redis", ""},
+		{"secretstores.azure.keyvault", "secretstores"},
+		{"secretstore.azure.keyvault", ""},
+		{"exporters.zipkin", "exporters"},
+		{"exporter.zipkin", ""},
+		{"state.redis", "state"},
+		{"states.redis", ""},
+		{"bindings.kafka", "bindings"},
+		{"binding.kafka", ""},
+		{"this.is.invalid.category", ""},
+	}
+
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	for _, tt := range compCategoryTests {
+		t.Run(tt.specType, func(t *testing.T) {
+			fakeComp := components_v1alpha1.Component{
+				Spec: components_v1alpha1.ComponentSpec{
+					Type: tt.specType,
+				},
+			}
+
+			assert.Equal(t, string(rt.extractComponentCategory(fakeComp)), tt.category)
+		})
+	}
+}
+
 // Test that flushOutstandingComponents waits for components
 func TestFlushOutstandingComponent(t *testing.T) {
 	t.Run("We can call flushOustandingComponents more than once", func(t *testing.T) {

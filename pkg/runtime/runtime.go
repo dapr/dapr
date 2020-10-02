@@ -77,7 +77,7 @@ type ComponentCategory string
 
 const (
 	bindingsComponent    ComponentCategory = "bindings"
-	exporterComponent    ComponentCategory = "exporter"
+	exporterComponent    ComponentCategory = "exporters"
 	pubsubComponent      ComponentCategory = "pubsub"
 	secretStoreComponent ComponentCategory = "secretstores"
 	stateComponent       ComponentCategory = "state"
@@ -659,7 +659,9 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 }
 
 func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
-	var trustDomain string
+	// Use the trust domain value from the access control policy spec to generate the cert
+	// If no access control policy has been specified, use a default value
+	trustDomain := config.DefaultTrustDomain
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
@@ -1259,7 +1261,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Co
 	}
 }
 
-func (a *DaprRuntime) figureOutComponentCategory(component components_v1alpha1.Component) ComponentCategory {
+func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Component) ComponentCategory {
 	for _, category := range componentCategoriesNeedProcess {
 		if strings.HasPrefix(component.Spec.Type, fmt.Sprintf("%s.", category)) {
 			return category
@@ -1292,7 +1294,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 		return nil
 	}
 
-	compCategory := a.figureOutComponentCategory(comp)
+	compCategory := a.extractComponentCategory(comp)
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
 		log.Errorf("process component %s error, %s", comp.Name, err)
 		return err
