@@ -858,6 +858,26 @@ func TestExtractComponentCategory(t *testing.T) {
 	}
 }
 
+// Test that doProcessOneComponent raises an error when the component category is empty
+func TestDoProcessOneComponentRaisesErrorWhenCategoryIsEmpty(t *testing.T) {
+	t.Run("An error is raised when the component category is empty", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		category := (ComponentCategory)("")
+		comp := components_v1alpha1.Component{
+			ObjectMeta: meta_v1.ObjectMeta{
+				Name: "invalidComponent",
+			},
+			Spec: components_v1alpha1.ComponentSpec{
+				Type: "thisCategoryDoesNotExist.foo",
+			},
+		}
+		err := rt.doProcessOneComponent(category, comp)
+		expectedError := errors.Errorf("invalid component type: %s", comp.Spec.Type)
+		assert.NotNil(t, err)
+		assert.Equal(t, expectedError.Error(), err.Error())
+	})
+}
+
 // Test that flushOutstandingComponents waits for components
 func TestFlushOutstandingComponent(t *testing.T) {
 	t.Run("We can call flushOustandingComponents more than once", func(t *testing.T) {

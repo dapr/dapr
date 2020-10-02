@@ -1330,7 +1330,7 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 	case stateComponent:
 		return a.initState(comp)
 	}
-	return nil
+	return errors.Errorf("invalid component type: %s", comp.Spec.Type)
 }
 
 func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component) componentPreprocessRes {
