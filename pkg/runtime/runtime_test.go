@@ -826,7 +826,6 @@ func TestProcessComponentSecrets(t *testing.T) {
 }
 
 func TestExtractComponentCategory(t *testing.T) {
-
 	t.Run("category result", func(t *testing.T) {
 		compCategoryTests := []struct {
 			specType string
@@ -844,9 +843,7 @@ func TestExtractComponentCategory(t *testing.T) {
 			{"binding.kafka", ""},
 			{"this.is.invalid.category", ""},
 		}
-	
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
-	
 		for _, tt := range compCategoryTests {
 			t.Run(tt.specType, func(t *testing.T) {
 				fakeComp := components_v1alpha1.Component{
@@ -870,9 +867,7 @@ func TestExtractComponentCategory(t *testing.T) {
 			{"exporter", "invalid component category: exporter"},
 			{"this.is.invalid.category", "invalid component category: this"},
 		}
-	
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
-	
 		for _, tt := range compCategoryTests {
 			t.Run(tt.specType, func(t *testing.T) {
 				fakeComp := components_v1alpha1.Component{

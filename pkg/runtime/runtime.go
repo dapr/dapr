@@ -1264,7 +1264,7 @@ func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Co
 func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Component) (ComponentCategory, error) {
 	compCategory := strings.Split(component.Spec.Type, ".")[0]
 	for _, category := range componentCategoriesNeedProcess {
-		if compCategory == fmt.Sprintf("%s", category) {
+		if compCategory == string(category) {
 			return category, nil
 		}
 	}
