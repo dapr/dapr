@@ -66,3 +66,14 @@ func TestGenerateSidecarCSR(t *testing.T) {
 		assert.True(t, len(pk) > 0)
 	})
 }
+
+func TestInitSidecarAuthenticator(t *testing.T) {
+	os.Setenv(certs.TrustAnchorsEnvVar, testRootCert)
+	os.Setenv(certs.CertChainEnvVar, "111")
+	os.Setenv(certs.CertKeyEnvVar, "111")
+	defer os.Clearenv()
+
+	certChain, _ := GetCertChain()
+	_, err := GetSidecarAuthenticator("localhost:5050", certChain)
+	assert.NoError(t, err)
+}
