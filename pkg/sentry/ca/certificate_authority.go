@@ -136,7 +136,7 @@ func shouldCreateCerts(conf config.SentryConfig) bool {
 		return false
 	}
 
-	if _, err := os.Stat(conf.RootCertPath); os.IsNotExist(err) {
+	if _, err = os.Stat(conf.RootCertPath); os.IsNotExist(err) {
 		return true
 	}
 	b, err := ioutil.ReadFile(conf.IssuerCertPath)
