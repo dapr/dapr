@@ -237,3 +237,4 @@ linters:
     - testpackage
     - goerr113
     - nestif
+    - gofumpt
