@@ -78,7 +78,7 @@ const (
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
 
-	// Deprecated, remove in v1.0
+	// Deprecated: remove in v1.0
 	idKey                 = "dapr.io/id"
 	daprPortKey           = "dapr.io/port"
 	daprProfilingKey      = "dapr.io/profiling"

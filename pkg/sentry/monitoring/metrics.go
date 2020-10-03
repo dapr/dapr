@@ -76,7 +76,7 @@ func IssuerCertChanged() {
 
 // InitMetrics initializes metrics
 func InitMetrics() error {
-	var nilKey = []tag.Key{}
+	nilKey := []tag.Key{}
 	return view.Register(
 		diag_utils.NewMeasureView(csrReceivedTotal, nilKey, view.Count()),
 		diag_utils.NewMeasureView(certSignSuccessTotal, nilKey, view.Count()),

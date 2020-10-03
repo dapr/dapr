@@ -39,7 +39,6 @@ import (
 	"go.opencensus.io/trace"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
-	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -113,7 +112,7 @@ func configureTestTraceExporter(meta exporters.Metadata) {
 	exporter.Init("fakeID", "fakeAddress", meta)
 }
 
-func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
+func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	var buffer = ""
@@ -125,8 +124,8 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 	})
 
 	spec := config.TracingSpec{SamplingRate: "1"}
-	server := grpc_go.NewServer(
-		grpc_go.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(diag.GRPCTraceUnaryServerInterceptor("id", spec))),
 	)
 
 	go func() {
@@ -142,14 +141,14 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 	return server, &buffer
 }
 
-func startTestServer(port int) *grpc_go.Server {
+func startTestServer(port int) *grpc.Server {
 	return startTestServerAPI(port, &mockGRPCAPI{})
 }
 
-func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc_go.Server {
+func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	server := grpc_go.NewServer()
+	server := grpc.NewServer()
 	go func() {
 		runtimev1pb.RegisterDaprServer(server, srv)
 		if err := server.Serve(lis); err != nil {
@@ -163,10 +162,10 @@ func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc_go.Server {
 	return server
 }
 
-func startInternalServer(port int, testAPIServer *api) *grpc_go.Server {
+func startInternalServer(port int, testAPIServer *api) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	server := grpc_go.NewServer()
+	server := grpc.NewServer()
 	go func() {
 		internalv1pb.RegisterServiceInvocationServer(server, testAPIServer)
 		if err := server.Serve(lis); err != nil {
@@ -180,17 +179,17 @@ func startInternalServer(port int, testAPIServer *api) *grpc_go.Server {
 	return server
 }
 
-func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc_go.Server {
+func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
-	opts := []grpc_go.ServerOption{}
+	opts := []grpc.ServerOption{}
 	if token != "" {
 		opts = append(opts,
-			grpc_go.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token")),
+			grpc.UnaryInterceptor(setAPIAuthenticationMiddlewareUnary(token, "dapr-api-token")),
 		)
 	}
 
-	server := grpc_go.NewServer(opts...)
+	server := grpc.NewServer(opts...)
 	go func() {
 		runtimev1pb.RegisterDaprServer(server, testAPIServer)
 		if err := server.Serve(lis); err != nil {
@@ -204,10 +203,8 @@ func startDaprAPIServer(port int, testAPIServer *api, token string) *grpc_go.Ser
 	return server
 }
 
-func createTestClient(port int) *grpc_go.ClientConn {
-	var opts []grpc_go.DialOption
-	opts = append(opts, grpc_go.WithInsecure())
-	conn, err := grpc_go.Dial(fmt.Sprintf("localhost:%d", port), opts...)
+func createTestClient(port int) *grpc.ClientConn {
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", port), grpc.WithInsecure())
 	if err != nil {
 		panic(err)
 	}

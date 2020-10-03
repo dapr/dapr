@@ -27,6 +27,7 @@ jobs:
       MAX_TEST_TIMEOUT: 5400
       TARGET_OS: ${{ matrix.target_os }}
       TARGET_ARCH: ${{ matrix.target_arch }}
+      HA_MODE: true
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]

@@ -305,7 +305,6 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		req.Message().HttpExtension.Verb = commonv1pb.HTTPExtension_PUT
 	}
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
-
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +697,8 @@ func (a *actorsRuntime) evaluateReminders() {
 			go func(wg *sync.WaitGroup, reminders []Reminder) {
 				defer wg.Done()
 
-				for _, r := range reminders {
+				for i := range reminders {
+					r := reminders[i] // Make a copy since we will refer to this as a reference in this loop.
 					targetActorAddress, _ := a.lookupActorAddress(r.ActorType, r.ActorID)
 					if targetActorAddress == "" {
 						continue
@@ -1212,7 +1212,7 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 }
 
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
-	var actorCountMap = map[string]int{}
+	actorCountMap := map[string]int{}
 	a.actorsTable.Range(func(key, value interface{}) bool {
 		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))
 		actorCountMap[actorType]++
@@ -1220,7 +1220,7 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 		return true
 	})
 
-	var activeActorsCount = []ActiveActorsCount{}
+	activeActorsCount := []ActiveActorsCount{}
 	for actorType, count := range actorCountMap {
 		activeActorsCount = append(activeActorsCount, ActiveActorsCount{Type: actorType, Count: count})
 	}
