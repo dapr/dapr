@@ -17,6 +17,7 @@ from github import Github
 milestoneProjectRegex = "^(.*) Milestone$"
 releaseNoteRegex = "^RELEASE NOTE:(.*)$"
 dashboardReleaseVersionRegex="v([0-9\.]+)-?.*"
+majorReleaseRegex="^([0-9]+\.[0-9]+)\.[0-9]+$"
 
 githubToken = os.getenv("GITHUB_TOKEN")
 
@@ -84,6 +85,10 @@ print("Found project: {}".format(project.name))
 
 releaseVersion = re.search(milestoneProjectRegex, project.name).group(1)
 print("Generating release notes for Dapr {}...".format(releaseVersion))
+# Set REL_VERSION.
+print ("##[set-env name=REL_VERSION;]{}".format(releaseVersion))
+print ("##[set-env name=REL_BRANCH;]release-{}".format(
+    re.search(majorReleaseRegex, releaseVersion).group(1)))
 
 releases = sorted([r for r in g.get_repo("dapr/dashboard").get_releases()], key=lambda r: r.created_at, reverse=True)
 dashboardReleaseVersion = re.search(dashboardReleaseVersionRegex, releases[0].tag_name).group(1)

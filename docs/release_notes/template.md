@@ -52,7 +52,7 @@ Runtime version: $dapr_version
 
 #### Upgrading from previous version
 
-If you previously installed Dapr using Helm, starting with this releases you can now upgrade Dapr to a new version.
+If you previously installed Dapr using Helm, you can upgrade Dapr to a new version.
 If you installed Dapr using the CLI, go [here](#starting-fresh-install-on-a-cluster).
 
 ##### 1. Get the latest CLI
