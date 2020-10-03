@@ -23,6 +23,7 @@ const (
 	caCommonName               = "cluster.local"
 	selfSignedRootCertLifetime = time.Hour * 8760
 	certLoadTimeout            = time.Second * 30
+	certDetectInterval         = time.Second * 1
 )
 
 var log = logger.NewLogger("dapr.sentry.ca")
@@ -147,7 +148,7 @@ func shouldCreateCerts(conf config.SentryConfig) bool {
 }
 
 func detectCertificates(path string) error {
-	t := time.NewTicker(time.Second * 1)
+	t := time.NewTicker(certDetectInterval)
 	timeout := time.After(certLoadTimeout)
 
 	for {
