@@ -60,11 +60,9 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	s.server = server.NewCAServer(certAuth, v)
 
 	go func() {
-		select {
-		case <-ctx.Done():
-			log.Info("sentry certificate authority is shutting down")
-			s.server.Shutdown() // nolint: errcheck
-		}
+		<-ctx.Done()
+		log.Info("sentry certificate authority is shutting down")
+		s.server.Shutdown() // nolint: errcheck
 	}()
 
 	if readyCh != nil {
