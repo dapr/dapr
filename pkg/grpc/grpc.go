@@ -97,6 +97,7 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 			serverName = fmt.Sprintf("%s.%s.svc.cluster.local", id, namespace)
 		}
 
+		// nolint:gosec
 		ta := credentials.NewTLS(&tls.Config{
 			ServerName:   serverName,
 			Certificates: []tls.Certificate{cert},

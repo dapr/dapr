@@ -23,6 +23,7 @@ func GetServerOptions(certChain *CertChain) ([]grpc.ServerOption, error) {
 		return opts, nil
 	}
 
+	// nolint:gosec
 	config := &tls.Config{
 		ClientCAs: cp,
 		// Require cert verification

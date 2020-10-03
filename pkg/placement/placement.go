@@ -53,7 +53,7 @@ func NewPlacementService() *Service {
 func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 
-	var registeredMemberID = ""
+	var registeredMemberID string
 
 	for {
 		req, err := srv.Recv()

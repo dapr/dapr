@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -174,7 +173,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
-	req.Metadata()[v1.DestinationIDHeader] = &internalv1pb.ListStringValue{
+	req.Metadata()[invokev1.DestinationIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{appID},
 	}
 }

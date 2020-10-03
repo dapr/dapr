@@ -179,6 +179,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 			return nil, err
 		}
 
+		// nolint:gosec
 		tlsConfig := tls.Config{
 			ClientCAs:  s.signedCert.TrustChain,
 			ClientAuth: tls.RequireAndVerifyClientCert,
