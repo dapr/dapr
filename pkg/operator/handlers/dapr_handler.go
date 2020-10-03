@@ -199,7 +199,8 @@ func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, deploymentKey
 		log.Errorf("unable to list services, err: %s", err)
 		return err
 	}
-	for _, svc := range services.Items {
+	for i := range services.Items {
+		svc := services.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		log.Debugf("deleting service: %s/%s", svc.Namespace, svc.Name)
 		if err := h.Delete(ctx, &svc, client.PropagationPolicy(meta_v1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
 			log.Errorf("unable to delete svc: %s/%s, err: %s", svc.Namespace, svc.Name, err)

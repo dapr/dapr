@@ -36,7 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -133,7 +132,7 @@ func getSubscriptionCustom(topic, route string) string {
 
 func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: meta_v1.TypeMeta{
 			Kind: "Subscription",
 		},
 		Spec: subscriptionsapi.SubscriptionSpec{
@@ -697,7 +696,7 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 
 func TestPopulateSecretsConfiguration(t *testing.T) {
 	t.Run("secret store configuration is populated", func(t *testing.T) {
-		//setup
+		// setup
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		rt.globalConfig.Spec.Secrets.Scopes = []config.SecretsScope{
 			{
@@ -706,10 +705,10 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 			},
 		}
 
-		//act
+		// act
 		rt.populateSecretsConfiguration()
 
-		//verify
+		// verify
 		assert.Contains(t, rt.secretsConfiguration, "testMock", "Expected testMock secret store configuration to be populated")
 		assert.Equal(t, config.AllowAccess, rt.secretsConfiguration["testMock"].DefaultAccess, "Expected default access as allow")
 		assert.Empty(t, rt.secretsConfiguration["testMock"].DeniedSecrets, "Expected testMock deniedSecrets to not be populated")

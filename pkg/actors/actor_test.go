@@ -53,7 +53,7 @@ func TestBusyChannel(t *testing.T) {
 	testActor := newActor("testType", "testID")
 	testActor.lock()
 
-	var channelClosed = false
+	channelClosed := false
 	go func() {
 		select {
 		case <-time.After(10 * time.Second):

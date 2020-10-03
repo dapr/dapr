@@ -98,7 +98,7 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 		httpMethod = int32(commonv1pb.HTTPExtension_POST)
 	}
 
-	var metadata = map[string]string{}
+	metadata := map[string]string{}
 	if querystring != "" {
 		params, _ := url.ParseQuery(querystring)
 
