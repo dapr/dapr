@@ -60,7 +60,7 @@ func TestApplyOptionsToLoggers(t *testing.T) {
 	}
 
 	// Create two loggers
-	var testLoggers = []Logger{
+	testLoggers := []Logger{
 		NewLogger("testLogger0"),
 		NewLogger("testLogger1"),
 	}

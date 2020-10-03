@@ -1319,7 +1319,8 @@ type fakeStateStore struct {
 }
 
 func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
-	for _, r := range req {
+	for i := range req {
+		r := req[i] // Make a copy since we will refer to this as a reference in this loop.
 		err := c.Delete(&r)
 		if err != nil {
 			return err
@@ -1330,7 +1331,8 @@ func (c fakeStateStore) BulkDelete(req []state.DeleteRequest) error {
 }
 
 func (c fakeStateStore) BulkSet(req []state.SetRequest) error {
-	for _, s := range req {
+	for i := range req {
+		s := req[i] // Make a copy since we will refer to this as a reference in this loop.
 		err := c.Set(&s)
 		if err != nil {
 			return err
