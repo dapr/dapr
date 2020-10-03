@@ -212,3 +212,14 @@ func TestSignCSR(t *testing.T) {
 		}
 	})
 }
+
+func TestCACertsGeneration(t *testing.T) {
+	defer cleanupCredentials()
+
+	ca := getTestCertAuth()
+	err := ca.LoadOrStoreTrustBundle()
+
+	assert.NoError(t, err)
+	assert.True(t, len(ca.GetCACertBundle().GetRootCertPem()) > 0)
+	assert.True(t, len(ca.GetCACertBundle().GetIssuerCertPem()) > 0)
+}

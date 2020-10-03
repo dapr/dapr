@@ -50,3 +50,35 @@ func TestBundleIssuerCertMatch(t *testing.T) {
 
 	assert.Equal(t, issuerCert.Raw, bundle.GetIssuerCertPem())
 }
+
+func TestRootCertPEM(t *testing.T) {
+	bundle := trustRootBundle{}
+	cert := getTestCert()
+	bundle.rootCertPem = cert.Raw
+
+	assert.Equal(t, cert.Raw, bundle.GetRootCertPem())
+}
+
+func TestIssuerCertPEM(t *testing.T) {
+	bundle := trustRootBundle{}
+	cert := getTestCert()
+	bundle.issuerCertPem = cert.Raw
+
+	assert.Equal(t, cert.Raw, bundle.GetIssuerCertPem())
+}
+
+func TestTrustDomain(t *testing.T) {
+	td := "td1"
+	bundle := trustRootBundle{}
+	bundle.trustDomain = td
+
+	assert.Equal(t, td, bundle.GetTrustDomain())
+}
+
+func TestTrustAnchors(t *testing.T) {
+	bundle := trustRootBundle{}
+	pool := &x509.CertPool{}
+	bundle.trustAnchors = pool
+
+	assert.Equal(t, pool, bundle.GetTrustAnchors())
+}
