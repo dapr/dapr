@@ -212,3 +212,71 @@ func TestSignCSR(t *testing.T) {
 		}
 	})
 }
+
+func TestCACertsGeneration(t *testing.T) {
+	defer cleanupCredentials()
+
+	ca := getTestCertAuth()
+	err := ca.LoadOrStoreTrustBundle()
+
+	assert.NoError(t, err)
+	assert.True(t, len(ca.GetCACertBundle().GetRootCertPem()) > 0)
+	assert.True(t, len(ca.GetCACertBundle().GetIssuerCertPem()) > 0)
+}
+
+func TestShouldCreateCerts(t *testing.T) {
+	t.Run("certs exist, should not create", func(t *testing.T) {
+		writeTestCredentialsToDisk()
+		defer cleanupCredentials()
+
+		a := getTestCertAuth()
+		r := shouldCreateCerts(a.(*defaultCA).config)
+		assert.False(t, r)
+	})
+
+	t.Run("certs do not exist, should create", func(t *testing.T) {
+		a := getTestCertAuth()
+		r := shouldCreateCerts(a.(*defaultCA).config)
+		assert.True(t, r)
+	})
+}
+
+func TestDetectCertificates(t *testing.T) {
+	t.Run("detected before timeout", func(t *testing.T) {
+		writeTestCredentialsToDisk()
+		defer cleanupCredentials()
+
+		a := getTestCertAuth()
+		rootCertPath := a.(*defaultCA).config.RootCertPath
+		err := detectCertificates(rootCertPath)
+		assert.NoError(t, err)
+	})
+
+	// this is a negative test scenario for the one above that doesn't require waiting the full 30s timeout.
+	// it's meant to check that detectCertificates doesn't detect the certs before they are loaded.
+	t.Run("cert arrives on disk after 2s", func(t *testing.T) {
+		defer cleanupCredentials()
+
+		a := getTestCertAuth()
+		rootCertPath := a.(*defaultCA).config.RootCertPath
+
+		go func() {
+			time.Sleep(time.Second * 2)
+			writeTestCredentialsToDisk()
+		}()
+
+		var start time.Time
+		var err error
+		done := make(chan bool, 1)
+
+		go func() {
+			start = time.Now()
+			err = detectCertificates(rootCertPath)
+			done <- true
+		}()
+
+		<-done
+		assert.NoError(t, err)
+		assert.True(t, time.Since(start).Seconds() >= 2)
+	})
+}
