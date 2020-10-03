@@ -28,7 +28,7 @@ const serverPort = 6500
 
 var log = logger.NewLogger("dapr.operator.api")
 
-//Server runs the Dapr API server for components and configurations
+// Server runs the Dapr API server for components and configurations
 type Server interface {
 	Run(certChain *dapr_credentials.CertChain)
 	OnComponentUpdated(component *componentsapi.Component)
@@ -96,7 +96,8 @@ func (a *apiServer) ListComponents(ctx context.Context, in *empty.Empty) (*opera
 	resp := &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{},
 	}
-	for _, c := range components.Items {
+	for i := range components.Items {
+		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		b, err := json.Marshal(&c)
 		if err != nil {
 			log.Warnf("error marshalling component: %s", err)
@@ -116,7 +117,8 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *empty.Empty) (*op
 	resp := &operatorv1pb.ListSubscriptionsResponse{
 		Subscriptions: [][]byte{},
 	}
-	for _, s := range subs.Items {
+	for i := range subs.Items {
+		s := subs.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		b, err := json.Marshal(&s)
 		if err != nil {
 			log.Warnf("error marshalling subscription: %s", err)
