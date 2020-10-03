@@ -277,6 +277,6 @@ func TestDetectCertificates(t *testing.T) {
 
 		<-done
 		assert.NoError(t, err)
-		assert.True(t, time.Now().Sub(start).Seconds() >= 2)
+		assert.True(t, time.Since(start).Seconds() >= 2)
 	})
 }
