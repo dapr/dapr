@@ -175,6 +175,7 @@ linters-settings:
       - hugeParam
       - ifElseChain
       - singleCaseSwitch
+      - exitAfterDefer
 
     # Enable multiple checks by tags, run `GL_DEBUG=gocritic golangci-lint run` to see all tags and checks.
     # Empty list by default. See https://github.com/go-critic/go-critic#usage -> section "Tags".
@@ -237,3 +238,8 @@ linters:
     - testpackage
     - goerr113
     - nestif
+    - nlreturn
+    - exhaustive
+    - noctx
+    - gci
+    - gofumpt
