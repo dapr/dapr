@@ -25,16 +25,12 @@ func StoreCredentials(conf config.SentryConfig, rootCertPem, issuerCertPem, issu
 }
 
 func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
-	namespace := os.Getenv("NAMESPACE")
-	if namespace == "" {
-		namespace = defaultSecretNamespace
-	}
-
 	kubeClient, err := kubernetes.GetClient()
 	if err != nil {
 		return err
 	}
 
+	namespace := getNamespace()
 	secret := &v1.Secret{
 		Data: map[string][]byte{
 			credentials.RootCertFilename:   rootCertPem,
@@ -54,6 +50,32 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 		return errors.Wrap(err, "failed saving secret to kubernetes")
 	}
 	return nil
+}
+
+func getNamespace() string {
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		namespace = defaultSecretNamespace
+	}
+	return namespace
+}
+
+// CredentialsExist checks root and issuer credentials exist on a hosting platform
+func CredentialsExist(conf config.SentryConfig) (bool, error) {
+	if config.IsKubernetesHosted() {
+		namespace := getNamespace()
+
+		kubeClient, err := kubernetes.GetClient()
+		if err != nil {
+			return false, err
+		}
+		s, err := kubeClient.CoreV1().Secrets(namespace).Get(KubeScrtName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		return len(s.Data) > 0, nil
+	}
+	return false, nil
 }
 
 /* #nosec */
