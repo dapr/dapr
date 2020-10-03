@@ -16,7 +16,7 @@ GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
 BINARIES    ?= daprd placement operator injector sentry
-HA_MODE 	?= false
+HA_MODE     ?= false
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -235,4 +235,3 @@ include docker/docker.mk
 # Target: tests                                                                #
 ################################################################################
 include tests/dapr_tests.mk
-
