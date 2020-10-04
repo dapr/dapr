@@ -38,7 +38,6 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      HA_MODE: false
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
@@ -46,7 +45,9 @@ jobs:
         - v1.17.11
         - v1.18.8
         - v1.19.1
-
+        mode:
+        - ha
+        - non-ha
         # Map between K8s and KinD versions.
         # This is attempting to make it a bit clearer what's being tested.
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.9.0
@@ -60,7 +61,11 @@ jobs:
         - k8s-version: v1.19.1
           kind-version: v0.9.0
           kind-image-sha: sha256:98cf5288864662e37115e362b23e4369c8c4a408f99cbc06e58ac30ddc721600
-
+        exclude:
+        - k8s-version: v1.17.11
+          mode: non-ha
+        - k8s-version: v1.18.8
+          mode: non-ha
     steps:
     - name: Check out code onto GOPATH
       uses: actions/checkout@v2
@@ -82,6 +87,10 @@ jobs:
         kind: Cluster
         nodes:
         - role: control-plane
+          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+        - role: worker
+          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+        - role: worker
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
         - role: worker
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
@@ -139,6 +148,11 @@ jobs:
       run: |
         make setup-helm-init
         make create-test-namespace
+        if [[ "${{ matrix.mode }}" == "ha" ]]; then
+          export HA_MODE=true
+        else
+          export HA_MODE=false
+        fi
         make docker-deploy-k8s
 
     - name: Setup Redis
