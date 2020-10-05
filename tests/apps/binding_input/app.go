@@ -18,8 +18,10 @@ import (
 const appPort = 3000
 
 type messageBuffer struct {
-	lock     *sync.RWMutex
-	messages []string
+	lock          *sync.RWMutex
+	messages      []string
+	errorOnce     bool
+	failedMessage string
 }
 
 func (m *messageBuffer) add(message string) {
@@ -28,10 +30,27 @@ func (m *messageBuffer) add(message string) {
 	m.messages = append(m.messages, message)
 }
 
-func (m *messageBuffer) getAll() []string {
+func (m *messageBuffer) getAllSuccessful() []string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	return m.messages
+}
+
+func (m *messageBuffer) getFailed() string {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return m.failedMessage
+}
+
+func (m *messageBuffer) fail(failedMessage string) bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if !m.errorOnce {
+		m.failedMessage = failedMessage
+		m.errorOnce = true
+		return m.errorOnce
+	}
+	return false
 }
 
 var messages messageBuffer = messageBuffer{
@@ -46,6 +65,7 @@ type indexHandlerResponse struct {
 type testHandlerResponse struct {
 	ReceivedMessages []string `json:"received_messages,omitempty"`
 	Message          string   `json:"message,omitempty"`
+	FailedMessage    string   `json:"failed_message,omitempty"`
 }
 
 // indexHandler is the handler for root path
@@ -59,7 +79,8 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		log.Println("test-topic binding input has been accepted")
-		// Sending StatusOK back to the topic, so it will not attempt to redeliver.
+		// Sending StatusOK back to the topic, so it will not attempt to redeliver on session restart.
+		// Consumer marking successfully consumed offset.
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -71,13 +92,24 @@ func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+	if fail := messages.fail(message); fail {
+		// simulate failure.
+		log.Print("failing message")
+		w.WriteHeader(http.StatusInternalServerError)
 
+		return
+	}
 	messages.add(message)
 	w.WriteHeader(http.StatusOK)
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
-	if err := json.NewEncoder(w).Encode(testHandlerResponse{ReceivedMessages: messages.getAll()}); err != nil {
+	failedMessage := messages.getFailed()
+	log.Printf("failed message %s", failedMessage)
+	if err := json.NewEncoder(w).Encode(testHandlerResponse{
+		ReceivedMessages: messages.getAllSuccessful(),
+		FailedMessage:    failedMessage,
+	}); err != nil {
 		log.Printf("error encoding saved messages: %s", err)
 
 		w.WriteHeader(http.StatusInternalServerError)
