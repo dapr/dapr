@@ -136,6 +136,9 @@ type DaprRuntime struct {
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentsDone      chan bool
 	pendingComponentDependents map[string][]components_v1alpha1.Component
+
+	delayedComponents     []components_v1alpha1.Component
+	delayedComponentsDone chan bool
 }
 
 type componentPreprocessRes struct {
@@ -169,6 +172,9 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration) *
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentsDone:      make(chan bool),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
+
+		delayedComponents:     make([]components_v1alpha1.Component, 0),
+		delayedComponentsDone: make(chan bool, 0),
 	}
 }
 
@@ -300,6 +306,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		log.Warnf("failed to init actors: %s", err)
 	}
+
+	go a.processDelayedComponents()
+
+	// Wait for the delayed components to be processed
+	<-a.delayedComponentsDone
+
 	return nil
 }
 
@@ -1273,6 +1285,12 @@ func (a *DaprRuntime) processOneComponent(comp components_v1alpha1.Component) er
 	}
 
 	compCategory := a.figureOutComponentCategory(comp)
+	if compCategory == bindingsComponent || compCategory == pubsubComponent {
+		a.delayedComponents = append(a.delayedComponents, comp)
+		log.Infof("loading component delayed. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
+		return nil
+	}
+
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
 		return err
 	}
@@ -1581,4 +1599,28 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
+}
+
+func (a *DaprRuntime) processDelayedComponents() {
+	for _, comp := range a.delayedComponents {
+		compCategory := a.figureOutComponentCategory(comp)
+		if err := a.doProcessOneComponent(compCategory, comp); err != nil {
+			log.Error("error loading delayed component. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
+			continue
+		}
+		dependency := componentDependency(compCategory, comp.Name)
+		if deps, ok := a.pendingComponentDependents[dependency]; ok {
+			delete(a.pendingComponentDependents, dependency)
+			go func(dependents []components_v1alpha1.Component) {
+				for _, dependent := range dependents {
+					a.pendingComponents <- dependent
+				}
+			}(deps)
+		}
+
+		a.appendOrReplaceComponents(comp)
+		diag.DefaultMonitoring.ComponentLoaded()
+		log.Infof("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
+	}
+	a.delayedComponentsDone <- true
 }
