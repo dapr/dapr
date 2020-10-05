@@ -16,8 +16,8 @@ from github import Github
 
 milestoneProjectRegex = "^(.*) Milestone$"
 releaseNoteRegex = "^RELEASE NOTE:(.*)$"
-dashboardReleaseVersionRegex="v([0-9\.]+)-?.*"
-majorReleaseRegex="^([0-9]+\.[0-9]+)\.[0-9]+$"
+dashboardReleaseVersionRegex = "v([0-9\.]+)-?.*"
+majorReleaseRegex = "^([0-9]+\.[0-9]+)\.[0-9]+$"
 
 githubToken = os.getenv("GITHUB_TOKEN")
 
@@ -105,7 +105,9 @@ for c in cards:
     match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
     if match:
         repo = issueOrPR.repository
-        changes.append((repo, issueOrPR, match.group(1).strip()))
+        note = match.group(1).strip()
+        if note:
+            changes.append((repo, issueOrPR, note))
 
 warnings=[]
 

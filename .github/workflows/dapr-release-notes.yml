@@ -41,4 +41,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
         run: |
-          gh pr create --title "Creates release notes for ${{ env.REL_VERSION }}." --body "Release notes." --base ${{ env.BASE_BRANCH }}
+          gh pr create --title "Create release notes for ${{ env.REL_VERSION }}." --body "Release notes." --base ${{ env.BASE_BRANCH }}
