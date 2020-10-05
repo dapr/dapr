@@ -1,0 +1,20 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: allowlistsgrpcappconfig
+spec:
+  accessControl:
+    defaultAction: deny
+    trustDomain: "public"
+    policies:
+    - appId:  "allowlists-caller"
+      defaultAction: deny
+      trustDomain: 'public'
+      namespace: "dapr-tests"
+      operations:
+      - name: grpcToGrpcTest
+        httpVerb: ['*']
+        action: allow
+      - name: httpToGrpcTest
+        httpVerb: ["*"]
+        action: deny

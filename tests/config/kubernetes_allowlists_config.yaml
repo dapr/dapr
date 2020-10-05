@@ -1,0 +1,20 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: allowlistsappconfig
+spec:
+  accessControl:
+    defaultAction: deny
+    trustDomain: "public"
+    policies:
+    - appId:  "allowlists-caller"
+      defaultAction: deny
+      trustDomain: 'public'
+      namespace: "dapr-tests"
+      operations:
+      - name: /opAllow
+        httpVerb: ['POST', 'GET']
+        action: allow
+      - name: /opDeny
+        httpVerb: ["*"]
+        action: deny

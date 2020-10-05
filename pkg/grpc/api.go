@@ -18,12 +18,10 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"github.com/dapr/dapr/pkg/proto/common/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -118,7 +116,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
 		operation := req.Message().Method
-		var httpVerb common.HTTPExtension_Verb
+		var httpVerb commonv1pb.HTTPExtension_Verb
 		// Get the http verb in case the application protocol is http
 		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
@@ -141,7 +139,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb, appProtocol string) (bool, string) {
+func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
 	if err != nil {
@@ -580,16 +578,16 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 	if action {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diagnostics.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
 		case config.ActionPolicyGlobal:
-			diagnostics.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	} else {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diagnostics.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
 		case config.ActionPolicyGlobal:
-			diagnostics.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	}
 }
