@@ -59,7 +59,7 @@ func TestActorInvocation(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	t.Run("Actor state.", func(t *testing.T) {
+	t.Run("Actor remote invocation", func(t *testing.T) {
 		actorID := guuid.New().String()
 
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "testmethod"), []byte{})

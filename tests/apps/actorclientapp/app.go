@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	appPort               = 5000
-	daprV1URL             = "http://localhost:5500/v1.0"
+	appPort               = 3000
+	daprV1URL             = "http://localhost:3500/v1.0"
 	actorMethodURLFormat  = daprV1URL + "/actors/%s/%s/method/%s"
 	secondsToWaitInMethod = 5
 )
