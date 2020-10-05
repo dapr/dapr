@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -276,7 +277,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, err = a.grpcConnectionFn(targetAddress, targetID, "", false, true)
+			_, err = a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, true)
 			if err != nil {
 				return nil, err
 			}
@@ -323,13 +324,10 @@ func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
 	targetAddress, targetID string,
 	req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := a.grpcConnectionFn(targetAddress, targetID, "", false, false)
+	conn, err := a.grpcConnectionFn(targetAddress, targetID, a.config.Namespace, false, false)
 	if err != nil {
 		return nil, err
 	}
-
-	// ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
-	// defer cancel()
 
 	span := diag_utils.SpanFromContext(ctx)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -1226,4 +1224,16 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 	}
 
 	return activeActorsCount
+}
+
+// ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters
+// And the mode the runtime is operating in.
+func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace string) error {
+	switch mode {
+	case modes.KubernetesMode:
+		if mTLSEnabled && namespace == "" {
+			return errors.New("actors must have a namespace configured when running in Kubernetes mode")
+		}
+	}
+	return nil
 }

@@ -19,6 +19,7 @@ type Config struct {
 	ActorIdleTimeout              time.Duration
 	DrainOngoingCallTimeout       time.Duration
 	DrainRebalancedActors         bool
+	Namespace                     string
 }
 
 const (
@@ -30,7 +31,7 @@ const (
 
 // NewConfig returns the actor runtime configuration
 func NewConfig(hostAddress, appID, placementAddress string, hostedActors []string, port int,
-	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool) Config {
+	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool, namespace string) Config {
 	c := Config{
 		HostAddress:                   hostAddress,
 		AppID:                         appID,
@@ -42,6 +43,7 @@ func NewConfig(hostAddress, appID, placementAddress string, hostedActors []strin
 		ActorIdleTimeout:              defaultActorIdleTimeout,
 		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
 		DrainRebalancedActors:         drainRebalancedActors,
+		Namespace:                     namespace,
 	}
 
 	scanDuration, err := time.ParseDuration(actorScanInterval)
