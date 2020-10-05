@@ -18,10 +18,12 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/proto/common/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -64,10 +66,13 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
+	secretsConfiguration  map[string]config.SecretsScope
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
+	accessControlList     *config.AccessControlList
+	appProtocol           string
 }
 
 // NewAPI returns a new gRPC API
@@ -75,11 +80,14 @@ func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
+	secretsConfiguration map[string]config.SecretsScope,
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec) API {
+	tracingSpec config.TracingSpec,
+	accessControlList *config.AccessControlList,
+	appProtocol string) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -88,8 +96,11 @@ func NewAPI(
 		publishFn:             publishFn,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
+		secretsConfiguration:  secretsConfiguration,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		tracingSpec:           tracingSpec,
+		accessControlList:     accessControlList,
+		appProtocol:           appProtocol,
 	}
 }
 
@@ -104,12 +115,55 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
 	}
 
+	if a.accessControlList != nil {
+		// An access control policy has been specified for the app. Apply the policies.
+		operation := req.Message().Method
+		var httpVerb common.HTTPExtension_Verb
+		// Get the http verb in case the application protocol is http
+		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
+			httpExt := req.Message().GetHttpExtension()
+			if httpExt != nil {
+				httpVerb = httpExt.GetVerb()
+			}
+		}
+		callAllowed, errMsg := a.applyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol)
+
+		if !callAllowed {
+			return nil, status.Errorf(codes.PermissionDenied, errMsg)
+		}
+	}
+
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
 	if err != nil {
 		return nil, err
 	}
 	return resp.Proto(), err
+}
+
+func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb, appProtocol string) (bool, string) {
+	// Apply access control list filter
+	spiffeID, err := config.GetAndParseSpiffeID(ctx)
+	if err != nil {
+		// Apply the default action
+		apiServerLogger.Debugf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
+	}
+	var appID, trustDomain, namespace string
+	if spiffeID != nil {
+		appID = spiffeID.AppID
+		namespace = spiffeID.Namespace
+		trustDomain = spiffeID.TrustDomain
+	}
+	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
+	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
+
+	var errMessage string
+	if !action {
+		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
+		apiServerLogger.Debugf(errMessage)
+	}
+
+	return action, errMessage
 }
 
 // CallActor invokes a virtual actor
@@ -133,13 +187,26 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &empty.Empty{}, err
 	}
 
+	pubsubName := in.PubsubName
+	if pubsubName == "" {
+		err := errors.New("ERR_PUBSUB_NAME_EMPTY")
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
 	topic := in.Topic
+	if topic == "" {
+		err := errors.New("ERR_TOPIC_EMPTY")
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
 	body := []byte{}
 
 	if in.Data != nil {
 		body = in.Data
 	}
-	pubsubName := in.PubsubName
+
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
@@ -384,6 +451,12 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
+	if !a.isSecretAllowed(in.StoreName, in.Key) {
+		err := status.Errorf(codes.PermissionDenied, "Access denied by policy to get %q from %q", in.Key, in.StoreName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
+	}
+
 	req := secretstores.GetSecretRequest{
 		Name:     in.Key,
 		Metadata: in.Metadata,
@@ -488,9 +561,35 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	})
 
 	if err != nil {
-		err = fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
+		err = errors.Wrap(err, "ERR_STATE_TRANSACTION")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) isSecretAllowed(storeName, key string) bool {
+	if config, ok := a.secretsConfiguration[storeName]; ok {
+		return config.IsSecretAllowed(key)
+	}
+	// By default if a configuration is not defined for a secret store, return true.
+	return true
+}
+
+func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb string, action bool) {
+	if action {
+		switch actionPolicy {
+		case config.ActionPolicyApp:
+			diagnostics.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+		case config.ActionPolicyGlobal:
+			diagnostics.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+		}
+	} else {
+		switch actionPolicy {
+		case config.ActionPolicyApp:
+			diagnostics.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+		case config.ActionPolicyGlobal:
+			diagnostics.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+		}
+	}
 }

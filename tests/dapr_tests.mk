@@ -49,7 +49,7 @@ endif
 define genTestAppImageBuild
 .PHONY: build-e2e-app-$(1)
 build-e2e-app-$(1): check-e2e-env
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -o $(E2E_TESTAPP_DIR)/$(1)/app$(BINARY_EXT_LOCAL) $(E2E_TESTAPP_DIR)/$(1)/app.go
+	CGO_ENABLED=0 GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -o $(E2E_TESTAPP_DIR)/$(1)/app$(BINARY_EXT_LOCAL) $(E2E_TESTAPP_DIR)/$(1)/app.go
 	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
 endef
 
@@ -139,7 +139,8 @@ setup-test-env-redis:
 setup-test-env-kafka:
 	$(HELM) template dapr-kafka incubator/kafka -f ./tests/config/kafka_override.yaml | python ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
 	echo "Waiting for kafka config job to complete"
-	kubectl wait --timeout=10m --for=condition=complete job `kubectl get jobs  -n $(DAPR_TEST_NAMESPACE) | awk '/dapr-kafka-config/ {print $$1}'` -n $(DAPR_TEST_NAMESPACE)
+	kubectl wait --timeout=10m --for=condition=complete job -n $(DAPR_TEST_NAMESPACE) \
+	  -l app.kubernetes.io/component=kafka-config,app.kubernetes.io/instance=dapr-kafka
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis
@@ -155,6 +156,7 @@ setup-app-configurations:
 # Apply component yaml for state, secrets, pubsub, and bindings
 setup-test-components:
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)

@@ -49,6 +49,8 @@ Usage of ./testclient:
         loglevel, one of [Debug Verbose Info Warning Error Critical Fatal] (default Info)
   -logprefix string
         Prefix to log lines before logged messages (default "> ")
+  -m string
+        test actor method that will be called during test. e.g. nop, setActorState, getActorState (default "setActorState")
   -numactors int
         Number of randomly generated actors. (default 10)
   -qps float

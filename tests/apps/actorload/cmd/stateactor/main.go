@@ -63,6 +63,10 @@ func (s *stateActor) setActorState(actorType, actorID string, data []byte, metad
 	return []byte(""), nil
 }
 
+func (s *stateActor) nopMethod(actorType, actorID string, data []byte, metadata map[string]string) ([]byte, error) {
+	return []byte("nop"), nil
+}
+
 func (s *stateActor) getActorState(actorType, actorID string, data []byte, metadata map[string]string) ([]byte, error) {
 	data, err := s.actorClient.GetState(actorType, actorID, actorStateName)
 	if err != nil {
@@ -103,6 +107,7 @@ func main() {
 	service.SetDeactivationHandler(actor.onDeactivated)
 	service.AddActorMethod("getActorState", actor.getActorState)
 	service.AddActorMethod("setActorState", actor.setActorState)
+	service.AddActorMethod("nop", actor.nopMethod)
 
 	service.StartServer()
 }

@@ -15,6 +15,8 @@ import (
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
+	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
@@ -141,11 +143,15 @@ func startTestServerWithTracing(port int) (*grpc_go.Server, *string) {
 }
 
 func startTestServer(port int) *grpc_go.Server {
+	return startTestServerAPI(port, &mockGRPCAPI{})
+}
+
+func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc_go.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	server := grpc_go.NewServer()
 	go func() {
-		runtimev1pb.RegisterDaprServer(server, &mockGRPCAPI{})
+		runtimev1pb.RegisterDaprServer(server, srv)
 		if err := server.Serve(lis); err != nil {
 			panic(err)
 		}
@@ -623,6 +629,125 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 	})
 }
 
+func TestGetSecret(t *testing.T) {
+	fakeStore := daprt.FakeSecretStore{}
+	fakeStores := map[string]secretstores.SecretStore{
+		"store1": fakeStore,
+		"store2": fakeStore,
+		"store3": fakeStore,
+		"store4": fakeStore,
+	}
+	secretsConfiguration := map[string]config.SecretsScope{
+		"store1": {
+			DefaultAccess: config.AllowAccess,
+			DeniedSecrets: []string{"not-allowed"},
+		},
+		"store2": {
+			DefaultAccess:  config.DenyAccess,
+			AllowedSecrets: []string{"good-key"},
+		},
+		"store3": {
+			DefaultAccess:  config.AllowAccess,
+			AllowedSecrets: []string{"good-key"},
+		},
+	}
+	expectedResponse := "life is good"
+	storeName := "store1"
+	deniedStoreName := "store2"
+	restrictedStore := "store3"
+	unrestrictedStore := "store4" // No configuration defined for the store
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		key              string
+		errorExcepted    bool
+		expectedResponse string
+		expectedError    codes.Code
+	}{
+		{
+			testName:         "Good Key from unrestricted store",
+			storeName:        unrestrictedStore,
+			key:              "good-key",
+			errorExcepted:    false,
+			expectedResponse: expectedResponse,
+		},
+		{
+			testName:         "Good Key default access",
+			storeName:        storeName,
+			key:              "good-key",
+			errorExcepted:    false,
+			expectedResponse: expectedResponse,
+		},
+		{
+			testName:         "Good Key restricted store access",
+			storeName:        restrictedStore,
+			key:              "good-key",
+			errorExcepted:    false,
+			expectedResponse: expectedResponse,
+		},
+		{
+			testName:         "Random Key restricted store access",
+			storeName:        restrictedStore,
+			key:              "random",
+			errorExcepted:    true,
+			expectedResponse: "",
+			expectedError:    codes.PermissionDenied,
+		},
+		{
+			testName:         "Random Key accessing a store denied access by default",
+			storeName:        deniedStoreName,
+			key:              "random",
+			errorExcepted:    true,
+			expectedResponse: "",
+			expectedError:    codes.PermissionDenied,
+		},
+		{
+			testName:         "Random Key accessing a store denied access by default",
+			storeName:        deniedStoreName,
+			key:              "random",
+			errorExcepted:    true,
+			expectedResponse: "",
+			expectedError:    codes.PermissionDenied,
+		},
+	}
+	// Setup Dapr API server
+	fakeAPI := &api{
+		id:                   "fakeAPI",
+		secretStores:         fakeStores,
+		secretsConfiguration: secretsConfiguration,
+	}
+	// Run test server
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	// Create gRPC test client
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	// act
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetSecretRequest{
+				StoreName: tt.storeName,
+				Key:       tt.key,
+			}
+			resp, err := client.GetSecret(context.Background(), req)
+
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, codes.PermissionDenied, status.Code(err))
+			}
+		})
+	}
+}
+
 func TestSaveState(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
@@ -677,14 +802,29 @@ func TestDeleteState(t *testing.T) {
 func TestPublishTopic(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
-	server := startTestServer(port)
+	srv := &api{
+		publishFn: func(req *pubsub.PublishRequest) error { return nil },
+	}
+	server := startTestServerAPI(port, srv)
 	defer server.Stop()
 
 	clientConn := createTestClient(port)
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
+
 	_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
+	assert.Error(t, err, "Expected error")
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+	})
+	assert.Error(t, err, "Expected error")
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+		Topic:      "topic",
+	})
 	assert.Nil(t, err)
 }
 
