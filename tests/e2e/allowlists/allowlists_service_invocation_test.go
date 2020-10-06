@@ -10,6 +10,7 @@ package service_invocation_e2e
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 
@@ -91,22 +92,23 @@ var moreAllowlistsServiceinvocationTests = []struct {
 	in               string
 	remoteApp        string
 	appMethod        string
+	expectedStatusCode int
 	expectedResponse string
 }{
 	{
 		"Test allow with callee side grpc",
 		"allowlists-callee-grpc",
 		"grpctogrpctest",
+		http.StatusOK,
 		"success",
 	},
-	// TODO: Verified this manually using python-sdk sample and port-forwarding to http port.
-	// 		 This test always returns success. Need to debug further
-	// {
-	// 	"Test deny with callee side grpc",
-	// 	"allowlists-callee-grpc",
-	// 	"httptogrpctest",
-	// 	"rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httptogrpctest verb: NONE",
-	// },
+	{
+		"Test deny with callee side grpc",
+		"allowlists-callee-grpc",
+		"httptogrpctest",
+		http.StatusInternalServerError,
+		"HTTP call failed with rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httpToGrpcTest verb: NONE",
+	},
 }
 
 func TestServiceInvocationWithAllowLists(t *testing.T) {
@@ -152,12 +154,13 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
 
 			t.Logf("url is '%s'\n", url)
-			resp, err := utils.HTTPPost(
-				url,
-				body)
+			resp, statusCode, err := HTTPPostWithStatus(
+			url,
+			body)
 
 			t.Log("checking err...")
 			require.NoError(t, err)
+			require.Equal(t, tt.expectedStatusCode, statusCode)
 
 			var appResp appResponse
 			t.Logf("unmarshalling..%s\n", string(resp))
