@@ -1,5 +1,3 @@
-// +build e2e
-
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -154,7 +152,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
 
 			t.Logf("url is '%s'\n", url)
-			resp, statusCode, err := HTTPPostWithStatus(
+			resp, statusCode, err := utils.HTTPPostWithStatus(
 			url,
 			body)
 
