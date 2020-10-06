@@ -1279,7 +1279,10 @@ func (a *DaprRuntime) processComponents() {
 		if comp.Name == "" {
 			continue
 		}
-		a.processComponentAndDependents(comp)
+		err := a.processComponentAndDependents(comp)
+		if err != nil {
+			log.Errorf("process component %s error, %s", comp.Name, err)
+		}
 	}
 }
 
@@ -1299,8 +1302,11 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	}
 
 	compCategory := a.extractComponentCategory(comp)
+	if compCategory == "" {
+		// the category entered is incorrect, return error
+		return errors.Errorf("incorrect type %s", comp.Spec.Type)
+	}
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
-		log.Errorf("process component %s error, %s", comp.Name, err)
 		return err
 	}
 
