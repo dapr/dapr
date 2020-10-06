@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/modes"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -96,7 +97,7 @@ func newTestActorsRuntimeWithMock(mockAppChannel *channelt.MockAppChannel) *acto
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false)
+	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false, "")
 	a := NewActors(store, mockAppChannel, nil, config, nil, spec)
 
 	return a.(*actorsRuntime)
@@ -834,4 +835,45 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 	actorKey := actorsRuntime.constructCompositeKey(appID, actorType, actorID)
 
 	assert.Equal(t, "myapp||TestActor||abc123", actorKey)
+}
+
+func TestConfig(t *testing.T) {
+	c := NewConfig("localhost:5050", "app1", "placement:5050", []string{"1"}, 3500, "1s", "2s", "3s", true, "default")
+	assert.Equal(t, "localhost:5050", c.HostAddress)
+	assert.Equal(t, "app1", c.AppID)
+	assert.Equal(t, "placement:5050", c.PlacementServiceAddress)
+	assert.Equal(t, []string{"1"}, c.HostedActorTypes)
+	assert.Equal(t, 3500, c.Port)
+	assert.Equal(t, "1s", c.ActorDeactivationScanInterval.String())
+	assert.Equal(t, "2s", c.ActorIdleTimeout.String())
+	assert.Equal(t, "3s", c.DrainOngoingCallTimeout.String())
+	assert.Equal(t, true, c.DrainRebalancedActors)
+	assert.Equal(t, "default", c.Namespace)
+}
+
+func TestHostValidation(t *testing.T) {
+	t.Run("kubernetes mode with mTLS, missing namespace", func(t *testing.T) {
+		err := ValidateHostEnvironment(true, modes.KubernetesMode, "")
+		assert.Error(t, err)
+	})
+
+	t.Run("kubernetes mode without mTLS, missing namespace", func(t *testing.T) {
+		err := ValidateHostEnvironment(false, modes.KubernetesMode, "")
+		assert.NoError(t, err)
+	})
+
+	t.Run("kubernetes mode with mTLS and namespace", func(t *testing.T) {
+		err := ValidateHostEnvironment(true, modes.KubernetesMode, "default")
+		assert.NoError(t, err)
+	})
+
+	t.Run("self hosted mode with mTLS, missing namespace", func(t *testing.T) {
+		err := ValidateHostEnvironment(true, modes.StandaloneMode, "")
+		assert.NoError(t, err)
+	})
+
+	t.Run("self hosted mode without mTLS, missing namespace", func(t *testing.T) {
+		err := ValidateHostEnvironment(false, modes.StandaloneMode, "")
+		assert.NoError(t, err)
+	})
 }

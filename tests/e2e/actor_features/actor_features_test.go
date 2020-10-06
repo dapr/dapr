@@ -115,10 +115,34 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 		},
+		{
+			AppName:        "actortestclient",
+			DaprEnabled:    true,
+			ImageName:      "e2e-actorclientapp",
+			Replicas:       1,
+			IngressEnabled: true,
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	os.Exit(tr.Start(m))
+}
+
+func TestActorInvocation(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("actortestclient")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Run("Actor remote invocation", func(t *testing.T) {
+		actorID := guuid.New().String()
+
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "testmethod"), []byte{})
+		require.NoError(t, err)
+	})
 }
 
 func TestActorFeatures(t *testing.T) {
