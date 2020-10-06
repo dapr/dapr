@@ -87,11 +87,11 @@ var allowlistsServiceinvocationTests = []struct {
 }
 
 var moreAllowlistsServiceinvocationTests = []struct {
-	in               string
-	remoteApp        string
-	appMethod        string
+	in                 string
+	remoteApp          string
+	appMethod          string
 	expectedStatusCode int
-	expectedResponse string
+	expectedResponse   string
 }{
 	{
 		"Test allow with callee side grpc",
@@ -153,8 +153,8 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 
 			t.Logf("url is '%s'\n", url)
 			resp, statusCode, err := utils.HTTPPostWithStatus(
-			url,
-			body)
+				url,
+				body)
 
 			t.Log("checking err...")
 			require.NoError(t, err)
