@@ -25,9 +25,11 @@ jobs:
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "windows-base") {
+              var fs = require('fs');
               // Set environment variables
-              console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
-              console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n
+                 CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
       - name: Check out dapr
         if: env.CHECKOUT_REPO != ''

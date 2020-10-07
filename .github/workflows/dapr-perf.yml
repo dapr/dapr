@@ -33,8 +33,8 @@ jobs:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
         run: |
-          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
-          echo ::set-env name=CHECKOUT_REF::refs/heads/master
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@0.3.0
@@ -43,9 +43,11 @@ jobs:
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-perf") {
+              var fs = require('fs');
               // Set environment variables
-              console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
-              console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n
+                 CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
@@ -86,7 +88,7 @@ jobs:
             } else {
               message = `Found the available test cluster - ${testCluster}. Please wait until test is done.`;
             }
-            
+
             await github.issues.createComment({
               owner: testPayload.issue.owner,
               repo: testPayload.issue.repo,
@@ -136,7 +138,7 @@ jobs:
             console.log(`Current Job Status: ${jobStatus}`);
 
             var message = "";
-            
+
             if (jobStatus == "cancelled") {
               message = "Dapr Perf tests cancelled.";
             } else if (jobStatus == "success") {
@@ -144,7 +146,7 @@ jobs:
             } else if (jobStatus == "failure") {
               message = "Dapr Perf tests failed.";
             }
-            
+
             if (message) {
               await github.issues.createComment({
                 owner: testPayload.issue.owner,

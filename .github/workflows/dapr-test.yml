@@ -41,8 +41,8 @@ jobs:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
         run: |
-          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
-          echo ::set-env name=CHECKOUT_REF::refs/heads/master
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
@@ -52,9 +52,11 @@ jobs:
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-test") {
+              var fs = require('fs');
               // Set environment variables
-              console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
-              console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n
+                 CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
@@ -98,7 +100,7 @@ jobs:
               const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
               message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please check the [build status](${checkLink}).`;
             }
-            
+
             await github.issues.createComment({
               owner: testPayload.issue.owner,
               repo: testPayload.issue.repo,
@@ -161,9 +163,9 @@ jobs:
             console.log(`Current Job Status: ${jobStatus}`);
 
             var message = "";
-            
+
             const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            
+
             if (jobStatus == "cancelled") {
               message = `End-to-end tests cancelled on ${targetOs}. Please check the [build logs](${checkLink})`;
             } else if (jobStatus == "success") {
@@ -171,7 +173,7 @@ jobs:
             } else if (jobStatus == "failure") {
               message = `End-to-end tests failed on ${targetOs}. Please check the [build logs](${checkLink})`;
             }
-            
+
             if (message) {
               await github.issues.createComment({
                 owner: testPayload.issue.owner,
