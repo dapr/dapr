@@ -1632,7 +1632,7 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 
 func (a *DaprRuntime) processDelayedComponents() {
 	for _, comp := range a.delayedComponents {
-		compCategory := a.figureOutComponentCategory(comp)
+		compCategory := a.extractComponentCategory(comp)
 		if err := a.doProcessOneComponent(compCategory, comp); err != nil {
 			log.Error("error loading delayed component. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
 			continue
