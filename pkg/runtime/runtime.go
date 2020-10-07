@@ -139,6 +139,9 @@ type DaprRuntime struct {
 
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentDependents map[string][]components_v1alpha1.Component
+
+	delayedComponents     []components_v1alpha1.Component
+	delayedComponentsDone chan bool
 }
 
 type componentPreprocessRes struct {
@@ -174,6 +177,9 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
+
+		delayedComponents:     make([]components_v1alpha1.Component, 0),
+		delayedComponentsDone: make(chan bool, 0),
 	}
 }
 
@@ -230,8 +236,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	a.blockUntilAppIsReady()
-
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return errors.Wrap(err, "failed to determine host address")
@@ -240,13 +244,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if a.globalConfig.Spec.TracingSpec.Stdout {
 		trace.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
-
-	err = a.createAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
-	}
-
-	a.loadAppConfiguration()
 
 	// Register and initialize name resolution for service discovery.
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
@@ -308,6 +305,23 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
+
+	a.blockUntilAppIsReady()
+
+	err = a.createAppChannel()
+	if err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+	}
+
+	a.loadAppConfiguration()
+	err = a.initActors()
+	if err != nil {
+		log.Warnf("failed to init actors: %s", err)
+	}
+	go a.processDelayedComponents()
+
+	// Wait for the delayed components to be processed
+	<-a.delayedComponentsDone
 
 	return nil
 }
@@ -1306,6 +1320,13 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 		// the category entered is incorrect, return error
 		return errors.Errorf("incorrect type %s", comp.Spec.Type)
 	}
+
+	if compCategory == bindingsComponent || compCategory == pubsubComponent {
+		a.delayedComponents = append(a.delayedComponents, comp)
+		log.Infof("loading component delayed. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
+		return nil
+	}
+
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
 		return err
 	}
@@ -1616,4 +1637,28 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
+}
+
+func (a *DaprRuntime) processDelayedComponents() {
+	for _, comp := range a.delayedComponents {
+		compCategory := a.extractComponentCategory(comp)
+		if err := a.doProcessOneComponent(compCategory, comp); err != nil {
+			log.Error("error loading delayed component. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
+			continue
+		}
+		dependency := componentDependency(compCategory, comp.Name)
+		if deps, ok := a.pendingComponentDependents[dependency]; ok {
+			delete(a.pendingComponentDependents, dependency)
+			go func(dependents []components_v1alpha1.Component) {
+				for _, dependent := range dependents {
+					a.pendingComponents <- dependent
+				}
+			}(deps)
+		}
+
+		a.appendOrReplaceComponents(comp)
+		diag.DefaultMonitoring.ComponentLoaded()
+		log.Infof("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
+	}
+	a.delayedComponentsDone <- true
 }
