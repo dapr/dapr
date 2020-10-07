@@ -36,7 +36,7 @@ rules:
   resources: ["deployments", "services", "components", "configurations", "subscriptions"]
   verbs: ["list"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions"]
   verbs: ["watch"]
 - apiGroups: ["*"]
   resources: ["services", "secrets", "configmaps"]
