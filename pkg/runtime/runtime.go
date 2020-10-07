@@ -1318,10 +1318,6 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	}
 
 	compCategory := a.extractComponentCategory(comp)
-	if compCategory == "" {
-		// the category entered is incorrect, return error
-		return errors.Errorf("incorrect type %s", comp.Spec.Type)
-	}
 	if compCategory == bindingsComponent || compCategory == pubsubComponent {
 		a.delayedComponents = append(a.delayedComponents, comp)
 		log.Infof("loading component delayed. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
