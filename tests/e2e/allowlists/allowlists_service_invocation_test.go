@@ -1,4 +1,3 @@
-// +build e2e
 
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
@@ -68,7 +67,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-var allowlistsServiceinvocationTests = []struct {
+var httpCalleeTests = []struct {
 	in               string
 	remoteApp        string
 	appMethod        string
@@ -88,7 +87,7 @@ var allowlistsServiceinvocationTests = []struct {
 	},
 }
 
-var moreAllowlistsServiceinvocationTests = []struct {
+var grpcCalleeTests = []struct {
 	in                 string
 	remoteApp          string
 	appMethod          string
@@ -106,7 +105,7 @@ var moreAllowlistsServiceinvocationTests = []struct {
 		"Test deny with callee side grpc",
 		"allowlists-callee-grpc",
 		"httptogrpctest",
-		http.PermissionDenied,
+		http.StatusForbidden,
 		"HTTP call failed with rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httpToGrpcTest verb: NONE",
 	},
 }
@@ -122,7 +121,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 
 	t.Logf("externalURL is '%s'\n", externalURL)
 
-	for _, tt := range allowlistsServiceinvocationTests {
+	for _, tt := range httpCalleeTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
 				RemoteApp: tt.remoteApp,
@@ -143,7 +142,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 		})
 	}
 
-	for _, tt := range moreAllowlistsServiceinvocationTests {
+	for _, tt := range grpcCalleeTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
 				RemoteApp: tt.remoteApp,
