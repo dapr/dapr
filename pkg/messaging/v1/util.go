@@ -100,7 +100,8 @@ func isPermanentHTTPHeader(hdr string) bool {
 		"Connection",
 		"Cache-Control",
 		"Content-Type",
-		// Content-Length is http 1.1 specific.
+		// Remove content-length header since it represents http1.1 payload size,
+		// not the sum of the h2 DATA frame payload lengths. See https://httpwg.org/specs/rfc7540.html#malformed
 		"Content-Length",
 		"Cookie",
 		"Date",
