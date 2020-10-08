@@ -22,6 +22,7 @@ import (
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/exporters"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -1702,5 +1703,65 @@ func TestInitActors(t *testing.T) {
 
 		err := r.initActors()
 		assert.Error(t, err)
+	})
+}
+
+func TestInitBindings(t *testing.T) {
+	t.Run("single input binding", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
+		r.bindingsRegistry.RegisterInputBindings(
+			bindings_loader.NewInput("test", func() bindings.InputBinding {
+				return &daprt.MockBinding{}
+			}),
+		)
+
+		c := components_v1alpha1.Component{}
+		c.ObjectMeta.Name = "test"
+		c.Spec.Type = "bindings.test"
+		err := r.initBinding(c)
+		assert.NotEqual(t, "couldn't find input binding bindings.test", err.Error())
+	})
+
+	t.Run("single output binding", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
+		r.bindingsRegistry.RegisterOutputBindings(
+			bindings_loader.NewOutput("test", func() bindings.OutputBinding {
+				return &daprt.MockBinding{}
+			}),
+		)
+
+		c := components_v1alpha1.Component{}
+		c.ObjectMeta.Name = "test"
+		c.Spec.Type = "bindings.test"
+		err := r.initBinding(c)
+		assert.NoError(t, err)
+	})
+
+	t.Run("one input binding, one output binding", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
+		r.bindingsRegistry.RegisterInputBindings(
+			bindings_loader.NewInput("testinput", func() bindings.InputBinding {
+				return &daprt.MockBinding{}
+			}),
+		)
+
+		r.bindingsRegistry.RegisterOutputBindings(
+			bindings_loader.NewOutput("testoutput", func() bindings.OutputBinding {
+				return &daprt.MockBinding{}
+			}),
+		)
+
+		input := components_v1alpha1.Component{}
+		input.ObjectMeta.Name = "testinput"
+		input.Spec.Type = "bindings.testinput"
+		err := r.initBinding(input)
+		assert.Error(t, err)
+		assert.NotEqual(t, "couldn't find input binding bindings.test", err.Error())
+
+		output := components_v1alpha1.Component{}
+		output.ObjectMeta.Name = "testinput"
+		output.Spec.Type = "bindings.testoutput"
+		err = r.initBinding(output)
+		assert.NoError(t, err)
 	})
 }
