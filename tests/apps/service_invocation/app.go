@@ -67,9 +67,9 @@ func singlehopHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func multihopHandler(w http.ResponseWriter, r *http.Request) {
-	response, err := invokeService("serviceinvocation-callee-1", "singlehop")
+	response, httpStatusCode, err := invokeService("serviceinvocation-callee-1", "singlehop")
 	if err != nil {
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, httpStatusCode, err)
 		return
 	}
 
@@ -149,9 +149,9 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Printf("  testHandler invoking %s with method %s\n", commandBody.RemoteApp, commandBody.Method)
-	response, err := invokeService(commandBody.RemoteApp, commandBody.Method)
+	response, httpStatusCode, err := invokeService(commandBody.RemoteApp, commandBody.Method)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(httpStatusCode)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
 		})
@@ -162,38 +162,38 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func invokeService(remoteApp, method string) (appResponse, error) {
+func invokeService(remoteApp, method string) (appResponse, int, error) {
 	return invokeServiceWithBody(remoteApp, method, nil)
 }
 
-func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, error) {
+func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, int, error) {
 	resp, err := invokeServiceWithBodyHeader(remoteApp, method, data, map[string]string{})
 
 	if err != nil {
-		return appResponse{}, err
+		return appResponse{}, resp.StatusCode, err
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	if err != nil {
-		return appResponse{}, err
+		return appResponse{}, resp.StatusCode, err
 	}
 
 	fmt.Printf("invokeService here\n")
 	var appResp appResponse
 	err = json.Unmarshal(body, &appResp)
 	if err != nil {
-		return appResponse{}, err
+		return appResponse{}, resp.StatusCode, err
 	}
 
 	// invokeServiceWithBodyHeader uses http client.Do method which
 	// returns success for everything except 2xx error codes. Check
 	// the status code to extract non 2xx errors.
 	if resp.StatusCode != http.StatusOK {
-		return appResponse{}, errors.New(appResp.Message)
+		return appResponse{}, resp.StatusCode, errors.New(appResp.Message)
 	}
 
-	return appResp, nil
+	return appResp, resp.StatusCode, nil
 }
 
 func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error) {
@@ -735,11 +735,11 @@ func httpToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Printf("httpToGrpcTest calling with message %s\n", string(b))
-	resp, err := invokeServiceWithBody(commandBody.RemoteApp, "httpToGrpcTest", b)
+	resp, httpStatusCode, err := invokeServiceWithBody(commandBody.RemoteApp, "httpToGrpcTest", b)
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, httpStatusCode, err)
 		return
 	}
 
@@ -922,35 +922,6 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 	return appResp, nil
 }
 
-func httpWrapperWithStatus(httpMethod string, url string, data []byte) (appResponse, error) {
-	var body []byte
-	var err error
-
-	if httpMethod == "POST" {
-		body, err = HTTPPost(url, data)
-	} else if httpMethod == "GET" {
-		body, err = HTTPGet(url)
-	} else if httpMethod == "PUT" {
-		body, err = HTTPPut(url, data)
-	} else if httpMethod == "DELETE" {
-		body, err = HTTPDelete(url, data)
-	} else {
-		return appResponse{}, errors.New("expected option")
-	}
-
-	if err != nil {
-		return appResponse{}, err
-	}
-
-	var appResp appResponse
-	err = json.Unmarshal(body, &appResp)
-	if err != nil {
-		return appResponse{}, err
-	}
-
-	return appResp, nil
-}
-
 // Performs calls from grpc client to http server.  It sends a random string to the other app
 // and expects the response to contain the same string inside an appResponse.
 // It uses all 4 http methods (verbs) in metadata to invoke the proper http method.
@@ -1066,9 +1037,9 @@ func onSerializationFailed(w http.ResponseWriter, err error) {
 	logAndSetResponse(w, http.StatusInternalServerError, msg)
 }
 
-func onHTTPCallFailed(w http.ResponseWriter, err error) {
+func onHTTPCallFailed(w http.ResponseWriter, httpStatusCode int, err error) {
 	msg := "HTTP call failed with " + err.Error()
-	logAndSetResponse(w, http.StatusInternalServerError, msg)
+	logAndSetResponse(w, httpStatusCode, msg)
 }
 
 func logAndSetResponse(w http.ResponseWriter, statusCode int, message string) {
@@ -1102,24 +1073,6 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 	}
 
 	return extractBody(resp.Body)
-}
-
-// HTTPPostWithStatus is a helper to make POST request call to url
-func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	client := newHTTPClient()
-	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
-	if err != nil {
-		// From the Do method for the client.Post
-		// An error is returned if caused by client policy (such as
-		// CheckRedirect), or failure to speak HTTP (such as a network
-		// connectivity problem). A non-2xx status code doesn't cause an
-		// error.
-		return nil, http.StatusInternalServerError, err
-	}
-
-	body, err := extractBody(resp.Body)
-
-	return body, resp.StatusCode, err
 }
 
 // Wraps GET calls

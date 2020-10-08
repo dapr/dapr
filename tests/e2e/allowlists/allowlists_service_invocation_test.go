@@ -106,7 +106,7 @@ var moreAllowlistsServiceinvocationTests = []struct {
 		"Test deny with callee side grpc",
 		"allowlists-callee-grpc",
 		"httptogrpctest",
-		http.StatusInternalServerError,
+		http.PermissionDenied,
 		"HTTP call failed with rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httpToGrpcTest verb: NONE",
 	},
 }
