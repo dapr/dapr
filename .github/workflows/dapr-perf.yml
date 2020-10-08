@@ -51,7 +51,7 @@ jobs:
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v2-beta
+        uses: actions/setup-go@v2
         with:
           go-version: ${{ env.GOVER }}
       - name: Check out code into the Go module directory
