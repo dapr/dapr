@@ -344,14 +344,18 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 }
 
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
-	if err := a.initOutputBinding(c); err != nil {
-		log.Errorf("failed to init output bindings: %s", err)
-		return err
+	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type) {
+		if err := a.initOutputBinding(c); err != nil {
+			log.Errorf("failed to init output bindings: %s", err)
+			return err
+		}
 	}
 
-	if err := a.initInputBinding(c); err != nil {
-		log.Errorf("failed to init input bindings: %s", err)
-		return err
+	if a.bindingsRegistry.HasInputBinding(c.Spec.Type) {
+		if err := a.initInputBinding(c); err != nil {
+			log.Errorf("failed to init input bindings: %s", err)
+			return err
+		}
 	}
 	return nil
 }
@@ -1279,7 +1283,10 @@ func (a *DaprRuntime) processComponents() {
 		if comp.Name == "" {
 			continue
 		}
-		a.processComponentAndDependents(comp)
+		err := a.processComponentAndDependents(comp)
+		if err != nil {
+			log.Errorf("process component %s error, %s", comp.Name, err)
+		}
 	}
 }
 
@@ -1299,8 +1306,11 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	}
 
 	compCategory := a.extractComponentCategory(comp)
+	if compCategory == "" {
+		// the category entered is incorrect, return error
+		return errors.Errorf("incorrect type %s", comp.Spec.Type)
+	}
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
-		log.Errorf("process component %s error, %s", comp.Name, err)
 		return err
 	}
 
