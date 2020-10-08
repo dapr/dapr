@@ -29,6 +29,8 @@ type (
 	Registry interface {
 		RegisterInputBindings(components ...InputBinding)
 		RegisterOutputBindings(components ...OutputBinding)
+		HasInputBinding(name string) bool
+		HasOutputBinding(name string) bool
 		CreateInputBinding(name string) (bindings.InputBinding, error)
 		CreateOutputBinding(name string) (bindings.OutputBinding, error)
 	}
@@ -91,6 +93,18 @@ func (b *bindingsRegistry) CreateOutputBinding(name string) (bindings.OutputBind
 		return method(), nil
 	}
 	return nil, errors.Errorf("couldn't find output binding %s", name)
+}
+
+// HasInputBinding checks if an input binding based on `name` exists in the registry.
+func (b *bindingsRegistry) HasInputBinding(name string) bool {
+	_, ok := b.inputBindings[name]
+	return ok
+}
+
+// HasOutputBinding checks if an output binding based on `name` exists in the registry.
+func (b *bindingsRegistry) HasOutputBinding(name string) bool {
+	_, ok := b.outputBindings[name]
+	return ok
 }
 
 func createFullName(name string) string {

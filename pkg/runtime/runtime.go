@@ -344,14 +344,18 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 }
 
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
-	if err := a.initOutputBinding(c); err != nil {
-		log.Errorf("failed to init output bindings: %s", err)
-		return err
+	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type) {
+		if err := a.initOutputBinding(c); err != nil {
+			log.Errorf("failed to init output bindings: %s", err)
+			return err
+		}
 	}
 
-	if err := a.initInputBinding(c); err != nil {
-		log.Errorf("failed to init input bindings: %s", err)
-		return err
+	if a.bindingsRegistry.HasInputBinding(c.Spec.Type) {
+		if err := a.initInputBinding(c); err != nil {
+			log.Errorf("failed to init input bindings: %s", err)
+			return err
+		}
 	}
 	return nil
 }
