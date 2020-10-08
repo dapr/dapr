@@ -87,9 +87,9 @@ releaseVersion = re.search(milestoneProjectRegex, project.name).group(1)
 print("Generating release notes for Dapr {}...".format(releaseVersion))
 # Set REL_VERSION.
 with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
-    print("REL_VERSION={}".format(releaseVersion), file=githubEnv)
-    print("REL_BRANCH=release-{}".format(
-        re.search(majorReleaseRegex, releaseVersion).group(1)), file=githubEnv)
+    githubEnv.write("REL_VERSION={}\n".format(releaseVersion))
+    githubEnv.write("REL_BRANCH=release-{}\n".format(
+        re.search(majorReleaseRegex, releaseVersion).group(1)))
 
 releases = sorted([r for r in g.get_repo("dapr/dashboard").get_releases()], key=lambda r: r.created_at, reverse=True)
 dashboardReleaseVersion = re.search(dashboardReleaseVersionRegex, releases[0].tag_name).group(1)

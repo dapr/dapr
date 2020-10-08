@@ -16,7 +16,7 @@ tagRefPrefix = "refs/tags/v"
 with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
 
     if gitRef is None or not gitRef.startswith(tagRefPrefix):
-        print("REL_VERSION=edge", file=githubEnv)
+        githubEnv.write("REL_VERSION=edge\n")
         print ("This is daily build from {}...".format(gitRef))
         sys.exit(0)
 
@@ -30,10 +30,10 @@ with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
         if os.path.exists(releaseNotePath):
             print ("Found {}".format(releaseNotePath))
             # Set LATEST_RELEASE to true
-            print("LATEST_RELEASE=true", file=githubEnv)
+            githubEnv.write("LATEST_RELEASE=true\n")
         else:
             print ("{} is not found".format(releaseNotePath))
             sys.exit(1)
         print ("Release build from {}...".format(gitRef))
 
-    print("REL_VERSION={}".format(releaseVersion), file=githubEnv)
+    githubEnv.write("REL_VERSION={}\n".format(releaseVersion))
