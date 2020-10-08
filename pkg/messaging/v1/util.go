@@ -95,9 +95,13 @@ func isPermanentHTTPHeader(hdr string) bool {
 		"Accept-Charset",
 		"Accept-Language",
 		"Accept-Ranges",
-		// "Authorization",
+		// Connection-specific header fields such as Connection and Keep-Alive are prohibited in HTTP/2.
+		// For grpc-dotnet users, Kestrel server throws the exception if connection header is given.
+		"Connection",
 		"Cache-Control",
 		"Content-Type",
+		// Content-Length is http 1.1 specific.
+		"Content-Length",
 		"Cookie",
 		"Date",
 		"Expect",
@@ -112,7 +116,6 @@ func isPermanentHTTPHeader(hdr string) bool {
 		"Origin",
 		"Pragma",
 		"Referer",
-		// "User-Agent",
 		"Via",
 		"Warning":
 		return true

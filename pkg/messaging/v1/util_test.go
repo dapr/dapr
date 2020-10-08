@@ -89,6 +89,12 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		"Content-Type": {
 			Values: []string{"application/json"},
 		},
+		"Content-Length": {
+			Values: []string{"2000"},
+		},
+		"Connection": {
+			Values: []string{"keep-alive"},
+		},
 		"Accept-Encoding": {
 			Values: []string{"gzip, deflate"},
 		},
@@ -102,8 +108,10 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 	t.Run("without http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, false)
 		// always trace header is returned
-		assert.Equal(t, 5, convertedMD.Len())
+		assert.Equal(t, 7, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD["host"][0])
+		assert.Equal(t, "keep-alive", convertedMD["connection"][0])
+		assert.Equal(t, "2000", convertedMD["content-length"][0])
 		assert.Equal(t, "application/json", convertedMD["content-type"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["accept-encoding"][0])
 		assert.Equal(t, "Go-http-client/1.1", convertedMD["user-agent"][0])
@@ -112,8 +120,10 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 	t.Run("with http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, true)
 		// always trace header is returned
-		assert.Equal(t, 5, convertedMD.Len())
+		assert.Equal(t, 7, convertedMD.Len())
 		assert.Equal(t, "localhost", convertedMD["dapr-host"][0])
+		assert.Equal(t, "keep-alive", convertedMD["dapr-connection"][0])
+		assert.Equal(t, "2000", convertedMD["dapr-content-length"][0])
 		assert.Equal(t, "application/json", convertedMD["dapr-content-type"][0])
 		assert.Equal(t, "gzip, deflate", convertedMD["accept-encoding"][0])
 		assert.Equal(t, "Go-http-client/1.1", convertedMD["user-agent"][0])
