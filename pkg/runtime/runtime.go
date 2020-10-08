@@ -1194,10 +1194,14 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 }
 
 func (a *DaprRuntime) initActors() error {
+	err := actors.ValidateHostEnvironment(a.runtimeConfig.mtlsEnabled, a.runtimeConfig.Mode, a.namespace)
+	if err != nil {
+		return err
+	}
 	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
-		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors)
+		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec)
-	err := act.Init()
+	err = act.Init()
 	a.actor = act
 	return err
 }
@@ -1275,7 +1279,10 @@ func (a *DaprRuntime) processComponents() {
 		if comp.Name == "" {
 			continue
 		}
-		a.processComponentAndDependents(comp)
+		err := a.processComponentAndDependents(comp)
+		if err != nil {
+			log.Errorf("process component %s error, %s", comp.Name, err)
+		}
 	}
 }
 
@@ -1295,8 +1302,11 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	}
 
 	compCategory := a.extractComponentCategory(comp)
+	if compCategory == "" {
+		// the category entered is incorrect, return error
+		return errors.Errorf("incorrect type %s", comp.Spec.Type)
+	}
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
-		log.Errorf("process component %s error, %s", comp.Name, err)
 		return err
 	}
 

@@ -19,3 +19,8 @@ assignees: ''
 
 ## Describe the feature
 <!-- Please also discuss possible business value -->
+
+## Release Note
+<!-- How should this new feature be announced in our release notes? It can be populated later. -->
+
+RELEASE NOTE:

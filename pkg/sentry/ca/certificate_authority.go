@@ -22,6 +22,8 @@ const (
 	caOrg                      = "dapr.io/sentry"
 	caCommonName               = "cluster.local"
 	selfSignedRootCertLifetime = time.Hour * 8760
+	certLoadTimeout            = time.Second * 30
+	certDetectInterval         = time.Second * 1
 )
 
 var log = logger.NewLogger("dapr.sentry.ca")
@@ -127,7 +129,15 @@ func (c *defaultCA) ValidateCSR(csr *x509.CertificateRequest) error {
 }
 
 func shouldCreateCerts(conf config.SentryConfig) bool {
-	if _, err := os.Stat(conf.RootCertPath); os.IsNotExist(err) {
+	exists, err := certs.CredentialsExist(conf)
+	if err != nil {
+		log.Errorf("error chcecking if credetials exist: %s", err)
+	}
+	if exists {
+		return false
+	}
+
+	if _, err = os.Stat(conf.RootCertPath); os.IsNotExist(err) {
 		return true
 	}
 	b, err := ioutil.ReadFile(conf.IssuerCertPath)
@@ -137,13 +147,36 @@ func shouldCreateCerts(conf config.SentryConfig) bool {
 	return len(b) == 0
 }
 
+func detectCertificates(path string) error {
+	t := time.NewTicker(certDetectInterval)
+	timeout := time.After(certLoadTimeout)
+
+	for {
+		select {
+		case <-timeout:
+			return errors.New("timed out on detecting credentials on filesystem")
+		case <-t.C:
+			_, err := os.Stat(path)
+			if err == nil {
+				t.Stop()
+				return nil
+			}
+		}
+	}
+}
+
 func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 	var issuerCreds *certs.Credentials
 	var rootCertBytes []byte
 	var issuerCertBytes []byte
 
-	// certs exist on disk, load them
+	// certs exist on disk or getting created, load them when ready
 	if !shouldCreateCerts(c.config) {
+		err := detectCertificates(c.config.RootCertPath)
+		if err != nil {
+			return nil, err
+		}
+
 		certChain, err := credentials.LoadFromDisk(c.config.RootCertPath, c.config.IssuerCertPath, c.config.IssuerKeyPath)
 		if err != nil {
 			return nil, errors.Wrap(err, "error loading cert chain from disk")
