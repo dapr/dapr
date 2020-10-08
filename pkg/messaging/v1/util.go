@@ -96,7 +96,7 @@ func isPermanentHTTPHeader(hdr string) bool {
 		"Accept-Language",
 		"Accept-Ranges",
 		// Connection-specific header fields such as Connection and Keep-Alive are prohibited in HTTP/2.
-		// For grpc-dotnet users, Kestrel server throws the exception if connection header is given.
+		// For grpc-dotnet users, Kestrel server throws the exception if connection header is given. See https://github.com/aspnet/KestrelHttpServer/issues/175 
 		"Connection",
 		"Cache-Control",
 		"Content-Type",
