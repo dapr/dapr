@@ -49,7 +49,8 @@ const (
 	TestSecondPubsubName = "testpubsub2"
 )
 
-var testCertRoot = `-----BEGIN CERTIFICATE-----
+var (
+	testCertRoot = `-----BEGIN CERTIFICATE-----
 MIIBjjCCATOgAwIBAgIQdZeGNuAHZhXSmb37Pnx2QzAKBggqhkjOPQQDAjAYMRYw
 FAYDVQQDEw1jbHVzdGVyLmxvY2FsMB4XDTIwMDIwMTAwMzUzNFoXDTMwMDEyOTAw
 MzUzNFowGDEWMBQGA1UEAxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqG
@@ -60,6 +61,9 @@ qTAYBgNVHREEETAPgg1jbHVzdGVyLmxvY2FsMAoGCCqGSM49BAMCA0kAMEYCIQDN
 rQNOck4ENOhmLROE/wqH0MKGjE6P8yzesgnp9fQI3AIhAJaVPrZloxl1dWCgmNWo
 Iklq0JnMgJU7nS+VpVvlgBN8
 -----END CERTIFICATE-----`
+
+	testData = []byte("fakedata")
+)
 
 type MockKubernetesStateStore struct {
 	callback func()
@@ -1438,7 +1442,7 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 }
 
 func (b *mockBinding) Read(handler func(*bindings.ReadResponse) error) error {
-	b.data = "fakedata"
+	b.data = string(testData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
 		metadata = b.metadata
@@ -1497,7 +1501,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 
 func TestReadInputBindings(t *testing.T) {
 	const testInputBindingName = "inputbinding"
-	const testInputBindingMethod = "inputbindingmethod"
+	const testInputBindingMethod = "inputbinding"
 
 	t.Run("app acknowledge, no retry", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
@@ -1506,7 +1510,7 @@ func TestReadInputBindings(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData([]byte("fake_binding_message"), "application/json")
+		fakeReq.WithRawData(testData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
@@ -1530,7 +1534,7 @@ func TestReadInputBindings(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithRawData(testData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
@@ -1548,14 +1552,13 @@ func TestReadInputBindings(t *testing.T) {
 	})
 
 	t.Run("binding has data and metadata", func(t *testing.T) {
-		fakeData := []byte("fake_data")
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData(fakeData, "application/json")
+		fakeReq.WithRawData(testData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{"bindings": {"input"}})
 
 		// User App subscribes 1 topics via http app channel
@@ -1568,7 +1571,7 @@ func TestReadInputBindings(t *testing.T) {
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
 		rt.readFromBinding(testInputBindingName, &b)
 
-		assert.Equal(t, fakeData, b.data)
+		assert.Equal(t, string(testData), b.data)
 	})
 }
 
