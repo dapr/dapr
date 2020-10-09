@@ -332,7 +332,7 @@ func testV1RequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, resp.StatusCode, err)
+		onHTTPCallFailed(w, err)
 		return
 	}
 
@@ -407,7 +407,7 @@ func testV1RequestHTTPToGRPC(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, resp.StatusCode, err)
+		onHTTPCallFailed(w, err)
 		return
 	}
 
@@ -497,7 +497,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, http.StatusInternalServerError, err)
+		onHTTPCallFailed(w, err)
 		return
 	}
 
@@ -603,7 +603,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, http.StatusInternalServerError, err)
+		onHTTPCallFailed(w, err)
 		return
 	}
 
@@ -786,7 +786,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	resp, err := httpWrapper("POST", url, b)
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, http.StatusInternalServerError, err)
+		onHTTPCallFailed(w, err)
 		return
 	}
 
@@ -819,7 +819,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	resp, err = httpWrapper("GET", url, b)
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, http.StatusInternalServerError, err)
+		onHTTPCallFailed(w, err)
 		return
 	}
 
@@ -848,7 +848,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	resp, err = httpWrapper("PUT", url, b)
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, http.StatusInternalServerError, err)
+		onHTTPCallFailed(w, err)
 		return
 	}
 
@@ -877,7 +877,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	resp, err = httpWrapper("DELETE", url, b)
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, http.StatusInternalServerError, err)
+		onHTTPCallFailed(w, err)
 		return
 	}
 
