@@ -62,7 +62,7 @@ rQNOck4ENOhmLROE/wqH0MKGjE6P8yzesgnp9fQI3AIhAJaVPrZloxl1dWCgmNWo
 Iklq0JnMgJU7nS+VpVvlgBN8
 -----END CERTIFICATE-----`
 
-	testData = []byte("fakedata")
+	testInputBindingData = []byte("fakedata")
 )
 
 type MockKubernetesStateStore struct {
@@ -1442,7 +1442,7 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 }
 
 func (b *mockBinding) Read(handler func(*bindings.ReadResponse) error) error {
-	b.data = string(testData)
+	b.data = string(testInputBindingData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
 		metadata = b.metadata
@@ -1510,7 +1510,7 @@ func TestReadInputBindings(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData(testData, "application/json")
+		fakeReq.WithRawData(testInputBindingData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
@@ -1534,7 +1534,7 @@ func TestReadInputBindings(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData(testData, "application/json")
+		fakeReq.WithRawData(testInputBindingData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
@@ -1558,7 +1558,7 @@ func TestReadInputBindings(t *testing.T) {
 
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData(testData, "application/json")
+		fakeReq.WithRawData(testInputBindingData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{"bindings": {"input"}})
 
 		// User App subscribes 1 topics via http app channel
@@ -1571,7 +1571,7 @@ func TestReadInputBindings(t *testing.T) {
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
 		rt.readFromBinding(testInputBindingName, &b)
 
-		assert.Equal(t, string(testData), b.data)
+		assert.Equal(t, string(testInputBindingData), b.data)
 	})
 }
 
