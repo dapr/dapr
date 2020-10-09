@@ -1,5 +1,3 @@
-// +build e2e
-
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -22,9 +20,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const appName = "stateapp"     // App name in Dapr.
-const numHealthChecks = 60     // Number of get calls before starting tests.
-const testManyEntriesCount = 5 // Anything between 1 and the number above (inclusive).
+const (
+	appName              = "stateapp" // App name in Dapr.
+	numHealthChecks      = 60         // Number of get calls before starting tests.
+	testManyEntriesCount = 5          // Anything between 1 and the number above (inclusive).
+)
 
 type testCommandRequest struct {
 	RemoteApp string `json:"remoteApp,omitempty"`
@@ -49,9 +49,10 @@ type requestResponse struct {
 
 // represents each step in a test since it can make multiple calls.
 type testStep struct {
-	command          string
-	request          requestResponse
-	expectedResponse requestResponse
+	command            string
+	request            requestResponse
+	expectedResponse   requestResponse
+	expectedStatusCode int
 }
 
 //  stateTransactionRequest represents a request for state transactions
@@ -73,8 +74,9 @@ type stateTransactionRequestResponse struct {
 }
 
 type testCase struct {
-	name  string
-	steps []testStep
+	name     string
+	steps    []testStep
+	protocol string
 }
 
 type testStateTransactionCase struct {
@@ -131,7 +133,12 @@ func newResponse(keyValues ...utils.SimpleKeyValue) requestResponse {
 	return newRequestResponse(keyValues...)
 }
 
-func generateTestCases() []testCase {
+func generateTestCases(isHTTP bool) []testCase {
+	protocol := "grpc"
+
+	if isHTTP {
+		protocol = "http"
+	}
 	// Just for readability
 	emptyRequest := requestResponse{
 		nil,
@@ -151,91 +158,108 @@ func generateTestCases() []testCase {
 	return []testCase{
 		{
 			// No comma since this will become the name of the test without spaces.
-			"Test get getbulk save delete with empty request response for single app and single hop",
+			"Test get save delete with empty request response for single app and single hop " + protocol,
 			[]testStep{
 				{
 					"get",
 					emptyRequest,
 					emptyResponse,
+					200,
 				},
 				{
 					"save",
 					emptyRequest,
 					emptyResponse,
+					201,
 				},
 				{
 					"delete",
 					emptyRequest,
 					emptyResponse,
+					200,
 				},
 			},
+			protocol,
 		},
 		{
 			// No comma since this will become the name of the test without spaces.
-			"Test save get and delete a single item for single app and single hop",
+			"Test save get and delete a single item for single app and single hop " + protocol,
 			[]testStep{
 				{
 					"get",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					newResponse(utils.SimpleKeyValue{testCase1Key, nil}),
+					200,
 				},
 				{
 					"save",
 					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
 					emptyResponse,
+					201,
 				},
 				{
 					"get",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					newResponse(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
+					200,
 				},
 				{
 					"delete",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					emptyResponse,
+					200,
 				},
 				{
 					"get",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					newResponse(utils.SimpleKeyValue{testCase1Key, nil}),
+					200,
 				},
 			},
+			protocol,
 		},
 		{
 			// No comma since this will become the name of the test without spaces.
-			"Test save get and delete on multiple items for single app and single hop",
+			"Test save get getbulk and delete on multiple items for single app and single hop " + protocol,
 			[]testStep{
 				{
 					"get",
 					newRequest(testCaseManyKeys...),
 					newResponse(testCaseManyKeys...),
+					200,
 				},
 				{
 					"save",
 					newRequest(testCaseManyKeyValues...),
 					emptyResponse,
+					201,
 				},
 				{
 					"get",
 					newRequest(testCaseManyKeys...),
 					newResponse(testCaseManyKeyValues...),
+					200,
 				},
 				{
 					"getbulk",
 					newRequest(testCaseManyKeys...),
 					newResponse(testCaseManyKeyValues...),
+					200,
 				},
 				{
 					"delete",
 					newRequest(testCaseManyKeys...),
 					emptyResponse,
+					200,
 				},
 				{
 					"get",
 					newRequest(testCaseManyKeys...),
 					newResponse(testCaseManyKeys...),
+					200,
 				},
 			},
+			protocol,
 		},
 	}
 }
@@ -294,7 +318,8 @@ func TestMain(m *testing.M) {
 func TestStateApp(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-	testCases := generateTestCases()
+	testCases := generateTestCases(false)
+	testCases = append(testCases, generateTestCases(false)...)
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
@@ -303,15 +328,17 @@ func TestStateApp(t *testing.T) {
 
 	// Now we are ready to run the actual tests
 	for _, tt := range testCases {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			for _, step := range tt.steps {
 				body, err := json.Marshal(step.request)
 				require.NoError(t, err)
 
-				url := fmt.Sprintf("%s/test/http/%s", externalURL, step.command)
+				url := fmt.Sprintf("%s/test/%s/%s", externalURL, tt.protocol, step.command)
 
-				resp, err := utils.HTTPPost(url, body)
+				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
 				require.NoError(t, err)
+				require.Equal(t, step.expectedStatusCode, statusCode)
 
 				var appResp requestResponse
 				err = json.Unmarshal(resp, &appResp)
