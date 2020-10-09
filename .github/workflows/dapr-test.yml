@@ -55,8 +55,8 @@ jobs:
               var fs = require('fs');
               // Set environment variables
               fs.appendFileSync(process.env.GITHUB_ENV,
-                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n
-                 CHECKOUT_REF=${testPayload.pull_head_ref}`);
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
