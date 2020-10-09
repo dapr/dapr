@@ -51,7 +51,8 @@ const (
 	TestSecondPubsubName = "testpubsub2"
 )
 
-var testCertRoot = `-----BEGIN CERTIFICATE-----
+var (
+	testCertRoot = `-----BEGIN CERTIFICATE-----
 MIIBjjCCATOgAwIBAgIQdZeGNuAHZhXSmb37Pnx2QzAKBggqhkjOPQQDAjAYMRYw
 FAYDVQQDEw1jbHVzdGVyLmxvY2FsMB4XDTIwMDIwMTAwMzUzNFoXDTMwMDEyOTAw
 MzUzNFowGDEWMBQGA1UEAxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqG
@@ -62,6 +63,9 @@ qTAYBgNVHREEETAPgg1jbHVzdGVyLmxvY2FsMAoGCCqGSM49BAMCA0kAMEYCIQDN
 rQNOck4ENOhmLROE/wqH0MKGjE6P8yzesgnp9fQI3AIhAJaVPrZloxl1dWCgmNWo
 Iklq0JnMgJU7nS+VpVvlgBN8
 -----END CERTIFICATE-----`
+
+	testInputBindingData = []byte("fakedata")
+)
 
 type MockKubernetesStateStore struct {
 	callback func()
@@ -1536,7 +1540,7 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 }
 
 func (b *mockBinding) Read(handler func(*bindings.ReadResponse) error) error {
-	b.data = "test"
+	b.data = string(testInputBindingData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
 		metadata = b.metadata
@@ -1594,14 +1598,17 @@ func TestInvokeOutputBindings(t *testing.T) {
 }
 
 func TestReadInputBindings(t *testing.T) {
+	const testInputBindingName = "inputbinding"
+	const testInputBindingMethod = "inputbinding"
+
 	t.Run("app acknowledge, no retry", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("test")
+		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithRawData(testInputBindingData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
@@ -1613,7 +1620,7 @@ func TestReadInputBindings(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		b := mockBinding{}
-		rt.readFromBinding("test", &b)
+		rt.readFromBinding(testInputBindingName, &b)
 
 		assert.False(t, b.hasError)
 	})
@@ -1623,9 +1630,9 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("test")
+		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithRawData(testInputBindingData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{})
 
 		// User App subscribes 1 topics via http app channel
@@ -1637,7 +1644,7 @@ func TestReadInputBindings(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		b := mockBinding{}
-		rt.readFromBinding("test", &b)
+		rt.readFromBinding(testInputBindingName, &b)
 
 		assert.True(t, b.hasError)
 	})
@@ -1647,9 +1654,9 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
-		fakeReq := invokev1.NewInvokeMethodRequest("test")
+		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
-		fakeReq.WithRawData([]byte("test"), "application/json")
+		fakeReq.WithRawData(testInputBindingData, "application/json")
 		fakeReq.WithMetadata(map[string][]string{"bindings": {"input"}})
 
 		// User App subscribes 1 topics via http app channel
@@ -1660,9 +1667,9 @@ func TestReadInputBindings(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
-		rt.readFromBinding("test", &b)
+		rt.readFromBinding(testInputBindingName, &b)
 
-		assert.Equal(t, "test", b.data)
+		assert.Equal(t, string(testInputBindingData), b.data)
 	})
 }
 
@@ -1686,16 +1693,16 @@ func TestNamespace(t *testing.T) {
 }
 
 func TestAuthorizedComponents(t *testing.T) {
-	name := "test"
+	testCompName := "fakeComponent"
 
 	t.Run("standalone mode, no namespce", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = name
+		component.ObjectMeta.Name = testCompName
 
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
 		assert.True(t, len(comps) == 1)
-		assert.Equal(t, name, comps[0].Name)
+		assert.Equal(t, testCompName, comps[0].Name)
 	})
 
 	t.Run("namespace mismatch", func(t *testing.T) {
@@ -1703,7 +1710,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = "test"
+		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
@@ -1715,7 +1722,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = name
+		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 
 		comps := rt.getAuthorizedComponents([]components_v1alpha1.Component{component})
@@ -1727,7 +1734,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = name
+		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{TestRuntimeConfigID}
 
@@ -1740,7 +1747,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = name
+		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{"other"}
 
@@ -1753,7 +1760,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = name
+		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{TestRuntimeConfigID}
 
@@ -1766,7 +1773,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		rt.namespace = "a"
 
 		component := components_v1alpha1.Component{}
-		component.ObjectMeta.Name = name
+		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
 
@@ -1808,29 +1815,29 @@ func TestInitBindings(t *testing.T) {
 	t.Run("single input binding", func(t *testing.T) {
 		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
 		r.bindingsRegistry.RegisterInputBindings(
-			bindings_loader.NewInput("test", func() bindings.InputBinding {
+			bindings_loader.NewInput("testInputBinding", func() bindings.InputBinding {
 				return &daprt.MockBinding{}
 			}),
 		)
 
 		c := components_v1alpha1.Component{}
-		c.ObjectMeta.Name = "test"
-		c.Spec.Type = "bindings.test"
+		c.ObjectMeta.Name = "testInputBinding"
+		c.Spec.Type = "bindings.testInputBinding"
 		err := r.initBinding(c)
-		assert.NotEqual(t, "couldn't find input binding bindings.test", err.Error())
+		assert.NotEqual(t, "couldn't find input binding bindings.testInputBinding", err.Error())
 	})
 
 	t.Run("single output binding", func(t *testing.T) {
 		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{})
 		r.bindingsRegistry.RegisterOutputBindings(
-			bindings_loader.NewOutput("test", func() bindings.OutputBinding {
+			bindings_loader.NewOutput("testOutputBinding", func() bindings.OutputBinding {
 				return &daprt.MockBinding{}
 			}),
 		)
 
 		c := components_v1alpha1.Component{}
-		c.ObjectMeta.Name = "test"
-		c.Spec.Type = "bindings.test"
+		c.ObjectMeta.Name = "testOutputBinding"
+		c.Spec.Type = "bindings.testOutputBinding"
 		err := r.initBinding(c)
 		assert.NoError(t, err)
 	})
