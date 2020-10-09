@@ -41,7 +41,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -267,7 +267,7 @@ func TestInitState(t *testing.T) {
 				{
 					Name: "actorStateStore",
 					Value: components_v1alpha1.DynamicValue{
-						JSON: v1beta1.JSON{Raw: []byte("true")},
+						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
 			},
@@ -858,7 +858,7 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			{
 				Name: "a",
 				Value: components_v1alpha1.DynamicValue{
-					JSON: v1beta1.JSON{Raw: []byte("b")},
+					JSON: v1.JSON{Raw: []byte("b")},
 				},
 			},
 		}
@@ -873,7 +873,7 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			{
 				Name: "a",
 				Value: components_v1alpha1.DynamicValue{
-					JSON: v1beta1.JSON{Raw: []byte(strconv.Itoa(6))},
+					JSON: v1.JSON{Raw: []byte(strconv.Itoa(6))},
 				},
 			},
 		}
@@ -888,7 +888,7 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			{
 				Name: "a",
 				Value: components_v1alpha1.DynamicValue{
-					JSON: v1beta1.JSON{Raw: []byte("true")},
+					JSON: v1.JSON{Raw: []byte("true")},
 				},
 			},
 		}
@@ -903,7 +903,7 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			{
 				Name: "a",
 				Value: components_v1alpha1.DynamicValue{
-					JSON: v1beta1.JSON{Raw: []byte("5.5")},
+					JSON: v1.JSON{Raw: []byte("5.5")},
 				},
 			},
 		}
@@ -918,7 +918,7 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			{
 				Name: "a",
 				Value: components_v1alpha1.DynamicValue{
-					JSON: v1beta1.JSON{Raw: []byte(`"hello there"`)},
+					JSON: v1.JSON{Raw: []byte(`"hello there"`)},
 				},
 			},
 		}
@@ -968,7 +968,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 				{
 					Name: "b",
 					Value: components_v1alpha1.DynamicValue{
-						JSON: v1beta1.JSON{Raw: []byte("value2")},
+						JSON: v1.JSON{Raw: []byte("value2")},
 					},
 				},
 			},
@@ -980,7 +980,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 	t.Run("Standalone Mode", func(t *testing.T) {
 		mockBinding.Spec.Metadata[0].Value = components_v1alpha1.DynamicValue{
-			JSON: v1beta1.JSON{Raw: []byte("")},
+			JSON: v1.JSON{Raw: []byte("")},
 		}
 		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
 			Key:  "key1",
@@ -1012,7 +1012,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 	t.Run("Kubernetes Mode", func(t *testing.T) {
 		mockBinding.Spec.Metadata[0].Value = components_v1alpha1.DynamicValue{
-			JSON: v1beta1.JSON{Raw: []byte("")},
+			JSON: v1.JSON{Raw: []byte("")},
 		}
 		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
 			Key:  "key1",
@@ -1040,7 +1040,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 	t.Run("Look up name only", func(t *testing.T) {
 		mockBinding.Spec.Metadata[0].Value = components_v1alpha1.DynamicValue{
-			JSON: v1beta1.JSON{Raw: []byte("")},
+			JSON: v1.JSON{Raw: []byte("")},
 		}
 		mockBinding.Spec.Metadata[0].SecretKeyRef = components_v1alpha1.SecretKeyRef{
 			Name: "name1",
@@ -1247,7 +1247,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 				{
 					Name: "b",
 					Value: components_v1alpha1.DynamicValue{
-						JSON: v1beta1.JSON{Raw: []byte("value2")},
+						JSON: v1.JSON{Raw: []byte("value2")},
 					},
 				},
 			},
@@ -1432,7 +1432,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		{
 			Name: "host",
 			Value: components_v1alpha1.DynamicValue{
-				JSON: v1beta1.JSON{
+				JSON: v1.JSON{
 					Raw: []byte("localhost"),
 				},
 			},
@@ -1440,7 +1440,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		{
 			Name: "password",
 			Value: components_v1alpha1.DynamicValue{
-				JSON: v1beta1.JSON{
+				JSON: v1.JSON{
 					Raw: []byte("fakePassword"),
 				},
 			},
@@ -1448,7 +1448,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		{
 			Name: "consumerID",
 			Value: components_v1alpha1.DynamicValue{
-				JSON: v1beta1.JSON{
+				JSON: v1.JSON{
 					Raw: []byte(TestRuntimeConfigID),
 				},
 			},
@@ -1456,7 +1456,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		{
 			Name: scopes.SubscriptionScopes,
 			Value: components_v1alpha1.DynamicValue{
-				JSON: v1beta1.JSON{
+				JSON: v1.JSON{
 					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
 				},
 			},
@@ -1464,7 +1464,7 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 		{
 			Name: scopes.PublishingScopes,
 			Value: components_v1alpha1.DynamicValue{
-				JSON: v1beta1.JSON{
+				JSON: v1.JSON{
 					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
 				},
 			},

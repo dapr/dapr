@@ -60,7 +60,7 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -1402,7 +1402,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 		val, ok := resp.Data[secretKeyName]
 		if ok {
 			component.Spec.Metadata[i].Value = components_v1alpha1.DynamicValue{
-				JSON: v1beta1.JSON{
+				JSON: v1.JSON{
 					Raw: []byte(val),
 				},
 			}

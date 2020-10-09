@@ -8,7 +8,7 @@ package v1alpha1
 import (
 	"strconv"
 
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -66,7 +66,7 @@ type ComponentList struct {
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value
 type DynamicValue struct {
-	v1beta1.JSON
+	v1.JSON
 }
 
 // String returns the string representation of the raw value.

@@ -7,7 +7,7 @@ package kubernetes
 
 import (
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -36,7 +36,7 @@ func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
 		metadata = append(metadata, v1alpha1.MetadataItem{
 			Name: k,
 			Value: v1alpha1.DynamicValue{
-				JSON: v1beta1.JSON{
+				JSON: v1.JSON{
 					Raw: []byte(v),
 				},
 			},
