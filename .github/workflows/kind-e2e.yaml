@@ -80,11 +80,17 @@ jobs:
       #     https://github.com/kubernetes-sigs/kind/issues/1165, using
       #     a local repository speeds up the image pushes into KinD
       #     significantly.
+      # (c) a random cluster suffix instead of the default .svc.cluster.local
       working-directory: ./
       run: |
         cat > kind.yaml <<EOF
         apiVersion: kind.x-k8s.io/v1alpha4
         kind: Cluster
+        kubeadmConfigPatches:
+          - |
+            kind: ClusterConfiguration
+            networking:
+              dnsDomain: "n${RANDOM}.local"
         nodes:
         - role: control-plane
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
