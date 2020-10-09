@@ -115,6 +115,7 @@ func TestBindings(t *testing.T) {
 	err = json.Unmarshal(resp, &decodedResponse)
 	require.NoError(t, err)
 
+	// Only the first message fails, all other messages are successfully consumed.
 	// nine messages succeed.
 	require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
 	// one message fails.

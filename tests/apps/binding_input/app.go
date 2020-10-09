@@ -45,6 +45,7 @@ func (m *messageBuffer) getFailed() string {
 func (m *messageBuffer) fail(failedMessage string) bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	// fail only for the first time. return false all other times.
 	if !m.errorOnce {
 		m.failedMessage = failedMessage
 		m.errorOnce = true
@@ -93,7 +94,7 @@ func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if fail := messages.fail(message); fail {
-		// simulate failure.
+		// simulate failure. fail only for the first time.
 		log.Print("failing message")
 		w.WriteHeader(http.StatusInternalServerError)
 
