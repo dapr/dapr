@@ -320,8 +320,8 @@ func TestMain(m *testing.M) {
 func TestStateApp(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-	testCases := generateTestCases(false)
-	testCases = append(testCases, generateTestCases(false)...)
+	testCases := generateTestCases(true)                       // For HTTP
+	testCases = append(testCases, generateTestCases(false)...) // For gRPC
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
