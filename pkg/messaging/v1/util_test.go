@@ -89,6 +89,24 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 		"Content-Type": {
 			Values: []string{"application/json"},
 		},
+		"Content-Length": {
+			Values: []string{"2000"},
+		},
+		"Connection": {
+			Values: []string{"keep-alive"},
+		},
+		"Keep-Alive": {
+			Values: []string{"timeout=5", "max=1000"},
+		},
+		"Proxy-Connection": {
+			Values: []string{"keep-alive"},
+		},
+		"Transfer-Encoding": {
+			Values: []string{"gzip", "chunked"},
+		},
+		"Upgrade": {
+			Values: []string{"WebSocket"},
+		},
 		"Accept-Encoding": {
 			Values: []string{"gzip, deflate"},
 		},
@@ -102,21 +120,53 @@ func TestInternalMetadataToGrpcMetadata(t *testing.T) {
 	t.Run("without http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, false)
 		// always trace header is returned
-		assert.Equal(t, 5, convertedMD.Len())
-		assert.Equal(t, "localhost", convertedMD["host"][0])
-		assert.Equal(t, "application/json", convertedMD["content-type"][0])
-		assert.Equal(t, "gzip, deflate", convertedMD["accept-encoding"][0])
-		assert.Equal(t, "Go-http-client/1.1", convertedMD["user-agent"][0])
+		assert.Equal(t, 11, convertedMD.Len())
+
+		var testHeaders = []struct {
+			key      string
+			expected string
+		}{
+			{"host", "localhost"},
+			{"connection", "keep-alive"},
+			{"content-length", "2000"},
+			{"content-type", "application/json"},
+			{"keep-alive", "timeout=5"},
+			{"proxy-connection", "keep-alive"},
+			{"transfer-encoding", "gzip"},
+			{"upgrade", "WebSocket"},
+			{"accept-encoding", "gzip, deflate"},
+			{"user-agent", "Go-http-client/1.1"},
+		}
+
+		for _, ht := range testHeaders {
+			assert.Equal(t, ht.expected, convertedMD[ht.key][0])
+		}
 	})
 
 	t.Run("with http header conversion for http headers", func(t *testing.T) {
 		convertedMD := InternalMetadataToGrpcMetadata(ctx, httpHeaders, true)
 		// always trace header is returned
-		assert.Equal(t, 5, convertedMD.Len())
-		assert.Equal(t, "localhost", convertedMD["dapr-host"][0])
-		assert.Equal(t, "application/json", convertedMD["dapr-content-type"][0])
-		assert.Equal(t, "gzip, deflate", convertedMD["accept-encoding"][0])
-		assert.Equal(t, "Go-http-client/1.1", convertedMD["user-agent"][0])
+		assert.Equal(t, 11, convertedMD.Len())
+
+		var testHeaders = []struct {
+			key      string
+			expected string
+		}{
+			{"dapr-host", "localhost"},
+			{"dapr-connection", "keep-alive"},
+			{"dapr-content-length", "2000"},
+			{"dapr-content-type", "application/json"},
+			{"dapr-keep-alive", "timeout=5"},
+			{"dapr-proxy-connection", "keep-alive"},
+			{"dapr-transfer-encoding", "gzip"},
+			{"dapr-upgrade", "WebSocket"},
+			{"accept-encoding", "gzip, deflate"},
+			{"user-agent", "Go-http-client/1.1"},
+		}
+
+		for _, ht := range testHeaders {
+			assert.Equal(t, ht.expected, convertedMD[ht.key][0])
+		}
 	})
 
 	var keyBinValue = []byte{100, 50}
