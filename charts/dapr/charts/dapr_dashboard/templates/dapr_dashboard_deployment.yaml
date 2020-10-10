@@ -33,7 +33,14 @@ spec:
                 - key: kubernetes.io/os
                   operator: In
                   values:
-                  - linux
+                  - {{ .Values.global.daprControlPlaneOs }}
+            - weight: 1
+              preference:
+                matchExpressions:
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                  - {{ .Values.global.daprControlPlaneArch }}
 {{- if eq .Values.global.ha.enabled true }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
