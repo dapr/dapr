@@ -261,4 +261,26 @@ func TestPubSub(t *testing.T) {
 		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
 	})
 
+	t.Run("pubsub subscriber retry", func(t *testing.T) {
+		// set subscriber to respond with error
+		log.Printf("Set subscriber to respond with retry\n")
+		_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/set-respond-retry", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, code)
+
+		sentMessages := testPublish(t, publisherExternalURL)
+
+		// restart application
+		log.Printf("Restarting subscriber application to trigger redelivery...\n")
+		err = tr.Platform.Restart(subscriberAppName)
+		require.NoError(t, err, "error restarting subscriber")
+		subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
+		require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
+
+		// validate redelivery of messages
+		log.Printf("Validating redelivered messages...")
+		time.Sleep(5 * time.Second)
+		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+	})
+
 }
