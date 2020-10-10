@@ -94,9 +94,14 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	}
 	defer postResp.Body.Close()
 
-	log.Printf("Publish succeeded")
-	w.WriteHeader(http.StatusOK)
-	resp = appResponse{Message: "Success"}
+	// pass on status code to the calling application
+	w.WriteHeader(postResp.StatusCode)
+
+	if postResp.StatusCode == http.StatusOK {
+		log.Printf("Publish succeeded")
+		resp = appResponse{Message: "Success"}
+	}
+	resp = appResponse{Message: "Failed"}
 	resp.StartTime = startTime
 	resp.EndTime = epoch()
 

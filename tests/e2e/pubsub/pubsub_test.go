@@ -8,7 +8,6 @@
 package pubsubapp_e2e
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -79,9 +78,8 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 	commandBody := publishCommand{Topic: topic}
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
+		// create and marshal message
 		commandBody.Data = fmt.Sprintf("message-%d", i)
-
-		sentMessages = append(sentMessages, commandBody.Data)
 		jsonValue, err := json.Marshal(commandBody)
 		require.NoError(t, err)
 
@@ -93,24 +91,20 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
 		}
 
-		postResp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonValue))
-		require.NoError(t, err)
-		if err != nil {
-			if postResp != nil {
-				log.Printf("Publish failed with error=%s, StatusCode=%d", err.Error(), postResp.StatusCode)
-			} else {
-				log.Printf("Publish failed with error=%s, response is nil", err.Error())
-			}
-
+		statusCode, err := postSingleMessage(url, jsonValue)
+		// return on an unsuccessful publish
+		if statusCode != http.StatusOK {
 			return nil, err
 		}
-		postResp.Body.Close()
+
+		// save successful message
+		sentMessages = append(sentMessages, commandBody.Data)
 	}
 
 	return sentMessages, nil
 }
 
-func sendToPublishApp(t *testing.T, publisherExternalURL string) receivedMessagesResponse {
+func testPublish(t *testing.T, publisherExternalURL string) receivedMessagesResponse {
 	var err error
 	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic")
 	require.NoError(t, err)
@@ -126,6 +120,37 @@ func sendToPublishApp(t *testing.T, publisherExternalURL string) receivedMessage
 		ReceivedByTopicB: sentTopicBMessages,
 		ReceivedByTopicC: sentTopicCMessages,
 	}
+}
+
+func postSingleMessage(url string, data []byte) (int, error) {
+	// HTTPPostWithStatus by default sends with content-type application/json
+	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
+	if err != nil {
+		log.Printf("Publish failed with error=%s, response is nil", err.Error())
+		return http.StatusInternalServerError, err
+	}
+	if statusCode != http.StatusOK {
+		err = fmt.Errorf("publish failed with StatusCode=%d", statusCode)
+	}
+	return statusCode, err
+}
+
+func testPublishWithoutTopic(t *testing.T, publisherExternalURL string) {
+	log.Printf("Test publish without topic\n")
+	commandBody := publishCommand{}
+	commandBody.Data = "unsuccessful message"
+	jsonValue, err := json.Marshal(commandBody)
+	require.NoError(t, err)
+	// this is the publish app's endpoint, not a dapr endpoint
+	url := fmt.Sprintf("http://%s/tests/publish", publisherExternalURL)
+
+	// debuggability - trace info about the first message.  don't trace others so it doesn't flood log.
+	log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
+
+	statusCode, err := postSingleMessage(url, jsonValue)
+	require.Error(t, err)
+	// without topic, response should be 404
+	require.Equal(t, http.StatusNotFound, statusCode)
 }
 
 func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {
@@ -203,10 +228,37 @@ func TestPubSub(t *testing.T) {
 	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	t.Run("pubsubtest1", func(t *testing.T) {
-		sentMessages := sendToPublishApp(t, publisherExternalURL)
+	t.Run("pubsub happy path", func(t *testing.T) {
+		sentMessages := testPublish(t, publisherExternalURL)
 
 		time.Sleep(5 * time.Second)
 		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
 	})
+
+	t.Run("pubsub no topic ", func(t *testing.T) {
+		testPublishWithoutTopic(t, publisherExternalURL)
+	})
+
+	t.Run("pubsub subscriber error", func(t *testing.T) {
+		// set subscriber to respond with error
+		log.Printf("Set subscriber to respond with error\n")
+		_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/set-respond-error", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, code)
+
+		sentMessages := testPublish(t, publisherExternalURL)
+
+		// restart application
+		log.Printf("Restarting subscriber application to trigger redelivery...\n")
+		err = tr.Platform.Restart(subscriberAppName)
+		require.NoError(t, err, "error restarting subscriber")
+		subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
+		require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
+
+		// validate redelivery of messages
+		log.Printf("Validating redelivered messages...")
+		time.Sleep(5 * time.Second)
+		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+	})
+
 }
