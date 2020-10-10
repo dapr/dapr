@@ -18,8 +18,9 @@ import (
 const appPort = 3000
 
 type messageBuffer struct {
-	lock          *sync.RWMutex
-	messages      []string
+	lock            *sync.RWMutex
+	successMessages []string
+	// errorOnce is used to make sure that message is failed only once.
 	errorOnce     bool
 	failedMessage string
 }
@@ -27,13 +28,13 @@ type messageBuffer struct {
 func (m *messageBuffer) add(message string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.messages = append(m.messages, message)
+	m.successMessages = append(m.successMessages, message)
 }
 
 func (m *messageBuffer) getAllSuccessful() []string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
-	return m.messages
+	return m.successMessages
 }
 
 func (m *messageBuffer) getFailed() string {
@@ -55,8 +56,8 @@ func (m *messageBuffer) fail(failedMessage string) bool {
 }
 
 var messages messageBuffer = messageBuffer{
-	lock:     &sync.RWMutex{},
-	messages: []string{},
+	lock:            &sync.RWMutex{},
+	successMessages: []string{},
 }
 
 type indexHandlerResponse struct {

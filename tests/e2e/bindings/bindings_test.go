@@ -103,13 +103,13 @@ func TestBindings(t *testing.T) {
 	require.NoError(t, err)
 
 	// act
-	postAssertHTTPStatus(t, fmt.Sprintf("%s/tests/send", outputExternalURL), body, http.StatusOK)
+	httpPostWithAssert(t, fmt.Sprintf("%s/tests/send", outputExternalURL), body, http.StatusOK)
 
 	// This delay allows all the messages to reach corresponding input bindings.
 	time.Sleep(bindingPropagationDelay * time.Second)
 
 	// assert
-	resp := postAssertHTTPStatus(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
+	resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
 
 	var decodedResponse receivedTopicsResponse
 	err = json.Unmarshal(resp, &decodedResponse)
@@ -122,7 +122,7 @@ func TestBindings(t *testing.T) {
 	require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
 }
 
-func postAssertHTTPStatus(t *testing.T, url string, data []byte, status int) []byte {
+func httpPostWithAssert(t *testing.T, url string, data []byte, status int) []byte {
 	resp, code, err := utils.HTTPPostWithStatus(url, data)
 	require.NoError(t, err)
 	require.Equal(t, status, code)
