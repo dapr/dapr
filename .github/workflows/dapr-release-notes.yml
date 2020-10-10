@@ -5,7 +5,7 @@
 
 name: dapr-release-notes
 
-on: 
+on:
   workflow_dispatch:
 jobs:
   build:
@@ -32,7 +32,7 @@ jobs:
           # Update origin with token
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
           git checkout ${REL_BRANCH} || git checkout master
-          echo "##[set-env name=BASE_BRANCH;]$(git branch --show-current)"
+          echo "BASE_BRANCH=$(git branch --show-current)" >> $GITHUB_ENV
           git checkout -b release-notes-${REL_VERSION}
           git add .
           # Only commit and push if we have changes

@@ -118,7 +118,7 @@ jobs:
         NODE_IP=$(kubectl get nodes \
                   -lkubernetes.io/hostname!=kind-control-plane \
                   -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-        echo "::set-env name=MINIKUBE_NODE_IP::$NODE_IP"
+        echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
 
     - name: Setup local registry
       run: |

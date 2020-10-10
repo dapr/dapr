@@ -49,7 +49,7 @@ jobs:
             target_arch: arm64
     steps:
       - name: Set up Go ${{ env.GOVER }}
-        uses: actions/setup-go@v2-beta
+        uses: actions/setup-go@v2
         with:
           go-version: ${{ env.GOVER }}
       - name: Install Docker CE for buildx
