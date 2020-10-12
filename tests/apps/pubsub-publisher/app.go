@@ -101,6 +101,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Publish succeeded")
 		resp = appResponse{Message: "Success"}
 	} else {
+		log.Printf("Publish failed")
 		resp = appResponse{Message: "Failed"}
 	}
 	resp.StartTime = startTime

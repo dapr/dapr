@@ -238,7 +238,7 @@ var pubsubTests = []struct {
 		subscriberResponse: "error",
 	},
 	{
-		name:               "publish with subscriber error test redelivery of messages",
+		name:               "publish with subscriber retry test redelivery of messages",
 		handler:            testValidateRedelivery,
 		subscriberResponse: "retry",
 	},
