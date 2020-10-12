@@ -9,7 +9,6 @@ package service_invocation_e2e
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"testing"
 
@@ -132,7 +131,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			resp, _, err := invokeTestApp(tt.calleeSide, externalURL, body, tt.appMethod)
+			resp, err := invokeTestApp(tt.calleeSide, externalURL, body, tt.appMethod)
 
 			t.Log("checking err...")
 			require.NoError(t, err)
@@ -146,19 +145,17 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 	}
 }
 
-func invokeTestApp(calleeSide string, externalURL string, body []byte, appMethod string) ([]byte, int, error){
+func invokeTestApp(calleeSide string, externalURL string, body []byte, appMethod string) ([]byte, error){
 	var resp []byte
-	statusCode := http.StatusOK
 	var err error
+	var url string
 	if calleeSide == "http" {
-		resp, err = utils.HTTPPost(
-			fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
+		url = fmt.Sprintf("%s/tests/invoke_test", externalURL)
 	} else {
-		url := fmt.Sprintf("http://%s/%s", externalURL, appMethod)
-		resp, statusCode, err = utils.HTTPPostWithStatus(
-			url,
-			body)
+		url = fmt.Sprintf("http://%s/%s", externalURL, appMethod)
 	}
-
-	return resp, statusCode, err
+	resp, err = utils.HTTPPost(
+		url,
+		body)
+	return resp, err
 }

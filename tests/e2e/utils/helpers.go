@@ -184,24 +184,6 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 	return extractBody(resp.Body)
 }
 
-// HTTPPostWithStatus is a helper to make POST request call to url
-func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	client := newHTTPClient()
-	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
-	if err != nil {
-		// From the Do method for the client.Post
-		// An error is returned if caused by client policy (such as
-		// CheckRedirect), or failure to speak HTTP (such as a network
-		// connectivity problem). A non-2xx status code doesn't cause an
-		// error.
-		return nil, http.StatusInternalServerError, err
-	}
-
-	body, err := extractBody(resp.Body)
-
-	return body, resp.StatusCode, err
-}
-
 // HTTPDelete calls a given URL with the HTTP DELETE method.
 func HTTPDelete(url string) ([]byte, error) {
 	client := newHTTPClient()
