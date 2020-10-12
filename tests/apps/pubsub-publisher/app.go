@@ -100,8 +100,9 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	if postResp.StatusCode == http.StatusOK {
 		log.Printf("Publish succeeded")
 		resp = appResponse{Message: "Success"}
+	} else {
+		resp = appResponse{Message: "Failed"}
 	}
-	resp = appResponse{Message: "Failed"}
 	resp.StartTime = startTime
 	resp.EndTime = epoch()
 

@@ -25,23 +25,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const numHealthChecks = 60 // Number of get calls before starting tests.
-
-// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
-// This is random so the first message name is not the same every time.
-const randomOffsetMax = 99
-const numberOfMessagesToPublish = 100
-
 var tr *runner.TestRunner
 
 const (
+	// Number of get calls before starting tests.
+	numHealthChecks = 60
+
+	// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
+	// This is random so the first message name is not the same every time.
+	randomOffsetMax           = 99
+	numberOfMessagesToPublish = 100
+
 	publisherAppName  = "pubsub-publisher"
 	subscriberAppName = "pubsub-subscriber"
 )
-
-type testCommandRequest struct {
-	Message string `json:"message,omitempty"`
-}
 
 // sent to the publisher app, which will publish data to dapr
 type publishCommand struct {
@@ -49,27 +46,11 @@ type publishCommand struct {
 	Data  string `json:"data"`
 }
 
-type appResponse struct {
-	Message   string `json:"message,omitempty"`
-	StartTime int    `json:"start_time,omitempty"`
-	EndTime   int    `json:"end_time,omitempty"`
-}
-
 // data returned from the subscriber app
 type receivedMessagesResponse struct {
 	ReceivedByTopicA []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB []string `json:"pubsub-b-topic"`
 	ReceivedByTopicC []string `json:"pubsub-c-topic"`
-}
-
-var receivedMessages []string
-
-// indexHandler is the handler for root path
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("indexHandler is called\n")
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
 }
 
 // sends messages to the publisher app.  The publisher app does the actual publish
@@ -135,7 +116,15 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	return statusCode, err
 }
 
-func testPublishWithoutTopic(t *testing.T, publisherExternalURL string) {
+func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _ string) {
+	log.Printf("Test publish subscribe success flow\n")
+	sentMessages := testPublish(t, publisherExternalURL)
+
+	time.Sleep(5 * time.Second)
+	validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+}
+
+func testPublishWithoutTopic(t *testing.T, publisherExternalURL, _, _, _ string) {
 	log.Printf("Test publish without topic\n")
 	commandBody := publishCommand{}
 	commandBody.Data = "unsuccessful message"
@@ -153,10 +142,28 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL string) {
 	require.Equal(t, http.StatusNotFound, statusCode)
 }
 
+func testValidateRedelivery(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName string) {
+	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
+	_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/set-respond-"+subscriberResponse, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, code)
+	sentMessages := testPublish(t, publisherExternalURL)
+
+	// restart application
+	log.Printf("Restarting subscriber application to check redelivery...\n")
+	err = tr.Platform.Restart(subscriberAppName)
+	require.NoError(t, err, "error restarting subscriber")
+
+	// validate redelivery of messages
+	log.Printf("Validating redelivered messages...")
+	time.Sleep(5 * time.Second)
+	validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+}
+
 func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {
-	// this is the publish app's endpoint, not a dapr endpoint
+	// this is the subscribe app's endpoint, not a dapr endpoint
 	url := fmt.Sprintf("http://%s/tests/get", subscriberExternalURL)
-	log.Printf("Publishing using url %s", url)
+	log.Printf("Getting messages received by subscriber using url %s", url)
 
 	resp, err := utils.HTTPPost(url, nil)
 	require.NoError(t, err)
@@ -212,6 +219,31 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
+var pubsubTests = []struct {
+	name               string
+	handler            func(*testing.T, string, string, string, string)
+	subscriberResponse string
+}{
+	{
+		name:    "publish and subscribe message successfully",
+		handler: testPublishSubscribeSuccessfully,
+	},
+	{
+		name:    "publish with no topic",
+		handler: testPublishWithoutTopic,
+	},
+	{
+		name:               "publish with subscriber error test redelivery of messages",
+		handler:            testValidateRedelivery,
+		subscriberResponse: "error",
+	},
+	{
+		name:               "publish with subscriber error test redelivery of messages",
+		handler:            testValidateRedelivery,
+		subscriberResponse: "retry",
+	},
+}
+
 func TestPubSub(t *testing.T) {
 	t.Log("Enter TestPubSub")
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
@@ -228,59 +260,9 @@ func TestPubSub(t *testing.T) {
 	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	t.Run("pubsub happy path", func(t *testing.T) {
-		sentMessages := testPublish(t, publisherExternalURL)
-
-		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
-	})
-
-	t.Run("pubsub no topic ", func(t *testing.T) {
-		testPublishWithoutTopic(t, publisherExternalURL)
-	})
-
-	t.Run("pubsub subscriber error", func(t *testing.T) {
-		// set subscriber to respond with error
-		log.Printf("Set subscriber to respond with error\n")
-		_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/set-respond-error", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, code)
-
-		sentMessages := testPublish(t, publisherExternalURL)
-
-		// restart application
-		log.Printf("Restarting subscriber application to trigger redelivery...\n")
-		err = tr.Platform.Restart(subscriberAppName)
-		require.NoError(t, err, "error restarting subscriber")
-		subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
-		require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
-
-		// validate redelivery of messages
-		log.Printf("Validating redelivered messages...")
-		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
-	})
-
-	t.Run("pubsub subscriber retry", func(t *testing.T) {
-		// set subscriber to respond with error
-		log.Printf("Set subscriber to respond with retry\n")
-		_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/set-respond-retry", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, code)
-
-		sentMessages := testPublish(t, publisherExternalURL)
-
-		// restart application
-		log.Printf("Restarting subscriber application to trigger redelivery...\n")
-		err = tr.Platform.Restart(subscriberAppName)
-		require.NoError(t, err, "error restarting subscriber")
-		subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
-		require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
-
-		// validate redelivery of messages
-		log.Printf("Validating redelivered messages...")
-		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
-	})
-
+	for _, tc := range pubsubTests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName)
+		})
+	}
 }
