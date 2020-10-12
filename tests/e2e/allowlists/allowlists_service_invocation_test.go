@@ -144,17 +144,19 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 	}
 }
 
-func invokeTestApp(calleeSide string, externalURL string, body []byte, appMethod string) ([]byte, error){
+func invokeTestApp(calleeSide string, externalURL string, body []byte, appMethod string) ([]byte, int, error){
 	var resp []byte
+	statusCode := http.StatusOK
 	var err error
-	var url string
 	if calleeSide == "http" {
-		url = fmt.Sprintf("%s/tests/invoke_test", externalURL)
+		resp, err = utils.HTTPPost(
+			fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
 	} else {
-		url = fmt.Sprintf("http://%s/%s", externalURL, appMethod)
+		url := fmt.Sprintf("http://%s/%s", externalURL, appMethod)
+		resp, statusCode, err = utils.HTTPPostWithStatus(
+			url,
+			body)
 	}
-	resp, err = utils.HTTPPost(
-		url,
-		body)
-	return resp, err
+
+	return resp, statusCode, err
 }
