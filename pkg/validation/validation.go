@@ -9,12 +9,13 @@ import (
 )
 
 // The consts and vars beginning with dns* were taken from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go
-const dns1123LabelFmt string = "[a-z0-9]([-a-z0-9]*[a-z0-9])?"
-const dns1123SubdomainFmt string = dns1123LabelFmt + "(\\." + dns1123LabelFmt + ")*"
-const dns1123LabelErrMsg string = "a lowercase RFC 1123 label must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character"
-const dns1123LabelMaxLength int = 63
+const (
+	dns1123LabelFmt       string = "[a-z0-9]([-a-z0-9]*[a-z0-9])?"
+	dns1123SubdomainFmt   string = dns1123LabelFmt + "(\\." + dns1123LabelFmt + ")*"
+	dns1123LabelErrMsg    string = "a lowercase RFC 1123 label must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character"
+	dns1123LabelMaxLength int    = 63
+)
 
-var dns1123SubdomainRegexp = regexp.MustCompile("^" + dns1123SubdomainFmt + "$")
 var dns1123LabelRegexp = regexp.MustCompile("^" + dns1123LabelFmt + "$")
 
 // ValidateKubernetesAppID returns a bool that indicates whether a dapr app id is valid for the Kubernetes platform.
