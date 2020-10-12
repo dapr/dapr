@@ -16,6 +16,7 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
 	"k8s.io/api/admission/v1beta1"
@@ -112,6 +113,11 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	id := getAppID(pod)
+	err := validation.ValidateKubernetesAppID(id)
+	if err != nil {
+		return nil, err
+	}
+
 	// Keep DNS resolution outside of getSidecarContainer for unit testing.
 	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
