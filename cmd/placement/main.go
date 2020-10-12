@@ -8,9 +8,9 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
@@ -97,9 +97,9 @@ func main() {
 	}
 
 	p := placement.NewPlacementService()
-	go p.Run(fmt.Sprint(*placementPort), certChain)
+	go p.Run(strconv.Itoa(*placementPort), certChain)
 
-	log.Infof("placement Service started on port %v", *placementPort)
+	log.Infof("placement service started on port %v", *placementPort)
 
 	go func() {
 		healthzServer := health.NewServer(log)
