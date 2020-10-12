@@ -68,7 +68,7 @@ jobs:
         run: python ./.github/scripts/get_release_version.py
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v2.2.1
         with:
           version: ${{ env.GOLANGLINT_VER }}
       - name: Run make test
