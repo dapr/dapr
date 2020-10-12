@@ -1,4 +1,3 @@
-// +build e2e
 
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
@@ -68,46 +67,49 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-var allowlistsServiceinvocationTests = []struct {
+var httpOnCalleeSideTests = []struct {
 	in               string
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
+}{
+	
+}
+
+var allowListsForServiceInvocationTests = []struct {
+	in                 string
+	remoteApp          string
+	appMethod          string
+	expectedResponse   string
+	calleeSide         string
 }{
 	{
 		"Test allow with callee side http",
 		"allowlists-callee-http",
 		"opAllow",
 		"opAllow is called",
+		"http",
 	},
 	{
 		"Test deny with callee side http",
 		"allowlists-callee-http",
 		"opDeny",
 		"rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
+		"http",
 	},
-}
-
-var moreAllowlistsServiceinvocationTests = []struct {
-	in                 string
-	remoteApp          string
-	appMethod          string
-	expectedStatusCode int
-	expectedResponse   string
-}{
 	{
 		"Test allow with callee side grpc",
 		"allowlists-callee-grpc",
 		"grpctogrpctest",
-		http.StatusOK,
 		"success",
+		"grpc",
 	},
 	{
 		"Test deny with callee side grpc",
 		"allowlists-callee-grpc",
 		"httptogrpctest",
-		http.StatusInternalServerError,
 		"HTTP call failed with rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httpToGrpcTest verb: NONE",
+		"grpc",
 	},
 }
 
@@ -122,7 +124,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 
 	t.Logf("externalURL is '%s'\n", externalURL)
 
-	for _, tt := range allowlistsServiceinvocationTests {
+	for _, tt := range allowListsForServiceInvocationTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
 				RemoteApp: tt.remoteApp,
@@ -130,8 +132,8 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			resp, err := utils.HTTPPost(
-				fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
+			resp, _, err := invokeTestApp(tt.calleeSide, externalURL, body, tt.appMethod)
+
 			t.Log("checking err...")
 			require.NoError(t, err)
 
@@ -142,31 +144,21 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			require.Equal(t, tt.expectedResponse, appResp.Message)
 		})
 	}
+}
 
-	for _, tt := range moreAllowlistsServiceinvocationTests {
-		t.Run(tt.in, func(t *testing.T) {
-			body, err := json.Marshal(testCommandRequest{
-				RemoteApp: tt.remoteApp,
-				Method:    tt.appMethod,
-			})
-			require.NoError(t, err)
-
-			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
-
-			t.Logf("url is '%s'\n", url)
-			resp, statusCode, err := utils.HTTPPostWithStatus(
-				url,
-				body)
-
-			t.Log("checking err...")
-			require.NoError(t, err)
-			require.Equal(t, tt.expectedStatusCode, statusCode)
-
-			var appResp appResponse
-			t.Logf("unmarshalling..%s\n", string(resp))
-			err = json.Unmarshal(resp, &appResp)
-			require.NoError(t, err)
-			require.Equal(t, tt.expectedResponse, appResp.Message)
-		})
+func invokeTestApp(calleeSide string, externalURL string, body []byte, appMethod string) ([]byte, int, error){
+	var resp []byte
+	statusCode := http.StatusOK
+	var err error
+	if calleeSide == "http" {
+		resp, err = utils.HTTPPost(
+			fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
+	} else {
+		url := fmt.Sprintf("http://%s/%s", externalURL, appMethod)
+		resp, statusCode, err = utils.HTTPPostWithStatus(
+			url,
+			body)
 	}
+
+	return resp, statusCode, err
 }
