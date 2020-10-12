@@ -922,35 +922,6 @@ func httpWrapper(httpMethod string, url string, data []byte) (appResponse, error
 	return appResp, nil
 }
 
-func httpWrapperWithStatus(httpMethod string, url string, data []byte) (appResponse, error) {
-	var body []byte
-	var err error
-
-	if httpMethod == "POST" {
-		body, err = HTTPPost(url, data)
-	} else if httpMethod == "GET" {
-		body, err = HTTPGet(url)
-	} else if httpMethod == "PUT" {
-		body, err = HTTPPut(url, data)
-	} else if httpMethod == "DELETE" {
-		body, err = HTTPDelete(url, data)
-	} else {
-		return appResponse{}, errors.New("expected option")
-	}
-
-	if err != nil {
-		return appResponse{}, err
-	}
-
-	var appResp appResponse
-	err = json.Unmarshal(body, &appResp)
-	if err != nil {
-		return appResponse{}, err
-	}
-
-	return appResp, nil
-}
-
 // Performs calls from grpc client to http server.  It sends a random string to the other app
 // and expects the response to contain the same string inside an appResponse.
 // It uses all 4 http methods (verbs) in metadata to invoke the proper http method.
@@ -1102,24 +1073,6 @@ func HTTPPost(url string, data []byte) ([]byte, error) {
 	}
 
 	return extractBody(resp.Body)
-}
-
-// HTTPPostWithStatus is a helper to make POST request call to url
-func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
-	client := newHTTPClient()
-	resp, err := client.Post(sanitizeHTTPURL(url), "application/json", bytes.NewBuffer(data)) //nolint
-	if err != nil {
-		// From the Do method for the client.Post
-		// An error is returned if caused by client policy (such as
-		// CheckRedirect), or failure to speak HTTP (such as a network
-		// connectivity problem). A non-2xx status code doesn't cause an
-		// error.
-		return nil, http.StatusInternalServerError, err
-	}
-
-	body, err := extractBody(resp.Body)
-
-	return body, resp.StatusCode, err
 }
 
 // Wraps GET calls
