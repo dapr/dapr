@@ -8,6 +8,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
+	"github.com/dapr/dapr/pkg/validation"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -117,6 +118,11 @@ func (h *DaprHandler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, deployment *appsv1.Deployment) error {
 	appID := h.getAppID(deployment)
+	err := validation.ValidateKubernetesAppID(appID)
+	if err != nil {
+		return err
+	}
+
 	mayDaprService := types.NamespacedName{
 		Namespace: namespace,
 		Name:      h.daprServiceName(appID),
