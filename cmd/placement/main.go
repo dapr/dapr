@@ -34,7 +34,7 @@ const (
 
 func main() {
 	placementPort := flag.Int("port", defaultPlacementPort, "sets the gRPC port for the placement service")
-	healthzPort := flag.Int("port", defaultHealthzPort, "sets the HTTP port for the healthz server")
+	healthzPort := flag.Int("healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -99,7 +99,7 @@ func main() {
 	p := placement.NewPlacementService()
 	go p.Run(fmt.Sprint(*placementPort), certChain)
 
-	log.Infof("placement Service started on port %s", *placementPort)
+	log.Infof("placement Service started on port %v", *placementPort)
 
 	go func() {
 		healthzServer := health.NewServer(log)
