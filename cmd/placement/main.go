@@ -10,6 +10,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"strconv"
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
@@ -27,11 +28,13 @@ var tlsEnabled bool
 
 const (
 	defaultCredentialsPath = "/var/run/dapr/credentials"
-	healthzPort            = 8080
+	defaultHealthzPort     = 8080
+	defaultPlacementPort   = 50005
 )
 
 func main() {
-	port := flag.String("port", "50005", "")
+	placementPort := flag.Int("port", defaultPlacementPort, "sets the gRPC port for the placement service")
+	healthzPort := flag.Int("healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -94,15 +97,15 @@ func main() {
 	}
 
 	p := placement.NewPlacementService()
-	go p.Run(*port, certChain)
+	go p.Run(strconv.Itoa(*placementPort), certChain)
 
-	log.Infof("placement Service started on port %s", *port)
+	log.Infof("placement service started on port %v", *placementPort)
 
 	go func() {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
 
-		err := healthzServer.Run(context.Background(), healthzPort)
+		err := healthzServer.Run(context.Background(), *healthzPort)
 		if err != nil {
 			log.Fatalf("failed to start healthz server: %s", err)
 		}
