@@ -26,6 +26,8 @@ const (
 )
 
 type appResponse struct {
+	// Status field for proper handling of errors form pubsub
+	Status    string `json:"status,omitempty"`
 	Message   string `json:"message,omitempty"`
 	StartTime int    `json:"start_time,omitempty"`
 	EndTime   int    `json:"end_time,omitempty"`
@@ -43,11 +45,16 @@ type subscription struct {
 	Route      string `json:"route"`
 }
 
-var receivedMessagesA []string
-var receivedMessagesB []string
-var receivedMessagesC []string
-
-var lock sync.Mutex
+var (
+	receivedMessagesA []string
+	receivedMessagesB []string
+	receivedMessagesC []string
+	// boolean variable to respond with error if set
+	respondWithError bool
+	// boolean variable to respond with retry if set
+	respondWithRetry bool
+	lock             sync.Mutex
+)
 
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +98,19 @@ func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("aHandler is called %s\n", r.URL)
 
+	if respondWithRetry {
+		// do not store received messages, respond with success but a retry status
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: "retry later",
+			Status:  "RETRY",
+		})
+		return
+	} else if respondWithError {
+		// do not store received messages, respond with error
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	defer r.Body.Close()
 
@@ -111,6 +131,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
+			Status:  "DROP",
 		})
 		return
 	}
@@ -120,6 +141,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
+			Status:  "DROP",
 		})
 		return
 	}
@@ -138,12 +160,14 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: errorMessage,
+			Status:  "DROP",
 		})
 		return
 	}
 
 	json.NewEncoder(w).Encode(appResponse{
-		Message: "success",
+		Message: "consumed",
+		Status:  "SUCCESS",
 	})
 }
 
@@ -181,6 +205,26 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// set to respond with error on receiving messages from pubsub
+func setRespondWithError(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	lock.Lock()
+	defer lock.Unlock()
+	log.Print("set respond with error")
+	respondWithError = true
+	w.WriteHeader(http.StatusOK)
+}
+
+// set to respond with error on receiving messages from pubsub
+func setRespondWithRetry(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	lock.Lock()
+	defer lock.Unlock()
+	log.Print("set respond with retry")
+	respondWithRetry = true
+	w.WriteHeader(http.StatusOK)
+}
+
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	log.Printf("Enter appRouter()")
@@ -189,6 +233,8 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 
 	router.HandleFunc("/tests/get", getReceivedMessages).Methods("POST")
+	router.HandleFunc("/tests/set-respond-error", setRespondWithError).Methods("POST")
+	router.HandleFunc("/tests/set-respond-retry", setRespondWithRetry).Methods("POST")
 
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
 
