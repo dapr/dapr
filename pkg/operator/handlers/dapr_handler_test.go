@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,6 +78,20 @@ func TestIsAnnotatedForDapr(t *testing.T) {
 
 		// Assert
 		assert.False(t, got)
+	})
+}
+
+func TestDaprService(t *testing.T) {
+	t.Run("invalid empty app id", func(t *testing.T) {
+		d := getDeployment("", "true")
+		err := getTestDaprHandler().ensureDaprServicePresent(context.TODO(), "default", d)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid char app id", func(t *testing.T) {
+		d := getDeployment("myapp@", "true")
+		err := getTestDaprHandler().ensureDaprServicePresent(context.TODO(), "default", d)
+		assert.Error(t, err)
 	})
 }
 
