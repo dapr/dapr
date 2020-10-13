@@ -10,6 +10,7 @@ package bindings_e2e
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -31,10 +32,11 @@ type messageData struct {
 
 type receivedTopicsResponse struct {
 	ReceivedMessages []string `json:"received_messages,omitempty"`
+	FailedMessage    string   `json:"failed_message,omitempty"`
 }
 
 var testMessages = []string{
-	"1",
+	"This message fails",
 	"2",
 	"3",
 	"4",
@@ -80,6 +82,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestBindings(t *testing.T) {
+	// setup
 	outputExternalURL := tr.Platform.AcquireAppExternalURL("bindingoutput")
 	require.NotEmpty(t, outputExternalURL, "bindingoutput external URL must not be empty!")
 	inputExternalURL := tr.Platform.AcquireAppExternalURL("bindinginput")
@@ -96,21 +99,32 @@ func TestBindings(t *testing.T) {
 	for _, mes := range testMessages {
 		req.Messages = append(req.Messages, messageData{Data: mes, Operation: "create"})
 	}
-
 	body, err := json.Marshal(req)
 	require.NoError(t, err)
 
-	_, err = utils.HTTPPost(fmt.Sprintf("%s/tests/send", outputExternalURL), body)
-	require.NoError(t, err)
+	// act
+	httpPostWithAssert(t, fmt.Sprintf("%s/tests/send", outputExternalURL), body, http.StatusOK)
 
-	// This delay allows all the messages to reach corresponding input bindings
+	// This delay allows all the messages to reach corresponding input bindings.
 	time.Sleep(bindingPropagationDelay * time.Second)
 
-	resp, err := utils.HTTPPost(fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil)
-	require.NoError(t, err)
+	// assert
+	resp := httpPostWithAssert(t, fmt.Sprintf("%s/tests/get_received_topics", inputExternalURL), nil, http.StatusOK)
 
 	var decodedResponse receivedTopicsResponse
 	err = json.Unmarshal(resp, &decodedResponse)
 	require.NoError(t, err)
-	require.Equal(t, testMessages, decodedResponse.ReceivedMessages)
+
+	// Only the first message fails, all other messages are successfully consumed.
+	// nine messages succeed.
+	require.Equal(t, testMessages[1:], decodedResponse.ReceivedMessages)
+	// one message fails.
+	require.Equal(t, testMessages[0], decodedResponse.FailedMessage)
+}
+
+func httpPostWithAssert(t *testing.T, url string, data []byte, status int) []byte {
+	resp, code, err := utils.HTTPPostWithStatus(url, data)
+	require.NoError(t, err)
+	require.Equal(t, status, code)
+	return resp
 }
