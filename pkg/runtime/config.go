@@ -14,6 +14,9 @@ import (
 // Protocol is a communications protocol
 type Protocol string
 
+// Scheme is a URI address scheme
+type Scheme string
+
 const (
 	// GRPCProtocol is a gRPC communication protocol
 	GRPCProtocol Protocol = "grpc"
@@ -29,6 +32,7 @@ const (
 	DefaultMetricsPort = 9090
 	// DefaultAllowedOrigins is the default origins allowed for the Dapr HTTP servers
 	DefaultAllowedOrigins = "*"
+	// DefaultAppScheme is the default URI scheme when Dapr calls the application
 )
 
 // Config holds the Dapr Runtime configuration
@@ -51,10 +55,11 @@ type Config struct {
 	mtlsEnabled             bool
 	SentryServiceAddress    string
 	CertChain               *credentials.CertChain
+	AppSSL                  bool
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
@@ -77,5 +82,6 @@ func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedO
 		MaxConcurrency:       maxConcurrency,
 		mtlsEnabled:          mtlsEnabled,
 		SentryServiceAddress: sentryAddress,
+		AppSSL:               appSSL,
 	}
 }
