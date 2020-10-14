@@ -297,15 +297,15 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	err := a.json.Unmarshal(body, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request: %s", err))
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
 
 	b, err := a.json.Marshal(req.Data)
 	if err != nil {
-		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't deserialize request data field: %s", err))
-		respondWithError(reqCtx, 500, msg)
+		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf("can't serialize request data field: %s", err))
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
@@ -330,14 +330,14 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	if err != nil {
 		errMsg := fmt.Sprintf("error invoking output binding %s: %s", name, err)
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", errMsg)
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
 	if resp == nil {
-		respondEmpty(reqCtx, 200)
+		respondEmpty(reqCtx, net_http.StatusOK)
 	} else {
-		respondWithJSON(reqCtx, 200, resp.Data)
+		respondWithJSON(reqCtx, net_http.StatusOK, resp.Data)
 	}
 }
 
@@ -352,7 +352,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	err = a.json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -389,13 +389,13 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	limiter.Wait()
 
 	b, _ := a.json.Marshal(bulkResp)
-	respondWithJSON(reqCtx, 200, b)
+	respondWithJSON(reqCtx, net_http.StatusOK, b)
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_CONFIGURED", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return nil, errors.New(msg.Message)
 	}
@@ -404,7 +404,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return nil, errors.New(msg.Message)
 	}
@@ -433,15 +433,15 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	resp, err := store.Get(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
 	if resp == nil || resp.Data == nil {
-		respondEmpty(reqCtx, 204)
+		respondEmpty(reqCtx, net_http.StatusNoContent)
 		return
 	}
-	respondWithETaggedJSON(reqCtx, 200, resp.Data, resp.ETag)
+	respondWithETaggedJSON(reqCtx, net_http.StatusOK, resp.Data, resp.ETag)
 }
 
 func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
@@ -472,17 +472,17 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	err = store.Delete(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf("failed deleting state with key %s: %s", key, err))
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
-	respondEmpty(reqCtx, 200)
+	respondEmpty(reqCtx, net_http.StatusOK)
 }
 
 func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_CONFIGURED", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -491,7 +491,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 
 	if a.secretStores[secretStoreName] == nil {
 		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf("secret store name: %s", secretStoreName))
-		respondWithError(reqCtx, 401, msg)
+		respondWithError(reqCtx, net_http.StatusUnauthorized, msg)
 		log.Debug(msg)
 		return
 	}
@@ -516,18 +516,18 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	resp, err := a.secretStores[secretStoreName].GetSecret(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
 
 	if resp.Data == nil {
-		respondEmpty(reqCtx, 204)
+		respondEmpty(reqCtx, net_http.StatusNoContent)
 		return
 	}
 
 	respBytes, _ := a.json.Marshal(resp.Data)
-	respondWithJSON(reqCtx, 200, respBytes)
+	respondWithJSON(reqCtx, net_http.StatusOK, respBytes)
 }
 
 func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
@@ -541,7 +541,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	err = a.json.Unmarshal(reqCtx.PostBody(), &reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -553,12 +553,12 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	err = store.BulkSet(reqs)
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_SAVE", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
 
-	respondEmpty(reqCtx, 201)
+	respondEmpty(reqCtx, net_http.StatusCreated)
 }
 
 func (a *api) getModifiedStateKey(key string) string {
@@ -575,7 +575,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	invokeMethodName := reqCtx.UserValue(methodParam).(string)
 	if invokeMethodName == "" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", "invalid method name")
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -590,7 +590,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// err does not represent user application response
 	if err != nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		return
 	}
 
@@ -610,7 +610,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		return
 	}
 
@@ -622,7 +622,7 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -634,17 +634,17 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	err = a.actor.CreateReminder(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondEmpty(reqCtx, 200)
+		respondEmpty(reqCtx, net_http.StatusOK)
 	}
 }
 
 func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -657,7 +657,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -669,17 +669,17 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	err = a.actor.CreateTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondEmpty(reqCtx, 200)
+		respondEmpty(reqCtx, net_http.StatusOK)
 	}
 }
 
 func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -697,17 +697,17 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 	err := a.actor.DeleteReminder(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondEmpty(reqCtx, 200)
+		respondEmpty(reqCtx, net_http.StatusOK)
 	}
 }
 
 func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -723,7 +723,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -732,7 +732,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	err := a.json.Unmarshal(body, &ops)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -746,17 +746,17 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	err = a.actor.TransactionalStateOperation(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondEmpty(reqCtx, 201)
+		respondEmpty(reqCtx, net_http.StatusCreated)
 	}
 }
 
 func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -772,23 +772,23 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	}
 	b, err := a.json.Marshal(resp)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondWithJSON(reqCtx, 200, b)
+		respondWithJSON(reqCtx, net_http.StatusOK, b)
 	}
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -805,17 +805,17 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 	err := a.actor.DeleteTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondEmpty(reqCtx, 200)
+		respondEmpty(reqCtx, net_http.StatusOK)
 	}
 }
 
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -841,7 +841,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	resp, err := a.actor.Call(reqCtx, req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", err.Error())
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
@@ -861,7 +861,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -877,7 +877,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -891,14 +891,14 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	resp, err := a.actor.GetState(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_GET", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
 		if resp == nil || resp.Data == nil {
-			respondEmpty(reqCtx, 204)
+			respondEmpty(reqCtx, net_http.StatusNoContent)
 			return
 		}
-		respondWithJSON(reqCtx, 200, resp.Data)
+		respondWithJSON(reqCtx, net_http.StatusOK, resp.Data)
 	}
 }
 
@@ -920,10 +920,10 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 	mtdBytes, err := a.json.Marshal(mtd)
 	if err != nil {
 		msg := NewErrorResponse("ERR_METADATA_GET", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondWithJSON(reqCtx, 200, mtdBytes)
+		respondWithJSON(reqCtx, net_http.StatusOK, mtdBytes)
 	}
 }
 
@@ -931,13 +931,13 @@ func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 	key := fmt.Sprintf("%v", reqCtx.UserValue("key"))
 	body := reqCtx.PostBody()
 	a.extendedMetadata.Store(key, string(body))
-	respondEmpty(reqCtx, 200)
+	respondEmpty(reqCtx, net_http.StatusOK)
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	if a.publishFn == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -946,7 +946,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	topic := reqCtx.UserValue(topicParam).(string)
 	if topic == "/" {
 		msg := NewErrorResponse("ERR_TOPIC_EMPTY", "")
-		respondWithError(reqCtx, 404, msg)
+		respondWithError(reqCtx, net_http.StatusNotFound, msg)
 		log.Debug(msg)
 		return
 	}
@@ -962,7 +962,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
@@ -976,10 +976,10 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	err = a.publishFn(&req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondEmpty(reqCtx, 200)
+		respondEmpty(reqCtx, net_http.StatusOK)
 	}
 }
 
@@ -992,16 +992,16 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 			return statusCode
 		}
 	}
-	return 200
+	return net_http.StatusOK
 }
 
 func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.readyStatus {
 		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", "dapr is not ready")
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondEmpty(reqCtx, 200)
+		respondEmpty(reqCtx, net_http.StatusOK)
 	}
 }
 
@@ -1022,7 +1022,7 @@ func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", "")
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -1031,7 +1031,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	stateStore, ok := a.stateStores[storeName]
 	if !ok {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND:", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 401, msg)
+		respondWithError(reqCtx, net_http.StatusUnauthorized, msg)
 		log.Debug(msg)
 		return
 	}
@@ -1039,7 +1039,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	transactionalStore, ok := stateStore.(state.TransactionalStore)
 	if !ok {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf("state store name: %s", storeName))
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
@@ -1048,7 +1048,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	var req state.TransactionalStateRequest
 	if err := a.json.Unmarshal(body, &req); err != nil {
 		msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
-		respondWithError(reqCtx, 400, msg)
+		respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
@@ -1060,7 +1060,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			var upsertReq state.SetRequest
 			if err := mapstructure.Decode(o.Request, &upsertReq); err != nil {
 				msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
-				respondWithError(reqCtx, 400, msg)
+				respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 				log.Debug(msg)
 				return
 			}
@@ -1073,7 +1073,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			var delReq state.DeleteRequest
 			if err := mapstructure.Decode(o.Request, &delReq); err != nil {
 				msg := NewErrorResponse("ERR_DESERIALIZE_HTTP_BODY", err.Error())
-				respondWithError(reqCtx, 400, msg)
+				respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 				log.Debug(msg)
 				return
 			}
@@ -1086,7 +1086,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			msg := NewErrorResponse(
 				"ERR_NOT_SUPPORTED_STATE_OPERATION",
 				fmt.Sprintf("operation type %s not supported", o.Operation))
-			respondWithError(reqCtx, 400, msg)
+			respondWithError(reqCtx, net_http.StatusBadRequest, msg)
 			log.Debug(msg)
 			return
 		}
@@ -1099,10 +1099,10 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_TRANSACTION", err.Error())
-		respondWithError(reqCtx, 500, msg)
+		respondWithError(reqCtx, net_http.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
-		respondEmpty(reqCtx, 201)
+		respondEmpty(reqCtx, net_http.StatusCreated)
 	}
 }
 
