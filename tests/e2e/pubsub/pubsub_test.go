@@ -116,15 +116,16 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	return statusCode, err
 }
 
-func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _ string) {
+func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _ string) string {
 	log.Printf("Test publish subscribe success flow\n")
 	sentMessages := testPublish(t, publisherExternalURL)
 
 	time.Sleep(5 * time.Second)
 	validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+	return subscriberExternalURL
 }
 
-func testPublishWithoutTopic(t *testing.T, publisherExternalURL, _, _, _ string) {
+func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _ string) string {
 	log.Printf("Test publish without topic\n")
 	commandBody := publishCommand{}
 	commandBody.Data = "unsuccessful message"
@@ -140,9 +141,10 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, _, _, _ string)
 	require.Error(t, err)
 	// without topic, response should be 404
 	require.Equal(t, http.StatusNotFound, statusCode)
+	return subscriberExternalURL
 }
 
-func testValidateRedelivery(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName string) {
+func testValidateRedelivery(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName string) string {
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 	_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/set-respond-"+subscriberResponse, nil)
 	require.NoError(t, err)
@@ -153,11 +155,16 @@ func testValidateRedelivery(t *testing.T, publisherExternalURL, subscriberExtern
 	log.Printf("Restarting subscriber application to check redelivery...\n")
 	err = tr.Platform.Restart(subscriberAppName)
 	require.NoError(t, err, "error restarting subscriber")
+	subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
+	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
+	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
+	require.NoError(t, err)
 
 	// validate redelivery of messages
 	log.Printf("Validating redelivered messages...")
 	time.Sleep(5 * time.Second)
 	validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+	return subscriberExternalURL
 }
 
 func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {
@@ -221,7 +228,7 @@ func TestMain(m *testing.M) {
 
 var pubsubTests = []struct {
 	name               string
-	handler            func(*testing.T, string, string, string, string)
+	handler            func(*testing.T, string, string, string, string) string
 	subscriberResponse string
 }{
 	{
@@ -262,7 +269,7 @@ func TestPubSub(t *testing.T) {
 
 	for _, tc := range pubsubTests {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName)
+			subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName)
 		})
 	}
 }
