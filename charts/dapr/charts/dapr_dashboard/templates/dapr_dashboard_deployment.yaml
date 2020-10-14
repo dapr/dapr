@@ -26,14 +26,17 @@ spec:
       serviceAccountName: dashboard-reader
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
-              preference:
-                matchExpressions:
-                - key: kubernetes.io/os
-                  operator: In
-                  values:
-                  - linux
+          requiredDuringSchedulingIgnoredDuringExecution:
+             nodeSelectorTerms:
+                - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                    - {{ .Values.global.daprControlPlaneOs }}
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                    - {{ .Values.global.daprControlPlaneArch }}
 {{- if eq .Values.global.ha.enabled true }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

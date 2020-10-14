@@ -49,7 +49,7 @@ jobs:
             target_arch: arm64
     steps:
       - name: Set up Go ${{ env.GOVER }}
-        uses: actions/setup-go@v2-beta
+        uses: actions/setup-go@v2
         with:
           go-version: ${{ env.GOVER }}
       - name: Install Docker CE for buildx
@@ -68,10 +68,9 @@ jobs:
         run: python ./.github/scripts/get_release_version.py
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v2.2.1
         with:
           version: ${{ env.GOLANGLINT_VER }}
-          only-new-issues: true
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"

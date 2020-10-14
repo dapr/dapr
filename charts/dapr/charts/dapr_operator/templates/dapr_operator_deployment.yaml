@@ -101,14 +101,17 @@ spec:
             secretName: dapr-trust-bundle
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
-              preference:
-                matchExpressions:
-                - key: kubernetes.io/os
-                  operator: In
-                  values:
-                  - {{ .Values.global.daprControlPlaneOs }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+             nodeSelectorTerms:
+                - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                    - {{ .Values.global.daprControlPlaneOs }}
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                    - {{ .Values.global.daprControlPlaneArch }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}

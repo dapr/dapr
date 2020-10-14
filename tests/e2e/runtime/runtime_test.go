@@ -74,10 +74,10 @@ func TestMain(m *testing.M) {
 			Name:     "runtime-bindings-http",
 			TypeName: "bindings.kafka",
 			MetaData: map[string]string{
-				"brokers":       "dapr-kafka:9092",
-				"topics":        "runtime-bindings-http",
-				"consumerGroup": "group1",
-				"authRequired":  "false",
+				"brokers":       `"dapr-kafka:9092"`,
+				"topics":        `"runtime-bindings-http"`,
+				"consumerGroup": `"group1"`,
+				"authRequired":  `"false"`,
 			},
 		},
 	}

@@ -60,6 +60,7 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -355,14 +356,18 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 }
 
 func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
-	if err := a.initOutputBinding(c); err != nil {
-		log.Errorf("failed to init output bindings: %s", err)
-		return err
+	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type) {
+		if err := a.initOutputBinding(c); err != nil {
+			log.Errorf("failed to init output bindings: %s", err)
+			return err
+		}
 	}
 
-	if err := a.initInputBinding(c); err != nil {
-		log.Errorf("failed to init input bindings: %s", err)
-		return err
+	if a.bindingsRegistry.HasInputBinding(c.Spec.Type) {
+		if err := a.initInputBinding(c); err != nil {
+			log.Errorf("failed to init input bindings: %s", err)
+			return err
+		}
 	}
 	return nil
 }
@@ -1424,7 +1429,11 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 
 		val, ok := resp.Data[secretKeyName]
 		if ok {
-			component.Spec.Metadata[i].Value = val
+			component.Spec.Metadata[i].Value = components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte(val),
+				},
+			}
 		}
 
 		cache[m.SecretKeyRef.Name] = resp
@@ -1605,7 +1614,7 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
 	properties := map[string]string{}
 	for _, c := range items {
-		properties[c.Name] = c.Value
+		properties[c.Name] = c.Value.String()
 	}
 	return properties
 }

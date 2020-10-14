@@ -7,7 +7,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/coreos/etcd v3.3.18+incompatible // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
-	github.com/dapr/components-contrib v0.4.1
+	github.com/dapr/components-contrib v0.4.1-0.20201009172644-b08e920cdd71
 	github.com/fasthttp/router v1.3.1
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
@@ -35,6 +35,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.17.8
+	k8s.io/apiextensions-apiserver v0.17.2
 	k8s.io/apimachinery v0.17.8
 	k8s.io/cli-runtime v0.17.0
 	k8s.io/client-go v0.17.2

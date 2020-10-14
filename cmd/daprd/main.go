@@ -80,6 +80,7 @@ import (
 
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
@@ -311,6 +312,9 @@ func main() {
 			}),
 		),
 		runtime.WithOutputBindings(
+			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
+				return apns.NewAPNS(logContrib)
+			}),
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
 				return sqs.NewAWSSQS(logContrib)
 			}),
