@@ -140,8 +140,7 @@ type DaprRuntime struct {
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentDependents map[string][]components_v1alpha1.Component
 
-	delayedComponents     []components_v1alpha1.Component
-	delayedComponentsDone chan bool
+	delayedComponents []components_v1alpha1.Component
 }
 
 type componentPreprocessRes struct {
@@ -178,8 +177,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
 
-		delayedComponents:     make([]components_v1alpha1.Component, 0),
-		delayedComponentsDone: make(chan bool, 0),
+		delayedComponents: make([]components_v1alpha1.Component, 0),
 	}
 }
 
@@ -312,16 +310,15 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
+	for _, comp := range a.delayedComponents {
+		a.doProcessDelayedComponent(comp)
+	}
 
 	a.loadAppConfiguration()
 	err = a.initActors()
 	if err != nil {
 		log.Warnf("failed to init actors: %s", err)
 	}
-	go a.processDelayedComponents()
-
-	// Wait for the delayed components to be processed
-	<-a.delayedComponentsDone
 
 	return nil
 }
@@ -1323,7 +1320,6 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 
 	if compCategory == bindingsComponent || compCategory == pubsubComponent {
 		a.delayedComponents = append(a.delayedComponents, comp)
-		log.Infof("loading component delayed. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
 		return nil
 	}
 
@@ -1360,6 +1356,17 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 		return a.initSecretStore(comp)
 	case stateComponent:
 		return a.initState(comp)
+	}
+	return nil
+}
+
+func (a *DaprRuntime) doProcessDelayedComponent(comp components_v1alpha1.Component) error {
+	category := a.extractComponentCategory(comp)
+	switch category {
+	case bindingsComponent:
+		return a.initBinding(comp)
+	case pubsubComponent:
+		return a.initPubSub(comp)
 	}
 	return nil
 }
@@ -1637,28 +1644,4 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
-}
-
-func (a *DaprRuntime) processDelayedComponents() {
-	for _, comp := range a.delayedComponents {
-		compCategory := a.extractComponentCategory(comp)
-		if err := a.doProcessOneComponent(compCategory, comp); err != nil {
-			log.Error("error loading delayed component. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
-			continue
-		}
-		dependency := componentDependency(compCategory, comp.Name)
-		if deps, ok := a.pendingComponentDependents[dependency]; ok {
-			delete(a.pendingComponentDependents, dependency)
-			go func(dependents []components_v1alpha1.Component) {
-				for _, dependent := range dependents {
-					a.pendingComponents <- dependent
-				}
-			}(deps)
-		}
-
-		a.appendOrReplaceComponents(comp)
-		diag.DefaultMonitoring.ComponentLoaded()
-		log.Infof("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
-	}
-	a.delayedComponentsDone <- true
 }

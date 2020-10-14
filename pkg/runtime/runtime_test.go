@@ -400,6 +400,11 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
+		for _, comp := range pubsubComponents {
+			err := rt.doProcessDelayedComponent(comp)
+			assert.Nil(t, err)
+		}
+
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
@@ -431,6 +436,10 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
+		for _, comp := range pubsubComponents {
+			err := rt.doProcessDelayedComponent(comp)
+			assert.Nil(t, err)
+		}
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -457,7 +466,10 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
-
+		for _, comp := range pubsubComponents {
+			err := rt.doProcessDelayedComponent(comp)
+			assert.Nil(t, err)
+		}
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 
@@ -562,7 +574,10 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
-
+		for _, comp := range pubsubComponents {
+			err := rt.doProcessDelayedComponent(comp)
+			assert.Nil(t, err)
+		}
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
@@ -592,7 +607,10 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
-
+		for _, comp := range pubsubComponents {
+			err := rt.doProcessDelayedComponent(comp)
+			assert.Nil(t, err)
+		}
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
@@ -620,6 +638,11 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+
+		for _, comp := range pubsubComponents {
+			err := rt.doProcessDelayedComponent(comp)
 			assert.Nil(t, err)
 		}
 
@@ -652,6 +675,11 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+
+		for _, comp := range pubsubComponents {
+			err := rt.doProcessDelayedComponent(comp)
 			assert.Nil(t, err)
 		}
 
