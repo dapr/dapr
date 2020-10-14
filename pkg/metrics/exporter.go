@@ -19,7 +19,7 @@ const (
 
 // Exporter is the interface for metrics exporters
 type Exporter interface {
-	// Init intializes metrics exporter
+	// Init initializes metrics exporter
 	Init() error
 	// Options returns Exporter options
 	Options() *Options
@@ -94,7 +94,7 @@ func (m *promMetricsExporter) startMetricServer() error {
 	addr := fmt.Sprintf(":%d", m.options.MetricsPort())
 
 	if m.ocExporter == nil {
-		return errors.New("exporter was not initiailized")
+		return errors.New("exporter was not initialized")
 	}
 
 	m.exporter.logger.Infof("metrics server started on %s%s", addr, defaultMetricsPath)
