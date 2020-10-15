@@ -53,8 +53,8 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 }
 
 // CreateLocalChannel creates a new gRPC AppChannel
-func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec) (channel.AppChannel, error) {
-	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false)
+func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
+	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
 	if err != nil {
 		return nil, errors.Errorf("error establishing connection to app grpc on port %v: %s", port, err)
 	}
@@ -65,7 +65,7 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 }
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
-func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error) {
+func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool) (*grpc.ClientConn, error) {
 	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
 		return val, nil
 	}
@@ -112,6 +112,13 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 	defer cancel()
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
+	if sslEnabled {
+		// nolint:gosec
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+		})))
+	}
+
 	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
 	if err != nil {
 		g.lock.Unlock()

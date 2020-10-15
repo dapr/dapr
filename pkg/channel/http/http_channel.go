@@ -26,6 +26,8 @@ import (
 const (
 	// HTTPStatusCode is an dapr http channel status code
 	HTTPStatusCode = "http.status_code"
+	httpScheme     = "http"
+	httpsScheme    = "https"
 )
 
 // Channel is an HTTP implementation of an AppChannel
@@ -38,16 +40,24 @@ type Channel struct {
 
 // CreateLocalChannel creates an HTTP AppChannel
 // nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec) (channel.AppChannel, error) {
+func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
+	scheme := httpScheme
+	if sslEnabled {
+		scheme = httpsScheme
+	}
+
 	c := &Channel{
 		client: &fasthttp.Client{
 			MaxConnsPerHost:           1000000,
-			TLSConfig:                 &tls.Config{InsecureSkipVerify: true},
 			ReadTimeout:               channel.DefaultChannelRequestTimeout,
 			MaxIdemponentCallAttempts: 0,
 		},
-		baseAddress: fmt.Sprintf("http://%s:%d", channel.DefaultChannelAddress, port),
+		baseAddress: fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
 		tracingSpec: spec,
+	}
+
+	if sslEnabled {
+		c.client.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	if maxConcurrency > 0 {
