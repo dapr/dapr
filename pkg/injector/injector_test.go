@@ -334,3 +334,27 @@ func TestAPITokenSecret(t *testing.T) {
 		assert.Equal(t, "", s)
 	})
 }
+
+func TestAppSSL(t *testing.T) {
+	t.Run("ssl enabled", func(t *testing.T) {
+		annotations := map[string]string{
+			daprAppSSLKey: "true",
+		}
+		s := appSSLEnabled(annotations)
+		assert.True(t, s)
+	})
+
+	t.Run("ssl disabled", func(t *testing.T) {
+		annotations := map[string]string{
+			daprAppSSLKey: "false",
+		}
+		s := appSSLEnabled(annotations)
+		assert.False(t, s)
+	})
+
+	t.Run("ssl not specified", func(t *testing.T) {
+		annotations := map[string]string{}
+		s := appSSLEnabled(annotations)
+		assert.False(t, s)
+	})
+}
