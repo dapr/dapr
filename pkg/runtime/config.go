@@ -14,9 +14,6 @@ import (
 // Protocol is a communications protocol
 type Protocol string
 
-// Scheme is a URI address scheme
-type Scheme string
-
 const (
 	// GRPCProtocol is a gRPC communication protocol
 	GRPCProtocol Protocol = "grpc"
@@ -32,7 +29,6 @@ const (
 	DefaultMetricsPort = 9090
 	// DefaultAllowedOrigins is the default origins allowed for the Dapr HTTP servers
 	DefaultAllowedOrigins = "*"
-	// DefaultAppScheme is the default URI scheme when Dapr calls the application
 )
 
 // Config holds the Dapr Runtime configuration

@@ -113,8 +113,6 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
 	if sslEnabled {
-		dialPrefix = "https://"
-
 		// nolint:gosec
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			InsecureSkipVerify: true,
