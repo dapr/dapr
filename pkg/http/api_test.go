@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/channel/http"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -45,8 +46,13 @@ import (
 func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		publishFn: func(req *pubsub.PublishRequest) error { return nil },
-		json:      jsoniter.ConfigFastest,
+		publishFn: func(req *pubsub.PublishRequest) error {
+			if req.PubsubName == "errorpubsub" {
+				return fmt.Errorf("Error from pubsub %s", req.PubsubName)
+			}
+			return nil
+		},
+		json: jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
 
@@ -69,6 +75,18 @@ func TestPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+		}
+	})
+
+	t.Run("Publish unsuccessfully - 500 InternalError", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/errorpubsub/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -130,15 +148,53 @@ func TestPubSubEndpoints(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
+func TestGetStatusCodeFromMetadata(t *testing.T) {
+	t.Run("status code present", func(t *testing.T) {
+		res := GetStatusCodeFromMetadata(map[string]string{
+			http.HTTPStatusCode: "404",
+		})
+		assert.Equal(t, 404, res, "expected status code to match")
+	})
+	t.Run("status code not present", func(t *testing.T) {
+		res := GetStatusCodeFromMetadata(map[string]string{})
+		assert.Equal(t, 200, res, "expected status code to match")
+	})
+	t.Run("status code present but invalid", func(t *testing.T) {
+		res := GetStatusCodeFromMetadata(map[string]string{
+			http.HTTPStatusCode: "a12a",
+		})
+		assert.Equal(t, 200, res, "expected status code to match")
+	})
+}
+
+func TestGetMetadataFromRequest(t *testing.T) {
+	t.Run("request with query args", func(t *testing.T) {
+		// set
+		ctx := &fasthttp.RequestCtx{}
+		ctx.Request.SetRequestURI("http://test.example.com/resource?metadata.test=test&&other=other")
+		// act
+		m := getMetadataFromRequest(ctx)
+		// assert
+		assert.NotEmpty(t, m, "expected map to be populated")
+		assert.Equal(t, 1, len(m), "expected length to match")
+		assert.Equal(t, "test", m["test"], "test", "expected value to be equal")
+	})
+}
+
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
-		json:                  jsoniter.ConfigFastest,
+		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+			if name == "testbinding" {
+				return nil, nil
+			}
+			return &bindings.InvokeResponse{Data: []byte("testresponse")}, nil
+		},
+		json: jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
 
-	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
+	t.Run("Invoke output bindings - 200 No Content empt response", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
 		req := OutputBindingRequest{
 			Data: "fake output",
@@ -150,6 +206,36 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 			// assert
 			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
+		}
+	})
+
+	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/bindings/testresponse", apiVersionV1)
+		req := OutputBindingRequest{
+			Data: "fake output",
+		}
+		b, _ := json.Marshal(&req)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, b, nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
+			assert.Equal(t, []byte("testresponse"), resp.RawBody, "expected response to match")
+		}
+	})
+
+	t.Run("Invoke output bindings - 500 InternalError invalid req", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/bindings/testresponse", apiVersionV1)
+		req := `{"dat" : "invalid request"}`
+		b, _ := json.Marshal(&req)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, b, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode)
+			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
 		}
 	})
 
