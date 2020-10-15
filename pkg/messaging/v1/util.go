@@ -326,7 +326,8 @@ func ErrorFromHTTPResponseCode(code int, detail string) error {
 
 	resps, err := respStatus.WithDetails(
 		&epb.ErrorInfo{
-			Type:   httpStatusText,
+			// TODO: fix this since Type field is removed
+			//Type:   httpStatusText,
 			Domain: errorInfoDomain,
 			Metadata: map[string]string{
 				errorInfoHTTPCodeMetadata:  strconv.Itoa(code),
