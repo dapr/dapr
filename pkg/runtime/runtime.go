@@ -270,13 +270,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	a.flushOutstandingComponents()
-
 	a.initDirectMessaging(a.nameResolver)
-
-	err = a.initActors()
-	if err != nil {
-		log.Warnf("failed to init actors: %s", err)
-	}
 
 	// Register and initialize HTTP middleware
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
@@ -304,16 +298,18 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
-
 	a.blockUntilAppIsReady()
+	for _, comp := range a.delayedComponents {
+		a.doProcessDelayedComponent(comp)
+	}
 
 	err = a.createAppChannel()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
-	for _, comp := range a.delayedComponents {
-		a.doProcessDelayedComponent(comp)
-	}
+
+	a.startSubscribing()
+	a.startReadingFromBinding()
 
 	a.loadAppConfiguration()
 	err = a.initActors()
@@ -760,14 +756,7 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	}
 
 	log.Infof("successful init for input binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
-	if _, ok := a.inputBindings[c.Name]; !ok {
-		go func() {
-			err := a.readFromBinding(c.Name, binding)
-			if err != nil {
-				log.Errorf("error reading from input binding %s: %s", c.Name, err)
-			}
-		}()
-	}
+
 	a.inputBindings[c.Name] = binding
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
@@ -976,11 +965,6 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	a.scopedSubscriptions[pubsubName] = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
 	a.scopedPublishings[pubsubName] = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
 	a.allowedTopics[pubsubName] = scopes.GetAllowedTopics(properties)
-	if _, ok := a.pubSubs[pubsubName]; !ok {
-		if err := a.beginPubSub(pubsubName, pubSub); err != nil {
-			return err
-		}
-	}
 	a.pubSubs[pubsubName] = pubSub
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 
@@ -1323,10 +1307,10 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 		return errors.Errorf("incorrect type %s", comp.Spec.Type)
 	}
 
-	if compCategory == bindingsComponent || compCategory == pubsubComponent {
-		a.delayedComponents = append(a.delayedComponents, comp)
-		return nil
-	}
+	// if compCategory == bindingsComponent || compCategory == pubsubComponent {
+	// 	a.delayedComponents = append(a.delayedComponents, comp)
+	// 	//return nil
+	// }
 
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
 		return err
@@ -1653,4 +1637,21 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
+}
+func (a *DaprRuntime) startSubscribing() {
+	for name, pubsub := range a.pubSubs {
+		if err := a.beginPubSub(name, pubsub); err != nil {
+			log.Errorf("error occurred while begining pubsub %s: %s", name, err)
+		}
+	}
+}
+
+func (a *DaprRuntime) startReadingFromBinding() {
+	for name, binding := range a.inputBindings {
+		err := a.readFromBinding(name, binding)
+		if err != nil {
+			log.Errorf("error reading from input binding %s: %s", name, err)
+		}
+
+	}
 }
