@@ -69,8 +69,8 @@ const (
 	actorStateStore   = "actorStateStore"
 
 	// output bindings concurrency
-	bindingsConcurrnecyParallel   = "parallel"
-	bindingsConcurrnecySequential = "sequential"
+	bindingsConcurrencyParallel   = "parallel"
+	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
 )
 
@@ -520,7 +520,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 			return err
 		}
 
-		if response.Concurrency == bindingsConcurrnecyParallel {
+		if response.Concurrency == bindingsConcurrencyParallel {
 			a.sendBatchOutputBindingsParallel(response.To, b)
 		} else {
 			return a.sendBatchOutputBindingsSequential(response.To, b)
@@ -558,9 +558,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
-				response.Concurrency = bindingsConcurrnecyParallel
+				response.Concurrency = bindingsConcurrencyParallel
 			} else {
-				response.Concurrency = bindingsConcurrnecySequential
+				response.Concurrency = bindingsConcurrencySequential
 			}
 
 			response.To = resp.To
