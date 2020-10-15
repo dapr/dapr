@@ -32,7 +32,7 @@ import (
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
+type messageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
 
 // DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
@@ -126,7 +126,7 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true)
+			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true, false)
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -146,7 +146,7 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false)
+	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false, false)
 	if err != nil {
 		return nil, err
 	}

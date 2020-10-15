@@ -1494,7 +1494,8 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		false,
 		-1,
 		false,
-		"")
+		"",
+		false)
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 	return rt
