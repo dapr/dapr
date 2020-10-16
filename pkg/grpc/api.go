@@ -462,7 +462,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 
 	if err != nil {
-		err := status.Errorf(codes.Internal, "failed getting secret with key %s from secret store %s: %s", req.Name, secretStoreName, err.Error())
+		err = status.Errorf(codes.Internal, "failed getting secret with key %s from secret store %s: %s", req.Name, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
