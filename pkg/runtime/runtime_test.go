@@ -1801,6 +1801,10 @@ func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler func(
 	return nil
 }
 
+func (m *mockPublishPubSub) Close() error {
+	return nil
+}
+
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
 		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
