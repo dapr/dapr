@@ -26,7 +26,7 @@ import (
 const (
 	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
-	dialTimeout       = time.Second * 5
+	dialTimeout       = time.Second * 30
 )
 
 // Manager is a wrapper around gRPC connection pooling
@@ -77,7 +77,6 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 	}
 
 	opts := []grpc.DialOption{
-		grpc.WithBlock(),
 		grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 
