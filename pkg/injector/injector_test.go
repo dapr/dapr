@@ -334,3 +334,64 @@ func TestAPITokenSecret(t *testing.T) {
 		assert.Equal(t, "", s)
 	})
 }
+
+func TestAppSSL(t *testing.T) {
+	t.Run("ssl enabled", func(t *testing.T) {
+		annotations := map[string]string{
+			daprAppSSLKey: "true",
+		}
+		s := appSSLEnabled(annotations)
+		assert.True(t, s)
+	})
+
+	t.Run("ssl disabled", func(t *testing.T) {
+		annotations := map[string]string{
+			daprAppSSLKey: "false",
+		}
+		s := appSSLEnabled(annotations)
+		assert.False(t, s)
+	})
+
+	t.Run("ssl not specified", func(t *testing.T) {
+		annotations := map[string]string{}
+		s := appSSLEnabled(annotations)
+		assert.False(t, s)
+	})
+
+	t.Run("get sidecar container enabled", func(t *testing.T) {
+		annotations := map[string]string{
+			daprAppSSLKey: "true",
+		}
+		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		found := false
+		for _, a := range c.Args {
+			if a == "--app-ssl" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found)
+	})
+
+	t.Run("get sidecar container disabled", func(t *testing.T) {
+		annotations := map[string]string{
+			daprAppSSLKey: "false",
+		}
+		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		for _, a := range c.Args {
+			if a == "--app-ssl" {
+				t.FailNow()
+			}
+		}
+	})
+
+	t.Run("get sidecar container not specified", func(t *testing.T) {
+		annotations := map[string]string{}
+		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		for _, a := range c.Args {
+			if a == "--app-ssl" {
+				t.FailNow()
+			}
+		}
+	})
+}
