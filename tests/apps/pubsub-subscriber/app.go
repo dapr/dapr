@@ -58,7 +58,7 @@ var (
 )
 
 // indexHandler is the handler for root path
-func indexHandler(w http.ResponseWriter, r *http.Request) {
+func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	log.Printf("indexHandler is called\n")
 
 	w.WriteHeader(http.StatusOK)
@@ -67,7 +67,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 // this handles /dapr/subscribe, which is called from dapr into this app.
 // this returns the list of topics the app is subscribed to.
-func configureSubscribeHandler(w http.ResponseWriter, r *http.Request) {
+func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 	log.Printf("configureSubscribeHandler called\n")
 
 	pubsubName := "messagebus"
@@ -197,7 +197,7 @@ func extractMessage(body []byte) (string, error) {
 }
 
 // the test calls this to get the messages received
-func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
+func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 	log.Println("Enter getReceivedMessages")
 
 	response := receivedMessagesResponse{
