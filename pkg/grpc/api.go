@@ -179,7 +179,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
-		err := status.Error(codes.Unavailable, "pubsub function is not configured")
+		err := status.Error(codes.FailedPrecondition, "pubsub function is not configured")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -326,7 +326,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 func (a *api) getStateStore(name string) (state.Store, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return nil, status.Error(codes.Unavailable, "state store is not configured")
+		return nil, status.Error(codes.FailedPrecondition, "state store is not configured")
 	}
 
 	if a.stateStores[name] == nil {
@@ -435,7 +435,7 @@ func (a *api) getModifiedStateKey(key string) string {
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
-		err := status.Error(codes.Unavailable, "secret store is not configured")
+		err := status.Error(codes.FailedPrecondition, "secret store is not configured")
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -476,7 +476,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		err := status.Error(codes.Unavailable, "state store is not configured")
+		err := status.Error(codes.FailedPrecondition, "state store is not configured")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
