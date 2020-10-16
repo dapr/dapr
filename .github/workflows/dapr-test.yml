@@ -38,6 +38,10 @@ jobs:
           - os: windows-latest
             target_os: windows
     steps:
+      - name: Set up container log path
+        run: |
+          echo "DAPR_CONTAINER_LOG_PATH=`pwd`/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" >> $GITHUB_ENV
+        shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
         run: |
@@ -147,6 +151,12 @@ jobs:
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_container_logs
+          path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
         env:

@@ -15,3 +15,8 @@ func (m *MockExporter) Init(appID string, hostAddress string, metadata exporters
 	args := m.Called(appID, hostAddress, metadata)
 	return args.Error(0)
 }
+
+// Unregister is a mock method.
+func (m *MockExporter) Unregister() {
+	m.Called()
+}

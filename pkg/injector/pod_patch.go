@@ -16,6 +16,7 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
 	"k8s.io/api/admission/v1beta1"
@@ -51,6 +52,7 @@ const (
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
+	daprAppSSLKey                     = "dapr.io/app-ssl"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -66,6 +68,7 @@ const (
 	sidecarMetricsPortName            = "dapr-metrics"
 	defaultLogLevel                   = "info"
 	defaultLogAsJSON                  = false
+	defaultAppSSL                     = false
 	kubernetesMountPath               = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig                     = "daprsystem"
 	defaultMetricsPort                = 9090
@@ -112,6 +115,11 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	id := getAppID(pod)
+	err := validation.ValidateKubernetesAppID(id)
+	if err != nil {
+		return nil, err
+	}
+
 	// Keep DNS resolution outside of getSidecarContainer for unit testing.
 	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
@@ -323,6 +331,10 @@ func profilingEnabled(annotations map[string]string) bool {
 	return isEnabled
 }
 
+func appSSLEnabled(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprAppSSLKey, defaultAppSSL)
+}
+
 func getAPITokenSecret(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprAPITokenSecret, "")
 }
@@ -466,6 +478,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 		log.Warn(err)
 	}
 
+	sslEnabled := appSSLEnabled(annotations)
 	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
 	c := &corev1.Container{
@@ -569,6 +582,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 				Name:  "SENTRY_LOCAL_IDENTITY",
 				Value: identity,
 			})
+	}
+
+	if sslEnabled {
+		c.Args = append(c.Args, "--app-ssl")
 	}
 
 	secret := getAPITokenSecret(annotations)

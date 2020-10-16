@@ -37,7 +37,6 @@ import (
 	"github.com/dapr/components-contrib/state/cassandra"
 	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/couchbase"
-	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
 	"github.com/dapr/components-contrib/state/hazelcast"
@@ -80,6 +79,7 @@ import (
 
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
@@ -171,9 +171,6 @@ func main() {
 			}),
 			state_loader.New("azure.tablestorage", func() state.Store {
 				return state_azure_tablestorage.NewAzureTablesStateStore(logContrib)
-			}),
-			state_loader.New("etcd", func() state.Store {
-				return etcd.NewETCD(logContrib)
 			}),
 			state_loader.New("cassandra", func() state.Store {
 				return cassandra.NewCassandraStateStore(logContrib)
@@ -311,6 +308,9 @@ func main() {
 			}),
 		),
 		runtime.WithOutputBindings(
+			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
+				return apns.NewAPNS(logContrib)
+			}),
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
 				return sqs.NewAWSSQS(logContrib)
 			}),

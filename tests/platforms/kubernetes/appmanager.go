@@ -7,6 +7,7 @@ package kubernetes
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -22,6 +23,12 @@ import (
 const (
 	// MiniKubeIPEnvVar is the environment variable name which will have Minikube node IP
 	MiniKubeIPEnvVar = "DAPR_TEST_MINIKUBE_IP"
+
+	// ContainerLogPathEnvVar is the environment variable name which will have the container logs
+	ContainerLogPathEnvVar = "DAPR_CONTAINER_LOG_PATH"
+
+	// ContainerLogDefaultPath
+	ContainerLogDefaultPath = "./container_logs"
 
 	// PollInterval is how frequently e2e tests will poll for updates.
 	PollInterval = 1 * time.Second
@@ -40,6 +47,8 @@ type AppManager struct {
 	app       AppDescription
 
 	forwarder *PodPortForwarder
+
+	logPrefix string
 }
 
 // NewAppManager creates AppManager instance
@@ -95,11 +104,28 @@ func (m *AppManager) Init() error {
 
 	m.forwarder = NewPodPortForwarder(m.client, m.namespace)
 
+	m.logPrefix = os.Getenv(ContainerLogPathEnvVar)
+
+	if m.logPrefix == "" {
+		m.logPrefix = ContainerLogDefaultPath
+	}
+
+	if err := os.MkdirAll(m.logPrefix, os.ModePerm); err != nil {
+		log.Printf("Failed to create output log directory '%s' Error was: '%s'. Container logs will be discarded", m.logPrefix, err)
+		m.logPrefix = ""
+	}
+
 	return nil
 }
 
 // Dispose deletes deployment and service
 func (m *AppManager) Dispose(wait bool) error {
+	if m.logPrefix != "" {
+		if err := m.SaveContainerLogs(); err != nil {
+			log.Printf("Failed to retrieve container logs for %s. Error was: %s", m.app.AppName, err)
+		}
+	}
+
 	if err := m.DeleteDeployment(true); err != nil {
 		return err
 	}
@@ -426,6 +452,58 @@ func (m *AppManager) GetHostDetails() (string, string, error) {
 	}
 
 	return podList.Items[0].GetName(), podList.Items[0].Status.PodIP, nil
+}
+
+// SaveContainerLogs get container logs for all containers in the pod and saves them to disk
+func (m *AppManager) SaveContainerLogs() error {
+	if !m.app.DaprEnabled {
+		return fmt.Errorf("dapr is not enabled for this app")
+	}
+
+	podClient := m.client.Pods(m.namespace)
+
+	// Filter only 'testapp=appName' labeled Pods
+	podList, err := podClient.List(metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, pod := range podList.Items {
+		for _, container := range pod.Spec.Containers {
+			err := func() error {
+				req := podClient.GetLogs(pod.GetName(), &apiv1.PodLogOptions{
+					Container: container.Name,
+				})
+				podLogs, err := req.Stream()
+				if err != nil {
+					return err
+				}
+				defer podLogs.Close()
+
+				filename := fmt.Sprintf("%s/%s.%s.log", m.logPrefix, pod.GetName(), container.Name)
+				fh, err := os.Create(filename)
+				if err != nil {
+					return err
+				}
+				defer fh.Close()
+				_, err = io.Copy(fh, podLogs)
+				if err != nil {
+					return err
+				}
+
+				log.Printf("Saved container logs to %s", filename)
+				return nil
+			}()
+
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // GetAppCPUAndMemory returns the Cpu and Memory usage for the dapr sidecar

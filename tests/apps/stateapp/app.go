@@ -123,6 +123,10 @@ func get(key string) (*appState, error) {
 		return nil, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
 
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return nil, fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
+	}
+
 	log.Printf("Found state for key %s: %s", key, body)
 
 	state, err := parseState(key, body)
@@ -205,6 +209,9 @@ func getBulk(states []daprState) ([]daprState, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not load values for bulk get from Dapr: %s", err.Error())
 	}
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return nil, fmt.Errorf("failed to load values for bulk get from Dapr: %s", body)
+	}
 
 	var resp []bulkGetResponse
 	err = json.Unmarshal(body, &resp)
@@ -248,8 +255,12 @@ func delete(key string) error {
 	if err != nil {
 		return fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
 	}
-
 	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return fmt.Errorf("failed to delete key %s in Dapr: %s", key, err.Error())
+	}
+
 	return nil
 }
 

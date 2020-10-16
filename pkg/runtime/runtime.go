@@ -69,8 +69,8 @@ const (
 	actorStateStore   = "actorStateStore"
 
 	// output bindings concurrency
-	bindingsConcurrnecyParallel   = "parallel"
-	bindingsConcurrnecySequential = "sequential"
+	bindingsConcurrencyParallel   = "parallel"
+	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
 )
 
@@ -520,7 +520,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 			return err
 		}
 
-		if response.Concurrency == bindingsConcurrnecyParallel {
+		if response.Concurrency == bindingsConcurrencyParallel {
 			a.sendBatchOutputBindingsParallel(response.To, b)
 		} else {
 			return a.sendBatchOutputBindingsSequential(response.To, b)
@@ -558,9 +558,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
-				response.Concurrency = bindingsConcurrnecyParallel
+				response.Concurrency = bindingsConcurrencyParallel
 			} else {
-				response.Concurrency = bindingsConcurrnecySequential
+				response.Concurrency = bindingsConcurrencySequential
 			}
 
 			response.To = resp.To
@@ -1515,7 +1515,7 @@ func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) 
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -1526,7 +1526,7 @@ func (a *DaprRuntime) createAppChannel() error {
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL)
 		if err != nil {
 			return err
 		}
