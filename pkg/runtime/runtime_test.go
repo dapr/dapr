@@ -1300,6 +1300,23 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
 	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
 
+	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		assert.Nil(t, err)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
 	t.Run("succeeded to publish message to user app with non-json response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -1390,11 +1407,59 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
-		var cloudEvent pubsub.CloudEventsEnvelope
-		json := jsoniter.ConfigFastest
-		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := errors.Errorf("unknown status returned from app while processing pub/sub event %v: not_valid", cloudEvent.ID)
-		assert.Equal(t, expectedClientError.Error(), err.Error())
+		assert.NoError(t, err, "expected no error on unknown status")
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("succeeded to publish message to user app and app returned unexpected json response", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData([]byte("{ \"message\": \"success\"}"), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		assert.Nil(t, err, "expected no error on unknown status")
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("failed to publish message error on invoking method", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+		invokeError := errors.New("error invoking method")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(nil, invokeError)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		expectedError := errors.Wrap(invokeError, "error from app channel while sending pub/sub event to app")
+		assert.Equal(t, expectedError.Error(), err.Error(), "expected errors to match")
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("failed to publish message to user app with 404", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		clientError := errors.New("Not Found")
+		fakeResp := invokev1.NewInvokeMethodResponse(404, "Not Found", nil)
+		fakeResp.WithRawData([]byte(clientError.Error()), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		assert.Nil(t, err, "expected error to be nil")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 

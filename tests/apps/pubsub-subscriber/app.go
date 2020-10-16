@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const (
@@ -46,9 +47,9 @@ type subscription struct {
 }
 
 var (
-	receivedMessagesA []string
-	receivedMessagesB []string
-	receivedMessagesC []string
+	receivedMessagesA sets.String
+	receivedMessagesB sets.String
+	receivedMessagesC sets.String
 	// boolean variable to respond with error if set
 	respondWithError bool
 	// boolean variable to respond with retry if set
@@ -111,7 +112,6 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	defer r.Body.Close()
 
 	var err error
@@ -128,7 +128,8 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		// Return success with DROP status to drop message
+		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
 			Status:  "DROP",
@@ -138,7 +139,8 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 	msg, err := extractMessage(body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		// Return success with DROP status to drop message
+		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
 			Status:  "DROP",
@@ -148,16 +150,20 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 
 	lock.Lock()
 	defer lock.Unlock()
-	if strings.HasSuffix(r.URL.String(), pubsubA) {
-		receivedMessagesA = append(receivedMessagesA, msg)
-	} else if strings.HasSuffix(r.URL.String(), pubsubB) {
-		receivedMessagesB = append(receivedMessagesB, msg)
-	} else if strings.HasSuffix(r.URL.String(), pubsubC) {
-		receivedMessagesC = append(receivedMessagesC, msg)
+	if strings.HasSuffix(r.URL.String(), pubsubA) && !receivedMessagesA.Has(msg) {
+		receivedMessagesA.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubB) && !receivedMessagesB.Has(msg) {
+		receivedMessagesB.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubC) && !receivedMessagesC.Has(msg) {
+		receivedMessagesC.Insert(msg)
 	} else {
-		errorMessage := fmt.Sprintf("Unexpected message from %s", r.URL.String())
+		// This case is triggered when there is multiple redelivery of same message or a message
+		// is thre for an unknown URL path
+
+		errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message from %s", r.URL.String())
 		log.Print(errorMessage)
-		w.WriteHeader(http.StatusInternalServerError)
+		// Return success with DROP status to drop message
+		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: errorMessage,
 			Status:  "DROP",
@@ -165,6 +171,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{
 		Message: "consumed",
 		Status:  "SUCCESS",
@@ -194,9 +201,9 @@ func getReceivedMessages(w http.ResponseWriter, r *http.Request) {
 	log.Println("Enter getReceivedMessages")
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicA: receivedMessagesA,
-		ReceivedByTopicB: receivedMessagesB,
-		ReceivedByTopicC: receivedMessagesC,
+		ReceivedByTopicA: receivedMessagesA.List(),
+		ReceivedByTopicB: receivedMessagesB.List(),
+		ReceivedByTopicC: receivedMessagesC.List(),
 	}
 
 	log.Printf("receivedMessagesResponse=%s", response)
@@ -249,5 +256,8 @@ func appRouter() *mux.Router {
 func main() {
 	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
 
+	receivedMessagesA = sets.NewString()
+	receivedMessagesB = sets.NewString()
+	receivedMessagesC = sets.NewString()
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
 }
