@@ -1522,7 +1522,8 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		false,
 		-1,
 		false,
-		"")
+		"",
+		false)
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 	return rt
@@ -1825,6 +1826,10 @@ func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 
 // Subscribe is a mock subscribe method
 func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler func(msg *pubsub.NewMessage) error) error {
+	return nil
+}
+
+func (m *mockPublishPubSub) Close() error {
 	return nil
 }
 
