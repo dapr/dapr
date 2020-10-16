@@ -179,7 +179,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
-		err := status.Error(codes.FailedPrecondition, "pubsub function is not configured")
+		err := status.Error(codes.FailedPrecondition, "no pubsub is configured")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
