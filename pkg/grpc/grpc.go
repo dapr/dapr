@@ -77,7 +77,6 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 	}
 
 	opts := []grpc.DialOption{
-		grpc.WithBlock(),
 		grpc.WithDefaultServiceConfig(grpcServiceConfig),
 	}
 
