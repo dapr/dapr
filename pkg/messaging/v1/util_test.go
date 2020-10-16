@@ -295,13 +295,17 @@ func TestErrorFromInternalStatus(t *testing.T) {
 		Details: expected.Proto().Details,
 	}
 
+	expected.Message()
+
 	// act
 	statusError := ErrorFromInternalStatus(internal)
 
 	// assert
 	actual, ok := status.FromError(statusError)
 	assert.True(t, ok)
-	assert.Equal(t, expected, actual)
+	assert.Equal(t, expected.Code(), actual.Code())
+	assert.Equal(t, expected.Message(), actual.Message())
+	assert.Equal(t, expected.Details(), actual.Details())
 }
 
 func TestCloneBytes(t *testing.T) {
