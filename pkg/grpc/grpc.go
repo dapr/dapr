@@ -26,7 +26,7 @@ import (
 const (
 	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
-	dialTimeout       = time.Second * 5
+	dialTimeout       = time.Second * 30
 )
 
 // Manager is a wrapper around gRPC connection pooling
