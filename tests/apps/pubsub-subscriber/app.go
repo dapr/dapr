@@ -47,9 +47,12 @@ type subscription struct {
 }
 
 var (
+	// using sets to make the test idempotent on multiple delivery of same message
 	receivedMessagesA sets.String
 	receivedMessagesB sets.String
 	receivedMessagesC sets.String
+	// boolean variable to respond with empty json message
+	respondWithEmptyJSON bool
 	// boolean variable to respond with error if set
 	respondWithError bool
 	// boolean variable to respond with retry if set
@@ -172,10 +175,14 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(appResponse{
-		Message: "consumed",
-		Status:  "SUCCESS",
-	})
+	if respondWithEmptyJSON {
+		w.Write([]byte("{}"))
+	} else {
+		json.NewEncoder(w).Encode(appResponse{
+			Message: "consumed",
+			Status:  "SUCCESS",
+		})
+	}
 }
 
 func extractMessage(body []byte) (string, error) {
@@ -232,6 +239,30 @@ func setRespondWithRetry(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// set to respond with empty json on receiving messages from pubsub
+func setRespondEmptyJSON(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	lock.Lock()
+	defer lock.Unlock()
+	log.Print("set respond with empty json")
+	respondWithEmptyJSON = true
+	w.WriteHeader(http.StatusOK)
+}
+
+// handler called for empty-json case.
+func initializeHandler(w http.ResponseWriter, _ *http.Request) {
+	initializeSets()
+	w.WriteHeader(http.StatusOK)
+}
+
+// initialize all the sets for a clean test.
+func initializeSets() {
+	// initialize all the sets
+	receivedMessagesA = sets.NewString()
+	receivedMessagesB = sets.NewString()
+	receivedMessagesC = sets.NewString()
+}
+
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	log.Printf("Enter appRouter()")
@@ -242,6 +273,8 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/tests/get", getReceivedMessages).Methods("POST")
 	router.HandleFunc("/tests/set-respond-error", setRespondWithError).Methods("POST")
 	router.HandleFunc("/tests/set-respond-retry", setRespondWithRetry).Methods("POST")
+	router.HandleFunc("/tests/set-respond-empty-json", setRespondEmptyJSON).Methods("POST")
+	router.HandleFunc("/tests/initialize", initializeHandler).Methods("POST")
 
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
 
@@ -256,8 +289,7 @@ func appRouter() *mux.Router {
 func main() {
 	log.Printf("Hello Dapr v2 - listening on http://localhost:%d", appPort)
 
-	receivedMessagesA = sets.NewString()
-	receivedMessagesB = sets.NewString()
-	receivedMessagesC = sets.NewString()
+	// initialize sets on application start
+	initializeSets()
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
 }
