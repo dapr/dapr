@@ -28,7 +28,6 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -180,21 +179,21 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
-		err := errors.New("ERR_PUBSUB_NOT_FOUND")
+		err := status.Error(codes.FailedPrecondition, "no pubsub is configured")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
 	pubsubName := in.PubsubName
 	if pubsubName == "" {
-		err := errors.New("ERR_PUBSUB_NAME_EMPTY")
+		err := status.Error(codes.InvalidArgument, "pubsub name is empty")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
 	topic := in.Topic
 	if topic == "" {
-		err := errors.New("ERR_TOPIC_EMPTY")
+		err := status.Errorf(codes.InvalidArgument, "topic is empty in pubsub %s", pubsubName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -210,7 +209,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_PUBSUB_CLOUD_EVENTS_SER")
+		err = status.Errorf(codes.InvalidArgument, "error when marshal cloud event envelop for topic %s pubsub %s: %s", topic, pubsubName, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -223,7 +222,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	err = a.publishFn(&req)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_PUBSUB_PUBLISH_MESSAGE")
+		err = status.Errorf(codes.Internal, "error when publish to topic %s in pubsub %s: %s", topic, pubsubName, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -276,7 +275,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	r := &runtimev1pb.InvokeBindingResponse{}
 	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_INVOKE_OUTPUT_BINDING")
+		err = status.Errorf(codes.Internal, "error when invoke output binding %s: %s", in.Name, err.Error())
 		apiServerLogger.Debug(err)
 		return r, err
 	}
@@ -327,11 +326,11 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 func (a *api) getStateStore(name string) (state.Store, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+		return nil, status.Error(codes.FailedPrecondition, "state store is not configured")
 	}
 
 	if a.stateStores[name] == nil {
-		return nil, errors.New("ERR_STATE_STORE_NOT_FOUND")
+		return nil, status.Errorf(codes.InvalidArgument, "state store %s is not found", name)
 	}
 	return a.stateStores[name], nil
 }
@@ -353,7 +352,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	getResponse, err := store.Get(&req)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_STATE_GET")
+		err = status.Errorf(codes.Internal, "fail to get %s from state store %s: %s", in.Key, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -392,7 +391,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_STATE_SAVE")
+		err = status.Errorf(codes.Internal, "failed saving state in state store %s: %s", in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -420,7 +419,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	err = store.Delete(&req)
 	if err != nil {
-		err = errors.Wrapf(err, "ERR_STATE_DELETE: failed deleting state with key %s", in.Key)
+		err = status.Errorf(codes.Internal, "failed deleting state with key %s: %s", in.Key, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -436,7 +435,7 @@ func (a *api) getModifiedStateKey(key string) string {
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
-		err := errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
+		err := status.Error(codes.FailedPrecondition, "secret store is not configured")
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -444,7 +443,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	secretStoreName := in.StoreName
 
 	if a.secretStores[secretStoreName] == nil {
-		err := errors.New("ERR_SECRET_STORE_NOT_FOUND")
+		err := status.Errorf(codes.InvalidArgument, "failed finding secret store with key %s", secretStoreName)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -463,7 +462,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 
 	if err != nil {
-		err = errors.Wrap(err, "ERR_SECRET_GET")
+		err = status.Errorf(codes.Internal, "failed getting secret with key %s from secret store %s: %s", req.Name, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -477,7 +476,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		err := errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+		err := status.Error(codes.FailedPrecondition, "state store is not configured")
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -485,14 +484,14 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	storeName := in.StoreName
 
 	if a.stateStores[storeName] == nil {
-		err := errors.New("ERR_STATE_STORE_NOT_FOUND")
+		err := status.Errorf(codes.InvalidArgument, "failed finding key %s in state store", storeName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
-		err := errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
+		err := status.Errorf(codes.Unimplemented, "state store %s doesn't support transaction", storeName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -507,7 +506,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				Key: a.getModifiedStateKey(req.Key),
 				// Limitation:
 				// components that cannot handle byte array need to deserialize/serialize in
-				// component sepcific way in components-contrib repo.
+				// component specific way in components-contrib repo.
 				Value:    req.Value,
 				Metadata: req.Metadata,
 				ETag:     req.Etag,
@@ -545,7 +544,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			}
 
 		default:
-			err := errors.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
+			err := status.Errorf(codes.Unimplemented, "operation type %s not supported", inputReq.OperationType)
 			apiServerLogger.Debug(err)
 			return &empty.Empty{}, err
 		}
@@ -559,7 +558,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	})
 
 	if err != nil {
-		err = errors.Wrap(err, "ERR_STATE_TRANSACTION")
+		err = status.Errorf(codes.Internal, "error while executing state transaction: %s", err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
