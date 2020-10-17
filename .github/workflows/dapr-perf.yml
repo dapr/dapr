@@ -32,7 +32,7 @@ jobs:
     steps:
       - name: Set up container log path
         run: |
-          echo "DAPR_CONTAINER_LOG_PATH=`pwd`/container_logs/perf_tests" >> $GITHUB_ENV
+          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/perf_tests" >> $GITHUB_ENV
         shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
