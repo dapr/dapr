@@ -106,7 +106,7 @@ jobs:
         cat kind.yaml
 
         # Set log target directory
-        echo "DAPR_CONTAINER_LOG_PATH=`pwd`/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
+        echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
     - name: Create KinD Cluster
       uses: helm/kind-action@v1.0.0
