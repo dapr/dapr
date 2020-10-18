@@ -143,10 +143,6 @@ func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 	return server, &buffer
 }
 
-func startTestServer(port int) *grpc.Server {
-	return startTestServerAPI(port, &mockGRPCAPI{})
-}
-
 func startTestServerAPI(port int, srv runtimev1pb.DaprServer) *grpc.Server {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
