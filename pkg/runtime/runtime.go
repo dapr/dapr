@@ -235,11 +235,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	a.hostAddress, err = utils.GetHostAddress()
-	if err != nil {
-		return errors.Wrap(err, "failed to determine host address")
-	}
-
 	if a.globalConfig.Spec.TracingSpec.Stdout {
 		trace.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
@@ -300,19 +295,25 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 	a.blockUntilAppIsReady()
 
+	a.hostAddress, err = utils.GetHostAddress()
+	if err != nil {
+		return errors.Wrap(err, "failed to determine host address")
+	}
+
 	err = a.createAppChannel()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
 
-	a.startSubscribing()
-	a.startReadingFromBinding()
-
 	a.loadAppConfiguration()
+
 	err = a.initActors()
 	if err != nil {
 		log.Warnf("failed to init actors: %s", err)
 	}
+
+	a.startSubscribing()
+	a.startReadingFromBinding()
 
 	return nil
 }
