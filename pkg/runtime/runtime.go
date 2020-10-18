@@ -1622,7 +1622,7 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 func (a *DaprRuntime) startSubscribing() {
 	for name, pubsub := range a.pubSubs {
 		if err := a.beginPubSub(name, pubsub); err != nil {
-			log.Errorf("error occurred while begining pubsub %s: %s", name, err)
+			log.Errorf("error occurred while beginning pubsub %s: %s", name, err)
 		}
 	}
 }
@@ -1633,6 +1633,5 @@ func (a *DaprRuntime) startReadingFromBinding() {
 		if err != nil {
 			log.Errorf("error reading from input binding %s: %s", name, err)
 		}
-
 	}
 }
