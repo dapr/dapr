@@ -299,9 +299,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 	a.blockUntilAppIsReady()
-	for _, comp := range a.delayedComponents {
-		a.doProcessDelayedComponent(comp)
-	}
 
 	err = a.createAppChannel()
 	if err != nil {
@@ -1307,11 +1304,6 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 		return errors.Errorf("incorrect type %s", comp.Spec.Type)
 	}
 
-	// if compCategory == bindingsComponent || compCategory == pubsubComponent {
-	// 	a.delayedComponents = append(a.delayedComponents, comp)
-	// 	//return nil
-	// }
-
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
 		return err
 	}
@@ -1345,17 +1337,6 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 		return a.initSecretStore(comp)
 	case stateComponent:
 		return a.initState(comp)
-	}
-	return nil
-}
-
-func (a *DaprRuntime) doProcessDelayedComponent(comp components_v1alpha1.Component) error {
-	category := a.extractComponentCategory(comp)
-	switch category {
-	case bindingsComponent:
-		return a.initBinding(comp)
-	case pubsubComponent:
-		return a.initPubSub(comp)
 	}
 	return nil
 }
