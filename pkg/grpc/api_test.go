@@ -9,11 +9,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/dapr/components-contrib/bindings"
 	"net"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/dapr/components-contrib/bindings"
 
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
@@ -964,7 +965,6 @@ func TestDeleteState(t *testing.T) {
 		return req.Key == "fakeAPI||key2"
 	})).Return(errors.New("failed to delete state with key2"))
 
-
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
@@ -1024,7 +1024,6 @@ func TestDeleteState(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestPublishTopic(t *testing.T) {

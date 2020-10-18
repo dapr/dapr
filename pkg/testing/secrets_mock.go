@@ -7,6 +7,7 @@ package testing
 
 import (
 	"errors"
+
 	"github.com/dapr/components-contrib/secretstores"
 )
 
