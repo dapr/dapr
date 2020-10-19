@@ -191,7 +191,6 @@ func TestRemoveHashingTable(t *testing.T) {
 			assert.Equal(t, tc.totalTable, len(s.hashingTableMap))
 		})
 	}
-
 }
 
 func TestRestoreHashingTables(t *testing.T) {

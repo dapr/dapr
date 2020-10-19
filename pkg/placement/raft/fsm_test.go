@@ -37,6 +37,7 @@ func TestFSMApply(t *testing.T) {
 		err, ok := resp.(error)
 
 		assert.False(t, ok)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(fsm.state.Members))
 	})
 
@@ -58,6 +59,7 @@ func TestFSMApply(t *testing.T) {
 		err, ok := resp.(error)
 
 		assert.False(t, ok)
+		assert.NoError(t, err)
 		assert.Equal(t, 0, len(fsm.state.Members))
 	})
 }
@@ -73,6 +75,7 @@ func TestRestore(t *testing.T) {
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
 	})
 	data, err := marshalMsgPack(s)
+	assert.NoError(t, err)
 	buf := ioutil.NopCloser(bytes.NewBuffer(data))
 
 	// act

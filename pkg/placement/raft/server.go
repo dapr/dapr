@@ -99,37 +99,33 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	var snap raft.SnapshotStore
 
 	if s.inMem {
-		store := raft.NewInmemStore()
-		s.raftInmem = store
-		stable = store
-		logStore = store
+		s.raftInmem = raft.NewInmemStore()
+		stable = s.raftInmem
+		logStore = s.raftInmem
 		snap = raft.NewInmemSnapshotStore()
 	} else {
-		if err := ensureDir(s.raftStorePath()); err != nil {
+		if err = ensureDir(s.raftStorePath()); err != nil {
 			return errors.Wrap(err, "failed to create log store directory")
 		}
 
 		// Create the backend raft store for logs and stable storage.
-		store, err := raftboltdb.NewBoltStore(filepath.Join(s.raftStorePath(), "raft.db"))
+		s.raftStore, err = raftboltdb.NewBoltStore(filepath.Join(s.raftStorePath(), "raft.db"))
 		if err != nil {
 			return err
 		}
-		s.raftStore = store
-		stable = store
+		stable = s.raftStore
 
 		// Wrap the store in a LogCache to improve performance.
-		cacheStore, err := raft.NewLogCache(raftLogCacheSize, store)
+		logStore, err = raft.NewLogCache(raftLogCacheSize, s.raftStore)
 		if err != nil {
 			return err
 		}
-		logStore = cacheStore
 
 		// Create the snapshot store.
-		snapshots, err := raft.NewFileSnapshotStore(s.raftStorePath(), snapshotsRetained, os.Stderr)
+		snap, err = raft.NewFileSnapshotStore(s.raftStorePath(), snapshotsRetained, os.Stderr)
 		if err != nil {
 			return err
 		}
-		snap = snapshots
 	}
 
 	// Setup Raft configuration.
@@ -156,7 +152,8 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	// If we are in bootstrap or dev mode and the state is clean then we can
 	// bootstrap now.
 	if s.inMem || s.bootstrap {
-		hasState, err := raft.HasExistingState(logStore, stable, snap)
+		var hasState bool
+		hasState, err = raft.HasExistingState(logStore, stable, snap)
 		if err != nil {
 			return err
 		}
@@ -170,7 +167,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 				},
 			}
 
-			if err := raft.BootstrapCluster(config,
+			if err = raft.BootstrapCluster(config,
 				logStore, stable, snap, trans, configuration); err != nil {
 				return err
 			}
@@ -178,12 +175,14 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	}
 
 	s.raft, err = raft.NewRaft(config, s.fsm, logStore, stable, snap, trans)
-	go s.raftWatcher()
+	if err != nil {
+		return err
+	}
 
 	// Join all peers to Raft cluster.
 	if s.bootstrap {
 		for _, peer := range s.peers {
-			if err := s.JoinCluster(peer.ID, peer.Address); err != nil {
+			if err = s.JoinCluster(peer.ID, peer.Address); err != nil {
 				logging.Errorf("failed to join %s, %s: %v", peer.ID, peer.Address, err)
 				continue
 			}
@@ -193,18 +192,6 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	logging.Debug("Raft server is starting")
 
 	return err
-}
-
-func (s *Server) raftWatcher() {
-	for {
-		select {
-		case isLeader := <-s.raft.LeaderCh():
-			logging.Infof("new leader election: %s, %v", s.raft.Leader(), isLeader)
-			if !isLeader {
-				break
-			}
-		}
-	}
 }
 
 func (s *Server) raftStorePath() string {
