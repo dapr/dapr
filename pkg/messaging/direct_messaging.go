@@ -189,7 +189,6 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 		}
 
 		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress
-		//forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", d.hostAddress, d.hostAddress)
 	}
 
 	if d.hostName != "" {
@@ -199,7 +198,6 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 		}
 
 		forwardedHeaderValue += "host=" + d.hostName
-		//forwardedHeaderValue += fmt.Sprintf("host=%s", d.hostName)
 	}
 
 	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
