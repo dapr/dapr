@@ -124,8 +124,7 @@ define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
 	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
-	-o $(5)/$(1) \
-	$(2)/main.go;
+	-o $(5)/$(1) $(2)/;
 endef
 
 # Generate binary targets
