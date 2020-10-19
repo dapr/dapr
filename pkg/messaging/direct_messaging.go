@@ -188,7 +188,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 			Values: []string{d.hostAddress},
 		}
 
-		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress
+		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress + ";"
 	}
 
 	if d.hostName != "" {
