@@ -5,16 +5,18 @@ go 1.15
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
-	github.com/dapr/components-contrib v0.4.1-0.20201015165349-4e77594a4d0f
+	github.com/dapr/components-contrib v0.4.1-0.20201016004933-ed7480237d80
+	github.com/dnaeon/go-vcr v1.1.0 // indirect
 	github.com/fasthttp/router v1.3.1
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
-	github.com/golang/protobuf v1.3.3
+	github.com/golang/protobuf v1.4.2
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.3
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/json-iterator/go v1.1.8
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/microcosm-cc/bluemonday v1.0.4 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.3.2
 	github.com/phayes/freeport v0.0.0-20171002181615-b8543db493a5
@@ -26,10 +28,10 @@ require (
 	github.com/stretchr/testify v1.5.1
 	github.com/valyala/fasthttp v1.16.0
 	github.com/yuin/gopher-lua v0.0.0-20200603152657-dc2b0ca8b37e // indirect
-	go.opencensus.io v0.22.3
+	go.opencensus.io v0.22.4
 	go.uber.org/zap v1.13.0 // indirect
-	google.golang.org/genproto v0.0.0-20200122232147-0452cf42e150
-	google.golang.org/grpc v1.26.0
+	google.golang.org/genproto v0.0.0-20200904004341-0bd0a958aa1d
+	google.golang.org/grpc v1.32.0
 	gopkg.in/square/go-jose.v2 v2.5.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.17.8
@@ -47,5 +49,7 @@ require (
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
+
+	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )
