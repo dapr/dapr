@@ -127,6 +127,10 @@ jobs:
       - name: Run Perf tests
         if: env.TEST_CLUSTER != ''
         run: make test-perf-all
+      - name: Save control plane logs
+        if: always() && env.TEST_CLUSTER != ''
+        run: |
+          make save-dapr-control-plane-k8s-logs
       - name: Upload container logs
         if: always()
         uses: actions/upload-artifact@master

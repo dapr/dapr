@@ -154,6 +154,9 @@ delete-test-env-kafka:
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis
 
+save-dapr-control-plane-k8s-logs:
+	kubectl logs -l 'app.kubernetes.io/name=dapr' -n $(DAPR_TEST_NAMESPACE) > $(DAPR_CONTAINER_LOG_PATH)/control_plane_containers.log
+
 # Apply default config yaml to turn mTLS off for testing (mTLS is enabled by default)
 setup-disable-mtls:
 	$(KUBECTL) apply -f ./tests/config/dapr_mtls_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)

@@ -29,6 +29,7 @@ import (
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/cors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -1481,7 +1482,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		TestRuntimeConfigID,
 		"10.10.10.12",
 		"10.10.10.11",
-		DefaultAllowedOrigins,
+		cors.DefaultAllowedOrigins,
 		"globalConfig",
 		"",
 		string(HTTPProtocol),
