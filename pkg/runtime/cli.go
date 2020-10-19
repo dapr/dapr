@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	global_config "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/cors"
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/logger"
@@ -38,7 +39,7 @@ func FromFlags() (*DaprRuntime, error) {
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
 	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
 	placementServiceHostAddress := flag.String("placement-host-address", "", "Address for the Dapr placement service")
-	allowedOrigins := flag.String("allowed-origins", DefaultAllowedOrigins, "Allowed HTTP origins")
+	allowedOrigins := flag.String("allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.Bool("enable-profiling", false, "Enable profiling")
 	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
 	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
