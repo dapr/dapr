@@ -140,8 +140,6 @@ type DaprRuntime struct {
 
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentDependents map[string][]components_v1alpha1.Component
-
-	delayedComponents []components_v1alpha1.Component
 }
 
 type componentPreprocessRes struct {
@@ -177,8 +175,6 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 
 		pendingComponents:          make(chan components_v1alpha1.Component),
 		pendingComponentDependents: map[string][]components_v1alpha1.Component{},
-
-		delayedComponents: make([]components_v1alpha1.Component, 0),
 	}
 }
 
@@ -1630,9 +1626,11 @@ func (a *DaprRuntime) startSubscribing() {
 
 func (a *DaprRuntime) startReadingFromBinding() {
 	for name, binding := range a.inputBindings {
-		err := a.readFromBinding(name, binding)
-		if err != nil {
-			log.Errorf("error reading from input binding %s: %s", name, err)
-		}
+		go func(name string, binding bindings.InputBinding) {
+			err := a.readFromBinding(name, binding)
+			if err != nil {
+				log.Errorf("error reading from input binding %s: %s", name, err)
+			}
+		}(name, binding)
 	}
 }
