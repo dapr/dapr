@@ -4,12 +4,9 @@ coverage:
   status:
     project:
       default:
-        informational: true
-    patch:
-      # Disable the coverage threshold of the patch, so that PRs are
-      # only failing because of overall project coverage threshold.
-      # See https://docs.codecov.io/docs/commit-status#disabling-a-status.
-      default: false
+        target: auto
+        threshold: 0%
+
 ignore:
   # Configure what to ignore.
   - "**/zz_generated*.go" # - Generated files.

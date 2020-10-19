@@ -1110,7 +1110,8 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 			log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
 			return nil
 		}
-		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, appResponse.Status)
+		log.Debugf("skipping status check. unknown status response returned from app while processing pub/sub event %v: %v", cloudEvent.ID, appResponse.Status)
+		return nil
 	}
 
 	if statusCode == nethttp.StatusNotFound {

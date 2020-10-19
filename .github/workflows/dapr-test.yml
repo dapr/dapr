@@ -151,6 +151,10 @@ jobs:
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
+      - name: Save control plane logs
+        if: always() && env.TEST_CLUSTER != ''
+        run: |
+          make save-dapr-control-plane-k8s-logs
       - name: Upload container logs
         if: always()
         uses: actions/upload-artifact@master
