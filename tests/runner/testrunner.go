@@ -36,6 +36,7 @@ type PlatformInterface interface {
 	GetAppUsage(appName string) (*AppUsage, error)
 }
 
+// AppUsage holds the CPU and Memory information for the application.
 type AppUsage struct {
 	CPU    string
 	Memory string
