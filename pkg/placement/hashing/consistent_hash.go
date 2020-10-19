@@ -9,7 +9,10 @@
 // https://en.wikipedia.org/wiki/Consistent_hashing
 //
 // https://research.googleblog.com/2017/04/consistent-hashing-with-bounded-loads.html
-package placement
+//
+// https://github.com/lafikl/consistent/blob/master/consistent.go
+//
+package hashing
 
 import (
 	"encoding/binary"
