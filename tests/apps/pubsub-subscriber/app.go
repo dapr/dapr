@@ -51,13 +51,15 @@ var (
 	receivedMessagesA sets.String
 	receivedMessagesB sets.String
 	receivedMessagesC sets.String
-	// boolean variable to respond with empty json message
+	// boolean variable to respond with empty json message if set
 	respondWithEmptyJSON bool
 	// boolean variable to respond with error if set
 	respondWithError bool
 	// boolean variable to respond with retry if set
 	respondWithRetry bool
-	lock             sync.Mutex
+	// boolean variable to respond with invalid status if set
+	respondWithInvalidStatus bool
+	lock                     sync.Mutex
 )
 
 // indexHandler is the handler for root path
@@ -113,6 +115,14 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	} else if respondWithError {
 		// do not store received messages, respond with error
 		w.WriteHeader(http.StatusInternalServerError)
+		return
+	} else if respondWithInvalidStatus {
+		// do not store received messages, respond with success but an invalid status
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: "invalid status triggers retry",
+			Status:  "INVALID",
+		})
 		return
 	}
 	defer r.Body.Close()
@@ -229,6 +239,16 @@ func setRespondWithError(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// set to respond with invalid status on receiving messages from pubsub
+func setRespondInvalidStatus(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	lock.Lock()
+	defer lock.Unlock()
+	log.Print("set respond with invalid status")
+	respondWithInvalidStatus = true
+	w.WriteHeader(http.StatusOK)
+}
+
 // set to respond with error on receiving messages from pubsub
 func setRespondWithRetry(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
@@ -274,6 +294,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/tests/set-respond-error", setRespondWithError).Methods("POST")
 	router.HandleFunc("/tests/set-respond-retry", setRespondWithRetry).Methods("POST")
 	router.HandleFunc("/tests/set-respond-empty-json", setRespondEmptyJSON).Methods("POST")
+	router.HandleFunc("/tests/set-respond-invalid-status", setRespondInvalidStatus).Methods("POST")
 	router.HandleFunc("/tests/initialize", initializeHandler).Methods("POST")
 
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
