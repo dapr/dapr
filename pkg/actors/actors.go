@@ -151,7 +151,15 @@ func (a *actorsRuntime) Init() error {
 	log.Infof("actor runtime started. actor idle timeout: %s. actor scan interval: %s",
 		a.config.ActorIdleTimeout.String(), a.config.ActorDeactivationScanInterval.String())
 
-	go a.startAppHealthCheck()
+	// Be careful to configure healthz endpoint option. If app healthz returns unhealthy status, Dapr will
+	// disconnect from placement to remove the node from consistent hashing ring.
+	// i.e if app is really busy state, the heathz status would be flaky, which leads to frequent
+	// actor reblanacing. It will impact the entire service.
+	go a.startAppHealthCheck(
+		health.WithFailureThreshold(4),
+		health.WithInterval(5*time.Second),
+		health.WithRequestTimeout(2*time.Second))
+
 	return nil
 }
 
@@ -452,13 +460,7 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 			if err != nil {
 				diag.DefaultMonitoring.ActorStatusReportFailed("recv", "status")
 				log.Warnf("failed to receive placement table update from placement service: %v", err)
-
-				// If receive channel is down, ensure the current stream is closed and get new gRPC stream.
-				stream.CloseSend()
-				isConnAlive = false
-				stream = a.newPlacementStreamConn(placementAddress)
-				isConnAlive = true
-
+				time.Sleep(heartbeatInterval)
 				continue
 			}
 
@@ -477,6 +479,25 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 				continue
 			}
 
+			host := placementv1pb.Host{
+				Name:     fmt.Sprintf("%s:%d", hostAddress, a.config.Port),
+				Load:     1, // TODO: Use CPU/Memory as load balancing factor
+				Entities: a.config.HostedActorTypes,
+				Port:     int64(a.config.Port),
+				Id:       a.config.AppID,
+			}
+
+			if err := stream.Send(&host); err != nil {
+				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
+				log.Warnf("failed to report status to placement service : %v", err)
+
+				// If receive channel is down, ensure the current stream is closed and get new gRPC stream.
+				stream.CloseSend()
+				isConnAlive = false
+				stream = a.newPlacementStreamConn(placementAddress)
+				isConnAlive = true
+			}
+
 			// appHealthy is the health status of actor service application. This allows placement to update
 			// memberlist and hashing table quickly.
 			if !a.appHealthy {
@@ -489,19 +510,6 @@ func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress 
 				continue
 			}
 
-			host := placementv1pb.Host{
-				Name:     fmt.Sprintf("%s:%d", hostAddress, a.config.Port),
-				Load:     1, // TODO: Use CPU/Memory as load balancing factor
-				Entities: a.config.HostedActorTypes,
-				Port:     int64(a.config.Port),
-				Id:       a.config.AppID,
-			}
-
-			if err := stream.Send(&host); err != nil {
-				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
-				log.Warnf("failed to report status to placement service : %v", err)
-			}
-
 			time.Sleep(heartbeatInterval)
 		}
 	}()
@@ -511,6 +519,12 @@ func (a *actorsRuntime) newPlacementStreamConn(placementAddress string) placemen
 	log.Infof("starting connection attempt to placement service: %s", placementAddress)
 
 	for {
+		// Stop reconnecting to placement until app is healthy.
+		if !a.appHealthy {
+			time.Sleep(placementReconnectInterval)
+			continue
+		}
+
 		opts, err := dapr_credentials.GetClientOptions(a.certChain, security.TLSServerName)
 		if err != nil {
 			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
