@@ -154,7 +154,7 @@ func (a *actorsRuntime) Init() error {
 	// Be careful to configure healthz endpoint option. If app healthz returns unhealthy status, Dapr will
 	// disconnect from placement to remove the node from consistent hashing ring.
 	// i.e if app is busy state, the heathz status would be flaky, which leads to frequent
-	// actor reblanacing. It will impact the entire service.
+	// actor rebalancing. It will impact the entire service.
 	go a.startAppHealthCheck(
 		health.WithFailureThreshold(4),
 		health.WithInterval(5*time.Second),
