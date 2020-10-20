@@ -41,6 +41,7 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/ghodss/yaml"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/phayes/freeport"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -55,6 +56,7 @@ const (
 	TestRuntimeConfigID  = "consumer0"
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
+	maxGRPCServerUptime  = 100 * time.Millisecond
 )
 
 var (
@@ -1511,6 +1513,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 }
 
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
+	port, _ := freeport.GetFreePort()
 	topic := "topic1"
 
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
@@ -1523,7 +1526,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		Metadata: map[string]string{pubsubName: TestPubsubName},
 	}
 
-	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), 51024)
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 	rt.topicRoutes = map[string]TopicRoute{}
 	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
 	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
@@ -1574,24 +1577,21 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			lis, err := net.Listen("tcp", "127.0.0.1:51024")
-			assert.NoError(t, err)
+			var grpcServer *grpc.Server
 
-			grpcServer := grpc.NewServer()
-			go func() {
-				if !tc.noResponseStatus {
-					runtimev1pb.RegisterAppCallbackServer(grpcServer, &channelt.MockServer{
-						TopicEventResponseStatus: tc.responseStatus,
-						Error:                    tc.responseError,
-					})
-				} else {
-					runtimev1pb.RegisterAppCallbackServer(grpcServer, &channelt.MockServer{
-						Error: tc.responseError,
-					})
-				}
-				grpcServer.Serve(lis)
-			}()
-			defer grpcServer.Stop()
+			if !tc.noResponseStatus {
+				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+					TopicEventResponseStatus: tc.responseStatus,
+					Error:                    tc.responseError,
+				})
+			} else {
+				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+					Error: tc.responseError,
+				})
+			}
+			if grpcServer != nil {
+				defer grpcServer.Stop()
+			}
 
 			// act
 			err = rt.publishMessageGRPC(testPubSubMessage)
@@ -1607,7 +1607,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 }
 
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
-	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), 51024)
+	port, _ := freeport.GetFreePort()
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 	rt.createAppChannel()
 	testCases := []struct {
 		name             string
@@ -1628,18 +1629,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			lis, err := net.Listen("tcp", "127.0.0.1:51024")
-			assert.NoError(t, err)
-
-			grpcServer := grpc.NewServer()
-			go func() {
-				runtimev1pb.RegisterAppCallbackServer(grpcServer, &channelt.MockServer{
-					Error:    tc.responseError,
-					Bindings: tc.responseFromApp,
-				})
-
-				grpcServer.Serve(lis)
-			}()
+			grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
+				Error:    tc.responseError,
+				Bindings: tc.responseFromApp,
+			})
 			defer grpcServer.Stop()
 
 			// act
@@ -1649,6 +1642,22 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			assert.Equal(t, tc.expectedResponse, resp, "expected response to match")
 		})
 	}
+}
+
+func startTestAppCallbackGRPCServer(t *testing.T, port int, mockServer runtimev1pb.AppCallbackServer) *grpc.Server {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	assert.NoError(t, err)
+	grpcServer := grpc.NewServer()
+	go func() {
+		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)
+		if err := grpcServer.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+	// wait until server starts
+	time.Sleep(maxGRPCServerUptime)
+
+	return grpcServer
 }
 
 func getFakeProperties() map[string]string {
