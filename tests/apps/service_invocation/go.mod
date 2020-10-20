@@ -3,7 +3,7 @@ module app
 go 1.15
 
 require (
-	github.com/dapr/dapr v0.11.0-rc.0.0.20200926045342-b1ff7a102404
+	github.com/dapr/dapr v0.11.1-0.20201016010930-cf4e080c1a54
 	github.com/golang/protobuf v1.3.3
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.3
