@@ -1570,12 +1570,19 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// setup
+			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoute{}
-			rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
-			rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
+			rt.topicRoutes[TestPubsubName] = TopicRoute{
+				routes: map[string]string{
+					topic: topic,
+				},
+			}
+			// create a new AppChannel and gRPC client for every test
 			rt.createAppChannel()
+			// properly close the app channel created
 			defer rt.grpc.AppClient.Close()
 			var grpcServer *grpc.Server
 
@@ -1590,6 +1597,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				})
 			}
 			if grpcServer != nil {
+				// properly stop the gRPC server
 				defer grpcServer.Stop()
 			}
 
