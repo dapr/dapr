@@ -11,7 +11,7 @@ metadata:
   labels:
     app: loadtestclient
 spec:
-  replicas: 1
+  replicas: 30
   selector:
     matchLabels:
       app: loadtestclient
@@ -39,7 +39,7 @@ spec:
       - name: loadtestclient
         image: [USE ACTOR TEST APP IMAGE]
         command: ["./testclient"]
-        args: ["-a", "StateActor", "-c", "10", "-numactors", "1024", "-s", "1024", "-t", "1m"]
+        args: ["-a", "StateActor", "-c", "10", "-numactors", "1024", "-s", "1024", "-t", "30m"]
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
