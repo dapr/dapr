@@ -7,7 +7,6 @@ package messaging
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -189,7 +188,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 			Values: []string{d.hostAddress},
 		}
 
-		forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", d.hostAddress, d.hostAddress)
+		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress + ";"
 	}
 
 	if d.hostName != "" {
@@ -198,7 +197,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 			Values: []string{d.hostName},
 		}
 
-		forwardedHeaderValue += fmt.Sprintf("host=%s", d.hostName)
+		forwardedHeaderValue += "host=" + d.hostName
 	}
 
 	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
