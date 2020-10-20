@@ -100,7 +100,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 			p.RemoveHost(srv)
 
 			_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
-				Name: req.Name,
+				Name: registeredMemberID,
 			})
 
 			if err != nil {
