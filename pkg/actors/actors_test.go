@@ -820,7 +820,10 @@ func TestActiveActorsCount(t *testing.T) {
 func TestActorsAppHealthCheck(t *testing.T) {
 	testActorRuntime := newTestActorsRuntime()
 	testActorRuntime.config.HostedActorTypes = []string{"actor1"}
-	go testActorRuntime.startAppHealthCheck(health.WithFailureThreshold(1), health.WithInterval(1))
+	go testActorRuntime.startAppHealthCheck(
+		health.WithFailureThreshold(1),
+		health.WithInterval(1*time.Second),
+		health.WithRequestTimeout(100*time.Millisecond))
 
 	time.Sleep(time.Second * 2)
 	assert.False(t, testActorRuntime.appHealthy)
