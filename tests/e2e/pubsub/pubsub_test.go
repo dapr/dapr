@@ -281,6 +281,11 @@ var pubsubTests = []struct {
 		handler:            testValidateRedeliveryOrEmptyJSON,
 		subscriberResponse: "retry",
 	},
+	{
+		name:               "publish with subscriber invalid status test redelivery of messages",
+		handler:            testValidateRedeliveryOrEmptyJSON,
+		subscriberResponse: "invalid-status",
+	},
 }
 
 func TestPubSub(t *testing.T) {
