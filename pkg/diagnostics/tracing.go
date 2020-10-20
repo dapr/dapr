@@ -35,10 +35,14 @@ const (
 
 	// span attribute keys
 	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	dbTypeSpanAttributeKey      = string(semconv.DBSystemKey)
-	dbInstanceSpanAttributeKey  = string(semconv.DBNameKey)
-	dbStatementSpanAttributeKey = string(semconv.DBStatementKey)
-	dbURLSpanAttributeKey       = string(semconv.DBConnectionStringKey)
+	//
+	// The upstream constants may be used directly, but that would
+	// proliferate the imports of go.opentelemetry.io/otel/... packages,
+	// which we don't want to do widely before upstream goes GA.
+	dbSystemSpanAttributeKey           = string(semconv.DBSystemKey)
+	dbNameSpanAttributeKey             = string(semconv.DBNameKey)
+	dbStatementSpanAttributeKey        = string(semconv.DBStatementKey)
+	dbConnectionStringSpanAttributeKey = string(semconv.DBConnectionStringKey)
 
 	messagingSystemSpanAttributeKey          = string(semconv.MessagingSystemKey)
 	messagingDestinationSpanAttributeKey     = string(semconv.MessagingDestinationKey)
@@ -200,10 +204,10 @@ func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
 // ConstructInputBindingSpanAttributes creates span attributes for InputBindings.
 func ConstructInputBindingSpanAttributes(bindingName, url string) map[string]string {
 	return map[string]string{
-		dbInstanceSpanAttributeKey:  bindingName,
-		gRPCServiceSpanAttributeKey: daprGRPCDaprService,
-		dbTypeSpanAttributeKey:      bindingBuildingBlockType,
-		dbURLSpanAttributeKey:       url,
+		dbNameSpanAttributeKey:             bindingName,
+		gRPCServiceSpanAttributeKey:        daprGRPCDaprService,
+		dbSystemSpanAttributeKey:           bindingBuildingBlockType,
+		dbConnectionStringSpanAttributeKey: url,
 	}
 }
 

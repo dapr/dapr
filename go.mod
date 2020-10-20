@@ -29,7 +29,7 @@ require (
 	github.com/valyala/fasthttp v1.16.0
 	github.com/yuin/gopher-lua v0.0.0-20200603152657-dc2b0ca8b37e // indirect
 	go.opencensus.io v0.22.4
-	go.opentelemetry.io/otel v0.13.0 // indirect
+	go.opentelemetry.io/otel v0.13.0
 	go.uber.org/zap v1.13.0 // indirect
 	google.golang.org/genproto v0.0.0-20200904004341-0bd0a958aa1d
 	google.golang.org/grpc v1.32.0

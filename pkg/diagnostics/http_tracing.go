@@ -222,15 +222,15 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]strin
 	switch componentType {
 	case "state":
 		dbType = stateBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = getContextValue(ctx, "storeName")
+		m[dbNameSpanAttributeKey] = getContextValue(ctx, "storeName")
 
 	case "secrets":
 		dbType = secretBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = getContextValue(ctx, "secretStoreName")
+		m[dbNameSpanAttributeKey] = getContextValue(ctx, "secretStoreName")
 
 	case "bindings":
 		dbType = bindingBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = getContextValue(ctx, "name")
+		m[dbNameSpanAttributeKey] = getContextValue(ctx, "name")
 
 	case "invoke":
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
@@ -248,10 +248,10 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]strin
 	}
 
 	// Populate the rest of database attributes.
-	if _, ok := m[dbInstanceSpanAttributeKey]; ok {
-		m[dbTypeSpanAttributeKey] = dbType
+	if _, ok := m[dbNameSpanAttributeKey]; ok {
+		m[dbSystemSpanAttributeKey] = dbType
 		m[dbStatementSpanAttributeKey] = fmt.Sprintf("%s %s", method, path)
-		m[dbURLSpanAttributeKey] = dbType
+		m[dbConnectionStringSpanAttributeKey] = dbType
 	}
 
 	// Populate dapr original api attributes.
@@ -288,7 +288,7 @@ func populateActorParams(ctx *fasthttp.RequestCtx, m map[string]string) string {
 
 	case "state":
 		dbType = stateBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = "actor"
+		m[dbNameSpanAttributeKey] = "actor"
 	}
 
 	return dbType
