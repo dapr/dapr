@@ -144,12 +144,27 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	return subscriberExternalURL
 }
 
-func testValidateRedelivery(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName string) string {
+func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName string) string {
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
+	if subscriberResponse == "empty-json" {
+		log.Println("Initialize the sets again in the subscriber application for this scenario ...")
+		// only for the empty-json scenario, initialize empty sets in the subscriber app
+		_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/initialize", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, code)
+	}
+
+	// set to respond with specified subscriber response
 	_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/set-respond-"+subscriberResponse, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, code)
 	sentMessages := testPublish(t, publisherExternalURL)
+
+	if subscriberResponse == "empty-json" {
+		// on empty-json response case immediately validate the received messages
+		time.Sleep(5 * time.Second)
+		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+	}
 
 	// restart application
 	log.Printf("Restarting subscriber application to check redelivery...\n")
@@ -160,10 +175,22 @@ func testValidateRedelivery(t *testing.T, publisherExternalURL, subscriberExtern
 	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	// validate redelivery of messages
-	log.Printf("Validating redelivered messages...")
-	time.Sleep(5 * time.Second)
-	validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+	if subscriberResponse == "empty-json" {
+		// validate that there is no redelivery of messages
+		log.Printf("Validating no redelivered messages...")
+		time.Sleep(5 * time.Second)
+		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, receivedMessagesResponse{
+			// empty string slices
+			ReceivedByTopicA: []string{},
+			ReceivedByTopicB: []string{},
+			ReceivedByTopicC: []string{},
+		})
+	} else {
+		// validate redelivery of messages
+		log.Printf("Validating redelivered messages...")
+		time.Sleep(5 * time.Second)
+		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+	}
 	return subscriberExternalURL
 }
 
@@ -236,18 +263,28 @@ var pubsubTests = []struct {
 		handler: testPublishSubscribeSuccessfully,
 	},
 	{
+		name:               "publish with subscriber returning empty json test delivery of message once",
+		handler:            testValidateRedeliveryOrEmptyJSON,
+		subscriberResponse: "empty-json",
+	},
+	{
 		name:    "publish with no topic",
 		handler: testPublishWithoutTopic,
 	},
 	{
 		name:               "publish with subscriber error test redelivery of messages",
-		handler:            testValidateRedelivery,
+		handler:            testValidateRedeliveryOrEmptyJSON,
 		subscriberResponse: "error",
 	},
 	{
 		name:               "publish with subscriber retry test redelivery of messages",
-		handler:            testValidateRedelivery,
+		handler:            testValidateRedeliveryOrEmptyJSON,
 		subscriberResponse: "retry",
+	},
+	{
+		name:               "publish with subscriber invalid status test redelivery of messages",
+		handler:            testValidateRedeliveryOrEmptyJSON,
+		subscriberResponse: "invalid-status",
 	},
 }
 
