@@ -46,3 +46,17 @@ func TestTraceStateToW3CString(t *testing.T) {
 		assert.Equal(t, "key=value", got)
 	})
 }
+
+// This test would allow us to know when the span attribute keys are
+// modified in go.opentelemetry.io/otel/semconv library, and thus in
+// the spec.
+func TestOtelConventionStrings(t *testing.T) {
+	assert.Equal(t, "db.system", dbSystemSpanAttributeKey)
+	assert.Equal(t, "db.name", dbNameSpanAttributeKey)
+	assert.Equal(t, "db.statement", dbStatementSpanAttributeKey)
+	assert.Equal(t, "db.connection_string", dbConnectionStringSpanAttributeKey)
+	assert.Equal(t, "topic", messagingDestinationTopicKind)
+	assert.Equal(t, "messaging.system", messagingSystemSpanAttributeKey)
+	assert.Equal(t, "messaging.destination", messagingDestinationSpanAttributeKey)
+	assert.Equal(t, "messaging.destination_kind", messagingDestinationKindSpanAttributeKey)
+}
