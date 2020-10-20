@@ -1513,7 +1513,6 @@ func TestOnNewPublishedMessage(t *testing.T) {
 }
 
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
-	port, _ := freeport.GetFreePort()
 	topic := "topic1"
 
 	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
@@ -1525,12 +1524,6 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		Data:     b,
 		Metadata: map[string]string{pubsubName: TestPubsubName},
 	}
-
-	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
-	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
-	rt.createAppChannel()
 
 	testCases := []struct {
 		name             string
@@ -1577,6 +1570,20 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// setup
+			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
+			port, _ := freeport.GetFreePort()
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt.topicRoutes = map[string]TopicRoute{}
+			rt.topicRoutes[TestPubsubName] = TopicRoute{
+				routes: map[string]string{
+					topic: topic,
+				},
+			}
+			// create a new AppChannel and gRPC client for every test
+			rt.createAppChannel()
+			// properly close the app channel created
+			defer rt.grpc.AppClient.Close()
 			var grpcServer *grpc.Server
 
 			if !tc.noResponseStatus {
@@ -1590,6 +1597,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				})
 			}
 			if grpcServer != nil {
+				// properly stop the gRPC server
 				defer grpcServer.Stop()
 			}
 
@@ -1607,9 +1615,6 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 }
 
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
-	rt.createAppChannel()
 	testCases := []struct {
 		name             string
 		expectedResponse []string
@@ -1629,6 +1634,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			port, _ := freeport.GetFreePort()
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt.createAppChannel()
+			defer rt.grpc.AppClient.Close()
 			grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
 				Error:    tc.responseError,
 				Bindings: tc.responseFromApp,
