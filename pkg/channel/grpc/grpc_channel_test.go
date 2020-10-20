@@ -14,53 +14,12 @@ import (
 	"net/http"
 	"testing"
 
+	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/golang/protobuf/ptypes/any"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
-
-// The Implementation of fake user app server
-type mockServer struct {
-}
-
-func (m *mockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-	dt := map[string]string{
-		"method": in.Method,
-	}
-
-	for k, v := range md {
-		dt[k] = v[0]
-	}
-
-	dt["httpverb"] = in.HttpExtension.GetVerb().String()
-	serialized, _ := json.Marshal(in.HttpExtension.Querystring)
-	dt["querystring"] = string(serialized)
-
-	ds, _ := json.Marshal(dt)
-	return &commonv1pb.InvokeResponse{Data: &any.Any{Value: ds}, ContentType: "application/json"}, nil
-}
-
-func (m *mockServer) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-	return &runtimev1pb.ListTopicSubscriptionsResponse{}, nil
-}
-
-func (m *mockServer) ListInputBindings(ctx context.Context, in *empty.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
-	return &runtimev1pb.ListInputBindingsResponse{}, nil
-}
-
-func (m *mockServer) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
-	return &runtimev1pb.BindingEventResponse{}, nil
-}
-
-func (m *mockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
-	return &runtimev1pb.TopicEventResponse{}, nil
-}
 
 // TODO: Add APIVersion testing
 
@@ -70,7 +29,7 @@ func TestInvokeMethod(t *testing.T) {
 
 	grpcServer := grpc.NewServer()
 	go func() {
-		runtimev1pb.RegisterAppCallbackServer(grpcServer, &mockServer{})
+		runtimev1pb.RegisterAppCallbackServer(grpcServer, &channelt.MockServer{})
 		grpcServer.Serve(lis)
 	}()
 

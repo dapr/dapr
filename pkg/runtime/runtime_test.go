@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/cors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -42,6 +44,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -1408,7 +1413,25 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err, "expected no error on unknown status")
+		assert.Error(t, err, "expected error on unknown status")
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("succeeded to publish message to user app but app returned empty status code", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		fakeResp.WithRawData([]byte("{ \"message\": \"empty status\"}"), "application/json")
+
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := rt.publishMessageHTTP(testPubSubMessage)
+
+		// assert
+		assert.NoError(t, err, "expected no error on empty status")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -1487,6 +1510,147 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	})
 }
 
+func TestOnNewPublishedMessageGRPC(t *testing.T) {
+	topic := "topic1"
+
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	b, err := json.Marshal(envelope)
+	assert.Nil(t, err)
+
+	testPubSubMessage := &pubsub.NewMessage{
+		Topic:    topic,
+		Data:     b,
+		Metadata: map[string]string{pubsubName: TestPubsubName},
+	}
+
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), 51024)
+	rt.topicRoutes = map[string]TopicRoute{}
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
+	rt.createAppChannel()
+
+	testCases := []struct {
+		name             string
+		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
+		errorExpected    bool
+		noResponseStatus bool
+		responseError    error
+	}{
+		{
+			name:             "failed to publish message to user app with unimplemented error",
+			noResponseStatus: true,
+			responseError:    status.Errorf(codes.Unimplemented, "unimplemented method"),
+			errorExpected:    false, // should be dropped with no error
+		},
+		{
+			name:             "failed to publish message to user app with response error",
+			noResponseStatus: true,
+			responseError:    assert.AnError,
+			errorExpected:    true,
+		},
+		{
+			name:             "succeeded to publish message to user app with empty response",
+			noResponseStatus: true,
+		},
+		{
+			name:           "succeeded to publish message to user app with success response",
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+		},
+		{
+			name:           "succeeded to publish message to user app with retry",
+			responseStatus: runtimev1pb.TopicEventResponse_RETRY,
+			errorExpected:  true,
+		},
+		{
+			name:           "succeeded to publish message to user app with drop",
+			responseStatus: runtimev1pb.TopicEventResponse_DROP,
+		},
+		{
+			name:           "succeeded to publish message to user app with invalid response",
+			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
+			errorExpected:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			lis, err := net.Listen("tcp", "127.0.0.1:51024")
+			assert.NoError(t, err)
+
+			grpcServer := grpc.NewServer()
+			go func() {
+				if !tc.noResponseStatus {
+					runtimev1pb.RegisterAppCallbackServer(grpcServer, &channelt.MockServer{
+						TopicEventResponseStatus: tc.responseStatus,
+						Error:                    tc.responseError,
+					})
+				} else {
+					runtimev1pb.RegisterAppCallbackServer(grpcServer, &channelt.MockServer{
+						Error: tc.responseError,
+					})
+				}
+				grpcServer.Serve(lis)
+			}()
+			defer grpcServer.Stop()
+
+			// act
+			err = rt.publishMessageGRPC(testPubSubMessage)
+
+			// assert
+			if tc.errorExpected {
+				assert.Error(t, err, "expected an error")
+			} else {
+				assert.Nil(t, err, "expected no error")
+			}
+		})
+	}
+}
+
+func TestGetSubscribedBindingsGRPC(t *testing.T) {
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), 51024)
+	rt.createAppChannel()
+	testCases := []struct {
+		name             string
+		expectedResponse []string
+		responseError    error
+		responseFromApp  []string
+	}{
+		{
+			name:             "get list of subscriber bindings success",
+			expectedResponse: []string{"binding1", "binding2"},
+			responseFromApp:  []string{"binding1", "binding2"},
+		},
+		{
+			name:             "get list of subscriber bindings error from app",
+			expectedResponse: []string{},
+			responseError:    assert.AnError,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			lis, err := net.Listen("tcp", "127.0.0.1:51024")
+			assert.NoError(t, err)
+
+			grpcServer := grpc.NewServer()
+			go func() {
+				runtimev1pb.RegisterAppCallbackServer(grpcServer, &channelt.MockServer{
+					Error:    tc.responseError,
+					Bindings: tc.responseFromApp,
+				})
+
+				grpcServer.Serve(lis)
+			}()
+			defer grpcServer.Stop()
+
+			// act
+			resp := rt.getSubscribedBindingsGRPC()
+
+			// assert
+			assert.Equal(t, tc.expectedResponse, resp, "expected response to match")
+		})
+	}
+}
+
 func getFakeProperties() map[string]string {
 	return map[string]string{
 		"host":                    "localhost",
@@ -1543,6 +1707,10 @@ func getFakeMetadataItems() []components_v1alpha1.MetadataItem {
 }
 
 func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
+	return NewTestDaprRuntimeWithProtocol(mode, string(HTTPProtocol), 1024)
+}
+
+func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewRuntimeConfig(
 		TestRuntimeConfigID,
 		"10.10.10.12",
@@ -1550,12 +1718,12 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 		cors.DefaultAllowedOrigins,
 		"globalConfig",
 		"",
-		string(HTTPProtocol),
+		protocol,
 		string(mode),
 		DefaultDaprHTTPPort,
 		0,
 		DefaultDaprAPIGRPCPort,
-		1024,
+		appPort,
 		DefaultProfilePort,
 		false,
 		-1,
