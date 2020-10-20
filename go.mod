@@ -15,10 +15,10 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.3
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
-	github.com/hashicorp/go-hclog v0.14.1
-	github.com/hashicorp/go-msgpack v1.1.5
+	github.com/hashicorp/go-hclog v0.9.1
+	github.com/hashicorp/go-msgpack v0.5.5
 	github.com/hashicorp/raft v1.2.0
-	github.com/hashicorp/raft-boltdb v0.0.0-20191021154308-4207f1bf0617
+	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
 	github.com/json-iterator/go v1.1.10
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/microcosm-cc/bluemonday v1.0.4 // indirect
