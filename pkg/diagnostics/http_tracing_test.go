@@ -157,28 +157,28 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 		{
 			"/v1.0/state/statestore/key",
 			map[string]string{
-				dbTypeSpanAttributeKey:      "state",
-				dbInstanceSpanAttributeKey:  "statestore",
-				dbStatementSpanAttributeKey: "GET /v1.0/state/statestore/key",
-				dbURLSpanAttributeKey:       "state",
+				dbSystemSpanAttributeKey:           "state",
+				dbNameSpanAttributeKey:             "statestore",
+				dbStatementSpanAttributeKey:        "GET /v1.0/state/statestore/key",
+				dbConnectionStringSpanAttributeKey: "state",
 			},
 		},
 		{
 			"/v1.0/state/statestore",
 			map[string]string{
-				dbTypeSpanAttributeKey:      "state",
-				dbInstanceSpanAttributeKey:  "statestore",
-				dbStatementSpanAttributeKey: "GET /v1.0/state/statestore",
-				dbURLSpanAttributeKey:       "state",
+				dbSystemSpanAttributeKey:           "state",
+				dbNameSpanAttributeKey:             "statestore",
+				dbStatementSpanAttributeKey:        "GET /v1.0/state/statestore",
+				dbConnectionStringSpanAttributeKey: "state",
 			},
 		},
 		{
 			"/v1.0/secrets/keyvault/name",
 			map[string]string{
-				dbTypeSpanAttributeKey:      secretBuildingBlockType,
-				dbInstanceSpanAttributeKey:  "keyvault",
-				dbStatementSpanAttributeKey: "GET /v1.0/secrets/keyvault/name",
-				dbURLSpanAttributeKey:       secretBuildingBlockType,
+				dbSystemSpanAttributeKey:           secretBuildingBlockType,
+				dbNameSpanAttributeKey:             "keyvault",
+				dbStatementSpanAttributeKey:        "GET /v1.0/secrets/keyvault/name",
+				dbConnectionStringSpanAttributeKey: secretBuildingBlockType,
 			},
 		},
 		{
@@ -200,20 +200,20 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 		{
 			"/v1/bindings/kafka",
 			map[string]string{
-				dbTypeSpanAttributeKey:      bindingBuildingBlockType,
-				dbInstanceSpanAttributeKey:  "kafka",
-				dbStatementSpanAttributeKey: "GET /v1/bindings/kafka",
-				dbURLSpanAttributeKey:       bindingBuildingBlockType,
+				dbSystemSpanAttributeKey:           bindingBuildingBlockType,
+				dbNameSpanAttributeKey:             "kafka",
+				dbStatementSpanAttributeKey:        "GET /v1/bindings/kafka",
+				dbConnectionStringSpanAttributeKey: bindingBuildingBlockType,
 			},
 		},
 		{
 			"/v1.0/actors/demo_actor/1/state/my_data",
 			map[string]string{
-				dbTypeSpanAttributeKey:      stateBuildingBlockType,
-				dbInstanceSpanAttributeKey:  "actor",
-				dbStatementSpanAttributeKey: "GET /v1.0/actors/demo_actor/1/state/my_data",
-				dbURLSpanAttributeKey:       stateBuildingBlockType,
-				daprAPIActorTypeID:          "demo_actor.1",
+				dbSystemSpanAttributeKey:           stateBuildingBlockType,
+				dbNameSpanAttributeKey:             "actor",
+				dbStatementSpanAttributeKey:        "GET /v1.0/actors/demo_actor/1/state/my_data",
+				dbConnectionStringSpanAttributeKey: stateBuildingBlockType,
+				daprAPIActorTypeID:                 "demo_actor.1",
 			},
 		},
 		{
