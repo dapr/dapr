@@ -46,7 +46,7 @@ func (a *actor) channel() chan (bool) {
 
 func (a *actor) lock() {
 	atomic.AddInt32(&a.pendingLockCount, 1)
-	diag.DefaultMonitoring.ReportCurrentPendingLocks(a.actorType, a.actorID, a.pendingLockCount)
+	diag.DefaultMonitoring.ReportCurrentPendingLocks(a.actorType, a.pendingLockCount)
 	a.concurrencyLock.Lock()
 
 	a.busy = true
@@ -62,5 +62,5 @@ func (a *actor) unLock() {
 
 	a.concurrencyLock.Unlock()
 	atomic.AddInt32(&a.pendingLockCount, -1)
-	diag.DefaultMonitoring.ReportCurrentPendingLocks(a.actorType, a.actorID, a.pendingLockCount)
+	diag.DefaultMonitoring.ReportCurrentPendingLocks(a.actorType, a.pendingLockCount)
 }
