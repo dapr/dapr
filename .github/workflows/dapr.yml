@@ -66,6 +66,9 @@ jobs:
         uses: actions/checkout@v2
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
+      - name: Run go mod tidy check diff
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        run: make modtidy check-diff
       - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         uses: golangci/golangci-lint-action@v2.2.1
