@@ -664,8 +664,8 @@ func TestGetSecret(t *testing.T) {
 	storeName := "store1"
 	deniedStoreName := "store2"
 	restrictedStore := "store3"
-	unrestrictedStore := "store4" // No configuration defined for the store
-	nonExistingStore := "nonexistent"  // Non-existing store
+	unrestrictedStore := "store4"     // No configuration defined for the store
+	nonExistingStore := "nonexistent" // Non-existing store
 
 	testCases := []struct {
 		testName         string
@@ -793,14 +793,14 @@ func TestSaveState(t *testing.T) {
 		if len(reqs) == 0 {
 			return false
 		}
-		return reqs[0].Key == "fakeAPI||key1"
+		return reqs[0].Key == "fakeAPI||good-key"
 	})).Return(nil)
 	fakeStore.On("BulkSet", mock.MatchedBy(func(reqs []state.SetRequest) bool {
 		if len(reqs) == 0 {
 			return false
 		}
-		return reqs[0].Key == "fakeAPI||key2"
-	})).Return(errors.New("failed to save state with key2"))
+		return reqs[0].Key == "fakeAPI||error-key"
+	})).Return(errors.New("failed to save state with error-key"))
 
 	fakeAPI := &api{
 		id:          "fakeAPI",
@@ -826,24 +826,24 @@ func TestSaveState(t *testing.T) {
 		{
 			testName:      "save state",
 			storeName:     "store1",
-			key:           "key1",
-			value:         "value1",
+			key:           "good-key",
+			value:         "value",
 			errorExcepted: false,
 			expectedError: codes.OK,
 		},
 		{
 			testName:      "save state with non-existing store",
 			storeName:     "store2",
-			key:           "key1",
-			value:         "value1",
+			key:           "good-key",
+			value:         "value",
 			errorExcepted: true,
 			expectedError: codes.InvalidArgument,
 		},
 		{
 			testName:      "save state but error occurs",
 			storeName:     "store1",
-			key:           "key2",
-			value:         "value2",
+			key:           "error-key",
+			value:         "value",
 			errorExcepted: true,
 			expectedError: codes.Internal,
 		},
@@ -875,17 +875,17 @@ func TestSaveState(t *testing.T) {
 func TestGetState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == "fakeAPI||key1"
+		return req.Key == "fakeAPI||good-key"
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
 			ETag: "test-etag",
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
-		return req.Key == "fakeAPI||key2"
+		return req.Key == "fakeAPI||error-key"
 	})).Return(
 		nil,
-		errors.New("failed to get state with key2"))
+		errors.New("failed to get state with error-key"))
 
 	fakeAPI := &api{
 		id:          "fakeAPI",
@@ -911,7 +911,7 @@ func TestGetState(t *testing.T) {
 		{
 			testName:      "get state",
 			storeName:     "store1",
-			key:           "key1",
+			key:           "good-key",
 			errorExcepted: false,
 			expectedResponse: runtimev1pb.GetStateResponse{
 				Data: []byte("test-data"),
@@ -922,7 +922,7 @@ func TestGetState(t *testing.T) {
 		{
 			testName:         "get store with non-existing store",
 			storeName:        "no-store",
-			key:              "key1",
+			key:              "good-key",
 			errorExcepted:    true,
 			expectedResponse: runtimev1pb.GetStateResponse{},
 			expectedError:    codes.InvalidArgument,
@@ -930,7 +930,7 @@ func TestGetState(t *testing.T) {
 		{
 			testName:         "get store with key but error occurs",
 			storeName:        "store1",
-			key:              "key2",
+			key:              "error-key",
 			errorExcepted:    true,
 			expectedResponse: runtimev1pb.GetStateResponse{},
 			expectedError:    codes.Internal,
@@ -959,10 +959,10 @@ func TestGetState(t *testing.T) {
 func TestDeleteState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == "fakeAPI||key1"
+		return req.Key == "fakeAPI||good-key"
 	})).Return(nil)
 	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
-		return req.Key == "fakeAPI||key2"
+		return req.Key == "fakeAPI||error-key"
 	})).Return(errors.New("failed to delete state with key2"))
 
 	fakeAPI := &api{
@@ -988,21 +988,21 @@ func TestDeleteState(t *testing.T) {
 		{
 			testName:      "delete state",
 			storeName:     "store1",
-			key:           "key1",
+			key:           "good-key",
 			errorExcepted: false,
 			expectedError: codes.OK,
 		},
 		{
 			testName:      "delete store with non-existing store",
 			storeName:     "no-store",
-			key:           "key1",
+			key:           "good-key",
 			errorExcepted: true,
 			expectedError: codes.InvalidArgument,
 		},
 		{
 			testName:      "delete store with key but error occurs",
 			storeName:     "store1",
-			key:           "key2",
+			key:           "error-key",
 			errorExcepted: true,
 			expectedError: codes.Internal,
 		},
@@ -1136,10 +1136,10 @@ func TestExecuteStateTransaction(t *testing.T) {
 		return false
 	}
 	fakeStore.On("Multi", mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
-		return matchKeyFn(req, "key1")
+		return matchKeyFn(req, "good-key")
 	})).Return(nil)
 	fakeStore.On("Multi", mock.MatchedBy(func(req *state.TransactionalStateRequest) bool {
-		return matchKeyFn(req, "key2")
+		return matchKeyFn(req, "error-key")
 	})).Return(errors.New("error to execute with key2"))
 
 	fakeAPI := &api{
@@ -1170,7 +1170,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 			testName:      "upsert operation",
 			storeName:     "store1",
 			operation:     state.Upsert,
-			key:           "key1",
+			key:           "good-key",
 			value:         []byte("1"),
 			errorExcepted: false,
 			expectedError: codes.OK,
@@ -1179,7 +1179,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 			testName:      "delete operation",
 			storeName:     "store1",
 			operation:     state.Upsert,
-			key:           "key1",
+			key:           "good-key",
 			errorExcepted: false,
 			expectedError: codes.OK,
 		},
@@ -1187,7 +1187,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 			testName:      "unknown operation",
 			storeName:     "store1",
 			operation:     state.OperationType("unknown"),
-			key:           "key1",
+			key:           "good-key",
 			errorExcepted: true,
 			expectedError: codes.Unimplemented,
 		},
@@ -1195,7 +1195,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 			testName:      "error occurs when multi execute",
 			storeName:     "store1",
 			operation:     state.Upsert,
-			key:           "key2",
+			key:           "error-key",
 			errorExcepted: true,
 			expectedError: codes.Internal,
 		},
