@@ -59,4 +59,6 @@ func TestOtelConventionStrings(t *testing.T) {
 	assert.Equal(t, "messaging.system", messagingSystemSpanAttributeKey)
 	assert.Equal(t, "messaging.destination", messagingDestinationSpanAttributeKey)
 	assert.Equal(t, "messaging.destination_kind", messagingDestinationKindSpanAttributeKey)
+	assert.Equal(t, "rpc.service", gRPCServiceSpanAttributeKey)
+	assert.Equal(t, "net.peer.name", netPeerNameSpanAttributeKey)
 }
