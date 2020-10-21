@@ -12,6 +12,7 @@ import (
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
 	"github.com/dapr/dapr/pkg/config"
+	cors_dapr "github.com/dapr/dapr/pkg/cors"
 	"github.com/dapr/dapr/pkg/logger"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -99,6 +100,10 @@ func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHan
 }
 
 func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	if s.config.AllowedOrigins == cors_dapr.DefaultAllowedOrigins {
+		return next
+	}
+
 	log.Infof("enabled cors http middleware")
 	origins := strings.Split(s.config.AllowedOrigins, ",")
 	corsHandler := s.getCorsHandler(origins)

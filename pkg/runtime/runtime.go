@@ -1091,6 +1091,9 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		}
 
 		switch appResponse.Status {
+		case "":
+			// Consider empty status field as success
+			fallthrough
 		case pubsub.Success:
 			return nil
 		case pubsub.Retry:
@@ -1099,6 +1102,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 			log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
 			return nil
 		}
+		// Consider unknown status field as error and retry
 		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, appResponse.Status)
 	}
 
@@ -1166,25 +1170,29 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		errStatus, hasErrStatus := status.FromError(err)
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
-			log.Warn("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
+			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
 			return nil
 		}
 
 		err = errors.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
 		log.Debug(err)
+		// on error from application, return error for redelivery of event
+		return err
 	}
 
 	switch res.GetStatus() {
 	case runtimev1pb.TopicEventResponse_SUCCESS:
+		// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
+		// success from protobuf definition
 		return nil
 	case runtimev1pb.TopicEventResponse_RETRY:
 		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
 	case runtimev1pb.TopicEventResponse_DROP:
-		log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
 		return nil
 	}
-
-	return err
+	// Consider unknown status field as error and retry
+	return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, res.GetStatus())
 }
 
 func (a *DaprRuntime) initActors() error {
