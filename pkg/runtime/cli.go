@@ -13,7 +13,6 @@ import (
 
 	global_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -81,10 +80,6 @@ func FromFlags() (*DaprRuntime, error) {
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
-
-	if err := diagnostics.InitMetrics(*appID); err != nil {
 		log.Fatal(err)
 	}
 
