@@ -15,7 +15,6 @@ var (
 	failReasonKey   = tag.MustNewKey("reason")
 	operationKey    = tag.MustNewKey("operation")
 	actorTypeKey    = tag.MustNewKey("actor_type")
-	actorIDKey      = tag.MustNewKey("actor_id")
 	trustDomainKey  = tag.MustNewKey("trustDomain")
 	namespaceKey    = tag.MustNewKey("namespace")
 	policyActionKey = tag.MustNewKey("policyAction")
@@ -163,7 +162,7 @@ func (s *serviceMetrics) Init(appID string) error {
 		diag_utils.NewMeasureView(s.actorRebalancedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diag_utils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.LastValue()),
+		diag_utils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
 
 		diag_utils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.LastValue()),
 		diag_utils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.LastValue()),
@@ -289,11 +288,11 @@ func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
 }
 
 // ReportCurrentPendingLocks records the current pending actor locks.
-func (s *serviceMetrics) ReportCurrentPendingLocks(actorType, actorID string, pendingLocks int32) {
+func (s *serviceMetrics) ReportCurrentPendingLocks(actorType string, pendingLocks int32) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
+			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
 			s.actorPendingCalls.M(int64(pendingLocks)))
 	}
 }
