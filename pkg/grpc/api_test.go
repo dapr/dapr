@@ -665,7 +665,7 @@ func TestGetSecret(t *testing.T) {
 	deniedStoreName := "store2"
 	restrictedStore := "store3"
 	unrestrictedStore := "store4" // No configuration defined for the store
-	nonExistingStore := "store5"  // Non-existing store
+	nonExistingStore := "nonexistent"  // Non-existing store
 
 	testCases := []struct {
 		testName         string
