@@ -47,7 +47,7 @@ const (
 	// Secret
 	ErrSecretStoreNotConfigured = "secret store is not configured"
 	ErrSecretStoreNotFound      = "failed finding secret store with key %s"
-	ErrPermissionDenied         = "Access denied by policy to get %q from %q"
+	ErrPermissionDenied         = "access denied by policy to get %q from %q"
 	ErrSecretGet                = "failed getting secret with key %s from secret store %s: %s"
 
 	// DirectMessaging
