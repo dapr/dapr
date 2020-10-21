@@ -280,16 +280,16 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("API gRPC server is running on port %v", a.runtimeConfig.APIGRPCPort)
 
+	// Start HTTP Server
+	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
+	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
+	a.blockUntilAppIsReady()
+
 	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
 	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.InternalGRPCPort)
-
-	// Start HTTP Server
-	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
-	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
-	a.blockUntilAppIsReady()
 
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
@@ -1496,6 +1496,7 @@ func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) 
 	}
 
 	contentType, body := resp.RawData()
+	log.Infof("body received is %s", string(body))
 	if contentType != invokev1.JSONContentType {
 		log.Debugf("dapr/config returns invalid content_type: %s", contentType)
 	}
