@@ -221,6 +221,18 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 }
 
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
+	// Register stdout trace exporter if user wants to debug requests or log as Info level.
+	if a.globalConfig.Spec.TracingSpec.Stdout {
+		trace.RegisterExporter(&diag_utils.StdoutExporter{})
+	}
+
+	// Initialize metrics only if MetricSpec is enabled.
+	if a.globalConfig.Spec.MetricSpec.Enabled {
+		if err := diag.InitMetrics(a.runtimeConfig.ID); err != nil {
+			log.Errorf("failed to initialize metrics: %v", err)
+		}
+	}
+
 	err := a.establishSecurity(a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
 		return err
@@ -231,9 +243,19 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	if a.globalConfig.Spec.TracingSpec.Stdout {
-		trace.RegisterExporter(&diag_utils.StdoutExporter{})
+	a.blockUntilAppIsReady()
+
+	a.hostAddress, err = utils.GetHostAddress()
+	if err != nil {
+		return errors.Wrap(err, "failed to determine host address")
 	}
+
+	err = a.createAppChannel()
+	if err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+	}
+
+	a.loadAppConfiguration()
 
 	// Register and initialize name resolution for service discovery.
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
