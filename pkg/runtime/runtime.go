@@ -261,7 +261,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	a.flushOutstandingComponents()
-	a.initDirectMessaging(a.nameResolver)
 
 	// Register and initialize HTTP middleware
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
@@ -284,7 +283,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 	a.blockUntilAppIsReady()
-
+	a.initDirectMessaging(a.nameResolver)
 	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
