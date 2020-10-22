@@ -50,14 +50,14 @@ func (a *actor) lock() {
 	a.concurrencyLock.Lock()
 
 	a.busy = true
+	a.busyCh = make(chan bool, 1)
 	a.lastUsedTime = time.Now().UTC()
 }
 
 func (a *actor) unLock() {
 	if a.busy {
 		a.busy = false
-		// this signals to drain actors earlier than DrainOngoingCallTimeout.
-		a.busyCh <- false
+		close(a.busyCh)
 	}
 
 	a.concurrencyLock.Unlock()
