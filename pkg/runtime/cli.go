@@ -45,11 +45,6 @@ func FromFlags() (*DaprRuntime, error) {
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
 
-	// deprecate in v1.0 release
-	placementServiceAddress := flag.String("placement-address", "", "[Deprecated] Address for the Dapr placement service")
-	maxConcurrency := flag.Int("max-concurrency", -1, "[Deprecated] Controls the concurrency level when forwarding requests to user code")
-	protocol := flag.String("protocol", string(HTTPProtocol), "[Deprecated] Protocol for the application: grpc or http")
-
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
@@ -122,22 +117,16 @@ func FromFlags() (*DaprRuntime, error) {
 	placementAddress := ""
 	if *placementServiceHostAddress != "" {
 		placementAddress = *placementServiceHostAddress
-	} else {
-		placementAddress = *placementServiceAddress
 	}
 
 	var concurrency int
 	if *appMaxConcurrency != -1 {
 		concurrency = *appMaxConcurrency
-	} else {
-		concurrency = *maxConcurrency
 	}
 
 	appPrtcl := string(HTTPProtocol)
 	if *appProtocol != string(HTTPProtocol) {
 		appPrtcl = *appProtocol
-	} else if *protocol != string(HTTPProtocol) {
-		appPrtcl = *protocol
 	}
 
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
