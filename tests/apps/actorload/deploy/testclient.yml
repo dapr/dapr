@@ -11,7 +11,7 @@ metadata:
   labels:
     app: loadtestclient
 spec:
-  replicas: 1
+  replicas: 60
   selector:
     matchLabels:
       app: loadtestclient
@@ -20,11 +20,11 @@ spec:
       labels:
         app: loadtestclient
       annotations:
+        dapr.io/config: "testappconfig"
         dapr.io/enabled: "true"
         dapr.io/id: "loadtestclient"
         dapr.io/log-as-json: "true"
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "9988"
+        dapr.io/enable-profiling: "true"
     spec:
       affinity:
         nodeAffinity:
@@ -37,9 +37,9 @@ spec:
                   - loadgen
       containers:
       - name: loadtestclient
-        image: [USE ACTOR TEST APP IMAGE]
+        image: youngp/actorloadtest:dev
         command: ["./testclient"]
-        args: ["-a", "StateActor", "-c", "10", "-numactors", "1024", "-s", "1024", "-t", "1m"]
+        args: ["-a", "StateActor", "-c", "10", "-numactors", "2048", "-s", "1024", "-t", "120m0s", "-m", "nop"]
         ports:
         - containerPort: 3000
         imagePullPolicy: Always
