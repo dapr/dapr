@@ -51,6 +51,12 @@ type AppManager struct {
 	logPrefix string
 }
 
+// PodInfo holds information about a given pod.
+type PodInfo struct {
+	Name string
+	IP   string
+}
+
 // NewAppManager creates AppManager instance
 func NewAppManager(kubeClients *KubeClient, namespace string, app AppDescription) *AppManager {
 	return &AppManager{
@@ -428,13 +434,10 @@ func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
 	return ns, err
 }
 
-// GetHostDetails returns the name and IP address of the pod running the app
-func (m *AppManager) GetHostDetails() (string, string, error) {
-	if int(m.app.Replicas) != 1 {
-		return "", "", fmt.Errorf("number of replicas should be 1")
-	}
+// GetHostDetails returns the name and IP address of the pods running the app
+func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	if !m.app.DaprEnabled {
-		return "", "", fmt.Errorf("dapr is not enabled for this app")
+		return nil, fmt.Errorf("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -444,14 +447,22 @@ func (m *AppManager) GetHostDetails() (string, string, error) {
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
 	if len(podList.Items) != int(m.app.Replicas) {
-		return "", "", fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
+		return nil, fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
 	}
 
-	return podList.Items[0].GetName(), podList.Items[0].Status.PodIP, nil
+	result := []PodInfo{}
+	for _, item := range podList.Items {
+		result = append(result, PodInfo{
+			Name: item.GetName(),
+			IP:   item.Status.PodIP,
+		})
+	}
+
+	return result, nil
 }
 
 // SaveContainerLogs get container logs for all containers in the pod and saves them to disk
@@ -506,26 +517,74 @@ func (m *AppManager) SaveContainerLogs() error {
 	return nil
 }
 
-// GetAppCPUAndMemory returns the Cpu and Memory usage for the dapr sidecar
-func (m *AppManager) GetAppCPUAndMemory() (int64, float64, error) {
-	podName, _, err := m.GetHostDetails()
+// GetCPUAndMemory returns the Cpu and Memory usage for the dapr app or sidecar
+func (m *AppManager) GetCPUAndMemory(sidecar bool) (int64, float64, error) {
+	pods, err := m.GetHostDetails()
 	if err != nil {
 		return -1, -1, err
 	}
 
-	metrics, err := m.client.MetricsClient.MetricsV1beta1().PodMetricses(m.namespace).Get(podName, metav1.GetOptions{})
-	if err != nil {
-		return -1, -1, err
-	}
+	var maxCPU int64 = -1
+	var maxMemory float64 = -1
+	for _, pod := range pods {
+		podName := pod.Name
+		metrics, err := m.client.MetricsClient.MetricsV1beta1().PodMetricses(m.namespace).Get(podName, metav1.GetOptions{})
+		if err != nil {
+			return -1, -1, err
+		}
 
-	for _, c := range metrics.Containers {
-		if c.Name == DaprSideCarName {
-			mi, _ := c.Usage.Memory().AsInt64()
-			mb := float64((mi / 1024)) * 0.001024
+		for _, c := range metrics.Containers {
+			isSidecar := c.Name == DaprSideCarName
+			if isSidecar == sidecar {
+				mi, _ := c.Usage.Memory().AsInt64()
+				mb := float64((mi / 1024)) * 0.001024
 
-			cpu := c.Usage.Cpu().ScaledValue(resource.Milli)
-			return cpu, mb, nil
+				cpu := c.Usage.Cpu().ScaledValue(resource.Milli)
+
+				if cpu > maxCPU {
+					maxCPU = cpu
+				}
+
+				if mb > maxMemory {
+					maxMemory = mb
+				}
+			}
 		}
 	}
-	return -1, -1, fmt.Errorf("dapr sidecar not found in pod %s in namespace %s", podName, m.namespace)
+	if (maxCPU < 0) || (maxMemory < 0) {
+		return -1, -1, fmt.Errorf("container (sidecar=%v) not found in pods for app %s in namespace %s", sidecar, m.app.AppName, m.namespace)
+	}
+
+	return maxCPU, maxMemory, nil
+}
+
+// GetTotalRestarts returns the total number of restarts for the app or sidecar
+func (m *AppManager) GetTotalRestarts() (int, error) {
+	if !m.app.DaprEnabled {
+		return 0, fmt.Errorf("dapr is not enabled for this app")
+	}
+
+	podClient := m.client.Pods(m.namespace)
+
+	// Filter only 'testapp=appName' labeled Pods
+	podList, err := podClient.List(metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	restartCount := 0
+	for _, pod := range podList.Items {
+		pod, err := podClient.Get(pod.GetName(), metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			restartCount += int(containerStatus.RestartCount)
+		}
+	}
+
+	return restartCount, nil
 }

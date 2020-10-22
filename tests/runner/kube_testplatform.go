@@ -183,12 +183,16 @@ func (c *KubeTestPlatform) AcquireAppExternalURL(name string) string {
 // GetAppHostDetails returns the name and IP address of the host(pod) running 'name'
 func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error) {
 	app := c.AppResources.FindActiveResource(name)
-	hostname, hostIP, err := app.(*kube.AppManager).GetHostDetails()
+	pods, err := app.(*kube.AppManager).GetHostDetails()
 	if err != nil {
 		return "", "", err
 	}
 
-	return hostname, hostIP, nil
+	if len(pods) == 0 {
+		return "", "", fmt.Errorf("no pods found for app: %v", name)
+	}
+
+	return pods[0].Name, pods[0].IP, nil
 }
 
 // Scale changes the number of replicas of the app
@@ -234,17 +238,40 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 	return appManager.DoPortForwarding("", targetPorts...)
 }
 
-// GetAppUsage returns the Cpu and Memory usage for the dapr container for a given app
+// GetAppUsage returns the Cpu and Memory usage for the app container for a given app
 func (c *KubeTestPlatform) GetAppUsage(appName string) (*AppUsage, error) {
 	app := c.AppResources.FindActiveResource(appName)
 	appManager := app.(*kube.AppManager)
 
-	cpu, mem, err := appManager.GetAppCPUAndMemory()
+	cpu, mem, err := appManager.GetCPUAndMemory(false)
 	if err != nil {
 		return nil, err
 	}
 	return &AppUsage{
-		CPU:    fmt.Sprintf("%vm", cpu),
-		Memory: fmt.Sprintf("%.2fMb", mem),
+		CPUm:     cpu,
+		MemoryMb: mem,
+	}, nil
+}
+
+// GetTotalRestarts returns the total of restarts across all pods and containers for an app.
+func (c *KubeTestPlatform) GetTotalRestarts(appName string) (int, error) {
+	app := c.AppResources.FindActiveResource(appName)
+	appManager := app.(*kube.AppManager)
+
+	return appManager.GetTotalRestarts()
+}
+
+// GetSidecarUsage returns the Cpu and Memory usage for the dapr container for a given app
+func (c *KubeTestPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
+	app := c.AppResources.FindActiveResource(appName)
+	appManager := app.(*kube.AppManager)
+
+	cpu, mem, err := appManager.GetCPUAndMemory(true)
+	if err != nil {
+		return nil, err
+	}
+	return &AppUsage{
+		CPUm:     cpu,
+		MemoryMb: mem,
 	}, nil
 }
