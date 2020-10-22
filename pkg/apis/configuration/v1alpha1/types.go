@@ -29,6 +29,8 @@ type ConfigurationSpec struct {
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
 	// +optional
+	MetricSpec *MetricSpec `json:"metric,omitempty"`
+	// +optional
 	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
 	// +optional
 	Secrets SecretsSpec `json:"secrets,omitempty"`
@@ -82,9 +84,14 @@ type SelectorField struct {
 	Value string `json:"value"`
 }
 
-// TracingSpec is the spec object in ConfigurationSpec
+// TracingSpec defines distributed tracing configuration
 type TracingSpec struct {
 	SamplingRate string `json:"samplingRate"`
+}
+
+// MetricSpec defines metrics configuration
+type MetricSpec struct {
+	Enabled string `json:"enabled,omitempty"`
 }
 
 // AppPolicySpec defines the policy data structure for each app
