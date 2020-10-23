@@ -7,9 +7,9 @@ We would like to extend our thanks to all the new and existing contributors who 
 
 **Highlights**
 
-If you're new to Dapr, visit the [getting started](https://github.com/dapr/docs/tree/master/getting-started) page and familiarize yourself with Dapr.
+If you're new to Dapr, visit the [getting started](https://docs.dapr.io/getting-started/) page and familiarize yourself with Dapr.
 
-Docs have been updated with all the new features and changes of this release. To get started with new capabilities introduced in this release, go to the [Concepts](https://github.com/dapr/docs/tree/master/concepts) and the [How To section](https://github.com/dapr/docs/tree/master/howto#how-tos).
+Docs have been updated with all the new features and changes of this release. To get started with new capabilities introduced in this release, go to the [Concepts](https://docs.dapr.io/concepts/) and the [Developing applications](https://docs.dapr.io/developing-applications/).
 
 $warnings
 
@@ -143,7 +143,7 @@ helm repo update
 
 If you installed Dapr with Helm to a namespace other than `dapr-system`, modify the uninstall command above to account for that.
 
-You can now follow [these](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#using-helm-advanced) instructions on how to install Dapr using __Helm 3__.
+You can now follow [these](https://docs.dapr.io/getting-started/install-dapr/#install-with-helm-advanced) instructions on how to install Dapr using __Helm 3__.
 
 Alternatively, you can use the newer version of CLI:
 
