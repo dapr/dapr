@@ -90,7 +90,7 @@ func TestGetProbeHttpHandler(t *testing.T) {
 func TestGetSideCarContainer(t *testing.T) {
 	annotations := map[string]string{}
 	annotations[daprConfigKey] = "config"
-	annotations[daprPortKey] = "5000"
+	annotations[daprAppPortKey] = "5000"
 	annotations[daprLogAsJSON] = "true"
 	annotations[daprAPITokenSecret] = "secret"
 

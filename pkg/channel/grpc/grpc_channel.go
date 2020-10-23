@@ -75,8 +75,6 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	// Prepare gRPC Metadata
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
 
-	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
-	defer cancel()
 	var header, trailer metadata.MD
 	resp, err := clientV1.OnInvoke(ctx, req.Message(), grpc.Header(&header), grpc.Trailer(&trailer))
 
