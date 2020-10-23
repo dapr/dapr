@@ -151,12 +151,6 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	}
 
 	span := diag_utils.SpanFromContext(ctx)
-
-	// TODO: Use built-in grpc client timeout instead of using context timeout
-	// no ops if span context is empty
-	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
-	defer cancel()
-
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	d.addForwardedHeadersToMetadata(req)
