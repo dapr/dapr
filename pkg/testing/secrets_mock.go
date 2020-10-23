@@ -5,7 +5,11 @@
 
 package testing
 
-import "github.com/dapr/components-contrib/secretstores"
+import (
+	"errors"
+
+	"github.com/dapr/components-contrib/secretstores"
+)
 
 type FakeSecretStore struct {
 }
@@ -16,6 +20,11 @@ func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 			Data: map[string]string{"good-key": "life is good"},
 		}, nil
 	}
+
+	if req.Name == "error-key" {
+		return secretstores.GetSecretResponse{}, errors.New("error occurs with error-key")
+	}
+
 	return secretstores.GetSecretResponse{}, nil
 }
 
