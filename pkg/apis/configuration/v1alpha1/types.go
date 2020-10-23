@@ -28,8 +28,8 @@ type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
-	// +optional
-	MetricSpec *MetricSpec `json:"metric,omitempty"`
+	// +kubebuilder:default={enabled:true}
+	MetricSpec MetricSpec `json:"metric,omitempty"`
 	// +optional
 	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
 	// +optional
@@ -91,7 +91,7 @@ type TracingSpec struct {
 
 // MetricSpec defines metrics configuration
 type MetricSpec struct {
-	Enabled string `json:"enabled,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // AppPolicySpec defines the policy data structure for each app

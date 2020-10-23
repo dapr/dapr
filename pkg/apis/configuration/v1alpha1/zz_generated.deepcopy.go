@@ -151,11 +151,7 @@ func (in *ConfigurationSpec) DeepCopyInto(out *ConfigurationSpec) {
 	*out = *in
 	in.HTTPPipelineSpec.DeepCopyInto(&out.HTTPPipelineSpec)
 	out.TracingSpec = in.TracingSpec
-	if in.MetricSpec != nil {
-		in, out := &in.MetricSpec, &out.MetricSpec
-		*out = new(MetricSpec)
-		**out = **in
-	}
+	out.MetricSpec = in.MetricSpec
 	out.MTLSSpec = in.MTLSSpec
 	in.Secrets.DeepCopyInto(&out.Secrets)
 	in.AccessControlSpec.DeepCopyInto(&out.AccessControlSpec)
