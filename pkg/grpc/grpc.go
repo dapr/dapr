@@ -34,7 +34,6 @@ type Manager struct {
 	AppClient      *grpc.ClientConn
 	lock           *sync.RWMutex
 	connectionPool map[string]*grpc.ClientConn
-	timeout        time.Duration
 	auth           security.Authenticator
 	mode           modes.DaprMode
 }
