@@ -137,8 +137,7 @@ func FromFlags() (*DaprRuntime, error) {
 		concurrency = *appMaxConcurrency
 	}
 
-	var timeout time.Duration
-	timeout = time.Second * time.Duration(*appChannelTimeout)
+	timeout := time.Second * time.Duration(*appChannelTimeout)
 
 	appPrtcl := string(HTTPProtocol)
 	if *appProtocol != string(HTTPProtocol) {
