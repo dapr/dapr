@@ -1,0 +1,29 @@
+# In perf tests, this will not be used to deploy the app to test cluster.
+# This is created for testing purpose in order to deploy this app using kubectl
+# before writing the perf test.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perf-service-invocation
+  labels:
+    testapp: perf-service-invocation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      testapp: perf-service-invocation
+  template:
+    metadata:
+      labels:
+        testapp: perf-service-invocation
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "testapp"
+        dapr.io/app-port: "3000"
+    spec:
+      containers:
+      - name: perf-service-invocation
+        image: docker.io/[YOUR ALIAS]/perf-service_invocation_grpc:dev
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always
