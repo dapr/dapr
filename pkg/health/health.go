@@ -6,15 +6,15 @@
 package health
 
 import (
-	"net"
-	"net/http"
 	"time"
+
+	"github.com/valyala/fasthttp"
 )
 
 const (
 	initialDelay      = time.Second * 1
 	failureThreshold  = 2
-	requestTimeout    = time.Millisecond * 500
+	requestTimeout    = time.Second * 2
 	interval          = time.Second * 5
 	successStatusCode = 200
 )
@@ -47,17 +47,21 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 		failureCount := 0
 		time.Sleep(options.initialDelay)
 
+		client := &fasthttp.Client{
+			MaxConnsPerHost:           5, // Limit Keep-Alive connections
+			ReadTimeout:               options.requestTimeout,
+			MaxIdemponentCallAttempts: 1,
+		}
+
+		req := fasthttp.AcquireRequest()
+		req.SetRequestURI(endpointAddress)
+		req.Header.SetMethod(fasthttp.MethodGet)
+		defer fasthttp.ReleaseRequest(req)
+
 		for range ticker.C {
-			client := &http.Client{
-				Timeout: options.requestTimeout,
-				Transport: &http.Transport{
-					Dial: (&net.Dialer{
-						Timeout: options.requestTimeout,
-					}).Dial,
-				},
-			}
-			resp, err := client.Get(endpointAddress)
-			if err != nil || resp.StatusCode != options.successStatusCode {
+			resp := fasthttp.AcquireResponse()
+			err := client.DoTimeout(req, resp, options.requestTimeout)
+			if err != nil || resp.StatusCode() != options.successStatusCode {
 				failureCount++
 				if failureCount == options.failureThreshold {
 					ch <- false
@@ -66,9 +70,7 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 				ch <- true
 				failureCount = 0
 			}
-			if resp != nil && resp.Body != nil {
-				resp.Body.Close()
-			}
+			fasthttp.ReleaseResponse(resp)
 		}
 	}(signalChan, endpointAddress, options)
 	return signalChan
