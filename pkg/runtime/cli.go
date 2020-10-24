@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"time"
 
 	global_config "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
@@ -46,6 +47,7 @@ func FromFlags() (*DaprRuntime, error) {
 	enableProfiling := flag.Bool("enable-profiling", false, "Enable profiling")
 	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
 	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
+	appChannelTimeout := flag.Int("app-channel-timeout", 120, "Seconds. Controls the connection timeout when forwarding requests to user code")
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
 	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
@@ -135,13 +137,16 @@ func FromFlags() (*DaprRuntime, error) {
 		concurrency = *appMaxConcurrency
 	}
 
+	var timeout time.Duration
+	timeout = time.Second * time.Duration(*appChannelTimeout)
+
 	appPrtcl := string(HTTPProtocol)
 	if *appProtocol != string(HTTPProtocol) {
 		appPrtcl = *appProtocol
 	}
 
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize)
+	runtimeConfig := NewRuntimeConfig(*appID, placementAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, timeout, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize)
 
 	// set environment variables
 	// TODO - consider adding host address to runtime config and/or caching result in utils package

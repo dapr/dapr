@@ -8,6 +8,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
@@ -28,15 +29,17 @@ type Channel struct {
 	ch               chan int
 	tracingSpec      config.TracingSpec
 	appMetadataToken string
+	timeout          time.Duration
 }
 
 // CreateLocalChannel creates a gRPC connection with user code
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
+func CreateLocalChannel(port, maxConcurrency int, timeout time.Duration, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
 	c := &Channel{
 		client:           conn,
 		baseAddress:      fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
 		tracingSpec:      spec,
 		appMetadataToken: auth.GetAppToken(),
+		timeout:          timeout,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)
@@ -83,6 +86,8 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	// Prepare gRPC Metadata
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
 
+	ctx, cancel := context.WithTimeout(ctx, g.timeout)
+	defer cancel()
 	var header, trailer metadata.MD
 	resp, err := clientV1.OnInvoke(ctx, req.Message(), grpc.Header(&header), grpc.Trailer(&trailer))
 

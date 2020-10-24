@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -81,7 +82,9 @@ func TestInvokeMethod(t *testing.T) {
 	t.Run("query string", func(t *testing.T) {
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &fasthttp.Client{},
+			client: &fasthttp.Client{
+				ReadTimeout: 60 * time.Second,
+			},
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
@@ -102,7 +105,7 @@ func TestInvokeMethod(t *testing.T) {
 	t.Run("tracing is enabled", func(t *testing.T) {
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &fasthttp.Client{},
+			client:      &fasthttp.Client{ReadTimeout: 60 * time.Second},
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "1",
 			},
@@ -131,7 +134,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			lock:     sync.Mutex{},
 		}
 		server := httptest.NewServer(&handler)
-		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
+		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{ReadTimeout: 60 * time.Second}}
 		c.ch = make(chan int, 1)
 
 		// act
@@ -159,7 +162,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			lock:     sync.Mutex{},
 		}
 		server := httptest.NewServer(&handler)
-		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{}}
+		c := Channel{baseAddress: server.URL, client: &fasthttp.Client{ReadTimeout: 60 * time.Second}}
 		c.ch = make(chan int, 1)
 
 		// act
@@ -184,7 +187,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 func TestInvokeWithHeaders(t *testing.T) {
 	ctx := context.Background()
 	testServer := httptest.NewServer(&testHandlerHeaders{})
-	c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+	c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{ReadTimeout: 60 * time.Second}}
 
 	req := invokev1.NewInvokeMethodRequest("method")
 	md := map[string][]string{
@@ -215,7 +218,7 @@ func TestContentType(t *testing.T) {
 	t.Run("default application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{ReadTimeout: 60 * time.Second}}
 		req := invokev1.NewInvokeMethodRequest("method")
 		req.WithRawData(nil, "")
 		req.WithHTTPExtension(http.MethodPost, "")
@@ -234,7 +237,7 @@ func TestContentType(t *testing.T) {
 	t.Run("application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{ReadTimeout: 60 * time.Second}}
 		req := invokev1.NewInvokeMethodRequest("method")
 		req.WithRawData(nil, "application/json")
 		req.WithHTTPExtension(http.MethodPost, "")
@@ -253,7 +256,7 @@ func TestContentType(t *testing.T) {
 	t.Run("text/plain", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{ReadTimeout: 60 * time.Second}}
 		req := invokev1.NewInvokeMethodRequest("method")
 		req.WithRawData(nil, "text/plain")
 		req.WithHTTPExtension(http.MethodPost, "")
@@ -322,7 +325,7 @@ func TestAppToken(t *testing.T) {
 
 func TestCreateChannel(t *testing.T) {
 	t.Run("ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, true)
+		ch, err := CreateLocalChannel(3000, 0, 120, config.TracingSpec{}, true)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
@@ -330,7 +333,7 @@ func TestCreateChannel(t *testing.T) {
 	})
 
 	t.Run("non-ssl scheme", func(t *testing.T) {
-		ch, err := CreateLocalChannel(3000, 0, config.TracingSpec{}, false)
+		ch, err := CreateLocalChannel(3000, 0, 120, config.TracingSpec{}, false)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()

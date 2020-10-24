@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -40,7 +41,8 @@ func TestInvokeMethod(t *testing.T) {
 	defer close(t, conn)
 	assert.NoError(t, err)
 
-	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1"}
+	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", timeout: 120 * time.Second}
+	assert.Equal(t, 120*time.Second, c.timeout)
 	req := invokev1.NewInvokeMethodRequest("method")
 	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 	response, err := c.InvokeMethod(context.Background(), req)

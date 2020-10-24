@@ -6,6 +6,8 @@
 package runtime
 
 import (
+	"time"
+
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/modes"
@@ -48,6 +50,7 @@ type Config struct {
 	Standalone           config.StandaloneConfig
 	Kubernetes           config.KubernetesConfig
 	MaxConcurrency       int
+	ChannelTimeout       time.Duration
 	mtlsEnabled          bool
 	SentryServiceAddress string
 	CertChain            *credentials.CertChain
@@ -60,7 +63,7 @@ func NewRuntimeConfig(
 	id string, placementAddresses []string,
 	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
 	httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int,
-	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int) *Config {
+	enableProfiling bool, maxConcurrency int, timeout time.Duration, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -81,6 +84,7 @@ func NewRuntimeConfig(
 		},
 		EnableProfiling:      enableProfiling,
 		MaxConcurrency:       maxConcurrency,
+		ChannelTimeout:       timeout,
 		mtlsEnabled:          mtlsEnabled,
 		SentryServiceAddress: sentryAddress,
 		AppSSL:               appSSL,
