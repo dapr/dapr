@@ -24,9 +24,9 @@ func main() {
 	}
 }
 
-func runHandler(ctx context.Context, e * common.InvocationEvent) (out *common.Content, err error) {
+func runHandler(ctx context.Context, e *common.InvocationEvent) (out *common.Content, err error) {
 	out = &common.Content{
-		Data: []byte("ok"),
+		Data:        []byte("ok"),
 		ContentType: "text/plain",
 	}
 	return
