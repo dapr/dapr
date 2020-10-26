@@ -225,6 +225,18 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 }
 
 func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
+	// Register stdout trace exporter if user wants to debug requests or log as Info level.
+	if a.globalConfig.Spec.TracingSpec.Stdout {
+		trace.RegisterExporter(&diag_utils.StdoutExporter{})
+	}
+
+	// Initialize metrics only if MetricSpec is enabled.
+	if a.globalConfig.Spec.MetricSpec.Enabled {
+		if err := diag.InitMetrics(a.runtimeConfig.ID); err != nil {
+			log.Errorf("failed to initialize metrics: %v", err)
+		}
+	}
+
 	err := a.establishSecurity(a.runtimeConfig.SentryServiceAddress)
 	if err != nil {
 		return err
@@ -240,10 +252,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.daprHostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return errors.Wrap(err, "failed to determine host address")
-	}
-
-	if a.globalConfig.Spec.TracingSpec.Stdout {
-		trace.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
 
 	err = a.createAppChannel()

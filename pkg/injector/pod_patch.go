@@ -81,13 +81,6 @@ const (
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
-
-	// Deprecated: remove in v1.0
-	idKey                 = "dapr.io/id"
-	daprPortKey           = "dapr.io/port"
-	daprProfilingKey      = "dapr.io/profiling"
-	daprMaxConcurrencyKey = "dapr.io/max-concurrency"
-	daprProtocolKey       = "dapr.io/protocol"
 )
 
 func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
@@ -275,19 +268,11 @@ func podContainsSidecarContainer(pod *corev1.Pod) bool {
 }
 
 func getMaxConcurrency(annotations map[string]string) (int32, error) {
-	maxConcurrencyKey, err := getInt32Annotation(annotations, daprAppMaxConcurrencyKey)
-	if maxConcurrencyKey == -1 {
-		return getInt32Annotation(annotations, daprMaxConcurrencyKey)
-	}
-	return maxConcurrencyKey, err
+	return getInt32Annotation(annotations, daprAppMaxConcurrencyKey)
 }
 
 func getAppPort(annotations map[string]string) (int32, error) {
-	pKey, err := getInt32Annotation(annotations, daprAppPortKey)
-	if pKey == -1 {
-		return getInt32Annotation(annotations, daprPortKey)
-	}
-	return pKey, err
+	return getInt32Annotation(annotations, daprAppPortKey)
 }
 
 func getConfig(annotations map[string]string) string {
@@ -295,12 +280,7 @@ func getConfig(annotations map[string]string) string {
 }
 
 func getProtocol(annotations map[string]string) string {
-	protocol := getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "")
-	if protocol != "" {
-		return protocol
-	}
-
-	return getStringAnnotationOrDefault(annotations, daprProtocolKey, "http")
+	return getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "http")
 }
 
 func getMetricsPort(annotations map[string]string) int {
@@ -308,12 +288,7 @@ func getMetricsPort(annotations map[string]string) int {
 }
 
 func getAppID(pod corev1.Pod) string {
-	id := getStringAnnotationOrDefault(pod.Annotations, daprAppIDKey, "")
-	if id != "" {
-		return id
-	}
-
-	return getStringAnnotationOrDefault(pod.Annotations, idKey, pod.GetName())
+	return getStringAnnotationOrDefault(pod.Annotations, daprAppIDKey, pod.GetName())
 }
 
 func getAppHost(pod corev1.Pod) string {
@@ -329,13 +304,7 @@ func logAsJSONEnabled(annotations map[string]string) bool {
 }
 
 func profilingEnabled(annotations map[string]string) bool {
-	isEnabled := getBoolAnnotationOrDefault(annotations, daprEnableProfilingKey, false)
-
-	if !isEnabled {
-		return getBoolAnnotationOrDefault(annotations, daprProfilingKey, false)
-	}
-
-	return isEnabled
+	return getBoolAnnotationOrDefault(annotations, daprEnableProfilingKey, false)
 }
 
 func appSSLEnabled(annotations map[string]string) bool {
