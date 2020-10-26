@@ -11,7 +11,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/protobuf v1.4.3
-	github.com/google/uuid v1.1.1
+	github.com/google/uuid v1.1.2
 	github.com/gorilla/mux v1.7.3
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
 	github.com/json-iterator/go v1.1.10
@@ -31,7 +31,7 @@ require (
 	go.opencensus.io v0.22.4
 	go.opentelemetry.io/otel v0.13.0
 	google.golang.org/genproto v0.0.0-20200904004341-0bd0a958aa1d
-	google.golang.org/grpc v1.32.0
+	google.golang.org/grpc v1.33.1
 	gopkg.in/square/go-jose.v2 v2.5.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	k8s.io/api v0.17.8
