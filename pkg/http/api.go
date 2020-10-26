@@ -712,6 +712,15 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	body := reqCtx.PostBody()
 
+	var ops []actors.TransactionalOperation
+	err := a.json.Unmarshal(body, &ops)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		log.Debug(msg)
+		return
+	}
+
 	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -719,15 +728,6 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", "")
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
-		log.Debug(msg)
-		return
-	}
-
-	var ops []actors.TransactionalOperation
-	err := a.json.Unmarshal(body, &ops)
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
@@ -770,15 +770,17 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", err.Error())
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
+		return
 	}
 	b, err := a.json.Marshal(resp)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", err.Error())
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
-	} else {
-		respondWithJSON(reqCtx, fasthttp.StatusOK, b)
+		return
 	}
+
+	respondWithJSON(reqCtx, fasthttp.StatusOK, b)
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
