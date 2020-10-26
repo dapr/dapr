@@ -1336,6 +1336,19 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
 	})
 
+	t.Run("Update state - PUT verb supported", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		request := []state.SetRequest{{
+			Key:  "good-key",
+			ETag: "",
+		}}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("PUT", apiPath, b, nil)
+		// assert
+		assert.Equal(t, 201, resp.StatusCode, "updating the state store with the PUT verb should succeed")
+	})
+
 	t.Run("Update state - No ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
@@ -1347,6 +1360,19 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
 		assert.Equal(t, 201, resp.StatusCode, "updating existing key without etag should succeed")
+	})
+
+	t.Run("Update state - State Error", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		request := []state.SetRequest{{
+			Key:  "state-error",
+			ETag: "",
+		}}
+		b, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+		// assert
+		assert.Equal(t, 500, resp.StatusCode, "state error should return 500 status")
 	})
 
 	t.Run("Update state - Matching ETag", func(t *testing.T) {
@@ -1398,6 +1424,105 @@ func TestV1StateEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})
+
+	t.Run("Bulk state get - Empty request", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+		request := BulkGetRequest{}
+		body, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on an empty body")
+	})
+
+	t.Run("Bulk state get - PUT request", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+		request := BulkGetRequest{}
+		body, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("PUT", apiPath, body, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on an empty body")
+	})
+
+	t.Run("Bulk state get - Malformed Reqest", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+		// {{
+		rawbody := []byte{0x7b, 0x7b}
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, rawbody, nil)
+		// assert
+		assert.Equal(t, 400, resp.StatusCode, "Bulk API should reject malformed JSON")
+	})
+
+	t.Run("Bulk state get - normal request", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+		request := BulkGetRequest{
+			Keys: []string{"good-key", "foo"},
+		}
+		body, _ := json.Marshal(request)
+
+		// act
+
+		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on a normal request")
+
+		var responses []BulkGetResponse
+
+		assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
+
+		expectedResponses := []BulkGetResponse{
+			{
+				Key:   "good-key",
+				Data:  jsoniter.RawMessage("life is good"),
+				ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+				Error: "",
+			},
+			{
+				Key:   "foo",
+				Data:  nil,
+				ETag:  "",
+				Error: "",
+			},
+		}
+
+		assert.Equal(t, expectedResponses, responses, "Responses do not match")
+	})
+
+	t.Run("Bulk state get - one key returns error", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+		request := BulkGetRequest{
+			Keys: []string{"good-key", "state-error"},
+		}
+		body, _ := json.Marshal(request)
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed even if key not found")
+
+		var responses []BulkGetResponse
+
+		assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
+
+		expectedResponses := []BulkGetResponse{
+			{
+				Key:   "good-key",
+				Data:  jsoniter.RawMessage("life is good"),
+				ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+				Error: "",
+			},
+			{
+				Key:   "state-error",
+				Data:  nil,
+				ETag:  "",
+				Error: "UPSTREAM STATE ERROR",
+			},
+		}
+
+		assert.Equal(t, expectedResponses, responses, "Responses do not match")
+	})
 }
 
 type fakeStateStore struct {
@@ -1441,9 +1566,12 @@ func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
-			Data: []byte("life is good"),
+			Data: []byte("\"bGlmZSBpcyBnb29k\""),
 			ETag: "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
 		}, nil
+	}
+	if req.Key == "state-error" {
+		return nil, errors.New("UPSTREAM STATE ERROR")
 	}
 	return nil, nil
 }
