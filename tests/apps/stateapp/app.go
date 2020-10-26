@@ -36,7 +36,7 @@ const (
 
 // appState represents a state in this app.
 type appState struct {
-	Data string `json:"data,omitempty"`
+	Data []byte `json:"data,omitempty"`
 }
 
 // daprState represents a state in Dapr.
@@ -88,7 +88,7 @@ func save(states []daprState) error {
 		return err
 	}
 
-	log.Printf("Posting state to %s with '%s'", stateURL, jsonValue)
+	log.Printf("Posting %d bytes of state to %s", len(jsonValue), stateURL)
 	res, err := http.Post(stateURL, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		return err
@@ -151,7 +151,7 @@ func parseState(key string, body []byte) (*appState, error) {
 		if stringMarshalErr != nil {
 			return nil, fmt.Errorf("could not parse value for key %s from Dapr: %s", key, err.Error())
 		}
-		state.Data = stateData
+		state.Data = []byte(stateData)
 	}
 	return state, nil
 }

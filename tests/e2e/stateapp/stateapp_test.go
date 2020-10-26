@@ -35,7 +35,7 @@ type testCommandRequest struct {
 
 // appState represents a state in this app.
 type appState struct {
-	Data string `json:"data,omitempty"`
+	Data []byte `json:"data,omitempty"`
 }
 
 // daprState represents a state in Dapr.
@@ -95,7 +95,7 @@ func generateDaprState(kv utils.SimpleKeyValue) daprState {
 		return daprState{key, nil}
 	}
 
-	value := fmt.Sprintf("%v", kv.Value)
+	value := []byte(fmt.Sprintf("%v", kv.Value))
 	return daprState{key, &appState{value}}
 }
 
@@ -116,7 +116,7 @@ func newStateTransactionRequestResponse(keyValues ...utils.StateTransactionKeyVa
 	daprStateTransactions := make([]stateTransaction, 0, len(keyValues))
 	for _, keyValue := range keyValues {
 		daprStateTransactions = append(daprStateTransactions, stateTransaction{
-			keyValue.Key, &appState{keyValue.Value}, keyValue.OperationType,
+			keyValue.Key, &appState{[]byte(keyValue.Value)}, keyValue.OperationType,
 		})
 	}
 
@@ -156,6 +156,12 @@ func generateTestCases(isHTTP bool) []testCase {
 
 	testCaseManyKeys := utils.GenerateRandomStringKeys(testManyEntriesCount)
 	testCaseManyKeyValues := utils.GenerateRandomStringValues(testCaseManyKeys)
+
+	// HTTP has a limit of 4MB for request bodies
+	largeDataSupported := 201
+	if isHTTP {
+		largeDataSupported = 500
+	}
 
 	return []testCase{
 		{
@@ -263,6 +269,50 @@ func generateTestCases(isHTTP bool) []testCase {
 			},
 			protocol,
 		},
+		{
+			// No comma since this will become the name of the test without spaces.
+			"Test data size edges (4MB for http) " + protocol,
+			[]testStep{
+				{
+					"save",
+					generateSpecificLengthSample(1024 * 1024), // Less than limit
+					emptyResponse,
+					201,
+				},
+				{
+					"save",
+					generateSpecificLengthSample(1024*1024*3 - 52), // Exact limit
+					emptyResponse,
+					201,
+				},
+				{
+					"save",
+					generateSpecificLengthSample(1024*1024*4 + 1), // Limit + 1
+					emptyResponse,
+					largeDataSupported,
+				},
+				{
+					"save",
+					generateSpecificLengthSample(1024 * 1024 * 8), // Greater than limit
+					emptyResponse,
+					largeDataSupported,
+				},
+			},
+			protocol,
+		},
+		{
+			// No comma since this will become the name of the test without spaces.
+			"Test missing key handled " + protocol,
+			[]testStep{
+				{
+					"get",
+					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
+					emptyResponse,
+					200,
+				},
+			},
+			protocol,
+		},
 	}
 }
 
@@ -296,6 +346,22 @@ func generateStateTransactionCases(protocolType string) testStateTransactionCase
 		},
 	}
 	return testStateTransactionCase
+}
+
+func generateSpecificLengthSample(sizeInBytes int) requestResponse {
+	key := guuid.New().String()
+	val := make([]byte, sizeInBytes)
+
+	state := []daprState{
+		{
+			key,
+			&appState{val},
+		},
+	}
+
+	return requestResponse{
+		state,
+	}
 }
 
 var tr *runner.TestRunner
@@ -414,4 +480,24 @@ func TestStateTransactionApps(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMissingStateStore(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+
+	// Define state URL for statestore that does not exist.
+	stateURL := "http://localhost:3500/v1.0/state/nonexistantstate"
+
+	request := newRequest(utils.SimpleKeyValue{guuid.New().String(), nil})
+	body, _ := json.Marshal(request)
+
+	resp, err := utils.HTTPPost(stateURL, body)
+
+	require.True(t, resp == nil)
+	require.True(t, err != nil)
 }
