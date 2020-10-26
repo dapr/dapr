@@ -12,8 +12,8 @@ If using [VS Code](https://code.visualstudio.com/), you can develop Dapr from a 
    - For Windows user, ensure that you share your local drive in docker desktop by following [this doc](https://code.visualstudio.com/docs/remote/containers#_installation)
 2. VS Code extension - [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 3. Kubernetes environment without helm install
-   - [Setup Minikube for Local environment](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-minikube.md)
-   - [Setup Azure Kubernetes Service](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-aks.md)
+   - [Setup Minikube for Local environment](https://docs.dapr.io/operations/hosting/kubernetes/cluster/setup-minikube/)
+   - [Setup Azure Kubernetes Service](https://docs.dapr.io/operations/hosting/kubernetes/cluster/setup-aks/)
 
 > Note: by default, [devcontainer configuration](../../.devcontainer/devcontainer.json) mounts `~/.kube` and `~/.minikube` directory to the container. Comment out mounting options based on your environment. Otherwise, you will face the mounting error.
 
