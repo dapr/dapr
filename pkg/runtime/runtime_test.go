@@ -1945,6 +1945,25 @@ func TestNamespace(t *testing.T) {
 	})
 }
 
+func TestApplicationHost(t *testing.T) {
+	t.Run("empty application host", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		ns := rt.getApplicationHost()
+
+		assert.Empty(t, ns)
+	})
+
+	t.Run("non-empty application host", func(t *testing.T) {
+		os.Setenv("APPLICATION_HOST", "host.a.com")
+		defer os.Clearenv()
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		ns := rt.getApplicationHost()
+
+		assert.Equal(t, "host.a.com", ns)
+	})
+}
+
 func TestAuthorizedComponents(t *testing.T) {
 	testCompName := "fakeComponent"
 

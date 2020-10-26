@@ -28,11 +28,11 @@ type Channel struct {
 	tracingSpec config.TracingSpec
 }
 
-// CreateLocalChannel creates a gRPC connection with user code
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
+// CreateChannel creates a gRPC connection with user code
+func CreateChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, applicationHost string) *Channel {
 	c := &Channel{
 		client:      conn,
-		baseAddress: fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
+		baseAddress: fmt.Sprintf("%s:%d", applicationHost, port),
 		tracingSpec: spec,
 	}
 	if maxConcurrency > 0 {

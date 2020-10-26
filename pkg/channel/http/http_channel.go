@@ -38,12 +38,16 @@ type Channel struct {
 	tracingSpec config.TracingSpec
 }
 
-// CreateLocalChannel creates an HTTP AppChannel
+// CreateAppChannel creates an HTTP AppChannel.
 // nolint:gosec
-func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
+func CreateAppChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, applicationHost string) (channel.AppChannel, error) {
+	channelAddress := channel.DefaultChannelAddress
 	scheme := httpScheme
 	if sslEnabled {
 		scheme = httpsScheme
+	}
+	if applicationHost != channel.DefaultChannelAddress {
+		channelAddress = applicationHost
 	}
 
 	c := &Channel{
@@ -52,7 +56,7 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 			ReadTimeout:               channel.DefaultChannelRequestTimeout,
 			MaxIdemponentCallAttempts: 0,
 		},
-		baseAddress: fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
+		baseAddress: fmt.Sprintf("%s://%s:%d", scheme, channelAddress, port),
 		tracingSpec: spec,
 	}
 

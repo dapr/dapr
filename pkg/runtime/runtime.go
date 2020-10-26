@@ -67,7 +67,6 @@ import (
 const (
 	appConfigEndpoint = "dapr/config"
 	actorStateStore   = "actorStateStore"
-
 	// output bindings concurrency
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
@@ -124,7 +123,8 @@ type DaprRuntime struct {
 	nameResolver           nr.Resolver
 	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
-	hostAddress            string
+	daprHostAddress        string
+	applicationHostAddress string
 	actorStateStoreName    string
 	actorStateStoreCount   int
 	authenticator          security.Authenticator
@@ -209,6 +209,10 @@ func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
+func (a *DaprRuntime) getApplicationHost() string {
+	return os.Getenv("APPLICATION_HOST")
+}
+
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
@@ -233,7 +237,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.blockUntilAppIsReady()
 
-	a.hostAddress, err = utils.GetHostAddress()
+	a.daprHostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return errors.Wrap(err, "failed to determine host address")
 	}
@@ -643,7 +647,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.daprHostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
 	server.StartNonBlocking()
@@ -670,7 +674,7 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, trustDomain)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.daprHostAddress, port, a.namespace, trustDomain)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
@@ -928,7 +932,7 @@ func (a *DaprRuntime) initExporter(c components_v1alpha1.Component) error {
 
 	properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
 
-	err = exporter.Init(a.runtimeConfig.ID, a.hostAddress, exporters.Metadata{
+	err = exporter.Init(a.runtimeConfig.ID, a.daprHostAddress, exporters.Metadata{
 		Properties: properties,
 	})
 	if err != nil {
@@ -1034,7 +1038,7 @@ func (a *DaprRuntime) initNameResolution() error {
 		// properties to register mDNS instances.
 		resolverMetadata.Properties = map[string]string{
 			nr.MDNSInstanceName:    a.runtimeConfig.ID,
-			nr.MDNSInstanceAddress: a.hostAddress,
+			nr.MDNSInstanceAddress: a.daprHostAddress,
 			nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
 		}
 	default:
@@ -1211,7 +1215,7 @@ func (a *DaprRuntime) initActors() error {
 	if err != nil {
 		return err
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
+	actorConfig := actors.NewConfig(a.daprHostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec)
 	err = act.Init()
@@ -1443,10 +1447,16 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		return
 	}
 
-	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
+	appHost := a.getApplicationHost()
+	if len(appHost) != 0 {
+		a.applicationHostAddress = appHost
+	} else {
+		a.applicationHostAddress = channel.DefaultChannelAddress
+	}
+	log.Infof("application host: %s. application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", a.applicationHostAddress, string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("localhost", fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort(a.applicationHostAddress, fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()
 			break
@@ -1523,18 +1533,19 @@ func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) 
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error)
+		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, applicationHost string) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
-			channelCreatorFn = a.grpc.CreateLocalChannel
+			channelCreatorFn = a.grpc.CreateAppChannel
 		case HTTPProtocol:
-			channelCreatorFn = http_channel.CreateLocalChannel
+			channelCreatorFn = http_channel.CreateAppChannel
 		default:
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL)
+		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency,
+			a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.applicationHostAddress)
 		if err != nil {
 			return err
 		}
