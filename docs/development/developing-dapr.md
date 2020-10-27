@@ -51,8 +51,8 @@ This document helps you get started developing Dapr. If you find any problem whi
 
 ### Kubernetes environment
 
-1. [Setup Minikube for Local environment](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-minikube.md)
-2. [Setup Azure Kubernetes Service](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-aks.md)
+1. [Setup Minikube for Local environment](https://docs.dapr.io/operations/hosting/kubernetes/cluster/setup-minikube/)
+2. [Setup Azure Kubernetes Service](https://docs.dapr.io/operations/hosting/kubernetes/cluster/setup-aks/)
 3. [Helm 3.x](https://helm.sh/docs/intro/install/)
 
 ### Installing Make
