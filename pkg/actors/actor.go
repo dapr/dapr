@@ -30,7 +30,7 @@ type actor struct {
 	// concurrencyLock is the lock to maintain actor's turn-based concurrency.
 	concurrencyLock *sync.Mutex
 	// pendingActorCalls is the number of the current pending actor calls by turn-based concurrency.
-	pendingActorCalls *atomic.Int32
+	pendingActorCalls atomic.Int32
 
 	// When consistent hashing tables are updated, actor runtime drains actor to rebalance actors
 	// across actor hosts after drainOngoingCallTimeout or until all pending actor calls are completed.
@@ -49,13 +49,12 @@ type actor struct {
 
 func newActor(actorType, actorID string) *actor {
 	return &actor{
-		actorType:         actorType,
-		actorID:           actorID,
-		concurrencyLock:   &sync.Mutex{},
-		disposeCh:         nil,
-		disposed:          false,
-		lastUsedTime:      time.Now().UTC(),
-		pendingActorCalls: atomic.NewInt32(0),
+		actorType:       actorType,
+		actorID:         actorID,
+		concurrencyLock: &sync.Mutex{},
+		disposeCh:       nil,
+		disposed:        false,
+		lastUsedTime:    time.Now().UTC(),
 	}
 }
 
