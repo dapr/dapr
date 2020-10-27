@@ -56,7 +56,7 @@ const (
 	TestRuntimeConfigID  = "consumer0"
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
-	maxGRPCServerUptime  = 100 * time.Millisecond
+	maxGRPCServerUptime  = 200 * time.Millisecond
 )
 
 var (
@@ -1580,12 +1580,9 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 					topic: topic,
 				},
 			}
-			// create a new AppChannel and gRPC client for every test
-			rt.createAppChannel()
-			// properly close the app channel created
-			defer rt.grpc.AppClient.Close()
 			var grpcServer *grpc.Server
 
+			// create mock application server first
 			if !tc.noResponseStatus {
 				grpcServer = startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
 					TopicEventResponseStatus: tc.responseStatus,
@@ -1600,6 +1597,11 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				// properly stop the gRPC server
 				defer grpcServer.Stop()
 			}
+
+			// create a new AppChannel and gRPC client for every test
+			rt.createAppChannel()
+			// properly close the app channel created
+			defer rt.grpc.AppClient.Close()
 
 			// act
 			err = rt.publishMessageGRPC(testPubSubMessage)
@@ -1636,13 +1638,17 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			port, _ := freeport.GetFreePort()
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
-			rt.createAppChannel()
-			defer rt.grpc.AppClient.Close()
+			// create mock application server first
 			grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
 				Error:    tc.responseError,
 				Bindings: tc.responseFromApp,
 			})
 			defer grpcServer.Stop()
+
+			// create a new AppChannel and gRPC client for every test
+			rt.createAppChannel()
+			// properly close the app channel created
+			defer rt.grpc.AppClient.Close()
 
 			// act
 			resp := rt.getSubscribedBindingsGRPC()
