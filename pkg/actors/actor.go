@@ -63,7 +63,7 @@ func (a *actor) isBusy() bool {
 	return !a.disposed && a.pendingActorCalls.Load() > 0
 }
 
-// channel creates or get new release channel. this channel is used for draining the actor.
+// channel creates or get new dispose channel. This channel is used for draining the actor.
 func (a *actor) channel() chan struct{} {
 	a.once.Do(func() {
 		a.disposeCh = make(chan struct{})
