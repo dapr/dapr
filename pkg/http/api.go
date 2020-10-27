@@ -430,7 +430,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	if err != nil {
 		storeName := a.getStateStoreName(reqCtx)
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
 	}
@@ -574,7 +574,8 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	targetID := reqCtx.UserValue(idParam).(string)
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	invokeMethodName := reqCtx.UserValue(methodParam).(string)
-	if invokeMethodName == "" {
+	// Router gives "/" if method parameter is empty
+	if invokeMethodName == "/" {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeMethod)
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
@@ -1044,7 +1045,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	stateStore, ok := a.stateStores[storeName]
 	if !ok {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrStateStoreNotFound, storeName))
-		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
 	}
