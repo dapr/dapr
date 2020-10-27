@@ -52,7 +52,30 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 	assert.NotEqual(t, firstLockTime, testActor.lastUsedTime)
 }
 
-func TestBusyChannel(t *testing.T) {
+func TestDisposedActor(t *testing.T) {
+	t.Run("not disposed", func(t *testing.T) {
+		testActor := newActor("testType", "testID")
+
+		testActor.lock()
+		testActor.unlock()
+		assert.False(t, testActor.disposed)
+	})
+
+	t.Run("disposed", func(t *testing.T) {
+		testActor := newActor("testType", "testID")
+
+		testActor.lock()
+		ch := testActor.channel()
+		assert.NotNil(t, ch)
+		testActor.unlock()
+
+		err := testActor.lock()
+
+		assert.IsType(t, ErrActorDisposed, err)
+	})
+}
+
+func TestPendingActorCalls(t *testing.T) {
 	t.Run("no pending actor call with new actor object", func(t *testing.T) {
 		testActor := newActor("testType", "testID")
 		channelClosed := false

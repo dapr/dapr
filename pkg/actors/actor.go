@@ -11,6 +11,12 @@ import (
 	"time"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/pkg/errors"
+)
+
+var (
+	// ErrActorDisposed is the error when runtime tries to hold the lock of the disposed actor.
+	ErrActorDisposed error = errors.New("actor is already disposed")
 )
 
 // actor represents single actor object and maintains its turn-based concurrency.
@@ -30,9 +36,12 @@ type actor struct {
 	// lastUsedTime is the time when the last actor call holds lock. This is used to calculate
 	// the duration of ongoing calls to time out.
 	lastUsedTime time.Time
-	// releaseCh is the channel to signal when all pending actor calls are completed. This channel
+
+	// disposed is true when actor is already disposed.
+	disposed bool
+	// disposeCh is the channel to signal when all pending actor calls are completed. This channel
 	// is used when runtime drains actor.
-	releaseCh chan struct{}
+	disposeCh chan struct{}
 
 	once sync.Once
 }
@@ -42,7 +51,8 @@ func newActor(actorType, actorID string) *actor {
 		actorType:         actorType,
 		actorID:           actorID,
 		concurrencyLock:   &sync.Mutex{},
-		releaseCh:         nil,
+		disposeCh:         nil,
+		disposed:          false,
 		lastUsedTime:      time.Now().UTC(),
 		pendingActorCalls: 0,
 	}
@@ -50,31 +60,38 @@ func newActor(actorType, actorID string) *actor {
 
 // isBusy returns true when pending actor calls are ongoing.
 func (a *actor) isBusy() bool {
-	return a.pendingActorCalls > 0
+	return !a.disposed && a.pendingActorCalls > 0
 }
 
 // channel creates or get new release channel. this channel is used for draining the actor.
 func (a *actor) channel() chan struct{} {
 	a.once.Do(func() {
-		a.releaseCh = make(chan struct{})
+		a.disposeCh = make(chan struct{})
 	})
-	return a.releaseCh
+	return a.disposeCh
 }
 
 // lock holds the lock for turn-based concurrency.
-func (a *actor) lock() {
+func (a *actor) lock() error {
 	atomic.AddInt32(&a.pendingActorCalls, int32(1))
 	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, a.pendingActorCalls)
 	a.concurrencyLock.Lock()
+	if a.disposed {
+		return ErrActorDisposed
+	}
 	a.lastUsedTime = time.Now().UTC()
+	return nil
 }
 
-// unlock release the lock for turn-based concurrency. If releaseChannel is avaiable,
-// it will close the channel to notify runtime to delete actor.
+// unlock release the lock for turn-based concurrency. If disposeCh is avaiable,
+// it will close the channel to notify runtime to dispose actor.
 func (a *actor) unlock() {
-	a.concurrencyLock.Unlock()
-	if atomic.AddInt32(&a.pendingActorCalls, int32(-1)) == 0 && a.releaseCh != nil {
-		close(a.releaseCh)
+	if atomic.AddInt32(&a.pendingActorCalls, int32(-1)) == 0 && a.disposeCh != nil {
+		if !a.disposed {
+			a.disposed = true
+			close(a.disposeCh)
+		}
 	}
+	a.concurrencyLock.Unlock()
 	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, a.pendingActorCalls)
 }
