@@ -7,8 +7,9 @@ package actors
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
+
+	"go.uber.org/atomic"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/pkg/errors"
@@ -29,7 +30,7 @@ type actor struct {
 	// concurrencyLock is the lock to maintain actor's turn-based concurrency.
 	concurrencyLock *sync.Mutex
 	// pendingActorCalls is the number of the current pending actor calls by turn-based concurrency.
-	pendingActorCalls int32
+	pendingActorCalls *atomic.Int32
 
 	// When consistent hashing tables are updated, actor runtime drains actor to rebalance actors
 	// across actor hosts after drainOngoingCallTimeout or until all pending actor calls are completed.
@@ -54,13 +55,13 @@ func newActor(actorType, actorID string) *actor {
 		disposeCh:         nil,
 		disposed:          false,
 		lastUsedTime:      time.Now().UTC(),
-		pendingActorCalls: 0,
+		pendingActorCalls: atomic.NewInt32(0),
 	}
 }
 
 // isBusy returns true when pending actor calls are ongoing.
 func (a *actor) isBusy() bool {
-	return !a.disposed && a.pendingActorCalls > 0
+	return !a.disposed && a.pendingActorCalls.Load() > 0
 }
 
 // channel creates or get new release channel. this channel is used for draining the actor.
@@ -73,10 +74,11 @@ func (a *actor) channel() chan struct{} {
 
 // lock holds the lock for turn-based concurrency.
 func (a *actor) lock() error {
-	atomic.AddInt32(&a.pendingActorCalls, int32(1))
-	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, a.pendingActorCalls)
+	a.pendingActorCalls.Inc()
+	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, a.pendingActorCalls.Load())
 	a.concurrencyLock.Lock()
 	if a.disposed {
+		a.unlock()
 		return ErrActorDisposed
 	}
 	a.lastUsedTime = time.Now().UTC()
@@ -86,12 +88,12 @@ func (a *actor) lock() error {
 // unlock release the lock for turn-based concurrency. If disposeCh is available,
 // it will close the channel to notify runtime to dispose actor.
 func (a *actor) unlock() {
-	if atomic.AddInt32(&a.pendingActorCalls, int32(-1)) == 0 {
+	if a.pendingActorCalls.Dec() == 0 {
 		if !a.disposed && a.disposeCh != nil {
 			a.disposed = true
 			close(a.disposeCh)
 		}
 	}
 	a.concurrencyLock.Unlock()
-	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, a.pendingActorCalls)
+	diag.DefaultMonitoring.ReportActorPendingCalls(a.actorType, a.pendingActorCalls.Load())
 }

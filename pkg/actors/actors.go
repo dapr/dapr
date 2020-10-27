@@ -303,10 +303,10 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	val, _ := a.actorsTable.LoadOrStore(key, newActor(actorTypeID.GetActorType(), actorTypeID.GetActorId()))
 	act := val.(*actor)
 	err := act.lock()
-	defer act.unlock()
 	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	}
+	defer act.unlock()
 
 	// Replace method to actors method
 	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)

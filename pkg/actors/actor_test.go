@@ -14,6 +14,7 @@ import (
 
 func TestIsBusy(t *testing.T) {
 	testActor := newActor("testType", "testID")
+
 	testActor.lock()
 	assert.Equal(t, true, testActor.isBusy())
 	testActor.unlock()
@@ -27,29 +28,35 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 	assert.Equal(t, true, testActor.isBusy())
 	firstLockTime := testActor.lastUsedTime
 
+	waitCh := make(chan bool)
+
 	// second lock
 	go func() {
+		waitCh <- false
 		testActor.lock()
+		time.Sleep(100 * time.Millisecond)
+		testActor.unlock()
+		waitCh <- false
 	}()
 
+	<-waitCh
+
 	time.Sleep(10 * time.Millisecond)
-	assert.Equal(t, int32(2), testActor.pendingActorCalls)
+	assert.Equal(t, int32(2), testActor.pendingActorCalls.Load())
 	assert.True(t, testActor.isBusy())
 	assert.Equal(t, firstLockTime, testActor.lastUsedTime)
 
 	// unlock the first lock
 	testActor.unlock()
 
-	time.Sleep(10 * time.Millisecond)
-	assert.Equal(t, int32(1), testActor.pendingActorCalls)
+	assert.Equal(t, int32(1), testActor.pendingActorCalls.Load())
 	assert.True(t, testActor.isBusy())
-	assert.NotEqual(t, firstLockTime, testActor.lastUsedTime)
 
 	// unlock the second lock
-	testActor.unlock()
-	assert.Equal(t, int32(0), testActor.pendingActorCalls)
+	<-waitCh
+	assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
 	assert.False(t, testActor.isBusy())
-	assert.NotEqual(t, firstLockTime, testActor.lastUsedTime)
+	assert.True(t, testActor.lastUsedTime.Sub(firstLockTime) >= 10*time.Millisecond)
 }
 
 func TestDisposedActor(t *testing.T) {
@@ -71,6 +78,7 @@ func TestDisposedActor(t *testing.T) {
 
 		err := testActor.lock()
 
+		assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
 		assert.IsType(t, ErrActorDisposed, err)
 	})
 }
