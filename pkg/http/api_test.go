@@ -60,25 +60,27 @@ func TestPubSubEndpoints(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints())
 
-	t.Run("Publish successfully - 200 OK", func(t *testing.T) {
+	t.Run("Publish successfully - 204 No Content", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		}
 	})
 
-	t.Run("Publish multi path successfully - 200 OK", func(t *testing.T) {
+	t.Run("Publish multi path successfully - 204 No Content", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/pubsubname/A/B/C", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		}
 	})
 
@@ -213,7 +215,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints())
 
-	t.Run("Invoke output bindings - 200 No Content empt response", func(t *testing.T) {
+	t.Run("Invoke output bindings - 204 No Content empty response", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
 		req := OutputBindingRequest{
 			Data: "fake output",
@@ -224,7 +226,8 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "failed to invoke output binding with %s", method)
+			assert.Equal(t, []byte{}, resp.RawBody, "expected response to match")
 		}
 	})
 
@@ -244,7 +247,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Invoke output bindings - 500 InternalError invalid req", func(t *testing.T) {
+	t.Run("Invoke output bindings - 400 InternalError invalid req", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testresponse", apiVersionV1)
 		req := `{"dat" : "invalid request"}`
 		b, _ := json.Marshal(&req)
@@ -253,7 +256,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 			// assert
-			assert.Equal(t, 500, resp.StatusCode)
+			assert.Equal(t, 400, resp.StatusCode)
 			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 		}
 	})
@@ -303,7 +306,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	}
 	fakeServer.StartServerWithTracing(spec, testAPI.constructBindingsEndpoints())
 
-	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
+	t.Run("Invoke output bindings - 204 OK", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
 		req := OutputBindingRequest{
 			Data: "fake output",
@@ -317,7 +320,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 
 			// assert
-			assert.Equal(t, 200, resp.StatusCode, "failed to invoke output binding with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "failed to invoke output binding with %s", method)
 		}
 	})
 
@@ -623,7 +626,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 				resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 				// assert
-				assert.Equal(t, 400, resp.StatusCode, apiPath)
+				assert.Equal(t, 500, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
 			}
 		}
@@ -756,7 +759,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
 	})
 
-	t.Run("Transaction - 201 Accepted", func(t *testing.T) {
+	t.Run("Transaction - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
 		testTransactionalOperations := []actors.TransactionalOperation{
@@ -796,7 +799,8 @@ func TestV1ActorEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
-		assert.Equal(t, 201, resp.StatusCode)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
 	})
@@ -886,7 +890,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_ACTOR_STATE_TRANSACTION_SAVE", resp.ErrorBody["errorCode"])
 	})
 
-	t.Run("Reminder Create - 200 OK", func(t *testing.T) {
+	t.Run("Reminder Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 
 		reminderRequest := actors.CreateReminderRequest{
@@ -909,7 +913,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.NoError(t, err)
 		for _, method := range []string{"POST", "PUT"} {
 			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
-			assert.Equal(t, 200, resp.StatusCode)
+			assert.Equal(t, 204, resp.StatusCode)
 		}
 
 		// assert
@@ -945,7 +949,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
 	})
 
-	t.Run("Reminder Delete - 200 OK", func(t *testing.T) {
+	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 		reminderRequest := actors.DeleteReminderRequest{
 			Name:      "reminder1",
@@ -963,7 +967,8 @@ func TestV1ActorEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 
 		// assert
-		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
 	})
 
@@ -1063,7 +1068,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
-	t.Run("Timer Create - 200 OK", func(t *testing.T) {
+	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
 		timerRequest := actors.CreateTimerRequest{
@@ -1087,7 +1092,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.NoError(t, err)
 		for _, method := range []string{"POST", "PUT"} {
 			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
-			assert.Equal(t, 200, resp.StatusCode)
+			assert.Equal(t, 204, resp.StatusCode)
 		}
 
 		// assert
@@ -1123,7 +1128,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "CreateTimer", 1)
 	})
 
-	t.Run("Timer Delete - 200 OK", func(t *testing.T) {
+	t.Run("Timer Delete - 204 No Conent", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 		timerRequest := actors.DeleteTimerRequest{
 			Name:      "timer1",
@@ -1141,11 +1146,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 
 		// assert
-		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
 	})
 
-	t.Run("Timer Delete - 200 OK", func(t *testing.T) {
+	t.Run("Timer Delete - 500 For upstream error", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 		timerRequest := actors.DeleteTimerRequest{
 			Name:      "timer1",
@@ -1309,8 +1315,8 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
 			// assert
-			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, 500, resp.StatusCode, apiPath)
+			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"], apiPath)
 		}
 	})
 
@@ -1342,7 +1348,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
-	t.Run("Transaction - 201 Accepted", func(t *testing.T) {
+	t.Run("Transaction - 204 No Content", func(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
@@ -1383,7 +1389,8 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
-		assert.Equal(t, 201, resp.StatusCode)
+		assert.Equal(t, 204, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 	})
 
@@ -1954,7 +1961,7 @@ func TestV1StateEndpoints(t *testing.T) {
 				testAPI.stateStores = nil
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
-				assert.Equal(t, 400, resp.StatusCode, apiPath)
+				assert.Equal(t, 500, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_STATE_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 				testAPI.stateStores = fakeStores
 
@@ -1995,6 +2002,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
 	t.Run("Get state - Good Key", func(t *testing.T) {
@@ -2025,7 +2033,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp := fakeServer.DoRequest("PUT", apiPath, b, nil)
 		// assert
-		assert.Equal(t, 201, resp.StatusCode, "updating the state store with the PUT verb should succeed")
+		assert.Equal(t, 204, resp.StatusCode, "updating the state store with the PUT verb should succeed")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
 	t.Run("Update state - No ETag", func(t *testing.T) {
@@ -2038,7 +2047,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
-		assert.Equal(t, 201, resp.StatusCode, "updating existing key without etag should succeed")
+		assert.Equal(t, 204, resp.StatusCode, "updating existing key without etag should succeed")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
 	t.Run("Update state - State Error", func(t *testing.T) {
@@ -2065,7 +2075,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
-		assert.Equal(t, 201, resp.StatusCode, "updating existing key with matching etag should succeed")
+		assert.Equal(t, 204, resp.StatusCode, "updating existing key with matching etag should succeed")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
@@ -2086,7 +2097,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 		// assert
-		assert.Equal(t, 200, resp.StatusCode, "updating existing key without etag should succeed")
+		assert.Equal(t, 204, resp.StatusCode, "updating existing key without etag should succeed")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
 	t.Run("Delete state - Matching ETag", func(t *testing.T) {
@@ -2094,7 +2106,8 @@ func TestV1StateEndpoints(t *testing.T) {
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, etag)
 		// assert
-		assert.Equal(t, 200, resp.StatusCode, "updating existing key with matching etag should succeed")
+		assert.Equal(t, 204, resp.StatusCode, "updating existing key with matching etag should succeed")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
 	t.Run("Delete state - Bad ETag", func(t *testing.T) {
@@ -2317,6 +2330,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
 	t.Run("Get secret - 403 Permission denied ", func(t *testing.T) {
@@ -2384,15 +2398,15 @@ func TestV1SecretEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_SECRET_GET", resp.ErrorBody["errorCode"], apiPath)
 	})
 
-	t.Run("Get secret - 400 for secret store not congfigured", func(t *testing.T) {
+	t.Run("Get secret - 500 for secret store not congfigured", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
 		testAPI.secretStores = nil
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
-		assert.Equal(t, 400, resp.StatusCode, "reading existing key should succeed")
-		assert.Equal(t, "ERR_SECRET_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
+		assert.Equal(t, "ERR_SECRET_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
 
 		testAPI.secretStores = fakeStores
 	})
@@ -2415,12 +2429,12 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode, "dapr not ready should return 500")
 	})
 
-	t.Run("Healthz - 200 OK", func(t *testing.T) {
+	t.Run("Healthz - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
 		testAPI.MarkStatusAsReady()
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
-		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, 204, resp.StatusCode)
 	})
 
 	fakeServer.Shutdown()
@@ -2443,7 +2457,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	storeName := "store1"
 	nonTransactionalStoreName := "storeNonTransactional"
 
-	t.Run("Direct Transaction - 201 Accepted", func(t *testing.T) {
+	t.Run("Direct Transaction - 204 No Content", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 		testTransactionalOperations := []state.TransactionalStateOperation{
 			{
@@ -2470,7 +2484,8 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
-		assert.Equal(t, 201, resp.StatusCode, "Dapr should return 201")
+		assert.Equal(t, 204, resp.StatusCode, "Dapr should return 204")
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 	})
 
 	t.Run("Post non-existent state store - 400 No State Store Found", func(t *testing.T) {
