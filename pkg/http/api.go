@@ -137,7 +137,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Handler: a.onGetState,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "state/{storeName}",
 			Version: apiVersionV1,
 			Handler: a.onPostState,
@@ -149,7 +149,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Handler: a.onDeleteState,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "state/{storeName}/bulk",
 			Version: apiVersionV1,
 			Handler: a.onBulkGetState,
@@ -358,32 +358,29 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 	metadata := getMetadataFromRequest(reqCtx)
 
-	bulkResp := []BulkGetResponse{}
+	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	limiter := concurrency.NewLimiter(req.Parallelism)
 
-	for _, k := range req.Keys {
+	for i, k := range req.Keys {
+		bulkResp[i].Key = k
 		fn := func(param interface{}) {
+			r := param.(*BulkGetResponse)
 			gr := &state.GetRequest{
-				Key:      a.getModifiedStateKey(param.(string)),
+				Key:      a.getModifiedStateKey(r.Key),
 				Metadata: metadata,
-			}
-
-			r := BulkGetResponse{
-				Key: param.(string),
 			}
 
 			resp, err := store.Get(gr)
 			if err != nil {
-				log.Debugf("bulk get: error getting key %s: %s", param.(string), err)
+				log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 				r.Error = err.Error()
 			} else if resp != nil {
 				r.Data = jsoniter.RawMessage(resp.Data)
 				r.ETag = resp.ETag
 			}
-			bulkResp = append(bulkResp, r)
 		}
 
-		limiter.Execute(fn, k)
+		limiter.Execute(fn, &bulkResp[i])
 	}
 	limiter.Wait()
 
