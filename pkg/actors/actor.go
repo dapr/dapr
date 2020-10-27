@@ -83,7 +83,7 @@ func (a *actor) lock() error {
 	return nil
 }
 
-// unlock release the lock for turn-based concurrency. If disposeCh is avaiable,
+// unlock release the lock for turn-based concurrency. If disposeCh is available,
 // it will close the channel to notify runtime to dispose actor.
 func (a *actor) unlock() {
 	if atomic.AddInt32(&a.pendingActorCalls, int32(-1)) == 0 {
