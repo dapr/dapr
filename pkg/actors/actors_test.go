@@ -719,18 +719,27 @@ func TestCallLocalActor(t *testing.T) {
 	})
 
 	t.Run("actor is already disposed", func(t *testing.T) {
+		// arrange
 		testActorRuntime := newTestActorsRuntime()
 		actorKey := testActorRuntime.constructCompositeKey(testActorType, testActorID)
 		act := newActor(testActorType, testActorID)
+
+		// add test actor
 		testActorRuntime.actorsTable.LoadOrStore(actorKey, act)
 		act.lock()
 		assert.True(t, act.isBusy())
+
+		// get dispose channel for test actor
 		ch := act.channel()
 		act.unlock()
-		_, closed := <-ch
-		assert.False(t, closed)
 
+		_, closed := <-ch
+		assert.False(t, closed, "dispose channel must be closed after unlock")
+
+		// act
 		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+
+		// assert
 		s, _ := status.FromError(err)
 		assert.Equal(t, codes.ResourceExhausted, s.Code())
 		assert.Nil(t, resp)
