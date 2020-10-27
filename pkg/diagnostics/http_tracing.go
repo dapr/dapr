@@ -193,7 +193,7 @@ func getContextValue(ctx *fasthttp.RequestCtx, key string) string {
 }
 
 func getAPIComponent(apiPath string) (string, string) {
-	// Dapr API reference : https://github.com/dapr/docs/tree/master/reference/api
+	// Dapr API reference : https://docs.dapr.io/reference/api/
 	// example : apiPath /v1.0/state/statestore
 	if apiPath == "" {
 		return "", ""

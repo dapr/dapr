@@ -67,8 +67,8 @@
         "summary": "Invoke a method on a remote dapr app",
         "description": "This endpoint lets you invoke a method in another Dapr enabled app.",
         "externalDocs": {
-          "description": "GitHub documentation",
-          "url": "https://github.com/dapr/docs/blob/master/reference/api/service_invocation_api.md"
+          "description": "Documentation",
+          "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
         }
       },
       "put": {
@@ -202,7 +202,7 @@
         "operationId": "invoke_post",
         "summary": "This endpoint lets you invoke a method in another Dapr enabled app.",
         "externalDocs": {
-          "url": "https://github.com/dapr/docs/blob/master/reference/api/service_invocation_api.md"
+          "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
         }
       },
       "delete": {
@@ -368,7 +368,7 @@
       "description": "Dapr provides users with the ability to call other applications that have unique ids. This functionality allows apps to interact with one another via named identifiers and puts the burden of service discovery on the Dapr runtime.",
       "externalDocs": {
         "description": "Dapr provides users with the ability to call other applications that have unique ids. This functionality allows apps to interact with one another via named identifiers and puts the burden of service discovery on the Dapr runtime.",
-        "url": "https://github.com/dapr/docs/blob/master/reference/api/service_invocation_api.md"
+        "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
       },
       "x-last-modified": 1594246229173
     },
@@ -376,14 +376,14 @@
       "name": "Invocation ",
       "description": "Dapr provides users with the ability to call other applications that have unique ids. This functionality allows apps to interact with one another via named identifiers and puts the burden of service discovery on the Dapr runtime.\n\n",
       "externalDocs": {
-        "url": "https://github.com/dapr/docs/blob/master/reference/api/service_invocation_api.md"
+        "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
       },
       "x-last-modified": 1594246379461
     }
   ],
   "externalDocs": {
     "description": "Dapr provides users with the ability to call other applications that have unique ids. This functionality allows apps to interact with one another via named identifiers and puts the burden of service discovery on the Dapr runtime.",
-    "url": "https://github.com/dapr/docs/blob/master/reference/api/service_invocation_api.md"
+    "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
   },
   "security": []
 }
