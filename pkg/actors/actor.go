@@ -84,7 +84,7 @@ func (a *actor) lock() error {
 	return nil
 }
 
-// unlock release the lock for turn-based concurrency. If disposeCh is available,
+// unlock releases the lock for turn-based concurrency. If disposeCh is available,
 // it will close the channel to notify runtime to dispose actor.
 func (a *actor) unlock() {
 	pending := a.pendingActorCalls.Dec()
