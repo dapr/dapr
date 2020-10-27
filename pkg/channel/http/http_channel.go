@@ -49,7 +49,6 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 	c := &Channel{
 		client: &fasthttp.Client{
 			MaxConnsPerHost:           1000000,
-			ReadTimeout:               channel.DefaultChannelRequestTimeout,
 			MaxIdemponentCallAttempts: 0,
 		},
 		baseAddress: fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
@@ -110,7 +109,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	// Send request to user application
 	var resp = fasthttp.AcquireResponse()
-	err := h.client.DoTimeout(channelReq, resp, channel.DefaultChannelRequestTimeout)
+	err := h.client.Do(channelReq, resp)
 	defer func() {
 		fasthttp.ReleaseRequest(channelReq)
 		fasthttp.ReleaseResponse(resp)

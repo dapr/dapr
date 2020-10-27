@@ -86,6 +86,13 @@ spec:
           containerPort: {{ .Values.global.prometheus.port }}
           protocol: TCP
 {{- end }}
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
         volumeMounts:
           - name: credentials
             mountPath: /var/run/dapr/credentials

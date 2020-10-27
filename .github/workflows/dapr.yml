@@ -21,8 +21,8 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.15
-      GOLANGCILINT_VER: 1.31
+      GOVER: 1.15.3
+      GOLANGCILINT_VER: v1.31
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
@@ -70,7 +70,7 @@ jobs:
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         uses: golangci/golangci-lint-action@v2.2.1
         with:
-          version: ${{ env.GOLANGLINT_VER }}
+          version: ${{ env.GOLANGCILINT_VER }}
       - name: Run go mod tidy check diff
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: make modtidy check-diff

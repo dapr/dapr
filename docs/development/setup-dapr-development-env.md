@@ -48,5 +48,5 @@ This document helps you get started developing Dapr. If you find any problem whi
 
 For development environment, you must install helm client and tiller.
 
-1. [Setup Minikube for Local environment](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-minikube.md)
-2. [Setup Azure Kubernetes Service](https://github.com/dapr/docs/blob/master/getting-started/cluster/setup-aks.md)
+1. [Setup Minikube for Local environment](https://docs.dapr.io/operations/hosting/kubernetes/cluster/setup-minikube/)
+2. [Setup Azure Kubernetes Service](hhttps://docs.dapr.io/operations/hosting/kubernetes/cluster/setup-aks/)
