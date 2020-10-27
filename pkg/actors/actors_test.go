@@ -838,6 +838,23 @@ func TestTransactionalState(t *testing.T) {
 	})
 }
 
+func TestGetOrCreateActor(t *testing.T) {
+	const testActorType = "fakeActor"
+	testActorRuntime := newTestActorsRuntime()
+
+	t.Run("create new key", func(t *testing.T) {
+		act := testActorRuntime.getOrCreateActor(testActorType, "id-1")
+		assert.NotNil(t, act)
+	})
+
+	t.Run("try to create the same key", func(t *testing.T) {
+		oldActor := testActorRuntime.getOrCreateActor(testActorType, "id-2")
+		assert.NotNil(t, oldActor)
+		newActor := testActorRuntime.getOrCreateActor(testActorType, "id-2")
+		assert.Same(t, oldActor, newActor, "should not create new actor")
+	})
+}
+
 func TestActiveActorsCount(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Actors Count", func(t *testing.T) {
