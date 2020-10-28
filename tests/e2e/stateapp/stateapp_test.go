@@ -157,12 +157,6 @@ func generateTestCases(isHTTP bool) []testCase {
 	testCaseManyKeys := utils.GenerateRandomStringKeys(testManyEntriesCount)
 	testCaseManyKeyValues := utils.GenerateRandomStringValues(testCaseManyKeys)
 
-	// HTTP has a limit of 4MB for request bodies
-	largeDataSupported := 201
-	if isHTTP {
-		largeDataSupported = 500
-	}
-
 	return []testCase{
 		{
 			// No comma since this will become the name of the test without spaces.
@@ -281,7 +275,7 @@ func generateTestCases(isHTTP bool) []testCase {
 				},
 				{
 					"save",
-					generateSpecificLengthSample(1024*1024*3 - 52), // Exact limit
+					generateSpecificLengthSample(1024*1024*3 - 55), // Exact limit
 					emptyResponse,
 					201,
 				},
@@ -289,26 +283,13 @@ func generateTestCases(isHTTP bool) []testCase {
 					"save",
 					generateSpecificLengthSample(1024*1024*4 + 1), // Limit + 1
 					emptyResponse,
-					largeDataSupported,
+					500,
 				},
 				{
 					"save",
 					generateSpecificLengthSample(1024 * 1024 * 8), // Greater than limit
 					emptyResponse,
-					largeDataSupported,
-				},
-			},
-			protocol,
-		},
-		{
-			// No comma since this will become the name of the test without spaces.
-			"Test missing key handled " + protocol,
-			[]testStep{
-				{
-					"get",
-					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
-					emptyResponse,
-					200,
+					500,
 				},
 			},
 			protocol,
@@ -402,7 +383,7 @@ func TestStateApp(t *testing.T) {
 				body, err := json.Marshal(step.request)
 				require.NoError(t, err)
 
-				url := fmt.Sprintf("%s/test/%s/%s", externalURL, tt.protocol, step.command)
+				url := fmt.Sprintf("%s/test/%s/%s/statestore", externalURL, tt.protocol, step.command)
 
 				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
 				require.NoError(t, err)
@@ -454,9 +435,9 @@ func TestStateTransactionApps(t *testing.T) {
 				require.NoError(t, err)
 				var url string
 				if tt.protocol == "HTTP" || step.command == "get" {
-					url = strings.TrimSpace(fmt.Sprintf("%s/test/http/%s", externalURL, step.command))
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/http/%s/statestore", externalURL, step.command))
 				} else {
-					url = strings.TrimSpace(fmt.Sprintf("%s/test/grpc/%s", externalURL, step.command))
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/grpc/%s/statestore", externalURL, step.command))
 				}
 				resp, err := utils.HTTPPost(url, body)
 				require.NoError(t, err)
@@ -482,6 +463,35 @@ func TestStateTransactionApps(t *testing.T) {
 	}
 }
 
+func TestMissingKeyDirect(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	for _, protocol := range []string{"http", "grpc"} {
+		stateURL := fmt.Sprintf("%s/test/%s/%s/statestore", externalURL, protocol, "get")
+
+		key := guuid.New().String()
+		request := newRequest(utils.SimpleKeyValue{key, nil})
+		body, _ := json.Marshal(request)
+
+		resp, status, err := utils.HTTPPostWithStatus(stateURL, body)
+
+		var states requestResponse
+		json.Unmarshal(resp, &states)
+
+		require.Equal(t, 200, status)
+		require.Nil(t, err)
+		require.Len(t, states.States, 1)
+		require.Equal(t, states.States[0].Key, key)
+		require.Nil(t, states.States[0].Value)
+	}
+}
+
 func TestMissingStateStore(t *testing.T) {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
@@ -489,15 +499,61 @@ func TestMissingStateStore(t *testing.T) {
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
 
-	// Define state URL for statestore that does not exist.
-	stateURL := "http://localhost:3500/v1.0/state/nonexistantstate"
+	for _, protocol := range []string{"http", "grpc"} {
+		// Define state URL for statestore that does not exist.
+		stateURL := fmt.Sprintf("%s/test/%s/%s/missingstatestore", externalURL, protocol, "save")
 
-	request := newRequest(utils.SimpleKeyValue{guuid.New().String(), nil})
-	body, _ := json.Marshal(request)
+		request := newRequest(utils.SimpleKeyValue{guuid.New().String(), nil})
+		body, _ := json.Marshal(request)
 
-	resp, err := utils.HTTPPost(stateURL, body)
+		resp, status, err := utils.HTTPPostWithStatus(stateURL, body)
 
-	require.True(t, resp == nil)
-	require.True(t, err != nil)
+		if protocol == "http" {
+			// The state app doesn't persist the real error other than this message
+			require.Contains(t, string(resp), "expected status code 201, got 400")
+			require.Equal(t, 500, status)
+			require.Nil(t, err)
+		} else {
+			// The state app doesn't persist the real error other than this message
+			require.Contains(t, string(resp), "state store missingstatestore is not found")
+			require.Equal(t, 500, status)
+			require.Nil(t, err)
+		}
+	}
+}
+
+func TestMisconfiguredStateStore(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	for _, protocol := range []string{"http", "grpc"} {
+		// Define state URL for statestore that does not exist.
+		for _, store := range []string{"badhost-store", "badpass-store"} {
+			stateURL := fmt.Sprintf("%s/test/%s/%s/%s", externalURL, protocol, "save", store)
+
+			request := newRequest(utils.SimpleKeyValue{guuid.New().String(), nil})
+			body, _ := json.Marshal(request)
+
+			resp, status, err := utils.HTTPPostWithStatus(stateURL, body)
+
+			if protocol == "http" {
+				// The state app doesn't persist the real error other than this message
+				require.Contains(t, string(resp), "expected status code 201, got 400")
+				require.Equal(t, 500, status)
+				require.Nil(t, err)
+			} else {
+				// The state app doesn't persist the real error other than this message
+				require.Contains(t, string(resp), fmt.Sprintf("state store %s is not found", store))
+				require.Equal(t, 500, status)
+				require.Nil(t, err)
+			}
+		}
+	}
 }
