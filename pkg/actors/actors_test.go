@@ -23,6 +23,8 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -700,6 +702,50 @@ func TestDeleteState(t *testing.T) {
 	assert.Nil(t, response.Data)
 }
 
+func TestCallLocalActor(t *testing.T) {
+	const (
+		testActorType = "pet"
+		testActorID   = "dog"
+		testMethod    = "bite"
+	)
+
+	req := invokev1.NewInvokeMethodRequest(testMethod).WithActor(testActorType, testActorID)
+
+	t.Run("invoke actor successfully", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	t.Run("actor is already disposed", func(t *testing.T) {
+		// arrange
+		testActorRuntime := newTestActorsRuntime()
+		actorKey := testActorRuntime.constructCompositeKey(testActorType, testActorID)
+		act := newActor(testActorType, testActorID)
+
+		// add test actor
+		testActorRuntime.actorsTable.LoadOrStore(actorKey, act)
+		act.lock()
+		assert.True(t, act.isBusy())
+
+		// get dispose channel for test actor
+		ch := act.channel()
+		act.unlock()
+
+		_, closed := <-ch
+		assert.False(t, closed, "dispose channel must be closed after unlock")
+
+		// act
+		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+
+		// assert
+		s, _ := status.FromError(err)
+		assert.Equal(t, codes.ResourceExhausted, s.Code())
+		assert.Nil(t, resp)
+	})
+}
+
 func TestTransactionalState(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Single set request succeeds", func(t *testing.T) {
@@ -789,6 +835,23 @@ func TestTransactionalState(t *testing.T) {
 		})
 		assert.NotNil(t, err)
 		assert.Equal(t, "operation type Wrong not supported", err.Error())
+	})
+}
+
+func TestGetOrCreateActor(t *testing.T) {
+	const testActorType = "fakeActor"
+	testActorRuntime := newTestActorsRuntime()
+
+	t.Run("create new key", func(t *testing.T) {
+		act := testActorRuntime.getOrCreateActor(testActorType, "id-1")
+		assert.NotNil(t, act)
+	})
+
+	t.Run("try to create the same key", func(t *testing.T) {
+		oldActor := testActorRuntime.getOrCreateActor(testActorType, "id-2")
+		assert.NotNil(t, oldActor)
+		newActor := testActorRuntime.getOrCreateActor(testActorType, "id-2")
+		assert.Same(t, oldActor, newActor, "should not create new actor")
 	})
 }
 
