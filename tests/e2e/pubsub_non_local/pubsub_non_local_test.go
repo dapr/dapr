@@ -39,9 +39,9 @@ const (
 	randomOffsetMax           = 99
 	numberOfMessagesToPublish = 100
 
-	publisherAppName  = "pubsub-publisher"
-	subscriberAppName = "pubsub-subscriber"
-	dummyAppName      = "dummy-app"
+	publisherAppName  = "pubsub-publisher-nl"
+	subscriberAppName = "pubsub-subscriber-nl"
+	dummyAppName      = "nl-dummy-app"
 )
 
 // nonlocalAppRunnable implements the runnnable interface
@@ -60,9 +60,7 @@ type publishCommand struct {
 
 // data returned from the subscriber app
 type receivedMessagesResponse struct {
-	ReceivedByTopicA []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC []string `json:"pubsub-c-topic"`
+	ReceivedByTopicD []string `json:"pubsub-d-topic"`
 }
 
 // sends messages to the publisher app.  The publisher app does the actual publish
@@ -99,19 +97,11 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 
 func testPublish(t *testing.T, publisherExternalURL string) receivedMessagesResponse {
 	var err error
-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic")
-	require.NoError(t, err)
-
-	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic")
-	require.NoError(t, err)
-
-	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic")
+	sentTopicDMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-d-topic")
 	require.NoError(t, err)
 
 	return receivedMessagesResponse{
-		ReceivedByTopicA: sentTopicAMessages,
-		ReceivedByTopicB: sentTopicBMessages,
-		ReceivedByTopicC: sentTopicCMessages,
+		ReceivedByTopicD: sentTopicDMessages,
 	}
 }
 
@@ -140,33 +130,25 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL, dummyAppExternalURL string, sentMessages receivedMessagesResponse) {
 	// get messages from dummy app (should be empty).
 	// dummy app is just a proxy application so that daprd can be started along side a container.
+	log.Printf("Checking that the app %s has not received any messages...\n", dummyAppName)
 	appResp := getAppResponse(t, dummyAppExternalURL)
 
-	log.Printf("Checking that the dummy app has not received any messages...\n")
-	require.Equal(t, 0, len(appResp.ReceivedByTopicA), "dummy app received message from dapr")
-	require.Equal(t, 0, len(appResp.ReceivedByTopicB), "dummy app received message from dapr")
-	require.Equal(t, 0, len(appResp.ReceivedByTopicC), "dummy app received message from dapr")
+	require.Equal(t, 0, len(appResp.ReceivedByTopicD), "dummy app received message from dapr")
 
 	// get messages from subscriber app (should be empty)
 	appResp = getAppResponse(t, subscriberExternalURL)
-	log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC))
+	log.Printf("subscriber %s receieved %d messages on pubsub-d-topic", subscriberAppName, len(appResp.ReceivedByTopicD))
 
 	// Sort messages first because the delivered messages cannot be ordered.
-	sort.Strings(sentMessages.ReceivedByTopicA)
-	sort.Strings(appResp.ReceivedByTopicA)
-	sort.Strings(sentMessages.ReceivedByTopicB)
-	sort.Strings(appResp.ReceivedByTopicB)
-	sort.Strings(sentMessages.ReceivedByTopicC)
-	sort.Strings(appResp.ReceivedByTopicC)
+	sort.Strings(sentMessages.ReceivedByTopicD)
+	sort.Strings(appResp.ReceivedByTopicD)
 
-	if !reflect.DeepEqual(sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA) {
-		for i := 0; i < len(sentMessages.ReceivedByTopicA); i++ {
-			log.Printf("%s, %s", sentMessages.ReceivedByTopicA[i], appResp.ReceivedByTopicA[i])
+	if !reflect.DeepEqual(sentMessages.ReceivedByTopicD, appResp.ReceivedByTopicD) {
+		for i := 0; i < len(sentMessages.ReceivedByTopicD); i++ {
+			log.Printf("%s, %s", sentMessages.ReceivedByTopicD[i], appResp.ReceivedByTopicD[i])
 		}
 	}
-	require.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA)
-	require.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB)
-	require.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC)
+	require.Equal(t, sentMessages.ReceivedByTopicD, appResp.ReceivedByTopicD)
 }
 
 func getAppResponse(t *testing.T, externalURL string) receivedMessagesResponse {
@@ -184,7 +166,6 @@ func getAppResponse(t *testing.T, externalURL string) receivedMessagesResponse {
 }
 
 func runTests(m *testing.M) int {
-	log.Println("Enter TestMain")
 	// the non-local app is run without a daprd sidecar.
 	nonlocalApps := []kube.AppDescription{
 		{
@@ -233,12 +214,13 @@ func runTests(m *testing.M) int {
 	}
 
 	log.Printf("Creating TestRunner\n")
-	tr = runner.NewTestRunner("pubsubtest", testApps, nil, nil)
+	tr = runner.NewTestRunner("nlpubsubtest", testApps, nil, nil)
 	log.Printf("Starting TestRunner\n")
 	return tr.Start(m)
 }
 
 func TestMain(m *testing.M) {
+	log.Println("Enter TestMain")
 	os.Exit(runTests(m))
 }
 
@@ -264,7 +246,7 @@ func TestPubSubNonLocal(t *testing.T) {
 	require.NoError(t, err)
 
 	// port forwarded call to subscriber application.
-	subscriberURL := fmt.Sprintf("localhost:%v", localPort[0])
+	subscriberURL := fmt.Sprintf("127.0.0.1:%v", localPort[0])
 	_, err = utils.HTTPGetNTimes("http://"+subscriberURL, numHealthChecks)
 	require.NoError(t, err)
 
