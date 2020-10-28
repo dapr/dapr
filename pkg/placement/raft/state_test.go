@@ -7,6 +7,7 @@ package raft
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -78,6 +79,8 @@ func TestUpsertMember(t *testing.T) {
 		}
 
 		oldUpdatedAt := s.Members[testMember.Name].UpdatedAt
+
+		time.Sleep(100 * time.Millisecond)
 
 		// act
 		//
