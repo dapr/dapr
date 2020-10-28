@@ -144,7 +144,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 		value = []corev1.Container{*sidecarContainer}
 	} else {
 		envPatchOps = addDaprEnvVarsToContainers(pod.Spec.Containers)
-		path = "/spec/containers/-"
+		path = "/spec/containers/0"
 		value = sidecarContainer
 	}
 
