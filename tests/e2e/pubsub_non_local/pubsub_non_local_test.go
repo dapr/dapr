@@ -142,6 +142,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL, d
 	// dummy app is just a proxy application so that daprd can be started along side a container.
 	appResp := getAppResponse(t, dummyAppExternalURL)
 
+	log.Printf("Checking that the dummy app has not received any messages...\n")
 	require.Equal(t, 0, len(appResp.ReceivedByTopicA), "dummy app received message from dapr")
 	require.Equal(t, 0, len(appResp.ReceivedByTopicB), "dummy app received message from dapr")
 	require.Equal(t, 0, len(appResp.ReceivedByTopicC), "dummy app received message from dapr")
@@ -183,7 +184,7 @@ func getAppResponse(t *testing.T, externalURL string) receivedMessagesResponse {
 }
 
 func runTests(m *testing.M) int {
-	fmt.Println("Enter TestMain")
+	log.Println("Enter TestMain")
 	// the non-local app is run without a daprd sidecar.
 	nonlocalApps := []kube.AppDescription{
 		{
@@ -241,8 +242,8 @@ func TestMain(m *testing.M) {
 	os.Exit(runTests(m))
 }
 
-func TestPubSub(t *testing.T) {
-	t.Log("Enter TestPubSub")
+func TestPubSubNonLocal(t *testing.T) {
+	log.Printf("Enter TestPubSubNonLocal\n")
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
