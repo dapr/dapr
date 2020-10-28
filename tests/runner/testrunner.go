@@ -30,6 +30,7 @@ type PlatformInterface interface {
 
 	AcquireAppExternalURL(name string) string
 	GetAppHostDetails(name string) (string, string, error)
+	GetServiceDNSName(name string) (string, error)
 	Restart(name string) error
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)
@@ -73,6 +74,30 @@ func NewTestRunner(id string, apps []kube.AppDescription,
 	}
 }
 
+// StartNonLocalDaprDisabledApps is the entry point to start non-local dapr disabled apps.
+// the apps do not have any components.
+// tearDown needs to be called manually after the test runner is started using this method.
+func (tr *TestRunner) StartNonLocalDaprDisabledApps() int {
+	// Setup non-local apps
+	log.Println("Running non-local app setup...")
+	err := tr.Platform.setup()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed Platform.setup(), %s", err.Error())
+		return runnerFailExitCode
+	}
+
+	// Install non-local apps.
+	if tr.testApps != nil && len(tr.testApps) > 0 {
+		log.Println("Installing non-local dapr disabled apps...")
+		if err := tr.Platform.addApps(tr.testApps); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed Platform.addApps(), %s", err.Error())
+			return runnerFailExitCode
+		}
+	}
+
+	return 0
+}
+
 // Start is the entry point of Dapr test runner
 func (tr *TestRunner) Start(m runnable) int {
 	// TODO: Add logging and reporting initialization
@@ -82,7 +107,7 @@ func (tr *TestRunner) Start(m runnable) int {
 	err := tr.Platform.setup()
 	defer func() {
 		log.Println("Running teardown...")
-		tr.tearDown()
+		tr.TearDown()
 	}()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.setup(), %s", err.Error())
@@ -123,7 +148,8 @@ func (tr *TestRunner) Start(m runnable) int {
 	return m.Run()
 }
 
-func (tr *TestRunner) tearDown() {
+// TearDown tears down the platform setup.
+func (tr *TestRunner) TearDown() {
 	// Tearing down platform
 	tr.Platform.tearDown()
 

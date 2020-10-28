@@ -93,6 +93,7 @@ func (m *AppManager) Init() error {
 	}
 
 	// Validate daprd side car is injected
+	// App without daprd side car should not have ingress enabled (for testing purposes) else throw error
 	if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
 		return err
 	}
@@ -200,7 +201,7 @@ func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err erro
 // ValidiateSideCar validates that dapr side car is running in dapr enabled pods
 func (m *AppManager) ValidiateSideCar() (bool, error) {
 	if !m.app.DaprEnabled {
-		return false, fmt.Errorf("dapr is not enabled for this app")
+		return false, nil
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -454,12 +455,18 @@ func (m *AppManager) GetHostDetails() (string, string, error) {
 	return podList.Items[0].GetName(), podList.Items[0].Status.PodIP, nil
 }
 
-// SaveContainerLogs get container logs for all containers in the pod and saves them to disk
-func (m *AppManager) SaveContainerLogs() error {
-	if !m.app.DaprEnabled {
-		return fmt.Errorf("dapr is not enabled for this app")
+// GetServiceDNSName returns the DNS for the service based on https://kubernetes.io/docs/concepts/services-networking/dns-pod-service
+func (m *AppManager) GetServiceDNSName() (string, error) {
+	if int(m.app.Replicas) != 1 {
+		return "", fmt.Errorf("number of replicas should be 1")
 	}
 
+	// kubedns will resolve it to <service_name>.namespace.svc.cluster.local
+	return fmt.Sprintf("%s.%s", m.app.AppName, m.namespace), nil
+}
+
+// SaveContainerLogs get container logs for all containers in the pod and saves them to disk
+func (m *AppManager) SaveContainerLogs() error {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
