@@ -23,6 +23,8 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -698,6 +700,50 @@ func TestDeleteState(t *testing.T) {
 	// assert
 	assert.NoError(t, err)
 	assert.Nil(t, response.Data)
+}
+
+func TestCallLocalActor(t *testing.T) {
+	const (
+		testActorType = "pet"
+		testActorID   = "dog"
+		testMethod    = "bite"
+	)
+
+	req := invokev1.NewInvokeMethodRequest(testMethod).WithActor(testActorType, testActorID)
+
+	t.Run("invoke actor successfully", func(t *testing.T) {
+		testActorRuntime := newTestActorsRuntime()
+		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	t.Run("actor is already disposed", func(t *testing.T) {
+		// arrange
+		testActorRuntime := newTestActorsRuntime()
+		actorKey := testActorRuntime.constructCompositeKey(testActorType, testActorID)
+		act := newActor(testActorType, testActorID)
+
+		// add test actor
+		testActorRuntime.actorsTable.LoadOrStore(actorKey, act)
+		act.lock()
+		assert.True(t, act.isBusy())
+
+		// get dispose channel for test actor
+		ch := act.channel()
+		act.unlock()
+
+		_, closed := <-ch
+		assert.False(t, closed, "dispose channel must be closed after unlock")
+
+		// act
+		resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+
+		// assert
+		s, _ := status.FromError(err)
+		assert.Equal(t, codes.ResourceExhausted, s.Code())
+		assert.Nil(t, resp)
+	})
 }
 
 func TestTransactionalState(t *testing.T) {
