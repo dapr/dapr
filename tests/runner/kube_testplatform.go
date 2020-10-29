@@ -21,7 +21,7 @@ const (
 	disableTelemetryConfig      = "disable-telemetry"
 	defaultSidecarCPULimit      = "4.0"
 	defaultSidecarMemoryLimit   = "512Mi"
-	defaultSidecarCPURequest    = "0.5"
+	defaultSidecarCPURequest    = "0.1"
 	defaultSidecarMemoryRequest = "250Mi"
 )
 
