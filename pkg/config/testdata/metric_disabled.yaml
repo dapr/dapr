@@ -1,0 +1,7 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: metricconfig
+spec:
+  metric:
+    enabled: false

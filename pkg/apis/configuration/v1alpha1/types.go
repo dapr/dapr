@@ -28,7 +28,7 @@ type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
-	// +kubebuilder:default={enabled:true}
+	// +optional
 	MetricSpec MetricSpec `json:"metric,omitempty"`
 	// +optional
 	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
