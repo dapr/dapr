@@ -39,3 +39,5 @@ webhooks:
     operations:
     - CREATE
   failurePolicy: Ignore
+  sideEffects: None
+  admissionReviewVersions: ["v1", "v1beta1"]
