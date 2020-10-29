@@ -60,7 +60,8 @@ spec:
                       description: DynamicValue is a dynamic value struct for the
                         component.metadata pair value
                       type: object
-                      additionalProperties: true
+                      x-kubernetes-preserve-unknown-fields: true
+                      additionalProperties: {}
                   required:
                   - name
                   type: object
