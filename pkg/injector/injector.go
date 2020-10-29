@@ -17,7 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/pkg/errors"
-	"k8s.io/api/admission/v1beta1"
+	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -45,15 +45,15 @@ type injector struct {
 
 // toAdmissionResponse is a helper function to create an AdmissionResponse
 // with an embedded error
-func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
-	return &v1beta1.AdmissionResponse{
+func toAdmissionResponse(err error) *v1.AdmissionResponse {
+	return &v1.AdmissionResponse{
 		Result: &metav1.Status{
 			Message: err.Error(),
 		},
 	}
 }
 
-func getAppIDFromRequest(req *v1beta1.AdmissionRequest) string {
+func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 	// default App ID
 	appID := ""
 
@@ -156,11 +156,11 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var admissionResponse *v1beta1.AdmissionResponse
+	var admissionResponse *v1.AdmissionResponse
 	var patchOps []PatchOperation
 	var err error
 
-	ar := v1beta1.AdmissionReview{}
+	ar := v1.AdmissionReview{}
 	if _, _, err = i.deserializer.Decode(body, nil, &ar); err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
@@ -181,7 +181,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		admissionResponse = toAdmissionResponse(err)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "patch")
 	} else if len(patchOps) == 0 {
-		admissionResponse = &v1beta1.AdmissionResponse{
+		admissionResponse = &v1.AdmissionResponse{
 			Allowed: true,
 		}
 	} else {
@@ -190,18 +190,18 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			admissionResponse = toAdmissionResponse(err)
 		} else {
-			admissionResponse = &v1beta1.AdmissionResponse{
+			admissionResponse = &v1.AdmissionResponse{
 				Allowed: true,
 				Patch:   patchBytes,
-				PatchType: func() *v1beta1.PatchType {
-					pt := v1beta1.PatchTypeJSONPatch
+				PatchType: func() *v1.PatchType {
+					pt := v1.PatchTypeJSONPatch
 					return &pt
 				}(),
 			}
 		}
 	}
 
-	admissionReview := v1beta1.AdmissionReview{}
+	admissionReview := v1.AdmissionReview{}
 	if admissionResponse != nil {
 		admissionReview.Response = admissionResponse
 		if ar.Request != nil {
