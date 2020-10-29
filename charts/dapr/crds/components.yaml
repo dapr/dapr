@@ -61,7 +61,7 @@ spec:
                         component.metadata pair value
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
-                      additionalProperties: {}
+                      additionalProperties: true
                   required:
                   - name
                   type: object
