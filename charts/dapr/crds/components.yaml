@@ -59,6 +59,13 @@ spec:
                     value:
                       description: DynamicValue is a dynamic value struct for the
                         component.metadata pair value
+                      oneOf:
+                        - type: string
+                        - type: integer
+                        - type: object
+                        - type: number
+                        - type: boolean
+                        - type: array
                   required:
                   - name
                   type: object
