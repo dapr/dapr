@@ -57,17 +57,7 @@ spec:
                       - name
                       type: object
                     value:
-                      x-kubernetes-int-or-string: true
-                      preserveUnknownFields: true
-                      description: DynamicValue is a dynamic value struct for the
-                        component.metadata pair value
-                      oneOf:
-                        - type: string
-                        - type: integer
-                        - type: object
-                        - type: number
-                        - type: boolean
-                        - type: array
+                      x-kubernetes-preserve-unknown-fields: true
                   required:
                   - name
                   type: object
