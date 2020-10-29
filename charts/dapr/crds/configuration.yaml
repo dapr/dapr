@@ -4,7 +4,14 @@ metadata:
   name: configurations.dapr.io
 spec:
   group: dapr.io
-  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    storage: true
+    additionalPrinterColumns: {}
+    subresources:
+      status: {}
+    schema:
+      openAPIV3Schema: {}
   names:
     kind: Configuration
     plural: configurations
