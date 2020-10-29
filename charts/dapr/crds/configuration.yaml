@@ -56,7 +56,6 @@ spec:
                                 type: string
                             required:
                             - action
-                            - httpVerb
                             - name
                             type: object
                           type: array
@@ -64,18 +63,12 @@ spec:
                           type: string
                       required:
                       - appId
-                      - defaultAction
-                      - namespace
-                      - operations
-                      - trustDomain
                       type: object
                     type: array
                   trustDomain:
                     type: string
                 required:
-                - defaultAction
                 - policies
-                - trustDomain
                 type: object
               httpPipeline:
                 description: PipelineSpec defines the middleware pipeline
@@ -126,9 +119,7 @@ spec:
                   workloadCertTTL:
                     type: string
                 required:
-                - allowedClockSkew
                 - enabled
-                - workloadCertTTL
                 type: object
               secrets:
                 description: SecretsSpec is the spec for secrets configuration

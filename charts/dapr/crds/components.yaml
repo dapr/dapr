@@ -62,7 +62,6 @@ spec:
                       type: object
                   required:
                   - name
-                  - value
                   type: object
                 type: array
               type:

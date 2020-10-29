@@ -38,8 +38,10 @@ type ComponentSpec struct {
 
 // MetadataItem is a name/value pair for a metadata
 type MetadataItem struct {
-	Name         string       `json:"name"`
-	Value        DynamicValue `json:"value"`
+	Name string `json:"name"`
+	// +optional
+	Value DynamicValue `json:"value,omitempty"`
+	// +optional
 	SecretKeyRef SecretKeyRef `json:"secretKeyRef,omitempty"`
 }
 
