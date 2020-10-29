@@ -296,14 +296,29 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	return nil, errors.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
 }
 
+func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
+	key := a.constructCompositeKey(actorType, actorID)
+
+	// This avoids allocating multiple actor allocations by calling newActor
+	// whenever actor is invoked. When storing actor key first, there is a chance to
+	// call newActor, but this is trivial.
+	val, ok := a.actorsTable.Load(key)
+	if !ok {
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID))
+	}
+
+	return val.(*actor)
+}
+
 func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	actorTypeID := req.Actor()
-	key := a.constructCompositeKey(actorTypeID.GetActorType(), actorTypeID.GetActorId())
 
-	val, _ := a.actorsTable.LoadOrStore(key, newActor(actorTypeID.GetActorType(), actorTypeID.GetActorId()))
-	act := val.(*actor)
-	act.lock()
-	defer act.unLock()
+	act := a.getOrCreateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
+	err := act.lock()
+	if err != nil {
+		return nil, status.Error(codes.ResourceExhausted, err.Error())
+	}
+	defer act.unlock()
 
 	// Replace method to actors method
 	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)

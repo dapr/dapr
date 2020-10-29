@@ -287,8 +287,8 @@ func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
 	}
 }
 
-// ReportCurrentPendingLocks records the current pending actor locks.
-func (s *serviceMetrics) ReportCurrentPendingLocks(actorType string, pendingLocks int32) {
+// ReportActorPendingCalls records the current pending actor locks.
+func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks int32) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
