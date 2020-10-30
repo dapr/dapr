@@ -306,7 +306,7 @@ func TestCallLocal(t *testing.T) {
 		request := invokev1.NewInvokeMethodRequest("method").Proto()
 
 		_, err := client.CallLocal(context.Background(), request)
-		assert.Equal(t, codes.Unknown, status.Code(err))
+		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 }
 
