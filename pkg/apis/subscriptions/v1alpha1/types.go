@@ -19,7 +19,8 @@ type Subscription struct {
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              SubscriptionSpec `json:"spec,omitempty"`
-	Scopes            []string         `json:"scopes,omitempty"`
+	// +optional
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // SubscriptionSpec is the spec for an event subscription
