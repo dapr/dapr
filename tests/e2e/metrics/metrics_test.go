@@ -51,8 +51,10 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 		},
 		{
-			AppName:        "grpcmetrics",
-			Config:         "obs-defaultmetric",
+			AppName: "grpcmetrics",
+			// TODO: Some AKS clusters created before do not support CRD defaulting even
+			// if Kubernetes version is 1.16/1.17 later.
+			// Config:         "obs-defaultmetric",
 			DaprEnabled:    true,
 			ImageName:      "e2e-stateapp",
 			Replicas:       1,
