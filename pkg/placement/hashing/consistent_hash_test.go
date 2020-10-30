@@ -3,7 +3,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package placement
+package hashing
 
 import (
 	"fmt"

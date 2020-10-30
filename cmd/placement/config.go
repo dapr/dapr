@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	defaultCredentialsPath = "/var/run/dapr/credentials"
-	defaultHealthzPort     = 8080
-	defaultPlacementPort   = 50005
+	defaultCredentialsPath   = "/var/run/dapr/credentials"
+	defaultHealthzPort       = 8080
+	defaultPlacementPort     = 50005
+	defaultReplicationFactor = 1000
 )
 
 type config struct {
@@ -29,10 +30,11 @@ type config struct {
 	raftBootStrap    bool
 
 	// Placement server configurations
-	placementPort int
-	healthzPort   int
-	certChainPath string
-	tlsEnabled    bool
+	placementPort     int
+	healthzPort       int
+	certChainPath     string
+	tlsEnabled        bool
+	replicationFactor int
 
 	// Log and metrics configurations
 	loggerOptions   logger.Options
@@ -61,6 +63,7 @@ func newConfig() *config {
 	flag.IntVar(&cfg.healthzPort, "healthz-port", cfg.healthzPort, "sets the HTTP port for the healthz server")
 	flag.StringVar(&cfg.certChainPath, "certchain", cfg.certChainPath, "Path to the credentials directory holding the cert chain")
 	flag.BoolVar(&cfg.tlsEnabled, "tls-enabled", cfg.tlsEnabled, "Should TLS be enabled for the placement gRPC server")
+	flag.IntVar(&cfg.replicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
 	cfg.loggerOptions = logger.DefaultOptions()
 	cfg.loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
