@@ -59,6 +59,33 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	}
 }
 
+func TestMetricSpecForStandAlone(t *testing.T) {
+	testCases := []struct {
+		name          string
+		confFile      string
+		metricEnabled bool
+	}{
+		{
+			name:          "metric is enabled by default",
+			confFile:      "./testdata/config.yaml",
+			metricEnabled: true,
+		},
+		{
+			name:          "metric is disabled by config",
+			confFile:      "./testdata/metric_disabled.yaml",
+			metricEnabled: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := LoadStandaloneConfiguration(tc.confFile)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
+		})
+	}
+}
+
 func TestSortAndValidateSecretsConfigration(t *testing.T) {
 	testCases := []struct {
 		name          string
