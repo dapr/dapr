@@ -23,9 +23,9 @@ type DaprHostMember struct {
 	Entities []string
 
 	// CreatedAt is the time when this host is first added.
-	CreatedAt int64
+	CreatedAt time.Time
 	// UpdatedAt is the last time when this host member info is updated.
-	UpdatedAt int64
+	UpdatedAt time.Time
 }
 
 // DaprHostMemberState is the state to store Dapr runtime host and
@@ -94,9 +94,11 @@ func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 }
 
 func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) error {
+	now := time.Now().UTC()
+
 	if m, ok := s.Members[host.Name]; ok {
 		if m.AppID == host.AppID && m.Name == host.Name && cmp.Equal(m.Entities, host.Entities) {
-			m.UpdatedAt = time.Now().UnixNano()
+			m.UpdatedAt = now
 			return nil
 		}
 		s.removeHashingTables(m)
@@ -107,8 +109,8 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) error {
 		AppID:    host.AppID,
 		Entities: make([]string, len(host.Entities)),
 
-		CreatedAt: time.Now().UnixNano(),
-		UpdatedAt: time.Now().UnixNano(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	copy(s.Members[host.Name].Entities, host.Entities)
 
