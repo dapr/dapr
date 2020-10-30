@@ -11,11 +11,10 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/placement/hashing"
-	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"google.golang.org/grpc"
@@ -25,16 +24,23 @@ import (
 
 var log = logger.NewLogger("dapr.placement")
 
+type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer
+
+type desseminateOp int
+
+const (
+	bufferredOperation desseminateOp = iota
+	flushOperation
+)
+
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
-	generation        int
-	entriesLock       *sync.RWMutex
-	entries           map[string]*hashing.Consistent
-	hosts             []placementv1pb.Placement_ReportDaprStatusServer
-	hostsEntitiesLock *sync.RWMutex
-	hostsEntities     map[string][]string
-	hostsLock         *sync.Mutex
-	updateLock        *sync.Mutex
+	generation int
+	updateLock *sync.Mutex
+
+	desseminateCh   chan desseminateOp
+	streamConns     []placementGRPCStream
+	streamConnsLock *sync.Mutex
 
 	raftNode *raft.Server
 }
@@ -46,13 +52,10 @@ type placementOptions struct {
 // NewPlacementService returns a new placement service
 func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
-		entriesLock:       &sync.RWMutex{},
-		entries:           make(map[string]*hashing.Consistent),
-		hostsEntitiesLock: &sync.RWMutex{},
-		hostsEntities:     make(map[string][]string),
-		hostsLock:         &sync.Mutex{},
-		updateLock:        &sync.Mutex{},
-		raftNode:          raftNode,
+		updateLock:      &sync.Mutex{},
+		streamConnsLock: &sync.Mutex{},
+		desseminateCh:   make(chan desseminateOp, 100),
+		raftNode:        raftNode,
 	}
 }
 
@@ -60,7 +63,7 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 
-	var registeredMemberID string
+	registeredMemberID := ""
 
 	for {
 		if !p.raftNode.IsLeader() {
@@ -72,11 +75,8 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 		case nil:
 			if registeredMemberID == "" {
 				registeredMemberID = req.Name
-				p.addHost(ctx, srv)
-				p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
-					placementOptions{incrementGeneration: false})
+				p.addConn(ctx, srv)
 				log.Debugf("New member is added: %s", registeredMemberID)
-				monitoring.RecordHostsCount(len(p.hosts))
 			}
 
 			_, err := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
@@ -88,7 +88,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				log.Debugf("fail to apply command: %v", err)
 			}
 
-			p.ProcessHost(req)
+			p.desseminateCh <- bufferredOperation
 
 		default:
 			if registeredMemberID == "" {
@@ -96,25 +96,22 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				return nil
 			}
 
-			p.hostsLock.Lock()
-			p.RemoveHost(srv)
-
-			_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
-				Name: registeredMemberID,
-			})
-
-			if err != nil {
-				log.Debugf("fail to apply command: %v", err)
-			}
-
-			// TODO: Need the robust fail-over handling by the intermittent
-			// network outage to prevent from rebalancing actors.
-			p.ProcessRemovedHost(registeredMemberID)
-			p.hostsLock.Unlock()
-
+			p.deleteConn(srv)
 			if err == io.EOF {
 				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
+				// Remove member and desseminate tables immediately
+				// do batched remove and dessemination
+				_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
+					Name: registeredMemberID,
+				})
+				if err != nil {
+					log.Debugf("fail to apply command: %v", err)
+				}
+
+				p.desseminateCh <- bufferredOperation
 			} else {
+				// no actions for hashing table. instead, connectionMonitoring will check
+				// host updatedAt and if current - updatedAt > 2 seconds, remove hosts
 				log.Debugf("Member is removed with error: %s, %v", registeredMemberID, err)
 			}
 
@@ -123,26 +120,77 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 	}
 }
 
-func (p *Service) addHost(ctx context.Context, srv placementv1pb.Placement_ReportDaprStatusServer) {
-	p.hostsLock.Lock()
-	defer p.hostsLock.Unlock()
+func (p *Service) faultyHostDetectionLoop() {
+	detectionTick := time.Tick(500 * time.Millisecond)
+	reqCount := 0
 
-	p.hosts = append(p.hosts, srv)
-}
+	for {
+		if !p.raftNode.IsLeader() {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
 
-// RemoveHost removes the host from the hosts list
-func (p *Service) RemoveHost(srv placementv1pb.Placement_ReportDaprStatusServer) {
-	for i := len(p.hosts) - 1; i >= 0; i-- {
-		if p.hosts[i] == srv {
-			p.hosts = append(p.hosts[:i], p.hosts[i+1:]...)
+		select {
+		case op := <-p.desseminateCh:
+			updateRequired := false
+			switch op {
+			case bufferredOperation:
+				reqCount++
+				if reqCount > 10 {
+					updateRequired = true
+					reqCount = 0
+				}
+			case flushOperation:
+				updateRequired = true
+			}
+
+			if updateRequired {
+				p.PerformTablesUpdate(p.streamConns, placementOptions{incrementGeneration: true})
+			}
+
+		case t := <-detectionTick:
+			m := p.raftNode.FSM().State().Members
+			tableUpdateRequired := false
+			for _, v := range m {
+				if t.Sub(v.UpdatedAt) < 10*time.Second {
+					continue
+				}
+				_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
+					Name: v.Name,
+				})
+				if err != nil {
+					log.Debugf("fail to apply command: %v", err)
+				}
+				tableUpdateRequired = true
+			}
+
+			if tableUpdateRequired {
+				p.desseminateCh <- flushOperation
+			}
 		}
 	}
 }
 
+func (p *Service) addConn(ctx context.Context, conn placementGRPCStream) {
+	p.streamConnsLock.Lock()
+	p.streamConns = append(p.streamConns, conn)
+	p.streamConnsLock.Unlock()
+}
+
+func (p *Service) deleteConn(conn placementGRPCStream) {
+	p.streamConnsLock.Lock()
+	for i, c := range p.streamConns {
+		if c == conn {
+			p.streamConns = append(p.streamConns[:i], p.streamConns[i+1:]...)
+			break
+		}
+	}
+	p.streamConnsLock.Unlock()
+}
+
 // PerformTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
 // it then proceeds to update and then unlock once all runtimes have been updated
-func (p *Service) PerformTablesUpdate(hosts []placementv1pb.Placement_ReportDaprStatusServer,
-	options placementOptions) {
+func (p *Service) PerformTablesUpdate(hosts []placementGRPCStream, options placementOptions) {
 	p.updateLock.Lock()
 	defer p.updateLock.Unlock()
 
@@ -170,7 +218,9 @@ func (p *Service) PerformTablesUpdate(hosts []placementv1pb.Placement_ReportDapr
 		Entries: map[string]*placementv1pb.PlacementTable{},
 	}
 
-	for k, v := range p.entries {
+	entries := p.raftNode.FSM().State().HashingTable()
+
+	for k, v := range entries {
 		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
 		table := placementv1pb.PlacementTable{
 			Hosts:     hosts,
@@ -208,66 +258,6 @@ func (p *Service) PerformTablesUpdate(hosts []placementv1pb.Placement_ReportDapr
 			log.Errorf("error updating host on unlock operation: %s", err)
 			continue
 		}
-	}
-}
-
-// ProcessRemovedHost removes a host from the hash table
-func (p *Service) ProcessRemovedHost(id string) {
-	updateRequired := false
-
-	var entities []string
-	func() {
-		p.hostsEntitiesLock.RLock()
-		defer p.hostsEntitiesLock.RUnlock()
-		entities = p.hostsEntities[id]
-		delete(p.hostsEntities, id)
-	}()
-
-	func() {
-		p.entriesLock.Lock()
-		defer p.entriesLock.Unlock()
-		for _, e := range entities {
-			if _, ok := p.entries[e]; ok {
-				p.entries[e].Remove(id)
-				updateRequired = true
-			}
-		}
-	}()
-
-	if updateRequired {
-		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
-	}
-}
-
-// ProcessHost updates the distributed has list based on a new host and its entities
-func (p *Service) ProcessHost(host *placementv1pb.Host) {
-	updateRequired := false
-
-	for _, e := range host.Entities {
-		p.entriesLock.Lock()
-
-		if _, ok := p.entries[e]; !ok {
-			p.entries[e] = hashing.NewConsistentHash()
-		}
-
-		exists := p.entries[e].Add(host.Name, host.Id, host.Port)
-		if !exists {
-			updateRequired = true
-			monitoring.RecordPerActorTypeReplicasCount(e, host.Name)
-		}
-
-		p.entriesLock.Unlock()
-	}
-
-	monitoring.RecordActorTypesCount(len(p.entries))
-	monitoring.RecordNonActorHostsCount(len(p.hosts) - len(p.entries))
-
-	if updateRequired {
-		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
-
-		p.hostsEntitiesLock.Lock()
-		p.hostsEntities[host.Name] = host.Entities
-		p.hostsEntitiesLock.Unlock()
 	}
 }
 

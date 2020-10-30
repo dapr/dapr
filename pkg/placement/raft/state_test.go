@@ -91,7 +91,7 @@ func TestUpsertMember(t *testing.T) {
 		// assert
 		assert.Equal(t, 2, len(s.Members))
 		assert.Equal(t, 1, len(s.Members[testMember.Name].Entities))
-		assert.True(t, oldUpdatedAt < s.Members[testMember.Name].UpdatedAt,
+		assert.True(t, oldUpdatedAt.UnixNano() < s.Members[testMember.Name].UpdatedAt.UnixNano(),
 			"UpdatedAt must be updated old: %d, new: %d", oldUpdatedAt, s.Members[testMember.Name].UpdatedAt)
 		assert.Equal(t, 1, len(s.hashingTableMap), "this doesn't delete empty consistent hashing table")
 	})
