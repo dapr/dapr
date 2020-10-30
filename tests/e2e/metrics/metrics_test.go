@@ -52,8 +52,17 @@ func TestMain(m *testing.M) {
 		},
 		{
 			AppName:        "grpcmetrics",
+			Config:         "obs-defaultmetric",
 			DaprEnabled:    true,
 			ImageName:      "e2e-stateapp",
+			Replicas:       1,
+			IngressEnabled: true,
+		},
+		{
+			AppName:        "disabledmetric",
+			Config:         "disable-telemetry",
+			DaprEnabled:    true,
+			ImageName:      "e2e-hellodapr",
 			Replicas:       1,
 			IngressEnabled: true,
 		},
@@ -88,6 +97,14 @@ var metricsTests = []testCase{
 		invokeDaprGRPC,
 		10,
 		testGRPCMetrics,
+	},
+	{
+		"metric off",
+		"disabledmetric",
+		"http",
+		invokeDaprHTTP,
+		3,
+		testMetricDisabled,
 	},
 }
 
@@ -138,6 +155,26 @@ func invokeDaprHTTP(t *testing.T, app string, n, daprPort int) {
 func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
 	require.NotNil(t, res)
 
+	foundMetric, foundPath := findHTTPMetricFromPrometheus(t, app, res)
+
+	// Check metric was found
+	require.True(t, foundMetric)
+	// Check metric with method was found
+	require.True(t, foundPath)
+}
+
+func testMetricDisabled(t *testing.T, app string, res *http.Response) {
+	require.NotNil(t, res)
+
+	foundMetric, foundPath := findHTTPMetricFromPrometheus(t, app, res)
+
+	// Check metric was found
+	require.False(t, foundMetric)
+	// Check metric with method was found
+	require.False(t, foundPath)
+}
+
+func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) (bool, bool) {
 	rfmt := expfmt.ResponseFormat(res.Header)
 	require.NotEqual(t, rfmt, expfmt.FmtUnknown)
 
@@ -148,6 +185,7 @@ func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
 	// it will check the `path` label is as expected for the invoked action.
 	var foundMetric bool
 	var foundPath bool
+
 	for {
 		mf := &io_prometheus_client.MetricFamily{}
 		err := decoder.Decode(mf)
@@ -182,10 +220,8 @@ func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
 			}
 		}
 	}
-	// Check metric was found
-	require.True(t, foundMetric)
-	// Check metric with method was found
-	require.True(t, foundPath)
+
+	return foundMetric, foundPath
 }
 
 func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {
