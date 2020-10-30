@@ -86,6 +86,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 			})
 			if err != nil {
 				log.Debugf("fail to apply command: %v", err)
+				continue
 			}
 
 			p.desseminateCh <- bufferredOperation
@@ -106,6 +107,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				})
 				if err != nil {
 					log.Debugf("fail to apply command: %v", err)
+					continue
 				}
 
 				p.desseminateCh <- bufferredOperation
