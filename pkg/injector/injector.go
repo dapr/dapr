@@ -161,7 +161,8 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	ar := v1.AdmissionReview{}
-	if _, _, err = i.deserializer.Decode(body, nil, &ar); err != nil {
+	_, gvk, err := i.deserializer.Decode(body, nil, &ar)
+	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
 		if ar.Request.UserInfo.UID != i.authUID {
@@ -206,32 +207,26 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		admissionReview.Response = admissionResponse
 		if ar.Request != nil {
 			admissionReview.Response.UID = ar.Request.UID
+			admissionReview.SetGroupVersionKind(*gvk)
 		}
 	}
 
-	resp, err := json.Marshal(admissionReview)
-	if err != nil {
-		log.Errorf("can't encode response: %v", err)
-		http.Error(
-			w,
-			fmt.Sprintf("could not encode response: %v", err),
-			http.StatusInternalServerError,
-		)
-
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
-		return
-	}
-
 	log.Infof("ready to write response ...")
-	if _, err := w.Write(resp); err != nil {
-		log.Errorf("can't write response: %v", err)
+	respBytes, err := json.Marshal(admissionReview)
+	if err != nil {
+		log.Errorf("can't deserialize response: %s", err)
+
 		http.Error(
 			w,
-			fmt.Sprintf("could not write response: %v", err),
+			err.Error(),
 			http.StatusInternalServerError,
 		)
 
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(respBytes); err != nil {
+		log.Error(err)
 	} else {
 		monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
 	}
