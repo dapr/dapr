@@ -139,7 +139,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Handler: a.onGetState,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "state/{storeName}",
 			Version: apiVersionV1,
 			Handler: a.onPostState,
@@ -151,7 +151,7 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Handler: a.onDeleteState,
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
 			Route:   "state/{storeName}/bulk",
 			Version: apiVersionV1,
 			Handler: a.onBulkGetState,
@@ -359,32 +359,29 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 	metadata := getMetadataFromRequest(reqCtx)
 
-	bulkResp := []BulkGetResponse{}
+	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	limiter := concurrency.NewLimiter(req.Parallelism)
 
-	for _, k := range req.Keys {
+	for i, k := range req.Keys {
+		bulkResp[i].Key = k
 		fn := func(param interface{}) {
+			r := param.(*BulkGetResponse)
 			gr := &state.GetRequest{
-				Key:      a.getModifiedStateKey(param.(string)),
+				Key:      a.getModifiedStateKey(r.Key),
 				Metadata: metadata,
-			}
-
-			r := BulkGetResponse{
-				Key: param.(string),
 			}
 
 			resp, err := store.Get(gr)
 			if err != nil {
-				log.Debugf("bulk get: error getting key %s: %s", param.(string), err)
+				log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
 				r.Error = err.Error()
 			} else if resp != nil {
 				r.Data = jsoniter.RawMessage(resp.Data)
 				r.ETag = resp.ETag
 			}
-			bulkResp = append(bulkResp, r)
 		}
 
-		limiter.Execute(fn, k)
+		limiter.Execute(fn, &bulkResp[i])
 	}
 	limiter.Wait()
 
@@ -721,6 +718,15 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	body := reqCtx.PostBody()
 
+	var ops []actors.TransactionalOperation
+	err := a.json.Unmarshal(body, &ops)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		log.Debug(msg)
+		return
+	}
+
 	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -728,15 +734,6 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", common.ErrActorInstanceMissing)
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
-		log.Debug(msg)
-		return
-	}
-
-	var ops []actors.TransactionalOperation
-	err := a.json.Unmarshal(body, &ops)
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(common.ErrMalformedRequest, err))
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
@@ -779,15 +776,17 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", fmt.Sprintf(common.ErrActorReminderGet, err))
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
+		return
 	}
 	b, err := a.json.Marshal(resp)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", fmt.Sprintf(common.ErrActorReminderGet, err))
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
-	} else {
-		respondWithJSON(reqCtx, fasthttp.StatusOK, b)
+		return
 	}
+
+	respondWithJSON(reqCtx, fasthttp.StatusOK, b)
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {

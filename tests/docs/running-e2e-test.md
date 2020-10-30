@@ -10,7 +10,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
 ### Prerequisites
 
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-  - [Install the latest Helm v3](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#using-helm-advanced).
+  - [Install the latest Helm v3](https://docs.dapr.io/getting-started/install-dapr/#install-with-helm-advanced).
 * Create your DockerHub ID
 * Set the environment variables
     ```bash

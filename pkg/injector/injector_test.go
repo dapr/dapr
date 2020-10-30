@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"k8s.io/api/admission/v1beta1"
+	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -241,7 +241,7 @@ func TestGetAppIDFromRequest(t *testing.T) {
 	})
 
 	t.Run("can handle empty admissionrequest object", func(t *testing.T) {
-		fakeReq := &v1beta1.AdmissionRequest{}
+		fakeReq := &v1.AdmissionRequest{}
 		appID := getAppIDFromRequest(fakeReq)
 		assert.Equal(t, "", appID)
 	})
@@ -255,7 +255,7 @@ func TestGetAppIDFromRequest(t *testing.T) {
 			},
 		}
 		rawBytes, _ := json.Marshal(fakePod)
-		fakeReq := &v1beta1.AdmissionRequest{
+		fakeReq := &v1.AdmissionRequest{
 			Object: runtime.RawExtension{
 				Raw: rawBytes,
 			},

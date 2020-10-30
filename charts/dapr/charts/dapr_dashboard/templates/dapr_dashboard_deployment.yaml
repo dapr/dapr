@@ -5,11 +5,7 @@ metadata:
   labels:
     app: dapr-dashboard
 spec:
-{{- if eq .Values.global.ha.enabled true }}
-  replicas: {{ .Values.global.ha.replicaCount }}
-{{- else }}
   replicas: {{ .Values.replicaCount }}
-{{- end }}
   selector:
     matchLabels:
       app: dapr-dashboard
@@ -59,3 +55,10 @@ spec:
               fieldPath: metadata.namespace
         ports:
         - containerPort: 8080
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 50m
+            memory: 20Mi
