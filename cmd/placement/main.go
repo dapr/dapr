@@ -27,14 +27,16 @@ var certChainPath string
 var tlsEnabled bool
 
 const (
-	defaultCredentialsPath = "/var/run/dapr/credentials"
-	defaultHealthzPort     = 8080
-	defaultPlacementPort   = 50005
+	defaultCredentialsPath   = "/var/run/dapr/credentials"
+	defaultHealthzPort       = 8080
+	defaultPlacementPort     = 50005
+	defaultReplicationFactor = 1000
 )
 
 func main() {
 	placementPort := flag.Int("port", defaultPlacementPort, "sets the gRPC port for the placement service")
 	healthzPort := flag.Int("healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
+	replicationFactor := flag.Int("replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -95,6 +97,8 @@ func main() {
 		certChain = chain
 		log.Info("tls certificates loaded successfully")
 	}
+
+	placement.SetReplicationFactor(*replicationFactor)
 
 	p := placement.NewPlacementService()
 	go p.Run(strconv.Itoa(*placementPort), certChain)
