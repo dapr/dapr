@@ -1,0 +1,18 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: disable-telemetry
+spec:
+  tracing:
+    samplingRate: "0"
+  metric:
+    enabled: false
+---
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: obs-defaultmetric
+spec:
+  tracing:
+    samplingRate: "0"
+  # by default, metric.enabled is true.

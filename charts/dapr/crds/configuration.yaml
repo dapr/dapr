@@ -155,6 +155,16 @@ spec:
                 required:
                 - samplingRate
                 type: object
+              metric:
+                default:
+                  enabled: true
+                description: MetricSpec defines metrics configuration
+                properties:
+                  enabled:
+                    type: boolean
+                required:
+                - enabled
+                type: object
             type: object
         type: object
     served: true
