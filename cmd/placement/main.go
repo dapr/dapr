@@ -16,6 +16,7 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement"
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/version"
@@ -54,6 +55,7 @@ func main() {
 	}
 
 	// Start Placement gRPC server.
+	hashing.SetReplicationFactor(cfg.replicationFactor)
 	apiServer := placement.NewPlacementService(raftServer)
 	var certChain *credentials.CertChain
 	if cfg.tlsEnabled {
