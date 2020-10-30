@@ -145,7 +145,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		}
 	}
 
-	config.LogLevel = "DEBUG"
+	// Use LoggerAdapter to integrate with Dapr logger. Log level relies on placement log level.
 	config.Logger = newLoggerAdapter()
 	config.LocalID = raft.ServerID(s.id)
 
