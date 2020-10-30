@@ -30,11 +30,10 @@ type config struct {
 	raftBootStrap    bool
 
 	// Placement server configurations
-	placementPort     int
-	healthzPort       int
-	certChainPath     string
-	tlsEnabled        bool
-	replicationFactor int
+	placementPort int
+	healthzPort   int
+	certChainPath string
+	tlsEnabled    bool
 
 	replicationFactor int
 
