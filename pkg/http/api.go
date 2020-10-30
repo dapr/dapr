@@ -843,7 +843,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 
 	resp, err := a.actor.Call(reqCtx, req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_INVOKE", fmt.Sprintf(messages.ErrActorInvoke, err))
+		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
 		return
