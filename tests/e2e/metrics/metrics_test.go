@@ -174,7 +174,7 @@ func testMetricDisabled(t *testing.T, app string, res *http.Response) {
 	require.False(t, foundPath)
 }
 
-func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) {
+func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) (bool, bool) {
 	rfmt := expfmt.ResponseFormat(res.Header)
 	require.NotEqual(t, rfmt, expfmt.FmtUnknown)
 
