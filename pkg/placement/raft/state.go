@@ -98,9 +98,11 @@ func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 }
 
 func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) error {
+	now := time.Now().UTC()
+
 	if m, ok := s.Members[host.Name]; ok {
 		if m.AppID == host.AppID && m.Name == host.Name && cmp.Equal(m.Entities, host.Entities) {
-			m.UpdatedAt = time.Now().UTC()
+			m.UpdatedAt = now
 			return nil
 		}
 		s.removeHashingTables(m)
@@ -111,8 +113,8 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) error {
 		AppID:    host.AppID,
 		Entities: make([]string, len(host.Entities)),
 
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	copy(s.Members[host.Name].Entities, host.Entities)
 

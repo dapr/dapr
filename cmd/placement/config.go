@@ -36,6 +36,8 @@ type config struct {
 	tlsEnabled        bool
 	replicationFactor int
 
+	replicationFactor int
+
 	// Log and metrics configurations
 	loggerOptions   logger.Options
 	metricsExporter metrics.Exporter
