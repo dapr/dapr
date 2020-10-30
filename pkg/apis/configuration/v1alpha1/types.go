@@ -28,6 +28,8 @@ type ConfigurationSpec struct {
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
+	// +kubebuilder:default={enabled:true}
+	MetricSpec MetricSpec `json:"metric,omitempty"`
 	// +optional
 	MTLSSpec MTLSSpec `json:"mtls,omitempty"`
 	// +optional
@@ -84,9 +86,14 @@ type SelectorField struct {
 	Value string `json:"value"`
 }
 
-// TracingSpec is the spec object in ConfigurationSpec
+// TracingSpec defines distributed tracing configuration
 type TracingSpec struct {
 	SamplingRate string `json:"samplingRate"`
+}
+
+// MetricSpec defines metrics configuration
+type MetricSpec struct {
+	Enabled bool `json:"enabled"`
 }
 
 // AppPolicySpec defines the policy data structure for each app
