@@ -116,7 +116,7 @@ func generateTestCases() []testCase {
 			"", // no error
 		},
 		{
-			"get empty secret",
+			"empty secret",
 			newRequest(secretStore, utils.SimpleKeyValue{emptySecret, ""}),
 			newResponse(secretStore, utils.SimpleKeyValue{emptySecret, ""}),
 			false,
@@ -124,7 +124,7 @@ func generateTestCases() []testCase {
 			"", // no error
 		},
 		{
-			"get allowed secret",
+			"allowed secret",
 			newRequest(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
 			newResponse(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
 			false,
@@ -132,7 +132,7 @@ func generateTestCases() []testCase {
 			"", // no error
 		},
 		{
-			"get unallowed secret",
+			"unallowed secret",
 			newRequest(secretStore, utils.SimpleKeyValue{unallowedSecret, ""}),
 			newResponse("", utils.SimpleKeyValue{unallowedSecret, ""}),
 			true,
@@ -140,15 +140,15 @@ func generateTestCases() []testCase {
 			"PERMISSION_DENIED",
 		},
 		{
-			"get nonexistent secret",
+			"nonexistent secret",
 			newRequest(secretStore, utils.SimpleKeyValue{nonExistentSecret, ""}),
 			newResponse("", utils.SimpleKeyValue{nonExistentSecret, ""}),
 			true,
 			500,
-			"ERR_STATE_GET",
+			"ERR_SECRET_GET",
 		},
 		{
-			"get from nonexistent secret store",
+			"secret from nonexistent secret store",
 			newRequest(nonexistentStore, utils.SimpleKeyValue{allowedSecret, ""}),
 			newResponse("", utils.SimpleKeyValue{allowedSecret, ""}),
 			true,
