@@ -76,6 +76,8 @@ spec:
 {{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
+        - "--replicationFactor"
+        - "{{ .Values.replicationFactor }}"
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
