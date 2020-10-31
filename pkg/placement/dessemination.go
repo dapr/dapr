@@ -10,9 +10,8 @@ import (
 
 const (
 	faultyHostDetectInterval    = 500 * time.Millisecond
-	faultyHostDetectMaxDuration = 3 * time.Second
-
-	flushTimerInterval = 1 * time.Second
+	faultyHostDetectMaxDuration = 2 * time.Second
+	flushTimerInterval          = 1 * time.Second
 )
 
 func (p *Service) DesseminateLoop() {
@@ -24,6 +23,8 @@ func (p *Service) DesseminateLoop() {
 
 	for {
 		if !p.raftNode.IsLeader() {
+			// TODO: use leader election channel instead of sleep
+			// <- p.raftNode.leaderCh
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -35,13 +36,15 @@ func (p *Service) DesseminateLoop() {
 				hostUpdateCount++
 
 			case flushOperation:
+				lastFlushTimestamp = time.Now().UTC()
+				log.Debugf("desseminate tables to runtimes. request count: %d", hostUpdateCount)
 				p.performTablesUpdate(p.streamConns, true)
 				hostUpdateCount = 0
-				lastFlushTimestamp = time.Now().UTC()
 			}
 
 		case t := <-flushTimer:
-			if hostUpdateCount > 0 && t.Sub(lastFlushTimestamp) > flushTimerInterval {
+			if hostUpdateCount > 0 && t > lastFlushTimestamp.Add(flushTimerInterval) {
+				log.Debugf("request dessemination. request count: %d", hostUpdateCount)
 				p.desseminateCh <- flushOperation
 			}
 
@@ -49,9 +52,10 @@ func (p *Service) DesseminateLoop() {
 			m := p.raftNode.FSM().State().Members
 			tableUpdateRequired := false
 			for _, v := range m {
-				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
+				if t < v.UpdatedAt.Add(faultyHostDetectMaxDuration) {
 					continue
 				}
+				log.Debugf("try to remove hosts: %s", v.Name)
 				_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{Name: v.Name})
 				if err != nil {
 					log.Debugf("fail to apply command: %v", err)
@@ -60,7 +64,7 @@ func (p *Service) DesseminateLoop() {
 			}
 
 			if tableUpdateRequired {
-				p.desseminateCh <- flushOperation
+				p.desseminateCh <- bufferredOperation
 			}
 		}
 	}
