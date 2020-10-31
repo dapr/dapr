@@ -15,8 +15,8 @@ const (
 )
 
 func (p *Service) DesseminateLoop() {
-	faultHostDetectTimer := time.Tick(faultyHostDetectInterval)
-	flushTimer := time.Tick(flushTimerInterval)
+	faultHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
+	flushTimer := time.NewTicker(flushTimerInterval)
 	lastFlushTimestamp := time.Now().UTC()
 
 	hostUpdateCount := 0
@@ -42,13 +42,13 @@ func (p *Service) DesseminateLoop() {
 				hostUpdateCount = 0
 			}
 
-		case t := <-flushTimer:
+		case t := <-flushTimer.C:
 			if hostUpdateCount > 0 && t.Sub(lastFlushTimestamp) > flushTimerInterval {
 				log.Debugf("request dessemination. request count: %d", hostUpdateCount)
 				p.desseminateCh <- flushOperation
 			}
 
-		case t := <-faultHostDetectTimer:
+		case t := <-faultHostDetectTimer.C:
 			m := p.raftNode.FSM().State().Members
 			tableUpdateRequired := false
 			for _, v := range m {

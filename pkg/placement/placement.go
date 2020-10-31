@@ -102,12 +102,12 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				p.desseminateCh <- bufferredOperation
 			}
 
-			_, err := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
+			_, raftErr := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
 				Name:     req.Name,
 				AppID:    req.Id,
 				Entities: req.Entities,
 			})
-			if err != nil {
+			if raftErr != nil {
 				log.Debugf("fail to apply command: %v", err)
 				continue
 			}
@@ -123,10 +123,10 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
 				// Remove member and desseminate tables immediately
 				// do batched remove and dessemination
-				_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
+				_, raftErr := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
 					Name: registeredMemberID,
 				})
-				if err != nil {
+				if raftErr != nil {
 					log.Debugf("fail to apply command: %v", err)
 					continue
 				}
