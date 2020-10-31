@@ -34,10 +34,10 @@ func TestFSMApply(t *testing.T) {
 		}
 
 		resp := fsm.Apply(raftLog)
-		err, ok := resp.(error)
+		updated, ok := resp.(bool)
 
-		assert.False(t, ok)
-		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.True(t, updated)
 		assert.Equal(t, 1, len(fsm.state.Members))
 	})
 
@@ -56,10 +56,10 @@ func TestFSMApply(t *testing.T) {
 		}
 
 		resp := fsm.Apply(raftLog)
-		err, ok := resp.(error)
+		updated, ok := resp.(bool)
 
-		assert.False(t, ok)
-		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.True(t, updated)
 		assert.Equal(t, 0, len(fsm.state.Members))
 	})
 }

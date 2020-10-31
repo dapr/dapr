@@ -48,28 +48,28 @@ func (c *FSM) State() *DaprHostMemberState {
 	return c.state
 }
 
-func (c *FSM) upsertMember(cmdData []byte) error {
+func (c *FSM) upsertMember(cmdData []byte) (bool, error) {
 	c.stateLock.Lock()
 	defer c.stateLock.Unlock()
 
 	var host DaprHostMember
 	if err := unmarshalMsgPack(cmdData, &host); err != nil {
-		return err
+		return false, err
 	}
 
-	return c.state.upsertMember(&host)
+	return c.state.upsertMember(&host), nil
 }
 
-func (c *FSM) removeMember(cmdData []byte) error {
+func (c *FSM) removeMember(cmdData []byte) (bool, error) {
 	c.stateLock.Lock()
 	defer c.stateLock.Unlock()
 
 	var host DaprHostMember
 	if err := unmarshalMsgPack(cmdData, &host); err != nil {
-		return err
+		return false, err
 	}
 
-	return c.state.removeMember(&host)
+	return c.state.removeMember(&host), nil
 }
 
 // Apply log is invoked once a log entry is committed.
@@ -83,14 +83,19 @@ func (c *FSM) Apply(log *raft.Log) interface{} {
 	}
 
 	var err error
+	var updated bool
 	switch cmdType {
 	case MemberUpsert:
-		err = c.upsertMember(buf[1:])
+		updated, err = c.upsertMember(buf[1:])
 	case MemberRemove:
-		err = c.removeMember(buf[1:])
+		updated, err = c.removeMember(buf[1:])
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	return updated
 }
 
 // Snapshot is used to support log compaction. This call should

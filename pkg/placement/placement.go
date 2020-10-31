@@ -38,7 +38,6 @@ const (
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
-	generation int
 	updateLock *sync.Mutex
 
 	desseminateCh chan desseminateOp
@@ -52,7 +51,6 @@ type Service struct {
 // NewPlacementService returns a new placement service
 func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
-		generation:      0,
 		updateLock:      &sync.Mutex{},
 		streamConns:     []placementGRPCStream{},
 		streamConnsLock: &sync.Mutex{},
@@ -97,12 +95,11 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 			if registeredMemberID == "" {
 				registeredMemberID = req.Name
 				p.addRuntimeConnection(ctx, srv)
-				p.performTablesUpdate([]placementGRPCStream{srv}, true)
+				p.performTablesUpdate([]placementGRPCStream{srv})
 				log.Debugf("New member is added: %s", registeredMemberID)
-				p.desseminateCh <- bufferredOperation
 			}
 
-			_, raftErr := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
+			updated, raftErr := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
 				Name:     req.Name,
 				AppID:    req.Id,
 				Entities: req.Entities,
@@ -110,6 +107,10 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 			if raftErr != nil {
 				log.Debugf("fail to apply command: %v", err)
 				continue
+			}
+
+			if updated {
+				p.desseminateCh <- bufferredOperation
 			}
 
 		default:
@@ -123,7 +124,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
 				// Remove member and desseminate tables immediately
 				// do batched remove and dessemination
-				_, raftErr := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
+				updated, raftErr := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
 					Name: registeredMemberID,
 				})
 				if raftErr != nil {
@@ -131,7 +132,9 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 					continue
 				}
 
-				p.desseminateCh <- bufferredOperation
+				if updated {
+					p.desseminateCh <- bufferredOperation
+				}
 			} else {
 				// no actions for hashing table. instead, connectionMonitoring will check
 				// host updatedAt and if current - updatedAt > 2 seconds, remove hosts

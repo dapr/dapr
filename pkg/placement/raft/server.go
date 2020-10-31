@@ -249,22 +249,21 @@ func (s *Server) IsLeader() bool {
 }
 
 // ApplyCommand applies command log to state machine to upsert or remove members.
-func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (interface{}, error) {
+func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, error) {
 	if !s.IsLeader() {
-		return nil, errors.New("this is not the leader node")
+		return false, errors.New("this is not the leader node")
 	}
 
 	cmdLog, err := makeRaftLogCommand(cmdType, data)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
 	future := s.raft.Apply(cmdLog, commandTimeout)
-
 	if err := future.Error(); err != nil {
-		return nil, err
+		return false, err
 	}
 
 	resp := future.Response()
-	return resp, nil
+	return resp.(bool), nil
 }

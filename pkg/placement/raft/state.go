@@ -36,6 +36,10 @@ type DaprHostMemberState struct {
 	// Members includes Dapr runtime hosts.
 	Members map[string]*DaprHostMember
 
+	// TableGeneration is the generation of hashingTableMap.
+	// This is incrased whenever hashingTableMap is updated.
+	TableGeneration uint64
+
 	// hashingTableMap is the map for storing consistent hashing data
 	// per Actor types.
 	hashingTableMap map[string]*hashing.Consistent
@@ -44,6 +48,7 @@ type DaprHostMemberState struct {
 func newDaprHostMemberState() *DaprHostMemberState {
 	return &DaprHostMemberState{
 		Index:           0,
+		TableGeneration: 0,
 		Members:         map[string]*DaprHostMember{},
 		hashingTableMap: map[string]*hashing.Consistent{},
 	}
@@ -56,6 +61,7 @@ func (s *DaprHostMemberState) HashingTable() map[string]*hashing.Consistent {
 func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	newMembers := &DaprHostMemberState{
 		Index:           s.Index,
+		TableGeneration: s.TableGeneration,
 		Members:         map[string]*DaprHostMember{},
 		hashingTableMap: nil,
 	}
@@ -97,13 +103,13 @@ func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 	}
 }
 
-func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) error {
+func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 	now := time.Now().UTC()
 
 	if m, ok := s.Members[host.Name]; ok {
 		if m.AppID == host.AppID && m.Name == host.Name && cmp.Equal(m.Entities, host.Entities) {
 			m.UpdatedAt = now
-			return nil
+			return false
 		}
 		s.removeHashingTables(m)
 	}
@@ -119,17 +125,20 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) error {
 	copy(s.Members[host.Name].Entities, host.Entities)
 
 	s.updateHashingTables(s.Members[host.Name])
+	s.TableGeneration++
 
-	return nil
+	return true
 }
 
-func (s *DaprHostMemberState) removeMember(host *DaprHostMember) error {
+func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
 	if m, ok := s.Members[host.Name]; ok {
 		s.removeHashingTables(m)
 		delete(s.Members, host.Name)
+		s.TableGeneration++
+		return true
 	}
 
-	return nil
+	return false
 }
 
 func (s *DaprHostMemberState) restoreHashingTables() {

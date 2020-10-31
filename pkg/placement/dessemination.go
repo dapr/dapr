@@ -1,7 +1,7 @@
 package placement
 
 import (
-	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -10,7 +10,7 @@ import (
 
 const (
 	faultyHostDetectInterval    = 500 * time.Millisecond
-	faultyHostDetectMaxDuration = 2 * time.Second
+	faultyHostDetectMaxDuration = 3 * time.Second
 	flushTimerInterval          = 1 * time.Second
 )
 
@@ -38,7 +38,7 @@ func (p *Service) DesseminateLoop() {
 			case flushOperation:
 				lastFlushTimestamp = time.Now().UTC()
 				log.Debugf("desseminate tables to runtimes. request count: %d", hostUpdateCount)
-				p.performTablesUpdate(p.streamConns, true)
+				p.performTablesUpdate(p.streamConns)
 				hostUpdateCount = 0
 			}
 
@@ -56,11 +56,14 @@ func (p *Service) DesseminateLoop() {
 					continue
 				}
 				log.Debugf("try to remove hosts: %s", v.Name)
-				_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{Name: v.Name})
+				updated, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{Name: v.Name})
 				if err != nil {
 					log.Debugf("fail to apply command: %v", err)
 				}
-				tableUpdateRequired = true
+
+				if updated {
+					tableUpdateRequired = true
+				}
 			}
 
 			if tableUpdateRequired {
@@ -72,13 +75,9 @@ func (p *Service) DesseminateLoop() {
 
 // performTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
 // it then proceeds to update and then unlock once all runtimes have been updated
-func (p *Service) performTablesUpdate(hosts []placementGRPCStream, incrementGeneration bool) {
+func (p *Service) performTablesUpdate(hosts []placementGRPCStream) {
 	p.updateLock.Lock()
 	defer p.updateLock.Unlock()
-
-	if incrementGeneration {
-		p.generation++
-	}
 
 	o := placementv1pb.PlacementOrder{
 		Operation: "lock",
@@ -92,11 +91,9 @@ func (p *Service) performTablesUpdate(hosts []placementGRPCStream, incrementGene
 		}
 	}
 
-	v := fmt.Sprintf("%v", p.generation)
-
 	o.Operation = "update"
 	o.Tables = &placementv1pb.PlacementTables{
-		Version: v,
+		Version: strconv.FormatUint(p.raftNode.FSM().State().TableGeneration, 10),
 		Entries: map[string]*placementv1pb.PlacementTable{},
 	}
 
