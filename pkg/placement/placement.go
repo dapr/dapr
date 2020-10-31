@@ -32,29 +32,51 @@ const (
 	flushOperation
 )
 
+const (
+	desseminateBufferSize = 100
+)
+
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
 	generation int
 	updateLock *sync.Mutex
 
-	desseminateCh   chan desseminateOp
+	desseminateCh chan desseminateOp
+
 	streamConns     []placementGRPCStream
 	streamConnsLock *sync.Mutex
 
 	raftNode *raft.Server
 }
 
-type placementOptions struct {
-	incrementGeneration bool
-}
-
 // NewPlacementService returns a new placement service
 func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
+		generation:      0,
 		updateLock:      &sync.Mutex{},
+		streamConns:     []placementGRPCStream{},
 		streamConnsLock: &sync.Mutex{},
-		desseminateCh:   make(chan desseminateOp, 100),
+		desseminateCh:   make(chan desseminateOp, desseminateBufferSize),
 		raftNode:        raftNode,
+	}
+}
+
+// Run starts the placement service gRPC server
+func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	opts, err := dapr_credentials.GetServerOptions(certChain)
+	if err != nil {
+		log.Fatalf("error creating gRPC options: %s", err)
+	}
+	s := grpc.NewServer(opts...)
+	placementv1pb.RegisterPlacementServer(s, p)
+
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
 	}
 }
 
@@ -74,8 +96,10 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 		case nil:
 			if registeredMemberID == "" {
 				registeredMemberID = req.Name
-				p.addConn(ctx, srv)
+				p.addRuntimeConnection(ctx, srv)
+				p.performTablesUpdate([]placementGRPCStream{srv}, true)
 				log.Debugf("New member is added: %s", registeredMemberID)
+				p.desseminateCh <- bufferredOperation
 			}
 
 			_, err := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
@@ -88,15 +112,13 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				continue
 			}
 
-			p.desseminateCh <- bufferredOperation
-
 		default:
 			if registeredMemberID == "" {
 				log.Debug("stream is disconnected before member is added")
 				return nil
 			}
 
-			p.deleteConn(srv)
+			p.deleteRuntimeConnection(srv)
 			if err == io.EOF {
 				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
 				// Remove member and desseminate tables immediately
@@ -121,13 +143,13 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 	}
 }
 
-func (p *Service) addConn(ctx context.Context, conn placementGRPCStream) {
+func (p *Service) addRuntimeConnection(ctx context.Context, conn placementGRPCStream) {
 	p.streamConnsLock.Lock()
 	p.streamConns = append(p.streamConns, conn)
 	p.streamConnsLock.Unlock()
 }
 
-func (p *Service) deleteConn(conn placementGRPCStream) {
+func (p *Service) deleteRuntimeConnection(conn placementGRPCStream) {
 	p.streamConnsLock.Lock()
 	for i, c := range p.streamConns {
 		if c == conn {
@@ -136,96 +158,4 @@ func (p *Service) deleteConn(conn placementGRPCStream) {
 		}
 	}
 	p.streamConnsLock.Unlock()
-}
-
-// PerformTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
-// it then proceeds to update and then unlock once all runtimes have been updated
-func (p *Service) PerformTablesUpdate(hosts []placementGRPCStream, options placementOptions) {
-	p.updateLock.Lock()
-	defer p.updateLock.Unlock()
-
-	if options.incrementGeneration {
-		p.generation++
-	}
-
-	o := placementv1pb.PlacementOrder{
-		Operation: "lock",
-	}
-
-	for _, host := range hosts {
-		err := host.Send(&o)
-		if err != nil {
-			log.Errorf("error updating host on lock operation: %s", err)
-			continue
-		}
-	}
-
-	v := fmt.Sprintf("%v", p.generation)
-
-	o.Operation = "update"
-	o.Tables = &placementv1pb.PlacementTables{
-		Version: v,
-		Entries: map[string]*placementv1pb.PlacementTable{},
-	}
-
-	entries := p.raftNode.FSM().State().HashingTable()
-
-	for k, v := range entries {
-		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
-		table := placementv1pb.PlacementTable{
-			Hosts:     hosts,
-			SortedSet: sortedSet,
-			TotalLoad: totalLoad,
-			LoadMap:   make(map[string]*placementv1pb.Host),
-		}
-
-		for lk, lv := range loadMap {
-			h := placementv1pb.Host{
-				Name: lv.Name,
-				Load: lv.Load,
-				Port: lv.Port,
-				Id:   lv.AppID,
-			}
-			table.LoadMap[lk] = &h
-		}
-		o.Tables.Entries[k] = &table
-	}
-
-	for _, host := range hosts {
-		err := host.Send(&o)
-		if err != nil {
-			log.Errorf("error updating host on update operation: %s", err)
-			continue
-		}
-	}
-
-	o.Tables = nil
-	o.Operation = "unlock"
-
-	for _, host := range hosts {
-		err := host.Send(&o)
-		if err != nil {
-			log.Errorf("error updating host on unlock operation: %s", err)
-			continue
-		}
-	}
-}
-
-// Run starts the placement service gRPC server
-func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	opts, err := dapr_credentials.GetServerOptions(certChain)
-	if err != nil {
-		log.Fatalf("error creating gRPC options: %s", err)
-	}
-	s := grpc.NewServer(opts...)
-	placementv1pb.RegisterPlacementServer(s, p)
-
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
 }
