@@ -43,7 +43,7 @@ func (p *Service) DesseminateLoop() {
 			}
 
 		case t := <-flushTimer:
-			if hostUpdateCount > 0 && t > lastFlushTimestamp.Add(flushTimerInterval) {
+			if hostUpdateCount > 0 && t.Sub(lastFlushTimestamp) > flushTimerInterval {
 				log.Debugf("request dessemination. request count: %d", hostUpdateCount)
 				p.desseminateCh <- flushOperation
 			}
@@ -52,7 +52,7 @@ func (p *Service) DesseminateLoop() {
 			m := p.raftNode.FSM().State().Members
 			tableUpdateRequired := false
 			for _, v := range m {
-				if t < v.UpdatedAt.Add(faultyHostDetectMaxDuration) {
+				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
 					continue
 				}
 				log.Debugf("try to remove hosts: %s", v.Name)
