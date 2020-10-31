@@ -21,6 +21,9 @@ const (
 	MemberUpsert CommandType = 0
 	// MemberRemove is the command to remove member from actor host member state
 	MemberRemove = 1
+
+	// MemberFlush is the reserved command for dessemination loop
+	MemberFlush = 100
 )
 
 // FSM implements a finite state machine that is used

@@ -31,43 +31,50 @@ func (p *Service) DesseminateLoop() {
 
 		select {
 		case op := <-p.desseminateCh:
-			switch op {
-			case bufferredOperation:
-				hostUpdateCount++
+			switch op.cmdType {
+			case raft.MemberUpsert:
+				fallthrough
 
-			case flushOperation:
+			case raft.MemberRemove:
+				updated, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
+				if raftErr != nil {
+					log.Debugf("fail to apply command: %v", raftErr)
+				}
+				if updated {
+					hostUpdateCount++
+				}
+
+			case raft.MemberFlush:
 				lastFlushTimestamp = time.Now().UTC()
+				hostUpdateCount = 0
+
+				if len(p.streamConns) == 0 {
+					break
+				}
+
 				log.Debugf("desseminate tables to runtimes. request count: %d", hostUpdateCount)
 				p.performTablesUpdate(p.streamConns)
-				hostUpdateCount = 0
 			}
 
 		case t := <-flushTimer.C:
 			if hostUpdateCount > 0 && t.Sub(lastFlushTimestamp) > flushTimerInterval {
 				log.Debugf("request dessemination. request count: %d", hostUpdateCount)
-				p.desseminateCh <- flushOperation
+				p.desseminateCh <- hostMemberCommand{cmdType: raft.MemberFlush}
 			}
 
 		case t := <-faultHostDetectTimer.C:
 			m := p.raftNode.FSM().State().Members
-			tableUpdateRequired := false
 			for _, v := range m {
 				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
 					continue
 				}
+
 				log.Debugf("try to remove hosts: %s", v.Name)
-				updated, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{Name: v.Name})
-				if err != nil {
-					log.Debugf("fail to apply command: %v", err)
-				}
 
-				if updated {
-					tableUpdateRequired = true
+				p.desseminateCh <- hostMemberCommand{
+					cmdType: raft.MemberRemove,
+					host:    raft.DaprHostMember{Name: v.Name},
 				}
-			}
-
-			if tableUpdateRequired {
-				p.desseminateCh <- bufferredOperation
 			}
 		}
 	}

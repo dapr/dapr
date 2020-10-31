@@ -25,22 +25,20 @@ var log = logger.NewLogger("dapr.placement")
 
 type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer
 
-type desseminateOp int
-
-const (
-	bufferredOperation desseminateOp = iota
-	flushOperation
-)
-
 const (
 	desseminateBufferSize = 100
 )
+
+type hostMemberCommand struct {
+	cmdType raft.CommandType
+	host    raft.DaprHostMember
+}
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
 	updateLock *sync.Mutex
 
-	desseminateCh chan desseminateOp
+	desseminateCh chan hostMemberCommand
 
 	streamConns     []placementGRPCStream
 	streamConnsLock *sync.Mutex
@@ -54,7 +52,7 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 		updateLock:      &sync.Mutex{},
 		streamConns:     []placementGRPCStream{},
 		streamConnsLock: &sync.Mutex{},
-		desseminateCh:   make(chan desseminateOp, desseminateBufferSize),
+		desseminateCh:   make(chan hostMemberCommand, desseminateBufferSize),
 		raftNode:        raftNode,
 	}
 }
@@ -99,18 +97,13 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				log.Debugf("New member is added: %s", registeredMemberID)
 			}
 
-			updated, raftErr := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
-				Name:     req.Name,
-				AppID:    req.Id,
-				Entities: req.Entities,
-			})
-			if raftErr != nil {
-				log.Debugf("fail to apply command: %v", err)
-				continue
-			}
-
-			if updated {
-				p.desseminateCh <- bufferredOperation
+			p.desseminateCh <- hostMemberCommand{
+				cmdType: raft.MemberUpsert,
+				host: raft.DaprHostMember{
+					Name:     req.Name,
+					AppID:    req.Id,
+					Entities: req.Entities,
+				},
 			}
 
 		default:
@@ -122,18 +115,9 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 			p.deleteRuntimeConnection(srv)
 			if err == io.EOF {
 				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
-				// Remove member and desseminate tables immediately
-				// do batched remove and dessemination
-				updated, raftErr := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
-					Name: registeredMemberID,
-				})
-				if raftErr != nil {
-					log.Debugf("fail to apply command: %v", err)
-					continue
-				}
-
-				if updated {
-					p.desseminateCh <- bufferredOperation
+				p.desseminateCh <- hostMemberCommand{
+					cmdType: raft.MemberRemove,
+					host:    raft.DaprHostMember{Name: req.Name},
 				}
 			} else {
 				// no actions for hashing table. instead, connectionMonitoring will check
