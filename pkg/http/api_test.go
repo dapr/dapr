@@ -235,7 +235,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
-			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -512,18 +512,47 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeData, _ := json.Marshal(fakeBodyObject)
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		apisAndMethods := map[string][]string{
+			"v1.0/actors/fakeActorType/fakeActorID/state/key1":          {"GET"},
+			"v1.0/actors/fakeActorType/fakeActorID/state":               {"POST", "PUT"},
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
+			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
+		}
 		testAPI.actor = nil
 
-		testMethods := []string{"GET"}
+		for apiPath, testMethods := range apisAndMethods {
+			for _, method := range testMethods {
+				// act
+				resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
-		for _, method := range testMethods {
-			// act
-			resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+				// assert
+				assert.Equal(t, 400, resp.StatusCode, apiPath)
+				assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+			}
+		}
+	})
 
-			// assert
-			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+	t.Run("All PUT/POST APIs - 400 for invalid JSON", func(t *testing.T) {
+		testAPI.actor = new(daprt.MockActors)
+		apiPaths := []string{
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
+			"v1.0/actors/fakeActorType/fakeActorID/state",
+			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1",
+		}
+
+		for _, apiPath := range apiPaths {
+			for _, requestMethod := range []string{"PUT", "POST"} {
+				// {{
+				inputBodyBytes := []byte{0x7b, 0x7b}
+
+				// act
+				resp := fakeServer.DoRequest(requestMethod, apiPath, inputBodyBytes, nil)
+
+				// assert
+				assert.Equal(t, 400, resp.StatusCode, apiPath)
+				assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+			}
 		}
 	})
 
@@ -596,6 +625,348 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 201, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
+	})
+
+	t.Run("Reminder Create - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		reminderRequest := actors.CreateReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+		}
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		for _, method := range []string{"POST", "PUT"} {
+			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
+			assert.Equal(t, 200, resp.StatusCode)
+		}
+
+		// assert
+		mockActors.AssertNumberOfCalls(t, "CreateReminder", 2)
+	})
+
+	t.Run("Reminder Create - 500 when CreateReminderFails", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		reminderRequest := actors.CreateReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+		}
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(reminderRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_CREATE", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
+	})
+
+	t.Run("Reminder Delete - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.DeleteReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("DeleteReminder", &reminderRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
+	})
+
+	t.Run("Reminder Delete - 500 on upstream actor error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.DeleteReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_DELETE", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
+	})
+
+	t.Run("Reminder Get - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.GetReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("GetReminder", &reminderRequest).Return(nil, nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+	})
+
+	t.Run("Reminder Get - 500 on upstream actor error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.GetReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+	})
+
+	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+		reminderRequest := actors.GetReminderRequest{
+			Name:      "reminder1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		reminderResponse := actors.Reminder{
+			// Functions are not JSON encodable. This will force the error condition
+			Data: func() {},
+		}
+
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+	})
+
+	t.Run("Timer Create - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+
+		timerRequest := actors.CreateTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+			Callback:  "",
+		}
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("CreateTimer", &timerRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(timerRequest)
+
+		assert.NoError(t, err)
+		for _, method := range []string{"POST", "PUT"} {
+			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
+			assert.Equal(t, 200, resp.StatusCode)
+		}
+
+		// assert
+		mockActors.AssertNumberOfCalls(t, "CreateTimer", 2)
+	})
+
+	t.Run("Timer Create - 500 on upstream error", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+
+		timerRequest := actors.CreateTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+			Data:      nil,
+			DueTime:   "0h0m3s0ms",
+			Period:    "0h0m7s0ms",
+		}
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		inputBodyBytes, err := json.Marshal(timerRequest)
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_CREATE", resp.ErrorBody["errorCode"])
+
+		// assert
+		mockActors.AssertNumberOfCalls(t, "CreateTimer", 1)
+	})
+
+	t.Run("Timer Delete - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		timerRequest := actors.DeleteTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("DeleteTimer", &timerRequest).Return(nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 200, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
+	})
+
+	t.Run("Timer Delete - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
+		timerRequest := actors.DeleteTimerRequest{
+			Name:      "timer1",
+			ActorType: "fakeActorType",
+			ActorID:   "fakeActorID",
+		}
+
+		mockActors := new(daprt.MockActors)
+
+		mockActors.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_TIMER_DELETE", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
+	})
+
+	t.Run("Direct Message - Forwards downstream status", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
+		headerMetadata := map[string][]string{
+			"Accept-Encoding": {"gzip"},
+			"Content-Length":  {"8"},
+			"Content-Type":    {"application/json"},
+			"Host":            {"localhost"},
+			"User-Agent":      {"Go-http-client/1.1"},
+		}
+		mockActors := new(daprt.MockActors)
+		invokeRequest := invokev1.NewInvokeMethodRequest("method1")
+		invokeRequest.WithActor("fakeActorType", "fakeActorID")
+		fakeData := []byte("fakeData")
+
+		invokeRequest.WithHTTPExtension(gohttp.MethodPost, "")
+		invokeRequest.WithRawData(fakeData, "application/json")
+		invokeRequest.WithMetadata(headerMetadata)
+		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
+		mockActors.On("Call", invokeRequest).Return(response, nil)
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		assert.Equal(t, 206, resp.StatusCode)
+		mockActors.AssertNumberOfCalls(t, "Call", 1)
+	})
+
+	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
+		headerMetadata := map[string][]string{
+			"Accept-Encoding": {"gzip"},
+			"Content-Length":  {"8"},
+			"Content-Type":    {"application/json"},
+			"Host":            {"localhost"},
+			"User-Agent":      {"Go-http-client/1.1"},
+		}
+		mockActors := new(daprt.MockActors)
+		invokeRequest := invokev1.NewInvokeMethodRequest("method1")
+		invokeRequest.WithActor("fakeActorType", "fakeActorID")
+		fakeData := []byte("fakeData")
+
+		invokeRequest.WithHTTPExtension(gohttp.MethodPost, "")
+		invokeRequest.WithRawData(fakeData, "application/json")
+		invokeRequest.WithMetadata(headerMetadata)
+		mockActors.On("Call", invokeRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
+
+		testAPI.actor = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_INVOKE_METHOD", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "Call", 1)
 	})
 
 	fakeServer.Shutdown()

@@ -1,10 +1,174 @@
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: configurations.dapr.io
 spec:
   group: dapr.io
-  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Configuration describes an Dapr configuration setting
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ConfigurationSpec is the spec for an configuration
+            properties:
+              accessControl:
+                description: AccessControlSpec is the spec object in ConfigurationSpec
+                properties:
+                  defaultAction:
+                    type: string
+                  policies:
+                    items:
+                      description: AppPolicySpec defines the policy data structure
+                        for each app
+                      properties:
+                        appId:
+                          type: string
+                        defaultAction:
+                          type: string
+                        namespace:
+                          type: string
+                        operations:
+                          items:
+                            description: AppOperationAction defines the data structure
+                              for each app operation
+                            properties:
+                              action:
+                                type: string
+                              httpVerb:
+                                items:
+                                  type: string
+                                type: array
+                              name:
+                                type: string
+                            required:
+                            - action
+                            - name
+                            type: object
+                          type: array
+                        trustDomain:
+                          type: string
+                      required:
+                      - appId
+                      type: object
+                    type: array
+                  trustDomain:
+                    type: string
+                required:
+                - policies
+                type: object
+              httpPipeline:
+                description: PipelineSpec defines the middleware pipeline
+                properties:
+                  handlers:
+                    items:
+                      description: HandlerSpec defines a request handlers
+                      properties:
+                        name:
+                          type: string
+                        selector:
+                          description: SelectorSpec selects target services to which
+                            the handler is to be applied
+                          properties:
+                            fields:
+                              items:
+                                description: SelectorField defines a selector fields
+                                properties:
+                                  field:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                - field
+                                - value
+                                type: object
+                              type: array
+                          required:
+                          - fields
+                          type: object
+                        type:
+                          type: string
+                      required:
+                      - name
+                      - type
+                      type: object
+                    type: array
+                required:
+                - handlers
+                type: object
+              mtls:
+                description: MTLSSpec defines mTLS configuration
+                properties:
+                  allowedClockSkew:
+                    type: string
+                  enabled:
+                    type: boolean
+                  workloadCertTTL:
+                    type: string
+                required:
+                - enabled
+                type: object
+              secrets:
+                description: SecretsSpec is the spec for secrets configuration
+                properties:
+                  scopes:
+                    items:
+                      description: SecretsScope defines the scope for secrets
+                      properties:
+                        allowedSecrets:
+                          items:
+                            type: string
+                          type: array
+                        defaultAccess:
+                          type: string
+                        deniedSecrets:
+                          items:
+                            type: string
+                          type: array
+                        storeName:
+                          type: string
+                      required:
+                      - storeName
+                      type: object
+                    type: array
+                required:
+                - scopes
+                type: object
+              tracing:
+                description: TracingSpec is the spec object in ConfigurationSpec
+                properties:
+                  samplingRate:
+                    type: string
+                required:
+                - samplingRate
+                type: object
+              metric:
+                default:
+                  enabled: true
+                description: MetricSpec defines metrics configuration
+                properties:
+                  enabled:
+                    type: boolean
+                required:
+                - enabled
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
   names:
     kind: Configuration
     plural: configurations

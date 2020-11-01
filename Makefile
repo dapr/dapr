@@ -124,8 +124,7 @@ define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
 	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
-	-o $(5)/$(1) \
-	$(2)/main.go;
+	-o $(5)/$(1) $(2)/;
 endef
 
 # Generate binary targets
@@ -220,6 +219,21 @@ test:
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
+
+################################################################################
+# Target: modtidy                                                              #
+################################################################################
+.PHONY: modtidy
+modtidy:
+	go mod tidy
+
+################################################################################
+# Target: check-diff                                                           #
+################################################################################
+.PHONY: check-diff
+check-diff:
+	git diff --exit-code ./go.mod # check no changes
+	git diff --exit-code ./go.sum # check no changes
 
 ################################################################################
 # Target: codegen                                                              #

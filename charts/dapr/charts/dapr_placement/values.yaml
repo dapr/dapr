@@ -11,3 +11,4 @@ ports:
   protocol: TCP
   port: 80
   targetPort: 50005
+replicationFactor: 1000

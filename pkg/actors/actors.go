@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/placement"
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -66,7 +66,7 @@ type actorsRuntime struct {
 	appChannel          channel.AppChannel
 	store               state.Store
 	placementTableLock  *sync.RWMutex
-	placementTables     *placement.ConsistentHashTables
+	placementTables     *hashing.ConsistentHashTables
 	placementSignal     chan struct{}
 	placementBlock      bool
 	operationUpdateLock *sync.Mutex
@@ -97,7 +97,7 @@ const (
 	lockOperation          = "lock"
 	unlockOperation        = "unlock"
 	updateOperation        = "update"
-	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://github.com/dapr/docs"
+	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
 
 // NewActors create a new actors runtime with given config
@@ -113,7 +113,7 @@ func NewActors(
 		config:              config,
 		store:               stateStore,
 		placementTableLock:  &sync.RWMutex{},
-		placementTables:     &placement.ConsistentHashTables{Entries: make(map[string]*placement.Consistent)},
+		placementTables:     &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 		operationUpdateLock: &sync.Mutex{},
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
@@ -296,14 +296,29 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	return nil, errors.Errorf("failed to invoke target %s after %v retries", targetAddress, numRetries)
 }
 
+func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
+	key := a.constructCompositeKey(actorType, actorID)
+
+	// This avoids allocating multiple actor allocations by calling newActor
+	// whenever actor is invoked. When storing actor key first, there is a chance to
+	// call newActor, but this is trivial.
+	val, ok := a.actorsTable.Load(key)
+	if !ok {
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID))
+	}
+
+	return val.(*actor)
+}
+
 func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	actorTypeID := req.Actor()
-	key := a.constructCompositeKey(actorTypeID.GetActorType(), actorTypeID.GetActorId())
 
-	val, _ := a.actorsTable.LoadOrStore(key, newActor(actorTypeID.GetActorType(), actorTypeID.GetActorId()))
-	act := val.(*actor)
-	act.lock()
-	defer act.unLock()
+	act := a.getOrCreateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
+	err := act.lock()
+	if err != nil {
+		return nil, status.Error(codes.ResourceExhausted, err.Error())
+	}
+	defer act.unlock()
 
 	// Replace method to actors method
 	req.Message().Method = fmt.Sprintf("actors/%s/%s/method/%s", actorTypeID.GetActorType(), actorTypeID.GetActorId(), req.Message().Method)
@@ -608,11 +623,11 @@ func (a *actorsRuntime) updatePlacements(in *placementv1pb.PlacementTables) {
 
 	if in.Version != a.placementTables.Version {
 		for k, v := range in.Entries {
-			loadMap := map[string]*placement.Host{}
+			loadMap := map[string]*hashing.Host{}
 			for lk, lv := range v.LoadMap {
-				loadMap[lk] = placement.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
+				loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
 			}
-			c := placement.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
+			c := hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
 			a.placementTables.Entries[k] = c
 		}
 
