@@ -26,40 +26,46 @@ var log = logger.NewLogger("dapr.placement")
 type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer
 
 const (
-	desseminateBufferSize = 100
+	membershipChangeChSize = 100
 )
 
-type hostMemberCommand struct {
+type hostMemberChange struct {
 	cmdType raft.CommandType
 	host    raft.DaprHostMember
 }
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
-	updateLock *sync.Mutex
+	serverListener net.Listener
+	grpcServer     *grpc.Server
 
-	desseminateCh chan hostMemberCommand
+	raftNode *raft.Server
 
 	streamConns     []placementGRPCStream
 	streamConnsLock *sync.Mutex
 
-	raftNode *raft.Server
+	membershipCh  chan hostMemberChange
+	dessemineLock *sync.Mutex
+
+	shutdownCh chan struct{}
 }
 
-// NewPlacementService returns a new placement service
+// NewPlacementService returns a new placement service.
 func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
-		updateLock:      &sync.Mutex{},
+		dessemineLock:   &sync.Mutex{},
 		streamConns:     []placementGRPCStream{},
 		streamConnsLock: &sync.Mutex{},
-		desseminateCh:   make(chan hostMemberCommand, desseminateBufferSize),
+		membershipCh:    make(chan hostMemberChange, membershipChangeChSize),
 		raftNode:        raftNode,
+		shutdownCh:      make(chan struct{}),
 	}
 }
 
-// Run starts the placement service gRPC server
+// Run starts the placement service gRPC server.
 func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	var err error
+	p.serverListener, err = net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -68,15 +74,23 @@ func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
 	if err != nil {
 		log.Fatalf("error creating gRPC options: %s", err)
 	}
-	s := grpc.NewServer(opts...)
-	placementv1pb.RegisterPlacementServer(s, p)
+	p.grpcServer = grpc.NewServer(opts...)
+	placementv1pb.RegisterPlacementServer(p.grpcServer, p)
 
-	if err := s.Serve(lis); err != nil {
+	if err := p.grpcServer.Serve(p.serverListener); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
 
-// ReportDaprStatus gets a heartbeat report from different Dapr hosts
+// Shutdown close all server connections.
+func (p *Service) Shutdown() {
+	if p.grpcServer != nil {
+		p.grpcServer.Stop()
+	}
+	p.serverListener.Close()
+}
+
+// ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
 
@@ -94,10 +108,10 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				registeredMemberID = req.Name
 				p.addRuntimeConnection(ctx, srv)
 				p.performTablesUpdate([]placementGRPCStream{srv})
-				log.Debugf("New member is added: %s", registeredMemberID)
+				log.Debugf("Stream connection is establiched from %s", registeredMemberID)
 			}
 
-			p.desseminateCh <- hostMemberCommand{
+			p.membershipCh <- hostMemberChange{
 				cmdType: raft.MemberUpsert,
 				host: raft.DaprHostMember{
 					Name:     req.Name,
@@ -108,21 +122,21 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 
 		default:
 			if registeredMemberID == "" {
-				log.Debug("stream is disconnected before member is added")
+				log.Error("stream is disconnected before member is added")
 				return nil
 			}
 
 			p.deleteRuntimeConnection(srv)
 			if err == io.EOF {
-				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
-				p.desseminateCh <- hostMemberCommand{
+				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
+				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
-					host:    raft.DaprHostMember{Name: req.Name},
+					host:    raft.DaprHostMember{Name: registeredMemberID},
 				}
 			} else {
 				// no actions for hashing table. instead, connectionMonitoring will check
 				// host updatedAt and if current - updatedAt > 2 seconds, remove hosts
-				log.Debugf("Member is removed with error: %s, %v", registeredMemberID, err)
+				log.Debugf("Stream connection is disconnected with the error: %v", err)
 			}
 
 			return nil

@@ -267,3 +267,8 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 	resp := future.Response()
 	return resp.(bool), nil
 }
+
+// Shutdown shutdown raft server gracefully
+func (s *Server) Shutdown() {
+	s.raft.Shutdown()
+}

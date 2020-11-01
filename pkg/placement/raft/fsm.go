@@ -20,10 +20,10 @@ const (
 	// MemberUpsert is the command to update or insert new or existing member info
 	MemberUpsert CommandType = 0
 	// MemberRemove is the command to remove member from actor host member state
-	MemberRemove = 1
+	MemberRemove CommandType = 1
 
 	// MemberFlush is the reserved command for dessemination loop
-	MemberFlush = 100
+	MemberFlush CommandType = 100
 )
 
 // FSM implements a finite state machine that is used

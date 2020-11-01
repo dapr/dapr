@@ -37,7 +37,7 @@ type DaprHostMemberState struct {
 	Members map[string]*DaprHostMember
 
 	// TableGeneration is the generation of hashingTableMap.
-	// This is incrased whenever hashingTableMap is updated.
+	// This is increased whenever hashingTableMap is updated.
 	TableGeneration uint64
 
 	// hashingTableMap is the map for storing consistent hashing data

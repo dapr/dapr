@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 const (
@@ -14,7 +14,9 @@ const (
 	flushTimerInterval          = 1 * time.Second
 )
 
-func (p *Service) DesseminateLoop() {
+// MembershipChangeLoop is the worker to change the state of membership
+// and update the consistent hashing tables for actors.
+func (p *Service) MembershipChangeLoop() {
 	faultHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
 	flushTimer := time.NewTicker(flushTimerInterval)
 	lastFlushTimestamp := time.Now().UTC()
@@ -30,7 +32,7 @@ func (p *Service) DesseminateLoop() {
 		}
 
 		select {
-		case op := <-p.desseminateCh:
+		case op := <-p.membershipCh:
 			switch op.cmdType {
 			case raft.MemberUpsert:
 				fallthrough
@@ -59,7 +61,7 @@ func (p *Service) DesseminateLoop() {
 		case t := <-flushTimer.C:
 			if hostUpdateCount > 0 && t.Sub(lastFlushTimestamp) > flushTimerInterval {
 				log.Debugf("request dessemination. request count: %d", hostUpdateCount)
-				p.desseminateCh <- hostMemberCommand{cmdType: raft.MemberFlush}
+				p.membershipCh <- hostMemberChange{cmdType: raft.MemberFlush}
 			}
 
 		case t := <-faultHostDetectTimer.C:
@@ -71,52 +73,45 @@ func (p *Service) DesseminateLoop() {
 
 				log.Debugf("try to remove hosts: %s", v.Name)
 
-				p.desseminateCh <- hostMemberCommand{
+				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
 					host:    raft.DaprHostMember{Name: v.Name},
 				}
 			}
+
+		case <-p.shutdownCh:
+			log.Debugf("Membership change loop is closing.")
+			return
 		}
 	}
 }
 
-// performTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
-// it then proceeds to update and then unlock once all runtimes have been updated
+// performTablesUpdate updates the connected dapr runtimes using a 3 stage commit.
+// first it locks so no further dapr can be taken it then proceeds to update and
+// then unlock once all runtimes have been updated
 func (p *Service) performTablesUpdate(hosts []placementGRPCStream) {
-	p.updateLock.Lock()
-	defer p.updateLock.Unlock()
+	p.dessemineLock.Lock()
+	defer p.dessemineLock.Unlock()
 
-	o := placementv1pb.PlacementOrder{
-		Operation: "lock",
-	}
+	p.disseminateOperation(hosts, "lock", nil)
 
-	for _, host := range hosts {
-		err := host.Send(&o)
-		if err != nil {
-			log.Errorf("error updating host on lock operation: %s", err)
-			continue
-		}
-	}
-
-	o.Operation = "update"
-	o.Tables = &placementv1pb.PlacementTables{
+	newTable := &v1pb.PlacementTables{
 		Version: strconv.FormatUint(p.raftNode.FSM().State().TableGeneration, 10),
-		Entries: map[string]*placementv1pb.PlacementTable{},
+		Entries: map[string]*v1pb.PlacementTable{},
 	}
 
 	entries := p.raftNode.FSM().State().HashingTable()
-
 	for k, v := range entries {
 		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
-		table := placementv1pb.PlacementTable{
+		table := v1pb.PlacementTable{
 			Hosts:     hosts,
 			SortedSet: sortedSet,
 			TotalLoad: totalLoad,
-			LoadMap:   make(map[string]*placementv1pb.Host),
+			LoadMap:   make(map[string]*v1pb.Host),
 		}
 
 		for lk, lv := range loadMap {
-			h := placementv1pb.Host{
+			h := v1pb.Host{
 				Name: lv.Name,
 				Load: lv.Load,
 				Port: lv.Port,
@@ -124,25 +119,27 @@ func (p *Service) performTablesUpdate(hosts []placementGRPCStream) {
 			}
 			table.LoadMap[lk] = &h
 		}
-		o.Tables.Entries[k] = &table
+		newTable.Entries[k] = &table
+	}
+	p.disseminateOperation(hosts, "update", newTable)
+
+	p.disseminateOperation(hosts, "unlock", nil)
+}
+
+func (p *Service) disseminateOperation(targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
+	o := &v1pb.PlacementOrder{
+		Operation: operation,
+		Tables:    tables,
 	}
 
-	for _, host := range hosts {
-		err := host.Send(&o)
-		if err != nil {
-			log.Errorf("error updating host on update operation: %s", err)
-			continue
-		}
-	}
-
-	o.Tables = nil
-	o.Operation = "unlock"
-
-	for _, host := range hosts {
-		err := host.Send(&o)
+	var err error
+	for _, s := range targets {
+		err := s.Send(o)
 		if err != nil {
 			log.Errorf("error updating host on unlock operation: %s", err)
 			continue
 		}
 	}
+
+	return err
 }
