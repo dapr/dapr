@@ -14,9 +14,13 @@ import (
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
+	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -25,12 +29,14 @@ var log = logger.NewLogger("dapr.placement")
 type Service struct {
 	generation        int
 	entriesLock       *sync.RWMutex
-	entries           map[string]*Consistent
+	entries           map[string]*hashing.Consistent
 	hosts             []placementv1pb.Placement_ReportDaprStatusServer
 	hostsEntitiesLock *sync.RWMutex
 	hostsEntities     map[string][]string
 	hostsLock         *sync.Mutex
 	updateLock        *sync.Mutex
+
+	raftNode *raft.Server
 }
 
 type placementOptions struct {
@@ -38,14 +44,15 @@ type placementOptions struct {
 }
 
 // NewPlacementService returns a new placement service
-func NewPlacementService() *Service {
+func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
 		entriesLock:       &sync.RWMutex{},
-		entries:           make(map[string]*Consistent),
+		entries:           make(map[string]*hashing.Consistent),
 		hostsEntitiesLock: &sync.RWMutex{},
 		hostsEntities:     make(map[string][]string),
 		hostsLock:         &sync.Mutex{},
 		updateLock:        &sync.Mutex{},
+		raftNode:          raftNode,
 	}
 }
 
@@ -56,6 +63,10 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 	var registeredMemberID string
 
 	for {
+		if !p.raftNode.IsLeader() {
+			return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+		}
+
 		req, err := srv.Recv()
 		switch err {
 		case nil:
@@ -68,6 +79,15 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 				monitoring.RecordHostsCount(len(p.hosts))
 			}
 
+			_, err := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
+				Name:     req.Name,
+				AppID:    req.Id,
+				Entities: req.Entities,
+			})
+			if err != nil {
+				log.Debugf("fail to apply command: %v", err)
+			}
+
 			p.ProcessHost(req)
 
 		default:
@@ -78,6 +98,14 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 
 			p.hostsLock.Lock()
 			p.RemoveHost(srv)
+
+			_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
+				Name: registeredMemberID,
+			})
+
+			if err != nil {
+				log.Debugf("fail to apply command: %v", err)
+			}
 
 			// TODO: Need the robust fail-over handling by the intermittent
 			// network outage to prevent from rebalancing actors.
@@ -219,7 +247,7 @@ func (p *Service) ProcessHost(host *placementv1pb.Host) {
 		p.entriesLock.Lock()
 
 		if _, ok := p.entries[e]; !ok {
-			p.entries[e] = NewConsistentHash()
+			p.entries[e] = hashing.NewConsistentHash()
 		}
 
 		exists := p.entries[e].Add(host.Name, host.Id, host.Port)

@@ -9,7 +9,10 @@
 // https://en.wikipedia.org/wiki/Consistent_hashing
 //
 // https://research.googleblog.com/2017/04/consistent-hashing-with-bounded-loads.html
-package placement
+//
+// https://github.com/lafikl/consistent/blob/master/consistent.go
+//
+package hashing
 
 import (
 	"encoding/binary"
@@ -23,7 +26,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const replicationFactor = 10
+var replicationFactor int
 
 // ErrNoHosts is an error for no hosts
 var ErrNoHosts = errors.New("no hosts added")
@@ -329,4 +332,9 @@ func (c *Consistent) delSlice(val uint64) {
 func (c *Consistent) hash(key string) uint64 {
 	out := blake2b.Sum512([]byte(key))
 	return binary.LittleEndian.Uint64(out[:])
+}
+
+// SetReplicationFactor sets the replication factor for actor placement on vnodes
+func SetReplicationFactor(factor int) {
+	replicationFactor = factor
 }
