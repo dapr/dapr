@@ -94,6 +94,7 @@ var allowListsForServiceInvocationTests = []struct {
 		"allowlists-callee-http",
 		"opDeny",
 		"fail to invoke, id: allowlists-callee-http, err: rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
+		"http",
 	},
 	{
 		"Test allow with callee side grpc",
