@@ -137,7 +137,7 @@ func TestPerformTableUpdate(t *testing.T) {
 		assert.True(t, ok)
 
 		// check if lock, update, and unlock operations are received in the right order.
-		assert.True(t, lockTime < updateTime && updateTime < unlockTime)
+		assert.True(t, lockTime <= updateTime && updateTime <= unlockTime)
 	}
 
 	// clean up resources
