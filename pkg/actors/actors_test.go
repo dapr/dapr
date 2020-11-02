@@ -99,7 +99,7 @@ func newTestActorsRuntimeWithMock(mockAppChannel *channelt.MockAppChannel) *acto
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false, "")
+	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "")
 	a := NewActors(store, mockAppChannel, nil, config, nil, spec)
 
 	return a.(*actorsRuntime)
@@ -904,7 +904,7 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
-	c := NewConfig("localhost:5050", "app1", "placement:5050", []string{"1"}, 3500, "1s", "2s", "3s", true, "default")
+	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default")
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
 	assert.Equal(t, "placement:5050", c.PlacementServiceAddress)
