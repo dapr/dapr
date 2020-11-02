@@ -123,8 +123,10 @@ func TestPerformTableUpdate(t *testing.T) {
 		assert.NoError(t, clientStreams[i].Send(host))
 	}
 
+	// Wait until clientStreams[clientID].Recv() in client go routine received new table
 	time.Sleep(10 * time.Millisecond)
 
+	// Call performTableUpdate directly, not by MembershipChangeWorker loop.
 	testServer.performTablesUpdate(testServer.streamConns, nil)
 
 	// assert
