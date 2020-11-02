@@ -104,7 +104,7 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 
 	var err error
 	for _, s := range targets {
-		err := s.Send(o)
+		err = s.Send(o)
 		if err != nil {
 			log.Errorf("error updating host on unlock operation: %s", err)
 			// TODO: the error should not be ignored. By handing error or retrying dissemination,
