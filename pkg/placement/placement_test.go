@@ -55,12 +55,15 @@ func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) 
 		testServer.Run(strconv.Itoa(port), nil)
 	}()
 
+	// Wait until test server starts
+	time.Sleep(100 * time.Millisecond)
+
 	cleanUpFn := func() {
 		testServer.Shutdown()
 	}
 
-	clientAddress := "127.0.0.1:" + strconv.Itoa(port)
-	return clientAddress, testServer, cleanUpFn
+	serverAddress := "127.0.0.1:" + strconv.Itoa(port)
+	return serverAddress, testServer, cleanUpFn
 }
 
 func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient, error) {
@@ -79,11 +82,11 @@ func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_Repor
 }
 
 func TestMemberRegistration(t *testing.T) {
-	clientAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
-		conn, stream, err := newTestClient(clientAddress)
+		conn, stream, err := newTestClient(serverAddress)
 		assert.NoError(t, err)
 
 		host := &v1pb.Host{
@@ -130,7 +133,7 @@ func TestMemberRegistration(t *testing.T) {
 
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
-		conn, stream, err := newTestClient(clientAddress)
+		conn, stream, err := newTestClient(serverAddress)
 		assert.NoError(t, err)
 
 		// act
