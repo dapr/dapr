@@ -20,13 +20,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const appName = "secretapp" // App name in Dapr.
-const numHealthChecks = 60  // Number of get calls before starting tests.
+const (
+	secretStore       = "kubernetes"
+	nonexistentStore  = "nonexistent"
+	appName           = "secretapp" // App name in Dapr.
+	numHealthChecks   = 60          // Number of get calls before starting tests.
+	allowedSecret     = "daprsecret"
+	unallowedSecret   = "daprsecret2"
+	nonExistentSecret = "nonexistentsecret"
+	emptySecret       = "emptysecret"
+	testCase1Value    = "admin"
+)
 
 // daprSecret represents a secret in Dapr.
 type daprSecret struct {
 	Key   string             `json:"key,omitempty"`
 	Value *map[string]string `json:"value,omitempty"`
+	Store string             `json:"store,omitempty"`
 }
 
 // requestResponse represents a request or response for the APIs in the app.
@@ -35,39 +45,38 @@ type requestResponse struct {
 }
 
 // represents each step in a test since it can make multiple calls.
-type testStep struct {
-	command          string
+type testCase struct {
+	name             string
 	request          requestResponse
 	expectedResponse requestResponse
 	errorExpected    bool
 	statusCode       int
+	errorString      string
 }
 
-type testCase struct {
-	name  string
-	steps []testStep
-}
-
-func generateDaprSecret(kv utils.SimpleKeyValue) daprSecret {
+func generateDaprSecret(kv utils.SimpleKeyValue, store string) daprSecret {
 	if kv.Key == nil {
 		return daprSecret{}
 	}
 
 	key := fmt.Sprintf("%v", kv.Key)
 	if kv.Value == nil {
-		return daprSecret{key, nil}
+		return daprSecret{key, nil, ""}
 	}
 
 	secret := fmt.Sprintf("%v", kv.Value)
-	value := map[string]string{"username": secret}
-	return daprSecret{key, &value}
+	value := map[string]string{}
+	if secret != "" {
+		value["username"] = secret
+	}
+	return daprSecret{key, &value, store}
 }
 
 // creates a requestResponse based on an array of key value pairs.
-func newRequestResponse(keyValues ...utils.SimpleKeyValue) requestResponse {
+func newRequestResponse(store string, keyValues ...utils.SimpleKeyValue) requestResponse {
 	daprSecrets := make([]daprSecret, 0, len(keyValues))
 	for _, keyValue := range keyValues {
-		daprSecrets = append(daprSecrets, generateDaprSecret(keyValue))
+		daprSecrets = append(daprSecrets, generateDaprSecret(keyValue, store))
 	}
 
 	return requestResponse{
@@ -76,13 +85,13 @@ func newRequestResponse(keyValues ...utils.SimpleKeyValue) requestResponse {
 }
 
 // Just for readability.
-func newRequest(keyValues ...utils.SimpleKeyValue) requestResponse {
-	return newRequestResponse(keyValues...)
+func newRequest(store string, keyValues ...utils.SimpleKeyValue) requestResponse {
+	return newRequestResponse(store, keyValues...)
 }
 
 // Just for readability.
-func newResponse(keyValues ...utils.SimpleKeyValue) requestResponse {
-	return newRequestResponse(keyValues...)
+func newResponse(store string, keyValues ...utils.SimpleKeyValue) requestResponse {
+	return newRequestResponse(store, keyValues...)
 }
 
 func generateTestCases() []testCase {
@@ -96,49 +105,55 @@ func generateTestCases() []testCase {
 		nil,
 	}
 
-	testCase1Key := "daprsecret"
-	testCase2Key := "daprsecret2"
-	testCase1Value := "admin"
-
 	return []testCase{
 		{
 			// No comma since this will become the name of the test without spaces.
-			"Test get with empty request response for single app and single hop",
-			[]testStep{
-				{
-					"get",
-					emptyRequest,
-					emptyResponse,
-					false,
-					200,
-				},
-			},
+			"empty request",
+			emptyRequest,
+			emptyResponse,
+			false,
+			200,
+			"", // no error
 		},
 		{
-			// No comma since this will become the name of the test without spaces.
-			"Test get a single item for single app and single hop",
-			[]testStep{
-				{
-					"get",
-					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
-					newResponse(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
-					false,
-					200,
-				},
-			},
+			"empty secret",
+			newRequest(secretStore, utils.SimpleKeyValue{emptySecret, ""}),
+			newResponse(secretStore, utils.SimpleKeyValue{emptySecret, ""}),
+			false,
+			200,
+			"", // no error
 		},
 		{
-			// No comma since this will become the name of the test without spaces.
-			"Test unallowed secret",
-			[]testStep{
-				{
-					"get",
-					newRequest(utils.SimpleKeyValue{testCase2Key, ""}),
-					newResponse(utils.SimpleKeyValue{testCase2Key, ""}),
-					true,
-					403,
-				},
-			},
+			"allowed secret",
+			newRequest(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
+			newResponse(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
+			false,
+			200,
+			"", // no error
+		},
+		{
+			"unallowed secret",
+			newRequest(secretStore, utils.SimpleKeyValue{unallowedSecret, ""}),
+			newResponse("", utils.SimpleKeyValue{unallowedSecret, ""}),
+			true,
+			403,
+			"ERR_PERMISSION_DENIED",
+		},
+		{
+			"nonexistent secret",
+			newRequest(secretStore, utils.SimpleKeyValue{nonExistentSecret, ""}),
+			newResponse("", utils.SimpleKeyValue{nonExistentSecret, ""}),
+			true,
+			500,
+			"ERR_SECRET_GET",
+		},
+		{
+			"secret from nonexistent secret store",
+			newRequest(nonexistentStore, utils.SimpleKeyValue{allowedSecret, ""}),
+			newResponse("", utils.SimpleKeyValue{allowedSecret, ""}),
+			true,
+			401,
+			"ERR_SECRET_STORE_NOT_FOUND",
 		},
 	}
 }
@@ -174,25 +189,29 @@ func TestSecretApp(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now we are ready to run the actual tests
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			for _, step := range tt.steps {
-				body, err := json.Marshal(step.request)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// setup
+			body, err := json.Marshal(tc.request)
+			require.NoError(t, err)
+			url := fmt.Sprintf("%s/test/get", externalURL)
+
+			// act
+			resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
+
+			// assert
+			if !tc.errorExpected {
 				require.NoError(t, err)
 
-				url := fmt.Sprintf("%s/test/%s", externalURL, step.command)
+				var appResp requestResponse
+				err = json.Unmarshal(resp, &appResp)
+				require.NoError(t, err)
 
-				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
-				if !step.errorExpected {
-					require.NoError(t, err)
-
-					var appResp requestResponse
-					err = json.Unmarshal(resp, &appResp)
-					require.NoError(t, err)
-					require.True(t, reflect.DeepEqual(step.expectedResponse, appResp))
-				} else {
-					require.Equal(t, step.statusCode, statusCode, "Expected statusCode to be equal")
-				}
+				require.True(t, reflect.DeepEqual(tc.expectedResponse, appResp))
+				require.Equal(t, tc.statusCode, statusCode, "Expected statusCode to be equal")
+			} else {
+				require.Contains(t, string(resp), tc.errorString, "Expected error string to match")
+				require.Equal(t, tc.statusCode, statusCode, "Expected statusCode to be equal")
 			}
 		})
 	}
