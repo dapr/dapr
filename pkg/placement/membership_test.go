@@ -58,7 +58,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		setupEach(t)
 
 		// wait until all host member change requests are flushed
-		time.Sleep(flushTimerInterval + 10*time.Millisecond)
+		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
 		assert.Equal(t, 3, len(testServer.raftNode.FSM().State().Members))
 
 		tearDownEach()
@@ -69,7 +69,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		setupEach(t)
 
 		// wait until all host member change requests are flushed
-		time.Sleep(flushTimerInterval + 10*time.Millisecond)
+		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
 		assert.Equal(t, 3, len(testServer.raftNode.FSM().State().Members))
 
 		// faulty host detector removes all members if heartbeat does not happen

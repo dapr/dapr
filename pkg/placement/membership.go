@@ -12,14 +12,18 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
+const (
+	commandRetryInterval = 100 * time.Millisecond
+	commandRetryMaxCount = 3
+)
+
 // MembershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) MembershipChangeWorker() {
 	faultHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
-	flushTimer := time.NewTicker(flushTimerInterval)
-	lastFlushTimestamp := time.Now().UTC()
+	disseminateTimer := time.NewTicker(disseminateTimerInterval)
 
-	hostUpdateCount := 0
+	p.hostUpdateCount = 0
 
 	for {
 		if !p.raftNode.IsLeader() {
@@ -31,38 +35,19 @@ func (p *Service) MembershipChangeWorker() {
 
 		select {
 		case op := <-p.membershipCh:
-			switch op.cmdType {
-			case raft.MemberUpsert:
-				fallthrough
+			p.processRaftStateCommand(op)
 
-			case raft.MemberRemove:
-				updated, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
-				if raftErr != nil {
-					log.Debugf("fail to apply command: %v", raftErr)
-				}
-				if updated {
-					hostUpdateCount++
-				}
-
-			case raft.MemberFlush:
-				lastFlushTimestamp = time.Now().UTC()
-				hostUpdateCount = 0
-
-				if len(p.streamConns) == 0 {
-					break
-				}
-
-				log.Debugf("desseminate tables to runtimes. request count: %d", hostUpdateCount)
-				p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
-			}
-
-		case t := <-flushTimer.C:
-			if hostUpdateCount > 0 && t.Sub(lastFlushTimestamp) > flushTimerInterval {
-				log.Debugf("request dessemination. request count: %d", hostUpdateCount)
-				p.membershipCh <- hostMemberChange{cmdType: raft.MemberFlush}
+		case <-disseminateTimer.C:
+			// check if there is actor runtime member change.
+			if p.hostUpdateCount > 0 {
+				log.Debugf("request dessemination. hostUpdateCount count: %d", p.hostUpdateCount)
+				p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 			}
 
 		case t := <-faultHostDetectTimer.C:
+			// Each dapr runtime sends the heartbeat every one second and placement will update UpdatedAt timestamp.
+			// If UpdatedAt is outdated, we can mark the host as faulty node.
+			// This faulty host will be removed from membership in the next dissemination period.
 			m := p.raftNode.FSM().State().Members
 			for _, v := range m {
 				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
@@ -81,6 +66,46 @@ func (p *Service) MembershipChangeWorker() {
 			log.Debugf("MembershipChangeWorker loop is closing.")
 			return
 		}
+	}
+}
+
+func (p *Service) processRaftStateCommand(op hostMemberChange) {
+	switch op.cmdType {
+	case raft.MemberUpsert, raft.MemberRemove:
+		// MemberUpsert updates the state of dapr runtime host whenever
+		// Dapr runtime sends heartbeats every 1 second.
+		// MemberRemove will be queued by faultHostDetectTimer.
+		// Even if ApplyCommand is failed, both commands will retry
+		// until the state is consistent.
+		var raftErr error
+		updated := false
+
+		for retry := 0; retry < commandRetryMaxCount; retry++ {
+			updated, raftErr = p.raftNode.ApplyCommand(op.cmdType, op.host)
+			if raftErr == nil {
+				break
+			} else {
+				log.Debugf("fail to apply command: %v, retry: %d", raftErr, retry)
+			}
+			time.Sleep(commandRetryInterval)
+		}
+
+		if raftErr != nil {
+			log.Errorf("fail to apply command: %v", raftErr)
+		}
+
+		if updated {
+			p.hostUpdateCount++
+		}
+
+	case raft.TableDisseminate:
+		// TableDissminate will be triggered by disseminateTimer.
+		// This will disseminate the latest consisten hashing tables to Dapr runtime.
+		if len(p.streamConns) > 0 {
+			log.Debugf("desseminate tables to runtimes. hostUpdateCount count: %d", p.hostUpdateCount)
+			p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
+		}
+		p.hostUpdateCount = 0
 	}
 }
 

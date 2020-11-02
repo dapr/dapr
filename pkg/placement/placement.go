@@ -40,8 +40,8 @@ const (
 	// faultyHostDetectInterval is the interval to check the faulty member.
 	faultyHostDetectInterval = 500 * time.Millisecond
 
-	// flushTimerInterval is the interval to disseminate the latest consistent hashing table.
-	flushTimerInterval = 500 * time.Millisecond
+	// disseminateTimerInterval is the interval to disseminate the latest consistent hashing table.
+	disseminateTimerInterval = 500 * time.Millisecond
 )
 
 type hostMemberChange struct {
@@ -67,6 +67,9 @@ type Service struct {
 	membershipCh chan hostMemberChange
 	// disseminateLock is the lock for hashing table dissemination.
 	disseminateLock *sync.Mutex
+	// hostUpdateCount represents how many dapr runtimes needs to change
+	// consistent hashing table. Only actor runtime's heartbeat will increase this.
+	hostUpdateCount int
 
 	// shutdownCh is the channel to be used for the graceful shutdown.
 	shutdownCh chan struct{}

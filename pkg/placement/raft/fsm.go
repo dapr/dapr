@@ -25,8 +25,8 @@ const (
 	// MemberRemove is the command to remove member from actor host member state
 	MemberRemove CommandType = 1
 
-	// MemberFlush is the reserved command for dessemination loop
-	MemberFlush CommandType = 100
+	// TableDisseminate is the reserved command for dissemination loop
+	TableDisseminate CommandType = 100
 )
 
 // FSM implements a finite state machine that is used
