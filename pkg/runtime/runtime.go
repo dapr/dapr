@@ -396,13 +396,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic: topic,
-		}, func(msg *pubsub.NewMessage) error {
+		}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 			if msg.Metadata == nil {
 				msg.Metadata = make(map[string]string, 1)
 			}
 
 			msg.Metadata[pubsubName] = name
-			return publishFunc(msg)
+			return publishFunc(context.Background(), msg)
 		}); err != nil {
 			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
 		}
