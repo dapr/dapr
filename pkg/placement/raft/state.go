@@ -54,10 +54,6 @@ func newDaprHostMemberState() *DaprHostMemberState {
 	}
 }
 
-func (s *DaprHostMemberState) HashingTable() map[string]*hashing.Consistent {
-	return s.hashingTableMap
-}
-
 func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	newMembers := &DaprHostMemberState{
 		Index:           s.Index,
