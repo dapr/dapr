@@ -5,14 +5,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
-	"fmt"
 	"os"
 
 	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -33,15 +32,15 @@ func CertPool(certPem []byte) (*x509.CertPool, error) {
 func GetCertChain() (*credentials.CertChain, error) {
 	trustAnchors := os.Getenv(certs.TrustAnchorsEnvVar)
 	if trustAnchors == "" {
-		return nil, fmt.Errorf("couldn't find trust anchors in environment variable %s", certs.TrustAnchorsEnvVar)
+		return nil, errors.Errorf("couldn't find trust anchors in environment variable %s", certs.TrustAnchorsEnvVar)
 	}
 	cert := os.Getenv(certs.CertChainEnvVar)
 	if cert == "" {
-		return nil, fmt.Errorf("couldn't find cert chain in environment variable %s", certs.CertChainEnvVar)
+		return nil, errors.Errorf("couldn't find cert chain in environment variable %s", certs.CertChainEnvVar)
 	}
 	key := os.Getenv(certs.CertKeyEnvVar)
 	if cert == "" {
-		return nil, fmt.Errorf("couldn't find cert key in environment variable %s", certs.CertKeyEnvVar)
+		return nil, errors.Errorf("couldn't find cert key in environment variable %s", certs.CertKeyEnvVar)
 	}
 	return &credentials.CertChain{
 		RootCA: []byte(trustAnchors),
@@ -69,7 +68,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
 		diag.DefaultMonitoring.MTLSInitFailed("prikeygen")
-		return nil, nil, fmt.Errorf("failed to generate private key: %s", err)
+		return nil, nil, errors.Wrap(err, "failed to generate private key")
 	}
 
 	encodedKey, err := x509.MarshalECPrivateKey(key)
@@ -86,7 +85,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 	csrb, err := x509.CreateCertificateRequest(rand.Reader, &csr, key)
 	if err != nil {
 		diag.DefaultMonitoring.MTLSInitFailed("csr")
-		return nil, nil, fmt.Errorf("failed to create sidecar csr: %s", err)
+		return nil, nil, errors.Wrap(err, "failed to create sidecar csr")
 	}
 	return csrb, keyPem, nil
 }

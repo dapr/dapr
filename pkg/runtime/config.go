@@ -27,8 +27,6 @@ const (
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints
 	DefaultMetricsPort = 9090
-	// DefaultAllowedOrigins is the default origins allowed for the Dapr HTTP servers
-	DefaultAllowedOrigins = "*"
 )
 
 // Config holds the Dapr Runtime configuration
@@ -51,10 +49,11 @@ type Config struct {
 	mtlsEnabled             bool
 	SentryServiceAddress    string
 	CertChain               *credentials.CertChain
+	AppSSL                  bool
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string) *Config {
+func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,
@@ -77,5 +76,6 @@ func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedO
 		MaxConcurrency:       maxConcurrency,
 		mtlsEnabled:          mtlsEnabled,
 		SentryServiceAddress: sentryAddress,
+		AppSSL:               appSSL,
 	}
 }

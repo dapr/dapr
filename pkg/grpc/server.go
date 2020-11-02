@@ -20,6 +20,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/pkg/errors"
 	grpc_go "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -42,6 +43,7 @@ type server struct {
 	api                API
 	config             ServerConfig
 	tracingSpec        config.TracingSpec
+	metricSpec         config.MetricSpec
 	authenticator      auth.Authenticator
 	listener           net.Listener
 	srv                *grpc_go.Server
@@ -59,11 +61,12 @@ var apiServerLogger = logger.NewLogger("dapr.runtime.grpc.api")
 var internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
 
 // NewAPIServer returns a new user facing gRPC API server
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec) Server {
 	return &server{
 		api:         api,
 		config:      config,
 		tracingSpec: tracingSpec,
+		metricSpec:  metricSpec,
 		kind:        apiServer,
 		logger:      apiServerLogger,
 		authToken:   auth.GetAPIToken(),
@@ -71,11 +74,12 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec) 
 }
 
 // NewInternalServer returns a new gRPC server for Dapr to Dapr communications
-func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, authenticator auth.Authenticator) Server {
+func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, authenticator auth.Authenticator) Server {
 	return &server{
 		api:              api,
 		config:           config,
 		tracingSpec:      tracingSpec,
+		metricSpec:       metricSpec,
 		authenticator:    authenticator,
 		renewMutex:       &sync.Mutex{},
 		kind:             internalServer,
@@ -118,15 +122,15 @@ func (s *server) StartNonBlocking() error {
 
 func (s *server) generateWorkloadCert() error {
 	s.logger.Info("sending workload csr request to sentry")
-	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID)
+	signedCert, err := s.authenticator.CreateSignedWorkloadCert(s.config.AppID, s.config.NameSpace, s.config.TrustDomain)
 	if err != nil {
-		return fmt.Errorf("error from authenticator CreateSignedWorkloadCert: %s", err)
+		return errors.Wrap(err, "error from authenticator CreateSignedWorkloadCert")
 	}
 	s.logger.Info("certificate signed successfully")
 
 	tlsCert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
 	if err != nil {
-		return fmt.Errorf("error creating x509 Key Pair: %s", err)
+		return errors.Wrap(err, "error creating x509 Key Pair")
 	}
 
 	s.signedCert = signedCert
@@ -144,7 +148,7 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
-	if diag.DefaultGRPCMonitoring.IsEnabled() {
+	if s.metricSpec.Enabled {
 		s.logger.Info("enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 	}
@@ -175,6 +179,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 			return nil, err
 		}
 
+		// nolint:gosec
 		tlsConfig := tls.Config{
 			ClientCAs:  s.signedCert.TrustChain,
 			ClientAuth: tls.RequireAndVerifyClientCert,

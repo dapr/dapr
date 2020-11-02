@@ -16,6 +16,7 @@ GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
 BINARIES    ?= daprd placement operator injector sentry
+HA_MODE     ?= false
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -123,8 +124,7 @@ define genBinariesForTarget
 .PHONY: $(5)/$(1)
 $(5)/$(1):
 	CGO_ENABLED=$(CGO) GOOS=$(3) GOARCH=$(4) go build $(GCFLAGS) -ldflags=$(LDFLAGS) \
-	-o $(5)/$(1) \
-	$(2)/main.go;
+	-o $(5)/$(1) $(2)/;
 endef
 
 # Generate binary targets
@@ -177,7 +177,7 @@ dapr.yaml: check-docker-env
 	$(info Generating helm manifest $(HELM_MANIFEST_FILE)...)
 	@mkdir -p $(HELM_OUT_DIR)
 	$(HELM) template \
-		--include-crds=true --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
+		--include-crds=true  --set global.ha.enabled=$(HA_MODE) --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
 # Target: upload-helmchart
@@ -196,8 +196,8 @@ upload-helmchart:
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
-		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) \
-		--set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true --set global.daprControlPlaneOs=$(TARGET_OS) $(HELM_CHART_DIR)
+		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s\
+		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true --set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #
@@ -209,7 +209,7 @@ release: build archive
 ################################################################################
 .PHONY: test
 test:
-	go test ./pkg/...
+	go test ./pkg/... $(COVERAGE_OPTS)
 	go test ./tests/...
 
 ################################################################################
@@ -219,6 +219,21 @@ test:
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) run --timeout=20m
+
+################################################################################
+# Target: modtidy                                                              #
+################################################################################
+.PHONY: modtidy
+modtidy:
+	go mod tidy
+
+################################################################################
+# Target: check-diff                                                           #
+################################################################################
+.PHONY: check-diff
+check-diff:
+	git diff --exit-code ./go.mod # check no changes
+	git diff --exit-code ./go.sum # check no changes
 
 ################################################################################
 # Target: codegen                                                              #
@@ -234,4 +249,3 @@ include docker/docker.mk
 # Target: tests                                                                #
 ################################################################################
 include tests/dapr_tests.mk
-

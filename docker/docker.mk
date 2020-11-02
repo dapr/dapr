@@ -13,18 +13,33 @@ DAPR_RUNTIME_IMAGE_NAME=daprd
 DAPR_PLACEMENT_IMAGE_NAME=placement
 DAPR_SENTRY_IMAGE_NAME=sentry
 
+# build docker image for linux
+BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
+
 ifeq ($(TARGET_OS), windows)
   DOCKERFILE:=Dockerfile-windows
+  BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(origin DEBUG), undefined)
   DOCKERFILE:=Dockerfile
+  BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(DEBUG),0)
   DOCKERFILE:=Dockerfile
+  BIN_PATH := $(BIN_PATH)/release
 else
   DOCKERFILE:=Dockerfile-debug
+  BIN_PATH := $(BIN_PATH)/debug
+endif
+
+ifeq ($(TARGET_ARCH),arm)
+  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/arm/v7
+else ifeq ($(TARGET_ARCH),arm64)
+  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/arm64/v8
+else
+  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/amd64
 endif
 
 # Supported docker image architecture
-DOCKERMUTI_ARCH=linux-amd64 linux-arm windows-amd64
+DOCKERMUTI_ARCH=linux-amd64 linux-arm linux-arm64 windows-amd64
 
 ################################################################################
 # Target: docker-build, docker-push                                            #
@@ -64,23 +79,39 @@ ifeq ($(TARGET_ARCH),)
 	$(error TARGET_ARCH environment variable must be set)
 endif
 
-# build docker image for linux
-BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)/release
 
 docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE_TAG) docker image ...)
+ifeq ($(TARGET_ARCH),amd64)
 	$(DOCKER) build --build-arg PKG_FILES=* -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 	$(DOCKER) build --build-arg PKG_FILES=daprd -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 	$(DOCKER) build --build-arg PKG_FILES=placement -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 	$(DOCKER) build --build-arg PKG_FILES=sentry -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+else
+	-$(DOCKER) buildx create --use --name daprbuild
+	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+	$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+endif
 
 # push docker image to the registry
 docker-push: docker-build
 	$(info Pushing $(DOCKER_IMAGE_TAG) docker image ...)
+ifeq ($(TARGET_ARCH),amd64)
 	$(DOCKER) push $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 	$(DOCKER) push $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 	$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
 	$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH)
+else
+	-$(DOCKER) buildx create --use --name daprbuild
+	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
+	$(DOCKER) buildx build --build-arg PKG_FILES=daprd --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
+	$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
+	$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --push
+endif
 
 # publish muti-arch docker image to the registry
 docker-manifest-create: check-docker-env
@@ -106,6 +137,17 @@ ifeq ($(LATEST_RELEASE),true)
 	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE_LATEST_TAG)
 	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE_LATEST_TAG)
 endif
+
+check-windows-version:
+ifeq ($(WINDOWS_VERSION),)
+	$(error WINDOWS_VERSION environment variable must be set)
+endif
+
+docker-windows-base-build: check-windows-version
+	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base . -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
+
+docker-windows-base-push: check-windows-version
+	$(DOCKER) push $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
 
 ################################################################################
 # Target: build-dev-container, push-dev-container                              #

@@ -28,7 +28,7 @@ func (m *MockDisposable) Init() error {
 	return args.Error(0)
 }
 
-func (m *MockDisposable) Dispose() error {
+func (m *MockDisposable) Dispose(wait bool) error {
 	args := m.Called()
 	return args.Error(0)
 }

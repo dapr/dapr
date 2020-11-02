@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )
@@ -26,7 +25,7 @@ func TestDestinationHeaders(t *testing.T) {
 
 		dm := newDirectMessaging()
 		dm.addDestinationAppIDHeaderToMetadata(appID, req)
-		md := req.Metadata()[v1.DestinationIDHeader]
+		md := req.Metadata()[invokev1.DestinationIDHeader]
 		assert.Equal(t, appID, md.Values[0])
 	})
 }
@@ -50,5 +49,38 @@ func TestForwardedHeaders(t *testing.T) {
 
 		md = req.Metadata()[fasthttp.HeaderForwarded]
 		assert.Equal(t, "for=1;by=1;host=2", md.Values[0])
+	})
+}
+
+func TestKubernetesNamespace(t *testing.T) {
+	t.Run("no namespace", func(t *testing.T) {
+		appID := "app1"
+
+		dm := newDirectMessaging()
+		id, ns, err := dm.requestAppIDAndNamespace(appID)
+
+		assert.NoError(t, err)
+		assert.Empty(t, ns)
+		assert.Equal(t, appID, id)
+	})
+
+	t.Run("with namespace", func(t *testing.T) {
+		appID := "app1.ns1"
+
+		dm := newDirectMessaging()
+		id, ns, err := dm.requestAppIDAndNamespace(appID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "ns1", ns)
+		assert.Equal(t, "app1", id)
+	})
+
+	t.Run("invalid namespace", func(t *testing.T) {
+		appID := "app1.ns1.ns2"
+
+		dm := newDirectMessaging()
+		_, _, err := dm.requestAppIDAndNamespace(appID)
+
+		assert.Error(t, err)
 	})
 }

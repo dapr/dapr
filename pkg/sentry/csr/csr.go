@@ -6,12 +6,15 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"time"
 
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/pkg/sentry/identity"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -21,21 +24,26 @@ const (
 	encodeMsgCert         = "CERTIFICATE"
 )
 
+var (
+	// The OID for the SAN extension (http://www.alvestrand.no/objectid/2.5.29.17.html)
+	oidSubjectAlternativeName = asn1.ObjectIdentifier{2, 5, 29, 17}
+)
+
 // GenerateCSR creates a X.509 certificate sign request and private key.
 func GenerateCSR(org string, pkcs8 bool) ([]byte, []byte, error) {
 	key, err := certs.GenerateECPrivateKey()
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to generate private keys: %s", err)
+		return nil, nil, errors.Wrap(err, "unable to generate private keys")
 	}
 
 	templ, err := genCSRTemplate(org)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error generating csr template: %s", err)
+		return nil, nil, errors.Wrap(err, "error generating csr template")
 	}
 
 	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, templ, crypto.PrivateKey(key))
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create CSR: %s", err)
+		return nil, nil, errors.Wrap(err, "failed to create CSR")
 	}
 
 	crtPem, keyPem, err := encode(true, csrBytes, key, pkcs8)
@@ -107,11 +115,11 @@ func GenerateRootCertCSR(org, cn string, publicKey interface{}, ttl time.Duratio
 }
 
 // GenerateCSRCertificate returns an x509 Certificate from a CSR, signing cert, public key, signing private key and duration.
-func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, signingCert *x509.Certificate, publicKey interface{}, signingKey crypto.PrivateKey,
+func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, identityBundle *identity.Bundle, signingCert *x509.Certificate, publicKey interface{}, signingKey crypto.PrivateKey,
 	ttl time.Duration, isCA bool) ([]byte, error) {
 	cert, err := generateBaseCert(ttl, publicKey)
 	if err != nil {
-		return nil, fmt.Errorf("error generating csr certificate: %s", err)
+		return nil, errors.Wrap(err, "error generating csr certificate")
 	}
 	if isCA {
 		cert.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign
@@ -120,16 +128,51 @@ func GenerateCSRCertificate(csr *x509.CertificateRequest, subject string, signin
 		cert.ExtKeyUsage = append(cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth)
 	}
 
-	cert.Subject = pkix.Name{
-		CommonName: subject,
+	if subject == "cluster.local" {
+		cert.Subject = pkix.Name{
+			CommonName: subject,
+		}
+		cert.DNSNames = []string{subject}
 	}
+
 	cert.Issuer = signingCert.Issuer
 	cert.IsCA = isCA
-	cert.DNSNames = []string{subject}
 	cert.IPAddresses = csr.IPAddresses
 	cert.Extensions = csr.Extensions
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = csr.SignatureAlgorithm
+
+	if identityBundle != nil {
+		spiffeID, err := identity.CreateSPIFFEID(identityBundle.TrustDomain, identityBundle.Namespace, identityBundle.ID)
+		if err != nil {
+			return nil, errors.Wrap(err, "error generating spiffe id")
+		}
+
+		rv := []asn1.RawValue{
+			{
+				Bytes: []byte(spiffeID),
+				Class: asn1.ClassContextSpecific,
+				Tag:   asn1.TagOID,
+			},
+			{
+				Bytes: []byte(fmt.Sprintf("%s.%s.svc.cluster.local", subject, identityBundle.Namespace)),
+				Class: asn1.ClassContextSpecific,
+				Tag:   2,
+			},
+		}
+
+		b, err := asn1.Marshal(rv)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal asn1 raw value for spiffe id")
+		}
+
+		cert.ExtraExtensions = append(cert.ExtraExtensions, pkix.Extension{
+			Id:       oidSubjectAlternativeName,
+			Value:    b,
+			Critical: true, // According to x509 and SPIFFE specs, a SubjAltName extension must be critical if subject name and DNS are not present.
+		})
+	}
+
 	return x509.CreateCertificate(rand.Reader, cert, signingCert, publicKey, signingKey)
 }
 
@@ -162,7 +205,7 @@ func newSerialNumber() (*big.Int, error) {
 	serialNumLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNum, err := rand.Int(rand.Reader, serialNumLimit)
 	if err != nil {
-		return nil, fmt.Errorf("error generating serial number: %s", err)
+		return nil, errors.Wrap(err, "error generating serial number")
 	}
 	return serialNum, nil
 }

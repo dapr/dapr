@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/sentry/ca"
@@ -13,6 +12,7 @@ import (
 	k8s "github.com/dapr/dapr/pkg/sentry/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
+	"github.com/pkg/errors"
 )
 
 var log = logger.NewLogger("dapr.sentry")
@@ -23,8 +23,8 @@ type CertificateAuthority interface {
 }
 
 type sentry struct {
-	server server.CAServer
-	doneCh chan struct{}
+	server    server.CAServer
+	reloading bool
 }
 
 // NewSentryCA returns a new Sentry Certificate Authority instance.
@@ -57,20 +57,17 @@ func (s *sentry) Run(ctx context.Context, conf config.SentryConfig, readyCh chan
 	log.Info("validator created")
 
 	// Run the CA server
-	s.doneCh = make(chan struct{})
 	s.server = server.NewCAServer(certAuth, v)
 
 	go func() {
-		select {
-		case <-ctx.Done():
-			log.Info("sentry certificate authority is shutting down")
-			s.server.Shutdown() // nolint: errcheck
-		case <-s.doneCh:
-		}
+		<-ctx.Done()
+		log.Info("sentry certificate authority is shutting down")
+		s.server.Shutdown() // nolint: errcheck
 	}()
 
 	if readyCh != nil {
 		readyCh <- true
+		s.reloading = false
 	}
 
 	log.Infof("sentry certificate authority is running, protecting ya'll")
@@ -85,7 +82,7 @@ func createValidator() (identity.Validator, error) {
 		// we're in Kubernetes, create client and init a new serviceaccount token validator
 		kubeClient, err := k8s.GetClient()
 		if err != nil {
-			return nil, fmt.Errorf("failed to create kubernetes client: %s", err)
+			return nil, errors.Wrap(err, "failed to create kubernetes client")
 		}
 		return kubernetes.NewValidator(kubeClient), nil
 	}
@@ -93,7 +90,11 @@ func createValidator() (identity.Validator, error) {
 }
 
 func (s *sentry) Restart(ctx context.Context, conf config.SentryConfig) {
+	if s.reloading {
+		return
+	}
+	s.reloading = true
+
 	s.server.Shutdown()
-	close(s.doneCh)
 	go s.Run(ctx, conf, nil)
 }

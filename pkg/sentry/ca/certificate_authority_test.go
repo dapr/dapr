@@ -6,15 +6,18 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -124,7 +127,7 @@ func TestSignCSR(t *testing.T) {
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
 
-		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*24, false)
+		resp, err := certAuth.SignCSR(certPem, "test-subject", nil, time.Hour*24, false)
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, time.Now().UTC().Add(time.Hour*24+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
@@ -142,7 +145,7 @@ func TestSignCSR(t *testing.T) {
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
 
-		resp, err := certAuth.SignCSR(certPem, "test-subject", time.Hour*-1, false)
+		resp, err := certAuth.SignCSR(certPem, "test-subject", nil, time.Hour*-1, false)
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
 		assert.Equal(t, time.Now().UTC().Add(workloadCertTTL+allowedClockSkew).Day(), resp.Certificate.NotAfter.UTC().Day())
@@ -157,7 +160,123 @@ func TestSignCSR(t *testing.T) {
 		certAuth := getTestCertAuth()
 		certAuth.LoadOrStoreTrustBundle()
 
-		_, err := certAuth.SignCSR(certPem, "", time.Hour*24, false)
+		_, err := certAuth.SignCSR(certPem, "", nil, time.Hour*24, false)
 		assert.NotNil(t, err)
+	})
+
+	t.Run("valid identity", func(t *testing.T) {
+		writeTestCredentialsToDisk()
+		defer cleanupCredentials()
+
+		csr := getTestCSR("test.a.com")
+		pk, _ := getECDSAPrivateKey()
+		csrb, _ := x509.CreateCertificateRequest(rand.Reader, csr, pk)
+		certPem := pem.EncodeToMemory(&pem.Block{Type: certs.Certificate, Bytes: csrb})
+
+		certAuth := getTestCertAuth()
+		certAuth.LoadOrStoreTrustBundle()
+
+		bundle := identity.NewBundle("app", "default", "public")
+		resp, err := certAuth.SignCSR(certPem, "test-subject", bundle, time.Hour*24, false)
+		assert.Nil(t, err)
+		assert.NotNil(t, resp)
+
+		oidSubjectAlternativeName := asn1.ObjectIdentifier{2, 5, 29, 17}
+
+		extFound := false
+		for _, ext := range resp.Certificate.Extensions {
+			if ext.Id.Equal(oidSubjectAlternativeName) {
+				var sequence asn1.RawValue
+				val, err := asn1.Unmarshal(ext.Value, &sequence)
+				assert.NoError(t, err)
+				assert.True(t, true, len(val) != 0)
+
+				for bytes := sequence.Bytes; len(bytes) > 0; {
+					var rawValue asn1.RawValue
+					var err error
+
+					bytes, err = asn1.Unmarshal(bytes, &rawValue)
+					assert.NoError(t, err)
+
+					id := string(rawValue.Bytes)
+					if strings.HasPrefix(id, "spiffe://") {
+						assert.Equal(t, "spiffe://public/ns/default/app", id)
+						extFound = true
+					}
+				}
+			}
+		}
+
+		if !extFound {
+			t.Error("SAN extension not found in certificate")
+		}
+	})
+}
+
+func TestCACertsGeneration(t *testing.T) {
+	defer cleanupCredentials()
+
+	ca := getTestCertAuth()
+	err := ca.LoadOrStoreTrustBundle()
+
+	assert.NoError(t, err)
+	assert.True(t, len(ca.GetCACertBundle().GetRootCertPem()) > 0)
+	assert.True(t, len(ca.GetCACertBundle().GetIssuerCertPem()) > 0)
+}
+
+func TestShouldCreateCerts(t *testing.T) {
+	t.Run("certs exist, should not create", func(t *testing.T) {
+		writeTestCredentialsToDisk()
+		defer cleanupCredentials()
+
+		a := getTestCertAuth()
+		r := shouldCreateCerts(a.(*defaultCA).config)
+		assert.False(t, r)
+	})
+
+	t.Run("certs do not exist, should create", func(t *testing.T) {
+		a := getTestCertAuth()
+		r := shouldCreateCerts(a.(*defaultCA).config)
+		assert.True(t, r)
+	})
+}
+
+func TestDetectCertificates(t *testing.T) {
+	t.Run("detected before timeout", func(t *testing.T) {
+		writeTestCredentialsToDisk()
+		defer cleanupCredentials()
+
+		a := getTestCertAuth()
+		rootCertPath := a.(*defaultCA).config.RootCertPath
+		err := detectCertificates(rootCertPath)
+		assert.NoError(t, err)
+	})
+
+	// this is a negative test scenario for the one above that doesn't require waiting the full 30s timeout.
+	// it's meant to check that detectCertificates doesn't detect the certs before they are loaded.
+	t.Run("cert arrives on disk after 2s", func(t *testing.T) {
+		defer cleanupCredentials()
+
+		a := getTestCertAuth()
+		rootCertPath := a.(*defaultCA).config.RootCertPath
+
+		go func() {
+			time.Sleep(time.Second * 2)
+			writeTestCredentialsToDisk()
+		}()
+
+		var start time.Time
+		var err error
+		done := make(chan bool, 1)
+
+		go func() {
+			start = time.Now()
+			err = detectCertificates(rootCertPath)
+			done <- true
+		}()
+
+		<-done
+		assert.NoError(t, err)
+		assert.True(t, time.Since(start).Seconds() >= 2)
 	})
 }

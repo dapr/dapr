@@ -1,9 +1,9 @@
 package kubernetes
 
 import (
-	"fmt"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	kauthapi "k8s.io/api/authentication/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,8 +26,8 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: invalid token: bad token", errPrefix), err)
+		err := v.Validate("a1:ns1", "a2:ns2", "ns2")
+		assert.Equal(t, errors.Errorf("%s: invalid token: bad token", errPrefix).Error(), err.Error())
 	})
 
 	t.Run("unauthenticated", func(t *testing.T) {
@@ -44,8 +44,9 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: authentication failed", errPrefix), err)
+		err := v.Validate("a1:ns1", "a2:ns2", "ns")
+		expectedErr := errors.Errorf("%s: authentication failed", errPrefix)
+		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
 
 	t.Run("bad token structure", func(t *testing.T) {
@@ -62,8 +63,9 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: provided token is not a properly structured service account token", errPrefix), err)
+		err := v.Validate("a1:ns1", "a2:ns2", "ns2")
+		expectedErr := errors.Errorf("%s: provided token is not a properly structured service account token", errPrefix)
+		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
 
 	t.Run("token id mismatch", func(t *testing.T) {
@@ -72,7 +74,7 @@ func TestValidate(t *testing.T) {
 			"create",
 			"tokenreviews",
 			func(action core.Action) (bool, runtime.Object, error) {
-				return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{Authenticated: true, User: kauthapi.UserInfo{Username: "system:serviceaccount:a1:ns1"}}}, nil
+				return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{Authenticated: true, User: kauthapi.UserInfo{Username: "system:serviceaccount:ns1:a1"}}}, nil
 			})
 
 		v := validator{
@@ -80,8 +82,9 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns2", "a2:ns2")
-		assert.Equal(t, fmt.Errorf("%s: token/id mismatch. received id: a1:ns2", errPrefix), err)
+		err := v.Validate("ns2:a1", "ns2:a2", "ns1")
+		expectedErr := errors.Errorf("%s: token/id mismatch. received id: ns2:a1", errPrefix)
+		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
 
 	t.Run("empty token", func(t *testing.T) {
@@ -91,9 +94,9 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("a1:ns1", "")
-		expectedErr := fmt.Errorf("%s: token field in request must not be empty", errPrefix)
-		assert.Equal(t, expectedErr, err)
+		err := v.Validate("a1:ns1", "", "ns")
+		expectedErr := errors.Errorf("%s: token field in request must not be empty", errPrefix)
+		assert.Equal(t, expectedErr.Error(), err.Error())
 	})
 
 	t.Run("empty id", func(t *testing.T) {
@@ -103,8 +106,26 @@ func TestValidate(t *testing.T) {
 			auth:   fakeClient.AuthenticationV1(),
 		}
 
-		err := v.Validate("", "a1:ns1")
-		expectedErr := fmt.Errorf("%s: id field in request must not be empty", errPrefix)
-		assert.Equal(t, expectedErr, err)
+		err := v.Validate("", "a1:ns1", "ns")
+		expectedErr := errors.Errorf("%s: id field in request must not be empty", errPrefix)
+		assert.Equal(t, expectedErr.Error(), err.Error())
+	})
+
+	t.Run("valid authentication", func(t *testing.T) {
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor(
+			"create",
+			"tokenreviews",
+			func(action core.Action) (bool, runtime.Object, error) {
+				return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{Authenticated: true, User: kauthapi.UserInfo{Username: "system:serviceaccount:ns1:a1"}}}, nil
+			})
+
+		v := validator{
+			client: fakeClient,
+			auth:   fakeClient.AuthenticationV1(),
+		}
+
+		err := v.Validate("ns1:a1", "ns1:a1", "ns1")
+		assert.NoError(t, err)
 	})
 }

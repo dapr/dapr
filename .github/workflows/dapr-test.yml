@@ -13,24 +13,40 @@ on:
 
 jobs:
   test-e2e:
-    name: end-to-end linux tests
-    runs-on: ubuntu-latest
+    name: end-to-end ${{ matrix.target_os }} tests
+    runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.15
-      GOOS: linux
-      GOARCH: amd64
+      GOVER: 1.15.3
+      GOOS: ${{ matrix.target_os }}
+      GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       HELMVER: v3.2.1
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
+      TARGET_OS: ${{ matrix.target_os }}
+      TARGET_ARCH: ${{ matrix.target_arch }}
+      HA_MODE: true
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        target_arch: [amd64]
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+          - os: windows-latest
+            target_os: windows
     steps:
+      - name: Set up container log path
+        run: |
+          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" >> $GITHUB_ENV
+        shell: bash
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
         run: |
-          echo ::set-env name=CHECKOUT_REPO::${{ github.repository }}
-          echo ::set-env name=CHECKOUT_REF::refs/heads/master
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
       - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
@@ -40,13 +56,15 @@ jobs:
           script: |
             const testPayload = context.payload.client_payload;
             if (testPayload && testPayload.command == "ok-to-test") {
+              var fs = require('fs');
               // Set environment variables
-              console.log(`::set-env name=CHECKOUT_REPO::${testPayload.pull_head_repo}`);
-              console.log(`::set-env name=CHECKOUT_REF::${testPayload.pull_head_ref}`);
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
       - name: Set up Go ${{ env.GOVER }}
         if: env.CHECKOUT_REPO != ''
-        uses: actions/setup-go@v2-beta
+        uses: actions/setup-go@v2
         with:
           go-version: ${{ env.GOVER }}
       - name: Check out code into the Go module directory
@@ -78,13 +96,15 @@ jobs:
             const payload = context.payload;
             const testPayload = payload.client_payload;
             const testCluster = process.env.TEST_CLUSTER;
+            const targetOs = process.env.TARGET_OS;
 
             if (!testCluster) {
               message = "All test clusters are occupied by the other tests. Please try to test later.";
             } else {
-              message = `Found the available test cluster - ${testCluster}. Please wait until test is done.`;
+              const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+              message = `Found the available test cluster - ${testCluster} for ${targetOs}. Please check the [build status](${checkLink}).`;
             }
-            
+
             await github.issues.createComment({
               owner: testPayload.issue.owner,
               repo: testPayload.issue.repo,
@@ -95,19 +115,11 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
-      - name: Build dapr and its docker image
+      - name: Build dapr and its docker image and push them to test registry
         if: env.TEST_CLUSTER != ''
         run: |
           make build
-          make docker-build
-      - name: Build e2e test apps
-        if: env.TEST_CLUSTER != ''
-        run: make build-e2e-app-all
-      - name: Push docker images to test dockerhub
-        if: env.TEST_CLUSTER != ''
-        run: |
           make docker-push
-          make push-e2e-app-all
       - name: Preparing ${{ env.TEST_CLUSTER }} cluster for test
         if: env.TEST_CLUSTER != ''
         run: |
@@ -123,9 +135,32 @@ jobs:
       - name: Show dapr configurations
         if: env.TEST_CLUSTER != ''
         run: kubectl get configurations daprsystem -n ${{ env.DAPR_NAMESPACE }} -o yaml
+      - name: Set windows TCP timeouts
+        if: matrix.target_os == 'windows'
+        run: |
+          netsh interface tcp set global initialRto=3000
+          netsh interface tcp set global maxSynRetransmissions=8
+          netsh interface tcp show global
+      - name: Build e2e test apps
+        if: env.TEST_CLUSTER != ''
+        run: make build-e2e-app-all
+      - name: Push e2e app images to test dockerhub
+        if: env.TEST_CLUSTER != ''
+        run: |
+          make push-e2e-app-all
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all
+      - name: Save control plane logs
+        if: always() && env.TEST_CLUSTER != ''
+        run: |
+          make save-dapr-control-plane-k8s-logs
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_container_logs
+          path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Add test result comment to PR
         if: always() && github.event_name == 'repository_dispatch' && env.TEST_CLUSTER != ''
         env:
@@ -137,19 +172,22 @@ jobs:
             const testPayload = context.payload.client_payload;
             const jobContext = JSON.parse(process.env.JOB_CONTEXT);
             const jobStatus = jobContext.status.toLowerCase();
+            const targetOs = process.env.TARGET_OS;
 
             console.log(`Current Job Status: ${jobStatus}`);
 
             var message = "";
-            
+
+            const checkLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
             if (jobStatus == "cancelled") {
-              message = "End-to-end tests cancelled.";
+              message = `End-to-end tests cancelled on ${targetOs}. Please check the [build logs](${checkLink})`;
             } else if (jobStatus == "success") {
-              message = "Congrats! All end-to-end tests have passed. Thanks for your contribution!";
+              message = `Congrats! All [end-to-end tests](${checkLink}) have passed on ${targetOs}. Thanks for your contribution!`;
             } else if (jobStatus == "failure") {
-              message = "End-to-end tests failed.";
+              message = `End-to-end tests failed on ${targetOs}. Please check the [build logs](${checkLink})`;
             }
-            
+
             if (message) {
               await github.issues.createComment({
                 owner: testPayload.issue.owner,

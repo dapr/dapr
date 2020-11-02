@@ -95,6 +95,10 @@ func save(states []daprState) error {
 	}
 
 	defer res.Body.Close()
+	// Save must return 201
+	if res.StatusCode != http.StatusCreated {
+		return fmt.Errorf("expected status code 201, got %d", res.StatusCode)
+	}
 	return nil
 }
 
@@ -119,15 +123,28 @@ func get(key string) (*appState, error) {
 		return nil, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
 
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return nil, fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
+	}
+
 	log.Printf("Found state for key %s: %s", key, body)
 
-	var state = new(appState)
+	state, err := parseState(key, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return state, nil
+}
+
+func parseState(key string, body []byte) (*appState, error) {
+	state := &appState{}
 	if len(body) == 0 {
 		return nil, nil
 	}
 
 	// a key not found in Dapr will return 200 but an empty response.
-	err = json.Unmarshal(body, &state)
+	err := json.Unmarshal(body, &state)
 	if err != nil {
 		var stateData string
 		stringMarshalErr := json.Unmarshal(body, &stateData)
@@ -136,7 +153,6 @@ func get(key string) (*appState, error) {
 		}
 		state.Data = stateData
 	}
-
 	return state, nil
 }
 
@@ -193,6 +209,9 @@ func getBulk(states []daprState) ([]daprState, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not load values for bulk get from Dapr: %s", err.Error())
 	}
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return nil, fmt.Errorf("failed to load values for bulk get from Dapr: %s", body)
+	}
 
 	var resp []bulkGetResponse
 	err = json.Unmarshal(body, &resp)
@@ -236,8 +255,12 @@ func delete(key string) error {
 	if err != nil {
 		return fmt.Errorf("could not delete key %s in Dapr: %s", key, err.Error())
 	}
-
 	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return fmt.Errorf("failed to delete key %s in Dapr: %s", key, err.Error())
+	}
+
 	return nil
 }
 
@@ -259,12 +282,11 @@ func executeTransaction(states []daprState) error {
 	var transactionalOperations []map[string]interface{}
 
 	for _, s := range states {
-		val, _ := json.Marshal(s.Value)
 		transactionalOperations = append(transactionalOperations, map[string]interface{}{
 			"operation": s.OperationType,
 			"request": map[string]interface{}{
 				"key":   s.Key,
-				"value": string(val),
+				"value": s.Value,
 			},
 		})
 	}
@@ -315,6 +337,11 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	switch cmd {
 	case "save":
 		err = save(req.States)
+		if err == nil {
+			// The save call to dapr side car has returned correct status.
+			// Set the status code to statusCreated
+			statusCode = http.StatusCreated
+		}
 	case "get":
 		states, err = getAll(req.States)
 		res.States = states
@@ -330,15 +357,15 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusBadRequest
 		res.Message = err.Error()
 	}
-
-	if err != nil && statusCode == http.StatusOK {
+	statusCheck := (statusCode == http.StatusOK || statusCode == http.StatusCreated)
+	if err != nil && statusCheck {
 		statusCode = http.StatusInternalServerError
 		res.Message = err.Error()
 	}
 
 	res.EndTime = epoch()
 
-	if statusCode != http.StatusOK {
+	if !statusCheck {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
 	}
 
@@ -347,10 +374,9 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
-// Handles State TransasctionRequest for GRPC
+// Handles all APIs for GRPC
 func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("Processing request for ", r.URL.RequestURI())
-	log.Println(fmt.Sprintf("%s", r.Body))
 	// Retrieve request body contents
 	var req requestResponse
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -362,7 +388,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
+	log.Printf("%v\n", req)
 	var res requestResponse
 	res.StartTime = epoch()
 	var statusCode = http.StatusOK
@@ -380,15 +406,46 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	client := runtimev1pb.NewDaprClient(conn)
 	cmd := mux.Vars(r)["command"]
 	switch cmd {
+	case "save":
+		_, err := client.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+			StoreName: "statestore",
+			States:    daprState2StateItems(req.States),
+		})
+		if err != nil {
+			statusCode, res.Message = setErrorMessage("ExecuteSaveState", err.Error())
+		}
+		statusCode = http.StatusCreated
+	case "getbulk":
+		response, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
+			StoreName: "statestore",
+			Keys:      daprState2Keys(req.States),
+		})
+		if err != nil {
+			statusCode, res.Message = setErrorMessage("GetBulkState", err.Error())
+		}
+		states, err := toDaprStates(response)
+		if err != nil {
+			statusCode, res.Message = setErrorMessage("GetBulkState", err.Error())
+		}
+		res.States = states
+	case "get":
+		states, err := getAllGRPC(client, req.States)
+		if err != nil {
+			statusCode, res.Message = setErrorMessage("GetState", err.Error())
+		}
+		res.States = states
+	case "delete":
+		err = deleteAllGRPC(client, req.States)
+		if err != nil {
+			statusCode, res.Message = setErrorMessage("DeleteState", err.Error())
+		}
 	case "transact":
 		_, err = client.ExecuteStateTransaction(context.Background(), &runtimev1pb.ExecuteStateTransactionRequest{
 			StoreName:  "statestore",
 			Operations: daprState2TransactionalStateRequest(req.States),
 		})
 		if err != nil {
-			statusCode = http.StatusInternalServerError
-			log.Printf("GRPC Execute State Transaction had error %s\n", err.Error())
-			res.Message = err.Error()
+			statusCode, res.Message = setErrorMessage("ExecuteStateTransaction", err.Error())
 		}
 	default:
 		statusCode = http.StatusInternalServerError
@@ -405,6 +462,88 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(res)
+}
+
+func daprState2Keys(states []daprState) []string {
+	var keys []string
+	for _, state := range states {
+		keys = append(keys, state.Key)
+	}
+	return keys
+}
+
+func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, error) {
+	var result []daprState
+	for _, state := range response.Items {
+		if state.Error != "" {
+			return nil, fmt.Errorf("%s while getting bulk state", state.Error)
+		}
+		daprStateItem, err := parseState(state.Key, state.Data)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, daprState{
+			Key:   state.Key,
+			Value: daprStateItem,
+		})
+	}
+	return result, nil
+}
+
+func deleteAllGRPC(client runtimev1pb.DaprClient, states []daprState) error {
+
+	for _, state := range states {
+		log.Printf("deleting sate for key %s\n", state.Key)
+		_, err := client.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
+			StoreName: "statestore",
+			Key:       state.Key,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func getAllGRPC(client runtimev1pb.DaprClient, states []daprState) ([]daprState, error) {
+	var responses []daprState
+	for _, state := range states {
+		log.Printf("getting state for key %s\n", state.Key)
+		res, err := client.GetState(context.Background(), &runtimev1pb.GetStateRequest{
+			StoreName: "statestore",
+			Key:       state.Key,
+		})
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("found state for key %s, value is %s\n", state.Key, res.Data)
+		val, err := parseState(state.Key, res.Data)
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, daprState{
+			Key:   state.Key,
+			Value: val,
+		})
+	}
+	return responses, nil
+}
+
+func setErrorMessage(method, errorString string) (int, string) {
+	log.Printf("GRPC %s had error %s\n", method, errorString)
+	return http.StatusInternalServerError, errorString
+}
+
+func daprState2StateItems(daprStates []daprState) []*commonv1pb.StateItem {
+	var stateItems []*commonv1pb.StateItem
+	for _, daprState := range daprStates {
+		val, _ := json.Marshal(daprState.Value)
+		stateItems = append(stateItems, &commonv1pb.StateItem{
+			Key:   daprState.Key,
+			Value: val,
+		})
+	}
+	return stateItems
 }
 
 func daprState2TransactionalStateRequest(daprStates []daprState) []*runtimev1pb.TransactionalStateOperation {

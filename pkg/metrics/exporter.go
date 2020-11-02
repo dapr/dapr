@@ -1,12 +1,12 @@
 package metrics
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/pkg/errors"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"go.opencensus.io/stats/view"
 )
@@ -19,7 +19,7 @@ const (
 
 // Exporter is the interface for metrics exporters
 type Exporter interface {
-	// Init intializes metrics exporter
+	// Init initializes metrics exporter
 	Init() error
 	// Options returns Exporter options
 	Options() *Options
@@ -74,7 +74,7 @@ func (m *promMetricsExporter) Init() error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to create Prometheus exporter: %v", err)
+		return errors.Errorf("failed to create Prometheus exporter: %v", err)
 	}
 
 	// register exporter to view
@@ -94,7 +94,7 @@ func (m *promMetricsExporter) startMetricServer() error {
 	addr := fmt.Sprintf(":%d", m.options.MetricsPort())
 
 	if m.ocExporter == nil {
-		return errors.New("exporter was not initiailized")
+		return errors.New("exporter was not initialized")
 	}
 
 	m.exporter.logger.Infof("metrics server started on %s%s", addr, defaultMetricsPath)

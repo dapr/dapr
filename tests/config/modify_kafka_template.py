@@ -12,7 +12,7 @@ for template in stdin_contents.split("---")[1:]:
         continue
     print("---", )
     print(template)
-    if "dapr-kafka-config" in template:
+    if "dapr-kafka-config" in template and "job-config.yaml" in template:
         print("""      affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -22,5 +22,9 @@ for template in stdin_contents.split("---")[1:]:
                   operator: In
                   values:
                   - linux
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                  - amd64
 """)
 

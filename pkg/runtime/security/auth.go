@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"sync"
@@ -16,6 +15,7 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -31,7 +31,7 @@ const (
 type Authenticator interface {
 	GetTrustAnchors() *x509.CertPool
 	GetCurrentSignedCert() *SignedCertificate
-	CreateSignedWorkloadCert(id string) (*SignedCertificate, error)
+	CreateSignedWorkloadCert(id, namespace, trustDomain string) (*SignedCertificate, error)
 }
 
 type authenticator struct {
@@ -76,7 +76,7 @@ func (a *authenticator) GetCurrentSignedCert() *SignedCertificate {
 
 // CreateSignedWorkloadCert returns a signed workload certificate, the PEM encoded private key
 // And the duration of the signed cert.
-func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate, error) {
+func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain string) (*SignedCertificate, error) {
 	csrb, pkPem, err := a.genCSRFunc(id)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 
 	config, err := dapr_credentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create tls config from cert and key: %s", err)
+		return nil, errors.Wrap(err, "failed to create tls config from cert and key")
 	}
 
 	unaryClientInterceptor := grpc_retry.UnaryClientInterceptor()
@@ -103,19 +103,24 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		grpc.WithUnaryInterceptor(unaryClientInterceptor))
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
-		return nil, fmt.Errorf("error establishing connection to sentry: %s", err)
+		return nil, errors.Wrap(err, "error establishing connection to sentry")
 	}
 	defer conn.Close()
 
 	c := sentryv1pb.NewCAClient(conn)
-	resp, err := c.SignCertificate(context.Background(), &sentryv1pb.SignCertificateRequest{
-		CertificateSigningRequest: certPem,
-		Id:                        getSentryIdentifier(id),
-		Token:                     getToken(),
-	}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
+
+	resp, err := c.SignCertificate(context.Background(),
+		&sentryv1pb.SignCertificateRequest{
+			CertificateSigningRequest: certPem,
+			Id:                        getSentryIdentifier(id),
+			Token:                     getToken(),
+			TrustDomain:               trustDomain,
+			Namespace:                 namespace,
+		}, grpc_retry.WithMax(sentryMaxRetries), grpc_retry.WithPerRetryTimeout(sentrySignTimeout))
+
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
-		return nil, fmt.Errorf("error from sentry SignCertificate: %s", err)
+		return nil, errors.Wrap(err, "error from sentry SignCertificate")
 	}
 
 	workloadCert := resp.GetWorkloadCertificate()
@@ -123,7 +128,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 	expiry, err := ptypes.Timestamp(validTimestamp)
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
-		return nil, fmt.Errorf("error parsing ValidUntil: %s", err)
+		return nil, errors.Wrap(err, "error parsing ValidUntil")
 	}
 
 	trustChain := x509.NewCertPool()
@@ -131,7 +136,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id string) (*SignedCertificate,
 		ok := trustChain.AppendCertsFromPEM(c)
 		if !ok {
 			diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("chaining")
-			return nil, fmt.Errorf("failed adding trust chain cert to x509 CertPool: %s", err)
+			return nil, errors.Wrap(err, "failed adding trust chain cert to x509 CertPool")
 		}
 	}
 

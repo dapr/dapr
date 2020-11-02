@@ -1,13 +1,13 @@
 package certs
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/kubernetes"
+	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -25,16 +25,12 @@ func StoreCredentials(conf config.SentryConfig, rootCertPem, issuerCertPem, issu
 }
 
 func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
-	namespace := os.Getenv("NAMESPACE")
-	if namespace == "" {
-		namespace = defaultSecretNamespace
-	}
-
 	kubeClient, err := kubernetes.GetClient()
 	if err != nil {
 		return err
 	}
 
+	namespace := getNamespace()
 	secret := &v1.Secret{
 		Data: map[string][]byte{
 			credentials.RootCertFilename:   rootCertPem,
@@ -51,26 +47,52 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 	// We update and not create because sentry expects a secret to already exist
 	_, err = kubeClient.CoreV1().Secrets(namespace).Update(secret)
 	if err != nil {
-		return fmt.Errorf("failed saving secret to kubernetes: %s", err)
+		return errors.Wrap(err, "failed saving secret to kubernetes")
 	}
 	return nil
+}
+
+func getNamespace() string {
+	namespace := os.Getenv("NAMESPACE")
+	if namespace == "" {
+		namespace = defaultSecretNamespace
+	}
+	return namespace
+}
+
+// CredentialsExist checks root and issuer credentials exist on a hosting platform
+func CredentialsExist(conf config.SentryConfig) (bool, error) {
+	if config.IsKubernetesHosted() {
+		namespace := getNamespace()
+
+		kubeClient, err := kubernetes.GetClient()
+		if err != nil {
+			return false, err
+		}
+		s, err := kubeClient.CoreV1().Secrets(namespace).Get(KubeScrtName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		return len(s.Data) > 0, nil
+	}
+	return false, nil
 }
 
 /* #nosec */
 func storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem []byte, rootCertPath, issuerCertPath, issuerKeyPath string) error {
 	err := ioutil.WriteFile(rootCertPath, rootCertPem, 0644)
 	if err != nil {
-		return fmt.Errorf("failed saving file to %s: %s", rootCertPath, err)
+		return errors.Wrapf(err, "failed saving file to %s", rootCertPath)
 	}
 
 	err = ioutil.WriteFile(issuerCertPath, issuerCertPem, 0644)
 	if err != nil {
-		return fmt.Errorf("failed saving file to %s: %s", issuerCertPath, err)
+		return errors.Wrapf(err, "failed saving file to %s", issuerCertPath)
 	}
 
 	err = ioutil.WriteFile(issuerKeyPath, issuerKeyPem, 0644)
 	if err != nil {
-		return fmt.Errorf("failed saving file to %s: %s", issuerKeyPath, err)
+		return errors.Wrapf(err, "failed saving file to %s", issuerKeyPath)
 	}
 	return nil
 }

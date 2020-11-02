@@ -1,0 +1,389 @@
+{
+  "openapi": "3.0.2",
+  "info": {
+    "title": "Service Invocation",
+    "version": "1.0",
+    "description": "Using the service invocation API, your microservice can find and reliably communicate with other microservices in your system using standard protocols (gRPC or HTTP are currently supported).",
+    "termsOfService": "https://github.com/dapr/docs/blob/master/LICENSE",
+    "contact": {},
+    "license": {
+      "name": "MIT License",
+      "url": "https://github.com/dapr/docs/blob/master/LICENSE"
+    },
+    "x-logo": {
+      "url": ""
+    }
+  },
+  "servers": [
+    {
+      "url": "http://{url}",
+      "description": "This endpoint lets you invoke a method in another Dapr enabled app.",
+      "variables": {
+        "url": {
+          "default": "localhost:3500",
+          "description": "url"
+        }
+      },
+      "x-last-modified": 1597254685557
+    }
+  ],
+  "paths": {
+    "/v1.0/invoke/{appId}/method/{method-name}": {
+      "description": "This endpoint lets you invoke a method in another Dapr enabled app.",
+      "get": {
+        "tags": [
+          "Invocation ",
+          "service"
+        ],
+        "parameters": [
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/appId"
+          },
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/method-name"
+          },
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/Content-Type"
+          },
+          {
+            "$ref": "#/components/securitySchemes/ApiKeyAuth",
+            "name": "ApiKeyAuth",
+            "x-last-modified": 1597270199372
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/200"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        },
+        "deprecated": false,
+        "operationId": "invoke_get",
+        "summary": "Invoke a method on a remote dapr app",
+        "description": "This endpoint lets you invoke a method in another Dapr enabled app.",
+        "externalDocs": {
+          "description": "Documentation",
+          "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
+        }
+      },
+      "put": {
+        "requestBody": {
+          "description": "Within the body of the request place the data you want to send to the service:\n{\n  \"arg1\": 10,\n  \"arg2\": 23,\n  \"operator\": \"+\"\n}\n",
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "any app arguments",
+                "type": "object",
+                "example": {
+                  "arg1": 10,
+                  "arg2": 23,
+                  "operator": "+"
+                },
+                "x-rc-meta": {
+                  "x-rc-comments": {}
+                }
+              },
+              "example": {
+                "arg1": 10,
+                "arg2": 23,
+                "operator": "+"
+              },
+              "description": "any app arguments",
+              "type": "object",
+              "properties": "",
+              "x-rc-meta": {
+                "x-rc-comments": {}
+              }
+            }
+          }
+        },
+        "tags": [
+          "Invocation ",
+          "service"
+        ],
+        "parameters": [
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/appId"
+          },
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/method-name"
+          },
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/Content-Type",
+            "name": "Content-Type"
+          },
+          {
+            "$ref": "#/components/securitySchemes/ApiKeyAuth",
+            "name": "ApiKeyAuth",
+            "x-last-modified": 1597270378537
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/200"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        },
+        "operationId": "invoke_put",
+        "summary": "This endpoint lets you invoke a method in another Dapr enabled app.",
+        "externalDocs": {
+          "url": ""
+        }
+      },
+      "post": {
+        "requestBody": {
+          "description": "Within the body of the request place the data you want to send to the service:\n{\n  \"arg1\": 10,\n  \"arg2\": 23,\n  \"operator\": \"+\"\n}\n",
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Within the body of the request place the data you want to send to the service:\n{\n  \"arg1\": 10,\n  \"arg2\": 23,\n  \"operator\": \"+\"\n}",
+                "type": "object",
+                "example": {
+                  "arg1": 10,
+                  "arg2": 23,
+                  "operator": "+"
+                },
+                "x-rc-meta": {
+                  "x-rc-comments": {}
+                }
+              },
+              "example": {
+                "arg1": 10,
+                "arg2": 23,
+                "operator": "+"
+              },
+              "x-rc-meta": {
+                "x-rc-comments": {}
+              }
+            }
+          }
+        },
+        "tags": [
+          "Invocation ",
+          "service"
+        ],
+        "parameters": [
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/appId"
+          },
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/method-name"
+          },
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/Content-Type"
+          },
+          {
+            "$ref": "#/components/securitySchemes/ApiKeyAuth",
+            "name": "ApiKeyAuth",
+            "x-last-modified": 1597270398630
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/200"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        },
+        "operationId": "invoke_post",
+        "summary": "This endpoint lets you invoke a method in another Dapr enabled app.",
+        "externalDocs": {
+          "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
+        }
+      },
+      "delete": {
+        "tags": [
+          "Invocation ",
+          "service"
+        ],
+        "parameters": [
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/appId"
+          },
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/method-name"
+          },
+          {
+            "deprecated": false,
+            "$ref": "#/components/parameters/Content-Type"
+          },
+          {
+            "$ref": "#/components/securitySchemes/ApiKeyAuth",
+            "name": "ApiKeyAuth",
+            "x-last-modified": 1597270419336
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/200"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        },
+        "operationId": "invoke_delete",
+        "summary": "This endpoint lets you invoke a method in another Dapr enabled app."
+      },
+      "x-last-modified": 1597254788230
+    }
+  },
+  "components": {
+    "responses": {
+      "200": {
+        "content": {
+          "text/plain": {
+            "schema": {
+              "type": "number",
+              "example": "",
+              "x-rc-meta": {
+                "x-rc-comments": {}
+              }
+            },
+            "example": 200,
+            "x-rc-meta": {
+              "x-rc-comments": {}
+            }
+          }
+        },
+        "description": "Operation succeeded",
+        "x-last-modified": 1597011885893
+      },
+      "500": {
+        "content": {
+          "text/plain": {
+            "schema": {
+              "format": "",
+              "pattern": "",
+              "type": "number",
+              "example": 500,
+              "x-rc-meta": {
+                "x-rc-comments": {}
+              }
+            },
+            "example": 500,
+            "x-rc-meta": {
+              "x-rc-comments": {}
+            }
+          }
+        },
+        "description": "Server Error",
+        "x-last-modified": 1597011858483
+      }
+    },
+    "parameters": {
+      "method-name": {
+        "example": "neworder",
+        "name": "method-name",
+        "description": "name of the method to be envoked",
+        "schema": {
+          "format": "",
+          "description": "name of the method to be envoked",
+          "pattern": "",
+          "type": "string",
+          "example": "neworder",
+          "x-rc-meta": {
+            "x-rc-comments": {}
+          }
+        },
+        "in": "path",
+        "required": true,
+        "x-last-modified": 1597011358645,
+        "x-rc-meta": {
+          "x-rc-comments": {}
+        }
+      },
+      "appId": {
+        "example": "nodeapp",
+        "name": "appId",
+        "description": "the App ID associated with the remote app",
+        "schema": {
+          "format": "",
+          "description": "the App ID associated with the remote app",
+          "pattern": "",
+          "type": "string",
+          "example": "nodeapp",
+          "x-rc-meta": {
+            "x-rc-comments": {}
+          }
+        },
+        "in": "path",
+        "required": true,
+        "x-last-modified": 1597253939494,
+        "x-rc-meta": {
+          "x-rc-comments": {}
+        }
+      },
+      "Content-Type": {
+        "deprecated": false,
+        "example": "application/json",
+        "name": "Content-Type",
+        "description": "the App ID associated with the remote app",
+        "schema": {
+          "format": "",
+          "description": "the App ID associated with the remote app",
+          "pattern": "",
+          "type": "string",
+          "example": "application/json",
+          "x-rc-meta": {
+            "x-rc-comments": {}
+          }
+        },
+        "in": "header",
+        "required": false,
+        "x-last-modified": 1597269332645,
+        "x-rc-meta": {
+          "x-rc-comments": {}
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "name": "dapr-api-token",
+        "in": "header",
+        "x-last-modified": 1597014915425
+      }
+    },
+    "schemas": {}
+  },
+  "tags": [
+    {
+      "name": "service",
+      "description": "Dapr provides users with the ability to call other applications that have unique ids. This functionality allows apps to interact with one another via named identifiers and puts the burden of service discovery on the Dapr runtime.",
+      "externalDocs": {
+        "description": "Dapr provides users with the ability to call other applications that have unique ids. This functionality allows apps to interact with one another via named identifiers and puts the burden of service discovery on the Dapr runtime.",
+        "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
+      },
+      "x-last-modified": 1594246229173
+    },
+    {
+      "name": "Invocation ",
+      "description": "Dapr provides users with the ability to call other applications that have unique ids. This functionality allows apps to interact with one another via named identifiers and puts the burden of service discovery on the Dapr runtime.\n\n",
+      "externalDocs": {
+        "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
+      },
+      "x-last-modified": 1594246379461
+    }
+  ],
+  "externalDocs": {
+    "description": "Dapr provides users with the ability to call other applications that have unique ids. This functionality allows apps to interact with one another via named identifiers and puts the burden of service discovery on the Dapr runtime.",
+    "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
+  },
+  "security": []
+}

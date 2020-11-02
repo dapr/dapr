@@ -8,6 +8,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
+	"github.com/dapr/dapr/pkg/validation"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,9 +34,6 @@ const (
 	defaultMetricsPort              = 9090
 	clusterIPNone                   = "None"
 	daprServiceOwnerField           = ".metadata.controller"
-
-	// deprecated, remove in v1.0 release
-	idAnnotationKey = "dapr.io/id"
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -117,6 +115,11 @@ func (h *DaprHandler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace string, deployment *appsv1.Deployment) error {
 	appID := h.getAppID(deployment)
+	err := validation.ValidateKubernetesAppID(appID)
+	if err != nil {
+		return err
+	}
+
 	mayDaprService := types.NamespacedName{
 		Namespace: namespace,
 		Name:      h.daprServiceName(appID),
@@ -199,16 +202,14 @@ func (h *DaprHandler) ensureDaprServiceAbsent(ctx context.Context, deploymentKey
 		log.Errorf("unable to list services, err: %s", err)
 		return err
 	}
-	for _, svc := range services.Items {
+	for i := range services.Items {
+		svc := services.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		log.Debugf("deleting service: %s/%s", svc.Namespace, svc.Name)
 		if err := h.Delete(ctx, &svc, client.PropagationPolicy(meta_v1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
 			log.Errorf("unable to delete svc: %s/%s, err: %s", svc.Namespace, svc.Name, err)
 		} else {
 			log.Debugf("deleted service: %s/%s", svc.Namespace, svc.Name)
 			appID := svc.Annotations[appIDAnnotationKey]
-			if appID == "" {
-				appID = svc.Annotations[idAnnotationKey]
-			}
 			monitoring.RecordServiceDeletedCount(appID)
 		}
 	}
@@ -220,11 +221,6 @@ func (h *DaprHandler) getAppID(deployment *appsv1.Deployment) string {
 	if val, ok := annotations[appIDAnnotationKey]; ok && val != "" {
 		return val
 	}
-
-	if val, ok := annotations[idAnnotationKey]; ok && val != "" {
-		return val
-	}
-
 	return ""
 }
 

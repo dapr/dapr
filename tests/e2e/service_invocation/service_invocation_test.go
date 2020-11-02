@@ -335,7 +335,7 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, hostname, requestHeaders["X-Forwarded-Host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["Forwarded"][0])
 
-		assert.NotNil(t, responseHeaders["content-length"][0])
+		assert.NotNil(t, responseHeaders["dapr-content-length"][0])
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
 		assert.Equal(t, "application/json; utf-8", responseHeaders["dapr-content-type"][0])
 		assert.NotNil(t, responseHeaders["dapr-date"][0])
@@ -370,6 +370,8 @@ func TestHeaders(t *testing.T) {
 
 		require.NoError(t, err)
 
+		assert.Nil(t, requestHeaders["connection"])
+		assert.Nil(t, requestHeaders["content-length"])
 		assert.True(t, strings.HasPrefix(requestHeaders["dapr-host"][0], "localhost:"))
 		assert.Equal(t, "application/grpc", requestHeaders["content-type"][0])
 		assert.True(t, strings.HasPrefix(requestHeaders[":authority"][0], "127.0.0.1:"))

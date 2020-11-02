@@ -11,11 +11,13 @@ import (
 
 // Tag keys
 var (
-	componentKey  = tag.MustNewKey("component")
-	failReasonKey = tag.MustNewKey("reason")
-	operationKey  = tag.MustNewKey("operation")
-	actorTypeKey  = tag.MustNewKey("actor_type")
-	actorIDKey    = tag.MustNewKey("actor_id")
+	componentKey    = tag.MustNewKey("component")
+	failReasonKey   = tag.MustNewKey("reason")
+	operationKey    = tag.MustNewKey("operation")
+	actorTypeKey    = tag.MustNewKey("actor_type")
+	trustDomainKey  = tag.MustNewKey("trustDomain")
+	namespaceKey    = tag.MustNewKey("namespace")
+	policyActionKey = tag.MustNewKey("policyAction")
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods
@@ -39,6 +41,12 @@ type serviceMetrics struct {
 	actorDeactivationTotal       *stats.Int64Measure
 	actorDeactivationFailedTotal *stats.Int64Measure
 	actorPendingCalls            *stats.Int64Measure
+
+	// Access Control Lists for Service Invocation metrics
+	appPolicyActionAllowed    *stats.Int64Measure
+	globalPolicyActionAllowed *stats.Int64Measure
+	appPolicyActionBlocked    *stats.Int64Measure
+	globalPolicyActionBlocked *stats.Int64Measure
 
 	appID   string
 	ctx     context.Context
@@ -110,6 +118,24 @@ func newServiceMetrics() *serviceMetrics {
 			"The number of pending actor calls waiting to acquire the per-actor lock.",
 			stats.UnitDimensionless),
 
+		// Access Control Lists for service invocation
+		appPolicyActionAllowed: stats.Int64(
+			"runtime/acl/app_policy_action_allowed_total",
+			"The number of requests allowed by the app specific action specified in the access control policy.",
+			stats.UnitDimensionless),
+		globalPolicyActionAllowed: stats.Int64(
+			"runtime/acl/global_policy_action_allowed_total",
+			"The number of requests allowed by the global action specified in the access control policy.",
+			stats.UnitDimensionless),
+		appPolicyActionBlocked: stats.Int64(
+			"runtime/acl/app_policy_action_blocked_total",
+			"The number of requests blocked by the app specific action specified in the access control policy.",
+			stats.UnitDimensionless),
+		globalPolicyActionBlocked: stats.Int64(
+			"runtime/acl/global_policy_action_blocked_total",
+			"The number of requests blocked by the global action specified in the access control policy.",
+			stats.UnitDimensionless),
+
 		// TODO: use the correct context for each request
 		ctx:     context.Background(),
 		enabled: false,
@@ -136,7 +162,12 @@ func (s *serviceMetrics) Init(appID string) error {
 		diag_utils.NewMeasureView(s.actorRebalancedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorDeactivationTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
 		diag_utils.NewMeasureView(s.actorDeactivationFailedTotal, []tag.Key{appIDKey, actorTypeKey}, view.Count()),
-		diag_utils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey, actorIDKey}, view.LastValue()),
+		diag_utils.NewMeasureView(s.actorPendingCalls, []tag.Key{appIDKey, actorTypeKey}, view.LastValue()),
+
+		diag_utils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.LastValue()),
+		diag_utils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.LastValue()),
+		diag_utils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.LastValue()),
+		diag_utils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.LastValue()),
 	)
 }
 
@@ -256,12 +287,76 @@ func (s *serviceMetrics) ActorDeactivationFailed(actorType, reason string) {
 	}
 }
 
-// ReportCurrentPendingLocks records the current pending actor locks.
-func (s *serviceMetrics) ReportCurrentPendingLocks(actorType, actorID string, pendingLocks int32) {
+// ReportActorPendingCalls records the current pending actor locks.
+func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks int32) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
-			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType, actorIDKey, actorID),
+			diag_utils.WithTags(appIDKey, s.appID, actorTypeKey, actorType),
 			s.actorPendingCalls.M(int64(pendingLocks)))
+	}
+}
+
+// RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app
+func (s *serviceMetrics) RequestAllowedByAppAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(
+				appIDKey, appID,
+				trustDomainKey, trustDomain,
+				namespaceKey, namespace,
+				operationKey, operation,
+				httpMethodKey, httpverb,
+				policyActionKey, policyAction),
+			s.appPolicyActionAllowed.M(1))
+	}
+}
+
+// RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app
+func (s *serviceMetrics) RequestBlockedByAppAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(
+				appIDKey, appID,
+				trustDomainKey, trustDomain,
+				namespaceKey, namespace,
+				operationKey, operation,
+				httpMethodKey, httpverb,
+				policyActionKey, policyAction),
+			s.appPolicyActionAllowed.M(1))
+	}
+}
+
+// RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy
+func (s *serviceMetrics) RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(
+				appIDKey, appID,
+				trustDomainKey, trustDomain,
+				namespaceKey, namespace,
+				operationKey, operation,
+				httpMethodKey, httpverb,
+				policyActionKey, policyAction),
+			s.globalPolicyActionAllowed.M(1))
+	}
+}
+
+// RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy
+func (s *serviceMetrics) RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diag_utils.WithTags(
+				appIDKey, appID,
+				trustDomainKey, trustDomain,
+				namespaceKey, namespace,
+				operationKey, operation,
+				httpMethodKey, httpverb,
+				policyActionKey, policyAction),
+			s.globalPolicyActionBlocked.M(1))
 	}
 }

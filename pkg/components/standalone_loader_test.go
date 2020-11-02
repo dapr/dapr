@@ -49,7 +49,7 @@ spec:
 	assert.Equal(t, "state.couchbase", components[0].Spec.Type)
 	assert.Len(t, components[0].Spec.Metadata, 2)
 	assert.Equal(t, "prop1", components[0].Spec.Metadata[0].Name)
-	assert.Equal(t, "value1", components[0].Spec.Metadata[0].Value)
+	assert.Equal(t, "value1", components[0].Spec.Metadata[0].Value.String())
 }
 
 func TestStandaloneDecodeInvalidYaml(t *testing.T) {
@@ -105,15 +105,15 @@ spec:
 	assert.Equal(t, "state.couchbase", components[0].Spec.Type)
 	assert.Len(t, components[0].Spec.Metadata, 2)
 	assert.Equal(t, "prop1", components[0].Spec.Metadata[0].Name)
-	assert.Equal(t, "value1", components[0].Spec.Metadata[0].Value)
+	assert.Equal(t, "value1", components[0].Spec.Metadata[0].Value.String())
 	assert.Equal(t, "prop2", components[0].Spec.Metadata[1].Name)
-	assert.Equal(t, "value2", components[0].Spec.Metadata[1].Value)
+	assert.Equal(t, "value2", components[0].Spec.Metadata[1].Value.String())
 
 	assert.Equal(t, "statestore2", components[1].Name)
 	assert.Equal(t, "state.redis", components[1].Spec.Type)
 	assert.Len(t, components[1].Spec.Metadata, 1)
 	assert.Equal(t, "prop3", components[1].Spec.Metadata[0].Name)
-	assert.Equal(t, "value3", components[1].Spec.Metadata[0].Value)
+	assert.Equal(t, "value3", components[1].Spec.Metadata[0].Value.String())
 }
 
 func TestStandaloneDecodeInValidDocInMultiYaml(t *testing.T) {
@@ -159,13 +159,13 @@ spec:
 	assert.Equal(t, "state.couchbase", components[0].Spec.Type)
 	assert.Len(t, components[0].Spec.Metadata, 2)
 	assert.Equal(t, "prop1", components[0].Spec.Metadata[0].Name)
-	assert.Equal(t, "value1", components[0].Spec.Metadata[0].Value)
+	assert.Equal(t, "value1", components[0].Spec.Metadata[0].Value.String())
 	assert.Equal(t, "prop2", components[0].Spec.Metadata[1].Name)
-	assert.Equal(t, "value2", components[0].Spec.Metadata[1].Value)
+	assert.Equal(t, "value2", components[0].Spec.Metadata[1].Value.String())
 
 	assert.Equal(t, "statestore2", components[1].Name)
 	assert.Equal(t, "state.redis", components[1].Spec.Type)
 	assert.Len(t, components[1].Spec.Metadata, 1)
 	assert.Equal(t, "prop3", components[1].Spec.Metadata[0].Name)
-	assert.Equal(t, "value3", components[1].Spec.Metadata[0].Value)
+	assert.Equal(t, "value3", components[1].Spec.Metadata[0].Value.String())
 }

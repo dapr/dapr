@@ -6,17 +6,21 @@
 package placement
 
 import (
-	"errors"
+	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
+	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -25,12 +29,14 @@ var log = logger.NewLogger("dapr.placement")
 type Service struct {
 	generation        int
 	entriesLock       *sync.RWMutex
-	entries           map[string]*Consistent
+	entries           map[string]*hashing.Consistent
 	hosts             []placementv1pb.Placement_ReportDaprStatusServer
 	hostsEntitiesLock *sync.RWMutex
 	hostsEntities     map[string][]string
 	hostsLock         *sync.Mutex
 	updateLock        *sync.Mutex
+
+	raftNode *raft.Server
 }
 
 type placementOptions struct {
@@ -38,57 +44,90 @@ type placementOptions struct {
 }
 
 // NewPlacementService returns a new placement service
-func NewPlacementService() *Service {
+func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
 		entriesLock:       &sync.RWMutex{},
-		entries:           make(map[string]*Consistent),
+		entries:           make(map[string]*hashing.Consistent),
 		hostsEntitiesLock: &sync.RWMutex{},
 		hostsEntities:     make(map[string][]string),
 		hostsLock:         &sync.Mutex{},
 		updateLock:        &sync.Mutex{},
+		raftNode:          raftNode,
 	}
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts
 func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := srv.Context()
-	p.hostsLock.Lock()
-	md, _ := metadata.FromIncomingContext(srv.Context())
-	v := md.Get("id")
-	if len(v) == 0 {
-		return errors.New("id header not found in metadata")
-	}
 
-	id := v[0]
-	p.hosts = append(p.hosts, srv)
-	log.Infof("host added: %s", id)
-	p.hostsLock.Unlock()
-
-	// send the current placements
-	p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
-		placementOptions{incrementGeneration: false})
-
-	monitoring.RecordHostsCount(len(p.hosts))
+	var registeredMemberID string
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+		if !p.raftNode.IsLeader() {
+			return status.Error(codes.FailedPrecondition, "only leader can serve the request")
 		}
 
 		req, err := srv.Recv()
-		if err != nil {
+		switch err {
+		case nil:
+			if registeredMemberID == "" {
+				registeredMemberID = req.Name
+				p.addHost(ctx, srv)
+				p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
+					placementOptions{incrementGeneration: false})
+				log.Debugf("New member is added: %s", registeredMemberID)
+				monitoring.RecordHostsCount(len(p.hosts))
+			}
+
+			_, err := p.raftNode.ApplyCommand(raft.MemberUpsert, raft.DaprHostMember{
+				Name:     req.Name,
+				AppID:    req.Id,
+				Entities: req.Entities,
+			})
+			if err != nil {
+				log.Debugf("fail to apply command: %v", err)
+			}
+
+			p.ProcessHost(req)
+
+		default:
+			if registeredMemberID == "" {
+				log.Debug("stream is disconnected before member is added")
+				return nil
+			}
+
 			p.hostsLock.Lock()
 			p.RemoveHost(srv)
-			p.ProcessRemovedHost(id)
-			log.Infof("host removed: %s", id)
-			p.hostsLock.Unlock()
-			continue
-		}
 
-		p.ProcessHost(req)
+			_, err := p.raftNode.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
+				Name: registeredMemberID,
+			})
+
+			if err != nil {
+				log.Debugf("fail to apply command: %v", err)
+			}
+
+			// TODO: Need the robust fail-over handling by the intermittent
+			// network outage to prevent from rebalancing actors.
+			p.ProcessRemovedHost(registeredMemberID)
+			p.hostsLock.Unlock()
+
+			if err == io.EOF {
+				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
+			} else {
+				log.Debugf("Member is removed with error: %s, %v", registeredMemberID, err)
+			}
+
+			return nil
+		}
 	}
+}
+
+func (p *Service) addHost(ctx context.Context, srv placementv1pb.Placement_ReportDaprStatusServer) {
+	p.hostsLock.Lock()
+	defer p.hostsLock.Unlock()
+
+	p.hosts = append(p.hosts, srv)
 }
 
 // RemoveHost removes the host from the hosts list
@@ -176,19 +215,24 @@ func (p *Service) PerformTablesUpdate(hosts []placementv1pb.Placement_ReportDapr
 func (p *Service) ProcessRemovedHost(id string) {
 	updateRequired := false
 
-	p.hostsEntitiesLock.RLock()
-	entities := p.hostsEntities[id]
-	delete(p.hostsEntities, id)
-	p.hostsEntitiesLock.RUnlock()
+	var entities []string
+	func() {
+		p.hostsEntitiesLock.RLock()
+		defer p.hostsEntitiesLock.RUnlock()
+		entities = p.hostsEntities[id]
+		delete(p.hostsEntities, id)
+	}()
 
-	p.entriesLock.Lock()
-	for _, e := range entities {
-		if _, ok := p.entries[e]; ok {
-			p.entries[e].Remove(id)
-			updateRequired = true
+	func() {
+		p.entriesLock.Lock()
+		defer p.entriesLock.Unlock()
+		for _, e := range entities {
+			if _, ok := p.entries[e]; ok {
+				p.entries[e].Remove(id)
+				updateRequired = true
+			}
 		}
-	}
-	p.entriesLock.Unlock()
+	}()
 
 	if updateRequired {
 		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
@@ -201,8 +245,9 @@ func (p *Service) ProcessHost(host *placementv1pb.Host) {
 
 	for _, e := range host.Entities {
 		p.entriesLock.Lock()
+
 		if _, ok := p.entries[e]; !ok {
-			p.entries[e] = NewConsistentHash()
+			p.entries[e] = hashing.NewConsistentHash()
 		}
 
 		exists := p.entries[e].Add(host.Name, host.Id, host.Port)
@@ -210,6 +255,7 @@ func (p *Service) ProcessHost(host *placementv1pb.Host) {
 			updateRequired = true
 			monitoring.RecordPerActorTypeReplicasCount(e, host.Name)
 		}
+
 		p.entriesLock.Unlock()
 	}
 
@@ -218,11 +264,11 @@ func (p *Service) ProcessHost(host *placementv1pb.Host) {
 
 	if updateRequired {
 		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
-	}
 
-	p.hostsEntitiesLock.Lock()
-	p.hostsEntities[host.Name] = host.Entities
-	p.hostsEntitiesLock.Unlock()
+		p.hostsEntitiesLock.Lock()
+		p.hostsEntities[host.Name] = host.Entities
+		p.hostsEntitiesLock.Unlock()
+	}
 }
 
 // Run starts the placement service gRPC server

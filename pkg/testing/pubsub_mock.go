@@ -27,3 +27,7 @@ func (m *MockPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handl
 	args := m.Called(req, handler)
 	return args.Error(0)
 }
+
+func (m *MockPubSub) Close() error {
+	return nil
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -52,7 +53,7 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 	addr := fmt.Sprintf(":%v", port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("could not listen on %s: %s", addr, err)
+		return errors.Wrapf(err, "could not listen on %s", addr)
 	}
 
 	tlsOpt := s.tlsServerOption(trustBundler)
@@ -60,7 +61,7 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 	sentryv1pb.RegisterCAServer(s.srv, s)
 
 	if err := s.srv.Serve(lis); err != nil {
-		return fmt.Errorf("grpc serve error: %s", err)
+		return errors.Wrap(err, "grpc serve error")
 	}
 	return nil
 }
@@ -68,6 +69,7 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOption {
 	cp := trustBundler.GetTrustAnchors()
 
+	// nolint:gosec
 	config := &tls.Config{
 		ClientCAs: cp,
 		// Require cert verification
@@ -78,7 +80,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 				if err != nil {
 					monitoring.ServerCertIssueFailed("server_cert")
 					log.Error(err)
-					return nil, fmt.Errorf("failed to get TLS server certificate: %s", err)
+					return nil, errors.Wrap(err, "failed to get TLS server certificate")
 				}
 				s.certificate = cert
 			}
@@ -98,7 +100,7 @@ func (s *server) getServerCertificate() (*tls.Certificate, error) {
 	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
 	serverCertTTL := issuerExp.Sub(now)
 
-	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), serverCertTTL, false)
+	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), nil, serverCertTTL, false)
 	if err != nil {
 		return nil, err
 	}
@@ -122,9 +124,11 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	monitoring.CertSignRequestRecieved()
 
 	csrPem := req.GetCertificateSigningRequest()
+
 	csr, err := certs.ParsePemCSR(csrPem)
+
 	if err != nil {
-		err = fmt.Errorf("cannot parse certificate signing request pem: %s", err)
+		err = errors.Wrap(err, "cannot parse certificate signing request pem")
 		log.Error(err)
 		monitoring.CertSignFailed("cert_parse")
 		return nil, err
@@ -132,23 +136,24 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	err = s.certAuth.ValidateCSR(csr)
 	if err != nil {
-		err = fmt.Errorf("error validating csr: %s", err)
+		err = errors.Wrap(err, "error validating csr")
 		log.Error(err)
 		monitoring.CertSignFailed("cert_validation")
 		return nil, err
 	}
 
-	err = s.validator.Validate(req.GetId(), req.GetToken())
+	err = s.validator.Validate(req.GetId(), req.GetToken(), req.GetNamespace())
 	if err != nil {
-		err = fmt.Errorf("error validating requester identity: %s", err)
+		err = errors.Wrap(err, "error validating requester identity")
 		log.Error(err)
 		monitoring.CertSignFailed("req_id_validation")
 		return nil, err
 	}
 
-	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, -1, false)
+	identity := identity.NewBundle(csr.Subject.CommonName, req.GetNamespace(), req.GetTrustDomain())
+	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, identity, -1, false)
 	if err != nil {
-		err = fmt.Errorf("error signing csr: %s", err)
+		err = errors.Wrap(err, "error signing csr")
 		log.Error(err)
 		monitoring.CertSignFailed("cert_sign")
 		return nil, err
@@ -162,7 +167,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	certPem = append(certPem, rootCert...)
 
 	if len(certPem) == 0 {
-		err = fmt.Errorf("insufficient data in certificate signing request, no certs signed")
+		err = errors.New("insufficient data in certificate signing request, no certs signed")
 		log.Error(err)
 		monitoring.CertSignFailed("insufficient_data")
 		return nil, err
@@ -170,7 +175,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	expiry, err := ptypes.TimestampProto(signed.Certificate.NotAfter)
 	if err != nil {
-		return nil, fmt.Errorf("could not validate certificate validity: %s", err)
+		return nil, errors.Wrap(err, "could not validate certificate validity")
 	}
 
 	resp := &sentryv1pb.SignCertificateResponse{

@@ -13,10 +13,12 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,7 +28,7 @@ const serverPort = 6500
 
 var log = logger.NewLogger("dapr.operator.api")
 
-//Server runs the Dapr API server for components and configurations
+// Server runs the Dapr API server for components and configurations
 type Server interface {
 	Run(certChain *dapr_credentials.CertChain)
 	OnComponentUpdated(component *componentsapi.Component)
@@ -74,11 +76,11 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
 	var config configurationapi.Configuration
 	if err := a.Client.Get(ctx, key, &config); err != nil {
-		return nil, fmt.Errorf("error getting configuration: %s", err)
+		return nil, errors.Wrap(err, "error getting configuration")
 	}
 	b, err := json.Marshal(&config)
 	if err != nil {
-		return nil, fmt.Errorf("error marshalling configuration: %s", err)
+		return nil, errors.Wrap(err, "error marshalling configuration")
 	}
 	return &operatorv1pb.GetConfigurationResponse{
 		Configuration: b,
@@ -89,18 +91,40 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 func (a *apiServer) ListComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components); err != nil {
-		return nil, fmt.Errorf("error getting components: %s", err)
+		return nil, errors.Wrap(err, "error getting components")
 	}
 	resp := &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{},
 	}
-	for _, c := range components.Items {
+	for i := range components.Items {
+		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		b, err := json.Marshal(&c)
 		if err != nil {
 			log.Warnf("error marshalling component: %s", err)
 			continue
 		}
 		resp.Components = append(resp.Components, b)
+	}
+	return resp, nil
+}
+
+// ListSubscriptions returns a list of Dapr pub/sub subscriptions
+func (a *apiServer) ListSubscriptions(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
+	var subs subscriptionsapi.SubscriptionList
+	if err := a.Client.List(ctx, &subs); err != nil {
+		return nil, errors.Wrap(err, "error getting subscriptions")
+	}
+	resp := &operatorv1pb.ListSubscriptionsResponse{
+		Subscriptions: [][]byte{},
+	}
+	for i := range subs.Items {
+		s := subs.Items[i] // Make a copy since we will refer to this as a reference in this loop.
+		b, err := json.Marshal(&s)
+		if err != nil {
+			log.Warnf("error marshalling subscription: %s", err)
+			continue
+		}
+		resp.Subscriptions = append(resp.Subscriptions, b)
 	}
 	return resp, nil
 }

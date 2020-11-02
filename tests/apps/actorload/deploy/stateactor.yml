@@ -1,0 +1,46 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stateactor
+  namespace: loadtest
+  labels:
+    app: stateactor
+spec:
+  replicas: 60
+  selector:
+    matchLabels:
+      app: stateactor
+  template:
+    metadata:
+      labels:
+        app: stateactor
+      annotations:
+        dapr.io/config: "testappconfig"
+        dapr.io/enabled: "true"
+        dapr.io/id: "stateactor"
+        dapr.io/port: "3000"
+        dapr.io/log-as-json: "true"
+        dapr.io/enable-profiling: "true"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: agentpool
+                  operator: In
+                  values:
+                  - testapp
+      containers:
+      - name: stateactor
+        image: youngp/actorloadtest:dev
+        command: ["./stateactor"]
+        args: ["-actors", "StateActor", "-p", "3000"]
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: Always

@@ -1,13 +1,9 @@
 package ca
 
 import (
-	"crypto"
 	"crypto/rand"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"sync"
@@ -18,12 +14,16 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/csr"
+	"github.com/dapr/dapr/pkg/sentry/identity"
+	"github.com/pkg/errors"
 )
 
 const (
 	caOrg                      = "dapr.io/sentry"
 	caCommonName               = "cluster.local"
 	selfSignedRootCertLifetime = time.Hour * 8760
+	certLoadTimeout            = time.Second * 30
+	certDetectInterval         = time.Second * 1
 )
 
 var log = logger.NewLogger("dapr.sentry.ca")
@@ -34,7 +34,7 @@ var log = logger.NewLogger("dapr.sentry.ca")
 type CertificateAuthority interface {
 	LoadOrStoreTrustBundle() error
 	GetCACertBundle() TrustRootBundler
-	SignCSR(csrPem []byte, subject string, ttl time.Duration, isCA bool) (*SignedCertificate, error)
+	SignCSR(csrPem []byte, subject string, identity *identity.Bundle, ttl time.Duration, isCA bool) (*SignedCertificate, error)
 	ValidateCSR(csr *x509.CertificateRequest) error
 }
 
@@ -81,7 +81,7 @@ func (c *defaultCA) GetCACertBundle() TrustRootBundler {
 // SignCSR signs a request with a PEM encoded CSR cert and duration.
 // If isCA is set to true, a CA cert will be issued. If isCA is set to false, a workload
 // Certificate will be issued instead.
-func (c *defaultCA) SignCSR(csrPem []byte, subject string, ttl time.Duration, isCA bool) (*SignedCertificate, error) {
+func (c *defaultCA) SignCSR(csrPem []byte, subject string, identity *identity.Bundle, ttl time.Duration, isCA bool) (*SignedCertificate, error) {
 	c.issuerLock.RLock()
 	defer c.issuerLock.RUnlock()
 
@@ -97,17 +97,17 @@ func (c *defaultCA) SignCSR(csrPem []byte, subject string, ttl time.Duration, is
 
 	cert, err := certs.ParsePemCSR(csrPem)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing csr pem: %s", err)
+		return nil, errors.Wrap(err, "error parsing csr pem")
 	}
 
-	crtb, err := csr.GenerateCSRCertificate(cert, subject, signingCert, cert.PublicKey, signingKey.Key, certLifetime, isCA)
+	crtb, err := csr.GenerateCSRCertificate(cert, subject, identity, signingCert, cert.PublicKey, signingKey.Key, certLifetime, isCA)
 	if err != nil {
-		return nil, fmt.Errorf("error signing csr: %s", err)
+		return nil, errors.Wrap(err, "error signing csr")
 	}
 
 	csrCert, err := x509.ParseCertificate(crtb)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing cert: %s", err)
+		return nil, errors.Wrap(err, "error parsing cert")
 	}
 
 	certPem := pem.EncodeToMemory(&pem.Block{
@@ -129,7 +129,15 @@ func (c *defaultCA) ValidateCSR(csr *x509.CertificateRequest) error {
 }
 
 func shouldCreateCerts(conf config.SentryConfig) bool {
-	if _, err := os.Stat(conf.RootCertPath); os.IsNotExist(err) {
+	exists, err := certs.CredentialsExist(conf)
+	if err != nil {
+		log.Errorf("error chcecking if credetials exist: %s", err)
+	}
+	if exists {
+		return false
+	}
+
+	if _, err = os.Stat(conf.RootCertPath); os.IsNotExist(err) {
 		return true
 	}
 	b, err := ioutil.ReadFile(conf.IssuerCertPath)
@@ -139,31 +147,54 @@ func shouldCreateCerts(conf config.SentryConfig) bool {
 	return len(b) == 0
 }
 
+func detectCertificates(path string) error {
+	t := time.NewTicker(certDetectInterval)
+	timeout := time.After(certLoadTimeout)
+
+	for {
+		select {
+		case <-timeout:
+			return errors.New("timed out on detecting credentials on filesystem")
+		case <-t.C:
+			_, err := os.Stat(path)
+			if err == nil {
+				t.Stop()
+				return nil
+			}
+		}
+	}
+}
+
 func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 	var issuerCreds *certs.Credentials
 	var rootCertBytes []byte
 	var issuerCertBytes []byte
 
-	// certs exist on disk, load them
+	// certs exist on disk or getting created, load them when ready
 	if !shouldCreateCerts(c.config) {
+		err := detectCertificates(c.config.RootCertPath)
+		if err != nil {
+			return nil, err
+		}
+
 		certChain, err := credentials.LoadFromDisk(c.config.RootCertPath, c.config.IssuerCertPath, c.config.IssuerKeyPath)
 		if err != nil {
-			return nil, fmt.Errorf("error loading cert chain from disk: %s", err)
+			return nil, errors.Wrap(err, "error loading cert chain from disk")
 		}
 
 		issuerCreds, err = certs.PEMCredentialsFromFiles(certChain.Cert, certChain.Key)
 		if err != nil {
-			return nil, fmt.Errorf("error reading PEM credentials: %s", err)
+			return nil, errors.Wrap(err, "error reading PEM credentials")
 		}
 
 		rootCertBytes, err = ioutil.ReadFile(c.config.RootCertPath)
 		if err != nil {
-			return nil, fmt.Errorf("error reading root cert from disk: %s", err)
+			return nil, errors.Wrap(err, "error reading root cert from disk")
 		}
 
 		issuerCertBytes, err = ioutil.ReadFile(c.config.IssuerCertPath)
 		if err != nil {
-			return nil, fmt.Errorf("error reading issuer cert from disk: %s", err)
+			return nil, errors.Wrap(err, "error reading issuer cert from disk")
 		}
 	} else {
 		// create self signed root and issuer certs
@@ -171,7 +202,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		var err error
 		issuerCreds, rootCertBytes, issuerCertBytes, err = c.generateRootAndIssuerCerts()
 		if err != nil {
-			return nil, fmt.Errorf("error generating trust root bundle: %s", err)
+			return nil, errors.Wrap(err, "error generating trust root bundle")
 		}
 
 		log.Info("self signed certs generated and persisted successfully")
@@ -180,7 +211,7 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 	// load trust anchors
 	trustAnchors, err := certs.CertPoolFromPEM(rootCertBytes)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing cert pool for trust anchors: %s", err)
+		return nil, errors.Wrap(err, "error parsing cert pool for trust anchors")
 	}
 
 	return &trustRootBundle{
@@ -189,42 +220,6 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 		trustDomain:   c.config.TrustDomain,
 		rootCertPem:   rootCertBytes,
 		issuerCertPem: issuerCertBytes,
-	}, nil
-}
-
-// GenerateSidecarCertificate generates a keypair and returns a new certificate
-func (c *defaultCA) GenerateSidecarCertificate(subject string) (*certs.Credentials, error) {
-	pk, err := certs.GenerateECPrivateKey()
-	if err != nil {
-		return nil, err
-	}
-
-	csr := &x509.CertificateRequest{
-		Subject:   pkix.Name{CommonName: subject},
-		DNSNames:  []string{subject},
-		PublicKey: &pk.PublicKey,
-	}
-
-	csrPem, err := x509.CreateCertificateRequest(rand.Reader, csr, pk)
-	if err != nil {
-		err = fmt.Errorf("error creating csr: %s", err)
-		log.Error(err)
-		return nil, err
-	}
-
-	signed, err := c.SignCSR(csrPem, subject, -1, false)
-	if err != nil {
-		err = fmt.Errorf("error signing csr: %s", err)
-		log.Error(err)
-		return nil, err
-	}
-
-	return &certs.Credentials{
-		PrivateKey: &certs.PrivateKey{
-			Key:  crypto.PrivateKey(pk),
-			Type: certs.ECPrivateKey,
-		},
-		Certificate: signed.Certificate,
 	}, nil
 }
 

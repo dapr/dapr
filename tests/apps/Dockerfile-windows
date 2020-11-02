@@ -1,0 +1,11 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+FROM mcr.microsoft.com/windows/nanoserver:1809
+
+WORKDIR /app
+COPY . .
+
+CMD ["app.exe"]

@@ -10,7 +10,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
 ### Prerequisites
 
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-  - [Install the latest Helm v3](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#using-helm-advanced).
+  - [Install the latest Helm v3](https://docs.dapr.io/getting-started/install-dapr/#install-with-helm-advanced).
 * Create your DockerHub ID
 * Create dapr-tests namespace
     ```bash
@@ -33,7 +33,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
     # DAPR_PERF_QPS sets the desired number of requests per second. Default is 1.
     # DAPR_PERF_CONNECTIONS sets the number of client connections used to send requests to Dapr. Default is 1.
     # DAPR_TEST_DURATION sets the duration of the test. Default is "1m".
-    # DAPR_PAYLOAD_SIZE_KB sets a payload size in kb to test with. default is 0.
+    # DAPR_PAYLOAD_SIZE sets a payload size in bytes to test with. default is 0.
     # DAPR_SIDECAR_CPU_LIMIT sets the cpu resource limit on the Dapr sidecar. default is 4.0.
     # DAPR_SIDECAR_MEMORY_LIMIT sets the memory resource limit on the Dapr sidecar. default is 512Mi.
     # DAPR_SIDECAR_CPU_REQUEST sets the cpu resource request on the Dapr sidecar. default is 0.5.
@@ -41,7 +41,7 @@ Performance tests are designed to let you evaluate the latency, resource usage a
     export DAPR_PERF_QPS
     export DAPR_PERF_CONNECTIONS
     export DAPR_TEST_DURATION
-    export DAPR_PAYLOAD_SIZE_KB
+    export DAPR_PAYLOAD_SIZE
     export DAPR_SIDECAR_CPU_LIMIT
     export DAPR_SIDECAR_MEMORY_LIMIT
     export DAPR_SIDECAR_CPU_REQUEST

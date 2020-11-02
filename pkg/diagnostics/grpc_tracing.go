@@ -186,30 +186,30 @@ func spanAttributesMapFromGRPC(appID string, req interface{}, rpcMethod string) 
 
 	case *runtimev1pb.InvokeBindingRequest:
 		dbType = bindingBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = s.GetName()
+		m[dbNameSpanAttributeKey] = s.GetName()
 
 	case *runtimev1pb.GetStateRequest:
 		dbType = stateBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = s.GetStoreName()
+		m[dbNameSpanAttributeKey] = s.GetStoreName()
 
 	case *runtimev1pb.SaveStateRequest:
 		dbType = stateBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = s.GetStoreName()
+		m[dbNameSpanAttributeKey] = s.GetStoreName()
 
 	case *runtimev1pb.DeleteStateRequest:
 		dbType = stateBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = s.GetStoreName()
+		m[dbNameSpanAttributeKey] = s.GetStoreName()
 
 	case *runtimev1pb.GetSecretRequest:
 		dbType = secretBuildingBlockType
-		m[dbInstanceSpanAttributeKey] = s.GetStoreName()
+		m[dbNameSpanAttributeKey] = s.GetStoreName()
 	}
 
-	if _, ok := m[dbInstanceSpanAttributeKey]; ok {
+	if _, ok := m[dbNameSpanAttributeKey]; ok {
 		m[gRPCServiceSpanAttributeKey] = daprGRPCDaprService
-		m[dbTypeSpanAttributeKey] = dbType
+		m[dbSystemSpanAttributeKey] = dbType
 		m[dbStatementSpanAttributeKey] = rpcMethod
-		m[dbURLSpanAttributeKey] = dbType
+		m[dbConnectionStringSpanAttributeKey] = dbType
 	}
 
 	m[daprAPIProtocolSpanAttributeKey] = daprAPIGRPCSpanAttrValue

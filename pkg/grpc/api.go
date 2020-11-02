@@ -7,7 +7,6 @@ package grpc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -64,10 +64,13 @@ type api struct {
 	appChannel            channel.AppChannel
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
+	secretsConfiguration  map[string]config.SecretsScope
 	publishFn             func(req *pubsub.PublishRequest) error
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
+	accessControlList     *config.AccessControlList
+	appProtocol           string
 }
 
 // NewAPI returns a new gRPC API
@@ -75,11 +78,14 @@ func NewAPI(
 	appID string, appChannel channel.AppChannel,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
+	secretsConfiguration map[string]config.SecretsScope,
 	publishFn func(req *pubsub.PublishRequest) error,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec) API {
+	tracingSpec config.TracingSpec,
+	accessControlList *config.AccessControlList,
+	appProtocol string) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -88,39 +94,87 @@ func NewAPI(
 		publishFn:             publishFn,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
+		secretsConfiguration:  secretsConfiguration,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		tracingSpec:           tracingSpec,
+		accessControlList:     accessControlList,
+		appProtocol:           appProtocol,
 	}
 }
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
 func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	if a.appChannel == nil {
-		return nil, status.Error(codes.Internal, "app channel is not initialized")
+		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
 
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
+	}
+
+	if a.accessControlList != nil {
+		// An access control policy has been specified for the app. Apply the policies.
+		operation := req.Message().Method
+		var httpVerb commonv1pb.HTTPExtension_Verb
+		// Get the http verb in case the application protocol is http
+		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
+			httpExt := req.Message().GetHttpExtension()
+			if httpExt != nil {
+				httpVerb = httpExt.GetVerb()
+			}
+		}
+		callAllowed, errMsg := a.applyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol)
+
+		if !callAllowed {
+			return nil, status.Errorf(codes.PermissionDenied, errMsg)
+		}
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
 	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
 	}
 	return resp.Proto(), err
+}
+
+func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string) (bool, string) {
+	// Apply access control list filter
+	spiffeID, err := config.GetAndParseSpiffeID(ctx)
+	if err != nil {
+		// Apply the default action
+		apiServerLogger.Debugf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
+	}
+	var appID, trustDomain, namespace string
+	if spiffeID != nil {
+		appID = spiffeID.AppID
+		namespace = spiffeID.Namespace
+		trustDomain = spiffeID.TrustDomain
+	}
+	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
+	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
+
+	var errMessage string
+	if !action {
+		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", appID, operation, httpVerb)
+		apiServerLogger.Debugf(errMessage)
+	}
+
+	return action, errMessage
 }
 
 // CallActor invokes a virtual actor
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
 
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
 	return resp.Proto(), nil
@@ -128,22 +182,39 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
-		return &empty.Empty{}, errors.New("ERR_PUBSUB_NOT_FOUND")
+		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	pubsubName := in.PubsubName
+	if pubsubName == "" {
+		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	topic := in.Topic
+	if topic == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
 	body := []byte{}
 
 	if in.Data != nil {
 		body = in.Data
 	}
-	pubsubName := in.PubsubName
+
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_CLOUD_EVENTS_SER: %s", err)
+		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	req := pubsub.PublishRequest{
@@ -154,7 +225,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	err = a.publishFn(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_PUBSUB_PUBLISH_MESSAGE: %s", err)
+		err = status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
 }
@@ -168,6 +241,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
 	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, err)
 		return nil, err
 	}
 
@@ -205,7 +279,9 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	r := &runtimev1pb.InvokeBindingResponse{}
 	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		return r, fmt.Errorf("ERR_INVOKE_OUTPUT_BINDING: %s", err)
+		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.Name, err.Error())
+		apiServerLogger.Debug(err)
+		return r, err
 	}
 
 	if resp != nil {
@@ -218,6 +294,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetBulkStateResponse{}, err
 	}
 
@@ -227,17 +304,21 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	for _, k := range in.Keys {
 		fn := func(param interface{}) {
 			req := state.GetRequest{
-				Key: a.getModifiedStateKey(param.(string)),
+				Key:      a.getModifiedStateKey(param.(string)),
+				Metadata: in.Metadata,
 			}
 
 			r, err := store.Get(&req)
-			if err == nil && r != nil && r.Data != nil {
-				resp.Items = append(resp.Items, &runtimev1pb.BulkStateItem{
-					Key:  param.(string),
-					Data: r.Data,
-					Etag: r.ETag,
-				})
+			item := &runtimev1pb.BulkStateItem{
+				Key: param.(string),
 			}
+			if err != nil {
+				item.Error = err.Error()
+			} else if r != nil {
+				item.Data = r.Data
+				item.Etag = r.ETag
+			}
+			resp.Items = append(resp.Items, item)
 		}
 
 		limiter.Execute(fn, k)
@@ -249,11 +330,11 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 func (a *api) getStateStore(name string) (state.Store, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+		return nil, status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
 	}
 
 	if a.stateStores[name] == nil {
-		return nil, errors.New("ERR_STATE_STORE_NOT_FOUND")
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, name)
 	}
 	return a.stateStores[name], nil
 }
@@ -261,11 +342,13 @@ func (a *api) getStateStore(name string) (state.Store, error) {
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 
 	req := state.GetRequest{
-		Key: a.getModifiedStateKey(in.Key),
+		Key:      a.getModifiedStateKey(in.Key),
+		Metadata: in.Metadata,
 		Options: state.GetStateOption{
 			Consistency: stateConsistencyToString(in.Consistency),
 		},
@@ -273,7 +356,9 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	getResponse, err := store.Get(&req)
 	if err != nil {
-		return nil, fmt.Errorf("ERR_STATE_GET: %s", err)
+		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetStateResponse{}, err
 	}
 
 	response := &runtimev1pb.GetStateResponse{}
@@ -287,6 +372,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
@@ -309,7 +395,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_STATE_SAVE: %s", err)
+		err = status.Errorf(codes.Internal, messages.ErrStateSave, in.StoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
 }
@@ -317,12 +405,14 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
 	req := state.DeleteRequest{
-		Key:  a.getModifiedStateKey(in.Key),
-		ETag: in.Etag,
+		Key:      a.getModifiedStateKey(in.Key),
+		Metadata: in.Metadata,
+		ETag:     in.Etag,
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
@@ -333,7 +423,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	err = store.Delete(&req)
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_STATE_DELETE: failed deleting state with key %s: %s", in.Key, err)
+		err = status.Errorf(codes.Internal, messages.ErrStateDelete, in.Key, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
 }
@@ -347,13 +439,23 @@ func (a *api) getModifiedStateKey(key string) string {
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
-		return nil, errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
+		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
 	secretStoreName := in.StoreName
 
 	if a.secretStores[secretStoreName] == nil {
-		return nil, errors.New("ERR_SECRET_STORE_NOT_FOUND")
+		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
+	}
+
+	if !a.isSecretAllowed(in.StoreName, in.Key) {
+		err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, in.Key, in.StoreName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
 	req := secretstores.GetSecretRequest{
@@ -364,7 +466,9 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 
 	if err != nil {
-		return nil, fmt.Errorf("ERR_SECRET_GET: %s", err)
+		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
 	response := &runtimev1pb.GetSecretResponse{}
@@ -376,18 +480,24 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+		err := status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	storeName := in.StoreName
 
 	if a.stateStores[storeName] == nil {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_FOUND")
+		err := status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, storeName)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
-		return &empty.Empty{}, errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
+		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, storeName)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 
 	operations := []state.TransactionalStateOperation{}
@@ -399,9 +509,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			setReq := state.SetRequest{
 				Key: a.getModifiedStateKey(req.Key),
 				// Limitation:
-				// type conversion is required because Multi of some statestore
-				// implementation cannot handle []byte properly.
-				Value:    string(req.Value),
+				// components that cannot handle byte array need to deserialize/serialize in
+				// component specific way in components-contrib repo.
+				Value:    req.Value,
 				Metadata: req.Metadata,
 				ETag:     req.Etag,
 			}
@@ -438,7 +548,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			}
 
 		default:
-			return &empty.Empty{}, fmt.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
+			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
+			apiServerLogger.Debug(err)
+			return &empty.Empty{}, err
 		}
 
 		operations = append(operations, operation)
@@ -450,7 +562,35 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	})
 
 	if err != nil {
-		return &empty.Empty{}, fmt.Errorf("ERR_STATE_TRANSACTION: %s", err)
+		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) isSecretAllowed(storeName, key string) bool {
+	if config, ok := a.secretsConfiguration[storeName]; ok {
+		return config.IsSecretAllowed(key)
+	}
+	// By default if a configuration is not defined for a secret store, return true.
+	return true
+}
+
+func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb string, action bool) {
+	if action {
+		switch actionPolicy {
+		case config.ActionPolicyApp:
+			diag.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+		case config.ActionPolicyGlobal:
+			diag.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+		}
+	} else {
+		switch actionPolicy {
+		case config.ActionPolicyApp:
+			diag.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+		case config.ActionPolicyGlobal:
+			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+		}
+	}
 }

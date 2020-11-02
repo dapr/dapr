@@ -8,8 +8,45 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: cluster-admin
+  name: dapr-operator-admin
   apiGroup: rbac.authorization.k8s.io
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: role-tokenreview-binding
+subjects:
+- kind: ServiceAccount
+  name: dapr-operator
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-operator-admin
+rules:
+- apiGroups: ["*"]
+  resources: ["serviceaccounts", "deployments", "services", "configmaps", "secrets", "components", "configurations"]
+  verbs: ["get"]
+- apiGroups: ["*"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions"]
+  verbs: ["list"]
+- apiGroups: ["*"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions"]
+  verbs: ["watch"]
+- apiGroups: ["*"]
+  resources: ["services", "secrets", "configmaps"]
+  verbs: ["update"]
+- apiGroups: ["*"]
+  resources: ["services"]
+  verbs: ["delete"]
+- apiGroups: ["*"]
+  resources: ["deployments", "services", "configmaps", "events"]
+  verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

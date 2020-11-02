@@ -1,0 +1,15 @@
+coverage:
+  # Commit status https://docs.codecov.io/docs/commit-status are used
+  # to block PR based on coverage threshold.
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0%
+
+ignore:
+  # Configure what to ignore.
+  - "**/zz_generated*.go" # - Generated files.
+  - "pkg/apis"            # - CRD related files including generated ones.
+  - "pkg/proto"           # - GRPC Protobuf client for dapr.
+  - "pkg/testing"         # - Testing mock.

@@ -16,8 +16,10 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
-	"k8s.io/api/admission/v1beta1"
+	"github.com/pkg/errors"
+	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,6 +52,7 @@ const (
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
+	daprAppSSLKey                     = "dapr.io/app-ssl"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
 	sidecarAPIGRPCPort                = 50001
@@ -65,6 +68,7 @@ const (
 	sidecarMetricsPortName            = "dapr-metrics"
 	defaultLogLevel                   = "info"
 	defaultLogAsJSON                  = false
+	defaultAppSSL                     = false
 	kubernetesMountPath               = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig                     = "daprsystem"
 	defaultMetricsPort                = 9090
@@ -76,21 +80,14 @@ const (
 	apiVersionV1                      = "v1.0"
 	defaultMtlsEnabled                = true
 	trueString                        = "true"
-
-	// Deprecated, remove in v1.0
-	idKey                 = "dapr.io/id"
-	daprPortKey           = "dapr.io/port"
-	daprProfilingKey      = "dapr.io/profiling"
-	daprMaxConcurrencyKey = "dapr.io/max-concurrency"
-	daprProtocolKey       = "dapr.io/protocol"
 )
 
-func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
+func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	namespace, image string, kubeClient *kubernetes.Clientset, daprClient scheme.Interface) ([]PatchOperation, error) {
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
-		log.Errorf("could not unmarshal raw object: %v", err)
+		errors.Wrap(err, "could not unmarshal raw object")
 		return nil, err
 	}
 
@@ -111,6 +108,11 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	}
 
 	id := getAppID(pod)
+	err := validation.ValidateKubernetesAppID(id)
+	if err != nil {
+		return nil, err
+	}
+
 	// Keep DNS resolution outside of getSidecarContainer for unit testing.
 	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
@@ -124,7 +126,7 @@ func (i *injector) getPodPatchOperations(ar *v1beta1.AdmissionReview,
 	mtlsEnabled := mTLSEnabled(daprClient)
 	if mtlsEnabled {
 		trustAnchors, certChain, certKey = getTrustAnchorsAndCertChain(kubeClient, namespace)
-		identity = fmt.Sprintf("%s:%s", pod.Spec.ServiceAccountName, req.Namespace)
+		identity = fmt.Sprintf("%s:%s", req.Namespace, pod.Spec.ServiceAccountName)
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
@@ -229,6 +231,7 @@ func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace str
 func mTLSEnabled(daprClient scheme.Interface) bool {
 	resp, err := daprClient.ConfigurationV1alpha1().Configurations(meta_v1.NamespaceAll).List(meta_v1.ListOptions{})
 	if err != nil {
+		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
 	}
 
@@ -237,6 +240,7 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 			return c.Spec.MTLSSpec.Enabled
 		}
 	}
+	log.Infof("Dapr system configuration (%s) is not found, use default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
 }
 
@@ -261,19 +265,11 @@ func podContainsSidecarContainer(pod *corev1.Pod) bool {
 }
 
 func getMaxConcurrency(annotations map[string]string) (int32, error) {
-	maxConcurrencyKey, err := getInt32Annotation(annotations, daprAppMaxConcurrencyKey)
-	if maxConcurrencyKey == -1 {
-		return getInt32Annotation(annotations, daprMaxConcurrencyKey)
-	}
-	return maxConcurrencyKey, err
+	return getInt32Annotation(annotations, daprAppMaxConcurrencyKey)
 }
 
 func getAppPort(annotations map[string]string) (int32, error) {
-	pKey, err := getInt32Annotation(annotations, daprAppPortKey)
-	if pKey == -1 {
-		return getInt32Annotation(annotations, daprPortKey)
-	}
-	return pKey, err
+	return getInt32Annotation(annotations, daprAppPortKey)
 }
 
 func getConfig(annotations map[string]string) string {
@@ -281,12 +277,7 @@ func getConfig(annotations map[string]string) string {
 }
 
 func getProtocol(annotations map[string]string) string {
-	protocol := getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "")
-	if protocol != "" {
-		return protocol
-	}
-
-	return getStringAnnotationOrDefault(annotations, daprProtocolKey, "http")
+	return getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "http")
 }
 
 func getMetricsPort(annotations map[string]string) int {
@@ -294,12 +285,7 @@ func getMetricsPort(annotations map[string]string) int {
 }
 
 func getAppID(pod corev1.Pod) string {
-	id := getStringAnnotationOrDefault(pod.Annotations, appIDKey, "")
-	if id != "" {
-		return id
-	}
-
-	return getStringAnnotationOrDefault(pod.Annotations, idKey, pod.GetName())
+	return getStringAnnotationOrDefault(pod.Annotations, appIDKey, pod.GetName())
 }
 
 func getLogLevel(annotations map[string]string) string {
@@ -311,13 +297,11 @@ func logAsJSONEnabled(annotations map[string]string) bool {
 }
 
 func profilingEnabled(annotations map[string]string) bool {
-	isEnabled := getBoolAnnotationOrDefault(annotations, daprEnableProfilingKey, false)
+	return getBoolAnnotationOrDefault(annotations, daprEnableProfilingKey, false)
+}
 
-	if !isEnabled {
-		return getBoolAnnotationOrDefault(annotations, daprProfilingKey, false)
-	}
-
-	return isEnabled
+func appSSLEnabled(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprAppSSLKey, defaultAppSSL)
 }
 
 func getAPITokenSecret(annotations map[string]string) string {
@@ -364,7 +348,7 @@ func getInt32Annotation(annotations map[string]string, key string) (int32, error
 	}
 	value, err := strconv.ParseInt(s, 10, 32)
 	if err != nil {
-		return -1, fmt.Errorf("error parsing %s int value %s: %s", key, s, err)
+		return -1, errors.Wrapf(err, "error parsing %s int value %s ", key, s)
 	}
 	return int32(value), nil
 }
@@ -404,7 +388,7 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 	if ok {
 		list, err := appendQuantityToResourceList(cpuLimit, corev1.ResourceCPU, r.Limits)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sidecar cpu limit: %s", err)
+			return nil, errors.Wrap(err, "error parsing sidecar cpu limit")
 		}
 		r.Limits = *list
 	}
@@ -412,7 +396,7 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 	if ok {
 		list, err := appendQuantityToResourceList(memLimit, corev1.ResourceMemory, r.Limits)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sidecar memory limit: %s", err)
+			return nil, errors.Wrap(err, "error parsing sidecar memory limit")
 		}
 		r.Limits = *list
 	}
@@ -420,7 +404,7 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 	if ok {
 		list, err := appendQuantityToResourceList(cpuRequest, corev1.ResourceCPU, r.Requests)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sidecar cpu request: %s", err)
+			return nil, errors.Wrap(err, "error parsing sidecar cpu request")
 		}
 		r.Requests = *list
 	}
@@ -428,7 +412,7 @@ func getResourceRequirements(annotations map[string]string) (*corev1.ResourceReq
 	if ok {
 		list, err := appendQuantityToResourceList(memRequest, corev1.ResourceMemory, r.Requests)
 		if err != nil {
-			return nil, fmt.Errorf("error parsing sidecar memory request: %s", err)
+			return nil, errors.Wrap(err, "error parsing sidecar memory request")
 		}
 		r.Requests = *list
 	}
@@ -463,6 +447,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 		log.Warn(err)
 	}
 
+	sslEnabled := appSSLEnabled(annotations)
 	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
 	c := &corev1.Container{
@@ -566,6 +551,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 				Name:  "SENTRY_LOCAL_IDENTITY",
 				Value: identity,
 			})
+	}
+
+	if sslEnabled {
+		c.Args = append(c.Args, "--app-ssl")
 	}
 
 	secret := getAPITokenSecret(annotations)

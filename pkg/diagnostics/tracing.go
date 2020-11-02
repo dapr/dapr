@@ -15,6 +15,11 @@ import (
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/tracestate"
+
+	// We currently don't depend on the Otel SDK since it has not GAed.
+	// This package, however, only contains the conventions from the Otel Spec,
+	// which we do depend on.
+	"go.opentelemetry.io/otel/semconv"
 )
 
 const (
@@ -30,18 +35,21 @@ const (
 
 	// span attribute keys
 	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	dbTypeSpanAttributeKey      = "db.type"
-	dbInstanceSpanAttributeKey  = "db.instance"
-	dbStatementSpanAttributeKey = "db.statement"
-	dbURLSpanAttributeKey       = "db.url"
+	//
+	// The upstream constants may be used directly, but that would
+	// proliferate the imports of go.opentelemetry.io/otel/... packages,
+	// which we don't want to do widely before upstream goes GA.
+	dbSystemSpanAttributeKey           = string(semconv.DBSystemKey)
+	dbNameSpanAttributeKey             = string(semconv.DBNameKey)
+	dbStatementSpanAttributeKey        = string(semconv.DBStatementKey)
+	dbConnectionStringSpanAttributeKey = string(semconv.DBConnectionStringKey)
 
-	messagingDestinationTopicKind            = "topic"
-	messagingSystemSpanAttributeKey          = "messaging.system"
-	messagingDestinationSpanAttributeKey     = "messaging.destination"
-	messagingDestinationKindSpanAttributeKey = "messaging.destination_kind"
+	messagingSystemSpanAttributeKey          = string(semconv.MessagingSystemKey)
+	messagingDestinationSpanAttributeKey     = string(semconv.MessagingDestinationKey)
+	messagingDestinationKindSpanAttributeKey = string(semconv.MessagingDestinationKindKey)
 
-	gRPCServiceSpanAttributeKey = "rpc.service"
-	netPeerNameSpanAttributeKey = "net.peer.name"
+	gRPCServiceSpanAttributeKey = string(semconv.RPCServiceKey)
+	netPeerNameSpanAttributeKey = string(semconv.NetPeerNameKey)
 
 	daprAPISpanAttributeKey           = "dapr.api"
 	daprAPIStatusCodeSpanAttributeKey = "dapr.status_code"
@@ -59,6 +67,11 @@ const (
 
 	daprGRPCServiceInvocationService = "ServiceInvocation"
 	daprGRPCDaprService              = "Dapr"
+)
+
+var (
+	// Effectively const, but isn't a const from upstream.
+	messagingDestinationTopicKind = semconv.MessagingDestinationKindKeyTopic.Value.AsString()
 )
 
 // SpanContextToW3CString returns the SpanContext string representation
@@ -191,10 +204,10 @@ func AddAttributesToSpan(span *trace.Span, attributes map[string]string) {
 // ConstructInputBindingSpanAttributes creates span attributes for InputBindings.
 func ConstructInputBindingSpanAttributes(bindingName, url string) map[string]string {
 	return map[string]string{
-		dbInstanceSpanAttributeKey:  bindingName,
-		gRPCServiceSpanAttributeKey: daprGRPCDaprService,
-		dbTypeSpanAttributeKey:      bindingBuildingBlockType,
-		dbURLSpanAttributeKey:       url,
+		dbNameSpanAttributeKey:             bindingName,
+		gRPCServiceSpanAttributeKey:        daprGRPCDaprService,
+		dbSystemSpanAttributeKey:           bindingBuildingBlockType,
+		dbConnectionStringSpanAttributeKey: url,
 	}
 }
 

@@ -46,17 +46,17 @@ for clustername in ${testclusterpool[@]}; do
     fi
 
     # To resolve the race condition when multiple tests are running,
-    # this script tries to create the namespace. If it is failed, we can assume 
+    # this script tries to create the namespace. If it is failed, we can assume
     # that this cluster is being used by the other tests.
     echo "Trying to create ${DAPR_TEST_NAMESPACE} namespace..."
     kubectl create namespace ${DAPR_TEST_NAMESPACE}
     if [ $? -eq 0 ]; then
         echo "Created ${DAPR_TEST_NAMESPACE} successfully and use $clustername cluster"
-        echo "::set-env name=TEST_CLUSTER::$clustername"
-        echo "::set-env name=DAPR_TAG::$clustername"
-        echo "::set-env name=DAPR_TEST_TAG::$clustername"
-        echo "::set-env name=TARGET_OS::$GOOS"
-        echo "::set-env name=TARGET_ARCH::$GOARCH"
+        echo "TEST_CLUSTER=$clustername" >> $GITHUB_ENV
+        echo "DAPR_TAG=$clustername" >> $GITHUB_ENV
+        echo "DAPR_TEST_TAG=$clustername" >> $GITHUB_ENV
+        echo "TARGET_OS=$GOOS" >> $GITHUB_ENV
+        echo "TARGET_ARCH=$GOARCH" >> $GITHUB_ENV
         exit 0
     fi
 

@@ -16,7 +16,8 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/logger"
-	"k8s.io/api/admission/v1beta1"
+	"github.com/pkg/errors"
+	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,19 +40,20 @@ type injector struct {
 	server       *http.Server
 	kubeClient   *kubernetes.Clientset
 	daprClient   scheme.Interface
+	authUID      string
 }
 
 // toAdmissionResponse is a helper function to create an AdmissionResponse
 // with an embedded error
-func toAdmissionResponse(err error) *v1beta1.AdmissionResponse {
-	return &v1beta1.AdmissionResponse{
+func toAdmissionResponse(err error) *v1.AdmissionResponse {
+	return &v1.AdmissionResponse{
 		Result: &metav1.Status{
 			Message: err.Error(),
 		},
 	}
 }
 
-func getAppIDFromRequest(req *v1beta1.AdmissionRequest) string {
+func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 	// default App ID
 	appID := ""
 
@@ -71,7 +73,7 @@ func getAppIDFromRequest(req *v1beta1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config
-func NewInjector(config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
+func NewInjector(authUID string, config Config, daprClient scheme.Interface, kubeClient *kubernetes.Clientset) Injector {
 	mux := http.NewServeMux()
 
 	i := &injector{
@@ -85,10 +87,19 @@ func NewInjector(config Config, daprClient scheme.Interface, kubeClient *kuberne
 		},
 		kubeClient: kubeClient,
 		daprClient: daprClient,
+		authUID:    authUID,
 	}
 
 	mux.HandleFunc("/mutate", i.handleRequest)
 	return i
+}
+
+func ReplicasetAccountUID(kubeClient *kubernetes.Clientset) (string, error) {
+	r, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get("replicaset-controller", metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return string(r.ObjectMeta.UID), nil
 }
 
 func (i *injector) Run(ctx context.Context) {
@@ -145,16 +156,20 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var admissionResponse *v1beta1.AdmissionResponse
+	var admissionResponse *v1.AdmissionResponse
 	var patchOps []PatchOperation
 	var err error
 
-	ar := v1beta1.AdmissionReview{}
-	if _, _, err = i.deserializer.Decode(body, nil, &ar); err != nil {
+	ar := v1.AdmissionReview{}
+	_, gvk, err := i.deserializer.Decode(body, nil, &ar)
+	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-		if ar.Request.Kind.Kind != "Pod" {
-			err = fmt.Errorf("invalid kind for review: %s", ar.Kind)
+		if ar.Request.UserInfo.UID != i.authUID {
+			err = errors.Wrapf(err, "unauthorized request")
+			log.Error(err)
+		} else if ar.Request.Kind.Kind != "Pod" {
+			err = errors.Wrapf(err, "invalid kind for review: %s", ar.Kind)
 			log.Error(err)
 		} else {
 			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.kubeClient, i.daprClient)
@@ -167,7 +182,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		admissionResponse = toAdmissionResponse(err)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "patch")
 	} else if len(patchOps) == 0 {
-		admissionResponse = &v1beta1.AdmissionResponse{
+		admissionResponse = &v1.AdmissionResponse{
 			Allowed: true,
 		}
 	} else {
@@ -176,49 +191,42 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			admissionResponse = toAdmissionResponse(err)
 		} else {
-			log.Infof("AdmissionResponse: patch=%v\n", string(patchBytes))
-			admissionResponse = &v1beta1.AdmissionResponse{
+			admissionResponse = &v1.AdmissionResponse{
 				Allowed: true,
 				Patch:   patchBytes,
-				PatchType: func() *v1beta1.PatchType {
-					pt := v1beta1.PatchTypeJSONPatch
+				PatchType: func() *v1.PatchType {
+					pt := v1.PatchTypeJSONPatch
 					return &pt
 				}(),
 			}
 		}
 	}
 
-	admissionReview := v1beta1.AdmissionReview{}
+	admissionReview := v1.AdmissionReview{}
 	if admissionResponse != nil {
 		admissionReview.Response = admissionResponse
 		if ar.Request != nil {
 			admissionReview.Response.UID = ar.Request.UID
+			admissionReview.SetGroupVersionKind(*gvk)
 		}
 	}
 
-	resp, err := json.Marshal(admissionReview)
-	if err != nil {
-		log.Errorf("can't encode response: %v", err)
-		http.Error(
-			w,
-			fmt.Sprintf("could not encode response: %v", err),
-			http.StatusInternalServerError,
-		)
-
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
-		return
-	}
-
 	log.Infof("ready to write response ...")
-	if _, err := w.Write(resp); err != nil {
-		log.Errorf("can't write response: %v", err)
+	respBytes, err := json.Marshal(admissionReview)
+	if err != nil {
+		log.Errorf("can't deserialize response: %s", err)
+
 		http.Error(
 			w,
-			fmt.Sprintf("could not write response: %v", err),
+			err.Error(),
 			http.StatusInternalServerError,
 		)
 
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(respBytes); err != nil {
+		log.Error(err)
 	} else {
 		monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
 	}

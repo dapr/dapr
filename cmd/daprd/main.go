@@ -24,7 +24,8 @@ import (
 	gcp_secretmanager "github.com/dapr/components-contrib/secretstores/gcp/secretmanager"
 	"github.com/dapr/components-contrib/secretstores/hashicorp/vault"
 	sercetstores_kubernetes "github.com/dapr/components-contrib/secretstores/kubernetes"
-	localsecretstore "github.com/dapr/components-contrib/secretstores/local"
+	secretstore_env "github.com/dapr/components-contrib/secretstores/local/env"
+	secretstore_file "github.com/dapr/components-contrib/secretstores/local/file"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 
 	// State Stores
@@ -36,7 +37,6 @@ import (
 	"github.com/dapr/components-contrib/state/cassandra"
 	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/couchbase"
-	"github.com/dapr/components-contrib/state/etcd"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
 	"github.com/dapr/components-contrib/state/hazelcast"
@@ -44,6 +44,7 @@ import (
 	"github.com/dapr/components-contrib/state/mongodb"
 	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
+	"github.com/dapr/components-contrib/state/rethinkdb"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
@@ -57,7 +58,7 @@ import (
 	pubsub_hazelcast "github.com/dapr/components-contrib/pubsub/hazelcast"
 	pubsub_kafka "github.com/dapr/components-contrib/pubsub/kafka"
 	pubsub_mqtt "github.com/dapr/components-contrib/pubsub/mqtt"
-	"github.com/dapr/components-contrib/pubsub/nats"
+	"github.com/dapr/components-contrib/pubsub/natsstreaming"
 	pubsub_pulsar "github.com/dapr/components-contrib/pubsub/pulsar"
 	"github.com/dapr/components-contrib/pubsub/rabbitmq"
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
@@ -78,6 +79,7 @@ import (
 
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
 	"github.com/dapr/components-contrib/bindings/aws/s3"
@@ -98,8 +100,10 @@ import (
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/mqtt"
+	"github.com/dapr/components-contrib/bindings/postgres"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
+	"github.com/dapr/components-contrib/bindings/rethinkdb/statechange"
 	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
 	"github.com/dapr/components-contrib/bindings/twilio/sms"
 	"github.com/dapr/components-contrib/bindings/twitter"
@@ -110,6 +114,7 @@ import (
 	"github.com/dapr/components-contrib/middleware/http/bearer"
 	"github.com/dapr/components-contrib/middleware/http/oauth2"
 	"github.com/dapr/components-contrib/middleware/http/oauth2clientcredentials"
+	"github.com/dapr/components-contrib/middleware/http/opa"
 	"github.com/dapr/components-contrib/middleware/http/ratelimit"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -144,8 +149,11 @@ func main() {
 			secretstores_loader.New("gcp.secretmanager", func() secretstores.SecretStore {
 				return gcp_secretmanager.NewSecreteManager(logContrib)
 			}),
-			secretstores_loader.New("local.localsecretstore", func() secretstores.SecretStore {
-				return localsecretstore.NewLocalSecretStore(logContrib)
+			secretstores_loader.New("local.file", func() secretstores.SecretStore {
+				return secretstore_file.NewLocalSecretStore(logContrib)
+			}),
+			secretstores_loader.New("local.env", func() secretstores.SecretStore {
+				return secretstore_env.NewEnvSecretStore(logContrib)
 			}),
 		),
 		runtime.WithStates(
@@ -163,9 +171,6 @@ func main() {
 			}),
 			state_loader.New("azure.tablestorage", func() state.Store {
 				return state_azure_tablestorage.NewAzureTablesStateStore(logContrib)
-			}),
-			state_loader.New("etcd", func() state.Store {
-				return etcd.NewETCD(logContrib)
 			}),
 			state_loader.New("cassandra", func() state.Store {
 				return cassandra.NewCassandraStateStore(logContrib)
@@ -200,13 +205,16 @@ func main() {
 			state_loader.New("aerospike", func() state.Store {
 				return aerospike.NewAerospikeStateStore(logContrib)
 			}),
+			state_loader.New("rethinkdb", func() state.Store {
+				return rethinkdb.NewRethinkDBStateStore(logContrib)
+			}),
 		),
 		runtime.WithPubSubs(
 			pubsub_loader.New("redis", func() pubs.PubSub {
 				return pubsub_redis.NewRedisStreams(logContrib)
 			}),
-			pubsub_loader.New("nats", func() pubs.PubSub {
-				return nats.NewNATSPubSub(logContrib)
+			pubsub_loader.New("natsstreaming", func() pubs.PubSub {
+				return natsstreaming.NewNATSStreamingPubSub(logContrib)
 			}),
 			pubsub_loader.New("azure.eventhubs", func() pubs.PubSub {
 				return pubsub_eventhubs.NewAzureEventHubs(logContrib)
@@ -295,8 +303,14 @@ func main() {
 			bindings_loader.NewInput("cron", func() bindings.InputBinding {
 				return cron.NewCron(logContrib)
 			}),
+			bindings_loader.NewInput("rethinkdb.statechange", func() bindings.InputBinding {
+				return statechange.NewRethinkDBStateChangeBinding(logContrib)
+			}),
 		),
 		runtime.WithOutputBindings(
+			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
+				return apns.NewAPNS(logContrib)
+			}),
 			bindings_loader.NewOutput("aws.sqs", func() bindings.OutputBinding {
 				return sqs.NewAWSSQS(logContrib)
 			}),
@@ -369,6 +383,9 @@ func main() {
 			bindings_loader.NewOutput("influx", func() bindings.OutputBinding {
 				return influx.NewInflux(logContrib)
 			}),
+			bindings_loader.NewOutput("postgres", func() bindings.OutputBinding {
+				return postgres.NewPostgres(logContrib)
+			}),
 		),
 		runtime.WithHTTPMiddleware(
 			http_middleware_loader.New("uppercase", func(metadata middleware.Metadata) http_middleware.Middleware {
@@ -394,6 +411,10 @@ func main() {
 			}),
 			http_middleware_loader.New("bearer", func(metadata middleware.Metadata) http_middleware.Middleware {
 				handler, _ := bearer.NewBearerMiddleware(log).GetHandler(metadata)
+				return handler
+			}),
+			http_middleware_loader.New("opa", func(metadata middleware.Metadata) http_middleware.Middleware {
+				handler, _ := opa.NewMiddleware(log).GetHandler(metadata)
 				return handler
 			}),
 		),

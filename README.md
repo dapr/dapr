@@ -4,6 +4,8 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
+[![Scheduled e2e test](https://github.com/dapr/dapr/workflows/dapr-test/badge.svg?event=schedule)](https://github.com/dapr/dapr/actions?workflow=dapr-test)
+[![codecov](https://codecov.io/gh/dapr/dapr/branch/master/graph/badge.svg)](https://codecov.io/gh/dapr/dapr)
 [![Gitter](https://badges.gitter.im/Dapr/community.svg)](https://gitter.im/Dapr/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TODOs](https://badgen.net/https/api.tickgit.com/badgen/github.com/dapr/dapr)](https://www.tickgit.com/browse?repo=github.com/dapr/dapr)
@@ -15,7 +17,7 @@ Dapr codifies the *best practices* for building microservice applications into o
 
 __Note: Dapr is currently under community development in alpha phase. Dapr is not recommended for production workloads until the 1.0 stable release.__
 
-![Dapr overview](https://github.com/dapr/docs/blob/master/images/overview.png)
+![Dapr overview](./img/overview.png)
 
 ## Goals
 
@@ -56,7 +58,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Cross platform virtual actors
 * Secrets management to retrieve secrets from secure key vaults
 * Rate limiting
-* Built-in [Observability](https://github.com/dapr/docs/tree/master/concepts/observability) support
+* Built-in [Observability](https://docs.dapr.io/concepts/observability-concept/) support
 * Runs natively on Kubernetes using a dedicated Operator and CRDs
 * Supports all programming languages via HTTP and gRPC
 * Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
@@ -68,12 +70,12 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 
 ## Get Started using Dapr
 
-See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
+See [Getting Started](https://docs.dapr.io/getting-started/).
 
 ## Quickstarts and Samples
 
-* See the [quickstarts repository](https://github.com/dapr/quickstarts) for code examples that can help you get started with Dapr. 
-* Explore additional samples in the Dapr [samples repository](https://github.com/dapr/samples). 
+* See the [quickstarts repository](https://github.com/dapr/quickstarts) for code examples that can help you get started with Dapr.
+* Explore additional samples in the Dapr [samples repository](https://github.com/dapr/samples).
 
 ## Community
 We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls. Here is how to get involved:
@@ -84,7 +86,7 @@ Reach out with any questions you may have and we'll make sure to answer then as 
 
 | Platform  | Link        |
 |:----------|:------------|
-| 💬 Instant Message Chat (preferred) | https://gitter.im/Dapr/community 
+| 💬 Instant Message Chat (preferred) | https://gitter.im/Dapr/community
 | 📧 Mailing List | https://groups.google.com/forum/#!forum/dapr-dev
 | 🐤 Twitter | [@daprdev](https://twitter.com/daprdev)
 
@@ -99,7 +101,7 @@ Every two weeks we host a community call to showcase new features, review upcomi
 - Tuesday August 4th 10am Pacific Time (PST)
 - Tuesday August 18th 10am Pacific Time (PST)
 - Tuesday September 1st 10am Pacific Time (PST)
-- Tuesday September 15th 10am Pacific Time (PST)
+- Wednesday September 16th 10am Pacific Time (PST)
 - Tuesday September 29th 10am Pacific Time (PST)
 
 | Asset | Link        |
@@ -114,8 +116,8 @@ Every two weeks we host a community call to showcase new features, review upcomi
 |:-----------|:------------|
 | 📺 Channel 9 | Azure Friday - Learn All About Distributed Application Runtime Dapr: [Part 1](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-1) and [Part 2](https://channel9.msdn.com/Shows/Azure-Friday/Learn-all-about-Distributed-Application-Runtime-Dapr-Part-2)
 | 🌎 Conferences | - [Dapr, Rudr, OAM: Mark Russinovich presents next gen app development & deployment](https://www.youtube.com/watch?v=eJCu6a-x9uo)<br>- [Mark Russinovich presents "The Future of Cloud Native Applications with OAM and Dapr"](https://myignite.techcommunity.microsoft.com/sessions/82059)<br>- [Build 2020: Mark Fussell presents Dapr](https://channel9.msdn.com/Events/Build/2020/INT118)
-| 🎤 Hanselminutes | [Dapr Distributed Application Runtime with Mark Russinovich](https://hanselminutes.com/718/dapr-distributed-application-runtime-with-azure-cto-mark-russinovich) 
-| 💻 Azure Community Live | [Build microservice applications using DAPR with Mark Fussell ](https://www.youtube.com/watch?v=CgqI7nen-Ng) 
+| 🎤 Hanselminutes | [Dapr Distributed Application Runtime with Mark Russinovich](https://hanselminutes.com/718/dapr-distributed-application-runtime-with-azure-cto-mark-russinovich)
+| 💻 Azure Community Live | [Build microservice applications using DAPR with Mark Fussell ](https://www.youtube.com/watch?v=CgqI7nen-Ng)
 
 ### Contributing to Dapr
 
@@ -133,11 +135,11 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 |:-----|:------------|
 | [Dapr](https://github.com/dapr/dapr) | The main repository that you are currently in. Contains the Dapr runtime code and overview documentation.
 | [CLI](https://github.com/dapr/cli) | The Dapr CLI allows you to setup Dapr on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Dapr instances.
-| [Docs](https://github.com/dapr/docs) | The documentation repository for Dapr.
+| [Docs](https://docs.dapr.io) | The documentation for Dapr.
 | [Quickstarts](https://github.com/dapr/quickstarts) | This repository contains a series of simple code samples that highlight the main Dapr capabilities
 | [Samples](https://github.com/dapr/samples) | This repository holds community maintained samples for various Dapr use cases.
-| [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications. 
-| [Dashboard ](https://github.com/dapr/dashboard) | General purpose dashboard for Dapr 
+| [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications.
+| [Dashboard ](https://github.com/dapr/dashboard) | General purpose dashboard for Dapr
 | [Go-sdk](https://github.com/dapr/go-sdk) | Dapr SDK for Go
 | [Java-sdk](https://github.com/dapr/java-sdk) | Dapr SDK for Java
 | [JS-sdk](https://github.com/dapr/js-sdk) | Dapr SDK for JavaScript
@@ -149,5 +151,4 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 
 ## Code of Conduct
 
- This project has adopted the [Microsoft Open Source Code of conduct](https://opensource.microsoft.com/codeofconduct/).
- For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+Please refer to our [Dapr Community Code of Conduct](https://github.com/dapr/community/blob/master/CODE-OF-CONDUCT.md)
