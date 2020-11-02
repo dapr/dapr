@@ -66,15 +66,6 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-var httpOnCalleeSideTests = []struct {
-	in               string
-	remoteApp        string
-	appMethod        string
-	expectedResponse string
-}{
-	
-}
-
 var allowListsForServiceInvocationTests = []struct {
 	in                 string
 	remoteApp          string
