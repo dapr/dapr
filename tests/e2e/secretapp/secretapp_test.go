@@ -137,7 +137,7 @@ func generateTestCases() []testCase {
 			newResponse("", utils.SimpleKeyValue{unallowedSecret, ""}),
 			true,
 			403,
-			"PERMISSION_DENIED",
+			"ERR_PERMISSION_DENIED",
 		},
 		{
 			"nonexistent secret",
