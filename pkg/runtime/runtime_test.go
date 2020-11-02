@@ -1319,7 +1319,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1355,7 +1355,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1373,7 +1373,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		var cloudEvent pubsub.CloudEventsEnvelope
@@ -1395,7 +1395,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1413,7 +1413,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Error(t, err, "expected error on unknown status")
@@ -1431,7 +1431,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.NoError(t, err, "expected no error on empty status")
@@ -1449,7 +1449,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err, "expected no error on unknown status")
@@ -1464,7 +1464,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(nil, invokeError)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		expectedError := errors.Wrap(invokeError, "error from app channel while sending pub/sub event to app")
@@ -1483,7 +1483,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err, "expected error to be nil")
@@ -1605,7 +1605,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			defer rt.grpc.AppClient.Close()
 
 			// act
-			err = rt.publishMessageGRPC(testPubSubMessage)
+			err = rt.publishMessageGRPC(context.Background(), testPubSubMessage)
 
 			// assert
 			if tc.errorExpected {
