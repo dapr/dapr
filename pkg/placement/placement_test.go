@@ -34,11 +34,11 @@ func TestMain(m *testing.M) {
 
 	testRaftServer.StartRaft(nil)
 
-	for {
+	// Wait until test raft node become a leader.
+	for range time.Tick(200 * time.Millisecond) {
 		if testRaftServer.IsLeader() {
 			break
 		}
-		time.Sleep(200 * time.Millisecond)
 	}
 
 	retVal := m.Run()
@@ -82,6 +82,8 @@ func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_Repor
 }
 
 func TestMemberRegistration(t *testing.T) {
+	const testStreamSendLatency = 50 * time.Millisecond
+
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
@@ -109,7 +111,7 @@ func TestMemberRegistration(t *testing.T) {
 			assert.EqualValues(t, host.Entities, memberChange.host.Entities)
 			assert.Equal(t, 1, len(testServer.streamConns))
 
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(testStreamSendLatency):
 			assert.True(t, false, "no membership change")
 		}
 
@@ -124,7 +126,7 @@ func TestMemberRegistration(t *testing.T) {
 			assert.Equal(t, raft.MemberRemove, memberChange.cmdType)
 			assert.Equal(t, host.Name, memberChange.host.Name)
 
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(testStreamSendLatency):
 			require.True(t, false, "no membership change")
 		}
 
@@ -155,7 +157,7 @@ func TestMemberRegistration(t *testing.T) {
 			assert.EqualValues(t, host.Entities, memberChange.host.Entities)
 			assert.Equal(t, 1, len(testServer.streamConns))
 
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(testStreamSendLatency):
 			require.True(t, false, "no membership change")
 		}
 
@@ -169,7 +171,7 @@ func TestMemberRegistration(t *testing.T) {
 		case <-testServer.membershipCh:
 			require.True(t, false, "should not have any member change message because faulty host detector time will clean up")
 
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(testStreamSendLatency):
 			assert.Equal(t, 0, len(testServer.streamConns))
 		}
 	})

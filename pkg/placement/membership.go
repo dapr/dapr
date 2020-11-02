@@ -13,14 +13,14 @@ import (
 )
 
 const (
-	commandRetryInterval = 100 * time.Millisecond
+	commandRetryInterval = 20 * time.Millisecond
 	commandRetryMaxCount = 3
 )
 
 // MembershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) MembershipChangeWorker() {
-	faultHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
+	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
 	disseminateTimer := time.NewTicker(disseminateTimerInterval)
 
 	p.hostUpdateCount = 0
@@ -44,7 +44,7 @@ func (p *Service) MembershipChangeWorker() {
 				p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 			}
 
-		case t := <-faultHostDetectTimer.C:
+		case t := <-faultyHostDetectTimer.C:
 			// Each dapr runtime sends the heartbeat every one second and placement will update UpdatedAt timestamp.
 			// If UpdatedAt is outdated, we can mark the host as faulty node.
 			// This faulty host will be removed from membership in the next dissemination period.
@@ -100,7 +100,7 @@ func (p *Service) processRaftStateCommand(op hostMemberChange) {
 
 	case raft.TableDisseminate:
 		// TableDissminate will be triggered by disseminateTimer.
-		// This will disseminate the latest consisten hashing tables to Dapr runtime.
+		// This disseminates the latest consistent hashing tables to Dapr runtime.
 		if len(p.streamConns) > 0 {
 			log.Debugf("desseminate tables to runtimes. hostUpdateCount count: %d", p.hostUpdateCount)
 			p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
@@ -110,12 +110,15 @@ func (p *Service) processRaftStateCommand(op hostMemberChange) {
 }
 
 // performTablesUpdate updates the connected dapr runtimes using a 3 stage commit.
-// first it locks so no further dapr can be taken it then proceeds to update and
-// then unlock once all runtimes have been updated
+// It first locks so no further dapr can be taken it. Once placement table is locked
+// in runtime, it proceeds to update new table to Dapr runtimes and then unlock
+// once all runtimes have been updated.
 func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1pb.PlacementTables) {
 	p.disseminateLock.Lock()
 	defer p.disseminateLock.Unlock()
 
+	// TODO: error from disseminationOperation needs to be handle properly.
+	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	p.disseminateOperation(hosts, "lock", nil)
 	p.disseminateOperation(hosts, "update", newTable)
 	p.disseminateOperation(hosts, "unlock", nil)
