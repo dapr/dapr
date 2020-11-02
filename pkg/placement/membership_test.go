@@ -24,7 +24,7 @@ func cleanupStates() {
 	}
 }
 
-func TestMembershipChangeLoop(t *testing.T) {
+func TestMembershipChangeWorker(t *testing.T) {
 	testServer := NewPlacementService(testRaftServer)
 
 	setupEach := func(t *testing.T) {
@@ -32,7 +32,7 @@ func TestMembershipChangeLoop(t *testing.T) {
 		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members))
 
 		testServer.shutdownCh = make(chan struct{})
-		go testServer.MembershipChangeLoop()
+		go testServer.MembershipChangeWorker()
 
 		// act
 		for i := 0; i < 3; i++ {

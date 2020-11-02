@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
@@ -26,7 +27,21 @@ var log = logger.NewLogger("dapr.placement")
 type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer
 
 const (
+	// membershipChangeChSize is the channel size of membership change request from Dapr runtime.
+	// MembershipChangeWorker will process actor host member change request.
 	membershipChangeChSize = 100
+
+	// faultyHostDetectMaxDuration is the maximum duration when existing host is marked as faulty.
+	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
+	// it updates the last heartbeat time in UpdateAt of the FSM state. If Now - UpdatedAt exceeds
+	// faultyHostDetectMaxDuration, MembershipChangeWorker tries to remove faulty dapr runtime from
+	// membership.
+	faultyHostDetectMaxDuration = 3 * time.Second
+	// faultyHostDetectInterval is the interval to check the faulty member.
+	faultyHostDetectInterval = 500 * time.Millisecond
+
+	// flushTimerInterval is the interval to disseminate the latest consistent hashing table.
+	flushTimerInterval = 500 * time.Millisecond
 )
 
 type hostMemberChange struct {
@@ -36,24 +51,31 @@ type hostMemberChange struct {
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
+	// serverListener is the TCP listener for placement gRPC server.
 	serverListener net.Listener
-	grpcServer     *grpc.Server
-
-	raftNode *raft.Server
-
-	streamConns     []placementGRPCStream
+	// grpcServer is the gRPC server for placement service.
+	grpcServer *grpc.Server
+	// streamConns has the stream connections established between placement gRPC server and Dapr runtime.
+	streamConns []placementGRPCStream
+	// streamConnsLock is the lock for streamConns change.
 	streamConnsLock *sync.Mutex
 
-	membershipCh  chan hostMemberChange
-	dessemineLock *sync.Mutex
+	// raftNode is the raft server instance.
+	raftNode *raft.Server
 
+	// membershipCh is the channel to maintain Dapr runtime host membership update.
+	membershipCh chan hostMemberChange
+	// disseminateLock is the lock for hashing table dissemination.
+	disseminateLock *sync.Mutex
+
+	// shutdownCh is the channel to be used for the graceful shutdown.
 	shutdownCh chan struct{}
 }
 
 // NewPlacementService returns a new placement service.
 func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
-		dessemineLock:   &sync.Mutex{},
+		disseminateLock: &sync.Mutex{},
 		streamConns:     []placementGRPCStream{},
 		streamConnsLock: &sync.Mutex{},
 		membershipCh:    make(chan hostMemberChange, membershipChangeChSize),
@@ -134,8 +156,8 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 					host:    raft.DaprHostMember{Name: registeredMemberID},
 				}
 			} else {
-				// no actions for hashing table. instead, connectionMonitoring will check
-				// host updatedAt and if current - updatedAt > 2 seconds, remove hosts
+				// no actions for hashing table. Instead, MembershipChangeWorker will check
+				// host updatedAt and if now - updatedAt > faultyHostDetectMaxDuration, remove hosts.
 				log.Debugf("Stream connection is disconnected with the error: %v", err)
 			}
 

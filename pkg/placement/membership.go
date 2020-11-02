@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package placement
 
 import (
@@ -7,15 +12,9 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-const (
-	faultyHostDetectInterval    = 500 * time.Millisecond
-	faultyHostDetectMaxDuration = 3 * time.Second
-	flushTimerInterval          = 500 * time.Millisecond
-)
-
-// MembershipChangeLoop is the worker to change the state of membership
+// MembershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
-func (p *Service) MembershipChangeLoop() {
+func (p *Service) MembershipChangeWorker() {
 	faultHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
 	flushTimer := time.NewTicker(flushTimerInterval)
 	lastFlushTimestamp := time.Now().UTC()
@@ -79,7 +78,7 @@ func (p *Service) MembershipChangeLoop() {
 			}
 
 		case <-p.shutdownCh:
-			log.Debugf("Membership change loop is closing.")
+			log.Debugf("MembershipChangeWorker loop is closing.")
 			return
 		}
 	}
@@ -89,8 +88,8 @@ func (p *Service) MembershipChangeLoop() {
 // first it locks so no further dapr can be taken it then proceeds to update and
 // then unlock once all runtimes have been updated
 func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1pb.PlacementTables) {
-	p.dessemineLock.Lock()
-	defer p.dessemineLock.Unlock()
+	p.disseminateLock.Lock()
+	defer p.disseminateLock.Unlock()
 
 	p.disseminateOperation(hosts, "lock", nil)
 	p.disseminateOperation(hosts, "update", newTable)
