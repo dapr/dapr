@@ -8,11 +8,13 @@ package placement
 import (
 	"context"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -20,6 +22,8 @@ import (
 
 var testRaftServer *raft.Server
 
+// TestMain is executed only one time in the entire package to
+// start test raft server.
 func TestMain(m *testing.M) {
 	testRaftServer = raft.New("testnode", true, true, []raft.PeerInfo{
 		{
@@ -44,23 +48,46 @@ func TestMain(m *testing.M) {
 	os.Exit(retVal)
 }
 
-func TestMemberRegistration(t *testing.T) {
-	testServer := NewPlacementService(testRaftServer)
-
+func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) {
+	testServer := NewPlacementService(raftServer)
+	port, _ := freeport.GetFreePort()
 	go func() {
-		testServer.Run("60007", nil)
+		testServer.Run(strconv.Itoa(port), nil)
 	}()
+
+	cleanUpFn := func() {
+		testServer.Shutdown()
+	}
+
+	clientAddress := "127.0.0.1:" + strconv.Itoa(port)
+	return clientAddress, testServer, cleanUpFn
+}
+
+func newTestClient(serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient, error) {
+	conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+	if err != nil {
+		return nil, nil, err
+	}
+	client := v1pb.NewPlacementClient(conn)
+	stream, err := client.ReportDaprStatus(context.Background())
+	if err != nil {
+		conn.Close()
+		return nil, nil, err
+	}
+
+	return conn, stream, nil
+}
+
+func TestMemberRegistration(t *testing.T) {
+	clientAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
-		conn, err := grpc.Dial("127.0.0.1:60007", grpc.WithInsecure())
-		assert.NoError(t, err)
-		client := v1pb.NewPlacementClient(conn)
-		stream, err := client.ReportDaprStatus(context.Background())
+		conn, stream, err := newTestClient(clientAddress)
 		assert.NoError(t, err)
 
 		host := &v1pb.Host{
-			Name:     "127.0.0.1:60007",
+			Name:     "127.0.0.1:50102",
 			Entities: []string{"DogActor", "CatActor"},
 			Id:       "testAppID",
 			Load:     1, // Not used yet
@@ -80,10 +107,12 @@ func TestMemberRegistration(t *testing.T) {
 			assert.Equal(t, 1, len(testServer.streamConns))
 
 		case <-time.After(100 * time.Millisecond):
-			require.True(t, false, "no membership change")
+			assert.True(t, false, "no membership change")
 		}
 
 		// act
+		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
+		// in the next flush time window.
 		stream.CloseSend()
 
 		// assert
@@ -94,7 +123,6 @@ func TestMemberRegistration(t *testing.T) {
 
 		case <-time.After(100 * time.Millisecond):
 			require.True(t, false, "no membership change")
-			assert.Equal(t, 0, len(testServer.streamConns))
 		}
 
 		conn.Close()
@@ -102,21 +130,17 @@ func TestMemberRegistration(t *testing.T) {
 
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
-		conn, err := grpc.Dial("127.0.0.1:60007", grpc.WithInsecure())
-		assert.NoError(t, err)
-		client := v1pb.NewPlacementClient(conn)
-		stream, err := client.ReportDaprStatus(context.Background())
+		conn, stream, err := newTestClient(clientAddress)
 		assert.NoError(t, err)
 
+		// act
 		host := &v1pb.Host{
-			Name:     "127.0.0.1:60007",
+			Name:     "127.0.0.1:50103",
 			Entities: []string{"DogActor", "CatActor"},
 			Id:       "testAppID",
 			Load:     1, // Not used yet
 			// Port is redundant because Name should include port number
 		}
-
-		// act
 		stream.Send(host)
 
 		// assert
@@ -133,18 +157,19 @@ func TestMemberRegistration(t *testing.T) {
 		}
 
 		// act
+		// Close tcp connection before closing stream, which simulates the scenario
+		// where dapr runtime disconnects the connection from placement service unexpectedly.
 		conn.Close()
 
 		// assert
 		select {
 		case <-testServer.membershipCh:
-			require.True(t, false, "should not have any member change message")
+			require.True(t, false, "should not have any member change message because faulty host detector time will clean up")
 
 		case <-time.After(100 * time.Millisecond):
 			assert.Equal(t, 0, len(testServer.streamConns))
-			break
 		}
 	})
 
-	testServer.Shutdown()
+	cleanup()
 }

@@ -7,10 +7,13 @@ package raft
 
 import (
 	"io"
+	"strconv"
 	"sync"
 
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/hashicorp/go-msgpack/codec"
 	"github.com/hashicorp/raft"
+	"github.com/pkg/errors"
 )
 
 // CommandType is the type of raft command in log entry
@@ -49,6 +52,41 @@ func (c *FSM) State() *DaprHostMemberState {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
 	return c.state
+}
+
+// PlacementState returns the current placement tables.
+func (c *FSM) PlacementState() *v1pb.PlacementTables {
+	c.stateLock.RLock()
+	defer c.stateLock.RUnlock()
+
+	newTable := &v1pb.PlacementTables{
+		Version: strconv.FormatUint(c.state.TableGeneration, 10),
+		Entries: map[string]*v1pb.PlacementTable{},
+	}
+
+	entries := c.state.hashingTableMap
+	for k, v := range entries {
+		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
+		table := v1pb.PlacementTable{
+			Hosts:     hosts,
+			SortedSet: sortedSet,
+			TotalLoad: totalLoad,
+			LoadMap:   make(map[string]*v1pb.Host),
+		}
+
+		for lk, lv := range loadMap {
+			h := v1pb.Host{
+				Name: lv.Name,
+				Load: lv.Load,
+				Port: lv.Port,
+				Id:   lv.AppID,
+			}
+			table.LoadMap[lk] = &h
+		}
+		newTable.Entries[k] = &table
+	}
+
+	return newTable
 }
 
 func (c *FSM) upsertMember(cmdData []byte) (bool, error) {
@@ -92,6 +130,8 @@ func (c *FSM) Apply(log *raft.Log) interface{} {
 		updated, err = c.upsertMember(buf[1:])
 	case MemberRemove:
 		updated, err = c.removeMember(buf[1:])
+	default:
+		err = errors.New("unimplemented command")
 	}
 
 	if err != nil {

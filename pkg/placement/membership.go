@@ -1,7 +1,6 @@
 package placement
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -11,7 +10,7 @@ import (
 const (
 	faultyHostDetectInterval    = 500 * time.Millisecond
 	faultyHostDetectMaxDuration = 3 * time.Second
-	flushTimerInterval          = 1 * time.Second
+	flushTimerInterval          = 500 * time.Millisecond
 )
 
 // MembershipChangeLoop is the worker to change the state of membership
@@ -55,7 +54,7 @@ func (p *Service) MembershipChangeLoop() {
 				}
 
 				log.Debugf("desseminate tables to runtimes. request count: %d", hostUpdateCount)
-				p.performTablesUpdate(p.streamConns)
+				p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
 			}
 
 		case t := <-flushTimer.C:
@@ -89,40 +88,12 @@ func (p *Service) MembershipChangeLoop() {
 // performTablesUpdate updates the connected dapr runtimes using a 3 stage commit.
 // first it locks so no further dapr can be taken it then proceeds to update and
 // then unlock once all runtimes have been updated
-func (p *Service) performTablesUpdate(hosts []placementGRPCStream) {
+func (p *Service) performTablesUpdate(hosts []placementGRPCStream, newTable *v1pb.PlacementTables) {
 	p.dessemineLock.Lock()
 	defer p.dessemineLock.Unlock()
 
 	p.disseminateOperation(hosts, "lock", nil)
-
-	newTable := &v1pb.PlacementTables{
-		Version: strconv.FormatUint(p.raftNode.FSM().State().TableGeneration, 10),
-		Entries: map[string]*v1pb.PlacementTable{},
-	}
-
-	entries := p.raftNode.FSM().State().HashingTable()
-	for k, v := range entries {
-		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
-		table := v1pb.PlacementTable{
-			Hosts:     hosts,
-			SortedSet: sortedSet,
-			TotalLoad: totalLoad,
-			LoadMap:   make(map[string]*v1pb.Host),
-		}
-
-		for lk, lv := range loadMap {
-			h := v1pb.Host{
-				Name: lv.Name,
-				Load: lv.Load,
-				Port: lv.Port,
-				Id:   lv.AppID,
-			}
-			table.LoadMap[lk] = &h
-		}
-		newTable.Entries[k] = &table
-	}
 	p.disseminateOperation(hosts, "update", newTable)
-
 	p.disseminateOperation(hosts, "unlock", nil)
 }
 
@@ -137,6 +108,9 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 		err := s.Send(o)
 		if err != nil {
 			log.Errorf("error updating host on unlock operation: %s", err)
+			// TODO: the error should not be ignored. By handing error or retrying dissemination,
+			// this logic needs to be improved. Otherwise, the runtimes throwing the exeception
+			// will have the inconsistent hashing tables.
 			continue
 		}
 	}

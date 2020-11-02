@@ -107,7 +107,7 @@ func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusS
 			if registeredMemberID == "" {
 				registeredMemberID = req.Name
 				p.addRuntimeConnection(ctx, srv)
-				p.performTablesUpdate([]placementGRPCStream{srv})
+				p.performTablesUpdate([]placementGRPCStream{srv}, p.raftNode.FSM().PlacementState())
 				log.Debugf("Stream connection is establiched from %s", registeredMemberID)
 			}
 
