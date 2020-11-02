@@ -75,6 +75,16 @@ func (m *MockPlatform) GetAppUsage(appName string) (*AppUsage, error) {
 	return &AppUsage{}, args.Error(0)
 }
 
+func (m *MockPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
+	args := m.Called(appName)
+	return &AppUsage{}, args.Error(0)
+}
+
+func (m *MockPlatform) GetTotalRestarts(appName string) (int, error) {
+	args := m.Called(appName)
+	return 0, args.Error(0)
+}
+
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{
