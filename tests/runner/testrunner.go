@@ -34,12 +34,14 @@ type PlatformInterface interface {
 	Scale(name string, replicas int32) error
 	PortForwardToApp(appName string, targetPort ...int) ([]int, error)
 	GetAppUsage(appName string) (*AppUsage, error)
+	GetSidecarUsage(appName string) (*AppUsage, error)
+	GetTotalRestarts(appname string) (int, error)
 }
 
 // AppUsage holds the CPU and Memory information for the application.
 type AppUsage struct {
-	CPU    string
-	Memory string
+	CPUm     int64
+	MemoryMb float64
 }
 
 // TestRunner holds initial test apps and testing platform instance
