@@ -1,4 +1,3 @@
-
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -67,11 +66,11 @@ func TestMain(m *testing.M) {
 }
 
 var allowListsForServiceInvocationTests = []struct {
-	in                 string
-	remoteApp          string
-	appMethod          string
-	expectedResponse   string
-	calleeSide         string
+	in               string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+	calleeSide       string
 }{
 	{
 		"Test allow with callee side http",
@@ -122,7 +121,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			var url string;
+			var url string
 			if tt.calleeSide == "http" {
 				url = fmt.Sprintf("%s/tests/invoke_test", externalURL)
 			} else {
