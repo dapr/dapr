@@ -1,3 +1,4 @@
+// +build e2e
 
 // ------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.
@@ -93,7 +94,8 @@ var allowListsForServiceInvocationTests = []struct {
 		"Test deny with callee side http",
 		"allowlists-callee-http",
 		"opDeny",
-		"fail to invoke, id: allowlists-callee-http, err: rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
+		"rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
+		"http",
 	},
 	{
 		"Test allow with callee side grpc",
@@ -130,8 +132,15 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			resp, err := invokeTestApp(tt.calleeSide, externalURL, body, tt.appMethod)
-
+			var url string;
+			if tt.calleeSide == "http" {
+				url = fmt.Sprintf("%s/tests/invoke_test", externalURL)
+			} else {
+				url = fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			}
+			resp, err := utils.HTTPPost(
+				url,
+				body)
 			t.Log("checking err...")
 			require.NoError(t, err)
 
@@ -142,21 +151,4 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			require.Equal(t, tt.expectedResponse, appResp.Message)
 		})
 	}
-}
-
-func invokeTestApp(calleeSide string, externalURL string, body []byte, appMethod string) ([]byte, int, error){
-	var resp []byte
-	statusCode := http.StatusOK
-	var err error
-	if calleeSide == "http" {
-		resp, err = utils.HTTPPost(
-			fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
-	} else {
-		url := fmt.Sprintf("http://%s/%s", externalURL, appMethod)
-		resp, statusCode, err = utils.HTTPPostWithStatus(
-			url,
-			body)
-	}
-
-	return resp, statusCode, err
 }
