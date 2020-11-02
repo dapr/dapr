@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -23,8 +24,8 @@ import (
 
 const (
 	numHealthChecks = 60  // Number of times to check for endpoint health per app.
-	maxAppMemMb     = 300 // Maximum Mb for app memory allocation.
-	maxSidecarMemMb = 100 // Maximum Mb for sidecar memory allocation.
+	maxAppMemMb     = 800 // Maximum Mb for app memory allocation.
+	maxSidecarMemMb = 300 // Maximum Mb for sidecar memory allocation.
 )
 
 var tr *runner.TestRunner
@@ -107,6 +108,9 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 
+	// Let test run for 10 minutes triggering the timers and collect metrics.
+	time.Sleep(10 * time.Minute)
+
 	appUsage, err := tr.Platform.GetAppUsage("testapp")
 	require.NoError(t, err)
 
@@ -130,7 +134,7 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
-		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue))
+		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
 	}
 
 	require.True(t, appUsage.MemoryMb < maxAppMemMb)
