@@ -20,12 +20,17 @@ import (
 const appPort = 3000
 
 // kubernetes is the name of the secret store
-/* #nosec */
-const secretURL = "http://localhost:3500/v1.0/secrets/kubernetes/%s?metadata.namespace=dapr-tests"
+const (
+	secretStore      = "kubernetes"
+	nonexistentStore = "nonexistent"
+	/* #nosec */
+	secretURL = "http://localhost:3500/v1.0/secrets/%s/%s?metadata.namespace=dapr-tests"
+)
 
 // daprSecret represents a secret in Dapr.
 type daprSecret struct {
 	Key   string             `json:"key,omitempty"`
+	Store string             `json:"store,omitempty"`
 	Value *map[string]string `json:"value,omitempty"`
 }
 
@@ -38,15 +43,15 @@ type requestResponse struct {
 }
 
 // indexHandler is the handler for root path
-func indexHandler(w http.ResponseWriter, r *http.Request) {
+func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	log.Println("indexHandler is called")
 
 	w.WriteHeader(http.StatusOK)
 }
 
-func get(key string) (*map[string]string, int, error) {
+func get(key, store string) (*map[string]string, int, error) {
 	log.Printf("Processing get request for %s.", key)
-	url, err := createSecretURL(key)
+	url, err := createSecretURL(key, store)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
@@ -58,8 +63,8 @@ func get(key string) (*map[string]string, int, error) {
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
-
 	defer res.Body.Close()
+
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
@@ -67,10 +72,10 @@ func get(key string) (*map[string]string, int, error) {
 	if res.StatusCode != http.StatusOK {
 		log.Printf("Non 200 StatusCode: %d\n", res.StatusCode)
 
-		return nil, res.StatusCode, fmt.Errorf("Got err response for key %s from Dapr: %s", key, body)
+		return nil, res.StatusCode, fmt.Errorf("got err response for key %s from Dapr: %s", key, body)
 	}
 
-	log.Printf("Found state for key %s: %s", key, body)
+	log.Printf("Found secret for key %s: %s", key, body)
 
 	var state = map[string]string{}
 	if len(body) == 0 {
@@ -92,17 +97,18 @@ func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
 
 	var output = make([]daprSecret, 0, len(secrets))
 	for _, secret := range secrets {
-		value, statusCode, err := get(secret.Key)
-
+		value, sc, err := get(secret.Key, secret.Store)
 		if err != nil {
-			return nil, statusCode, err
+			return nil, sc, err
 		}
 
 		log.Printf("Result for get request for key %s: %v", secret.Key, value)
 		output = append(output, daprSecret{
 			Key:   secret.Key,
 			Value: value,
+			Store: secret.Store,
 		})
+		statusCode = sc
 	}
 
 	log.Printf("Result for get request for %d secrets: %v", len(secrets), output)
@@ -129,7 +135,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var res = requestResponse{}
 	var uri = r.URL.RequestURI()
 	var secrets []daprSecret
-	var statusCode = http.StatusOK
+	var statusCode int
 
 	res.StartTime = epoch()
 
@@ -158,8 +164,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(res)
 }
 
-func createSecretURL(key string) (string, error) {
-	url, err := url.Parse(fmt.Sprintf(secretURL, key))
+func createSecretURL(key, store string) (string, error) {
+	url, err := url.Parse(fmt.Sprintf(secretURL, store, key))
 	if err != nil {
 		return "", fmt.Errorf("could not parse %s: %s", secretURL, err.Error())
 	}

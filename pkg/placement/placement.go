@@ -11,241 +11,86 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/placement/monitoring"
+	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var log = logger.NewLogger("dapr.placement")
 
+type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer
+
+const (
+	// membershipChangeChSize is the channel size of membership change request from Dapr runtime.
+	// MembershipChangeWorker will process actor host member change request.
+	membershipChangeChSize = 100
+
+	// faultyHostDetectMaxDuration is the maximum duration when existing host is marked as faulty.
+	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
+	// it updates the last heartbeat time in UpdateAt of the FSM state. If Now - UpdatedAt exceeds
+	// faultyHostDetectMaxDuration, MembershipChangeWorker tries to remove faulty dapr runtime from
+	// membership.
+	faultyHostDetectMaxDuration = 3 * time.Second
+	// faultyHostDetectInterval is the interval to check the faulty member.
+	faultyHostDetectInterval = 500 * time.Millisecond
+
+	// disseminateTimerInterval is the interval to disseminate the latest consistent hashing table.
+	disseminateTimerInterval = 500 * time.Millisecond
+)
+
+type hostMemberChange struct {
+	cmdType raft.CommandType
+	host    raft.DaprHostMember
+}
+
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
-	generation        int
-	entriesLock       *sync.RWMutex
-	entries           map[string]*Consistent
-	hosts             []placementv1pb.Placement_ReportDaprStatusServer
-	hostsEntitiesLock *sync.RWMutex
-	hostsEntities     map[string][]string
-	hostsLock         *sync.Mutex
-	updateLock        *sync.Mutex
+	// serverListener is the TCP listener for placement gRPC server.
+	serverListener net.Listener
+	// grpcServer is the gRPC server for placement service.
+	grpcServer *grpc.Server
+	// streamConns has the stream connections established between placement gRPC server and Dapr runtime.
+	streamConns []placementGRPCStream
+	// streamConnsLock is the lock for streamConns change.
+	streamConnsLock *sync.Mutex
+
+	// raftNode is the raft server instance.
+	raftNode *raft.Server
+
+	// membershipCh is the channel to maintain Dapr runtime host membership update.
+	membershipCh chan hostMemberChange
+	// disseminateLock is the lock for hashing table dissemination.
+	disseminateLock *sync.Mutex
+	// hostUpdateCount represents how many dapr runtimes needs to change
+	// consistent hashing table. Only actor runtime's heartbeat will increase this.
+	hostUpdateCount int
+
+	// shutdownCh is the channel to be used for the graceful shutdown.
+	shutdownCh chan struct{}
 }
 
-type placementOptions struct {
-	incrementGeneration bool
-}
-
-// NewPlacementService returns a new placement service
-func NewPlacementService() *Service {
+// NewPlacementService returns a new placement service.
+func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
-		entriesLock:       &sync.RWMutex{},
-		entries:           make(map[string]*Consistent),
-		hostsEntitiesLock: &sync.RWMutex{},
-		hostsEntities:     make(map[string][]string),
-		hostsLock:         &sync.Mutex{},
-		updateLock:        &sync.Mutex{},
+		disseminateLock: &sync.Mutex{},
+		streamConns:     []placementGRPCStream{},
+		streamConnsLock: &sync.Mutex{},
+		membershipCh:    make(chan hostMemberChange, membershipChangeChSize),
+		raftNode:        raftNode,
+		shutdownCh:      make(chan struct{}),
 	}
 }
 
-// ReportDaprStatus gets a heartbeat report from different Dapr hosts
-func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
-	ctx := srv.Context()
-
-	var registeredMemberID string
-
-	for {
-		req, err := srv.Recv()
-		switch err {
-		case nil:
-			if registeredMemberID == "" {
-				registeredMemberID = req.Name
-				p.addHost(ctx, srv)
-				p.PerformTablesUpdate([]placementv1pb.Placement_ReportDaprStatusServer{srv},
-					placementOptions{incrementGeneration: false})
-				log.Debugf("New member is added: %s", registeredMemberID)
-				monitoring.RecordHostsCount(len(p.hosts))
-			}
-
-			p.ProcessHost(req)
-
-		default:
-			if registeredMemberID == "" {
-				log.Debug("stream is disconnected before member is added")
-				return nil
-			}
-
-			p.hostsLock.Lock()
-			p.RemoveHost(srv)
-
-			// TODO: Need the robust fail-over handling by the intermittent
-			// network outage to prevent from rebalancing actors.
-			p.ProcessRemovedHost(registeredMemberID)
-			p.hostsLock.Unlock()
-
-			if err == io.EOF {
-				log.Debugf("Member is removed gracefully: %s", registeredMemberID)
-			} else {
-				log.Debugf("Member is removed with error: %s, %v", registeredMemberID, err)
-			}
-
-			return nil
-		}
-	}
-}
-
-func (p *Service) addHost(ctx context.Context, srv placementv1pb.Placement_ReportDaprStatusServer) {
-	p.hostsLock.Lock()
-	defer p.hostsLock.Unlock()
-
-	p.hosts = append(p.hosts, srv)
-}
-
-// RemoveHost removes the host from the hosts list
-func (p *Service) RemoveHost(srv placementv1pb.Placement_ReportDaprStatusServer) {
-	for i := len(p.hosts) - 1; i >= 0; i-- {
-		if p.hosts[i] == srv {
-			p.hosts = append(p.hosts[:i], p.hosts[i+1:]...)
-		}
-	}
-}
-
-// PerformTablesUpdate updates the connected dapr runtimes using a 3 stage commit. first it locks so no further dapr can be taken
-// it then proceeds to update and then unlock once all runtimes have been updated
-func (p *Service) PerformTablesUpdate(hosts []placementv1pb.Placement_ReportDaprStatusServer,
-	options placementOptions) {
-	p.updateLock.Lock()
-	defer p.updateLock.Unlock()
-
-	if options.incrementGeneration {
-		p.generation++
-	}
-
-	o := placementv1pb.PlacementOrder{
-		Operation: "lock",
-	}
-
-	for _, host := range hosts {
-		err := host.Send(&o)
-		if err != nil {
-			log.Errorf("error updating host on lock operation: %s", err)
-			continue
-		}
-	}
-
-	v := fmt.Sprintf("%v", p.generation)
-
-	o.Operation = "update"
-	o.Tables = &placementv1pb.PlacementTables{
-		Version: v,
-		Entries: map[string]*placementv1pb.PlacementTable{},
-	}
-
-	for k, v := range p.entries {
-		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
-		table := placementv1pb.PlacementTable{
-			Hosts:     hosts,
-			SortedSet: sortedSet,
-			TotalLoad: totalLoad,
-			LoadMap:   make(map[string]*placementv1pb.Host),
-		}
-
-		for lk, lv := range loadMap {
-			h := placementv1pb.Host{
-				Name: lv.Name,
-				Load: lv.Load,
-				Port: lv.Port,
-				Id:   lv.AppID,
-			}
-			table.LoadMap[lk] = &h
-		}
-		o.Tables.Entries[k] = &table
-	}
-
-	for _, host := range hosts {
-		err := host.Send(&o)
-		if err != nil {
-			log.Errorf("error updating host on update operation: %s", err)
-			continue
-		}
-	}
-
-	o.Tables = nil
-	o.Operation = "unlock"
-
-	for _, host := range hosts {
-		err := host.Send(&o)
-		if err != nil {
-			log.Errorf("error updating host on unlock operation: %s", err)
-			continue
-		}
-	}
-}
-
-// ProcessRemovedHost removes a host from the hash table
-func (p *Service) ProcessRemovedHost(id string) {
-	updateRequired := false
-
-	var entities []string
-	func() {
-		p.hostsEntitiesLock.RLock()
-		defer p.hostsEntitiesLock.RUnlock()
-		entities = p.hostsEntities[id]
-		delete(p.hostsEntities, id)
-	}()
-
-	func() {
-		p.entriesLock.Lock()
-		defer p.entriesLock.Unlock()
-		for _, e := range entities {
-			if _, ok := p.entries[e]; ok {
-				p.entries[e].Remove(id)
-				updateRequired = true
-			}
-		}
-	}()
-
-	if updateRequired {
-		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
-	}
-}
-
-// ProcessHost updates the distributed has list based on a new host and its entities
-func (p *Service) ProcessHost(host *placementv1pb.Host) {
-	updateRequired := false
-
-	for _, e := range host.Entities {
-		p.entriesLock.Lock()
-
-		if _, ok := p.entries[e]; !ok {
-			p.entries[e] = NewConsistentHash()
-		}
-
-		exists := p.entries[e].Add(host.Name, host.Id, host.Port)
-		if !exists {
-			updateRequired = true
-			monitoring.RecordPerActorTypeReplicasCount(e, host.Name)
-		}
-
-		p.entriesLock.Unlock()
-	}
-
-	monitoring.RecordActorTypesCount(len(p.entries))
-	monitoring.RecordNonActorHostsCount(len(p.hosts) - len(p.entries))
-
-	if updateRequired {
-		p.PerformTablesUpdate(p.hosts, placementOptions{incrementGeneration: true})
-
-		p.hostsEntitiesLock.Lock()
-		p.hostsEntities[host.Name] = host.Entities
-		p.hostsEntitiesLock.Unlock()
-	}
-}
-
-// Run starts the placement service gRPC server
+// Run starts the placement service gRPC server.
 func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	var err error
+	p.serverListener, err = net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -254,10 +99,89 @@ func (p *Service) Run(port string, certChain *dapr_credentials.CertChain) {
 	if err != nil {
 		log.Fatalf("error creating gRPC options: %s", err)
 	}
-	s := grpc.NewServer(opts...)
-	placementv1pb.RegisterPlacementServer(s, p)
+	p.grpcServer = grpc.NewServer(opts...)
+	placementv1pb.RegisterPlacementServer(p.grpcServer, p)
 
-	if err := s.Serve(lis); err != nil {
+	if err := p.grpcServer.Serve(p.serverListener); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+}
+
+// Shutdown close all server connections.
+func (p *Service) Shutdown() {
+	if p.grpcServer != nil {
+		p.grpcServer.Stop()
+	}
+	p.serverListener.Close()
+}
+
+// ReportDaprStatus gets a heartbeat report from different Dapr hosts.
+func (p *Service) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error {
+	ctx := srv.Context()
+
+	registeredMemberID := ""
+
+	for {
+		if !p.raftNode.IsLeader() {
+			return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+		}
+
+		req, err := srv.Recv()
+		switch err {
+		case nil:
+			if registeredMemberID == "" {
+				registeredMemberID = req.Name
+				p.addRuntimeConnection(ctx, srv)
+				p.performTablesUpdate([]placementGRPCStream{srv}, p.raftNode.FSM().PlacementState())
+				log.Debugf("Stream connection is establiched from %s", registeredMemberID)
+			}
+
+			p.membershipCh <- hostMemberChange{
+				cmdType: raft.MemberUpsert,
+				host: raft.DaprHostMember{
+					Name:     req.Name,
+					AppID:    req.Id,
+					Entities: req.Entities,
+				},
+			}
+
+		default:
+			if registeredMemberID == "" {
+				log.Error("stream is disconnected before member is added")
+				return nil
+			}
+
+			p.deleteRuntimeConnection(srv)
+			if err == io.EOF {
+				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
+				p.membershipCh <- hostMemberChange{
+					cmdType: raft.MemberRemove,
+					host:    raft.DaprHostMember{Name: registeredMemberID},
+				}
+			} else {
+				// no actions for hashing table. Instead, MembershipChangeWorker will check
+				// host updatedAt and if now - updatedAt > faultyHostDetectMaxDuration, remove hosts.
+				log.Debugf("Stream connection is disconnected with the error: %v", err)
+			}
+
+			return nil
+		}
+	}
+}
+
+func (p *Service) addRuntimeConnection(ctx context.Context, conn placementGRPCStream) {
+	p.streamConnsLock.Lock()
+	p.streamConns = append(p.streamConns, conn)
+	p.streamConnsLock.Unlock()
+}
+
+func (p *Service) deleteRuntimeConnection(conn placementGRPCStream) {
+	p.streamConnsLock.Lock()
+	for i, c := range p.streamConns {
+		if c == conn {
+			p.streamConns = append(p.streamConns[:i], p.streamConns[i+1:]...)
+			break
+		}
+	}
+	p.streamConnsLock.Unlock()
 }

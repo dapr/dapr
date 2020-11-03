@@ -8,13 +8,16 @@
 E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorclientapp actorfeatures runtime runtime_init
 
 # PERFORMACE test app list
-PERF_TEST_APPS=tester service_invocation_http
+PERF_TEST_APPS=actorjava tester service_invocation_http
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
 
 # PERFORMANCE test app root directory
 PERF_TESTAPP_DIR=./tests/apps/perf
+
+# PERFORMANCE tests
+PERF_TESTS=actor_timer service_invocation_http
 
 KUBECTL=kubectl
 
@@ -88,7 +91,9 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-e2e-build-deploy-run: create-test-namespace setup-helm-init setup-test-env-redis setup-test-env-kafka build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka
+
+e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
@@ -122,6 +127,18 @@ test-e2e-all: check-e2e-env
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
 	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 2 -count=1 -v -tags=e2e ./tests/e2e/...
+
+
+define genPerfTestRun
+.PHONY: test-perf-$(1)
+test-perf-$(1): check-e2e-env
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
+endef
+
+# Generate perf app image build targets
+$(foreach ITEM,$(PERF_TESTS),$(eval $(call genPerfTestRun,$(ITEM))))
+
+TEST_PERF_TARGETS:=$(foreach ITEM,$(PERF_TESTS),test-perf-$(ITEM))
 
 # start all perf tests
 test-perf-all: check-e2e-env
@@ -164,10 +181,10 @@ setup-disable-mtls:
 
 # Apply default config yaml to turn tracing off for testing (tracing is enabled by default)
 setup-app-configurations:
-	$(KUBECTL) apply -f ./tests/config/dapr_telemetry_off_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_observability_test_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 # Apply component yaml for state, secrets, pubsub, and bindings
-setup-test-components:
+setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -185,3 +202,61 @@ setup-test-components:
 # Clean up test environment
 clean-test-env:
 	./tests/test-infra/clean_up.sh $(DAPR_TEST_NAMESPACE)
+
+# Setup kind
+setup-kind:
+	kind create cluster --config ./tests/config/kind.yaml --name kind
+	kubectl cluster-info --context kind-kind
+	# Setup registry
+	docker run -d --restart=always -p 5000:5000 --name kind-registry registry:2
+	# Connect the registry to the KinD network.
+	docker network connect "kind" kind-registry
+
+describe-kind-env:
+	@echo "\
+	export MINIKUBE_NODE_IP=`kubectl get nodes \
+	    -lkubernetes.io/hostname!=kind-control-plane \
+        -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'`\n\
+	export DAPR_REGISTRY=localhost:5000/dapr\n\
+	export DAPR_TEST_REGISTRY=localhost:5000/dapr\n\
+	export DAPR_TAG=dev\n\
+	export DAPR_NAMESPACE=dapr-tests"
+	
+
+delete-kind:
+	docker stop kind-registry && docker rm kind-registry || echo "Could not delete registry."
+	kind delete cluster --name kind
+
+ifeq ($(OS),Windows_NT) 
+    detected_OS := windows
+else
+    detected_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown' |  tr '[:upper:]' '[:lower:]')
+endif
+
+setup-minikube-darwin:
+	minikube start --memory=4g --cpus=4 --driver=hyperkit --kubernetes-version=v1.18.9
+	minikube addons enable metrics-server
+
+setup-minikube-windows:
+	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.9
+	minikube addons enable metrics-server
+
+setup-minikube-linux:
+	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.9
+	minikube addons enable metrics-server
+
+setup-minikube: setup-minikube-$(detected_OS)
+
+describe-minikube-env:
+	@echo "\
+	export DAPR_REGISTRY=docker.io/`docker-credential-desktop list | jq -r '\
+	. | to_entries[] | select(.key | contains("docker.io")) | last(.value)'`\n\
+	export DAPR_TAG=dev\n\
+	export DAPR_NAMESPACE=dapr-tests\n\
+	export DAPR_TEST_ENV=minikube\n\
+	export DAPR_TEST_REGISTRY=\n\
+	export MINIKUBE_NODE_IP="
+
+# Setup minikube
+delete-minikube:
+	minikube delete

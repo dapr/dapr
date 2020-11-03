@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: disable-telemetry
+  name: metricconfig
 spec:
-  tracing:
-    samplingRate: "0"
+  metric:
+    enabled: false

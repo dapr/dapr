@@ -186,17 +186,17 @@ func LoadStandaloneConfiguration(config string) (*Configuration, error) {
 		return nil, err
 	}
 
-	var conf Configuration
-	err = yaml.Unmarshal(b, &conf)
+	conf := LoadDefaultConfiguration()
+	err = yaml.Unmarshal(b, conf)
 	if err != nil {
 		return nil, err
 	}
-	err = sortAndValidateSecretsConfiguration(&conf)
+	err = sortAndValidateSecretsConfiguration(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return &conf, nil
+	return conf, nil
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
@@ -211,18 +211,18 @@ func LoadKubernetesConfiguration(config, namespace string, operatorClient operat
 	if resp.GetConfiguration() == nil {
 		return nil, errors.Errorf("configuration %s not found", config)
 	}
-	var conf Configuration
-	err = json.Unmarshal(resp.GetConfiguration(), &conf)
+	conf := LoadDefaultConfiguration()
+	err = json.Unmarshal(resp.GetConfiguration(), conf)
 	if err != nil {
 		return nil, err
 	}
 
-	err = sortAndValidateSecretsConfiguration(&conf)
+	err = sortAndValidateSecretsConfiguration(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return &conf, nil
+	return conf, nil
 }
 
 // Validate the secrets configuration and sort the allow and deny lists if present.

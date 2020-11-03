@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/placement"
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -66,7 +66,7 @@ type actorsRuntime struct {
 	appChannel          channel.AppChannel
 	store               state.Store
 	placementTableLock  *sync.RWMutex
-	placementTables     *placement.ConsistentHashTables
+	placementTables     *hashing.ConsistentHashTables
 	placementSignal     chan struct{}
 	placementBlock      bool
 	operationUpdateLock *sync.Mutex
@@ -113,7 +113,7 @@ func NewActors(
 		config:              config,
 		store:               stateStore,
 		placementTableLock:  &sync.RWMutex{},
-		placementTables:     &placement.ConsistentHashTables{Entries: make(map[string]*placement.Consistent)},
+		placementTables:     &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 		operationUpdateLock: &sync.Mutex{},
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
@@ -623,11 +623,11 @@ func (a *actorsRuntime) updatePlacements(in *placementv1pb.PlacementTables) {
 
 	if in.Version != a.placementTables.Version {
 		for k, v := range in.Entries {
-			loadMap := map[string]*placement.Host{}
+			loadMap := map[string]*hashing.Host{}
 			for lk, lv := range v.LoadMap {
-				loadMap[lk] = placement.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
+				loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
 			}
-			c := placement.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
+			c := hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
 			a.placementTables.Entries[k] = c
 		}
 
