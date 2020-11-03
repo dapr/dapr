@@ -71,8 +71,8 @@ func main() {
 func runTest(params TestParameters) ([]byte, error) {
 	var args []string
 	if len(params.Payload) > 0 {
-		args = []string{"load", "-json", "result.json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
-			"-t", params.TestDuration, "-payload", "'" + params.Payload + "'", params.TargetEndpoint}
+		args = []string{"load", "-json", "result.json", "-content-type", "application/json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
+			"-t", params.TestDuration, "-payload", params.Payload, params.TargetEndpoint}
 	} else {
 		args = []string{"load", "-json", "result.json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
 			"-t", params.TestDuration, "-payload-size", fmt.Sprint(params.PayloadSizeKB), params.TargetEndpoint}

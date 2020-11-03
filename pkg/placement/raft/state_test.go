@@ -47,7 +47,7 @@ func TestUpsertMember(t *testing.T) {
 
 	t.Run("add new actor member", func(t *testing.T) {
 		// act
-		s.upsertMember(&DaprHostMember{
+		updated := s.upsertMember(&DaprHostMember{
 			Name:     "127.0.0.1:8080",
 			AppID:    "FakeID",
 			Entities: []string{"actorTypeOne", "actorTypeTwo"},
@@ -56,11 +56,12 @@ func TestUpsertMember(t *testing.T) {
 		// assert
 		assert.Equal(t, 1, len(s.Members))
 		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.True(t, updated)
 	})
 
 	t.Run("add non actor member", func(t *testing.T) {
 		// act
-		s.upsertMember(&DaprHostMember{
+		updated := s.upsertMember(&DaprHostMember{
 			Name:     "127.0.0.1:8081",
 			AppID:    "FakeID_2",
 			Entities: []string{},
@@ -69,6 +70,17 @@ func TestUpsertMember(t *testing.T) {
 		// assert
 		assert.Equal(t, 2, len(s.Members))
 		assert.Equal(t, 2, len(s.hashingTableMap))
+		assert.False(t, updated)
+
+		// act
+		updated = s.upsertMember(&DaprHostMember{
+			Name:     "127.0.0.1:8081",
+			AppID:    "FakeID_2",
+			Entities: []string{},
+		})
+
+		// assert
+		assert.False(t, updated)
 	})
 
 	t.Run("update existing actor member", func(t *testing.T) {
@@ -86,10 +98,11 @@ func TestUpsertMember(t *testing.T) {
 		//
 		// this tries to update the existing actor members.
 		// it will delete empty consistent hashing table.
-		s.upsertMember(testMember)
+		updated := s.upsertMember(testMember)
 
 		// assert
 		assert.Equal(t, 2, len(s.Members))
+		assert.True(t, updated)
 		assert.Equal(t, 1, len(s.Members[testMember.Name].Entities))
 		assert.True(t, s.Members[testMember.Name].UpdatedAt.Sub(oldUpdatedAt) > 0,
 			"UpdatedAt must be updated old: %v, new: %v", oldUpdatedAt, s.Members[testMember.Name].UpdatedAt)
@@ -103,7 +116,7 @@ func TestRemoveMember(t *testing.T) {
 
 	t.Run("remove member and clean up consistent hashing table", func(t *testing.T) {
 		// act
-		s.upsertMember(&DaprHostMember{
+		updated := s.upsertMember(&DaprHostMember{
 			Name:     "127.0.0.1:8080",
 			AppID:    "FakeID",
 			Entities: []string{"actorTypeOne", "actorTypeTwo"},
@@ -111,15 +124,41 @@ func TestRemoveMember(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 1, len(s.Members))
+		assert.True(t, updated)
 		assert.Equal(t, 2, len(s.hashingTableMap))
 
 		// act
-		s.removeMember(&DaprHostMember{
+		updated = s.removeMember(&DaprHostMember{
 			Name: "127.0.0.1:8080",
 		})
 
 		// assert
 		assert.Equal(t, 0, len(s.Members))
+		assert.True(t, updated)
+		assert.Equal(t, 0, len(s.hashingTableMap))
+	})
+
+	t.Run("no table update required", func(t *testing.T) {
+		// act
+		updated := s.upsertMember(&DaprHostMember{
+			Name:     "127.0.0.1:8080",
+			AppID:    "FakeID",
+			Entities: []string{},
+		})
+
+		// assert
+		assert.Equal(t, 1, len(s.Members))
+		assert.False(t, updated)
+		assert.Equal(t, 0, len(s.hashingTableMap))
+
+		// act
+		updated = s.removeMember(&DaprHostMember{
+			Name: "127.0.0.1:8080",
+		})
+
+		// assert
+		assert.Equal(t, 0, len(s.Members))
+		assert.False(t, updated)
 		assert.Equal(t, 0, len(s.hashingTableMap))
 	})
 }
