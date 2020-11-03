@@ -243,19 +243,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	a.blockUntilAppIsReady()
-
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return errors.Wrap(err, "failed to determine host address")
 	}
-
-	err = a.createAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
-	}
-
-	a.loadAppConfiguration()
 
 	// Register and initialize name resolution for service discovery.
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
@@ -304,13 +295,14 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
-	a.blockUntilAppIsReady()
-	a.initDirectMessaging(a.nameResolver)
+
 	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
 	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.InternalGRPCPort)
+
+	a.blockUntilAppIsReady()
 
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
@@ -323,7 +315,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	a.loadAppConfiguration()
-
+	a.initDirectMessaging(a.nameResolver)
 	err = a.initActors()
 	if err != nil {
 		log.Warnf("failed to init actors: %s", err)
