@@ -472,8 +472,10 @@ func (m *AppManager) GetServiceDNSName() (string, error) {
 		return "", fmt.Errorf("number of replicas should be 1")
 	}
 
-	// kubedns will resolve it to <service_name>.namespace.svc.cluster.local
-	return fmt.Sprintf("%s.%s", m.app.AppName, m.namespace), nil
+	// <service_name>.namespace should be resolved to <service_name>.namespace.svc.cluster.local
+	// but in Windows it does not do so. https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#dns-limitations
+	// using full form.
+	return fmt.Sprintf("%s.%s.svc.cluster.local", m.app.AppName, m.namespace), nil
 }
 
 // SaveContainerLogs get container logs for all containers in the pod and saves them to disk
