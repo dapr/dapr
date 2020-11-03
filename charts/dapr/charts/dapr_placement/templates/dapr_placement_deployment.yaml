@@ -6,7 +6,11 @@ metadata:
   labels:
     app: dapr-placement
 spec:
+{{- if eq .Values.global.ha.enabled true }}
+  replicas: {{ .Values.global.ha.replicaCount }}
+{{- else }}
   replicas: {{ .Values.replicaCount }}
+{{- end }}
   selector:
     matchLabels:
       app: dapr-placement
@@ -26,6 +30,18 @@ spec:
         prometheus.io/path: "/"
 {{- end }}
     spec:
+{{- if eq .Values.global.ha.enabled true }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - dapr-sentry
+            topologyKey: "kubernetes.io/hostname"
+{{- end }}
       containers:
       - name: dapr-placement
         livenessProbe:
