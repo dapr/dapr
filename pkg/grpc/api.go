@@ -42,6 +42,7 @@ const (
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
+	channel.SetAppChannel
 	// DaprInternal Service methods
 	CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -593,4 +594,8 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	}
+}
+
+func (a *api) Set(appChannel channel.AppChannel) {
+	a.appChannel = appChannel
 }

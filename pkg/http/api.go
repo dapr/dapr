@@ -35,6 +35,7 @@ import (
 
 // API returns a list of HTTP endpoints for Dapr
 type API interface {
+	channel.SetAppChannel
 	APIEndpoints() []Endpoint
 	MarkStatusAsReady()
 }
@@ -1127,4 +1128,8 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 	}
 	// By default if a configuration is not defined for a secret store, return true.
 	return true
+}
+
+func (a *api) Set(appChannel channel.AppChannel) {
+	a.appChannel = appChannel
 }

@@ -304,16 +304,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.blockUntilAppIsReady()
 
-	a.hostAddress, err = utils.GetHostAddress()
-	if err != nil {
-		return errors.Wrap(err, "failed to determine host address")
-	}
-
 	err = a.createAppChannel()
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
-
+	a.daprHTTPAPI.Set(a.appChannel)
+	grpcAPI.Set(a.appChannel)
 	a.loadAppConfiguration()
 	a.initDirectMessaging(a.nameResolver)
 	err = a.initActors()
