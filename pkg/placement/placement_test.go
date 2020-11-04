@@ -30,7 +30,7 @@ func TestMain(m *testing.M) {
 			ID:      "testnode",
 			Address: "127.0.0.1:6060",
 		},
-	})
+	}, "")
 
 	testRaftServer.StartRaft(nil)
 

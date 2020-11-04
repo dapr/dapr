@@ -32,7 +32,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members))
 
 		testServer.shutdownCh = make(chan struct{})
-		go testServer.MembershipChangeWorker()
+		stopCh := make(chan struct{})
+		go testServer.membershipChangeWorker(stopCh)
 
 		// act
 		for i := 0; i < 3; i++ {

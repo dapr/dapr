@@ -6,6 +6,7 @@
 package placement
 
 import (
+	"sync"
 	"time"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -15,25 +16,119 @@ import (
 const (
 	commandRetryInterval = 20 * time.Millisecond
 	commandRetryMaxCount = 3
+
+	barrierWriteTimeout = 2 * time.Minute
 )
 
-// MembershipChangeWorker is the worker to change the state of membership
+// MonitorLeadership is used to monitor if we acquire or lose our role
+// as the leader in the Raft cluster. There is some work the leader is
+// expected to do, so we must react to changes
+//
+// reference: https://github.com/hashicorp/consul/blob/master/agent/consul/leader.go
+func (p *Service) MonitorLeadership() {
+	var weAreLeaderCh chan struct{}
+	var leaderLoop sync.WaitGroup
+
+	leaderCh := p.raftNode.Raft().LeaderCh()
+
+	for {
+		select {
+		case isLeader := <-leaderCh:
+			switch {
+			case isLeader:
+				if weAreLeaderCh != nil {
+					log.Error("attempted to start the leader loop while running")
+					continue
+				}
+
+				weAreLeaderCh = make(chan struct{})
+				leaderLoop.Add(1)
+				go func(ch chan struct{}) {
+					defer leaderLoop.Done()
+					p.leaderLoop(ch)
+				}(weAreLeaderCh)
+				log.Info("cluster leadership acquired")
+
+			default:
+				if weAreLeaderCh == nil {
+					log.Error("attempted to stop the leader loop while not running")
+					continue
+				}
+
+				log.Info("shutting down leader loop")
+				close(weAreLeaderCh)
+				leaderLoop.Wait()
+				weAreLeaderCh = nil
+				log.Info("cluster leadership lost")
+			}
+
+		case <-p.shutdownCh:
+			return
+		}
+	}
+}
+
+func (p *Service) leaderLoop(stopCh chan struct{}) {
+	for {
+		select {
+		case <-stopCh:
+			return
+		case <-p.shutdownCh:
+			return
+		default:
+		}
+
+		// Apply a raft barrier to ensure the FSM reflects all queued writes
+		// before becoming a leader.
+		barrier := p.raftNode.Raft().Barrier(barrierWriteTimeout)
+		if err := barrier.Error(); err != nil {
+			log.Error("failed to wait for barrier", "error", err)
+			continue
+		}
+
+		if err := p.establishLeadership(); err == nil {
+			break
+		}
+	}
+
+	p.membershipChangeWorker(stopCh)
+	p.revokeLeadership()
+}
+
+func (p *Service) establishLeadership() error {
+	if err := p.raftNode.JoinInitialCluster(); err != nil {
+		return err
+	}
+
+	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
+	p.hasLeadership = true
+
+	return nil
+}
+
+func (p *Service) revokeLeadership() {
+	p.hasLeadership = false
+
+	log.Info("Waiting until all connections are drained.")
+	p.connectionGroup.Wait()
+}
+
+// membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
-func (p *Service) MembershipChangeWorker() {
+func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
 	disseminateTimer := time.NewTicker(disseminateTimerInterval)
 
 	p.hostUpdateCount = 0
 
 	for {
-		if !p.raftNode.IsLeader() {
-			// TODO: use leader election channel instead of sleep
-			// <- p.raftNode.leaderCh
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
 		select {
+		case <-stopCh:
+			return
+
+		case <-p.shutdownCh:
+			return
+
 		case op := <-p.membershipCh:
 			p.processRaftStateCommand(op)
 
@@ -61,10 +156,6 @@ func (p *Service) MembershipChangeWorker() {
 					host:    raft.DaprHostMember{Name: v.Name},
 				}
 			}
-
-		case <-p.shutdownCh:
-			log.Debugf("MembershipChangeWorker loop is closing.")
-			return
 		}
 	}
 }
