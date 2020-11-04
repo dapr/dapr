@@ -56,6 +56,7 @@ type API interface {
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
+	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -567,6 +568,29 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.CreateTimerRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+		DueTime:   in.DueTime,
+		Period:    in.Period,
+		Callback:  in.Callback,
+	}
+
+	if in.Data != nil {
+		req.Data = in.Data
+	}
+	err := a.actor.CreateTimer(ctx, req)
+	return &empty.Empty{}, err
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
