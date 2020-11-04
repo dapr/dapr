@@ -36,6 +36,10 @@ type DaprHostMemberState struct {
 	// Members includes Dapr runtime hosts.
 	Members map[string]*DaprHostMember
 
+	// TableGeneration is the generation of hashingTableMap.
+	// This is increased whenever hashingTableMap is updated.
+	TableGeneration uint64
+
 	// hashingTableMap is the map for storing consistent hashing data
 	// per Actor types.
 	hashingTableMap map[string]*hashing.Consistent
@@ -44,6 +48,7 @@ type DaprHostMemberState struct {
 func newDaprHostMemberState() *DaprHostMemberState {
 	return &DaprHostMemberState{
 		Index:           0,
+		TableGeneration: 0,
 		Members:         map[string]*DaprHostMember{},
 		hashingTableMap: map[string]*hashing.Consistent{},
 	}
@@ -52,6 +57,7 @@ func newDaprHostMemberState() *DaprHostMemberState {
 func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	newMembers := &DaprHostMemberState{
 		Index:           s.Index,
+		TableGeneration: s.TableGeneration,
 		Members:         map[string]*DaprHostMember{},
 		hashingTableMap: nil,
 	}
@@ -93,39 +99,61 @@ func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 	}
 }
 
-func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) error {
+func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 	now := time.Now().UTC()
+	tableUpdateRequired := false
 
 	if m, ok := s.Members[host.Name]; ok {
 		if m.AppID == host.AppID && m.Name == host.Name && cmp.Equal(m.Entities, host.Entities) {
 			m.UpdatedAt = now
-			return nil
+			return false
 		}
-		s.removeHashingTables(m)
+		if s.isActorHost(m) {
+			s.removeHashingTables(m)
+			tableUpdateRequired = true
+		}
 	}
 
 	s.Members[host.Name] = &DaprHostMember{
-		Name:     host.Name,
-		AppID:    host.AppID,
-		Entities: make([]string, len(host.Entities)),
+		Name:  host.Name,
+		AppID: host.AppID,
 
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	copy(s.Members[host.Name].Entities, host.Entities)
 
-	s.updateHashingTables(s.Members[host.Name])
+	// update hashing table only when host reports actor types
+	if s.isActorHost(host) {
+		s.Members[host.Name].Entities = make([]string, len(host.Entities))
+		copy(s.Members[host.Name].Entities, host.Entities)
 
-	return nil
+		s.updateHashingTables(s.Members[host.Name])
+		tableUpdateRequired = true
+	}
+
+	if tableUpdateRequired {
+		s.TableGeneration++
+	}
+
+	return tableUpdateRequired
 }
 
-func (s *DaprHostMemberState) removeMember(host *DaprHostMember) error {
+func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
+	tableUpdateRequired := false
 	if m, ok := s.Members[host.Name]; ok {
-		s.removeHashingTables(m)
+		if s.isActorHost(m) {
+			s.removeHashingTables(m)
+			s.TableGeneration++
+			tableUpdateRequired = true
+		}
 		delete(s.Members, host.Name)
 	}
 
-	return nil
+	return tableUpdateRequired
+}
+
+func (s *DaprHostMemberState) isActorHost(host *DaprHostMember) bool {
+	return len(host.Entities) > 0
 }
 
 func (s *DaprHostMemberState) restoreHashingTables() {
