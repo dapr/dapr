@@ -62,6 +62,8 @@ func main() {
 		certChain = loadCertChains(cfg.certChainPath)
 	}
 
+	go apiServer.MembershipChangeWorker()
+
 	go apiServer.Run(strconv.Itoa(cfg.placementPort), certChain)
 	log.Infof("placement service started on port %d", cfg.placementPort)
 
