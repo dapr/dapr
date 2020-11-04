@@ -187,7 +187,7 @@ func (p *ActorPlacement) Start() {
 			err := p.clientStream.Send(&host)
 			if err != nil {
 				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
-				log.Warnf("failed to report status to placement service : %v", err)
+				log.Debugf("failed to report status to placement service : %v", err)
 			}
 
 			time.Sleep(statusReportHeartbeatInterval)
