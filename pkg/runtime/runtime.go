@@ -133,6 +133,8 @@ type DaprRuntime struct {
 	scopedPublishings      map[string][]string
 	allowedTopics          map[string][]string
 	daprHTTPAPI            http.API
+	grpcExternalAPI        grpc.API
+	grpcInternalAPI        grpc.API
 	operatorClient         operatorv1pb.OperatorClient
 	topicRoutes            map[string]TopicRoute
 
@@ -286,21 +288,25 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.populateSecretsConfiguration()
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
+
 	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
 	log.Infof("API gRPC server is running on port %v", a.runtimeConfig.APIGRPCPort)
+	a.grpcExternalAPI = grpcAPI
 
 	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
+	grpcAPI = a.getGRPCAPI()
 	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
 	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.InternalGRPCPort)
+	a.grpcInternalAPI = grpcAPI
 
 	a.blockUntilAppIsReady()
 
@@ -309,14 +315,16 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
-	grpcAPI.SetAppChannel(a.appChannel)
+	a.grpcExternalAPI.SetAppChannel(a.appChannel)
+	a.grpcInternalAPI.SetAppChannel(a.appChannel)
 
 	a.loadAppConfiguration()
 
 	a.initDirectMessaging(a.nameResolver)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
-	grpcAPI.SetDirectMessaging(a.directMessaging)
+	a.grpcExternalAPI.SetDirectMessaging(a.directMessaging)
+	a.grpcInternalAPI.SetDirectMessaging(a.directMessaging)
 
 	err = a.initActors()
 	if err != nil {
@@ -324,7 +332,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	a.daprHTTPAPI.SetActor(a.actor)
-	grpcAPI.SetActor(a.actor)
+	a.grpcExternalAPI.SetActor(a.actor)
+	a.grpcInternalAPI.SetActor(a.actor)
 
 	a.startSubscribing()
 	a.startReadingFromBinding()
