@@ -115,8 +115,8 @@ func (p *ActorPlacement) Start() {
 	}
 
 	// Establish receive channel to retrieve placement table update
+	p.shutdownWg.Add(1)
 	go func() {
-		p.shutdownWg.Add(1)
 		for !p.shutdown {
 			resp, err := p.clientStream.Recv()
 			if p.shutdown {
@@ -157,8 +157,8 @@ func (p *ActorPlacement) Start() {
 
 	// Send the current host status to placement to register the member and
 	// maintain the status of member by placement.
+	p.shutdownWg.Add(1)
 	go func() {
-		p.shutdownWg.Add(1)
 		for !p.shutdown {
 			// Wait until stream is reconnected.
 			if !p.serverConnAlive || p.clientStream == nil {
