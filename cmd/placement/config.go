@@ -63,7 +63,7 @@ func newConfig() *config {
 	flag.StringVar(&cfg.raftPeerString, "initial-cluster", cfg.raftPeerString, "raft cluster peers")
 	flag.BoolVar(&cfg.raftBootStrap, "cluster-bootstrap", cfg.raftBootStrap, "raft cluster bootstrap required")
 	flag.BoolVar(&cfg.raftInMemEnabled, "inmem-store-enabled", cfg.raftInMemEnabled, "Enable in-memory log and snapshot store")
-	flag.StringVar(&cfg.raftLogStorePath, "raft-logstore-path", cfg.raftLogStorePath, "raft log store path. (default log-<id>)")
+	flag.StringVar(&cfg.raftLogStorePath, "raft-logstore-path", cfg.raftLogStorePath, "raft log store path.")
 	flag.IntVar(&cfg.placementPort, "port", cfg.placementPort, "sets the gRPC port for the placement service")
 	flag.IntVar(&cfg.healthzPort, "healthz-port", cfg.healthzPort, "sets the HTTP port for the healthz server")
 	flag.StringVar(&cfg.certChainPath, "certchain", cfg.certChainPath, "Path to the credentials directory holding the cert chain")
@@ -79,6 +79,9 @@ func newConfig() *config {
 	flag.Parse()
 
 	cfg.raftPeers = parsePeersFromFlag(cfg.raftPeerString)
+	if cfg.raftLogStorePath != "" {
+		cfg.raftInMemEnabled = false
+	}
 
 	return &cfg
 }
