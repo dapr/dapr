@@ -39,8 +39,6 @@ import (
 const (
 	daprSeparator        = "||"
 	metadataPartitionKey = "partitionKey"
-
-	placementReconnectInterval = 500 * time.Millisecond
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")

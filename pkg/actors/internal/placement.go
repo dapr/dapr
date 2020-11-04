@@ -204,7 +204,7 @@ func (p *ActorPlacement) closeStream() {
 }
 
 func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusClient, *grpc.ClientConn) {
-	for range time.Tick(placementReconnectInterval) {
+	for {
 		if p.shutdown {
 			return nil, nil
 		}
@@ -213,6 +213,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthFn() {
+			time.Sleep(placementReconnectInterval)
 			continue
 		}
 
@@ -236,6 +237,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			log.Debugf("error connecting to placement service: %v", err)
 			conn.Close()
 			p.serverIndex = (p.serverIndex + 1) % len(p.serverAddr)
+			time.Sleep(placementReconnectInterval)
 			continue
 		}
 
@@ -248,8 +250,6 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 		log.Infof("established connection to placement service at %s", serverAddr)
 		return stream, conn
 	}
-
-	return nil, nil
 }
 
 func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
