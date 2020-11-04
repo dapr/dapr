@@ -36,30 +36,50 @@ const (
 // ActorPlacement maintains membership of actor instances and consistent hash
 // tables to discover the actor while interacting with Placement service.
 type ActorPlacement struct {
-	actorTypes      []string
-	appID           string
+	actorTypes []string
+	appID      string
+	// runtimeHostname is the address and port of the runtime
 	runtimeHostName string
 
-	serverAddr        []string
-	serverIndex       int
-	serverConnAlive   bool
-	serverConnectedCh chan bool
-	clientCert        *dapr_credentials.CertChain
-	clientConn        *grpc.ClientConn
-	clientStream      v1pb.Placement_ReportDaprStatusClient
+	// serverAddr is the list of placement addresses.
+	serverAddr []string
+	// serverIndex is the the current index of placement servers in serverAddr.
+	serverIndex int
+	// streamConnAlive is the status of stream connection alive.
+	streamConnAlive bool
+	// streamConnectedCh is the channel to notify that the stream
+	// between runtime and placement is connected.
+	streamConnectedCh chan bool
+	// clientCert is the workload certificate to connect placement.
+	clientCert *dapr_credentials.CertChain
+	// clientConn is the gRPC client connection.
+	clientConn *grpc.ClientConn
+	// clientStream is the client side stream.
+	clientStream v1pb.Placement_ReportDaprStatusClient
 
-	placementTables    *hashing.ConsistentHashTables
+	// placementTables is the consistent hashing table map to
+	// look up Dapr runtime host addressto locate actor.
+	placementTables *hashing.ConsistentHashTables
+	// placementTableLock is the lock for placementTables.
 	placementTableLock *sync.RWMutex
 
-	unblockSignal       chan struct{}
-	tableIsBlocked      bool
+	// unblockSignal is the channel to block table locking.
+	unblockSignal chan struct{}
+	// tableIsBlocked is the status of table lock.
+	tableIsBlocked bool
+	// operationUpdateLock is the lock for three stage commit.
 	operationUpdateLock *sync.Mutex
 
-	appHealthFn        func() bool
+	// appHealthFn is the user app health check callback.
+	appHealthFn func() bool
+	// afterTableUpdateFn is the process after the table updates,
+	// such as draining actors and resetting reminders.
 	afterTableUpdateFn func()
 
-	shutdown   bool
-	shutdownWg sync.WaitGroup
+	// shutdown is the flag when runtime is being shutdown.
+	shutdown bool
+	// shutdownConnLoop is the wait group to wait until all connection loop are done
+	shutdownConnLoop sync.WaitGroup
 }
 
 func addDNSResolverPrefix(addr []string) []string {
@@ -103,10 +123,10 @@ func NewActorPlacement(
 // Start connects placement service to register to membership and send heartbeat
 // to report the current member status periodically.
 func (p *ActorPlacement) Start() {
-	// serverConnAlive represents the status of stream channel. This must be changed in receiver loop.
+	// streamConnAlive represents the status of stream channel. This must be changed in receiver loop.
 	// This flag reduces the unnecessary request retry.
-	p.serverConnAlive = true
-	p.serverConnectedCh = make(chan bool)
+	p.streamConnAlive = true
+	p.streamConnectedCh = make(chan bool)
 	p.serverIndex = 0
 	p.shutdown = false
 	p.clientStream, p.clientConn = p.establishStreamConn()
@@ -115,8 +135,9 @@ func (p *ActorPlacement) Start() {
 	}
 
 	// Establish receive channel to retrieve placement table update
-	p.shutdownWg.Add(1)
+	p.shutdownConnLoop.Add(1)
 	go func() {
+		defer p.shutdownConnLoop.Done()
 		for !p.shutdown {
 			resp, err := p.clientStream.Recv()
 			if p.shutdown {
@@ -124,8 +145,8 @@ func (p *ActorPlacement) Start() {
 			}
 
 			// TODO: we may need to handle specific errors later.
-			if !p.serverConnAlive || err != nil {
-				p.serverConnAlive = false
+			if !p.streamConnAlive || err != nil {
+				p.streamConnAlive = false
 				p.closeStream()
 
 				s, ok := status.FromError(err)
@@ -142,8 +163,8 @@ func (p *ActorPlacement) Start() {
 				if newStream != nil {
 					p.clientConn = newConn
 					p.clientStream = newStream
-					p.serverConnectedCh <- true
-					p.serverConnAlive = true
+					p.streamConnectedCh <- true
+					p.streamConnAlive = true
 				}
 
 				continue
@@ -152,17 +173,20 @@ func (p *ActorPlacement) Start() {
 			diag.DefaultMonitoring.ActorStatusReported("recv")
 			p.onPlacementOrder(resp)
 		}
-		p.shutdownWg.Done()
 	}()
 
 	// Send the current host status to placement to register the member and
 	// maintain the status of member by placement.
-	p.shutdownWg.Add(1)
+	p.shutdownConnLoop.Add(1)
 	go func() {
+		defer p.shutdownConnLoop.Done()
 		for !p.shutdown {
 			// Wait until stream is reconnected.
-			if !p.serverConnAlive || p.clientStream == nil {
-				<-p.serverConnectedCh
+			if !p.streamConnAlive || p.clientStream == nil {
+				<-p.streamConnectedCh
+			}
+			if p.shutdown {
+				break
 			}
 
 			// appHealthFn is the health status of actor service application. This allows placement to update
@@ -192,15 +216,15 @@ func (p *ActorPlacement) Start() {
 
 			time.Sleep(statusReportHeartbeatInterval)
 		}
-		p.shutdownWg.Done()
 	}()
 }
 
 // Stop shutdowns server stream gracefully.
 func (p *ActorPlacement) Stop() {
 	p.shutdown = true
-	p.shutdownWg.Wait()
+	close(p.streamConnectedCh)
 	p.closeStream()
+	p.shutdownConnLoop.Wait()
 }
 
 func (p *ActorPlacement) closeStream() {
