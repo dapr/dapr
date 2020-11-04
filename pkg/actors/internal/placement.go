@@ -58,7 +58,8 @@ type ActorPlacement struct {
 	appHealthFn        func() bool
 	afterTableUpdateFn func()
 
-	shutdown bool
+	shutdown   bool
+	shutdownWg sync.WaitGroup
 }
 
 func addDNSResolverPrefix(addr []string) []string {
@@ -115,14 +116,15 @@ func (p *ActorPlacement) Start() {
 
 	// Establish receive channel to retrieve placement table update
 	go func() {
+		p.shutdownWg.Add(1)
 		for !p.shutdown {
 			resp, err := p.clientStream.Recv()
+			if p.shutdown {
+				break
+			}
 
 			// TODO: we may need to handle specific errors later.
 			if !p.serverConnAlive || err != nil {
-				log.Warnf("failed to receive placement table update from placement service: %v", err)
-				diag.DefaultMonitoring.ActorStatusReportFailed("recv", "status")
-
 				p.serverConnAlive = false
 				p.closeStream()
 
@@ -130,7 +132,11 @@ func (p *ActorPlacement) Start() {
 				// If the current server is not leader, then it will try to the next server.
 				if ok && s.Code() == codes.FailedPrecondition {
 					p.serverIndex = (p.serverIndex + 1) % len(p.serverAddr)
+				} else {
+					log.Debugf("disconnected from placement: %v", err)
 				}
+
+				diag.DefaultMonitoring.ActorStatusReportFailed("recv", "status")
 
 				newStream, newConn := p.establishStreamConn()
 				if newStream != nil {
@@ -146,11 +152,13 @@ func (p *ActorPlacement) Start() {
 			diag.DefaultMonitoring.ActorStatusReported("recv")
 			p.onPlacementOrder(resp)
 		}
+		p.shutdownWg.Done()
 	}()
 
 	// Send the current host status to placement to register the member and
 	// maintain the status of member by placement.
 	go func() {
+		p.shutdownWg.Add(1)
 		for !p.shutdown {
 			// Wait until stream is reconnected.
 			if !p.serverConnAlive || p.clientStream == nil {
@@ -184,12 +192,14 @@ func (p *ActorPlacement) Start() {
 
 			time.Sleep(statusReportHeartbeatInterval)
 		}
+		p.shutdownWg.Done()
 	}()
 }
 
 // Stop shutdowns server stream gracefully.
 func (p *ActorPlacement) Stop() {
 	p.shutdown = true
+	p.shutdownWg.Wait()
 	p.closeStream()
 }
 
@@ -204,11 +214,7 @@ func (p *ActorPlacement) closeStream() {
 }
 
 func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusClient, *grpc.ClientConn) {
-	for {
-		if p.shutdown {
-			return nil, nil
-		}
-
+	for !p.shutdown {
 		serverAddr := p.serverAddr[p.serverIndex]
 
 		// Stop reconnecting to placement until app is healthy.
@@ -250,6 +256,8 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 		log.Infof("established connection to placement service at %s", serverAddr)
 		return stream, conn
 	}
+
+	return nil, nil
 }
 
 func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {

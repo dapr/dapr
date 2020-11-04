@@ -1378,6 +1378,10 @@ func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component
 // Stop allows for a graceful shutdown of all runtime internal operations or components
 func (a *DaprRuntime) Stop() {
 	log.Info("stop command issued. Shutting down all operations")
+
+	if a.actor != nil {
+		a.actor.Stop()
+	}
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {

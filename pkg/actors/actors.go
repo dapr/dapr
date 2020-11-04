@@ -47,6 +47,7 @@ var log = logger.NewLogger("dapr.runtime.actor")
 type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
+	Stop()
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
@@ -1050,6 +1051,11 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 	}
 
 	return activeActorsCount
+}
+
+// Stop closes all network connections and resources used in actor runtime
+func (a *actorsRuntime) Stop() {
+	a.placement.Stop()
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters
