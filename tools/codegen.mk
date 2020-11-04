@@ -24,3 +24,15 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+protoc-gen-internals-v1:
+	protoc -I . ./dapr/proto/internals/v1/*.proto --go_out=plugins=grpc:.
+	cp -R ./github.com/dapr/dapr/pkg/proto/internals/v1/*.go ./pkg/proto/internals/v1
+
+protoc-gen-runtime-v1:
+	protoc -I . ./dapr/proto/runtime/v1/*.proto --go_out=plugins=grpc:.
+	cp -R ./github.com/dapr/dapr/pkg/proto/runtime/v1/*.go ./pkg/proto/runtime/v1
+
+# TODO(artursouza): Add auto-gen for other protos.
+
+protoc-gen: protoc-gen-runtime-v1 protoc-gen-internals-v1
