@@ -5,7 +5,7 @@ go 1.15
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
-	github.com/dapr/components-contrib v0.4.1-0.20201103180530-01f90bdbc825
+	github.com/dapr/components-contrib v0.4.1-0.20201104004137-763c856a442d
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
 	github.com/fasthttp/router v1.3.2
 	github.com/fsnotify/fsnotify v1.4.7
