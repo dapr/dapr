@@ -40,7 +40,7 @@ type Config struct {
 	ApplicationPort         int
 	ApplicationProtocol     Protocol
 	Mode                    modes.DaprMode
-	PlacementServiceAddress string
+	PlacementServiceAddress []string
 	GlobalConfig            string
 	AllowedOrigins          string
 	Standalone              config.StandaloneConfig
@@ -53,7 +53,11 @@ type Config struct {
 }
 
 // NewRuntimeConfig returns a new runtime config
-func NewRuntimeConfig(id, placementServiceAddress, controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string, httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int, enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool) *Config {
+func NewRuntimeConfig(
+	id string, placementServiceAddress []string,
+	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
+	httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int,
+	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool) *Config {
 	return &Config{
 		ID:                      id,
 		HTTPPort:                httpPort,

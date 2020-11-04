@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	global_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
@@ -114,9 +115,9 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	placementAddress := ""
+	placementAddress := []string{}
 	if *placementServiceHostAddress != "" {
-		placementAddress = *placementServiceHostAddress
+		placementAddress = parsePlacementAddr(*placementServiceHostAddress)
 	}
 
 	var concurrency int
@@ -177,4 +178,13 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Fatalf(err.Error())
 	}
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList), nil
+}
+
+func parsePlacementAddr(val string) []string {
+	parsed := []string{}
+	p := strings.Split(val, ",")
+	for _, addr := range p {
+		parsed = append(parsed, strings.TrimSpace(addr))
+	}
+	return parsed
 }

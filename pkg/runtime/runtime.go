@@ -1219,7 +1219,7 @@ func (a *DaprRuntime) initActors() error {
 	if err != nil {
 		return err
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, []string{a.runtimeConfig.PlacementServiceAddress}, a.appConfig.Entities,
+	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
 		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec)
 	err = act.Init()

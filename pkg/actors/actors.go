@@ -134,11 +134,17 @@ func (a *actorsRuntime) Init() error {
 	}
 
 	hostname := fmt.Sprintf("%s:%d", a.config.HostAddress, a.config.Port)
+
+	afterTableUpdateFn := func() {
+		a.drainRebalancedActors()
+		a.evaluateReminders()
+	}
+
 	a.placement = internal.NewActorPlacement(
 		a.config.PlacementServiceAddress, a.certChain,
 		a.config.AppID, hostname, a.config.HostedActorTypes,
 		func() bool { return a.appHealthy },
-		a.drainRebalancedActors, a.evaluateReminders)
+		afterTableUpdateFn)
 
 	go a.placement.Start()
 	a.startDeactivationTicker(a.config.ActorDeactivationScanInterval, a.config.ActorIdleTimeout)
