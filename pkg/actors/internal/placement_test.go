@@ -85,7 +85,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		// wait until placement connect to the second leader node
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[1], testPlacement.serverIndex)
-		assert.True(t, testSrv[testPlacement.serverIndex].recvCount >= 2)
+		assert.True(t, testSrv[testPlacement.serverIndex].recvCount >= 1)
 	})
 
 	// tear down
