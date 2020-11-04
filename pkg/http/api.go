@@ -35,9 +35,11 @@ import (
 
 // API returns a list of HTTP endpoints for Dapr
 type API interface {
-	channel.SetAppChannel
 	APIEndpoints() []Endpoint
 	MarkStatusAsReady()
+	SetAppChannel(appChannel channel.AppChannel)
+	SetDirectMessaging(directMessaging messaging.DirectMessaging)
+	SetActor(actor actors.Actors)
 }
 
 type api struct {
@@ -1130,6 +1132,14 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 	return true
 }
 
-func (a *api) Set(appChannel channel.AppChannel) {
+func (a *api) SetAppChannel(appChannel channel.AppChannel) {
 	a.appChannel = appChannel
+}
+
+func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
+	a.directMessaging = directMessaging
+}
+
+func (a *api) SetActor(actor actors.Actors) {
+	a.actor = actor
 }

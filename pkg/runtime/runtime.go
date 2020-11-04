@@ -308,14 +308,23 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	if err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
 	}
-	a.daprHTTPAPI.Set(a.appChannel)
-	grpcAPI.Set(a.appChannel)
+	a.daprHTTPAPI.SetAppChannel(a.appChannel)
+	grpcAPI.SetAppChannel(a.appChannel)
+
 	a.loadAppConfiguration()
+
 	a.initDirectMessaging(a.nameResolver)
+
+	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
+	grpcAPI.SetDirectMessaging(a.directMessaging)
+
 	err = a.initActors()
 	if err != nil {
 		log.Warnf("failed to init actors: %s", err)
 	}
+
+	a.daprHTTPAPI.SetActor(a.actor)
+	grpcAPI.SetActor(a.actor)
 
 	a.startSubscribing()
 	a.startReadingFromBinding()

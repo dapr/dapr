@@ -21,8 +21,3 @@ type AppChannel interface {
 	GetBaseAddress() string
 	InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 }
-
-// SetAppChannel sets app channel
-type SetAppChannel interface {
-	Set(chhanel AppChannel)
-}
