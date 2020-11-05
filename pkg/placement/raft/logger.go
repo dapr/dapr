@@ -32,7 +32,7 @@ func (l *loggerAdapter) Log(level hclog.Level, msg string, args ...interface{}) 
 	case hclog.Error:
 		logging.Debugf(msg, args)
 	default:
-		logging.Infof(msg, args)
+		logging.Debugf(msg, args)
 	}
 }
 
