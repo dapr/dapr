@@ -198,6 +198,7 @@ func (s *Server) bootstrapConfig(peers []PeerInfo) (*raft.Configuration, error) 
 		return raftConfig, nil
 	}
 
+	// return nil for raft.Configuration to use the existing log store files.
 	return nil, nil
 }
 
