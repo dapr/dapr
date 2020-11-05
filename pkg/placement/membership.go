@@ -119,7 +119,7 @@ func (p *Service) revokeLeadership() {
 	p.hasLeadership = false
 
 	log.Info("Waiting until all connections are drained.")
-	p.connectionGroup.Wait()
+	p.streamConnGroup.Wait()
 }
 
 // membershipChangeWorker is the worker to change the state of membership
@@ -208,6 +208,9 @@ func (p *Service) processRaftStateCommand(op hostMemberChange) {
 		// Disseminate hashing tables to Dapr runtimes only if number of current stream connections
 		// and number of FSM state members are matched. Otherwise, this will be retried until
 		// the numbers are matched.
+
+		// When placement node first gets the leadership, it needs to wait until runtimes connecting
+		// old leader connects to new leader. The numbers will be eventually consistent.
 		streamConns := len(p.streamConns)
 		targetConns := len(p.raftNode.FSM().State().Members)
 		if streamConns == targetConns {

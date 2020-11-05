@@ -67,14 +67,18 @@ type Service struct {
 	membershipCh chan hostMemberChange
 	// disseminateLock is the lock for hashing table dissemination.
 	disseminateLock *sync.Mutex
-	// memberUpdateCount represents how many dapr runtimes needs to change
+	// memberUpdateCount represents how many dapr runtimes needs to change.
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
 	memberUpdateCount int
 
+	// hasLeadership incidicates the state for leadership.
 	hasLeadership bool
 
-	connectionGroup sync.WaitGroup
+	// streamConnGroup represents the number of stream connections.
+	// This waits until all stream connnections are drained when revoking leadership.
+	streamConnGroup sync.WaitGroup
 
+	// shutdownLock is the mutex to lock shutdown
 	shutdownLock *sync.Mutex
 	// shutdownCh is the channel to be used for the graceful shutdown.
 	shutdownCh chan struct{}
@@ -142,8 +146,8 @@ TIMEOUT:
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error {
 	ctx := stream.Context()
 
-	p.connectionGroup.Add(1)
-	defer p.connectionGroup.Done()
+	p.streamConnGroup.Add(1)
+	defer p.streamConnGroup.Done()
 
 	registeredMemberID := ""
 
