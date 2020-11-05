@@ -219,7 +219,7 @@ func (p *ActorPlacement) Start() {
 	}()
 }
 
-// Stop shutdowns server stream gracefully.
+// Stop shuts down server stream gracefully.
 func (p *ActorPlacement) Stop() {
 	p.shutdown = true
 	close(p.streamConnectedCh)
