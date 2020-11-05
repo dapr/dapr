@@ -196,7 +196,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				}
 			} else {
 				// no actions for hashing table. Instead, MembershipChangeWorker will check
-				// host updatedAt and if now - updatedAt > faultyHostDetectMaxDuration, remove hosts.
+				// host updatedAt and if now - updatedAt > p.faultyHostDetectDuration, remove hosts.
 				log.Debugf("Stream connection is disconnected with the error: %v", err)
 			}
 
