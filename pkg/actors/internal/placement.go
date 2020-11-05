@@ -247,7 +247,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			continue
 		}
 
-		log.Infof("try to connect placement service: %s", serverAddr)
+		log.Infof("try to connect to placement service: %s", serverAddr)
 
 		opts, err := dapr_credentials.GetClientOptions(p.clientCert, security.TLSServerName)
 		if err != nil {
