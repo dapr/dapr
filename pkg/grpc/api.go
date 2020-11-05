@@ -26,9 +26,11 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -58,6 +60,7 @@ type API interface {
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
 	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
 	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error)
+	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
 }
 
 type api struct {
@@ -609,6 +612,32 @@ func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Unregist
 
 	err := a.actor.DeleteTimer(ctx, req)
 	return &empty.Empty{}, err
+}
+
+func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.InvokeActorResponse{}, err
+	}
+
+	req := invokev1.NewInvokeMethodRequest(fasthttp.MethodPut)
+	req.WithActor(in.ActorType, in.ActorId)
+	req.WithRawData(in.Data, "")
+
+	resp, err := a.actor.Call(context.TODO(), req)
+	if err != nil {
+		err := status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.InvokeActorResponse{}, err
+	}
+
+	_, body := resp.RawData()
+	return &runtimev1pb.InvokeActorResponse{
+		Data: &any.Any{
+			Value: body,
+		},
+	}, nil
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
