@@ -37,10 +37,9 @@ type Server struct {
 	id  string
 	fsm *FSM
 
-	bootstrap bool
-	inMem     bool
-	raftBind  string
-	peers     []PeerInfo
+	inMem    bool
+	raftBind string
+	peers    []PeerInfo
 
 	config        *raft.Config
 	raft          *raft.Raft
@@ -55,7 +54,7 @@ type Server struct {
 }
 
 // New creates Raft server node.
-func New(id string, inMem, bootstrap bool, peers []PeerInfo, logStorePath string) *Server {
+func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
 	raftBind := raftAddressForID(id, peers)
 	if raftBind == "" {
 		return nil
@@ -64,7 +63,6 @@ func New(id string, inMem, bootstrap bool, peers []PeerInfo, logStorePath string
 	return &Server{
 		id:               id,
 		inMem:            inMem,
-		bootstrap:        bootstrap,
 		raftBind:         raftBind,
 		peers:            peers,
 		raftLogStorePath: logStorePath,

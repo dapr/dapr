@@ -25,7 +25,7 @@ var testRaftServer *raft.Server
 // TestMain is executed only one time in the entire package to
 // start test raft server.
 func TestMain(m *testing.M) {
-	testRaftServer = raft.New("testnode", true, true, []raft.PeerInfo{
+	testRaftServer = raft.New("testnode", true, []raft.PeerInfo{
 		{
 			ID:      "testnode",
 			Address: "127.0.0.1:6060",
