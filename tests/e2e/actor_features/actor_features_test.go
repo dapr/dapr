@@ -366,6 +366,9 @@ func TestActorFeatures(t *testing.T) {
 			require.NoError(t, err)
 		}
 
+		// Add delay to make the test robust.
+		time.Sleep(5 * time.Second)
+
 		res, err = utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		require.NoError(t, err)
 
