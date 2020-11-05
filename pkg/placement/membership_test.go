@@ -26,6 +26,7 @@ func cleanupStates() {
 
 func TestMembershipChangeWorker(t *testing.T) {
 	testServer := NewPlacementService(testRaftServer)
+	testServer.hasLeadership = true
 
 	setupEach := func(t *testing.T) {
 		cleanupStates()
@@ -84,6 +85,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 func TestPerformTableUpdate(t *testing.T) {
 	const testClients = 10
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership = true
 
 	// arrange
 	clientConns := []*grpc.ClientConn{}

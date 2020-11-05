@@ -86,13 +86,20 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 			continue
 		}
 
-		if err := p.establishLeadership(); err == nil {
-			break
+		if !p.hasLeadership {
+			if err := p.establishLeadership(); err == nil {
+				log.Info("leader is established.")
+				// revoke leadership process must be done before leaderLoop() ends.
+				defer p.revokeLeadership()
+				goto WORKER
+			} else {
+				log.Warnf("fails to establish leadership: %v", err)
+			}
 		}
 	}
 
+WORKER:
 	p.membershipChangeWorker(stopCh)
-	p.revokeLeadership()
 }
 
 func (p *Service) establishLeadership() error {
@@ -119,7 +126,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
 	disseminateTimer := time.NewTicker(disseminateTimerInterval)
 
-	p.hostUpdateCount = 0
+	p.memberUpdateCount = 0
 
 	for {
 		select {
@@ -134,8 +141,8 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 
 		case <-disseminateTimer.C:
 			// check if there is actor runtime member change.
-			if p.hostUpdateCount > 0 {
-				log.Debugf("request dessemination. hostUpdateCount count: %d", p.hostUpdateCount)
+			if p.memberUpdateCount > 0 {
+				log.Debugf("request dessemination. memberUpdateCount count: %d", p.memberUpdateCount)
 				p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 			}
 
@@ -186,17 +193,21 @@ func (p *Service) processRaftStateCommand(op hostMemberChange) {
 		}
 
 		if updated {
-			p.hostUpdateCount++
+			p.memberUpdateCount++
 		}
 
 	case raft.TableDisseminate:
 		// TableDissminate will be triggered by disseminateTimer.
 		// This disseminates the latest consistent hashing tables to Dapr runtime.
-		if len(p.streamConns) > 0 {
-			log.Debugf("desseminate tables to runtimes. hostUpdateCount count: %d", p.hostUpdateCount)
+		streamConns := len(p.streamConns)
+		targetConns := len(p.raftNode.FSM().State().Members)
+		if streamConns == targetConns {
+			log.Debugf(
+				"desseminate tables to memers. memberUpdateCount: %d, streams: %d, targets: %d",
+				p.memberUpdateCount, streamConns, targetConns)
 			p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
+			p.memberUpdateCount = 0
 		}
-		p.hostUpdateCount = 0
 	}
 }
 

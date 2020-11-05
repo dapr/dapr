@@ -67,9 +67,9 @@ type Service struct {
 	membershipCh chan hostMemberChange
 	// disseminateLock is the lock for hashing table dissemination.
 	disseminateLock *sync.Mutex
-	// hostUpdateCount represents how many dapr runtimes needs to change
+	// memberUpdateCount represents how many dapr runtimes needs to change
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
-	hostUpdateCount int
+	memberUpdateCount int
 
 	hasLeadership bool
 
@@ -125,12 +125,13 @@ func (p *Service) Shutdown() {
 	for p.hasLeadership {
 		select {
 		case <-time.After(5 * time.Second):
-			break
+			goto TIMEOUT
 		default:
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
 
+TIMEOUT:
 	if p.grpcServer != nil {
 		p.grpcServer.Stop()
 	}

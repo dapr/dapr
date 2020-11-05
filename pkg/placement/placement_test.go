@@ -50,6 +50,7 @@ func TestMain(m *testing.M) {
 
 func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) {
 	testServer := NewPlacementService(raftServer)
+
 	port, _ := freeport.GetFreePort()
 	go func() {
 		testServer.Run(strconv.Itoa(port), nil)
@@ -59,6 +60,7 @@ func newTestPlacementServer(raftServer *raft.Server) (string, *Service, func()) 
 	time.Sleep(100 * time.Millisecond)
 
 	cleanUpFn := func() {
+		testServer.hasLeadership = false
 		testServer.Shutdown()
 	}
 
@@ -85,6 +87,7 @@ func TestMemberRegistration(t *testing.T) {
 	const testStreamSendLatency = 50 * time.Millisecond
 
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership = true
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
