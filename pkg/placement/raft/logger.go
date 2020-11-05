@@ -28,16 +28,16 @@ func (l *loggerAdapter) Log(level hclog.Level, msg string, args ...interface{}) 
 	case hclog.Debug:
 		logging.Debugf(msg, args)
 	case hclog.Warn:
-		logging.Warnf(msg, args)
+		logging.Debugf(msg, args)
 	case hclog.Error:
-		logging.Errorf(msg, args)
+		logging.Debugf(msg, args)
 	default:
-		logging.Infof(msg, args)
+		logging.Debugf(msg, args)
 	}
 }
 
 func (l *loggerAdapter) Trace(msg string, args ...interface{}) {
-	logging.Infof(msg, args)
+	logging.Debugf(msg, args)
 }
 
 func (l *loggerAdapter) Debug(msg string, args ...interface{}) {
@@ -45,15 +45,15 @@ func (l *loggerAdapter) Debug(msg string, args ...interface{}) {
 }
 
 func (l *loggerAdapter) Info(msg string, args ...interface{}) {
-	logging.Infof(msg, args)
+	logging.Debugf(msg, args)
 }
 
 func (l *loggerAdapter) Warn(msg string, args ...interface{}) {
-	logging.Warnf(msg, args)
+	logging.Debugf(msg, args)
 }
 
 func (l *loggerAdapter) Error(msg string, args ...interface{}) {
-	logging.Errorf(msg, args)
+	logging.Debugf(msg, args)
 }
 
 func (l *loggerAdapter) IsTrace() bool { return false }

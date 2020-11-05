@@ -43,25 +43,28 @@ type Server struct {
 	raftBind  string
 	peers     []PeerInfo
 
-	raft          *raft.Raft
-	raftStore     *raftboltdb.BoltStore
-	raftTransport *raft.NetworkTransport
-	raftInmem     *raft.InmemStore
+	config           *raft.Config
+	raft             *raft.Raft
+	raftStore        *raftboltdb.BoltStore
+	raftTransport    *raft.NetworkTransport
+	raftInmem        *raft.InmemStore
+	raftLogStorePath string
 }
 
 // New creates Raft server node.
-func New(id string, inMem, bootstrap bool, peers []PeerInfo) *Server {
+func New(id string, inMem, bootstrap bool, peers []PeerInfo, logStorePath string) *Server {
 	raftBind := raftAddressForID(id, peers)
 	if raftBind == "" {
 		return nil
 	}
 
 	return &Server{
-		id:        id,
-		inMem:     inMem,
-		bootstrap: bootstrap,
-		raftBind:  raftBind,
-		peers:     peers,
+		id:               id,
+		inMem:            inMem,
+		bootstrap:        bootstrap,
+		raftBind:         raftBind,
+		peers:            peers,
+		raftLogStorePath: logStorePath,
 	}
 }
 
@@ -131,7 +134,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	// Setup Raft configuration.
 	if config == nil {
 		// Set default configuration for raft
-		config = &raft.Config{
+		s.config = &raft.Config{
 			ProtocolVersion:    raft.ProtocolVersionMax,
 			HeartbeatTimeout:   1000 * time.Millisecond,
 			ElectionTimeout:    1000 * time.Millisecond,
@@ -143,11 +146,13 @@ func (s *Server) StartRaft(config *raft.Config) error {
 			SnapshotThreshold:  8192,
 			LeaderLeaseTimeout: 500 * time.Millisecond,
 		}
+	} else {
+		s.config = config
 	}
 
 	// Use LoggerAdapter to integrate with Dapr logger. Log level relies on placement log level.
-	config.Logger = newLoggerAdapter()
-	config.LocalID = raft.ServerID(s.id)
+	s.config.Logger = newLoggerAdapter()
+	s.config.LocalID = raft.ServerID(s.id)
 
 	// If we are in bootstrap or dev mode and the state is clean then we can
 	// bootstrap now.
@@ -161,32 +166,22 @@ func (s *Server) StartRaft(config *raft.Config) error {
 			configuration := raft.Configuration{
 				Servers: []raft.Server{
 					{
-						ID:      config.LocalID,
+						ID:      s.config.LocalID,
 						Address: trans.LocalAddr(),
 					},
 				},
 			}
 
-			if err = raft.BootstrapCluster(config,
+			if err = raft.BootstrapCluster(s.config,
 				logStore, stable, snap, trans, configuration); err != nil {
 				return err
 			}
 		}
 	}
 
-	s.raft, err = raft.NewRaft(config, s.fsm, logStore, stable, snap, trans)
+	s.raft, err = raft.NewRaft(s.config, s.fsm, logStore, stable, snap, trans)
 	if err != nil {
 		return err
-	}
-
-	// Join all peers to Raft cluster.
-	if s.bootstrap {
-		for _, peer := range s.peers {
-			if err = s.JoinCluster(peer.ID, peer.Address); err != nil {
-				logging.Errorf("failed to join %s, %s: %v", peer.ID, peer.Address, err)
-				continue
-			}
-		}
 	}
 
 	logging.Debug("Raft server is starting")
@@ -195,7 +190,10 @@ func (s *Server) StartRaft(config *raft.Config) error {
 }
 
 func (s *Server) raftStorePath() string {
-	return logStorePrefix + s.id
+	if s.raftLogStorePath == "" {
+		return logStorePrefix + s.id
+	}
+	return s.raftLogStorePath
 }
 
 // FSM returns fsm
@@ -203,9 +201,25 @@ func (s *Server) FSM() *FSM {
 	return s.fsm
 }
 
-// JoinCluster joins new node to Raft cluster. If node is already the member of cluster,
+// Raft returns raft node
+func (s *Server) Raft() *raft.Raft {
+	return s.raft
+}
+
+// JoinInitialCluster joins the initial peers into raft cluster.
+func (s *Server) JoinInitialCluster() (err error) {
+	for _, peer := range s.peers {
+		if err = s.joinCluster(peer.ID, peer.Address); err != nil {
+			logging.Errorf("failed to join %s, %s: %v", peer.ID, peer.Address, err)
+		}
+	}
+
+	return
+}
+
+// joinCluster joins new node to Raft cluster. If node is already the member of cluster,
 // it will skip to add node.
-func (s *Server) JoinCluster(nodeID, addr string) error {
+func (s *Server) joinCluster(nodeID, addr string) error {
 	if !s.IsLeader() {
 		return errors.New("only leader can join node to the cluster")
 	}
@@ -270,5 +284,14 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 
 // Shutdown shutdown raft server gracefully
 func (s *Server) Shutdown() {
-	s.raft.Shutdown()
+	if s.raft != nil {
+		s.raftTransport.Close()
+		future := s.raft.Shutdown()
+		if err := future.Error(); err != nil {
+			logging.Warnf("error shutting down raft: %v", err)
+		}
+		if s.raftStore != nil {
+			s.raftStore.Close()
+		}
+	}
 }

@@ -25,16 +25,19 @@ func cleanupStates() {
 }
 
 func TestMembershipChangeWorker(t *testing.T) {
-	testServer := NewPlacementService(testRaftServer)
+	serverAddress, testServer, cleanupServer := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership = true
 
+	var stopCh chan struct{}
 	setupEach := func(t *testing.T) {
 		cleanupStates()
 		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members))
 
-		testServer.shutdownCh = make(chan struct{})
-		go testServer.MembershipChangeWorker()
+		stopCh = make(chan struct{})
+		go testServer.membershipChangeWorker(stopCh)
+	}
 
-		// act
+	arrangeFakeMembers := func(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			testServer.membershipCh <- hostMemberChange{
 				cmdType: raft.MemberUpsert,
@@ -46,20 +49,70 @@ func TestMembershipChangeWorker(t *testing.T) {
 			}
 		}
 
-		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members))
-	}
-
-	tearDownEach := func() {
-		close(testServer.shutdownCh)
-	}
-
-	t.Run("flush timer", func(t *testing.T) {
-		// arrange
-		setupEach(t)
-
 		// wait until all host member change requests are flushed
 		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
 		assert.Equal(t, 3, len(testServer.raftNode.FSM().State().Members))
+	}
+
+	tearDownEach := func() {
+		close(stopCh)
+	}
+
+	t.Run("successful dissemination", func(t *testing.T) {
+		setupEach(t)
+		// arrange
+		conn, stream, err := newTestClient(serverAddress)
+		assert.NoError(t, err)
+		done := make(chan bool)
+		go func() {
+			for {
+				placementOrder, streamErr := stream.Recv()
+				if streamErr != nil {
+					return
+				}
+				if placementOrder.Operation != "unlock" {
+					done <- true
+				}
+			}
+		}()
+
+		host := &v1pb.Host{
+			Name:     "127.0.0.1:50100",
+			Entities: []string{"DogActor", "CatActor"},
+			Id:       "testAppID",
+			Load:     1, // Not used yet
+			// Port is redundant because Name should include port number
+		}
+
+		// act
+		assert.NoError(t, stream.Send(host))
+
+		<-done
+
+		assert.Equal(t, 1, len(testServer.streamConns))
+		assert.Equal(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
+		// wait until table dissemination.
+		time.Sleep(disseminateTimerInterval + 200*time.Millisecond)
+		assert.Equal(t, 0, testServer.memberUpdateCount, "flushed all member updates")
+
+		conn.Close()
+
+		tearDownEach()
+	})
+
+	t.Run("no dissemination if current connections and members are unmatched", func(t *testing.T) {
+		// arrange
+		setupEach(t)
+
+		// act
+		arrangeFakeMembers(t)
+
+		assert.Equal(t, 0, len(testServer.streamConns))
+		assert.NotEqual(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
+		// wait until table dissemination.
+		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
+		assert.Equal(t, 3, testServer.memberUpdateCount,
+			"memberUpdateCount must not be cleared if connection are unmatched.")
 
 		tearDownEach()
 	})
@@ -67,10 +120,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 	t.Run("faulty host detector", func(t *testing.T) {
 		// arrange
 		setupEach(t)
-
-		// wait until all host member change requests are flushed
-		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
-		assert.Equal(t, 3, len(testServer.raftNode.FSM().State().Members))
+		arrangeFakeMembers(t)
 
 		// faulty host detector removes all members if heartbeat does not happen
 		time.Sleep(faultyHostDetectMaxDuration + 10*time.Millisecond)
@@ -78,11 +128,14 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		tearDownEach()
 	})
+
+	cleanupServer()
 }
 
 func TestPerformTableUpdate(t *testing.T) {
 	const testClients = 10
 	serverAddress, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership = true
 
 	// arrange
 	clientConns := []*grpc.ClientConn{}
