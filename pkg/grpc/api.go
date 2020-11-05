@@ -57,6 +57,7 @@ type API interface {
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
 	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
+	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -590,6 +591,23 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 		req.Data = in.Data
 	}
 	err := a.actor.CreateTimer(ctx, req)
+	return &empty.Empty{}, err
+}
+
+func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.DeleteTimerRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+	}
+
+	err := a.actor.DeleteTimer(ctx, req)
 	return &empty.Empty{}, err
 }
 
