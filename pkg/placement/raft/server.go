@@ -157,6 +157,10 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	// If we are in bootstrap or dev mode and the state is clean then we can
 	// bootstrap now.
 	bootstrapConf, err := s.bootstrapConfig(s.peers)
+	if err != nil {
+		return err
+	}
+
 	if bootstrapConf != nil {
 		if err = raft.BootstrapCluster(
 			s.config, s.logStore, s.stableStore,
