@@ -72,7 +72,7 @@ type ActorPlacement struct {
 
 	// appHealthFn is the user app health check callback.
 	appHealthFn func() bool
-	// afterTableUpdateFn is the process after the table updates,
+	// afterTableUpdateFn is function for post processing done after table updates,
 	// such as draining actors and resetting reminders.
 	afterTableUpdateFn func()
 
