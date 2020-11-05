@@ -29,7 +29,7 @@ const (
 	unlockOperation = "unlock"
 	updateOperation = "update"
 
-	placementReconnectInterval    = 500 * time.Millisecond
+	placementReconnectInterval    = 100 * time.Millisecond
 	statusReportHeartbeatInterval = 1 * time.Second
 )
 
