@@ -135,8 +135,8 @@ jobs:
       - name: Run Perf test actor_timer in Java
         if: env.TEST_CLUSTER != ''
         env:
-          DAPR_PERF_QPS: 500
-          DAPR_PERF_CONNECTIONS: 16
+          DAPR_PERF_QPS: 220
+          DAPR_PERF_CONNECTIONS: 10
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD: "{}"
         run: make test-perf-actor_timer
