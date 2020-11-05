@@ -994,6 +994,23 @@ func TestUnregisterActorTimer(t *testing.T) {
 	})
 }
 
+func TestInvokeActor(t *testing.T) {
+	t.Run("actors not initialized", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		server := startDaprAPIServer(port, &api{
+			id: "fakeAPI",
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		_, err := client.InvokeActor(context.TODO(), &runtimev1pb.InvokeActorRequest{})
+		assert.Equal(t, codes.Unimplemented, status.Code(err))
+	})
+}
+
 func TestDeleteState(t *testing.T) {
 	fakeStore := &daprt.MockStateStore{}
 	fakeStore.On("Delete", mock.MatchedBy(func(req *state.DeleteRequest) bool {
