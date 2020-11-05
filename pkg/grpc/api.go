@@ -626,7 +626,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 
 	resp, err := a.actor.Call(context.TODO(), req)
 	if err != nil {
-		err := status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.InvokeActorResponse{}, err
 	}
