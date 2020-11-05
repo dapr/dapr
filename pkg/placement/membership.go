@@ -69,7 +69,10 @@ func (p *Service) MonitorLeadership() {
 }
 
 func (p *Service) leaderLoop(stopCh chan struct{}) {
+	// This loop is to ensure the FSM reflects all queued writes by applying Barrier
+	// and completes leadership establishment before becoming a leader.
 	for {
+		// for earlier stop
 		select {
 		case <-stopCh:
 			return
@@ -78,8 +81,6 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 		default:
 		}
 
-		// Apply a raft barrier to ensure the FSM reflects all queued writes
-		// before becoming a leader.
 		barrier := p.raftNode.Raft().Barrier(barrierWriteTimeout)
 		if err := barrier.Error(); err != nil {
 			log.Error("failed to wait for barrier", "error", err)
@@ -103,6 +104,7 @@ WORKER:
 }
 
 func (p *Service) establishLeadership() error {
+	// Ensure that all intiail peers joins the cluster
 	if err := p.raftNode.JoinInitialCluster(); err != nil {
 		return err
 	}
@@ -131,9 +133,13 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 	for {
 		select {
 		case <-stopCh:
+			faultyHostDetectTimer.Stop()
+			disseminateTimer.Stop()
 			return
 
 		case <-p.shutdownCh:
+			faultyHostDetectTimer.Stop()
+			disseminateTimer.Stop()
 			return
 
 		case op := <-p.membershipCh:
@@ -155,8 +161,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
 					continue
 				}
-
-				log.Debugf("try to remove hosts: %s", v.Name)
+				log.Debugf("try to remove outdated hosts: %s, elasped: %d ms", v.Name, t.Sub(v.UpdatedAt).Milliseconds())
 
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
@@ -199,6 +204,10 @@ func (p *Service) processRaftStateCommand(op hostMemberChange) {
 	case raft.TableDisseminate:
 		// TableDissminate will be triggered by disseminateTimer.
 		// This disseminates the latest consistent hashing tables to Dapr runtime.
+
+		// Disseminate hashing tables to Dapr runtimes only if number of current stream connections
+		// and number of FSM state members are matched. Otherwise, this will be retried until
+		// the numbers are matched.
 		streamConns := len(p.streamConns)
 		targetConns := len(p.raftNode.FSM().State().Members)
 		if streamConns == targetConns {

@@ -36,7 +36,7 @@ const (
 	// it updates the last heartbeat time in UpdateAt of the FSM state. If Now - UpdatedAt exceeds
 	// faultyHostDetectMaxDuration, MembershipChangeWorker tries to remove faulty dapr runtime from
 	// membership.
-	faultyHostDetectMaxDuration = 3 * time.Second
+	faultyHostDetectMaxDuration = 4 * time.Second
 	// faultyHostDetectInterval is the interval to check the faulty member.
 	faultyHostDetectInterval = 500 * time.Millisecond
 
