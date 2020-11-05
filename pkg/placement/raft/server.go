@@ -44,6 +44,7 @@ type Server struct {
 	peers     []PeerInfo
 
 	raft          *raft.Raft
+	raftLayer     *RaftSecureLayer
 	raftStore     *raftboltdb.BoltStore
 	raftTransport *raft.NetworkTransport
 	raftInmem     *raft.InmemStore
@@ -85,11 +86,23 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		return err
 	}
 
-	trans, err := raft.NewTCPTransport(s.raftBind, addr, 3, 10*time.Second, os.Stderr)
+	// Create logger adapter to integrate with Dapr Logger
+	loggerAdapter := newLoggerAdapter()
+
+	s.raftLayer, err = NewRaftSecureLayer(s.raftBind, addr, nil)
 	if err != nil {
 		return err
 	}
 
+	// Create a transport layer.
+	transConfig := &raft.NetworkTransportConfig{
+		Stream:  s.raftLayer,
+		MaxPool: 3,
+		Timeout: 10 * time.Second,
+		Logger:  loggerAdapter,
+	}
+
+	trans := raft.NewNetworkTransportWithConfig(transConfig)
 	s.raftTransport = trans
 
 	// Build an all in-memory setup for dev mode, otherwise prepare a full
@@ -145,8 +158,8 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		}
 	}
 
-	// Use LoggerAdapter to integrate with Dapr logger. Log level relies on placement log level.
-	config.Logger = newLoggerAdapter()
+	// Use LoggerAdapter to integrate with Dapr logger.
+	config.Logger = loggerAdapter
 	config.LocalID = raft.ServerID(s.id)
 
 	// If we are in bootstrap or dev mode and the state is clean then we can
