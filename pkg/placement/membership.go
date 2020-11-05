@@ -161,7 +161,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
 					continue
 				}
-				log.Debugf("try to remove outdated hosts: %s, elasped: %d ms", v.Name, t.Sub(v.UpdatedAt).Milliseconds())
+				log.Debugf("try to remove outdated hosts: %s, elapsed: %d ms", v.Name, t.Sub(v.UpdatedAt).Milliseconds())
 
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
