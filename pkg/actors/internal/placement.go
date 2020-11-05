@@ -277,7 +277,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			goto NEXT_SERVER
 		}
 
-		log.Infof("established connection to placement service at %s", serverAddr)
+		log.Infof("established connection to placement service at %q", serverAddr)
 		return stream, conn
 	}
 
