@@ -7,6 +7,11 @@ name: dapr-release-notes
 
 on:
   workflow_dispatch:
+    inputs:
+      milestone_regex_suffix:
+        description: 'Suffix regex to project name'
+        required: false
+        default: '' # on empty gets appended with Milestone
 jobs:
   build:
     name: Generate release notes
@@ -23,6 +28,7 @@ jobs:
       - name: Commit and push to branch
         env:
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          MILESTONE_REGEX_SUFFIX: ${{ github.event.inputs.milestone_regex_suffix }}
           COMMIT_MSG: |
             Generating Dapr release notes.
             skip-checks: true
