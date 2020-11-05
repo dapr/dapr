@@ -63,7 +63,7 @@ type ActorPlacement struct {
 	// placementTableLock is the lock for placementTables.
 	placementTableLock *sync.RWMutex
 
-	// unblockSignal is the channel to block table locking.
+	// unblockSignal is the channel to unblock table locking.
 	unblockSignal chan struct{}
 	// tableIsBlocked is the status of table lock.
 	tableIsBlocked bool
