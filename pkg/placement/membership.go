@@ -97,6 +97,9 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 }
 
 func (p *Service) establishLeadership() {
+	// Give more time to let each runtime to find the leader and connect to the leader.
+	p.faultyHostDetectDuration = faultyHostDetectInitialDuration
+
 	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
 	p.hasLeadership = true
 }
@@ -144,7 +147,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			// This faulty host will be removed from membership in the next dissemination period.
 			m := p.raftNode.FSM().State().Members
 			for _, v := range m {
-				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
+				if t.Sub(v.UpdatedAt) <= p.faultyHostDetectDuration {
 					continue
 				}
 				log.Debugf("try to remove outdated hosts: %s, elapsed: %d ms", v.Name, t.Sub(v.UpdatedAt).Milliseconds())
@@ -205,6 +208,9 @@ func (p *Service) processRaftStateCommand(op hostMemberChange) {
 				p.memberUpdateCount, streamConns, targetConns)
 			p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
 			p.memberUpdateCount = 0
+
+			// set faultyHostDetectDuration to the default duration.
+			p.faultyHostDetectDuration = faultyHostDetectDefaultDuration
 		}
 	}
 }
