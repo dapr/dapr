@@ -34,8 +34,7 @@ func (p *Service) MonitorLeadership() {
 	for {
 		select {
 		case isLeader := <-leaderCh:
-			switch {
-			case isLeader:
+			if isLeader {
 				if weAreLeaderCh != nil {
 					log.Error("attempted to start the leader loop while running")
 					continue
@@ -48,8 +47,7 @@ func (p *Service) MonitorLeadership() {
 					p.leaderLoop(ch)
 				}(weAreLeaderCh)
 				log.Info("cluster leadership acquired")
-
-			default:
+			} else {
 				if weAreLeaderCh == nil {
 					log.Error("attempted to stop the leader loop while not running")
 					continue
@@ -71,7 +69,7 @@ func (p *Service) MonitorLeadership() {
 func (p *Service) leaderLoop(stopCh chan struct{}) {
 	// This loop is to ensure the FSM reflects all queued writes by applying Barrier
 	// and completes leadership establishment before becoming a leader.
-	for {
+	for !p.hasLeadership {
 		// for earlier stop
 		select {
 		case <-stopCh:
@@ -88,31 +86,19 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 		}
 
 		if !p.hasLeadership {
-			if err := p.establishLeadership(); err == nil {
-				log.Info("leader is established.")
-				// revoke leadership process must be done before leaderLoop() ends.
-				defer p.revokeLeadership()
-				goto WORKER
-			} else {
-				log.Warnf("fails to establish leadership: %v", err)
-			}
+			p.establishLeadership()
+			log.Info("leader is established.")
+			// revoke leadership process must be done before leaderLoop() ends.
+			defer p.revokeLeadership()
 		}
 	}
 
-WORKER:
 	p.membershipChangeWorker(stopCh)
 }
 
-func (p *Service) establishLeadership() error {
-	// Ensure that all intiail peers joins the cluster
-	if err := p.raftNode.JoinInitialCluster(); err != nil {
-		return err
-	}
-
+func (p *Service) establishLeadership() {
 	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
 	p.hasLeadership = true
-
-	return nil
 }
 
 func (p *Service) revokeLeadership() {

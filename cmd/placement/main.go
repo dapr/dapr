@@ -49,7 +49,7 @@ func main() {
 	}
 
 	// Start Raft cluster.
-	raftServer := raft.New(cfg.raftID, cfg.raftInMemEnabled, cfg.raftBootStrap, cfg.raftPeers, cfg.raftLogStorePath)
+	raftServer := raft.New(cfg.raftID, cfg.raftInMemEnabled, true, cfg.raftPeers, cfg.raftLogStorePath)
 	if raftServer == nil {
 		log.Fatal("failed to create raft server.")
 	}

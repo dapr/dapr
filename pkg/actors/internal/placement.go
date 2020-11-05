@@ -265,7 +265,9 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 	NEXT_SERVER:
 		if err != nil {
 			log.Debugf("error connecting to placement service: %v", err)
-			conn.Close()
+			if conn != nil {
+				conn.Close()
+			}
 			p.serverIndex = (p.serverIndex + 1) % len(p.serverAddr)
 			time.Sleep(placementReconnectInterval)
 			continue
