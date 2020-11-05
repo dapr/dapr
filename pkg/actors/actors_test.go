@@ -907,7 +907,7 @@ func TestConfig(t *testing.T) {
 	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default")
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
-	assert.Equal(t, []string{"placement:5050"}, c.PlacementServiceAddress)
+	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
 	assert.Equal(t, []string{"1"}, c.HostedActorTypes)
 	assert.Equal(t, 3500, c.Port)
 	assert.Equal(t, "1s", c.ActorDeactivationScanInterval.String())

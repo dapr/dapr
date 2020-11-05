@@ -16,7 +16,7 @@ func TestNewConfig(t *testing.T) {
 		3500, 50002, 50001, 8080, 7070, true, 1, true, "localhost:5052", true)
 
 	assert.Equal(t, "app1", c.ID)
-	assert.Equal(t, "localhost:5050", c.PlacementServiceAddress[0])
+	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
 	assert.Equal(t, "localhost:5051", c.Kubernetes.ControlPlaneAddress)
 	assert.Equal(t, "*", c.AllowedOrigins)
 	assert.Equal(t, "config", c.GlobalConfig)

@@ -38,7 +38,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
 	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
-	placementServiceHostAddress := flag.String("placement-host-address", "", "Address for the Dapr placement service")
+	placementServiceHostAddr := flag.String("placement-host-address", "", "Addresses for Dapr Actor Placement servers")
 	allowedOrigins := flag.String("allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.Bool("enable-profiling", false, "Enable profiling")
 	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
@@ -115,9 +115,9 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	placementAddress := []string{}
-	if *placementServiceHostAddress != "" {
-		placementAddress = parsePlacementAddr(*placementServiceHostAddress)
+	placementAddresses := []string{}
+	if *placementServiceHostAddr != "" {
+		placementAddresses = parsePlacementAddr(*placementServiceHostAddr)
 	}
 
 	var concurrency int
@@ -130,7 +130,7 @@ func FromFlags() (*DaprRuntime, error) {
 		appPrtcl = *appProtocol
 	}
 
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
+	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
 		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL)
 
 	var globalConfig *global_config.Configuration

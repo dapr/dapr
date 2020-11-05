@@ -120,7 +120,7 @@ func NewActors(
 }
 
 func (a *actorsRuntime) Init() error {
-	if len(a.config.PlacementServiceAddress) == 0 {
+	if len(a.config.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 	if a.store == nil {
@@ -140,7 +140,7 @@ func (a *actorsRuntime) Init() error {
 	}
 
 	a.placement = internal.NewActorPlacement(
-		a.config.PlacementServiceAddress, a.certChain,
+		a.config.PlacementAddresses, a.certChain,
 		a.config.AppID, hostname, a.config.HostedActorTypes,
 		func() bool { return a.appHealthy },
 		afterTableUpdateFn)
