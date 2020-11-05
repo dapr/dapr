@@ -7,7 +7,6 @@ syntax = "proto3";
 
 package dapr.proto.runtime.v1;
 
-import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "dapr/proto/common/v1/common.proto";
 
@@ -266,5 +265,5 @@ message InvokeActorRequest {
 
 // InvokeActorResponse is the method that returns an actor invocation response.
 message InvokeActorResponse {
-  google.protobuf.Any data = 1;
+  bytes data = 1;
 }
