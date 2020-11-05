@@ -34,7 +34,7 @@ const (
 	// faultyHostDetectDuration is the maximum duration when existing host is marked as faulty.
 	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
 	// it updates the last heartbeat time in UpdateAt of the FSM state. If Now - UpdatedAt exceeds
-	// faultyHostDetectDuration, membershipChangeWorker tries to remove faulty dapr runtime from
+	// faultyHostDetectDuration, membershipChangeWorker() tries to remove faulty Dapr runtime from
 	// membership.
 	// When placement gets the leadership, faultyHostDetectionDuration will be faultyHostDetectInitialDuration.
 	// This duration will give more time to let each runtime find the leader of placement nodes.
