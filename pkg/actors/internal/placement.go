@@ -83,7 +83,7 @@ type ActorPlacement struct {
 }
 
 func addDNSResolverPrefix(addr []string) []string {
-	resolvers := make([]string, len(addr))
+	resolvers := make([]string, 0, len(addr))
 	for _, a := range addr {
 		prefix := ""
 		host, _, err := net.SplitHostPort(a)
