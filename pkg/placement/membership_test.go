@@ -92,7 +92,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		assert.Equal(t, 1, len(testServer.streamConns))
 		assert.Equal(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
 		// wait until table dissemination.
-		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
+		time.Sleep(disseminateTimerInterval + 200*time.Millisecond)
 		assert.Equal(t, 0, testServer.memberUpdateCount, "flushed all member updates")
 
 		conn.Close()
