@@ -6,6 +6,7 @@
 package placement
 
 import (
+	"sync"
 	"time"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -15,32 +16,128 @@ import (
 const (
 	commandRetryInterval = 20 * time.Millisecond
 	commandRetryMaxCount = 3
+
+	barrierWriteTimeout = 2 * time.Minute
 )
 
-// MembershipChangeWorker is the worker to change the state of membership
-// and update the consistent hashing tables for actors.
-func (p *Service) MembershipChangeWorker() {
-	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
-	disseminateTimer := time.NewTicker(disseminateTimerInterval)
+// MonitorLeadership is used to monitor if we acquire or lose our role
+// as the leader in the Raft cluster. There is some work the leader is
+// expected to do, so we must react to changes
+//
+// reference: https://github.com/hashicorp/consul/blob/master/agent/consul/leader.go
+func (p *Service) MonitorLeadership() {
+	var weAreLeaderCh chan struct{}
+	var leaderLoop sync.WaitGroup
 
-	p.hostUpdateCount = 0
+	leaderCh := p.raftNode.Raft().LeaderCh()
 
 	for {
-		if !p.raftNode.IsLeader() {
-			// TODO: use leader election channel instead of sleep
-			// <- p.raftNode.leaderCh
-			time.Sleep(100 * time.Millisecond)
+		select {
+		case isLeader := <-leaderCh:
+			if isLeader {
+				if weAreLeaderCh != nil {
+					log.Error("attempted to start the leader loop while running")
+					continue
+				}
+
+				weAreLeaderCh = make(chan struct{})
+				leaderLoop.Add(1)
+				go func(ch chan struct{}) {
+					defer leaderLoop.Done()
+					p.leaderLoop(ch)
+				}(weAreLeaderCh)
+				log.Info("cluster leadership acquired")
+			} else {
+				if weAreLeaderCh == nil {
+					log.Error("attempted to stop the leader loop while not running")
+					continue
+				}
+
+				log.Info("shutting down leader loop")
+				close(weAreLeaderCh)
+				leaderLoop.Wait()
+				weAreLeaderCh = nil
+				log.Info("cluster leadership lost")
+			}
+
+		case <-p.shutdownCh:
+			return
+		}
+	}
+}
+
+func (p *Service) leaderLoop(stopCh chan struct{}) {
+	// This loop is to ensure the FSM reflects all queued writes by applying Barrier
+	// and completes leadership establishment before becoming a leader.
+	for !p.hasLeadership {
+		// for earlier stop
+		select {
+		case <-stopCh:
+			return
+		case <-p.shutdownCh:
+			return
+		default:
+		}
+
+		barrier := p.raftNode.Raft().Barrier(barrierWriteTimeout)
+		if err := barrier.Error(); err != nil {
+			log.Error("failed to wait for barrier", "error", err)
 			continue
 		}
 
+		if !p.hasLeadership {
+			p.establishLeadership()
+			log.Info("leader is established.")
+			// revoke leadership process must be done before leaderLoop() ends.
+			defer p.revokeLeadership()
+		}
+	}
+
+	p.membershipChangeWorker(stopCh)
+}
+
+func (p *Service) establishLeadership() {
+	// Give more time to let each runtime to find the leader and connect to the leader.
+	p.faultyHostDetectDuration = faultyHostDetectInitialDuration
+
+	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
+	p.hasLeadership = true
+}
+
+func (p *Service) revokeLeadership() {
+	p.hasLeadership = false
+
+	log.Info("Waiting until all connections are drained.")
+	p.streamConnGroup.Wait()
+}
+
+// membershipChangeWorker is the worker to change the state of membership
+// and update the consistent hashing tables for actors.
+func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
+	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
+	disseminateTimer := time.NewTicker(disseminateTimerInterval)
+
+	p.memberUpdateCount = 0
+
+	for {
 		select {
+		case <-stopCh:
+			faultyHostDetectTimer.Stop()
+			disseminateTimer.Stop()
+			return
+
+		case <-p.shutdownCh:
+			faultyHostDetectTimer.Stop()
+			disseminateTimer.Stop()
+			return
+
 		case op := <-p.membershipCh:
 			p.processRaftStateCommand(op)
 
 		case <-disseminateTimer.C:
 			// check if there is actor runtime member change.
-			if p.hostUpdateCount > 0 {
-				log.Debugf("request dessemination. hostUpdateCount count: %d", p.hostUpdateCount)
+			if p.memberUpdateCount > 0 {
+				log.Debugf("request dessemination. memberUpdateCount count: %d", p.memberUpdateCount)
 				p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 			}
 
@@ -50,21 +147,16 @@ func (p *Service) MembershipChangeWorker() {
 			// This faulty host will be removed from membership in the next dissemination period.
 			m := p.raftNode.FSM().State().Members
 			for _, v := range m {
-				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
+				if t.Sub(v.UpdatedAt) <= p.faultyHostDetectDuration {
 					continue
 				}
-
-				log.Debugf("try to remove hosts: %s", v.Name)
+				log.Debugf("try to remove outdated hosts: %s, elapsed: %d ms", v.Name, t.Sub(v.UpdatedAt).Milliseconds())
 
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
 					host:    raft.DaprHostMember{Name: v.Name},
 				}
 			}
-
-		case <-p.shutdownCh:
-			log.Debugf("MembershipChangeWorker loop is closing.")
-			return
 		}
 	}
 }
@@ -95,17 +187,31 @@ func (p *Service) processRaftStateCommand(op hostMemberChange) {
 		}
 
 		if updated {
-			p.hostUpdateCount++
+			p.memberUpdateCount++
 		}
 
 	case raft.TableDisseminate:
 		// TableDissminate will be triggered by disseminateTimer.
 		// This disseminates the latest consistent hashing tables to Dapr runtime.
-		if len(p.streamConns) > 0 {
-			log.Debugf("desseminate tables to runtimes. hostUpdateCount count: %d", p.hostUpdateCount)
+
+		// Disseminate hashing tables to Dapr runtimes only if number of current stream connections
+		// and number of FSM state members are matched. Otherwise, this will be retried until
+		// the numbers are matched.
+
+		// When placement node first gets the leadership, it needs to wait until runtimes connecting
+		// old leader connects to new leader. The numbers will be eventually consistent.
+		streamConns := len(p.streamConns)
+		targetConns := len(p.raftNode.FSM().State().Members)
+		if streamConns == targetConns {
+			log.Debugf(
+				"desseminate tables to memers. memberUpdateCount: %d, streams: %d, targets: %d",
+				p.memberUpdateCount, streamConns, targetConns)
 			p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
+			p.memberUpdateCount = 0
+
+			// set faultyHostDetectDuration to the default duration.
+			p.faultyHostDetectDuration = faultyHostDetectDefaultDuration
 		}
-		p.hostUpdateCount = 0
 	}
 }
 

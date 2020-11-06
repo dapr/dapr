@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
@@ -23,6 +25,8 @@ import (
 )
 
 var log = logger.NewLogger("dapr.placement")
+
+const gracefulTimeout = 10 * time.Second
 
 func main() {
 	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
@@ -45,7 +49,7 @@ func main() {
 	}
 
 	// Start Raft cluster.
-	raftServer := raft.New(cfg.raftID, cfg.raftInMemEnabled, cfg.raftBootStrap, cfg.raftPeers)
+	raftServer := raft.New(cfg.raftID, cfg.raftInMemEnabled, cfg.raftPeers, cfg.raftLogStorePath)
 	if raftServer == nil {
 		log.Fatal("failed to create raft server.")
 	}
@@ -62,18 +66,37 @@ func main() {
 		certChain = loadCertChains(cfg.certChainPath)
 	}
 
-	go apiServer.MembershipChangeWorker()
-
+	go apiServer.MonitorLeadership()
 	go apiServer.Run(strconv.Itoa(cfg.placementPort), certChain)
 	log.Infof("placement service started on port %d", cfg.placementPort)
 
 	// Start Healthz endpoint.
-	startHealthzServer(cfg.healthzPort)
+	go startHealthzServer(cfg.healthzPort)
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
+	// Relay incoming process signal to exit placement gracefully
+	signalCh := make(chan os.Signal, 10)
+	gracefulExitCh := make(chan struct{})
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	defer signal.Stop(signalCh)
 
-	<-stop
+	<-signalCh
+
+	// Shutdown servers
+	go func() {
+		apiServer.Shutdown()
+		raftServer.Shutdown()
+		close(gracefulExitCh)
+	}()
+
+	select {
+	case <-time.After(gracefulTimeout):
+		log.Info("Timeout on graceful leave. Exiting...")
+		os.Exit(1)
+
+	case <-gracefulExitCh:
+		log.Info("Gracefully exit.")
+		os.Exit(0)
+	}
 }
 
 func startHealthzServer(healthzPort int) {
