@@ -39,7 +39,7 @@ type API interface {
 	MarkStatusAsReady()
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
-	SetActor(actor actors.Actors)
+	SetActorRuntime(actor actors.Actors)
 }
 
 type api struct {
@@ -1141,6 +1141,6 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 	a.directMessaging = directMessaging
 }
 
-func (a *api) SetActor(actor actors.Actors) {
+func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
 }
