@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -33,7 +32,7 @@ func TestMain(m *testing.M) {
 			AppName:        "testapp",
 			DaprEnabled:    true,
 			ImageName:      "perf-actorjava",
-			Replicas:       4,
+			Replicas:       1,
 			IngressEnabled: true,
 			AppPort:        3000,
 		},
@@ -53,6 +52,7 @@ func TestMain(m *testing.M) {
 
 func TestActorTimerWithStatePerformance(t *testing.T) {
 	p := perf.Params()
+
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
@@ -72,8 +72,9 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform dapr test
-	endpoint := fmt.Sprintf("http://testapp:3000/actors")
+	endpoint := fmt.Sprintf("http://localhost:3500/v1.0/actors/DemoActorTimer/{uuid}/method/noOp")
 	p.TargetEndpoint = endpoint
+	p.StdClient = true
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
@@ -82,9 +83,6 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
-
-	// Let test run for 10 minutes triggering the timers and collect metrics.
-	time.Sleep(10 * time.Minute)
 
 	appUsage, err := tr.Platform.GetAppUsage("testapp")
 	require.NoError(t, err)
@@ -115,4 +113,6 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
+	require.True(t, daprResult.DurationHistogram.Percentiles[2].Value*1000 < 4.5)
+	require.True(t, daprResult.DurationHistogram.Percentiles[3].Value*1000 < 5.5)
 }

@@ -31,12 +31,18 @@ const (
 	// MembershipChangeWorker will process actor host member change request.
 	membershipChangeChSize = 100
 
-	// faultyHostDetectMaxDuration is the maximum duration when existing host is marked as faulty.
+	// faultyHostDetectDuration is the maximum duration when existing host is marked as faulty.
 	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
 	// it updates the last heartbeat time in UpdateAt of the FSM state. If Now - UpdatedAt exceeds
-	// faultyHostDetectMaxDuration, MembershipChangeWorker tries to remove faulty dapr runtime from
+	// faultyHostDetectDuration, membershipChangeWorker() tries to remove faulty Dapr runtime from
 	// membership.
-	faultyHostDetectMaxDuration = 4 * time.Second
+	// When placement gets the leadership, faultyHostDetectionDuration will be faultyHostDetectInitialDuration.
+	// This duration will give more time to let each runtime find the leader of placement nodes.
+	// Once the first dissemination happens after getting leadership, membershipChangeWorker will
+	// use faultyHostDetectDefaultDuration.
+	faultyHostDetectInitialDuration = 6 * time.Second
+	faultyHostDetectDefaultDuration = 3 * time.Second
+
 	// faultyHostDetectInterval is the interval to check the faulty member.
 	faultyHostDetectInterval = 500 * time.Millisecond
 
@@ -71,6 +77,9 @@ type Service struct {
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
 	memberUpdateCount int
 
+	// faultyHostDetectDuration
+	faultyHostDetectDuration time.Duration
+
 	// hasLeadership incidicates the state for leadership.
 	hasLeadership bool
 
@@ -87,14 +96,15 @@ type Service struct {
 // NewPlacementService returns a new placement service.
 func NewPlacementService(raftNode *raft.Server) *Service {
 	return &Service{
-		disseminateLock: &sync.Mutex{},
-		streamConns:     []placementGRPCStream{},
-		streamConnsLock: &sync.Mutex{},
-		membershipCh:    make(chan hostMemberChange, membershipChangeChSize),
-		hasLeadership:   false,
-		raftNode:        raftNode,
-		shutdownCh:      make(chan struct{}),
-		shutdownLock:    &sync.Mutex{},
+		disseminateLock:          &sync.Mutex{},
+		streamConns:              []placementGRPCStream{},
+		streamConnsLock:          &sync.Mutex{},
+		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
+		hasLeadership:            false,
+		faultyHostDetectDuration: faultyHostDetectInitialDuration,
+		raftNode:                 raftNode,
+		shutdownCh:               make(chan struct{}),
+		shutdownLock:             &sync.Mutex{},
 	}
 }
 
@@ -186,7 +196,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				}
 			} else {
 				// no actions for hashing table. Instead, MembershipChangeWorker will check
-				// host updatedAt and if now - updatedAt > faultyHostDetectMaxDuration, remove hosts.
+				// host updatedAt and if now - updatedAt > p.faultyHostDetectDuration, remove hosts.
 				log.Debugf("Stream connection is disconnected with the error: %v", err)
 			}
 

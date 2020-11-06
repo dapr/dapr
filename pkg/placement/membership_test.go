@@ -61,6 +61,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 	t.Run("successful dissemination", func(t *testing.T) {
 		setupEach(t)
 		// arrange
+		testServer.faultyHostDetectDuration = faultyHostDetectInitialDuration
+
 		conn, stream, err := newTestClient(serverAddress)
 		assert.NoError(t, err)
 		done := make(chan bool)
@@ -89,11 +91,14 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		<-done
 
-		assert.Equal(t, 1, len(testServer.streamConns))
-		assert.Equal(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
 		// wait until table dissemination.
 		time.Sleep(disseminateTimerInterval + 200*time.Millisecond)
-		assert.Equal(t, 0, testServer.memberUpdateCount, "flushed all member updates")
+		assert.Equal(t, 1, len(testServer.streamConns))
+		assert.Equal(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
+		assert.Equal(t, 0, testServer.memberUpdateCount,
+			"flushed all member updates")
+		assert.Equal(t, faultyHostDetectDefaultDuration, testServer.faultyHostDetectDuration,
+			"faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
 
@@ -123,7 +128,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		arrangeFakeMembers(t)
 
 		// faulty host detector removes all members if heartbeat does not happen
-		time.Sleep(faultyHostDetectMaxDuration + 10*time.Millisecond)
+		time.Sleep(faultyHostDetectInitialDuration + 10*time.Millisecond)
 		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members))
 
 		tearDownEach()

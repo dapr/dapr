@@ -17,7 +17,7 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer service_invocation_http
+PERF_TESTS=actor_timer actor_activation service_invocation_http
 
 KUBECTL=kubectl
 
