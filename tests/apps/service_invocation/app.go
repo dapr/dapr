@@ -51,6 +51,18 @@ type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+type negativeTestResult struct {
+	MainCallSuccessful bool                   `json:"callSuccessful"`
+	RawBody            []byte                 `json:"rawBody"`
+	RawError           string                 `json:"rawError"`
+	Results            []individualTestResult `json:"results"`
+}
+
+type individualTestResult struct {
+	TestCase       string `json:"case"`
+	CallSuccessful bool   `json:"callSuccessful"`
+}
+
 // indexHandler is the handler for root path
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("indexHandler is called\n")
@@ -242,11 +254,19 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/puthandler", putHandler).Methods("PUT")
 	router.HandleFunc("/deletehandler", deleteHandler).Methods("DELETE")
 
+	// called through dapr service invocation and meant to cause error
+	router.HandleFunc("/timeouterror", timeoutServiceCall).Methods("POST")
+	router.HandleFunc("/parseerror", parseErrorServiceCall).Methods("POST")
+	router.HandleFunc("/largedatahttp", largeDataErrorServiceCallHTTP).Methods("POST")
+	router.HandleFunc("/largedatagrpc", largeDataErrorServiceCallGrpc).Methods("POST")
+
 	// called by test to run some cases - these will themselves make calls
 	router.HandleFunc("/httptohttptest", httpTohttpTest).Methods("POST")
 	router.HandleFunc("/grpctogrpctest", grpcToGrpcTest).Methods("POST")
 	router.HandleFunc("/httptogrpctest", httpToGrpcTest).Methods("POST")
 	router.HandleFunc("/grpctohttptest", grpcToHTTPTest).Methods("POST")
+	router.HandleFunc("/badservicecalltesthttp", badServiceCallTestHTTP).Methods("POST")
+	router.HandleFunc("/badservicecalltestgrpc", badServiceCallTestGrpc).Methods("POST")
 
 	// service invocation v1 e2e tests
 	router.HandleFunc("/tests/v1_httptohttptest", testV1RequestHTTPToHTTP).Methods("POST")
@@ -1002,6 +1022,228 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logAndSetResponse(w, http.StatusOK, "success")
+}
+
+func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Enter badServiceCallTestHTTP")
+	var commandBody testCommandRequest
+	err := json.NewDecoder(r.Body).Decode(&commandBody)
+	if err != nil {
+		onBadRequest(w, err)
+		return
+	}
+
+	fmt.Printf("badServiceCallTestHTTP - target app: %s\n", commandBody.RemoteApp)
+
+	daprAddress := fmt.Sprintf("localhost:%s", strconv.Itoa(daprPort))
+
+	fmt.Printf("dapr address is %s\n", daprAddress)
+	var testMessage struct {
+		Data string `json:"data"`
+	}
+	testMessage.Data = guuid.New().String()
+
+	fmt.Printf("badServiceCallTestHTTP calling with message %v\n", testMessage)
+
+	// post
+	url := fmt.Sprintf(
+		"http://localhost:%s/v1.0/invoke/%s/method/%s",
+		strconv.Itoa(daprPort), commandBody.RemoteApp,
+		commandBody.Method)
+	fmt.Printf("%s invoke url is %s\n", commandBody.Method, url)
+	b, err := json.Marshal(testMessage)
+	if err != nil {
+		fmt.Printf("marshal had error %s\n", err)
+		onSerializationFailed(w, err)
+		return
+	}
+
+	fmt.Printf("%s method body is %s\n", commandBody.Method, string(b))
+
+	var testResponse negativeTestResult
+
+	client := newHTTPClient()
+	client.Timeout = 5 * time.Second
+	resp, err := client.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(b)) // nolint
+
+	testResponse.MainCallSuccessful = err == nil && resp.StatusCode == 200
+
+	if resp != nil && resp.Body != nil {
+		fmt.Printf("badServiceCallTestHTTP - Response Code: %d", resp.StatusCode)
+		w.WriteHeader(resp.StatusCode)
+		rawBody, _ := extractBody(resp.Body)
+		testResponse.RawBody = rawBody
+		json.NewDecoder(strings.NewReader(string(rawBody))).Decode(&testResponse.Results)
+	}
+
+	if err != nil {
+		testResponse.RawError = err.Error()
+
+		if resp == nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+
+	json.NewEncoder(w).Encode(testResponse)
+}
+
+func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Enter badServiceCallTestGrpc")
+	var commandBody testCommandRequest
+	err := json.NewDecoder(r.Body).Decode(&commandBody)
+	if err != nil {
+		onBadRequest(w, err)
+		return
+	}
+
+	fmt.Printf("badServiceCallTestGrpc - target app: %s\n", commandBody.RemoteApp)
+
+	daprAddress := fmt.Sprintf("localhost:%s", "50001")
+
+	fmt.Printf("dapr address is %s\n", daprAddress)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, err := grpc.DialContext(ctx, daprAddress, grpc.WithInsecure())
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer conn.Close()
+
+	// Create the client
+	client := runtimev1pb.NewDaprClient(conn)
+
+	var testMessage struct {
+		Data string `json:"data"`
+	}
+	testMessage.Data = guuid.New().String()
+
+	fmt.Printf("badServiceCallTestGrpc calling with message %v\n", testMessage)
+
+	b, _ := json.Marshal(testMessage)
+	req := constructRequest(commandBody.RemoteApp, commandBody.Method, "POST", b)
+
+	var testResponse negativeTestResult
+	resp, err := client.InvokeService(ctx, req)
+	testResponse.MainCallSuccessful = true
+	if err != nil {
+		testResponse.MainCallSuccessful = false
+		testResponse.RawError = err.Error()
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	if resp != nil && resp.Data != nil {
+		rawBody := resp.Data.GetValue()
+		testResponse.RawBody = rawBody
+		json.NewDecoder(strings.NewReader(string(rawBody))).Decode(&testResponse.Results)
+	}
+
+	json.NewEncoder(w).Encode(testResponse)
+}
+
+func timeoutServiceCall(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Entering timeoutServiceCall")
+
+	// Timeout for the client is 5 seconds, we just need to wait longer than that.
+	time.Sleep(10 * time.Second)
+
+	logAndSetResponse(w, 200, "Client waited longer than it should have.")
+}
+
+func parseErrorServiceCall(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Entering parseErrorServiceCall")
+	var data struct {
+		Data int `json:"data"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&data)
+
+	if err != nil {
+		onSerializationFailed(w, err)
+		return
+	}
+
+	// We shouldn't get here.
+	logAndSetResponse(w, 200, fmt.Sprintf("Request should have failed to parse: %v", data))
+}
+
+func largeDataErrorServiceCallHTTP(w http.ResponseWriter, r *http.Request) {
+	largeDataErrorServiceCall(w, r, true)
+}
+
+func largeDataErrorServiceCallGrpc(w http.ResponseWriter, r *http.Request) {
+	largeDataErrorServiceCall(w, r, false)
+}
+
+func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bool) {
+	fmt.Println("Entering largeDataErrorServiceCall")
+
+	// post
+	url := fmt.Sprintf(
+		"http://localhost:%s/v1.0/invoke/serviceinvocation-callee-0/method/posthandler",
+		strconv.Itoa(daprPort))
+
+	testSizes := []struct {
+		size int
+		name string
+	}{
+		{
+			size: 1024 * 1024,
+			name: "1MB",
+		},
+		{
+			size: 1024*1024*3 - 454,
+			name: "4MB",
+		},
+		{
+			size: 1024*1024*3 - 1,
+			name: "4MB+",
+		},
+		{
+			size: 1024 * 1024 * 8,
+			name: "8MB",
+		},
+	}
+
+	results := make([]individualTestResult, len(testSizes))
+	for i, test := range testSizes {
+		var result individualTestResult
+		result.TestCase = test.name
+
+		body := make([]byte, test.size)
+		jsonBody, _ := json.Marshal(body)
+		fmt.Printf("largeDataErrorServiceCall - Request size: %d\n", len(jsonBody))
+
+		if isHTTP {
+			client := newHTTPClient()
+			resp, err := client.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(jsonBody)) // nolint
+
+			result.CallSuccessful = !((resp != nil && resp.StatusCode != 200) || err != nil)
+		} else {
+			daprAddress := fmt.Sprintf("localhost:%s", "50001")
+
+			conn, err := grpc.DialContext(context.Background(), daprAddress, grpc.WithInsecure())
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			defer conn.Close()
+
+			// Create the client
+			client := runtimev1pb.NewDaprClient(conn)
+
+			req := constructRequest("serviceinvocation-callee-0", "posthandler", "POST", jsonBody)
+
+			_, err = client.InvokeService(context.Background(), req)
+
+			result.CallSuccessful = err == nil
+		}
+
+		results[i] = result
+	}
+
+	json.NewEncoder(w).Encode(results)
 }
 
 func main() {
