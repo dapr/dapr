@@ -1,12 +1,17 @@
-
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: dapr-placement
   labels:
     app: dapr-placement
 spec:
+{{- if eq .Values.global.ha.enabled true }}
+  replicas: {{ .Values.global.ha.replicaCount }}
+{{- else }}
   replicas: {{ .Values.replicaCount }}
+{{- end }}
+  serviceName: "dapr-placement"
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       app: dapr-placement
@@ -32,14 +37,14 @@ spec:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 3
+          initialDelaySeconds: 60
           periodSeconds: 3
           failureThreshold: 5
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 3
+          initialDelaySeconds: 60
           periodSeconds: 3
           failureThreshold: 5
 {{- if contains "/" .Values.image.name }}
@@ -50,8 +55,8 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         resources:
           limits:
-            cpu: 1000m
-            memory: 500Mi
+            cpu: 500m
+            memory: 300Mi
           requests:
             cpu: 250m
             memory: 100Mi
@@ -59,8 +64,15 @@ spec:
           - name: credentials
             mountPath: /var/run/dapr/credentials
             readOnly: true
+{{- if eq .Values.global.ha.enabled true }}
+          - name: raft-log
+            mountPath: /var/run/dapr/raft-log
+{{- end }}
         ports:
           - containerPort: 50005
+            name: api
+          - containerPort: 8201
+            name: raft-server
 {{- if eq .Values.global.prometheus.enabled true }}
           - name: metrics
             containerPort: {{ .Values.global.prometheus.port }}
@@ -69,8 +81,19 @@ spec:
         command:
         - "/placement"
         args:
+{{- if eq .Values.global.ha.enabled true }}
+        - "--id"
+        - "$(PLACEMENT_ID)"
+        - "--initial-cluster"
+        - "dapr-placement-0=dapr-placement-0.dapr-placement:8201,dapr-placement-1=dapr-placement-1.dapr-placement:8201,dapr-placement-2=dapr-placement-2.dapr-placement.dapr-system:8201"
+        - "--raft-logstore-path"
+        - "/var/run/dapr/raft-log"
+        - "--inmem-store-enabled=false"
+{{- else }}
+        - "--inmem-store-enabled=true"
+{{- end }}
         - "--log-level"
-        - {{ .Values.logLevel }}
+        - debug
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
@@ -86,6 +109,11 @@ spec:
 {{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"
 {{- end }}
+        env:
+          - name: PLACEMENT_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
       serviceAccountName: dapr-operator
       volumes:
         - name: credentials
@@ -107,4 +135,15 @@ spec:
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
+{{- end }}
+{{- if eq .Values.global.ha.enabled true }}
+  volumeClaimTemplates:
+  - metadata:
+      name: raft-log
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
 {{- end }}

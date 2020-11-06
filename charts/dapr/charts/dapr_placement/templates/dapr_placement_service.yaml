@@ -2,10 +2,19 @@ kind: Service
 apiVersion: v1
 metadata:
   name: dapr-placement
+  labels:
+    app: dapr-placement
 spec:
   selector:
     app: dapr-placement
+  # placement must be able to resolve pod address to join initial cluster peers
+  # before POD is ready
+  publishNotReadyAddresses: true
   ports:
-  - protocol: TCP
+  - name: api
     port: {{ .Values.ports.port }} 
     targetPort: {{ .Values.ports.targetPort }}
+  - name: raft-server
+    port: 8201
+    targetPort: 8201
+  clusterIP: None
