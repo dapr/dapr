@@ -1212,7 +1212,7 @@ func (a *DaprRuntime) initActors() error {
 	if err != nil {
 		return err
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementServiceAddress, a.appConfig.Entities,
+	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.appConfig.Entities,
 		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec)
 	err = act.Init()
@@ -1372,6 +1372,10 @@ func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component
 // Stop allows for a graceful shutdown of all runtime internal operations or components
 func (a *DaprRuntime) Stop() {
 	log.Info("stop command issued. Shutting down all operations")
+
+	if a.actor != nil {
+		a.actor.Stop()
+	}
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {

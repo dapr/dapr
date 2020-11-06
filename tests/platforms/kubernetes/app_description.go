@@ -17,6 +17,10 @@ type AppDescription struct {
 	IngressEnabled    bool
 	MetricsPort       string
 	Config            string
+	AppCPULimit       string
+	AppCPURequest     string
+	AppMemoryLimit    string
+	AppMemoryRequest  string
 	DaprCPULimit      string
 	DaprCPURequest    string
 	DaprMemoryLimit   string

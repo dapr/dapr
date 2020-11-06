@@ -16,4 +16,6 @@ public interface DemoActorTimer {
   void registerDemoActorTimer();
 
   String say(String something);
+
+  void noOp();
 }

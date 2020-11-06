@@ -1749,7 +1749,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewRuntimeConfig(
 		TestRuntimeConfigID,
-		"10.10.10.12",
+		[]string{"10.10.10.12"},
 		"10.10.10.11",
 		cors.DefaultAllowedOrigins,
 		"globalConfig",
