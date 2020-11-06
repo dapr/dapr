@@ -744,7 +744,6 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 }
 
 func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
-
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type)
 	if err != nil {
 		log.Warnf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
@@ -1649,7 +1648,6 @@ func (a *DaprRuntime) startSubscribing() {
 }
 
 func (a *DaprRuntime) startReadingFromBinding() {
-
 	for name, binding := range a.inputBindings {
 		subscribed := a.isAppSubscribedToBinding(name)
 		if !subscribed {
