@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"testing"
 
 	"github.com/dapr/dapr/tests/perf"
@@ -49,29 +48,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestServiceInvocationHTTPPerformance(t *testing.T) {
-	p := perf.ParamsFromDefaults()
-
-	if val, ok := os.LookupEnv(perf.ClientConnectionsEnvVar); ok && val != "" {
-		clientConn, err := strconv.Atoi(val)
-		require.NoError(t, err)
-		p.ClientConnections = clientConn
-	}
-	if val, ok := os.LookupEnv(perf.TestDurationEnvVar); ok && val != "" {
-		p.TestDuration = val
-	}
-	if val, ok := os.LookupEnv(perf.PayloadSizeEnvVar); ok && val != "" {
-		payloadSize, err := strconv.Atoi(val)
-		require.NoError(t, err)
-		p.PayloadSizeKB = payloadSize
-	}
-	if val, ok := os.LookupEnv(perf.PayloadEnvVar); ok && val != "" {
-		p.Payload = val
-	}
-	if val, ok := os.LookupEnv(perf.QPSEnvVar); ok && val != "" {
-		qps, err := strconv.Atoi(val)
-		require.NoError(t, err)
-		p.QPS = qps
-	}
+	p := perf.Params()
 	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 	// Get the ingress external url of test app
@@ -121,6 +98,9 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	usage, err := tr.Platform.GetSidecarUsage("testapp")
 	require.NoError(t, err)
 
+	restarts, err := tr.Platform.GetTotalRestarts("testapp")
+	require.NoError(t, err)
+
 	t.Logf("dapr test results: %s", string(daprResp))
 	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", usage.CPUm, usage.MemoryMb)
 
@@ -141,4 +121,9 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 		latency := (daprValue - baselineValue) * 1000
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
+
+	require.Equal(t, 0, daprResult.RetCodes.Num400)
+	require.Equal(t, 0, daprResult.RetCodes.Num500)
+	require.Equal(t, 0, restarts)
+	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 }

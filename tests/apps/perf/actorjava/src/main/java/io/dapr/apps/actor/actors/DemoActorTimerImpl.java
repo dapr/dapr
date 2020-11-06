@@ -88,4 +88,9 @@ public class DemoActorTimerImpl extends AbstractActor implements DemoActorTimer 
         // Now respond with current timestamp.
         return utcNowAsString;
     }
+
+    @Override
+    public void noOp() {
+        // No-op to test performance without app logic impacting numbers.
+    }
 }
