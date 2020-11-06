@@ -150,6 +150,11 @@ func (_m *MockActors) Init() error {
 	return r0
 }
 
+// Stop provides a mock function with given fields:
+func (_m *MockActors) Stop() {
+	_m.Called()
+}
+
 // SaveState provides a mock function with given fields: req
 func (_m *MockActors) SaveState(ctx context.Context, req *actors.SaveStateRequest) error {
 	ret := _m.Called(req)

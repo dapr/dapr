@@ -29,6 +29,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -60,7 +61,8 @@ type API interface {
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActor(actor actors.Actors)
 	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
-
+	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error)
+	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
 }
 
 type api struct {
@@ -595,6 +597,47 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 	}
 	err := a.actor.CreateTimer(ctx, req)
 	return &empty.Empty{}, err
+}
+
+func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.DeleteTimerRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+	}
+
+	err := a.actor.DeleteTimer(ctx, req)
+	return &empty.Empty{}, err
+}
+
+func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.InvokeActorResponse{}, err
+	}
+
+	req := invokev1.NewInvokeMethodRequest(fasthttp.MethodPut)
+	req.WithActor(in.ActorType, in.ActorId)
+	req.WithRawData(in.Data, "")
+
+	resp, err := a.actor.Call(context.TODO(), req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.InvokeActorResponse{}, err
+	}
+
+	_, body := resp.RawData()
+	return &runtimev1pb.InvokeActorResponse{
+		Data: body,
+	}, nil
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
