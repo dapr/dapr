@@ -69,6 +69,23 @@ func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
 	}
 }
 
+func tryResolveRaftAdvertiseAddr(bindAddr string) (*net.TCPAddr, error) {
+	// HACKHACK: Kubernetes POD DNS A record population takes some time
+	// to look up the address after StatefulSet POD is deployed.
+	const retryCount = 120
+	var interval = 1 * time.Second
+
+	var err error
+	for retry := 0; retry < retryCount; retry++ {
+		addr, err := net.ResolveTCPAddr("tcp", bindAddr)
+		if err == nil {
+			return addr, nil
+		}
+		time.Sleep(interval)
+	}
+	return nil, err
+}
+
 // StartRaft starts Raft node with Raft protocol configuration. if config is nil,
 // the default config will be used.
 func (s *Server) StartRaft(config *raft.Config) error {
@@ -83,8 +100,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 
 	s.fsm = newFSM()
 
-	// TODO: replace tls enabled transport layer using workload cert
-	addr, err := net.ResolveTCPAddr("tcp", s.raftBind)
+	addr, err := tryResolveRaftAdvertiseAddr(s.raftBind)
 	if err != nil {
 		return err
 	}
