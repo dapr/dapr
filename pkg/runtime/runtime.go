@@ -328,8 +328,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	grpcAPI.SetActorRuntime(a.actor)
 
 	a.startSubscribing()
-	a.startReadingFromBinding()
-
+	err = a.startReadingFromBindings()
+	if err != nil {
+		log.Warnf("failed to read from bindings: %s ", err)
+	}
 	return nil
 }
 
@@ -1647,7 +1649,10 @@ func (a *DaprRuntime) startSubscribing() {
 	}
 }
 
-func (a *DaprRuntime) startReadingFromBinding() {
+func (a *DaprRuntime) startReadingFromBindings() error {
+	if a.appChannel == nil {
+		return errors.New("app channel not initialized")
+	}
 	for name, binding := range a.inputBindings {
 		subscribed := a.isAppSubscribedToBinding(name)
 		if !subscribed {
@@ -1660,4 +1665,5 @@ func (a *DaprRuntime) startReadingFromBinding() {
 			}
 		}(name, binding)
 	}
+	return nil
 }
