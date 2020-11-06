@@ -114,7 +114,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 
 	// Keep DNS resolution outside of getSidecarContainer for unit testing.
-	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
+	placementAddress := fmt.Sprintf("%s:50005", getKubernetesDNS(placementService, namespace))
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
 	apiSrvAddress := fmt.Sprintf("%s:80", getKubernetesDNS(apiAddress, namespace))
 
