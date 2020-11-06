@@ -34,8 +34,7 @@ func (p *Service) MonitorLeadership() {
 	for {
 		select {
 		case isLeader := <-leaderCh:
-			switch {
-			case isLeader:
+			if isLeader {
 				if weAreLeaderCh != nil {
 					log.Error("attempted to start the leader loop while running")
 					continue
@@ -48,8 +47,7 @@ func (p *Service) MonitorLeadership() {
 					p.leaderLoop(ch)
 				}(weAreLeaderCh)
 				log.Info("cluster leadership acquired")
-
-			default:
+			} else {
 				if weAreLeaderCh == nil {
 					log.Error("attempted to stop the leader loop while not running")
 					continue
@@ -71,7 +69,7 @@ func (p *Service) MonitorLeadership() {
 func (p *Service) leaderLoop(stopCh chan struct{}) {
 	// This loop is to ensure the FSM reflects all queued writes by applying Barrier
 	// and completes leadership establishment before becoming a leader.
-	for {
+	for !p.hasLeadership {
 		// for earlier stop
 		select {
 		case <-stopCh:
@@ -88,31 +86,22 @@ func (p *Service) leaderLoop(stopCh chan struct{}) {
 		}
 
 		if !p.hasLeadership {
-			if err := p.establishLeadership(); err == nil {
-				log.Info("leader is established.")
-				// revoke leadership process must be done before leaderLoop() ends.
-				defer p.revokeLeadership()
-				goto WORKER
-			} else {
-				log.Warnf("fails to establish leadership: %v", err)
-			}
+			p.establishLeadership()
+			log.Info("leader is established.")
+			// revoke leadership process must be done before leaderLoop() ends.
+			defer p.revokeLeadership()
 		}
 	}
 
-WORKER:
 	p.membershipChangeWorker(stopCh)
 }
 
-func (p *Service) establishLeadership() error {
-	// Ensure that all intiail peers joins the cluster
-	if err := p.raftNode.JoinInitialCluster(); err != nil {
-		return err
-	}
+func (p *Service) establishLeadership() {
+	// Give more time to let each runtime to find the leader and connect to the leader.
+	p.faultyHostDetectDuration = faultyHostDetectInitialDuration
 
 	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
 	p.hasLeadership = true
-
-	return nil
 }
 
 func (p *Service) revokeLeadership() {
@@ -158,7 +147,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			// This faulty host will be removed from membership in the next dissemination period.
 			m := p.raftNode.FSM().State().Members
 			for _, v := range m {
-				if t.Sub(v.UpdatedAt) < faultyHostDetectMaxDuration {
+				if t.Sub(v.UpdatedAt) <= p.faultyHostDetectDuration {
 					continue
 				}
 				log.Debugf("try to remove outdated hosts: %s, elapsed: %d ms", v.Name, t.Sub(v.UpdatedAt).Milliseconds())
@@ -219,6 +208,9 @@ func (p *Service) processRaftStateCommand(op hostMemberChange) {
 				p.memberUpdateCount, streamConns, targetConns)
 			p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
 			p.memberUpdateCount = 0
+
+			// set faultyHostDetectDuration to the default duration.
+			p.faultyHostDetectDuration = faultyHostDetectDefaultDuration
 		}
 	}
 }

@@ -138,11 +138,12 @@ func (a *actorsRuntime) Init() error {
 		a.drainRebalancedActors()
 		a.evaluateReminders()
 	}
+	appHealthFn := func() bool { return a.appHealthy }
 
 	a.placement = internal.NewActorPlacement(
 		a.config.PlacementAddresses, a.certChain,
 		a.config.AppID, hostname, a.config.HostedActorTypes,
-		func() bool { return a.appHealthy },
+		appHealthFn,
 		afterTableUpdateFn)
 
 	go a.placement.Start()

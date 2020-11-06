@@ -7,7 +7,6 @@ package raft
 
 import (
 	"net"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -38,21 +37,24 @@ type Server struct {
 	id  string
 	fsm *FSM
 
-	bootstrap bool
-	inMem     bool
-	raftBind  string
-	peers     []PeerInfo
+	inMem    bool
+	raftBind string
+	peers    []PeerInfo
 
-	config           *raft.Config
-	raft             *raft.Raft
-	raftStore        *raftboltdb.BoltStore
-	raftTransport    *raft.NetworkTransport
-	raftInmem        *raft.InmemStore
+	config        *raft.Config
+	raft          *raft.Raft
+	raftStore     *raftboltdb.BoltStore
+	raftTransport *raft.NetworkTransport
+
+	logStore    raft.LogStore
+	stableStore raft.StableStore
+	snapStore   raft.SnapshotStore
+
 	raftLogStorePath string
 }
 
 // New creates Raft server node.
-func New(id string, inMem, bootstrap bool, peers []PeerInfo, logStorePath string) *Server {
+func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
 	raftBind := raftAddressForID(id, peers)
 	if raftBind == "" {
 		return nil
@@ -61,7 +63,6 @@ func New(id string, inMem, bootstrap bool, peers []PeerInfo, logStorePath string
 	return &Server{
 		id:               id,
 		inMem:            inMem,
-		bootstrap:        bootstrap,
 		raftBind:         raftBind,
 		peers:            peers,
 		raftLogStorePath: logStorePath,
@@ -88,7 +89,8 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		return err
 	}
 
-	trans, err := raft.NewTCPTransport(s.raftBind, addr, 3, 10*time.Second, os.Stderr)
+	loggerAdapter := newLoggerAdapter()
+	trans, err := raft.NewTCPTransportWithLogger(s.raftBind, addr, 3, 10*time.Second, loggerAdapter)
 	if err != nil {
 		return err
 	}
@@ -97,15 +99,11 @@ func (s *Server) StartRaft(config *raft.Config) error {
 
 	// Build an all in-memory setup for dev mode, otherwise prepare a full
 	// disk-based setup.
-	var logStore raft.LogStore
-	var stable raft.StableStore
-	var snap raft.SnapshotStore
-
 	if s.inMem {
-		s.raftInmem = raft.NewInmemStore()
-		stable = s.raftInmem
-		logStore = s.raftInmem
-		snap = raft.NewInmemSnapshotStore()
+		raftInmem := raft.NewInmemStore()
+		s.stableStore = raftInmem
+		s.logStore = raftInmem
+		s.snapStore = raft.NewInmemSnapshotStore()
 	} else {
 		if err = ensureDir(s.raftStorePath()); err != nil {
 			return errors.Wrap(err, "failed to create log store directory")
@@ -116,16 +114,16 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		if err != nil {
 			return err
 		}
-		stable = s.raftStore
+		s.stableStore = s.raftStore
 
 		// Wrap the store in a LogCache to improve performance.
-		logStore, err = raft.NewLogCache(raftLogCacheSize, s.raftStore)
+		s.logStore, err = raft.NewLogCache(raftLogCacheSize, s.raftStore)
 		if err != nil {
 			return err
 		}
 
 		// Create the snapshot store.
-		snap, err = raft.NewFileSnapshotStore(s.raftStorePath(), snapshotsRetained, os.Stderr)
+		s.snapStore, err = raft.NewFileSnapshotStoreWithLogger(s.raftStorePath(), snapshotsRetained, loggerAdapter)
 		if err != nil {
 			return err
 		}
@@ -151,35 +149,25 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	}
 
 	// Use LoggerAdapter to integrate with Dapr logger. Log level relies on placement log level.
-	s.config.Logger = newLoggerAdapter()
+	s.config.Logger = loggerAdapter
 	s.config.LocalID = raft.ServerID(s.id)
 
 	// If we are in bootstrap or dev mode and the state is clean then we can
 	// bootstrap now.
-	if s.inMem || s.bootstrap {
-		var hasState bool
-		hasState, err = raft.HasExistingState(logStore, stable, snap)
-		if err != nil {
-			return err
-		}
-		if !hasState {
-			configuration := raft.Configuration{
-				Servers: []raft.Server{
-					{
-						ID:      s.config.LocalID,
-						Address: trans.LocalAddr(),
-					},
-				},
-			}
+	bootstrapConf, err := s.bootstrapConfig(s.peers)
+	if err != nil {
+		return err
+	}
 
-			if err = raft.BootstrapCluster(s.config,
-				logStore, stable, snap, trans, configuration); err != nil {
-				return err
-			}
+	if bootstrapConf != nil {
+		if err = raft.BootstrapCluster(
+			s.config, s.logStore, s.stableStore,
+			s.snapStore, trans, *bootstrapConf); err != nil {
+			return err
 		}
 	}
 
-	s.raft, err = raft.NewRaft(s.config, s.fsm, logStore, stable, snap, trans)
+	s.raft, err = raft.NewRaft(s.config, s.fsm, s.logStore, s.stableStore, s.snapStore, s.raftTransport)
 	if err != nil {
 		return err
 	}
@@ -187,6 +175,31 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	logging.Debug("Raft server is starting")
 
 	return err
+}
+
+func (s *Server) bootstrapConfig(peers []PeerInfo) (*raft.Configuration, error) {
+	hasState, err := raft.HasExistingState(s.logStore, s.stableStore, s.snapStore)
+	if err != nil {
+		return nil, err
+	}
+
+	if !hasState {
+		raftConfig := &raft.Configuration{
+			Servers: make([]raft.Server, len(peers)),
+		}
+
+		for i, p := range peers {
+			raftConfig.Servers[i] = raft.Server{
+				ID:      raft.ServerID(p.ID),
+				Address: raft.ServerAddress(p.Address),
+			}
+		}
+
+		return raftConfig, nil
+	}
+
+	// return nil for raft.Configuration to use the existing log store files.
+	return nil, nil
 }
 
 func (s *Server) raftStorePath() string {
@@ -204,57 +217,6 @@ func (s *Server) FSM() *FSM {
 // Raft returns raft node
 func (s *Server) Raft() *raft.Raft {
 	return s.raft
-}
-
-// JoinInitialCluster joins the initial peers into raft cluster.
-func (s *Server) JoinInitialCluster() (err error) {
-	for _, peer := range s.peers {
-		if err = s.joinCluster(peer.ID, peer.Address); err != nil {
-			logging.Errorf("failed to join %s, %s: %v", peer.ID, peer.Address, err)
-		}
-	}
-
-	return
-}
-
-// joinCluster joins new node to Raft cluster. If node is already the member of cluster,
-// it will skip to add node.
-func (s *Server) joinCluster(nodeID, addr string) error {
-	if !s.IsLeader() {
-		return errors.New("only leader can join node to the cluster")
-	}
-
-	logging.Debugf("joining peer %s at %s to the cluster.", nodeID, addr)
-
-	configFuture := s.raft.GetConfiguration()
-	if err := configFuture.Error(); err != nil {
-		logging.Errorf("failed to get raft configuration: %v", err)
-		return err
-	}
-
-	for _, srv := range configFuture.Configuration().Servers {
-		// If a node already exists with either the joining node's ID or address,
-		// that node may need to be removed from the config first.
-		if srv.ID == raft.ServerID(nodeID) || srv.Address == raft.ServerAddress(addr) {
-			if srv.Address == raft.ServerAddress(addr) && srv.ID == raft.ServerID(nodeID) {
-				logging.Debugf("node %s at %s is already the member of cluster.", nodeID, addr)
-				return nil
-			}
-
-			future := s.raft.RemoveServer(srv.ID, 0, 0)
-			if err := future.Error(); err != nil {
-				return errors.Wrapf(err, "error removing existing node %s at %s", nodeID, addr)
-			}
-		}
-	}
-
-	f := s.raft.AddVoter(raft.ServerID(nodeID), raft.ServerAddress(addr), 0, 0)
-	if f.Error() != nil {
-		return f.Error()
-	}
-	logging.Debugf("node %s at %s joined successfully", nodeID, addr)
-
-	return nil
 }
 
 // IsLeader returns true if the current node is leader

@@ -58,7 +58,7 @@ type ActorPlacement struct {
 	clientStream v1pb.Placement_ReportDaprStatusClient
 
 	// placementTables is the consistent hashing table map to
-	// look up Dapr runtime host addressto locate actor.
+	// look up Dapr runtime host address to locate actor.
 	placementTables *hashing.ConsistentHashTables
 	// placementTableLock is the lock for placementTables.
 	placementTableLock *sync.RWMutex
@@ -83,7 +83,7 @@ type ActorPlacement struct {
 }
 
 func addDNSResolverPrefix(addr []string) []string {
-	resolvers := []string{}
+	resolvers := make([]string, 0, len(addr))
 	for _, a := range addr {
 		prefix := ""
 		host, _, err := net.SplitHostPort(a)
@@ -265,7 +265,9 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 	NEXT_SERVER:
 		if err != nil {
 			log.Debugf("error connecting to placement service: %v", err)
-			conn.Close()
+			if conn != nil {
+				conn.Close()
+			}
 			p.serverIndex = (p.serverIndex + 1) % len(p.serverAddr)
 			time.Sleep(placementReconnectInterval)
 			continue
