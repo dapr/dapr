@@ -12,8 +12,7 @@ spec:
   publishNotReadyAddresses: true
   ports:
   - name: api
-    port: {{ .Values.ports.port }} 
-    targetPort: {{ .Values.ports.targetPort }}
+    port: {{ .Values.ports.targetPort }}
   - name: raft-server
     port: 8201
     targetPort: 8201
