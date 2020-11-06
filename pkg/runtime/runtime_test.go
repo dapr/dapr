@@ -2099,7 +2099,7 @@ func TestInitBindings(t *testing.T) {
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
 		err := r.initBinding(c)
-		assert.NotEqual(t, "couldn't find input binding bindings.testInputBinding", err.Error())
+		assert.NoError(t, err)
 	})
 
 	t.Run("single output binding", func(t *testing.T) {
@@ -2135,8 +2135,7 @@ func TestInitBindings(t *testing.T) {
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
 		err := r.initBinding(input)
-		assert.Error(t, err)
-		assert.NotEqual(t, "couldn't find input binding bindings.test", err.Error())
+		assert.NoError(t, err)
 
 		output := components_v1alpha1.Component{}
 		output.ObjectMeta.Name = "testinput"
