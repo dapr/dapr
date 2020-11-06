@@ -762,7 +762,6 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	}
 
 	log.Infof("successful init for input binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
-
 	a.inputBindings[c.Name] = binding
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
