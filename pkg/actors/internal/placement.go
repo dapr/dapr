@@ -8,6 +8,7 @@ package internal
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/balancer/roundrobin"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -259,6 +261,12 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			opts = append(
 				opts,
 				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
+		}
+
+		if len(p.serverAddr) == 1 && strings.HasPrefix(p.serverAddr[0], "dns:///") {
+			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
+			// With round robin load balancer, Dapr can find the leader automatically.
+			opts = append(opts, grpc.WithBalancerName(roundrobin.Name))
 		}
 
 		conn, err := grpc.Dial(serverAddr, opts...)
