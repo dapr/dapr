@@ -470,7 +470,6 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
-	fakeServer.Shutdown()
 
 	t.Run("Invoke returns error - 403 ERR_DIRECT_INVOKE", func(t *testing.T) {
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
@@ -500,6 +499,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, 403, resp.StatusCode)
 		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
+	
 	fakeServer.Shutdown()
 }
 
