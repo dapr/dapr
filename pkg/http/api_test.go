@@ -499,7 +499,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, 403, resp.StatusCode)
 		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
-	
+
 	fakeServer.Shutdown()
 }
 
