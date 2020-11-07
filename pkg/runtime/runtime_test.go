@@ -1877,6 +1877,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1886,6 +1892,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -1901,6 +1908,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1910,6 +1923,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
 		fakeResp.WithRawData([]byte("Internal Error"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -1925,6 +1939,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1934,7 +1954,9 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
 		rt.appChannel = mockAppChannel
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}

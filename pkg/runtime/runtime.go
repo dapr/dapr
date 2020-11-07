@@ -649,6 +649,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
+	subscribed := a.isAppSubscribedToBinding(name)
+	if !subscribed {
+		return errors.Errorf("app %s not subscribed to binding", name)
+	}
 	err := binding.Read(func(resp *bindings.ReadResponse) error {
 		if resp != nil {
 			err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
@@ -1654,10 +1658,6 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 		return errors.New("app channel not initialized")
 	}
 	for name, binding := range a.inputBindings {
-		subscribed := a.isAppSubscribedToBinding(name)
-		if !subscribed {
-			log.Errorf("app %s not subscribed to binding", name)
-		}
 		go func(name string, binding bindings.InputBinding) {
 			err := a.readFromBinding(name, binding)
 			if err != nil {
