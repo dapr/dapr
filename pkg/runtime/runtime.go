@@ -651,7 +651,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
 	subscribed := a.isAppSubscribedToBinding(name)
 	if !subscribed {
-		return errors.Errorf("app %s not subscribed to binding", name)
+		return errors.Errorf("app not subscribed to binding %s", name)
 	}
 	err := binding.Read(func(resp *bindings.ReadResponse) error {
 		if resp != nil {
