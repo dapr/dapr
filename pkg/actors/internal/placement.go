@@ -148,6 +148,7 @@ func (p *ActorPlacement) Start() {
 
 			// TODO: we may need to handle specific errors later.
 			if !p.streamConnAlive || err != nil {
+				p.streamConnectedCh = make(chan bool)
 				p.streamConnAlive = false
 				p.closeStream()
 
@@ -165,8 +166,10 @@ func (p *ActorPlacement) Start() {
 				if newStream != nil {
 					p.clientConn = newConn
 					p.clientStream = newStream
-					p.streamConnectedCh <- true
 					p.streamConnAlive = true
+					close(p.streamConnectedCh)
+				} else {
+					log.Error("BUGBUGBUG: SHOULD NOT HAPPEN")
 				}
 
 				continue
@@ -185,7 +188,9 @@ func (p *ActorPlacement) Start() {
 		for !p.shutdown {
 			// Wait until stream is reconnected.
 			if !p.streamConnAlive || p.clientStream == nil {
+				log.Info("++++ WAITING FOR stream connection.")
 				<-p.streamConnectedCh
+				log.Info("---- WAITING FOR stream connection.")
 			}
 			if p.shutdown {
 				break
@@ -287,7 +292,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			goto NEXT_SERVER
 		}
 
-		log.Infof("established connection to placement service at %q", serverAddr)
+		log.Infof("established connection to placement service at %s", conn.Target())
 		return stream, conn
 	}
 

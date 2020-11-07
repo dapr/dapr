@@ -117,27 +117,31 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
 	disseminateTimer := time.NewTicker(disseminateTimerInterval)
 
-	p.memberUpdateCount = 0
+	p.memberUpdateCount.Store(0)
+
+	go p.processRaftStateCommand(stopCh)
+
+	defer log.Info("BUGBUGBUG: WHY exit!!")
 
 	for {
 		select {
 		case <-stopCh:
+			log.Info("BUGBUGBUG: WHY stopch!!")
 			faultyHostDetectTimer.Stop()
 			disseminateTimer.Stop()
 			return
 
 		case <-p.shutdownCh:
+			log.Info("BUGBUGBUG: WHY shutdownCh!!")
 			faultyHostDetectTimer.Stop()
 			disseminateTimer.Stop()
 			return
 
-		case op := <-p.membershipCh:
-			p.processRaftStateCommand(op)
-
 		case <-disseminateTimer.C:
 			// check if there is actor runtime member change.
-			if p.memberUpdateCount > 0 {
-				log.Debugf("request dessemination. memberUpdateCount count: %d", p.memberUpdateCount)
+			cnt := p.memberUpdateCount.Load()
+			if cnt > 0 {
+				log.Debugf("request dessemination. memberUpdateCount count: %d", cnt)
 				p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 			}
 
@@ -147,7 +151,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			// This faulty host will be removed from membership in the next dissemination period.
 			m := p.raftNode.FSM().State().Members
 			for _, v := range m {
-				if t.Sub(v.UpdatedAt) <= p.faultyHostDetectDuration {
+				if t.Sub(v.UpdatedAt) < p.faultyHostDetectDuration {
 					continue
 				}
 				log.Debugf("try to remove outdated hosts: %s, elapsed: %d ms", v.Name, t.Sub(v.UpdatedAt).Milliseconds())
@@ -161,56 +165,73 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 	}
 }
 
-func (p *Service) processRaftStateCommand(op hostMemberChange) {
-	switch op.cmdType {
-	case raft.MemberUpsert, raft.MemberRemove:
-		// MemberUpsert updates the state of dapr runtime host whenever
-		// Dapr runtime sends heartbeats every 1 second.
-		// MemberRemove will be queued by faultHostDetectTimer.
-		// Even if ApplyCommand is failed, both commands will retry
-		// until the state is consistent.
-		var raftErr error
-		updated := false
+func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
+	for {
+		select {
+		case <-stopCh:
+			log.Info("BUGBUGBUG: WHY stopch!!")
+			return
 
-		for retry := 0; retry < commandRetryMaxCount; retry++ {
-			updated, raftErr = p.raftNode.ApplyCommand(op.cmdType, op.host)
-			if raftErr == nil {
-				break
-			} else {
-				log.Debugf("fail to apply command: %v, retry: %d", raftErr, retry)
+		case <-p.shutdownCh:
+			log.Info("BUGBUGBUG: WHY shutdownCh!!")
+			return
+
+		case op := <-p.membershipCh:
+			switch op.cmdType {
+			case raft.MemberUpsert, raft.MemberRemove:
+				// MemberUpsert updates the state of dapr runtime host whenever
+				// Dapr runtime sends heartbeats every 1 second.
+				// MemberRemove will be queued by faultHostDetectTimer.
+				// Even if ApplyCommand is failed, both commands will retry
+				// until the state is consistent.
+				var raftErr error
+				updated := false
+
+				for retry := 0; retry < commandRetryMaxCount; retry++ {
+					updated, raftErr = p.raftNode.ApplyCommand(op.cmdType, op.host)
+					if raftErr == nil {
+						break
+					} else {
+						log.Debugf("fail to apply command: %v, retry: %d", raftErr, retry)
+					}
+					time.Sleep(commandRetryInterval)
+				}
+
+				if raftErr != nil {
+					log.Errorf("fail to apply command: %v", raftErr)
+				}
+
+				if updated {
+					p.memberUpdateCount.Inc()
+				}
+
+			case raft.TableDisseminate:
+				// TableDissminate will be triggered by disseminateTimer.
+				// This disseminates the latest consistent hashing tables to Dapr runtime.
+
+				// Disseminate hashing tables to Dapr runtimes only if number of current stream connections
+				// and number of FSM state members are matched. Otherwise, this will be retried until
+				// the numbers are matched.
+
+				// When placement node first gets the leadership, it needs to wait until runtimes connecting
+				// old leader connects to new leader. The numbers will be eventually consistent.
+				streamConns := len(p.streamConns)
+				targetConns := len(p.raftNode.FSM().State().Members)
+				cnt := p.memberUpdateCount.Load()
+				if streamConns == targetConns && cnt > 0 {
+					log.Debugf(
+						"desseminate tables to memers. memberUpdateCount: %d, streams: %d, targets: %d",
+						cnt, streamConns, targetConns)
+					p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
+					log.Debugf(
+						"dessemination is completed. memberUpdateCount: %d, streams: %d, targets: %d",
+						cnt, streamConns, targetConns)
+					p.memberUpdateCount.Store(0)
+
+					// set faultyHostDetectDuration to the default duration.
+					p.faultyHostDetectDuration = faultyHostDetectDefaultDuration
+				}
 			}
-			time.Sleep(commandRetryInterval)
-		}
-
-		if raftErr != nil {
-			log.Errorf("fail to apply command: %v", raftErr)
-		}
-
-		if updated {
-			p.memberUpdateCount++
-		}
-
-	case raft.TableDisseminate:
-		// TableDissminate will be triggered by disseminateTimer.
-		// This disseminates the latest consistent hashing tables to Dapr runtime.
-
-		// Disseminate hashing tables to Dapr runtimes only if number of current stream connections
-		// and number of FSM state members are matched. Otherwise, this will be retried until
-		// the numbers are matched.
-
-		// When placement node first gets the leadership, it needs to wait until runtimes connecting
-		// old leader connects to new leader. The numbers will be eventually consistent.
-		streamConns := len(p.streamConns)
-		targetConns := len(p.raftNode.FSM().State().Members)
-		if streamConns == targetConns {
-			log.Debugf(
-				"desseminate tables to memers. memberUpdateCount: %d, streams: %d, targets: %d",
-				p.memberUpdateCount, streamConns, targetConns)
-			p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
-			p.memberUpdateCount = 0
-
-			// set faultyHostDetectDuration to the default duration.
-			p.faultyHostDetectDuration = faultyHostDetectDefaultDuration
 		}
 	}
 }

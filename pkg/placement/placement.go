@@ -17,6 +17,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,7 +42,7 @@ const (
 	// Once the first dissemination happens after getting leadership, membershipChangeWorker will
 	// use faultyHostDetectDefaultDuration.
 	faultyHostDetectInitialDuration = 6 * time.Second
-	faultyHostDetectDefaultDuration = 3 * time.Second
+	faultyHostDetectDefaultDuration = 4 * time.Second
 
 	// faultyHostDetectInterval is the interval to check the faulty member.
 	faultyHostDetectInterval = 500 * time.Millisecond
@@ -75,7 +76,7 @@ type Service struct {
 	disseminateLock *sync.Mutex
 	// memberUpdateCount represents how many dapr runtimes needs to change.
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
-	memberUpdateCount int
+	memberUpdateCount atomic.Uint32
 
 	// faultyHostDetectDuration
 	faultyHostDetectDuration time.Duration
