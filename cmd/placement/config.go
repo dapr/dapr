@@ -27,7 +27,7 @@ type config struct {
 	raftPeerString   string
 	raftPeers        []raft.PeerInfo
 	raftInMemEnabled bool
-	raftBootStrap    bool
+	raftLogStorePath string
 
 	// Placement server configurations
 	placementPort int
@@ -49,7 +49,7 @@ func newConfig() *config {
 		raftPeerString:   "node0=127.0.0.1:15050",
 		raftPeers:        []raft.PeerInfo{},
 		raftInMemEnabled: true,
-		raftBootStrap:    false,
+		raftLogStorePath: "",
 
 		placementPort: defaultPlacementPort,
 		healthzPort:   defaultHealthzPort,
@@ -59,7 +59,8 @@ func newConfig() *config {
 
 	flag.StringVar(&cfg.raftID, "id", cfg.raftID, "Placement server ID.")
 	flag.StringVar(&cfg.raftPeerString, "initial-cluster", cfg.raftPeerString, "raft cluster peers")
-	flag.BoolVar(&cfg.raftInMemEnabled, "inmem-store-enabled", cfg.raftInMemEnabled, "Enable in-memory log and snapshot store")
+	flag.BoolVar(&cfg.raftInMemEnabled, "inmem-store-enabled", cfg.raftInMemEnabled, "Enable in-memory log and snapshot store unless --raft-logstore-path is set")
+	flag.StringVar(&cfg.raftLogStorePath, "raft-logstore-path", cfg.raftLogStorePath, "raft log store path.")
 	flag.IntVar(&cfg.placementPort, "port", cfg.placementPort, "sets the gRPC port for the placement service")
 	flag.IntVar(&cfg.healthzPort, "healthz-port", cfg.healthzPort, "sets the HTTP port for the healthz server")
 	flag.StringVar(&cfg.certChainPath, "certchain", cfg.certChainPath, "Path to the credentials directory holding the cert chain")
@@ -75,7 +76,9 @@ func newConfig() *config {
 	flag.Parse()
 
 	cfg.raftPeers = parsePeersFromFlag(cfg.raftPeerString)
-	cfg.raftBootStrap = len(cfg.raftPeers) > 1
+	if cfg.raftLogStorePath != "" {
+		cfg.raftInMemEnabled = false
+	}
 
 	return &cfg
 }
