@@ -18,7 +18,7 @@ const (
 	defaultCredentialsPath   = "/var/run/dapr/credentials"
 	defaultHealthzPort       = 8080
 	defaultPlacementPort     = 50005
-	defaultReplicationFactor = 1000
+	defaultReplicationFactor = 100
 )
 
 type config struct {
