@@ -64,6 +64,10 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 		Entries: make(map[string]*v1pb.PlacementTable),
 	}
 
+	totalHostSize := 0
+	totalSortedSet := 0
+	totalLoadMap := 0
+
 	entries := c.state.hashingTableMap
 	for k, v := range entries {
 		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
@@ -90,7 +94,13 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 			table.LoadMap[lk] = &h
 		}
 		newTable.Entries[k] = &table
+
+		totalHostSize += len(table.Hosts)
+		totalSortedSet += len(table.SortedSet)
+		totalLoadMap += len(table.LoadMap)
 	}
+
+	logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
 
 	return newTable
 }
