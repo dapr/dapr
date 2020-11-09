@@ -307,7 +307,7 @@ func TestActorFeatures(t *testing.T) {
 
 		tr.Platform.Restart(appName)
 
-		// wait until actors are redistrubted.
+		// wait until actors are redistributed.
 		time.Sleep(10 * time.Second)
 
 		newHostname, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
@@ -333,7 +333,7 @@ func TestActorFeatures(t *testing.T) {
 
 		tr.Platform.Scale(appName, appScaleToCheckRebalance)
 
-		// wait until actors are redistrubted.
+		// wait until actors are redistributed.
 		time.Sleep(10 * time.Second)
 
 		anyActorMoved := false

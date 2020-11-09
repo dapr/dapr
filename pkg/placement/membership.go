@@ -287,7 +287,7 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 				remoteAddr = peer.Addr.String()
 			}
 
-			log.Errorf("error updating runtime host (%s) on unlock operation: %s", remoteAddr, err)
+			log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
 			// TODO: the error should not be ignored. By handing error or retrying dissemination,
 			// this logic needs to be improved. Otherwise, the runtimes throwing the exeception
 			// will have the inconsistent hashing tables.
