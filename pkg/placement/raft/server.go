@@ -78,8 +78,9 @@ func tryResolveRaftAdvertiseAddr(bindAddr string) (*net.TCPAddr, error) {
 	)
 
 	var err error
+	var addr *net.TCPAddr
 	for retry := 0; retry < retryCount; retry++ {
-		addr, err := net.ResolveTCPAddr("tcp", bindAddr)
+		addr, err = net.ResolveTCPAddr("tcp", bindAddr)
 		if err == nil {
 			return addr, nil
 		}
