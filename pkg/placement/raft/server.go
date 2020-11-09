@@ -72,8 +72,10 @@ func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
 func tryResolveRaftAdvertiseAddr(bindAddr string) (*net.TCPAddr, error) {
 	// HACKHACK: Kubernetes POD DNS A record population takes some time
 	// to look up the address after StatefulSet POD is deployed.
-	const retryCount = 120
-	var interval = 1 * time.Second
+	const (
+		retryCount = 120
+		interval   = 2 * time.Second
+	)
 
 	var err error
 	for retry := 0; retry < retryCount; retry++ {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"google.golang.org/grpc/peer"
 )
 
 const (
@@ -120,18 +121,14 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 
 	go p.processRaftStateCommand(stopCh)
 
-	defer log.Info("BUGBUGBUG: WHY exit!!")
-
 	for {
 		select {
 		case <-stopCh:
-			log.Info("BUGBUGBUG: WHY stopch!!")
 			faultyHostDetectTimer.Stop()
 			disseminateTimer.Stop()
 			return
 
 		case <-p.shutdownCh:
-			log.Info("BUGBUGBUG: WHY shutdownCh!!")
 			faultyHostDetectTimer.Stop()
 			disseminateTimer.Stop()
 			return
@@ -141,7 +138,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			if p.disseminateNextTime <= t.UnixNano() && len(p.membershipCh) == 0 {
 				cnt := p.memberUpdateCount.Load()
 				if cnt > 0 {
-					log.Debugf("request dessemination. memberUpdateCount count: %d", cnt)
+					log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCount count: %d", cnt)
 					p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 				}
 			}
@@ -163,7 +160,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 					if elapsed < int64(p.faultyHostDetectDuration) {
 						continue
 					}
-					log.Debugf("try to remove outdated hosts: %s, elapsed: %d ns", v.Name, elapsed)
+					log.Debugf("Try to remove outdated host: %s, elapsed: %d ns", v.Name, elapsed)
 
 					p.membershipCh <- hostMemberChange{
 						cmdType: raft.MemberRemove,
@@ -228,13 +225,14 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 				nTargetConns := len(p.raftNode.FSM().State().Members)
 				cnt := p.memberUpdateCount.Load()
 				if cnt > 0 {
-					log.Debugf(
-						"desseminate tables to memers. memberUpdateCount: %d, streams: %d, targets: %d",
-						cnt, nStreamConnPool, nTargetConns)
-					p.performTablesUpdate(p.streamConnPool, p.raftNode.FSM().PlacementState())
-					log.Debugf(
-						"dessemination is completed. memberUpdateCount: %d, streams: %d, targets: %d",
-						cnt, nStreamConnPool, nTargetConns)
+					state := p.raftNode.FSM().PlacementState()
+					log.Infof(
+						"Start desseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+						cnt, nStreamConnPool, nTargetConns, state.Version)
+					p.performTablesUpdate(p.streamConnPool, state)
+					log.Infof(
+						"Completed dessemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+						cnt, nStreamConnPool, nTargetConns, state.Version)
 					p.memberUpdateCount.Store(0)
 
 					// set faultyHostDetectDuration to the default duration.
@@ -269,8 +267,14 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 	var err error
 	for _, s := range targets {
 		err = s.Send(o)
+
 		if err != nil {
-			log.Errorf("error updating host on unlock operation: %s", err)
+			peerAddr := "n/a"
+			if peer, ok := peer.FromContext(s.Context()); ok {
+				peerAddr = peer.Addr.String()
+			}
+
+			log.Errorf("error updating host(%s) on unlock operation: %s", peerAddr, err)
 			// TODO: the error should not be ignored. By handing error or retrying dissemination,
 			// this logic needs to be improved. Otherwise, the runtimes throwing the exeception
 			// will have the inconsistent hashing tables.
