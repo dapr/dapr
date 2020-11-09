@@ -16,4 +16,3 @@ spec:
   - name: raft-node
     port: {{ .Values.ports.raftRPCPort }}
   clusterIP: None
-  

@@ -90,8 +90,13 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.tls.root.certPEM`            | Root Certificate cert                                                   | `""`                    |
 | `dapr_sentry.trustDomain`                 | Trust domain (logical group to manage app trust relationship) for access control list | `cluster.local`  |
 | `dapr_placement.replicaCount`             | Number of replicas for Dapr Placement                                   | `1`                     |
+| `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
 | `dapr_placement.logLevel`                 | Dapr Placement service Log level                                        | `info`                  |
 | `dapr_placement.image.name`               | Dapr Placement service docker image name (`global.registry/dapr_placement.image.name`) | `dapr`   |
+| `dapr_placement.cluster.forceInMemoryLog` | Use in-memeory log store and disable volume attach when `global.ha.enabled` is true | `false`   |
+| `dapr_placement.cluster.logStorePath`     | Mount path for persistent volume for log store when `global.ha.enabled` is true | `/var/run/dapr/raft-log`   |
+| `dapr_placement.volumeclaims.storageSize` | Attached volume size | `1Gi`   |
+| `dapr_placement.volumeclaims.storageClassName` | storage class name |    |
 | `dapr_dashboard.replicaCount`             | Number of replicas for Dapr Dashboard                                   | `1`                     |
 | `dapr_dashboard.logLevel`                 | Dapr Dashboard service Log level                                        | `info`                  |
 | `dapr_dashboard.image.registry`           | Dapr Dashboard docker registry                                          | `docker.io/daprio`      |
