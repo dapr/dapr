@@ -79,9 +79,9 @@ func singlehopHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func multihopHandler(w http.ResponseWriter, r *http.Request) {
-	response, err := invokeService("serviceinvocation-callee-1", "singlehop")
+	response, statusCode, err := invokeService("serviceinvocation-callee-1", "singlehop")
 	if err != nil {
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, statusCode, err)
 		return
 	}
 
@@ -161,9 +161,9 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Printf("  testHandler invoking %s with method %s\n", commandBody.RemoteApp, commandBody.Method)
-	response, err := invokeService(commandBody.RemoteApp, commandBody.Method)
+	response, statusCode, err := invokeService(commandBody.RemoteApp, commandBody.Method)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(statusCode)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
 		})
@@ -174,30 +174,37 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func invokeService(remoteApp, method string) (appResponse, error) {
+func invokeService(remoteApp, method string) (appResponse, int, error) {
 	return invokeServiceWithBody(remoteApp, method, nil)
 }
 
-func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, error) {
+func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, int, error) {
 	resp, err := invokeServiceWithBodyHeader(remoteApp, method, data, map[string]string{})
+
 	if err != nil {
-		return appResponse{}, err
+		return appResponse{}, resp.StatusCode, err
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	if err != nil {
-		return appResponse{}, err
+		return appResponse{}, resp.StatusCode, err
 	}
 
-	fmt.Printf("invokeService here\n")
 	var appResp appResponse
 	err = json.Unmarshal(body, &appResp)
 	if err != nil {
-		return appResponse{}, err
+		return appResponse{}, resp.StatusCode, err
 	}
 
-	return appResp, nil
+	// invokeServiceWithBodyHeader uses http client.Do method which
+	// returns success for everything except 2xx error codes. Check
+	// the status code to extract non 2xx errors.
+	if resp.StatusCode != http.StatusOK {
+		return appResponse{}, resp.StatusCode, errors.New(appResp.Message)
+	}
+
+	return appResp, resp.StatusCode, nil
 }
 
 func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error) {
@@ -344,7 +351,7 @@ func testV1RequestHTTPToHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, 0, err)
 		return
 	}
 
@@ -419,7 +426,7 @@ func testV1RequestHTTPToGRPC(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, 0, err)
 		return
 	}
 
@@ -509,7 +516,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, 0, err)
 		return
 	}
 
@@ -615,7 +622,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, 0, err)
 		return
 	}
 
@@ -747,10 +754,11 @@ func httpToGrpcTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Printf("httpToGrpcTest calling with message %s\n", string(b))
-	resp, err := invokeServiceWithBody(commandBody.RemoteApp, "httpToGrpcTest", b)
+	resp, statusCode, err := invokeServiceWithBody(commandBody.RemoteApp, "httpToGrpcTest", b)
+
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, statusCode, err)
 		return
 	}
 
@@ -797,7 +805,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	resp, err := httpWrapper("POST", url, b)
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, 0, err)
 		return
 	}
 
@@ -830,7 +838,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	resp, err = httpWrapper("GET", url, b)
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, 0, err)
 		return
 	}
 
@@ -859,7 +867,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	resp, err = httpWrapper("PUT", url, b)
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, 0, err)
 		return
 	}
 
@@ -888,7 +896,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 	resp, err = httpWrapper("DELETE", url, b)
 	if err != nil {
 		fmt.Printf("response had error %s\n", err)
-		onHTTPCallFailed(w, err)
+		onHTTPCallFailed(w, 0, err)
 		return
 	}
 
@@ -1270,9 +1278,12 @@ func onSerializationFailed(w http.ResponseWriter, err error) {
 	logAndSetResponse(w, http.StatusInternalServerError, msg)
 }
 
-func onHTTPCallFailed(w http.ResponseWriter, err error) {
+func onHTTPCallFailed(w http.ResponseWriter, statusCode int, err error) {
 	msg := "HTTP call failed with " + err.Error()
-	logAndSetResponse(w, http.StatusInternalServerError, msg)
+	if statusCode == 0 {
+		statusCode = http.StatusInternalServerError
+	}
+	logAndSetResponse(w, statusCode, msg)
 }
 
 func logAndSetResponse(w http.ResponseWriter, statusCode int, message string) {

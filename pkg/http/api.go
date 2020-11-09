@@ -31,12 +31,16 @@ import (
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // API returns a list of HTTP endpoints for Dapr
 type API interface {
 	APIEndpoints() []Endpoint
 	MarkStatusAsReady()
+	SetAppChannel(appChannel channel.AppChannel)
+	SetDirectMessaging(directMessaging messaging.DirectMessaging)
+	SetActorRuntime(actor actors.Actors)
 }
 
 type api struct {
@@ -591,8 +595,14 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	resp, err := a.directMessaging.Invoke(reqCtx, targetID, req)
 	// err does not represent user application response
 	if err != nil {
+		// Allowlists policies that are applied on the callee side can return a Permission Denied error.
+		// For everything else, treat it as a gRPC transport error
+		statusCode := fasthttp.StatusInternalServerError
+		if status.Code(err) == codes.PermissionDenied {
+			statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
+		}
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, err))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, statusCode, msg)
 		return
 	}
 
@@ -1128,4 +1138,16 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 	}
 	// By default if a configuration is not defined for a secret store, return true.
 	return true
+}
+
+func (a *api) SetAppChannel(appChannel channel.AppChannel) {
+	a.appChannel = appChannel
+}
+
+func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
+	a.directMessaging = directMessaging
+}
+
+func (a *api) SetActorRuntime(actor actors.Actors) {
+	a.actor = actor
 }

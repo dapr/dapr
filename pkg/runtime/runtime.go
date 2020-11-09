@@ -243,19 +243,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	a.blockUntilAppIsReady()
-
 	a.hostAddress, err = utils.GetHostAddress()
 	if err != nil {
 		return errors.Wrap(err, "failed to determine host address")
 	}
-
-	err = a.createAppChannel()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
-	}
-
-	a.loadAppConfiguration()
 
 	// Register and initialize name resolution for service discovery.
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
@@ -284,13 +275,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.flushOutstandingComponents()
 
-	a.initDirectMessaging(a.nameResolver)
-
-	err = a.initActors()
-	if err != nil {
-		log.Warnf("failed to init actors: %s", err)
-	}
-
 	// Register and initialize HTTP middleware
 	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 	pipeline, err := a.buildHTTPPipeline()
@@ -302,11 +286,16 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.populateSecretsConfiguration()
 	// Create and start internal and external gRPC servers
 	grpcAPI := a.getGRPCAPI()
+
 	err = a.startGRPCAPIServer(grpcAPI, a.runtimeConfig.APIGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
 	log.Infof("API gRPC server is running on port %v", a.runtimeConfig.APIGRPCPort)
+
+	// Start HTTP Server
+	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
+	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
 
 	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
@@ -314,10 +303,35 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.InternalGRPCPort)
 
-	// Start HTTP Server
-	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
-	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
+	a.blockUntilAppIsReady()
 
+	err = a.createAppChannel()
+	if err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+	}
+	a.daprHTTPAPI.SetAppChannel(a.appChannel)
+	grpcAPI.SetAppChannel(a.appChannel)
+
+	a.loadAppConfiguration()
+
+	a.initDirectMessaging(a.nameResolver)
+
+	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
+	grpcAPI.SetDirectMessaging(a.directMessaging)
+
+	err = a.initActors()
+	if err != nil {
+		log.Warnf("failed to init actors: %s", err)
+	}
+
+	a.daprHTTPAPI.SetActorRuntime(a.actor)
+	grpcAPI.SetActorRuntime(a.actor)
+
+	a.startSubscribing()
+	err = a.startReadingFromBindings()
+	if err != nil {
+		log.Warnf("failed to read from bindings: %s ", err)
+	}
 	return nil
 }
 
@@ -635,6 +649,10 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
+	subscribed := a.isAppSubscribedToBinding(name)
+	if !subscribed {
+		return errors.Errorf("app not subscribed to binding %s", name)
+	}
 	err := binding.Read(func(resp *bindings.ReadResponse) error {
 		if resp != nil {
 			err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
@@ -732,14 +750,6 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) bool {
 }
 
 func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
-	if a.appChannel == nil {
-		return errors.New("app channel not initialized")
-	}
-	subscribed := a.isAppSubscribedToBinding(c.ObjectMeta.Name)
-	if !subscribed {
-		return nil
-	}
-
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type)
 	if err != nil {
 		log.Warnf("failed to create input binding %s (%s): %s", c.ObjectMeta.Name, c.Spec.Type, err)
@@ -757,14 +767,6 @@ func (a *DaprRuntime) initInputBinding(c components_v1alpha1.Component) error {
 	}
 
 	log.Infof("successful init for input binding %s (%s)", c.ObjectMeta.Name, c.Spec.Type)
-	if _, ok := a.inputBindings[c.Name]; !ok {
-		go func() {
-			err := a.readFromBinding(c.Name, binding)
-			if err != nil {
-				log.Errorf("error reading from input binding %s: %s", c.Name, err)
-			}
-		}()
-	}
 	a.inputBindings[c.Name] = binding
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 	return nil
@@ -973,11 +975,6 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	a.scopedSubscriptions[pubsubName] = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
 	a.scopedPublishings[pubsubName] = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
 	a.allowedTopics[pubsubName] = scopes.GetAllowedTopics(properties)
-	if _, ok := a.pubSubs[pubsubName]; !ok {
-		if err := a.beginPubSub(pubsubName, pubSub); err != nil {
-			return err
-		}
-	}
 	a.pubSubs[pubsubName] = pubSub
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 
@@ -1327,6 +1324,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 		// the category entered is incorrect, return error
 		return errors.Errorf("incorrect type %s", comp.Spec.Type)
 	}
+
 	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
 		return err
 	}
@@ -1518,6 +1516,7 @@ func (a *DaprRuntime) getConfigurationHTTP() (*config.ApplicationConfig, error) 
 	}
 
 	contentType, body := resp.RawData()
+	log.Infof("body received is %s", string(body))
 	if contentType != invokev1.JSONContentType {
 		log.Debugf("dapr/config returns invalid content_type: %s", contentType)
 	}
@@ -1645,4 +1644,26 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 
 func componentDependency(compCategory ComponentCategory, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
+}
+func (a *DaprRuntime) startSubscribing() {
+	for name, pubsub := range a.pubSubs {
+		if err := a.beginPubSub(name, pubsub); err != nil {
+			log.Errorf("error occurred while beginning pubsub %s: %s", name, err)
+		}
+	}
+}
+
+func (a *DaprRuntime) startReadingFromBindings() error {
+	if a.appChannel == nil {
+		return errors.New("app channel not initialized")
+	}
+	for name, binding := range a.inputBindings {
+		go func(name string, binding bindings.InputBinding) {
+			err := a.readFromBinding(name, binding)
+			if err != nil {
+				log.Errorf("error reading from input binding %s: %s", name, err)
+			}
+		}(name, binding)
+	}
+	return nil
 }
