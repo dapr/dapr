@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	commandRetryInterval = 20 * time.Millisecond
-	commandRetryMaxCount = 3
-
-	barrierWriteTimeout = 2 * time.Minute
+	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
+	raftApplyCommandMaxConcurrency = 10
+	barrierWriteTimeout            = 2 * time.Minute
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -137,28 +136,39 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			disseminateTimer.Stop()
 			return
 
-		case <-disseminateTimer.C:
+		case t := <-disseminateTimer.C:
 			// check if there is actor runtime member change.
-			cnt := p.memberUpdateCount.Load()
-			if cnt > 0 {
-				log.Debugf("request dessemination. memberUpdateCount count: %d", cnt)
-				p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
+			if p.disseminateNextTime <= t.UnixNano() && len(p.membershipCh) == 0 {
+				cnt := p.memberUpdateCount.Load()
+				if cnt > 0 {
+					log.Debugf("request dessemination. memberUpdateCount count: %d", cnt)
+					p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
+				}
 			}
 
 		case t := <-faultyHostDetectTimer.C:
 			// Each dapr runtime sends the heartbeat every one second and placement will update UpdatedAt timestamp.
 			// If UpdatedAt is outdated, we can mark the host as faulty node.
 			// This faulty host will be removed from membership in the next dissemination period.
-			m := p.raftNode.FSM().State().Members
-			for _, v := range m {
-				if t.Sub(v.UpdatedAt) < p.faultyHostDetectDuration {
-					continue
-				}
-				log.Debugf("try to remove outdated hosts: %s, elapsed: %d ms", v.Name, t.Sub(v.UpdatedAt).Milliseconds())
+			if len(p.membershipCh) == 0 {
+				m := p.raftNode.FSM().State().Members
+				for _, v := range m {
+					heartbeat, ok := p.lastHeartBeat.Load(v.Name)
+					if !ok {
+						p.lastHeartBeat.Store(v.Name, time.Now().UnixNano())
+						continue
+					}
 
-				p.membershipCh <- hostMemberChange{
-					cmdType: raft.MemberRemove,
-					host:    raft.DaprHostMember{Name: v.Name},
+					elapsed := t.UnixNano() - heartbeat.(int64)
+					if elapsed < int64(p.faultyHostDetectDuration) {
+						continue
+					}
+					log.Debugf("try to remove outdated hosts: %s, elapsed: %d ns", v.Name, elapsed)
+
+					p.membershipCh <- hostMemberChange{
+						cmdType: raft.MemberRemove,
+						host:    raft.DaprHostMember{Name: v.Name},
+					}
 				}
 			}
 		}
@@ -166,14 +176,14 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 }
 
 func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
+	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)
+
 	for {
 		select {
 		case <-stopCh:
-			log.Info("BUGBUGBUG: WHY stopch!!")
 			return
 
 		case <-p.shutdownCh:
-			log.Info("BUGBUGBUG: WHY shutdownCh!!")
 			return
 
 		case op := <-p.membershipCh:
@@ -184,26 +194,25 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 				// MemberRemove will be queued by faultHostDetectTimer.
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
-				var raftErr error
-				updated := false
-
-				for retry := 0; retry < commandRetryMaxCount; retry++ {
+				logApplyConcurrency <- struct{}{}
+				go func() {
+					var raftErr error
+					updated := false
 					updated, raftErr = p.raftNode.ApplyCommand(op.cmdType, op.host)
-					if raftErr == nil {
-						break
+					if raftErr != nil {
+						log.Errorf("fail to apply command: %v", raftErr)
 					} else {
-						log.Debugf("fail to apply command: %v, retry: %d", raftErr, retry)
+						if op.cmdType == raft.MemberRemove {
+							p.lastHeartBeat.Delete(op.host.Name)
+						}
+
+						if updated {
+							p.memberUpdateCount.Inc()
+							p.disseminateNextTime = time.Now().Add(disseminateTimeout).UnixNano()
+						}
 					}
-					time.Sleep(commandRetryInterval)
-				}
-
-				if raftErr != nil {
-					log.Errorf("fail to apply command: %v", raftErr)
-				}
-
-				if updated {
-					p.memberUpdateCount.Inc()
-				}
+					<-logApplyConcurrency
+				}()
 
 			case raft.TableDisseminate:
 				// TableDissminate will be triggered by disseminateTimer.
@@ -215,17 +224,17 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 
 				// When placement node first gets the leadership, it needs to wait until runtimes connecting
 				// old leader connects to new leader. The numbers will be eventually consistent.
-				streamConns := len(p.streamConns)
-				targetConns := len(p.raftNode.FSM().State().Members)
+				nStreamConnPool := len(p.streamConnPool)
+				nTargetConns := len(p.raftNode.FSM().State().Members)
 				cnt := p.memberUpdateCount.Load()
-				if streamConns == targetConns && cnt > 0 {
+				if cnt > 0 {
 					log.Debugf(
 						"desseminate tables to memers. memberUpdateCount: %d, streams: %d, targets: %d",
-						cnt, streamConns, targetConns)
-					p.performTablesUpdate(p.streamConns, p.raftNode.FSM().PlacementState())
+						cnt, nStreamConnPool, nTargetConns)
+					p.performTablesUpdate(p.streamConnPool, p.raftNode.FSM().PlacementState())
 					log.Debugf(
 						"dessemination is completed. memberUpdateCount: %d, streams: %d, targets: %d",
-						cnt, streamConns, targetConns)
+						cnt, nStreamConnPool, nTargetConns)
 					p.memberUpdateCount.Store(0)
 
 					// set faultyHostDetectDuration to the default duration.

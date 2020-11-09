@@ -51,7 +51,7 @@ type ActorPlacement struct {
 	streamConnAlive bool
 	// streamConnectedCh is the channel to notify that the stream
 	// between runtime and placement is connected.
-	streamConnectedCh chan bool
+	streamConnectedCh chan struct{}
 	// clientCert is the workload certificate to connect placement.
 	clientCert *dapr_credentials.CertChain
 	// clientConn is the gRPC client connection.
@@ -128,7 +128,7 @@ func (p *ActorPlacement) Start() {
 	// streamConnAlive represents the status of stream channel. This must be changed in receiver loop.
 	// This flag reduces the unnecessary request retry.
 	p.streamConnAlive = true
-	p.streamConnectedCh = make(chan bool)
+	p.streamConnectedCh = make(chan struct{})
 	p.serverIndex = 0
 	p.shutdown = false
 	p.clientStream, p.clientConn = p.establishStreamConn()
@@ -148,7 +148,6 @@ func (p *ActorPlacement) Start() {
 
 			// TODO: we may need to handle specific errors later.
 			if !p.streamConnAlive || err != nil {
-				p.streamConnectedCh = make(chan bool)
 				p.streamConnAlive = false
 				p.closeStream()
 
@@ -168,8 +167,7 @@ func (p *ActorPlacement) Start() {
 					p.clientStream = newStream
 					p.streamConnAlive = true
 					close(p.streamConnectedCh)
-				} else {
-					log.Error("BUGBUGBUG: SHOULD NOT HAPPEN")
+					p.streamConnectedCh = make(chan struct{})
 				}
 
 				continue
@@ -187,11 +185,10 @@ func (p *ActorPlacement) Start() {
 		defer p.shutdownConnLoop.Done()
 		for !p.shutdown {
 			// Wait until stream is reconnected.
-			if !p.streamConnAlive || p.clientStream == nil {
-				log.Info("++++ WAITING FOR stream connection.")
+			if !p.streamConnAlive {
 				<-p.streamConnectedCh
-				log.Info("---- WAITING FOR stream connection.")
 			}
+
 			if p.shutdown {
 				break
 			}
@@ -221,7 +218,9 @@ func (p *ActorPlacement) Start() {
 				log.Debugf("failed to report status to placement service : %v", err)
 			}
 
-			time.Sleep(statusReportHeartbeatInterval)
+			if p.streamConnAlive {
+				time.Sleep(statusReportHeartbeatInterval)
+			}
 		}
 	}()
 }
@@ -300,7 +299,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 }
 
 func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
-	log.Infof("placement order received: %s", in.Operation)
+	log.Debugf("placement order received: %s", in.Operation)
 	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
 
 	// lock all incoming calls when an updated table arrives

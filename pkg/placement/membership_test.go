@@ -91,11 +91,13 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		<-done
 
+		// ignore disseminateTimeout.
+		testServer.disseminateNextTime = 0
 		// wait until table dissemination.
-		time.Sleep(disseminateTimerInterval + 200*time.Millisecond)
-		assert.Equal(t, 1, len(testServer.streamConns))
-		assert.Equal(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
-		assert.Equal(t, 0, testServer.memberUpdateCount,
+		time.Sleep(disseminateTimerInterval * 2)
+		assert.Equal(t, 1, len(testServer.streamConnPool))
+		assert.Equal(t, len(testServer.streamConnPool), len(testServer.raftNode.FSM().State().Members))
+		assert.Equal(t, uint32(0), testServer.memberUpdateCount.Load(),
 			"flushed all member updates")
 		assert.Equal(t, faultyHostDetectDefaultDuration, testServer.faultyHostDetectDuration,
 			"faultyHostDetectDuration must be faultyHostDetectDuration")
@@ -112,11 +114,11 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// act
 		arrangeFakeMembers(t)
 
-		assert.Equal(t, 0, len(testServer.streamConns))
-		assert.NotEqual(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
+		assert.Equal(t, 0, len(testServer.streamConnPool))
+		assert.NotEqual(t, len(testServer.streamConnPool), len(testServer.raftNode.FSM().State().Members))
 		// wait until table dissemination.
 		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
-		assert.Equal(t, 3, testServer.memberUpdateCount,
+		assert.Equal(t, uint32(3), testServer.memberUpdateCount.Load(),
 			"memberUpdateCount must not be cleared if connection are unmatched.")
 
 		tearDownEach()
@@ -185,7 +187,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Call performTableUpdate directly, not by MembershipChangeWorker loop.
-	testServer.performTablesUpdate(testServer.streamConns, nil)
+	testServer.performTablesUpdate(testServer.streamConnPool, nil)
 
 	// assert
 	for i := 0; i < testClients; i++ {
