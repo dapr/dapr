@@ -1,4 +1,3 @@
-
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -95,7 +94,7 @@ spec:
   {{- end }}
 {{- end }}
         - "--log-level"
-        - {{ .Values.logLevel }}
+        - debug
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}

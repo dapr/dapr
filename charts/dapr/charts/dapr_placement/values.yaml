@@ -10,10 +10,10 @@ fullnameOverride: ""
 ports:
   protocol: TCP
   apiPort: 50005
-  raftRPCPort: 8301
+  raftRPCPort: 8201
 
 cluster:
-  initialCluster: "dapr-placement-0=dapr-placement-0.dapr-placement:8301,dapr-placement-1=dapr-placement-1.dapr-placement:8301,dapr-placement-2=dapr-placement-2.dapr-placement.dapr-system:8301"
+  initialCluster: "dapr-placement-0=dapr-placement-0.dapr-placement:8201,dapr-placement-1=dapr-placement-1.dapr-placement:8201,dapr-placement-2=dapr-placement-2.dapr-placement:8201"
   forceInMemoryLog: false
   logStorePath: /var/run/dapr/raft-log
 
