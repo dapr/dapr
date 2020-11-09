@@ -38,6 +38,9 @@ import (
 type API interface {
 	APIEndpoints() []Endpoint
 	MarkStatusAsReady()
+	SetAppChannel(appChannel channel.AppChannel)
+	SetDirectMessaging(directMessaging messaging.DirectMessaging)
+	SetActorRuntime(actor actors.Actors)
 }
 
 type api struct {
@@ -1135,4 +1138,16 @@ func (a *api) isSecretAllowed(storeName, key string) bool {
 	}
 	// By default if a configuration is not defined for a secret store, return true.
 	return true
+}
+
+func (a *api) SetAppChannel(appChannel channel.AppChannel) {
+	a.appChannel = appChannel
+}
+
+func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
+	a.directMessaging = directMessaging
+}
+
+func (a *api) SetActorRuntime(actor actors.Actors) {
+	a.actor = actor
 }
