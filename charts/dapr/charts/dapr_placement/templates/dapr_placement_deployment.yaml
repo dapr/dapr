@@ -138,6 +138,7 @@ spec:
         - name: {{ .Values.global.imagePullSecrets }}
 {{- end }}
 {{- if eq .Values.global.ha.enabled true }}
+  {{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:
   - metadata:
       name: raft-log
@@ -147,7 +148,8 @@ spec:
       resources:
         requests:
           storage: {{ .Values.volumeclaims.storageSize }}
-  {{- if .Values.volumeclaims.storageClassName }}
+    {{- if .Values.volumeclaims.storageClassName }}
       storageClassName: {{ .Values.volumeclaims.storageClassName }}
+    {{- end }}
   {{- end }}
 {{- end }}
