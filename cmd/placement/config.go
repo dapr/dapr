@@ -45,8 +45,8 @@ type config struct {
 func newConfig() *config {
 	// Default configuration
 	cfg := config{
-		raftID:           "node0",
-		raftPeerString:   "node0=127.0.0.1:15050",
+		raftID:           "dapr-placement-0",
+		raftPeerString:   "dapr-placement-0=127.0.0.1:8201",
 		raftPeers:        []raft.PeerInfo{},
 		raftInMemEnabled: true,
 		raftLogStorePath: "",

@@ -190,7 +190,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		return err
 	}
 
-	logging.Debug("Raft server is starting")
+	logging.Infof("Raft server is starting on %s...", s.raftBind)
 
 	return err
 }
