@@ -94,7 +94,7 @@ spec:
   {{- end }}
 {{- end }}
         - "--log-level"
-        - debug
+        - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
