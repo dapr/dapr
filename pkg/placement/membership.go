@@ -150,6 +150,12 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			if len(p.membershipCh) == 0 {
 				m := p.raftNode.FSM().State().Members
 				for _, v := range m {
+					// When leader is changed and current placement node become new leader, there are no stream
+					// connections from each runtime so that lastHeartBeat have no heartbeat timestamp record
+					// from each runtime. Eventually, all runtime will find the leader and connect to the leader
+					// of placement servers.
+					// Before all runtimes connect to the leader of placements, it will record the current
+					// time as heartbeat timestamp.
 					heartbeat, ok := p.lastHeartBeat.Load(v.Name)
 					if !ok {
 						p.lastHeartBeat.Store(v.Name, time.Now().UnixNano())
@@ -172,7 +178,11 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 	}
 }
 
+// processRaftStateCommand is the worker loop to apply membership change command to raft state
+// and will disseminate the latest hashing table to the connected dapr runtime.
 func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
+	// logApplyConcurrency is the buffered channel to limit the concurrency
+	// of raft apply command.
 	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)
 
 	for {
@@ -193,9 +203,7 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 				// until the state is consistent.
 				logApplyConcurrency <- struct{}{}
 				go func() {
-					var raftErr error
-					updated := false
-					updated, raftErr = p.raftNode.ApplyCommand(op.cmdType, op.host)
+					updated, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
 					if raftErr != nil {
 						log.Errorf("fail to apply command: %v", raftErr)
 					} else {
@@ -203,8 +211,12 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 							p.lastHeartBeat.Delete(op.host.Name)
 						}
 
+						// ApplyCommand returns true only if the command changes hashing table.
 						if updated {
 							p.memberUpdateCount.Inc()
+							// disseminateNextTime will be updated whenever apply is done, so that
+							// it will keep moving the time to disseminate the table, which will
+							// reduce the unnecessary table dissemination.
 							p.disseminateNextTime = time.Now().Add(disseminateTimeout).UnixNano()
 						}
 					}
@@ -223,8 +235,9 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 				// old leader connects to new leader. The numbers will be eventually consistent.
 				nStreamConnPool := len(p.streamConnPool)
 				nTargetConns := len(p.raftNode.FSM().State().Members)
-				cnt := p.memberUpdateCount.Load()
-				if cnt > 0 {
+
+				// ignore dissemination if there is no member update.
+				if cnt := p.memberUpdateCount.Load(); cnt > 0 {
 					state := p.raftNode.FSM().PlacementState()
 					log.Infof(
 						"Start desseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
@@ -269,16 +282,15 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 		err = s.Send(o)
 
 		if err != nil {
-			peerAddr := "n/a"
+			remoteAddr := "n/a"
 			if peer, ok := peer.FromContext(s.Context()); ok {
-				peerAddr = peer.Addr.String()
+				remoteAddr = peer.Addr.String()
 			}
 
-			log.Errorf("error updating host(%s) on unlock operation: %s", peerAddr, err)
+			log.Errorf("error updating runtime host (%s) on unlock operation: %s", remoteAddr, err)
 			// TODO: the error should not be ignored. By handing error or retrying dissemination,
 			// this logic needs to be improved. Otherwise, the runtimes throwing the exeception
 			// will have the inconsistent hashing tables.
-			continue
 		}
 	}
 

@@ -24,6 +24,9 @@ const (
 	raftLogCacheSize = 512
 
 	commandTimeout = 1 * time.Second
+
+	nameResolveRetryInterval = 2 * time.Second
+	nameResolveMaxRetry      = 120
 )
 
 // PeerInfo represents raft peer node information
@@ -72,19 +75,14 @@ func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
 func tryResolveRaftAdvertiseAddr(bindAddr string) (*net.TCPAddr, error) {
 	// HACKHACK: Kubernetes POD DNS A record population takes some time
 	// to look up the address after StatefulSet POD is deployed.
-	const (
-		retryCount = 120
-		interval   = 2 * time.Second
-	)
-
 	var err error
 	var addr *net.TCPAddr
-	for retry := 0; retry < retryCount; retry++ {
+	for retry := 0; retry < nameResolveMaxRetry; retry++ {
 		addr, err = net.ResolveTCPAddr("tcp", bindAddr)
 		if err == nil {
 			return addr, nil
 		}
-		time.Sleep(interval)
+		time.Sleep(nameResolveRetryInterval)
 	}
 	return nil, err
 }

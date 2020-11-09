@@ -42,7 +42,7 @@ const (
 	// Once the first dissemination happens after getting leadership, membershipChangeWorker will
 	// use faultyHostDetectDefaultDuration.
 	faultyHostDetectInitialDuration = 6 * time.Second
-	faultyHostDetectDefaultDuration = 4 * time.Second
+	faultyHostDetectDefaultDuration = 3 * time.Second
 
 	// faultyHostDetectInterval is the interval to check the faulty member.
 	faultyHostDetectInterval = 500 * time.Millisecond
@@ -171,7 +171,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	isActorRuntime := false
 
 	p.streamConnGroup.Add(1)
-	defer p.streamConnGroup.Done()
+	defer func() {
+		p.streamConnGroup.Done()
+		p.deleteStreamConn(stream)
+	}()
 
 	for p.hasLeadership {
 		req, err := stream.Recv()
@@ -188,33 +191,36 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 			// Ensure that the incoming runtime is actor instance.
 			isActorRuntime = len(req.Entities) > 0
-			if isActorRuntime {
-				// Record the heartbeat timestamp. This timestamp will be used to check if the member
-				// state maintained by raft is valid or not. If the member is outdated based the timestamp
-				// the member will be marked as faulty node and removed.
-				p.lastHeartBeat.Store(req.Name, time.Now().UnixNano())
+			if !isActorRuntime {
+				// ignore if this runtime is non-actor.
+				continue
+			}
 
-				members := p.raftNode.FSM().State().Members
+			// Record the heartbeat timestamp. This timestamp will be used to check if the member
+			// state maintained by raft is valid or not. If the member is outdated based the timestamp
+			// the member will be marked as faulty node and removed.
+			p.lastHeartBeat.Store(req.Name, time.Now().UnixNano())
 
-				// Upsert incoming member only if it is an actor service (not actor client) and
-				// the existing member info is unmatched with the incoming member info.
-				upsertRequired := true
-				if m, ok := members[req.Name]; ok {
-					if m.AppID == req.Id && m.Name == req.Name && cmp.Equal(m.Entities, req.Entities) {
-						upsertRequired = false
-					}
+			members := p.raftNode.FSM().State().Members
+
+			// Upsert incoming member only if it is an actor service (not actor client) and
+			// the existing member info is unmatched with the incoming member info.
+			upsertRequired := true
+			if m, ok := members[req.Name]; ok {
+				if m.AppID == req.Id && m.Name == req.Name && cmp.Equal(m.Entities, req.Entities) {
+					upsertRequired = false
 				}
+			}
 
-				if upsertRequired {
-					p.membershipCh <- hostMemberChange{
-						cmdType: raft.MemberUpsert,
-						host: raft.DaprHostMember{
-							Name:      req.Name,
-							AppID:     req.Id,
-							Entities:  req.Entities,
-							UpdatedAt: time.Now().UnixNano(),
-						},
-					}
+			if upsertRequired {
+				p.membershipCh <- hostMemberChange{
+					cmdType: raft.MemberUpsert,
+					host: raft.DaprHostMember{
+						Name:      req.Name,
+						AppID:     req.Id,
+						Entities:  req.Entities,
+						UpdatedAt: time.Now().UnixNano(),
+					},
 				}
 			}
 
@@ -223,8 +229,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				log.Error("stream is disconnected before member is added")
 				return nil
 			}
-
-			p.deleteStreamConn(stream)
 
 			if err == io.EOF {
 				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
@@ -244,7 +248,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		}
 	}
 
-	p.deleteStreamConn(stream)
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
 }
 
