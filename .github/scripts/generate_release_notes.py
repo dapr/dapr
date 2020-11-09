@@ -110,6 +110,7 @@ for c in cards:
     contributors = []
     url = ""
     try:
+        # only a PR can be converted to a PR object, otherwise will throw error.
         pr = issueOrPR.as_pull_request()
         contributors.append(pr.user.login)
         url = pr.html_url
