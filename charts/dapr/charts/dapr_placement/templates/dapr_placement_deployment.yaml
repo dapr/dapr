@@ -57,7 +57,7 @@ spec:
         resources:
           limits:
             cpu: 1000m
-            memory: 300Mi
+            memory: 500Mi
           requests:
             cpu: 250m
             memory: 100Mi
@@ -88,7 +88,7 @@ spec:
         - "--initial-cluster"
         - "dapr-placement-0=dapr-placement-0.dapr-placement:8201,dapr-placement-1=dapr-placement-1.dapr-placement:8201,dapr-placement-2=dapr-placement-2.dapr-placement.dapr-system:8201"
         - "--raft-logstore-path"
-        - "/var/run/dapr/raft-log"
+        - "/var/run/dapr/raft-log/log-$(PLACEMENT_ID)"
         - "--inmem-store-enabled=false"
 {{- else }}
         - "--inmem-store-enabled=true"
