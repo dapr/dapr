@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // API returns a list of HTTP endpoints for Dapr
@@ -594,8 +595,14 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	resp, err := a.directMessaging.Invoke(reqCtx, targetID, req)
 	// err does not represent user application response
 	if err != nil {
+		// Allowlists policies that are applied on the callee side can return a Permission Denied error.
+		// For everything else, treat it as a gRPC transport error
+		statusCode := fasthttp.StatusInternalServerError
+		if status.Code(err) == codes.PermissionDenied {
+			statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
+		}
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, err))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		respondWithError(reqCtx, statusCode, msg)
 		return
 	}
 
