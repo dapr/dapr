@@ -14,11 +14,10 @@ from string import Template
 
 from github import Github
 
-milestoneProjectRegexPrefix = "(.*)"
-milestoneProjectRegexSuffix = "Milestone$"
+milestoneProjectRegex = "^(.*) Milestone .*$"
 releaseNoteRegex = "^RELEASE NOTE:(.*)$"
 dashboardReleaseVersionRegex = "v([0-9\.]+)-?.*"
-majorReleaseRegex = "^([0-9]+\.[0-9]+)\.[0-9]+$"
+majorReleaseRegex = "^([0-9]+\.[0-9]+)\.[0-9]+.*$"
 
 githubToken = os.getenv("GITHUB_TOKEN")
 
@@ -72,11 +71,6 @@ g = Github(githubToken)
 org = g.get_organization("dapr")
 
 # discover milestone project
-suffix = os.getenv("MILESTONE_REGEX_SUFFIX")
-if suffix:
-    print("Input suffix: {}".format(suffix))
-    milestoneProjectRegexSuffix = suffix
-milestoneProjectRegex = "^" + milestoneProjectRegexPrefix + " " + milestoneProjectRegexSuffix + "$"
 projects = [p for p in org.get_projects(state='open') if re.search(milestoneProjectRegex, p.name)]
 projects = sorted(projects, key=lambda p: p.id)
 if len(projects) == 0:
