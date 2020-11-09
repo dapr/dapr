@@ -66,14 +66,16 @@ spec:
             mountPath: /var/run/dapr/credentials
             readOnly: true
 {{- if eq .Values.global.ha.enabled true }}
+  {{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
-            mountPath: /var/run/dapr/raft-log
+            mountPath: {{ .Values.cluster.logStorePath }}
+  {{- end }}
 {{- end }}
         ports:
-          - containerPort: 50005
+          - containerPort: {{ .Values.ports.apiPort }}
             name: api
-          - containerPort: 8201
-            name: raft-server
+          - containerPort: {{ .Values.ports.raftRPCPort }}
+            name: raft-node
 {{- if eq .Values.global.prometheus.enabled true }}
           - name: metrics
             containerPort: {{ .Values.global.prometheus.port }}
@@ -86,12 +88,11 @@ spec:
         - "--id"
         - "$(PLACEMENT_ID)"
         - "--initial-cluster"
-        - "dapr-placement-0=dapr-placement-0.dapr-placement:8201,dapr-placement-1=dapr-placement-1.dapr-placement:8201,dapr-placement-2=dapr-placement-2.dapr-placement.dapr-system:8201"
+        - {{ .Values.cluster.initialCluster }}
+  {{- if eq .Values.cluster.forceInMemoryLog false }}
         - "--raft-logstore-path"
-        - "/var/run/dapr/raft-log/log-$(PLACEMENT_ID)"
-        - "--inmem-store-enabled=false"
-{{- else }}
-        - "--inmem-store-enabled=true"
+        - "{{ .Values.cluster.logStorePath }}/log-$(PLACEMENT_ID)"
+  {{- end }}
 {{- end }}
         - "--log-level"
         - {{ .Values.logLevel }}
@@ -146,5 +147,8 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 1Gi
+          storage: {{ .Values.volumeclaims.storageSize }}
+  {{- if .Values.volumeclaims.storageClassName }}
+      storageClassName: {{ .Values.volumeclaims.storageClassName }}
+  {{- end }}
 {{- end }}
