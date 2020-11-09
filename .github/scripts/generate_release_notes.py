@@ -14,7 +14,7 @@ from string import Template
 
 from github import Github
 
-milestoneProjectRegex = "^(.*) Milestone .*$"
+milestoneProjectRegex = "^(.*) Milestone( [0-9])?$"
 releaseNoteRegex = "^RELEASE NOTE:(.*)$"
 dashboardReleaseVersionRegex = "v([0-9\.]+)-?.*"
 majorReleaseRegex = "^([0-9]+\.[0-9]+)\.[0-9]+.*$"
