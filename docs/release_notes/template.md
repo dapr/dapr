@@ -176,3 +176,10 @@ kubectl rollout restart deploy/<deployment-name>
 ## Breaking Changes
 
 $dapr_breaking_changes
+
+
+## Acknowledgements
+
+Thanks to everyone who made this release possible!
+
+$dapr_contributors
