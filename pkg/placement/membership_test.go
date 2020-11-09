@@ -87,16 +87,22 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}
 
 		// act
-		assert.NoError(t, stream.Send(host))
+		err = stream.Send(host)
+		assert.NoError(t, err)
 
-		<-done
+		// wait until table dissemination.
+		time.Sleep(disseminateTimerInterval)
 
 		// ignore disseminateTimeout.
 		testServer.disseminateNextTime = 0
-		// wait until table dissemination.
-		time.Sleep(disseminateTimerInterval * 2)
+
+		<-done
+
 		assert.Equal(t, 1, len(testServer.streamConnPool))
 		assert.Equal(t, len(testServer.streamConnPool), len(testServer.raftNode.FSM().State().Members))
+
+		// wait until table dissemination.
+		time.Sleep(disseminateTimerInterval * 2)
 		assert.Equal(t, uint32(0), testServer.memberUpdateCount.Load(),
 			"flushed all member updates")
 		assert.Equal(t, faultyHostDetectDefaultDuration, testServer.faultyHostDetectDuration,
