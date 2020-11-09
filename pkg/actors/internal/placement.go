@@ -219,6 +219,7 @@ func (p *ActorPlacement) Start() {
 				log.Debugf("failed to report status to placement service : %v", err)
 			}
 
+			// No delay if stream connection is not alive.
 			if p.streamConnAlive {
 				time.Sleep(statusReportHeartbeatInterval)
 			}
