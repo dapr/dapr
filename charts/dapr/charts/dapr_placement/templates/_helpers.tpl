@@ -30,3 +30,10 @@ Create chart name and version as used by the chart label.
 {{- define "dapr_placement.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{/*
+Create initial cluster peer list.
+*/}}
+{{- define "dapr_placement.initialcluster" -}}
+{{- print "dapr-placement-server-0=dapr-placement-server-0.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort ",dapr-placement-server-1=dapr-placement-server-1.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort ",dapr-placement-server-2=dapr-placement-server-2.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort -}}
+{{- end -}}
