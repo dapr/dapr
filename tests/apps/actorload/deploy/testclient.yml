@@ -22,7 +22,7 @@ spec:
       annotations:
         dapr.io/config: "testappconfig"
         dapr.io/enabled: "true"
-        dapr.io/id: "loadtestclient"
+        dapr.io/app-id: "loadtestclient"
         dapr.io/log-as-json: "true"
         dapr.io/enable-profiling: "true"
     spec:
