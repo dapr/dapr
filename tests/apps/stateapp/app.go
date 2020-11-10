@@ -97,8 +97,8 @@ func save(states []daprState, statestore string) error {
 
 	defer res.Body.Close()
 	// Save must return 201
-	if res.StatusCode != http.StatusCreated {
-		return fmt.Errorf("expected status code 201, got %d", res.StatusCode)
+	if res.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("expected status code 204, got %d", res.StatusCode)
 	}
 	return nil
 }
@@ -341,8 +341,8 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		err = save(req.States, statestore)
 		if err == nil {
 			// The save call to dapr side car has returned correct status.
-			// Set the status code to statusCreated
-			statusCode = http.StatusCreated
+			// Set the status code to statusNoContent
+			statusCode = http.StatusNoContent
 		}
 	case "get":
 		states, err = getAll(req.States, statestore)
@@ -352,6 +352,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		res.States = states
 	case "delete":
 		err = deleteAll(req.States, statestore)
+		statusCode = http.StatusNoContent
 	case "transact":
 		err = executeTransaction(req.States, statestore)
 	default:
@@ -359,7 +360,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusBadRequest
 		res.Message = err.Error()
 	}
-	statusCheck := (statusCode == http.StatusOK || statusCode == http.StatusCreated)
+	statusCheck := (statusCode == http.StatusOK || statusCode == http.StatusNoContent)
 	if err != nil && statusCheck {
 		statusCode = http.StatusInternalServerError
 		res.Message = err.Error()
@@ -414,7 +415,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 			StoreName: statestore,
 			States:    daprState2StateItems(req.States),
 		})
-		statusCode = http.StatusCreated
+		statusCode = http.StatusNoContent
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("ExecuteSaveState", err.Error())
 		}
@@ -438,6 +439,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		res.States = states
 	case "delete":
+		statusCode = http.StatusNoContent
 		err = deleteAllGRPC(client, req.States, statestore)
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("DeleteState", err.Error())
@@ -458,7 +460,7 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res.EndTime = epoch()
-	if statusCode != http.StatusOK {
+	if statusCode != http.StatusOK || statusCode != http.StatusNoContent {
 		log.Printf("Error status code %v: %v", statusCode, res.Message)
 	}
 
