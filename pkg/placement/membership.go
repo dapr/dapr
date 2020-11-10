@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"google.golang.org/grpc/peer"
@@ -226,15 +227,11 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 			case raft.TableDisseminate:
 				// TableDissminate will be triggered by disseminateTimer.
 				// This disseminates the latest consistent hashing tables to Dapr runtime.
-
-				// Disseminate hashing tables to Dapr runtimes only if number of current stream connections
-				// and number of FSM state members are matched. Otherwise, this will be retried until
-				// the numbers are matched.
-
-				// When placement node first gets the leadership, it needs to wait until runtimes connecting
-				// old leader connects to new leader. The numbers will be eventually consistent.
 				nStreamConnPool := len(p.streamConnPool)
 				nTargetConns := len(p.raftNode.FSM().State().Members)
+
+				monitoring.RecordRuntimesCount(nStreamConnPool)
+				monitoring.RecordActorRuntimesCount(nTargetConns)
 
 				// ignore dissemination if there is no member update.
 				if cnt := p.memberUpdateCount.Load(); cnt > 0 {
