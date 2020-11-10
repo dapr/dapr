@@ -6,8 +6,6 @@
 package v1
 
 import (
-	"errors"
-
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	any "github.com/golang/protobuf/ptypes/any"
@@ -35,7 +33,7 @@ func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetai
 func InternalInvokeResponse(resp *internalv1pb.InternalInvokeResponse) (*InvokeMethodResponse, error) {
 	rsp := &InvokeMethodResponse{r: resp}
 	if resp.Message == nil {
-		return nil, errors.New("Message field is nil")
+		resp.Message = &commonv1pb.InvokeResponse{Data: &any.Any{Value: []byte{}}}
 	}
 
 	return rsp, nil
