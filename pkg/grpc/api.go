@@ -56,6 +56,7 @@ type API interface {
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
+	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
@@ -541,6 +542,48 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	}
 
 	response := &runtimev1pb.GetSecretResponse{}
+	if getResponse.Data != nil {
+		response.Data = getResponse.Data
+	}
+	return response, nil
+}
+
+func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error) {
+	if a.secretStores == nil || len(a.secretStores) == 0 {
+		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetBulkSecretResponse{}, err
+	}
+
+	secretStoreName := in.StoreName
+
+	if a.secretStores[secretStoreName] == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetBulkSecretResponse{}, err
+	}
+
+	req := secretstores.BulkGetSecretRequest{
+		Metadata: in.Metadata,
+	}
+
+	getResponse, err := a.secretStores[secretStoreName].BulkGetSecret(req)
+
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetBulkSecretResponse{}, err
+	}
+
+	for key := range getResponse.Data {
+		if !a.isSecretAllowed(in.StoreName, key) {
+			err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, key, in.StoreName)
+			apiServerLogger.Debug(err)
+			return &runtimev1pb.GetBulkSecretResponse{}, err
+		}
+	}
+
+	response := &runtimev1pb.GetBulkSecretResponse{}
 	if getResponse.Data != nil {
 		response.Data = getResponse.Data
 	}
