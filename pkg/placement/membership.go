@@ -180,11 +180,7 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 					// of placement servers.
 					// Before all runtimes connect to the leader of placements, it will record the current
 					// time as heartbeat timestamp.
-					heartbeat, ok := p.lastHeartBeat.Load(v.Name)
-					if !ok {
-						p.lastHeartBeat.Store(v.Name, time.Now().UnixNano())
-						continue
-					}
+					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, time.Now().UnixNano())
 
 					elapsed := t.UnixNano() - heartbeat.(int64)
 					if elapsed < int64(p.faultyHostDetectDuration) {
