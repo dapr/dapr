@@ -18,7 +18,7 @@ CGO         ?= 0
 BINARIES    ?= daprd placement operator injector sentry
 HA_MODE     ?= false
 # Force in-memory log for placement
-FORCE_INMEM ?=true
+FORCE_INMEM ?= true
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
