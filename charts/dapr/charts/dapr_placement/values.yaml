@@ -15,6 +15,7 @@ ports:
 cluster:
   forceInMemoryLog: false
   logStorePath: /var/run/dapr/raft-log
+  logStoreWinPath: C:\\raft-log
 
 volumeclaims:
   storageSize: 1Gi

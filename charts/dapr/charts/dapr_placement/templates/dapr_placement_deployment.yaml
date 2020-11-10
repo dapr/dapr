@@ -10,7 +10,7 @@ spec:
 {{- else }}
   replicas: {{ .Values.replicaCount }}
 {{- end }}
-  serviceName: "dapr-placement-server"
+  serviceName: dapr-placement-server
   podManagementPolicy: Parallel
   selector:
     matchLabels:
@@ -67,7 +67,11 @@ spec:
 {{- if eq .Values.global.ha.enabled true }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
+    {{- if eq .Values.global.daprControlPlaneOs "windows" }}
+            mountPath: {{ .Values.cluster.logStoreWinPath }}
+    {{- else }}
             mountPath: {{ .Values.cluster.logStorePath }}
+    {{- end }}
   {{- end }}
 {{- end }}
         ports:
@@ -87,10 +91,14 @@ spec:
         - "--id"
         - "$(PLACEMENT_ID)"
         - "--initial-cluster"
-        - "dapr-placement-server-0=dapr-placement-server-0.dapr-placement-server.$(NAMESPACE).svc.cluster.local:8201,dapr-placement-server-1=dapr-placement-server-1.dapr-placement-server.$(NAMESPACE).svc.cluster.local:8201,dapr-placement-server-2=dapr-placement-server-2.dapr-placement-server.$(NAMESPACE).svc.cluster.local:8201"
+        - {{ template "dapr_placement.initialcluster" . }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
         - "--raft-logstore-path"
-        - "{{ .Values.cluster.logStorePath }}/log-$(PLACEMENT_ID)"
+    {{- if eq .Values.global.daprControlPlaneOs "windows" }}
+        - "{{ .Values.cluster.logStoreWinPath }}\\$(PLACEMENT_ID)"
+    {{- else }}
+        - "{{ .Values.cluster.logStorePath }}/$(PLACEMENT_ID)"
+    {{- end }}
   {{- end }}
 {{- end }}
         - "--log-level"
