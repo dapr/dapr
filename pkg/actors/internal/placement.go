@@ -160,8 +160,6 @@ func (p *ActorPlacement) Start() {
 					log.Debugf("disconnected from placement: %v", err)
 				}
 
-				diag.DefaultMonitoring.ActorStatusReportFailed("recv", "status")
-
 				newStream, newConn := p.establishStreamConn()
 				if newStream != nil {
 					p.clientConn = newConn
@@ -174,7 +172,6 @@ func (p *ActorPlacement) Start() {
 				continue
 			}
 
-			diag.DefaultMonitoring.ActorStatusReported("recv")
 			p.onPlacementOrder(resp)
 		}
 	}()
@@ -221,6 +218,7 @@ func (p *ActorPlacement) Start() {
 
 			// No delay if stream connection is not alive.
 			if p.streamConnAlive {
+				diag.DefaultMonitoring.ActorStatusReported("send")
 				time.Sleep(statusReportHeartbeatInterval)
 			}
 		}
