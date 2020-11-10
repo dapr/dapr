@@ -48,8 +48,10 @@ func TestInternalInvocationResponse(t *testing.T) {
 			Message: nil,
 		}
 
-		_, err := InternalInvokeResponse(&pb)
-		assert.Error(t, err)
+		ir, err := InternalInvokeResponse(&pb)
+		assert.NoError(t, err)
+		assert.NotNil(t, ir.r.Message)
+		assert.Equal(t, []byte{}, ir.r.Message.Data.Value)
 	})
 }
 
