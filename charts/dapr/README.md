@@ -67,13 +67,14 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `Always`                |
 | `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
-| `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`                 |
-| `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                     |
+| `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`             |
+| `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
 | `global.prometheus.enabled`               | Prometheus metrics enablement for control plane services                | `true`                  |
 | `global.prometheus.port`                  | Prometheus scrape http endpoint port                                    | `9090`                  |
 | `global.mtls.enabled`                     | Mutual TLS enablement                                                   | `true`                  |
 | `global.mtls.workloadCertTTL`             | TTL for workload cert                                                   | `24h`                   |
 | `global.mtls.allowedClockSkew`            | Allowed clock skew for workload cert rotation                           | `15m`                   |
+| `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
 | `dapr_operator.replicaCount`              | Number of replicas for Operator                                         | `1`                     |

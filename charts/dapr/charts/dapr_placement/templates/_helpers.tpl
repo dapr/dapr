@@ -35,5 +35,5 @@ Create chart name and version as used by the chart label.
 Create initial cluster peer list.
 */}}
 {{- define "dapr_placement.initialcluster" -}}
-{{- print "dapr-placement-server-0=dapr-placement-server-0.dapr-placement-server." .Release.Namespace .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort ",dapr-placement-server-1=dapr-placement-server-1.dapr-placement-server." .Release.Namespace .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort ",dapr-placement-server-2=dapr-placement-server-2.dapr-placement-server." .Release.Namespace .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort -}}
+{{- print "dapr-placement-server-0=dapr-placement-server-0.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort ",dapr-placement-server-1=dapr-placement-server-1.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort ",dapr-placement-server-2=dapr-placement-server-2.dapr-placement-server." .Release.Namespace ".svc" .Values.global.dnsSuffix ":" .Values.ports.raftRPCPort -}}
 {{- end -}}
