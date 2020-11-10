@@ -113,23 +113,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 		tearDownEach()
 	})
 
-	t.Run("no dissemination if current connections and members are unmatched", func(t *testing.T) {
-		// arrange
-		setupEach(t)
-
-		// act
-		arrangeFakeMembers(t)
-
-		assert.Equal(t, 0, len(testServer.streamConnPool))
-		assert.NotEqual(t, len(testServer.streamConnPool), len(testServer.raftNode.FSM().State().Members))
-		// wait until table dissemination.
-		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
-		assert.Equal(t, uint32(3), testServer.memberUpdateCount.Load(),
-			"memberUpdateCount must not be cleared if connection are unmatched.")
-
-		tearDownEach()
-	})
-
 	t.Run("faulty host detector", func(t *testing.T) {
 		// arrange
 		setupEach(t)
@@ -143,6 +126,31 @@ func TestMembershipChangeWorker(t *testing.T) {
 	})
 
 	cleanupServer()
+}
+
+func TestCleanupHeartBeats(t *testing.T) {
+	_, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership = true
+	maxClients := 3
+
+	for i := 0; i < maxClients; i++ {
+		testServer.lastHeartBeat.Store(fmt.Sprintf("10.0.0.%d:1001", i), time.Now().UnixNano())
+	}
+
+	var getCount = func() int {
+		cnt := 0
+		testServer.lastHeartBeat.Range(func(k, v interface{}) bool {
+			cnt++
+			return true
+		})
+
+		return cnt
+	}
+
+	assert.Equal(t, maxClients, getCount())
+	testServer.cleanupHeartbeats()
+	assert.Equal(t, 0, getCount())
+	cleanup()
 }
 
 func TestPerformTableUpdate(t *testing.T) {

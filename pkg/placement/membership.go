@@ -110,6 +110,15 @@ func (p *Service) revokeLeadership() {
 
 	log.Info("Waiting until all connections are drained.")
 	p.streamConnGroup.Wait()
+
+	p.cleanupHeartbeats()
+}
+
+func (p *Service) cleanupHeartbeats() {
+	p.lastHeartBeat.Range(func(key, value interface{}) bool {
+		p.lastHeartBeat.Delete(key)
+		return true
+	})
 }
 
 // membershipChangeWorker is the worker to change the state of membership
@@ -135,33 +144,43 @@ func (p *Service) membershipChangeWorker(stopCh chan struct{}) {
 			return
 
 		case t := <-disseminateTimer.C:
+			// Earlier stop when leadership is lost.
+			if !p.hasLeadership {
+				continue
+			}
+
 			// check if there is actor runtime member change.
 			if p.disseminateNextTime <= t.UnixNano() && len(p.membershipCh) == 0 {
-				cnt := p.memberUpdateCount.Load()
-				if cnt > 0 {
+				if cnt := p.memberUpdateCount.Load(); cnt > 0 {
 					log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCount count: %d", cnt)
 					p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 				}
 			}
 
 		case t := <-faultyHostDetectTimer.C:
+			// Earlier stop when leadership is lost.
+			if !p.hasLeadership {
+				continue
+			}
+
 			// Each dapr runtime sends the heartbeat every one second and placement will update UpdatedAt timestamp.
 			// If UpdatedAt is outdated, we can mark the host as faulty node.
 			// This faulty host will be removed from membership in the next dissemination period.
 			if len(p.membershipCh) == 0 {
 				m := p.raftNode.FSM().State().Members
 				for _, v := range m {
+					// Earlier stop when leadership is lost.
+					if !p.hasLeadership {
+						break
+					}
+
 					// When leader is changed and current placement node become new leader, there are no stream
 					// connections from each runtime so that lastHeartBeat have no heartbeat timestamp record
 					// from each runtime. Eventually, all runtime will find the leader and connect to the leader
 					// of placement servers.
 					// Before all runtimes connect to the leader of placements, it will record the current
 					// time as heartbeat timestamp.
-					heartbeat, ok := p.lastHeartBeat.Load(v.Name)
-					if !ok {
-						p.lastHeartBeat.Store(v.Name, time.Now().UnixNano())
-						continue
-					}
+					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, time.Now().UnixNano())
 
 					elapsed := t.UnixNano() - heartbeat.(int64)
 					if elapsed < int64(p.faultyHostDetectDuration) {
