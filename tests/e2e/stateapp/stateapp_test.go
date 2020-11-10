@@ -172,13 +172,13 @@ func generateTestCases(isHTTP bool) []testCase {
 					"save",
 					emptyRequest,
 					emptyResponse,
-					201,
+					204,
 				},
 				{
 					"delete",
 					emptyRequest,
 					emptyResponse,
-					200,
+					204,
 				},
 			},
 			protocol,
@@ -197,7 +197,7 @@ func generateTestCases(isHTTP bool) []testCase {
 					"save",
 					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
 					emptyResponse,
-					201,
+					204,
 				},
 				{
 					"get",
@@ -209,7 +209,7 @@ func generateTestCases(isHTTP bool) []testCase {
 					"delete",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					emptyResponse,
-					200,
+					204,
 				},
 				{
 					"get",
@@ -234,7 +234,7 @@ func generateTestCases(isHTTP bool) []testCase {
 					"save",
 					newRequest(testCaseManyKeyValues...),
 					emptyResponse,
-					201,
+					204,
 				},
 				{
 					"get",
@@ -252,7 +252,7 @@ func generateTestCases(isHTTP bool) []testCase {
 					"delete",
 					newRequest(testCaseManyKeys...),
 					emptyResponse,
-					200,
+					204,
 				},
 				{
 					"get",
@@ -271,13 +271,13 @@ func generateTestCases(isHTTP bool) []testCase {
 					"save",
 					generateSpecificLengthSample(1024 * 1024), // Less than limit
 					emptyResponse,
-					201,
+					204,
 				},
 				{
 					"save",
 					generateSpecificLengthSample(1024*1024*3 - 55), // Exact limit
 					emptyResponse,
-					201,
+					204,
 				},
 				{
 					"save",
@@ -387,12 +387,14 @@ func TestStateApp(t *testing.T) {
 
 				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
 				require.NoError(t, err)
-				require.Equal(t, step.expectedStatusCode, statusCode)
+				require.Equal(t, step.expectedStatusCode, statusCode, url)
 
 				var appResp requestResponse
-				err = json.Unmarshal(resp, &appResp)
+				if statusCode != 204 {
+					err = json.Unmarshal(resp, &appResp)
 
-				require.NoError(t, err)
+					require.NoError(t, err)
+				}
 
 				for _, er := range step.expectedResponse.States {
 					for _, ri := range appResp.States {
@@ -510,7 +512,7 @@ func TestMissingAndMisconfiguredStateStore(t *testing.T) {
 		{
 			statestore:   "missingstore",
 			protocol:     "http",
-			errorMessage: "expected status code 201, got 400",
+			errorMessage: "expected status code 204, got 400",
 			status:       500,
 		},
 		{
@@ -522,7 +524,7 @@ func TestMissingAndMisconfiguredStateStore(t *testing.T) {
 		{
 			statestore:   "badhost-store",
 			protocol:     "http",
-			errorMessage: "expected status code 201, got 400",
+			errorMessage: "expected status code 204, got 400",
 			status:       500,
 		},
 		{
@@ -534,7 +536,7 @@ func TestMissingAndMisconfiguredStateStore(t *testing.T) {
 		{
 			statestore:   "badpass-store",
 			protocol:     "http",
-			errorMessage: "expected status code 201, got 400",
+			errorMessage: "expected status code 204, got 400",
 			status:       500,
 		},
 		{

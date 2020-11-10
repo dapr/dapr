@@ -53,7 +53,7 @@ func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {
 	respondWithJSON(ctx, code, b)
 }
 
-func respondEmpty(ctx *fasthttp.RequestCtx, code int) {
+func respondEmpty(ctx *fasthttp.RequestCtx) {
 	ctx.Response.SetBody(nil)
-	ctx.Response.SetStatusCode(code)
+	ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
 }
