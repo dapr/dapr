@@ -7,7 +7,6 @@ package raft
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -48,9 +47,10 @@ func TestUpsertMember(t *testing.T) {
 	t.Run("add new actor member", func(t *testing.T) {
 		// act
 		updated := s.upsertMember(&DaprHostMember{
-			Name:     "127.0.0.1:8080",
-			AppID:    "FakeID",
-			Entities: []string{"actorTypeOne", "actorTypeTwo"},
+			Name:      "127.0.0.1:8080",
+			AppID:     "FakeID",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+			UpdatedAt: 1,
 		})
 
 		// assert
@@ -59,40 +59,53 @@ func TestUpsertMember(t *testing.T) {
 		assert.True(t, updated)
 	})
 
-	t.Run("add non actor member", func(t *testing.T) {
+	t.Run("no hashing table update required", func(t *testing.T) {
 		// act
 		updated := s.upsertMember(&DaprHostMember{
-			Name:     "127.0.0.1:8081",
-			AppID:    "FakeID_2",
-			Entities: []string{},
+			Name:      "127.0.0.1:8081",
+			AppID:     "FakeID_2",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+			UpdatedAt: 1,
 		})
 
 		// assert
 		assert.Equal(t, 2, len(s.Members))
 		assert.Equal(t, 2, len(s.hashingTableMap))
-		assert.False(t, updated)
+		assert.True(t, updated)
 
 		// act
 		updated = s.upsertMember(&DaprHostMember{
-			Name:     "127.0.0.1:8081",
-			AppID:    "FakeID_2",
-			Entities: []string{},
+			Name:      "127.0.0.1:8081",
+			AppID:     "FakeID_2",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+			UpdatedAt: 2,
 		})
 
 		// assert
 		assert.False(t, updated)
 	})
 
-	t.Run("update existing actor member", func(t *testing.T) {
+	t.Run("non actor host", func(t *testing.T) {
 		testMember := &DaprHostMember{
-			Name:     "127.0.0.1:8080",
-			AppID:    "FakeID",
-			Entities: []string{"actorTypeOneA"},
+			Name:      "127.0.0.1:8080",
+			AppID:     "FakeID",
+			Entities:  []string{},
+			UpdatedAt: 100,
 		}
 
-		oldUpdatedAt := s.Members[testMember.Name].UpdatedAt
+		// act
+		updated := s.upsertMember(testMember)
+		// assert
+		assert.False(t, updated)
+	})
 
-		time.Sleep(100 * time.Millisecond)
+	t.Run("update existing actor member", func(t *testing.T) {
+		testMember := &DaprHostMember{
+			Name:      "127.0.0.1:8080",
+			AppID:     "FakeID",
+			Entities:  []string{"actorTypeThree"},
+			UpdatedAt: 100,
+		}
 
 		// act
 		//
@@ -104,9 +117,7 @@ func TestUpsertMember(t *testing.T) {
 		assert.Equal(t, 2, len(s.Members))
 		assert.True(t, updated)
 		assert.Equal(t, 1, len(s.Members[testMember.Name].Entities))
-		assert.True(t, s.Members[testMember.Name].UpdatedAt.Sub(oldUpdatedAt) > 0,
-			"UpdatedAt must be updated old: %v, new: %v", oldUpdatedAt, s.Members[testMember.Name].UpdatedAt)
-		assert.Equal(t, 1, len(s.hashingTableMap), "this doesn't delete empty consistent hashing table")
+		assert.Equal(t, 3, len(s.hashingTableMap), "this doesn't delete empty consistent hashing table")
 	})
 }
 
@@ -140,19 +151,7 @@ func TestRemoveMember(t *testing.T) {
 
 	t.Run("no table update required", func(t *testing.T) {
 		// act
-		updated := s.upsertMember(&DaprHostMember{
-			Name:     "127.0.0.1:8080",
-			AppID:    "FakeID",
-			Entities: []string{},
-		})
-
-		// assert
-		assert.Equal(t, 1, len(s.Members))
-		assert.False(t, updated)
-		assert.Equal(t, 0, len(s.hashingTableMap))
-
-		// act
-		updated = s.removeMember(&DaprHostMember{
+		updated := s.removeMember(&DaprHostMember{
 			Name: "127.0.0.1:8080",
 		})
 

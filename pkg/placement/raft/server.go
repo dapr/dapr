@@ -24,6 +24,9 @@ const (
 	raftLogCacheSize = 512
 
 	commandTimeout = 1 * time.Second
+
+	nameResolveRetryInterval = 2 * time.Second
+	nameResolveMaxRetry      = 120
 )
 
 // PeerInfo represents raft peer node information
@@ -69,6 +72,21 @@ func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
 	}
 }
 
+func tryResolveRaftAdvertiseAddr(bindAddr string) (*net.TCPAddr, error) {
+	// HACKHACK: Kubernetes POD DNS A record population takes some time
+	// to look up the address after StatefulSet POD is deployed.
+	var err error
+	var addr *net.TCPAddr
+	for retry := 0; retry < nameResolveMaxRetry; retry++ {
+		addr, err = net.ResolveTCPAddr("tcp", bindAddr)
+		if err == nil {
+			return addr, nil
+		}
+		time.Sleep(nameResolveRetryInterval)
+	}
+	return nil, err
+}
+
 // StartRaft starts Raft node with Raft protocol configuration. if config is nil,
 // the default config will be used.
 func (s *Server) StartRaft(config *raft.Config) error {
@@ -83,8 +101,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 
 	s.fsm = newFSM()
 
-	// TODO: replace tls enabled transport layer using workload cert
-	addr, err := net.ResolveTCPAddr("tcp", s.raftBind)
+	addr, err := tryResolveRaftAdvertiseAddr(s.raftBind)
 	if err != nil {
 		return err
 	}
@@ -172,7 +189,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		return err
 	}
 
-	logging.Debug("Raft server is starting")
+	logging.Infof("Raft server is starting on %s...", s.raftBind)
 
 	return err
 }

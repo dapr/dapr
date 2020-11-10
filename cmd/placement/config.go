@@ -18,7 +18,7 @@ const (
 	defaultCredentialsPath   = "/var/run/dapr/credentials"
 	defaultHealthzPort       = 8080
 	defaultPlacementPort     = 50005
-	defaultReplicationFactor = 1000
+	defaultReplicationFactor = 100
 )
 
 type config struct {
@@ -45,8 +45,8 @@ type config struct {
 func newConfig() *config {
 	// Default configuration
 	cfg := config{
-		raftID:           "node0",
-		raftPeerString:   "node0=127.0.0.1:15050",
+		raftID:           "dapr-placement-0",
+		raftPeerString:   "dapr-placement-0=127.0.0.1:8201",
 		raftPeers:        []raft.PeerInfo{},
 		raftInMemEnabled: true,
 		raftLogStorePath: "",
