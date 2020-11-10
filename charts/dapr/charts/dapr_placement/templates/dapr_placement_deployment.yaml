@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: dapr-placement
+  name: dapr-placement-server
   labels:
-    app: dapr-placement
+    app: dapr-placement-server
 spec:
 {{- if eq .Values.global.ha.enabled true }}
   replicas: {{ .Values.global.ha.replicaCount }}
 {{- else }}
   replicas: {{ .Values.replicaCount }}
 {{- end }}
-  serviceName: "dapr-placement"
+  serviceName: "dapr-placement-server"
   podManagementPolicy: Parallel
   selector:
     matchLabels:
-      app: dapr-placement
+      app: dapr-placement-server
   template:
     metadata:
       labels:
-        app: dapr-placement
+        app: dapr-placement-server
         app.kubernetes.io/name: {{ .Release.Name }}
         app.kubernetes.io/version: {{ .Values.global.tag }}
         app.kubernetes.io/component: placement
@@ -32,7 +32,7 @@ spec:
 {{- end }}
     spec:
       containers:
-      - name: dapr-placement
+      - name: dapr-placement-server
         livenessProbe:
           httpGet:
             path: /healthz
