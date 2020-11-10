@@ -61,7 +61,7 @@ const (
 	userContainerDaprHTTPPortName     = "DAPR_HTTP_PORT"
 	userContainerDaprGRPCPortName     = "DAPR_GRPC_PORT"
 	apiAddress                        = "dapr-api"
-	placementService                  = "dapr-placement"
+	placementService                  = "dapr-placement-server"
 	sentryService                     = "dapr-sentry"
 	sidecarHTTPPortName               = "dapr-http"
 	sidecarGRPCPortName               = "dapr-grpc"
@@ -117,7 +117,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	applicationHost := getAppHost(pod)
 
 	// Keep DNS resolution outside of getSidecarContainer for unit testing.
-	placementAddress := fmt.Sprintf("%s:80", getKubernetesDNS(placementService, namespace))
+	placementAddress := fmt.Sprintf("%s:50005", getKubernetesDNS(placementService, namespace))
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
 	apiSrvAddress := fmt.Sprintf("%s:80", getKubernetesDNS(apiAddress, namespace))
 

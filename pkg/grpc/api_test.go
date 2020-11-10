@@ -100,6 +100,10 @@ func (m *mockGRPCAPI) ExecuteStateTransaction(ctx context.Context, in *runtimev1
 	return &empty.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error) {
+	return &empty.Empty{}, nil
+}
+
 func ExtractSpanContext(ctx context.Context) []byte {
 	span := diag_utils.SpanFromContext(ctx)
 	return []byte(SerializeSpanContext(span.SpanContext()))
@@ -954,6 +958,57 @@ func TestGetState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRegisterActorTimer(t *testing.T) {
+	t.Run("actors not initialized", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		server := startDaprAPIServer(port, &api{
+			id: "fakeAPI",
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		_, err := client.RegisterActorTimer(context.TODO(), &runtimev1pb.RegisterActorTimerRequest{})
+		assert.Equal(t, codes.Unimplemented, status.Code(err))
+	})
+}
+
+func TestUnregisterActorTimer(t *testing.T) {
+	t.Run("actors not initialized", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		server := startDaprAPIServer(port, &api{
+			id: "fakeAPI",
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		_, err := client.UnregisterActorTimer(context.TODO(), &runtimev1pb.UnregisterActorTimerRequest{})
+		assert.Equal(t, codes.Unimplemented, status.Code(err))
+	})
+}
+
+func TestInvokeActor(t *testing.T) {
+	t.Run("actors not initialized", func(t *testing.T) {
+		port, _ := freeport.GetFreePort()
+		server := startDaprAPIServer(port, &api{
+			id: "fakeAPI",
+		}, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(port)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		_, err := client.InvokeActor(context.TODO(), &runtimev1pb.InvokeActorRequest{})
+		assert.Equal(t, codes.Unimplemented, status.Code(err))
+	})
 }
 
 func TestDeleteState(t *testing.T) {
