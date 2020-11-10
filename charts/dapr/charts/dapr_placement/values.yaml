@@ -13,7 +13,6 @@ ports:
   raftRPCPort: 8201
 
 cluster:
-  initialCluster: "dapr-placement-server-0=dapr-placement-server-0.dapr-placement-server:8201,dapr-placement-server-1=dapr-placement-server-1.dapr-placement-server:8201,dapr-placement-server-2=dapr-placement-server-2.dapr-placement-server:8201"
   forceInMemoryLog: false
   logStorePath: /var/run/dapr/raft-log
 
