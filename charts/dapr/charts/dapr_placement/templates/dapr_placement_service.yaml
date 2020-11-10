@@ -1,12 +1,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: dapr-placement
+  name: dapr-placement-server
   labels:
-    app: dapr-placement
+    app: dapr-placement-server
 spec:
   selector:
-    app: dapr-placement
+    app: dapr-placement-server
   # placement must be able to resolve pod address to join initial cluster peers
   # before POD is ready
   publishNotReadyAddresses: true
