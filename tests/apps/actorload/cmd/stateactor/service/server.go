@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 
@@ -48,7 +47,7 @@ func NewActorService(port int, config *actor_rt.DaprConfig) *ActorService {
 	if config == nil {
 		daprConfig = actor_rt.DaprConfig{
 			Entities:                []string{},
-			ActorIdleTimeout:        "5m",
+			ActorIdleTimeout:        "60m",
 			ActorScanInterval:       "10s",
 			DrainOngoingCallTimeout: "10s",
 			DrainRebalancedActors:   true,
@@ -193,12 +192,10 @@ func actorMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		actorType := chi.URLParam(r, "actorType")
 		actorID := chi.URLParam(r, "actorID")
-		hostname, _ := os.Hostname()
 
 		ctx := context.WithValue(r.Context(), "actorType", actorType)
 		ctx = context.WithValue(ctx, "actorID", actorID)
 
-		log.Printf("%s.%s, %s, %s", actorType, actorID, hostname, r.URL.EscapedPath())
 		w.Header().Add("Content-Type", "application/json")
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

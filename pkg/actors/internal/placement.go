@@ -30,7 +30,7 @@ const (
 	unlockOperation = "unlock"
 	updateOperation = "update"
 
-	placementReconnectInterval    = 100 * time.Millisecond
+	placementReconnectInterval    = 500 * time.Millisecond
 	statusReportHeartbeatInterval = 1 * time.Second
 
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
@@ -253,7 +253,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			continue
 		}
 
-		log.Infof("try to connect to placement service: %s", serverAddr)
+		log.Debugf("try to connect to placement service: %s", serverAddr)
 
 		opts, err := dapr_credentials.GetClientOptions(p.clientCert, security.TLSServerName)
 		if err != nil {
@@ -291,7 +291,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			goto NEXT_SERVER
 		}
 
-		log.Infof("established connection to placement service at %s", conn.Target())
+		log.Debugf("established connection to placement service at %s", conn.Target())
 		return stream, conn
 	}
 
