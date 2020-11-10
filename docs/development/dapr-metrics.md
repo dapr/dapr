@@ -38,10 +38,8 @@ Dapr uses prometheus process and go collectors by default.
 
 [monitoring metrics](../../pkg/placement/monitoring/metrics.go)
 
-* dapr_placement_hosts_total: The total number of hosts reported to placement service.
-* dapr_placement_actortypes_total: The total number of actor types reported to placement service.
-* dapr_placement_nonactorhosts_total: The total number of non actor hosts reported to placement service.
-* dapr_placement_replicas_peractortype_total: The total number of replicas per actor type reported to placement service.
+* dapr_placement_runtimes_total: The total number of hosts reported to placement service.
+* dapr_placement_actorruntimes_total: The total number of actor runtimes reported to placement service.
 
 ## Dapr Sentry metrics
 
