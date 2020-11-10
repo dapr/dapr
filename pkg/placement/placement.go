@@ -55,7 +55,7 @@ const (
 	// the hashing table is disseminated. disseminateNextTime is updated whenever membership change
 	// is applied to raft state or each pod is deployed. If we increase disseminateTimeout, it will
 	// reduce the frequency of dissemination, but it will delay the table dissemination.
-	disseminateTimeout = 5 * time.Second
+	disseminateTimeout = 2 * time.Second
 )
 
 type hostMemberChange struct {
