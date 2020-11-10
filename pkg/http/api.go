@@ -586,6 +586,12 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if a.directMessaging == nil {
+		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		return
+	}
+
 	// Construct internal invoke method request
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).WithHTTPExtension(verb, reqCtx.QueryArgs().String())
 	req.WithRawData(reqCtx.Request.Body(), string(reqCtx.Request.Header.ContentType()))
@@ -925,9 +931,14 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		return true
 	})
 
+	activeActorsCount := []actors.ActiveActorsCount{}
+	if a.actor != nil {
+		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
+	}
+
 	mtd := metadata{
 		ID:                a.id,
-		ActiveActorsCount: a.actor.GetActiveActorsCount(reqCtx),
+		ActiveActorsCount: activeActorsCount,
 		Extended:          temp,
 	}
 

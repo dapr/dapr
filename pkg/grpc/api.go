@@ -245,6 +245,10 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		req.WithMetadata(incomingMD)
 	}
 
+	if a.directMessaging == nil {
+		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
+	}
+
 	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, err)

@@ -51,8 +51,9 @@ const (
 	ErrSecretGet                = "failed getting secret with key %s from secret store %s: %s"
 
 	// DirectMessaging
-	ErrDirectInvoke       = "fail to invoke, id: %s, err: %s"
-	ErrDirectInvokeMethod = "invalid method name"
+	ErrDirectInvoke         = "fail to invoke, id: %s, err: %s"
+	ErrDirectInvokeMethod   = "invalid method name"
+	ErrDirectInvokeNotReady = "invoke API is not ready"
 
 	// Metadata
 	ErrMetadataGet = "failed deserializing metadata: %s"
