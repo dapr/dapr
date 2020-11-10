@@ -60,7 +60,7 @@ const (
 	userContainerDaprHTTPPortName     = "DAPR_HTTP_PORT"
 	userContainerDaprGRPCPortName     = "DAPR_GRPC_PORT"
 	apiAddress                        = "dapr-api"
-	placementService                  = "dapr-placement"
+	placementService                  = "dapr-placement-server"
 	sentryService                     = "dapr-sentry"
 	sidecarHTTPPortName               = "dapr-http"
 	sidecarGRPCPortName               = "dapr-grpc"
