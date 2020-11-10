@@ -88,10 +88,11 @@ print("Found project: {}".format(project.name))
 releaseVersion = re.search(milestoneProjectRegex, project.name).group(1)
 print("Generating release notes for Dapr {}...".format(releaseVersion))
 # Set REL_VERSION.
-with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
-    githubEnv.write("REL_VERSION={}\n".format(releaseVersion))
-    githubEnv.write("REL_BRANCH=release-{}\n".format(
-        re.search(majorReleaseRegex, releaseVersion).group(1)))
+if os.getenv("GITHUB_ENV"):
+    with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
+        githubEnv.write("REL_VERSION={}\n".format(releaseVersion))
+        githubEnv.write("REL_BRANCH=release-{}\n".format(
+            re.search(majorReleaseRegex, releaseVersion).group(1)))
 
 # get dashboard release version
 releases = sorted([r for r in g.get_repo("dapr/dashboard").get_releases()], key=lambda r: r.created_at, reverse=True)
@@ -108,22 +109,30 @@ for column in columns:
 for c in cards:
     issueOrPR = c.get_content()
     contributors = []
-    url = ""
+    url = issueOrPR.html_url
     try:
         # only a PR can be converted to a PR object, otherwise will throw error.
         pr = issueOrPR.as_pull_request()
         contributors.append(pr.user.login)
-        url = pr.html_url
     except:
         a = [l.login for l in issueOrPR.assignees]
+        if len(a) == 0:
+            print("Issue is unassigned: {}".format(url))
         contributors.extend(a)
-        url = issueOrPR.html_url
     match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
+    hasNote = False
     if match:
         repo = issueOrPR.repository
         note = match.group(1).strip()
         if note:
-            changes.append((repo, issueOrPR, note, contributors, url))
+            if note.upper() not in ["NOT APPLICABLE", "N/A"]:
+                changes.append((repo, issueOrPR, note, contributors, url))
+            hasNote = True
+    if not hasNote:
+        assignee = 'nobody'
+        if issueOrPR.assignee:
+            assignee = issueOrPR.assignee.login
+        print("Issue or PR assigned to {} has no release note: {}".format(assignee, url))
 
 warnings=[]
 contributors = set()
