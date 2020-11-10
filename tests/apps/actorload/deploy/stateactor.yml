@@ -11,7 +11,7 @@ metadata:
   labels:
     app: stateactor
 spec:
-  replicas: 60
+  replicas: 50
   selector:
     matchLabels:
       app: stateactor
@@ -22,10 +22,10 @@ spec:
       annotations:
         dapr.io/config: "testappconfig"
         dapr.io/enabled: "true"
-        dapr.io/id: "stateactor"
-        dapr.io/port: "3000"
+        dapr.io/app-id: "stateactor"
+        dapr.io/app-port: "3000"
         dapr.io/log-as-json: "true"
-        dapr.io/enable-profiling: "true"
+        dapr.io/log-level: "debug"
     spec:
       affinity:
         nodeAffinity:

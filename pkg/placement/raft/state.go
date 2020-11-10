@@ -6,14 +6,11 @@
 package raft
 
 import (
-	"time"
-
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/google/go-cmp/cmp"
 )
 
-// DaprHostMember represents Dapr runtime host member, which can be
-// actor service host or normal host.
+// DaprHostMember represents Dapr runtime actor host member which serve actor types.
 type DaprHostMember struct {
 	// Name is the unique name of Dapr runtime host.
 	Name string
@@ -22,10 +19,8 @@ type DaprHostMember struct {
 	// Entities is the list of Actor Types which this Dapr runtime supports.
 	Entities []string
 
-	// CreatedAt is the time when this host is first added.
-	CreatedAt time.Time
 	// UpdatedAt is the last time when this host member info is updated.
-	UpdatedAt time.Time
+	UpdatedAt int64
 }
 
 // DaprHostMemberState is the state to store Dapr runtime host and
@@ -41,7 +36,9 @@ type DaprHostMemberState struct {
 	TableGeneration uint64
 
 	// hashingTableMap is the map for storing consistent hashing data
-	// per Actor types.
+	// per Actor types. This will be generated when log entries are replayed.
+	// While snapshotting the state, this member will not be saved. Instead,
+	// hashingTableMap will be recovered in snapshot recovery process.
 	hashingTableMap map[string]*hashing.Consistent
 }
 
@@ -66,7 +63,6 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 			Name:      v.Name,
 			AppID:     v.AppID,
 			Entities:  make([]string, len(v.Entities)),
-			CreatedAt: v.CreatedAt,
 			UpdatedAt: v.UpdatedAt,
 		}
 		copy(m.Entities, v.Entities)
@@ -99,57 +95,56 @@ func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 	}
 }
 
+// upsertMember upserts member host info to the FSM state and returns true
+// if the hashing table update happens.
 func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
-	now := time.Now().UTC()
-	tableUpdateRequired := false
+	if !s.isActorHost(host) {
+		return false
+	}
 
 	if m, ok := s.Members[host.Name]; ok {
+		// No need to update consistent hashing table if the same dapr host member exists
 		if m.AppID == host.AppID && m.Name == host.Name && cmp.Equal(m.Entities, host.Entities) {
-			m.UpdatedAt = now
+			m.UpdatedAt = host.UpdatedAt
 			return false
 		}
-		if s.isActorHost(m) {
-			s.removeHashingTables(m)
-			tableUpdateRequired = true
-		}
+
+		// Remove hashing table because the existing member is invalid
+		// and needs to be updated by new member info.
+		s.removeHashingTables(m)
 	}
 
 	s.Members[host.Name] = &DaprHostMember{
-		Name:  host.Name,
-		AppID: host.AppID,
-
-		CreatedAt: now,
-		UpdatedAt: now,
+		Name:      host.Name,
+		AppID:     host.AppID,
+		UpdatedAt: host.UpdatedAt,
 	}
 
-	// update hashing table only when host reports actor types
-	if s.isActorHost(host) {
-		s.Members[host.Name].Entities = make([]string, len(host.Entities))
-		copy(s.Members[host.Name].Entities, host.Entities)
+	// Update hashing table only when host reports actor types
+	s.Members[host.Name].Entities = make([]string, len(host.Entities))
+	copy(s.Members[host.Name].Entities, host.Entities)
 
-		s.updateHashingTables(s.Members[host.Name])
-		tableUpdateRequired = true
-	}
+	s.updateHashingTables(s.Members[host.Name])
 
-	if tableUpdateRequired {
-		s.TableGeneration++
-	}
+	// Increase hashing table generation version. Runtime will compare the table generation
+	// version with its own and then update it if it is new.
+	s.TableGeneration++
 
-	return tableUpdateRequired
+	return true
 }
 
+// removeMember removes members from membership and update hashing table and returns true
+// if hashing table update happens.
 func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
-	tableUpdateRequired := false
 	if m, ok := s.Members[host.Name]; ok {
-		if s.isActorHost(m) {
-			s.removeHashingTables(m)
-			s.TableGeneration++
-			tableUpdateRequired = true
-		}
+		s.removeHashingTables(m)
+		s.TableGeneration++
 		delete(s.Members, host.Name)
+
+		return true
 	}
 
-	return tableUpdateRequired
+	return false
 }
 
 func (s *DaprHostMemberState) isActorHost(host *DaprHostMember) bool {
