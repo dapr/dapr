@@ -892,6 +892,16 @@ func TestActorsAppHealthCheck(t *testing.T) {
 	assert.False(t, testActorRuntime.appHealthy)
 }
 
+func TestShutdown(t *testing.T) {
+	testActorRuntime := newTestActorsRuntime()
+
+	t.Run("no panic when placement is nil", func(t *testing.T) {
+		testActorRuntime.placement = nil
+		testActorRuntime.Stop()
+		// No panic
+	})
+}
+
 func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 	appID := "myapp"
 	actorType := "TestActor"

@@ -1056,7 +1056,9 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 
 // Stop closes all network connections and resources used in actor runtime
 func (a *actorsRuntime) Stop() {
-	a.placement.Stop()
+	if a.placement != nil {
+		a.placement.Stop()
+	}
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters
