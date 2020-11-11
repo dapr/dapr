@@ -148,6 +148,10 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           make push-e2e-app-all
+      - name: Define E2E parallelism
+        if: matrix.target_os == 'linux'
+        run: |
+          echo "DAPR_TEST_PARALLELISM=2" >> $GITHUB_ENV
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all

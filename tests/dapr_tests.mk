@@ -42,6 +42,10 @@ $(error cannot find get minikube node ip address. ensure that you have minikube 
 endif
 endif
 
+ifeq ($(DAPR_TEST_PARALLELISM),)
+DAPR_TEST_PARALLELISM=2
+endif
+
 # check the required environment variables
 check-e2e-env:
 ifeq ($(DAPR_TEST_REGISTRY),)
@@ -126,7 +130,7 @@ test-e2e-all: check-e2e-env
 	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 1 -count=1 -v -tags=e2e ./tests/e2e/...
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p $(DAPR_TEST_PARALLELISM) -count=1 -v -tags=e2e ./tests/e2e/...
 
 
 define genPerfTestRun
