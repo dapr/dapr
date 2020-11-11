@@ -227,8 +227,14 @@ func (p *ActorPlacement) Start() {
 
 // Stop shuts down server stream gracefully.
 func (p *ActorPlacement) Stop() {
+	if !p.shutdown {
+		return
+	}
+
 	p.shutdown = true
-	close(p.streamConnectedCh)
+	if p.streamConnectedCh != nil {
+		close(p.streamConnectedCh)
+	}
 	p.closeStream()
 	p.shutdownConnLoop.Wait()
 }
