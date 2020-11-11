@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func TestActorTimerWithStatePerformance(t *testing.T) {
+func TestActorActivate(t *testing.T) {
 	p := perf.Params()
 
 	// Get the ingress external url of test app
@@ -72,9 +72,9 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform dapr test
-	endpoint := fmt.Sprintf("http://localhost:3500/v1.0/actors/DemoActorTimer/{uuid}/method/noOp")
+	endpoint := fmt.Sprintf("http://127.0.0.1:3500/v1.0/actors/DemoActorTimer/{uuid}/method/noOp")
 	p.TargetEndpoint = endpoint
-	p.StdClient = true
+	p.StdClient = false
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
@@ -93,10 +93,14 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	restarts, err := tr.Platform.GetTotalRestarts("testapp")
 	require.NoError(t, err)
 
+	testerRestarts, err := tr.Platform.GetTotalRestarts("tester")
+	require.NoError(t, err)
+
 	t.Logf("dapr test results: %s", string(daprResp))
 	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
 	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 	t.Logf("target dapr app or sidecar restarted %v times", restarts)
+	t.Logf("tester app or sidecar restarted %v times", testerRestarts)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
@@ -113,6 +117,6 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
-	require.True(t, daprResult.DurationHistogram.Percentiles[2].Value*1000 < 4.5)
-	require.True(t, daprResult.DurationHistogram.Percentiles[3].Value*1000 < 5.5)
+	require.True(t, daprResult.DurationHistogram.Percentiles[2].Value*1000 < 15)
+	require.True(t, daprResult.DurationHistogram.Percentiles[3].Value*1000 < 35)
 }
