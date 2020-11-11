@@ -227,7 +227,7 @@ func (p *ActorPlacement) Start() {
 
 // Stop shuts down server stream gracefully.
 func (p *ActorPlacement) Stop() {
-	if !p.shutdown {
+	if p.shutdown {
 		return
 	}
 
