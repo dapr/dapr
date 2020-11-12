@@ -78,31 +78,22 @@ See [Getting Started](https://docs.dapr.io/getting-started/).
 * Explore additional samples in the Dapr [samples repository](https://github.com/dapr/samples).
 
 ## Community
-We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls. Here is how to get involved:
+We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls.
+For more information on the community engagement, developer guidelines and more, head over to the [Dapr community repo](https://github.com/dapr/community#dapr-community)
+
+Here is a summary of how to get involved:
 
 ### Contact Us
-
 Reach out with any questions you may have and we'll make sure to answer then as soon as possible!
 
 | Platform  | Link        |
 |:----------|:------------|
 | 💬 Instant Message Chat (preferred) | https://gitter.im/Dapr/community
-| 📧 Mailing List | https://groups.google.com/forum/#!forum/dapr-dev
 | 🐤 Twitter | [@daprdev](https://twitter.com/daprdev)
 
 ### Community Call
 
-Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome!
-
-**Upcoming Meetings**:
-- Tuesday June 23rd 10am Pacific Time (PST)
-- Tuesday July 7th 10am Pacific Time (PST)
-- Tuesday July 21st 10am Pacific Time (PST)
-- Tuesday August 4th 10am Pacific Time (PST)
-- Tuesday August 18th 10am Pacific Time (PST)
-- Tuesday September 1st 10am Pacific Time (PST)
-- Wednesday September 16th 10am Pacific Time (PST)
-- Tuesday September 29th 10am Pacific Time (PST)
+Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome! For [meeting dates](https://github.com/dapr/community#community-meetings) go to the Dapr community repo
 
 | Asset | Link        |
 |:-----------|:------------|
@@ -119,15 +110,6 @@ Every two weeks we host a community call to showcase new features, review upcomi
 | 🎤 Hanselminutes | [Dapr Distributed Application Runtime with Mark Russinovich](https://hanselminutes.com/718/dapr-distributed-application-runtime-with-azure-cto-mark-russinovich)
 | 💻 Azure Community Live | [Build microservice applications using DAPR with Mark Fussell ](https://www.youtube.com/watch?v=CgqI7nen-Ng)
 
-### Contributing to Dapr
-
-See the [Wiki](https://github.com/dapr/dapr/wiki) for information on contributing to Dapr.
-
-See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development) to get started with building and developing.
-
-## Roadmap
-
-See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for the Dapr project.
 
 ## Repositories
 
