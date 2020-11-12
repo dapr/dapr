@@ -553,6 +553,7 @@ func (a *actorsRuntime) evaluateReminders() {
 
 						if !exists {
 							stop := make(chan bool)
+							a.activeReminders.Store(reminderKey, stop)
 							err := a.startReminder(&r, stop)
 							if err != nil {
 								log.Debugf("error starting reminder: %s", err)
