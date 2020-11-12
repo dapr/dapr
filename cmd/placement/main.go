@@ -7,52 +7,40 @@ package main
 
 import (
 	"context"
-	"flag"
 	"os"
 	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/fswatcher"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement"
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
+	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/version"
 )
 
 var log = logger.NewLogger("dapr.placement")
-var certChainPath string
-var tlsEnabled bool
 
-const (
-	defaultCredentialsPath = "/var/run/dapr/credentials"
-	healthzPort            = 8080
-)
+const gracefulTimeout = 10 * time.Second
 
 func main() {
-	port := flag.String("port", "50005", "")
+	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
 
-	loggerOptions := logger.DefaultOptions()
-	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	cfg := newConfig()
 
-	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
-	flag.BoolVar(&tlsEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
-	flag.Parse()
-
-	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+	// Apply options to all loggers.
+	if err := logger.ApplyOptionsToLoggers(&cfg.loggerOptions); err != nil {
 		log.Fatal(err)
 	}
+	log.Infof("log level set to: %s", cfg.loggerOptions.OutputLevel)
 
-	log.Infof("starting Dapr Placement Service -- version %s -- commit %s", version.Version(), version.Commit())
-	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
-
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
+	// Initialize dapr metrics for placement.
+	if err := cfg.metricsExporter.Init(); err != nil {
 		log.Fatal(err)
 	}
 
@@ -60,53 +48,93 @@ func main() {
 		log.Fatal(err)
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
-
-	var certChain *credentials.CertChain
-	if tlsEnabled {
-		tlsCreds := credentials.NewTLSCredentials(certChainPath)
-
-		log.Info("mTLS enabled, getting tls certificates")
-		// try to load certs from disk, if not yet there, start a watch on the local filesystem
-		chain, err := credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
-		if err != nil {
-			fsevent := make(chan struct{})
-
-			go func() {
-				log.Infof("starting watch for certs on filesystem: %s", certChainPath)
-				err = fswatcher.Watch(context.Background(), tlsCreds.Path(), fsevent)
-				if err != nil {
-					log.Fatal("error starting watch on filesystem: %s", err)
-				}
-			}()
-
-			<-fsevent
-			log.Info("certificates detected")
-
-			chain, err = credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
-			if err != nil {
-				log.Fatal("failed to load cert chain from disk: %s", err)
-			}
-		}
-		certChain = chain
-		log.Info("tls certificates loaded successfully")
+	// Start Raft cluster.
+	raftServer := raft.New(cfg.raftID, cfg.raftInMemEnabled, cfg.raftPeers, cfg.raftLogStorePath)
+	if raftServer == nil {
+		log.Fatal("failed to create raft server.")
 	}
 
-	p := placement.NewPlacementService()
-	go p.Run(*port, certChain)
+	if err := raftServer.StartRaft(nil); err != nil {
+		log.Fatalf("failed to start Raft Server: %v", err)
+	}
 
-	log.Infof("placement Service started on port %s", *port)
+	// Start Placement gRPC server.
+	hashing.SetReplicationFactor(cfg.replicationFactor)
+	apiServer := placement.NewPlacementService(raftServer)
+	var certChain *credentials.CertChain
+	if cfg.tlsEnabled {
+		certChain = loadCertChains(cfg.certChainPath)
+	}
 
+	go apiServer.MonitorLeadership()
+	go apiServer.Run(strconv.Itoa(cfg.placementPort), certChain)
+	log.Infof("placement service started on port %d", cfg.placementPort)
+
+	// Start Healthz endpoint.
+	go startHealthzServer(cfg.healthzPort)
+
+	// Relay incoming process signal to exit placement gracefully
+	signalCh := make(chan os.Signal, 10)
+	gracefulExitCh := make(chan struct{})
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	defer signal.Stop(signalCh)
+
+	<-signalCh
+
+	// Shutdown servers
 	go func() {
-		healthzServer := health.NewServer(log)
-		healthzServer.Ready()
-
-		err := healthzServer.Run(context.Background(), healthzPort)
-		if err != nil {
-			log.Fatalf("failed to start healthz server: %s", err)
-		}
+		apiServer.Shutdown()
+		raftServer.Shutdown()
+		close(gracefulExitCh)
 	}()
 
-	<-stop
+	select {
+	case <-time.After(gracefulTimeout):
+		log.Info("Timeout on graceful leave. Exiting...")
+		os.Exit(1)
+
+	case <-gracefulExitCh:
+		log.Info("Gracefully exit.")
+		os.Exit(0)
+	}
+}
+
+func startHealthzServer(healthzPort int) {
+	healthzServer := health.NewServer(log)
+	healthzServer.Ready()
+
+	if err := healthzServer.Run(context.Background(), healthzPort); err != nil {
+		log.Fatalf("failed to start healthz server: %s", err)
+	}
+}
+
+func loadCertChains(certChainPath string) *credentials.CertChain {
+	tlsCreds := credentials.NewTLSCredentials(certChainPath)
+
+	log.Info("mTLS enabled, getting tls certificates")
+	// try to load certs from disk, if not yet there, start a watch on the local filesystem
+	chain, err := credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
+	if err != nil {
+		fsevent := make(chan struct{})
+
+		go func() {
+			log.Infof("starting watch for certs on filesystem: %s", certChainPath)
+			err = fswatcher.Watch(context.Background(), tlsCreds.Path(), fsevent)
+			if err != nil {
+				log.Fatal("error starting watch on filesystem: %s", err)
+			}
+		}()
+
+		<-fsevent
+		log.Info("certificates detected")
+
+		chain, err = credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
+		if err != nil {
+			log.Fatal("failed to load cert chain from disk: %s", err)
+		}
+	}
+
+	log.Info("tls certificates loaded successfully")
+
+	return chain
 }

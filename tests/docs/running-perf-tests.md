@@ -9,14 +9,18 @@ Performance tests are designed to let you evaluate the latency, resource usage a
 
 ### Prerequisites
 
+* Kubernetes cluster (Minikube and Kind are valid options too).
+  - To setup a new Kind cluster and local registry, run `make setup-kind`.
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-  - [Install the latest Helm v3](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#using-helm-advanced).
+  - [Install the latest Helm v3](https://docs.dapr.io/getting-started/install-dapr/#install-with-helm-advanced).
 * Create your DockerHub ID
 * Create dapr-tests namespace
     ```bash
     kubectl create namespace dapr-tests
     ```
 * Set the environment variables
+    - If using Kind, run `make describe-kind-env` and copy-and-paste the export commands displayed.
+
     ```bash
     export DAPR_REGISTRY=docker.io/your_dockerhub_id
     export DAPR_TAG=dev
@@ -65,6 +69,9 @@ make docker-push
 
 # Deploy Dapr runtime to your cluster
 make docker-deploy-k8s
+
+# Install 3rd party software
+make setup-3rd-party
 ```
 
 ### Register app configurations
@@ -83,6 +90,12 @@ export DAPR_DISABLE_TELEMETRY=true
 
 ```bash
 make setup-disable-mtls
+```
+
+### Register the default component configurations for testing
+
+```bash
+make setup-test-components
 ```
 
 ### Build and push test apps to docker hub

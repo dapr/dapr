@@ -12,7 +12,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ---
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: role-tokenreview-binding
 subjects:
@@ -36,7 +36,7 @@ rules:
   resources: ["deployments", "services", "components", "configurations", "subscriptions"]
   verbs: ["list"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions"]
   verbs: ["watch"]
 - apiGroups: ["*"]
   resources: ["services", "secrets", "configmaps"]

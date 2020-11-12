@@ -1,0 +1,44 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-release-notes
+
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    name: Generate release notes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Install dependencies
+        run: pip install PyGithub
+      - name: Generate release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        run: python ./.github/scripts/generate_release_notes.py
+      - name: Commit and push to branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          COMMIT_MSG: |
+            Generating Dapr release notes.
+            skip-checks: true
+        run: |
+          git config user.email "Dapr Bot"
+          git config user.name "daprweb@microsoft.com"
+          # Update origin with token
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          git checkout ${REL_BRANCH} || git checkout master
+          echo "BASE_BRANCH=$(git branch --show-current)" >> $GITHUB_ENV
+          git checkout -b release-notes-${REL_VERSION}
+          git add .
+          # Only commit and push if we have changes
+          git diff --quiet && git diff --staged --quiet || (git commit -m "${COMMIT_MSG}"; git push --force origin release-notes-${REL_VERSION})
+      - name: Create pull request
+        env:
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        run: |
+          gh pr create --title "Create release notes for ${{ env.REL_VERSION }}." --body "Release notes." --base ${{ env.BASE_BRANCH }}

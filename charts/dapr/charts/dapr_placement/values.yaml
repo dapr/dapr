@@ -9,5 +9,16 @@ fullnameOverride: ""
 
 ports:
   protocol: TCP
-  port: 80
-  targetPort: 50005
+  apiPort: 50005
+  raftRPCPort: 8201
+
+cluster:
+  forceInMemoryLog: false
+  logStorePath: /var/run/dapr/raft-log
+  logStoreWinPath: C:\\raft-log
+
+volumeclaims:
+  storageSize: 1Gi
+  storageClassName:
+
+replicationFactor: 100

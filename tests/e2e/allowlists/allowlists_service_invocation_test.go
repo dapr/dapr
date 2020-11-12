@@ -5,7 +5,7 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package service_invocation_e2e
+package allowlists_service_invocation_e2e
 
 import (
 	"encoding/json"
@@ -67,46 +67,46 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-var allowlistsServiceinvocationTests = []struct {
-	in               string
-	remoteApp        string
-	appMethod        string
-	expectedResponse string
+var allowListsForServiceInvocationTests = []struct {
+	in                 string
+	remoteApp          string
+	appMethod          string
+	expectedResponse   string
+	calleeSide         string
+	expectedStatusCode int
 }{
 	{
 		"Test allow with callee side http",
 		"allowlists-callee-http",
 		"opAllow",
 		"opAllow is called",
+		"http",
+		200,
 	},
 	{
 		"Test deny with callee side http",
 		"allowlists-callee-http",
 		"opDeny",
-		"rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
+		"fail to invoke, id: allowlists-callee-http, err: rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: opDeny verb: POST",
+		"http",
+		403,
 	},
-}
-
-var moreAllowlistsServiceinvocationTests = []struct {
-	in               string
-	remoteApp        string
-	appMethod        string
-	expectedResponse string
-}{
 	{
 		"Test allow with callee side grpc",
 		"allowlists-callee-grpc",
 		"grpctogrpctest",
 		"success",
+		"grpc",
+		200,
 	},
-	// TODO: Verified this manually using python-sdk sample and port-forwarding to http port.
-	// 		 This test always returns success. Need to debug further
-	// {
-	// 	"Test deny with callee side grpc",
-	// 	"allowlists-callee-grpc",
-	// 	"httptogrpctest",
-	// 	"rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httptogrpctest verb: NONE",
-	// },
+	{
+		"Test deny with callee side grpc",
+		"allowlists-callee-grpc",
+		"httptogrpctest",
+		"HTTP call failed with fail to invoke, id: allowlists-callee-grpc, err: rpc error: code = PermissionDenied desc = access control policy has denied access to appid: allowlists-caller operation: httpToGrpcTest verb: NONE",
+		"grpc",
+		403,
+	},
 }
 
 func TestServiceInvocationWithAllowLists(t *testing.T) {
@@ -120,7 +120,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 
 	t.Logf("externalURL is '%s'\n", externalURL)
 
-	for _, tt := range allowlistsServiceinvocationTests {
+	for _, tt := range allowListsForServiceInvocationTests {
 		t.Run(tt.in, func(t *testing.T) {
 			body, err := json.Marshal(testCommandRequest{
 				RemoteApp: tt.remoteApp,
@@ -128,34 +128,15 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			resp, err := utils.HTTPPost(
-				fmt.Sprintf("%s/tests/invoke_test", externalURL), body)
-			t.Log("checking err...")
-			require.NoError(t, err)
-
-			var appResp appResponse
-			t.Logf("unmarshalling..%s\n", string(resp))
-			err = json.Unmarshal(resp, &appResp)
-			require.NoError(t, err)
-			require.Equal(t, tt.expectedResponse, appResp.Message)
-		})
-	}
-
-	for _, tt := range moreAllowlistsServiceinvocationTests {
-		t.Run(tt.in, func(t *testing.T) {
-			body, err := json.Marshal(testCommandRequest{
-				RemoteApp: tt.remoteApp,
-				Method:    tt.appMethod,
-			})
-			require.NoError(t, err)
-
-			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
-
-			t.Logf("url is '%s'\n", url)
-			resp, err := utils.HTTPPost(
+			var url string;
+			if tt.calleeSide == "http" {
+				url = fmt.Sprintf("%s/tests/invoke_test", externalURL)
+			} else {
+				url = fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+			}
+			resp, statusCode, err := utils.HTTPPostWithStatus(
 				url,
 				body)
-
 			t.Log("checking err...")
 			require.NoError(t, err)
 
@@ -164,6 +145,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 			err = json.Unmarshal(resp, &appResp)
 			require.NoError(t, err)
 			require.Equal(t, tt.expectedResponse, appResp.Message)
+			require.Equal(t, tt.expectedStatusCode, statusCode)
 		})
 	}
 }

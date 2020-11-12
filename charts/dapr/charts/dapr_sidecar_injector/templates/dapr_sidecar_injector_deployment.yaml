@@ -100,6 +100,13 @@ spec:
           containerPort: {{ .Values.global.prometheus.port }}
           protocol: TCP
 {{- end }}
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
         volumeMounts:
         - name: cert
           mountPath: /dapr/cert
@@ -110,14 +117,17 @@ spec:
           secretName: dapr-sidecar-injector-cert
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
-              preference:
-                matchExpressions:
-                - key: kubernetes.io/os
-                  operator: In
-                  values:
-                  - {{ .Values.global.daprControlPlaneOs }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+             nodeSelectorTerms:
+                - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                    - {{ .Values.global.daprControlPlaneOs }}
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                    - {{ .Values.global.daprControlPlaneArch }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}

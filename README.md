@@ -4,6 +4,7 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
+[![Scheduled e2e test](https://github.com/dapr/dapr/workflows/dapr-test/badge.svg?event=schedule)](https://github.com/dapr/dapr/actions?workflow=dapr-test)
 [![codecov](https://codecov.io/gh/dapr/dapr/branch/master/graph/badge.svg)](https://codecov.io/gh/dapr/dapr)
 [![Gitter](https://badges.gitter.im/Dapr/community.svg)](https://gitter.im/Dapr/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -16,7 +17,7 @@ Dapr codifies the *best practices* for building microservice applications into o
 
 __Note: Dapr is currently under community development in alpha phase. Dapr is not recommended for production workloads until the 1.0 stable release.__
 
-![Dapr overview](https://github.com/dapr/docs/blob/master/images/overview.png)
+![Dapr overview](./img/overview.png)
 
 ## Goals
 
@@ -57,7 +58,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Cross platform virtual actors
 * Secrets management to retrieve secrets from secure key vaults
 * Rate limiting
-* Built-in [Observability](https://github.com/dapr/docs/tree/master/concepts/observability) support
+* Built-in [Observability](https://docs.dapr.io/concepts/observability-concept/) support
 * Runs natively on Kubernetes using a dedicated Operator and CRDs
 * Supports all programming languages via HTTP and gRPC
 * Multi-Cloud, open components (bindings, pub-sub, state) from Azure, AWS, GCP
@@ -69,7 +70,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 
 ## Get Started using Dapr
 
-See [Getting Started](https://github.com/dapr/docs/tree/master/getting-started).
+See [Getting Started](https://docs.dapr.io/getting-started/).
 
 ## Quickstarts and Samples
 
@@ -134,7 +135,7 @@ See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for 
 |:-----|:------------|
 | [Dapr](https://github.com/dapr/dapr) | The main repository that you are currently in. Contains the Dapr runtime code and overview documentation.
 | [CLI](https://github.com/dapr/cli) | The Dapr CLI allows you to setup Dapr on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Dapr instances.
-| [Docs](https://github.com/dapr/docs) | The documentation repository for Dapr.
+| [Docs](https://docs.dapr.io) | The documentation for Dapr.
 | [Quickstarts](https://github.com/dapr/quickstarts) | This repository contains a series of simple code samples that highlight the main Dapr capabilities
 | [Samples](https://github.com/dapr/samples) | This repository holds community maintained samples for various Dapr use cases.
 | [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications.

@@ -21,8 +21,8 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.15
-      GOLANGCILINT_VER: 1.26.0
+      GOVER: 1.15.3
+      GOLANGCILINT_VER: v1.31
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
@@ -49,7 +49,7 @@ jobs:
             target_arch: arm64
     steps:
       - name: Set up Go ${{ env.GOVER }}
-        uses: actions/setup-go@v2-beta
+        uses: actions/setup-go@v2
         with:
           go-version: ${{ env.GOVER }}
       - name: Install Docker CE for buildx
@@ -62,17 +62,18 @@ jobs:
           sudo apt update
           sudo apt install docker-ce
           docker -v
-      - name: Install golangci-lint
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        run: |
-          curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "${{ env.GOROOT }}/bin" v${{ env.GOLANGCILINT_VER }}
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
       - name: Parse release version and set REL_VERSION
         run: python ./.github/scripts/get_release_version.py
-      - name: Run make lint
+      - name: golangci-lint
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
-        run: make lint
+        uses: golangci/golangci-lint-action@v2.2.1
+        with:
+          version: ${{ env.GOLANGCILINT_VER }}
+      - name: Run go mod tidy check diff
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        run: make modtidy check-diff
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"

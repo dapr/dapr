@@ -24,7 +24,12 @@ affinity:
             operator: In
             values:
             - linux
+          - key: kubernetes.io/arch
+            operator: In
+            values:
+            - amd64
 zookeeper:
+  replicaCount: 1
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -34,3 +39,7 @@ zookeeper:
               operator: In
               values:
               - linux
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+              - amd64

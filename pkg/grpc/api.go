@@ -18,19 +18,17 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"github.com/dapr/dapr/pkg/proto/common/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -58,6 +56,12 @@ type API interface {
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
+	SetAppChannel(appChannel channel.AppChannel)
+	SetDirectMessaging(directMessaging messaging.DirectMessaging)
+	SetActorRuntime(actor actors.Actors)
+	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
+	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error)
+	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
 }
 
 type api struct {
@@ -107,18 +111,18 @@ func NewAPI(
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
 func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	if a.appChannel == nil {
-		return nil, status.Error(codes.Internal, "app channel is not initialized")
+		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
 
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
 
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
 		operation := req.Message().Method
-		var httpVerb common.HTTPExtension_Verb
+		var httpVerb commonv1pb.HTTPExtension_Verb
 		// Get the http verb in case the application protocol is http
 		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
@@ -136,12 +140,13 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 
 	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 		return nil, err
 	}
 	return resp.Proto(), err
 }
 
-func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb common.HTTPExtension_Verb, appProtocol string) (bool, string) {
+func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
 	if err != nil {
@@ -170,11 +175,12 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "parsing InternalInvokeRequest error: %s", err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
 
 	resp, err := a.actor.Call(ctx, req)
 	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
 	return resp.Proto(), nil
@@ -182,21 +188,21 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.publishFn == nil {
-		err := errors.New("ERR_PUBSUB_NOT_FOUND")
+		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotFound)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
 	pubsubName := in.PubsubName
 	if pubsubName == "" {
-		err := errors.New("ERR_PUBSUB_NAME_EMPTY")
+		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
 	topic := in.Topic
 	if topic == "" {
-		err := errors.New("ERR_TOPIC_EMPTY")
+		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -212,7 +218,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_PUBSUB_CLOUD_EVENTS_SER")
+		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -225,7 +231,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	err = a.publishFn(&req)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_PUBSUB_PUBLISH_MESSAGE")
+		err = status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -239,8 +245,13 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 		req.WithMetadata(incomingMD)
 	}
 
+	if a.directMessaging == nil {
+		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
+	}
+
 	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
 	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, err)
 		return nil, err
 	}
 
@@ -278,7 +289,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	r := &runtimev1pb.InvokeBindingResponse{}
 	resp, err := a.sendToOutputBindingFn(in.Name, req)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_INVOKE_OUTPUT_BINDING")
+		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.Name, err.Error())
 		apiServerLogger.Debug(err)
 		return r, err
 	}
@@ -329,11 +340,11 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 
 func (a *api) getStateStore(name string) (state.Store, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return nil, errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+		return nil, status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
 	}
 
 	if a.stateStores[name] == nil {
-		return nil, errors.New("ERR_STATE_STORE_NOT_FOUND")
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, name)
 	}
 	return a.stateStores[name], nil
 }
@@ -355,7 +366,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	getResponse, err := store.Get(&req)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_STATE_GET")
+		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -394,7 +405,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		err = errors.Wrap(err, "ERR_STATE_SAVE")
+		err = status.Errorf(codes.Internal, messages.ErrStateSave, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -422,7 +433,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	err = store.Delete(&req)
 	if err != nil {
-		err = errors.Wrapf(err, "ERR_STATE_DELETE: failed deleting state with key %s", in.Key)
+		err = status.Errorf(codes.Internal, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -438,7 +449,7 @@ func (a *api) getModifiedStateKey(key string) string {
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
-		err := errors.New("ERR_SECRET_STORE_NOT_CONFIGURED")
+		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -446,13 +457,13 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	secretStoreName := in.StoreName
 
 	if a.secretStores[secretStoreName] == nil {
-		err := errors.New("ERR_SECRET_STORE_NOT_FOUND")
+		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
 
 	if !a.isSecretAllowed(in.StoreName, in.Key) {
-		err := status.Errorf(codes.PermissionDenied, "Access denied by policy to get %q from %q", in.Key, in.StoreName)
+		err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, in.Key, in.StoreName)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -465,7 +476,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	getResponse, err := a.secretStores[secretStoreName].GetSecret(req)
 
 	if err != nil {
-		err = errors.Wrap(err, "ERR_SECRET_GET")
+		err = status.Errorf(codes.Internal, messages.ErrSecretGet, req.Name, secretStoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetSecretResponse{}, err
 	}
@@ -479,7 +490,7 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
-		err := errors.New("ERR_STATE_STORE_NOT_CONFIGURED")
+		err := status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -487,14 +498,14 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	storeName := in.StoreName
 
 	if a.stateStores[storeName] == nil {
-		err := errors.New("ERR_STATE_STORE_NOT_FOUND")
+		err := status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, storeName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
-		err := errors.New("ERR_STATE_STORE_NOT_SUPPORTED")
+		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, storeName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -509,7 +520,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				Key: a.getModifiedStateKey(req.Key),
 				// Limitation:
 				// components that cannot handle byte array need to deserialize/serialize in
-				// component sepcific way in components-contrib repo.
+				// component specific way in components-contrib repo.
 				Value:    req.Value,
 				Metadata: req.Metadata,
 				ETag:     req.Etag,
@@ -547,7 +558,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			}
 
 		default:
-			err := errors.Errorf("ERR_OPERATION_NOT_SUPPORTED: operation type %s not supported", inputReq.OperationType)
+			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
 			apiServerLogger.Debug(err)
 			return &empty.Empty{}, err
 		}
@@ -561,11 +572,75 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	})
 
 	if err != nil {
-		err = errors.Wrap(err, "ERR_STATE_TRANSACTION")
+		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.CreateTimerRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+		DueTime:   in.DueTime,
+		Period:    in.Period,
+		Callback:  in.Callback,
+	}
+
+	if in.Data != nil {
+		req.Data = in.Data
+	}
+	err := a.actor.CreateTimer(ctx, req)
+	return &empty.Empty{}, err
+}
+
+func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.DeleteTimerRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+	}
+
+	err := a.actor.DeleteTimer(ctx, req)
+	return &empty.Empty{}, err
+}
+
+func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.InvokeActorResponse{}, err
+	}
+
+	req := invokev1.NewInvokeMethodRequest(in.Method)
+	req.WithActor(in.ActorType, in.ActorId)
+	req.WithRawData(in.Data, "")
+
+	resp, err := a.actor.Call(context.TODO(), req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.InvokeActorResponse{}, err
+	}
+
+	_, body := resp.RawData()
+	return &runtimev1pb.InvokeActorResponse{
+		Data: body,
+	}, nil
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {
@@ -580,16 +655,28 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 	if action {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diagnostics.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestAllowedByAppAction(appID, trustDomain, namespace, operation, verb, action)
 		case config.ActionPolicyGlobal:
-			diagnostics.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	} else {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diagnostics.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestBlockedByAppAction(appID, trustDomain, namespace, operation, verb, action)
 		case config.ActionPolicyGlobal:
-			diagnostics.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
+			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	}
+}
+
+func (a *api) SetAppChannel(appChannel channel.AppChannel) {
+	a.appChannel = appChannel
+}
+
+func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
+	a.directMessaging = directMessaging
+}
+
+func (a *api) SetActorRuntime(actor actors.Actors) {
+	a.actor = actor
 }

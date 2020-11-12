@@ -19,3 +19,13 @@ assignees: ''
 
 ## Describe the feature
 <!-- Please also discuss possible business value -->
+
+## Release Note
+<!-- How should the fix for this issue be communicated in our release notes? It can be populated later. -->
+<!-- Keep it as a single line. Examples: -->
+
+<!-- RELEASE NOTE: **ADD** New feature in Dapr. -->
+<!-- RELEASE NOTE: **FIX** Bug in runtime. -->
+<!-- RELEASE NOTE: **UPDATE** Runtime dependency. -->
+
+RELEASE NOTE:

@@ -7,7 +7,6 @@ package messaging
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -27,13 +26,12 @@ import (
 	"google.golang.org/grpc/status"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
-type messageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists bool) (*grpc.ClientConn, error)
+type messageClientConnection func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
 
 // DirectMessaging is the API interface for invoking a remote app
 type DirectMessaging interface {
@@ -127,7 +125,7 @@ func (d *directMessaging) invokeWithRetry(
 
 		code := status.Code(err)
 		if code == codes.Unavailable || code == codes.Unauthenticated {
-			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true)
+			_, connerr := d.connectionCreatorFn(app.address, app.id, app.namespace, false, true, false)
 			if connerr != nil {
 				return nil, connerr
 			}
@@ -147,18 +145,12 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false)
+	conn, err := d.connectionCreatorFn(appAddress, appID, namespace, false, false, false)
 	if err != nil {
 		return nil, err
 	}
 
 	span := diag_utils.SpanFromContext(ctx)
-
-	// TODO: Use built-in grpc client timeout instead of using context timeout
-	// no ops if span context is empty
-	ctx, cancel := context.WithTimeout(ctx, channel.DefaultChannelRequestTimeout)
-	defer cancel()
-
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 
 	d.addForwardedHeadersToMetadata(req)
@@ -174,7 +166,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 }
 
 func (d *directMessaging) addDestinationAppIDHeaderToMetadata(appID string, req *invokev1.InvokeMethodRequest) {
-	req.Metadata()[v1.DestinationIDHeader] = &internalv1pb.ListStringValue{
+	req.Metadata()[invokev1.DestinationIDHeader] = &internalv1pb.ListStringValue{
 		Values: []string{appID},
 	}
 }
@@ -190,7 +182,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 			Values: []string{d.hostAddress},
 		}
 
-		forwardedHeaderValue += fmt.Sprintf("for=%s;by=%s;", d.hostAddress, d.hostAddress)
+		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress + ";"
 	}
 
 	if d.hostName != "" {
@@ -199,7 +191,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 			Values: []string{d.hostName},
 		}
 
-		forwardedHeaderValue += fmt.Sprintf("host=%s", d.hostName)
+		forwardedHeaderValue += "host=" + d.hostName
 	}
 
 	// Add Forwarded header: https://tools.ietf.org/html/rfc7239

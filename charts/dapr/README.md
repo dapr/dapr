@@ -35,7 +35,7 @@ For more details on initializing Helm, [read the Helm docs](https://helm.sh/docs
 
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
-    helm install dapr dapr/dapr --namespace dapr-system
+    helm install dapr dapr/dapr --namespace dapr-system --wait
     ``` 
 
 ## Verify installation
@@ -54,7 +54,7 @@ helm uninstall dapr -n dapr-system
 
 ## Upgrade the charts
 
-*Before* upgrading Dapr, make sure you have exported the existing certs. Follow the upgrade HowTo instructions in [Upgrading Dapr with Helm](https://github.com/dapr/docs/blob/master/howto/deploy-k8s-prod/README.md#upgrading-dapr-with-helm).
+*Before* upgrading Dapr, make sure you have exported the existing certs. Follow the upgrade HowTo instructions in [Upgrading Dapr with Helm](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#upgrading-dapr-with-helm).
 
 ## Configuration
 
@@ -67,14 +67,16 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `Always`                |
 | `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
-| `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`                 |
-| `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                     |
+| `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`             |
+| `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
 | `global.prometheus.enabled`               | Prometheus metrics enablement for control plane services                | `true`                  |
 | `global.prometheus.port`                  | Prometheus scrape http endpoint port                                    | `9090`                  |
 | `global.mtls.enabled`                     | Mutual TLS enablement                                                   | `true`                  |
 | `global.mtls.workloadCertTTL`             | TTL for workload cert                                                   | `24h`                   |
 | `global.mtls.allowedClockSkew`            | Allowed clock skew for workload cert rotation                           | `15m`                   |
+| `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
+| `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
 | `dapr_operator.replicaCount`              | Number of replicas for Operator                                         | `1`                     |
 | `dapr_operator.logLevel`                  | Operator Log level                                                      | `info`                  |
 | `dapr_operator.image.name`                | Operator docker image name (`global.registry/dapr_operator.image.name`) | `dapr`                  |
@@ -89,8 +91,14 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.tls.root.certPEM`            | Root Certificate cert                                                   | `""`                    |
 | `dapr_sentry.trustDomain`                 | Trust domain (logical group to manage app trust relationship) for access control list | `cluster.local`  |
 | `dapr_placement.replicaCount`             | Number of replicas for Dapr Placement                                   | `1`                     |
+| `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
 | `dapr_placement.logLevel`                 | Dapr Placement service Log level                                        | `info`                  |
 | `dapr_placement.image.name`               | Dapr Placement service docker image name (`global.registry/dapr_placement.image.name`) | `dapr`   |
+| `dapr_placement.cluster.forceInMemoryLog` | Use in-memeory log store and disable volume attach when `global.ha.enabled` is true | `false`   |
+| `dapr_placement.cluster.logStorePath`     | Mount path for persistent volume for log store in unix-like system when `global.ha.enabled` is true | `/var/run/dapr/raft-log`   |
+| `dapr_placement.cluster.logStoreWinPath`  | Mount path for persistent volume for log store in windows when `global.ha.enabled` is true | `C:\\raft-log`   |
+| `dapr_placement.volumeclaims.storageSize` | Attached volume size | `1Gi`   |
+| `dapr_placement.volumeclaims.storageClassName` | storage class name |    |
 | `dapr_dashboard.replicaCount`             | Number of replicas for Dapr Dashboard                                   | `1`                     |
 | `dapr_dashboard.logLevel`                 | Dapr Dashboard service Log level                                        | `info`                  |
 | `dapr_dashboard.image.registry`           | Dapr Dashboard docker registry                                          | `docker.io/daprio`      |
@@ -102,7 +110,7 @@ The Helm chart has the follow configuration options that can be supplied:
 This command creates three replicas of each control plane pod for an HA deployment (with the exception of the Placement pod) in the dapr-system namespace:
 
 ```
-helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true
+helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true --wait
 ```
 
 ## Example of installing edge version of Dapr
@@ -110,5 +118,5 @@ helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true
 This command deploys the latest `edge` version of Dapr to `dapr-system` namespace. This is useful if you want to deploy the latest version of Dapr to test a feature or some capability in your Kubernetes cluster. 
 
 ```
-helm install dapr dapr/dapr --namespace dapr-system --set-string global.tag=edge
+helm install dapr dapr/dapr --namespace dapr-system --set-string global.tag=edge --wait
 ```

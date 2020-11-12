@@ -21,8 +21,12 @@ const (
 	disableTelemetryConfig      = "disable-telemetry"
 	defaultSidecarCPULimit      = "4.0"
 	defaultSidecarMemoryLimit   = "512Mi"
-	defaultSidecarCPURequest    = "0.5"
+	defaultSidecarCPURequest    = "0.1"
 	defaultSidecarMemoryRequest = "250Mi"
+	defaultAppCPULimit          = "4.0"
+	defaultAppMemoryLimit       = "800Mi"
+	defaultAppCPURequest        = "0.1"
+	defaultAppMemoryRequest     = "250Mi"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
@@ -100,10 +104,14 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 			app.Config = disableTelemetryConfig
 		}
 
-		app.DaprCPULimit = c.cpuLimit()
-		app.DaprCPURequest = c.cpuRequest()
-		app.DaprMemoryLimit = c.memoryLimit()
-		app.DaprMemoryRequest = c.memoryRequest()
+		app.DaprCPULimit = c.sidecarCPULimit()
+		app.DaprCPURequest = c.sidecarCPURequest()
+		app.DaprMemoryLimit = c.sidecarMemoryLimit()
+		app.DaprMemoryRequest = c.sidecarMemoryRequest()
+		app.AppCPULimit = c.appCPULimit()
+		app.AppCPURequest = c.appCPURequest()
+		app.AppMemoryLimit = c.appMemoryLimit()
+		app.AppMemoryRequest = c.appMemoryRequest()
 
 		log.Printf("Adding app %v", app)
 		c.AppResources.Add(kube.NewAppManager(c.KubeClient, kube.DaprTestNamespace, app))
@@ -142,7 +150,7 @@ func (c *KubeTestPlatform) disableTelemetry() bool {
 	return disable
 }
 
-func (c *KubeTestPlatform) cpuLimit() string {
+func (c *KubeTestPlatform) sidecarCPULimit() string {
 	cpu := os.Getenv("DAPR_SIDECAR_CPU_LIMIT")
 	if cpu != "" {
 		return cpu
@@ -150,7 +158,7 @@ func (c *KubeTestPlatform) cpuLimit() string {
 	return defaultSidecarCPULimit
 }
 
-func (c *KubeTestPlatform) cpuRequest() string {
+func (c *KubeTestPlatform) sidecarCPURequest() string {
 	cpu := os.Getenv("DAPR_SIDECAR_CPU_REQUEST")
 	if cpu != "" {
 		return cpu
@@ -158,7 +166,7 @@ func (c *KubeTestPlatform) cpuRequest() string {
 	return defaultSidecarCPURequest
 }
 
-func (c *KubeTestPlatform) memoryRequest() string {
+func (c *KubeTestPlatform) sidecarMemoryRequest() string {
 	mem := os.Getenv("DAPR_SIDECAR_MEMORY_REQUEST")
 	if mem != "" {
 		return mem
@@ -166,12 +174,44 @@ func (c *KubeTestPlatform) memoryRequest() string {
 	return defaultSidecarMemoryRequest
 }
 
-func (c *KubeTestPlatform) memoryLimit() string {
+func (c *KubeTestPlatform) sidecarMemoryLimit() string {
 	mem := os.Getenv("DAPR_SIDECAR_MEMORY_LIMIT")
 	if mem != "" {
 		return mem
 	}
 	return defaultSidecarMemoryLimit
+}
+
+func (c *KubeTestPlatform) appCPULimit() string {
+	cpu := os.Getenv("DAPR_APP_CPU_LIMIT")
+	if cpu != "" {
+		return cpu
+	}
+	return defaultAppCPULimit
+}
+
+func (c *KubeTestPlatform) appCPURequest() string {
+	cpu := os.Getenv("DAPR_APP_CPU_REQUEST")
+	if cpu != "" {
+		return cpu
+	}
+	return defaultAppCPURequest
+}
+
+func (c *KubeTestPlatform) appMemoryRequest() string {
+	mem := os.Getenv("DAPR_APP_MEMORY_REQUEST")
+	if mem != "" {
+		return mem
+	}
+	return defaultAppMemoryRequest
+}
+
+func (c *KubeTestPlatform) appMemoryLimit() string {
+	mem := os.Getenv("DAPR_APP_MEMORY_LIMIT")
+	if mem != "" {
+		return mem
+	}
+	return defaultAppMemoryLimit
 }
 
 // AcquireAppExternalURL returns the external url for 'name'.
@@ -183,12 +223,16 @@ func (c *KubeTestPlatform) AcquireAppExternalURL(name string) string {
 // GetAppHostDetails returns the name and IP address of the host(pod) running 'name'
 func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error) {
 	app := c.AppResources.FindActiveResource(name)
-	hostname, hostIP, err := app.(*kube.AppManager).GetHostDetails()
+	pods, err := app.(*kube.AppManager).GetHostDetails()
 	if err != nil {
 		return "", "", err
 	}
 
-	return hostname, hostIP, nil
+	if len(pods) == 0 {
+		return "", "", fmt.Errorf("no pods found for app: %v", name)
+	}
+
+	return pods[0].Name, pods[0].IP, nil
 }
 
 // Scale changes the number of replicas of the app
@@ -234,17 +278,40 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 	return appManager.DoPortForwarding("", targetPorts...)
 }
 
-// GetAppUsage returns the Cpu and Memory usage for the dapr container for a given app
+// GetAppUsage returns the Cpu and Memory usage for the app container for a given app
 func (c *KubeTestPlatform) GetAppUsage(appName string) (*AppUsage, error) {
 	app := c.AppResources.FindActiveResource(appName)
 	appManager := app.(*kube.AppManager)
 
-	cpu, mem, err := appManager.GetAppCPUAndMemory()
+	cpu, mem, err := appManager.GetCPUAndMemory(false)
 	if err != nil {
 		return nil, err
 	}
 	return &AppUsage{
-		CPU:    fmt.Sprintf("%vm", cpu),
-		Memory: fmt.Sprintf("%.2fMb", mem),
+		CPUm:     cpu,
+		MemoryMb: mem,
+	}, nil
+}
+
+// GetTotalRestarts returns the total of restarts across all pods and containers for an app.
+func (c *KubeTestPlatform) GetTotalRestarts(appName string) (int, error) {
+	app := c.AppResources.FindActiveResource(appName)
+	appManager := app.(*kube.AppManager)
+
+	return appManager.GetTotalRestarts()
+}
+
+// GetSidecarUsage returns the Cpu and Memory usage for the dapr container for a given app
+func (c *KubeTestPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
+	app := c.AppResources.FindActiveResource(appName)
+	appManager := app.(*kube.AppManager)
+
+	cpu, mem, err := appManager.GetCPUAndMemory(true)
+	if err != nil {
+		return nil, err
+	}
+	return &AppUsage{
+		CPUm:     cpu,
+		MemoryMb: mem,
 	}, nil
 }

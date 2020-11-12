@@ -10,7 +10,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
 ### Prerequisites
 
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
-  - [Install the latest Helm v3](https://github.com/dapr/docs/blob/master/getting-started/environment-setup.md#using-helm-advanced).
+  - [Install the latest Helm v3](https://docs.dapr.io/getting-started/install-dapr/#install-with-helm-advanced).
 * Create your DockerHub ID
 * Set the environment variables
     ```bash
@@ -20,8 +20,8 @@ E2E tests are designed for verifying the functional correctness by replicating e
     # If you want to run tests against Windows or arm kubernetes clusters, uncomment and set these
     # export TARGET_OS=linux
     # export TARGET_ARCH=amd64
- 
-    # If you are cross compiling (building on MacOS/Windows and running against a Linux Kubernetes cluster 
+
+    # If you are cross compiling (building on MacOS/Windows and running against a Linux Kubernetes cluster
     # or vice versa) uncomment and set these
     # export GOOS=linux
     # export GOARCH=amd64
@@ -128,8 +128,15 @@ make delete-test-namespace
 
 ## Run E2E tests through GitHub Actions
 
-To keep the build infrastructure simple, Dapr uses [dapr-test GitHub Actions Workflow](https://github.com/dapr/dapr/actions?query=workflow%3Adapr-test) to run e2e tests using one of [AKS clusters](https://github.com/dapr/dapr/blob/4cd61680a3129f729deae24a51da241d0701376c/tests/test-infra/find_cluster.sh#L12-L17).
+To keep the build infrastructure simple, Dapr uses [dapr-test GitHub
+Actions
+Workflow](https://github.com/dapr/dapr/actions?query=workflow%3Adapr-test)
+to run e2e tests using one of [AKS
+clusters](https://github.com/dapr/dapr/blob/4cd61680a3129f729deae24a51da241d0701376c/tests/test-infra/find_cluster.sh#L12-L17). A
+separate workflow also runs E2E in [KinD](https://kind.sigs.k8s.io/)
+clusters.
 
-Once a contributor creates pull request, maintainer can start E2E tests by adding `/ok-to-test` comment to Pull Request.
-
-
+Once a contributor creates a pull request, E2E tests on KinD clusters
+are automatically executed for faster feedback. In order to run the
+E2E tests on AKS, ask a maintainer or approver to add `/ok-to-test` comment to
+the Pull Request.

@@ -20,7 +20,7 @@ import (
 
 func TestLogAsJSONEnabled(t *testing.T) {
 	t.Run("dapr.io/log-as-json is true", func(t *testing.T) {
-		var fakeAnnotation = map[string]string{
+		fakeAnnotation := map[string]string{
 			daprLogAsJSON: "true",
 		}
 
@@ -28,7 +28,7 @@ func TestLogAsJSONEnabled(t *testing.T) {
 	})
 
 	t.Run("dapr.io/log-as-json is false", func(t *testing.T) {
-		var fakeAnnotation = map[string]string{
+		fakeAnnotation := map[string]string{
 			daprLogAsJSON: "false",
 		}
 
@@ -36,14 +36,14 @@ func TestLogAsJSONEnabled(t *testing.T) {
 	})
 
 	t.Run("dapr.io/log-as-json is not given", func(t *testing.T) {
-		var fakeAnnotation = map[string]string{}
+		fakeAnnotation := map[string]string{}
 
 		assert.Equal(t, false, logAsJSONEnabled(fakeAnnotation))
 	})
 }
 
 func TestFormatProbePath(t *testing.T) {
-	var testCases = []struct {
+	testCases := []struct {
 		given    []string
 		expected string
 	}{
@@ -90,13 +90,13 @@ func TestGetProbeHttpHandler(t *testing.T) {
 func TestGetSideCarContainer(t *testing.T) {
 	annotations := map[string]string{}
 	annotations[daprConfigKey] = "config"
-	annotations[daprPortKey] = "5000"
+	annotations[daprAppPortKey] = "5000"
 	annotations[daprLogAsJSON] = "true"
 	annotations[daprAPITokenSecret] = "secret"
 
 	container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
 
-	var expectedArgs = []string{
+	expectedArgs := []string{
 		"--mode", "kubernetes",
 		"--dapr-http-port", "3500",
 		"--dapr-grpc-port", "50001",
