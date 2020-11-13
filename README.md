@@ -93,7 +93,7 @@ Reach out with any questions you may have and we'll make sure to answer then as 
 
 ### Community Call
 
-Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome! For [meeting dates](https://github.com/dapr/community#community-meetings) go to the Dapr community repo
+Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome! For [upcoming meeting dates](https://github.com/dapr/community#community-meetings) go to the Dapr community repo
 
 | Asset | Link        |
 |:-----------|:------------|
