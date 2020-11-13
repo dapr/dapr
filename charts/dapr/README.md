@@ -16,7 +16,7 @@ This chart installs Dapr via "child-charts":
 ## Prerequisites
 
 * Kubernetes cluster with RBAC (Role-Based Access Control) enabled is required
-* Helm 3.4.0 or newer
+* Helm 3.4.0 or newer 
 
 ## Resources Required
 The chart deploys pods that consume minimum resources as specified in the resources configuration parameter.
