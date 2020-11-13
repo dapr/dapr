@@ -7,14 +7,32 @@ package messaging
 
 import (
 	"testing"
+	"time"
 
+	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )
 
 func newDirectMessaging() *directMessaging {
 	return &directMessaging{}
+}
+
+func TestNewDirectMessaging(t *testing.T) {
+	dm := NewDirectMessaging(
+		"appID",
+		"namespace",
+		3000,
+		modes.KubernetesMode,
+		nil,
+		nil,
+		nil,
+		config.TracingSpec{},
+		60*time.Second)
+
+	assert.NotEqual(t, nil, dm)
 }
 
 func TestDestinationHeaders(t *testing.T) {
