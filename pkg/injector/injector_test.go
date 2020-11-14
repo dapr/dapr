@@ -362,7 +362,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "true",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
 		found := false
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
@@ -377,7 +377,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "false",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
 				t.FailNow()
@@ -387,7 +387,7 @@ func TestAppSSL(t *testing.T) {
 
 	t.Run("get sidecar container not specified", func(t *testing.T) {
 		annotations := map[string]string{}
-		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
 				t.FailNow()
