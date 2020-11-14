@@ -187,7 +187,7 @@ func TestGetContainer(t *testing.T) {
 	annotations[daprConfigKey] = "config"
 	annotations[daprAppPortKey] = appPort
 
-	c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+	c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
 
 	assert.NotNil(t, c)
 	assert.Equal(t, "image", c.Image)
@@ -202,7 +202,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprCPULimitKey] = "100m"
 		annotations[daprMemoryLimitKey] = "1Gi"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Limits.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Limits.Memory().String())
@@ -216,7 +216,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprCPURequestKey] = "100m"
 		annotations[daprMemoryRequestKey] = "1Gi"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Equal(t, "100m", c.Resources.Requests.Cpu().String())
 		assert.Equal(t, "1Gi", c.Resources.Requests.Memory().String())
@@ -228,7 +228,7 @@ func TestSidecarResourceLimits(t *testing.T) {
 		annotations[daprAppPortKey] = appPort
 		annotations[daprLogAsJSON] = "true"
 
-		c, _ := getSidecarContainer(annotations, "app", "image", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
 		assert.NotNil(t, c)
 		assert.Len(t, c.Resources.Limits, 0)
 	})
