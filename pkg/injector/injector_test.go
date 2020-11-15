@@ -362,7 +362,7 @@ func TestAppSSL(t *testing.T) {
 		annotations := map[string]string{
 			daprAppSSLKey: "true",
 		}
-		c, _ := getSidecarContainer(annotations, "app", "image", "Always", "ns", "a", "b", nil, "", "", "", "", false, "")
+		c, _ := getSidecarContainer(annotations, "app", "image", "", "ns", "a", "b", nil, "", "", "", "", false, "")
 		found := false
 		for _, a := range c.Args {
 			if a == "--app-ssl" {
