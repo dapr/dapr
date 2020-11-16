@@ -103,7 +103,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.logLevel`                 | Dapr Dashboard service Log level                                        | `info`                  |
 | `dapr_dashboard.image.registry`           | Dapr Dashboard docker registry                                          | `docker.io/daprio`      |
 | `dapr_dashboard.image.name`               | Dapr Dashboard docker image name                                        | `dashboard`             |
-| `dapr_dashboard.image.tag`                | Dapr Dashboard docker image tag                                         | `"0.2.0"`               |
+| `dapr_dashboard.image.tag`                | Dapr Dashboard docker image tag                                         | `"0.4.0"`               |
 
 ## Example of highly available configuration of the control plane
 
