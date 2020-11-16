@@ -87,37 +87,28 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}
 
 		// act
-		assert.NoError(t, stream.Send(host))
+		err = stream.Send(host)
+		assert.NoError(t, err)
+
+		// wait until table dissemination.
+		time.Sleep(disseminateTimerInterval)
+
+		// ignore disseminateTimeout.
+		testServer.disseminateNextTime = 0
 
 		<-done
 
+		assert.Equal(t, 1, len(testServer.streamConnPool))
+		assert.Equal(t, len(testServer.streamConnPool), len(testServer.raftNode.FSM().State().Members))
+
 		// wait until table dissemination.
-		time.Sleep(disseminateTimerInterval + 200*time.Millisecond)
-		assert.Equal(t, 1, len(testServer.streamConns))
-		assert.Equal(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
-		assert.Equal(t, 0, testServer.memberUpdateCount,
+		time.Sleep(disseminateTimerInterval * 2)
+		assert.Equal(t, uint32(0), testServer.memberUpdateCount.Load(),
 			"flushed all member updates")
 		assert.Equal(t, faultyHostDetectDefaultDuration, testServer.faultyHostDetectDuration,
 			"faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
-
-		tearDownEach()
-	})
-
-	t.Run("no dissemination if current connections and members are unmatched", func(t *testing.T) {
-		// arrange
-		setupEach(t)
-
-		// act
-		arrangeFakeMembers(t)
-
-		assert.Equal(t, 0, len(testServer.streamConns))
-		assert.NotEqual(t, len(testServer.streamConns), len(testServer.raftNode.FSM().State().Members))
-		// wait until table dissemination.
-		time.Sleep(disseminateTimerInterval + 10*time.Millisecond)
-		assert.Equal(t, 3, testServer.memberUpdateCount,
-			"memberUpdateCount must not be cleared if connection are unmatched.")
 
 		tearDownEach()
 	})
@@ -135,6 +126,31 @@ func TestMembershipChangeWorker(t *testing.T) {
 	})
 
 	cleanupServer()
+}
+
+func TestCleanupHeartBeats(t *testing.T) {
+	_, testServer, cleanup := newTestPlacementServer(testRaftServer)
+	testServer.hasLeadership = true
+	maxClients := 3
+
+	for i := 0; i < maxClients; i++ {
+		testServer.lastHeartBeat.Store(fmt.Sprintf("10.0.0.%d:1001", i), time.Now().UnixNano())
+	}
+
+	var getCount = func() int {
+		cnt := 0
+		testServer.lastHeartBeat.Range(func(k, v interface{}) bool {
+			cnt++
+			return true
+		})
+
+		return cnt
+	}
+
+	assert.Equal(t, maxClients, getCount())
+	testServer.cleanupHeartbeats()
+	assert.Equal(t, 0, getCount())
+	cleanup()
 }
 
 func TestPerformTableUpdate(t *testing.T) {
@@ -185,7 +201,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Call performTableUpdate directly, not by MembershipChangeWorker loop.
-	testServer.performTablesUpdate(testServer.streamConns, nil)
+	testServer.performTablesUpdate(testServer.streamConnPool, nil)
 
 	// assert
 	for i := 0; i < testClients; i++ {

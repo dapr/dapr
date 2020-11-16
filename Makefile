@@ -17,6 +17,8 @@ GIT_VERSION = $(shell git describe --always --abbrev=7 --dirty)
 CGO         ?= 0
 BINARIES    ?= daprd placement operator injector sentry
 HA_MODE     ?= false
+# Force in-memory log for placement
+FORCE_INMEM ?= true
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -82,6 +84,7 @@ HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
 HELM_MANIFEST_FILE:=$(HELM_OUT_DIR)/$(RELEASE_NAME).yaml
 HELM_REGISTRY?=daprio.azurecr.io
+
 
 ################################################################################
 # Go build details                                                             #
@@ -196,8 +199,12 @@ upload-helmchart:
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
 	$(HELM) install \
-		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s\
-		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) --set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true --set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) $(HELM_CHART_DIR)
+		$(RELEASE_NAME) --namespace=$(DAPR_NAMESPACE) --wait --timeout 5m0s \
+		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(DAPR_TAG)-$(TARGET_OS)-$(TARGET_ARCH) \
+		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
+		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
+		--set dapr_placement.logLevel=debug \
+		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) $(HELM_CHART_DIR)
 
 ################################################################################
 # Target: archive                                                              #

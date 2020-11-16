@@ -56,6 +56,9 @@ type API interface {
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
+	SetAppChannel(appChannel channel.AppChannel)
+	SetDirectMessaging(directMessaging messaging.DirectMessaging)
+	SetActorRuntime(actor actors.Actors)
 	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
 	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
@@ -240,6 +243,10 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
+	}
+
+	if a.directMessaging == nil {
+		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
 	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
@@ -660,4 +667,16 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	}
+}
+
+func (a *api) SetAppChannel(appChannel channel.AppChannel) {
+	a.appChannel = appChannel
+}
+
+func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
+	a.directMessaging = directMessaging
+}
+
+func (a *api) SetActorRuntime(actor actors.Actors) {
+	a.actor = actor
 }
