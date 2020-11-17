@@ -95,7 +95,7 @@ func TestGetSideCarContainer(t *testing.T) {
 	annotations[daprAPITokenSecret] = "secret"
 	annotations[daprAppHostKey] = "app.host"
 
-	container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "app.host", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
+	container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "app.host", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
 
 	expectedArgs := []string{
 		"--mode", "kubernetes",
@@ -124,6 +124,44 @@ func TestGetSideCarContainer(t *testing.T) {
 	// DAPR_API_TOKEN
 	assert.Equal(t, "secret", container.Env[3].ValueFrom.SecretKeyRef.Name)
 	assert.EqualValues(t, expectedArgs, container.Args)
+	assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
+}
+
+func TestImagePullPolicy(t *testing.T) {
+	testCases := []struct {
+		testName       string
+		pullPolicy     string
+		expectedPolicy corev1.PullPolicy
+	}{
+		{
+			"TestDefaultPullPolicy",
+			"",
+			corev1.PullIfNotPresent,
+		},
+		{
+			"TestAlwaysPullPolicy",
+			"Always",
+			corev1.PullAlways,
+		},
+		{
+			"TestNeverPullPolicy",
+			"Never",
+			corev1.PullNever,
+		},
+		{
+			"TestIfNotPresentPullPolicy",
+			"IfNotPresent",
+			corev1.PullIfNotPresent,
+		},
+	}
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			actualPolicy := getPullPolicy(tc.pullPolicy)
+			fmt.Println(tc.testName)
+			assert.Equal(t, tc.expectedPolicy, actualPolicy)
+		})
+	}
 }
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {

@@ -8,7 +8,8 @@ RUN go build -o tester .
 FROM golang:1.15 as fortio_build_env
 
 WORKDIR /fortio
-RUN git clone https://github.com/artursouza/fortio.git #redo
+ADD "https://api.github.com/repos/artursouza/fortio/branches/master" skipcache
+RUN git clone https://github.com/artursouza/fortio.git
 RUN cd fortio && go build
 
 FROM debian:buster-slim
