@@ -51,7 +51,7 @@ func TestInvokeMethod(t *testing.T) {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
 	conn, err := grpc.Dial("localhost:9998", opts...)
-	defer klose(t, conn)
+	defer closeConnection(t, conn)
 	assert.NoError(t, err)
 
 	c := Channel{baseAddress: "localhost:9998", client: conn}
@@ -72,7 +72,7 @@ func TestInvokeMethod(t *testing.T) {
 	assert.Equal(t, "{\"param1\":\"val1\",\"param2\":\"val2\"}", actual["querystring"])
 }
 
-func klose(t *testing.T, c io.Closer) {
+func closeConnection(t *testing.T, c io.Closer) {
 	err := c.Close()
 	if err != nil {
 		assert.Fail(t, fmt.Sprintf("unable to close %s", err))
