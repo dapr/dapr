@@ -452,6 +452,7 @@ func getPullPolicy(pullPolicy string) corev1.PullPolicy {
 }
 
 func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, imagePullPolicy, applicationHost, namespace, controlPlaneAddress, placementServiceAddress string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
+	// TODO consider reducing number of parameters to the method.
 	appPort, err := getAppPort(annotations)
 	if err != nil {
 		return nil, err

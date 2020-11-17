@@ -26,13 +26,13 @@ import (
 
 func TestCreateChannel(t *testing.T) {
 	t.Run("Test empty application host", func(t *testing.T) {
-		c := CreateChannel(9999, 1, nil, config.TracingSpec{}, "")
+		c := CreateChannel("", 9999, 1, nil, config.TracingSpec{})
 		assert.Equal(t, ":9999", c.baseAddress)
 		close(c.ch)
 	})
 
 	t.Run("Test non-empty application host", func(t *testing.T) {
-		c := CreateChannel(9999, 1, nil, config.TracingSpec{}, "10.1.1.2")
+		c := CreateChannel("10.1.1.2", 9999, 1, nil, config.TracingSpec{})
 		assert.Equal(t, "10.1.1.2:9999", c.baseAddress)
 		close(c.ch)
 	})

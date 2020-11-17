@@ -1544,7 +1544,7 @@ func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) 
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, applicationHost string) (channel.AppChannel, error)
+		var channelCreatorFn func(applicationHost string, port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
@@ -1555,8 +1555,8 @@ func (a *DaprRuntime) createAppChannel() error {
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency,
-			a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL, a.applicationHostAddress)
+		ch, err := channelCreatorFn(a.applicationHostAddress, a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency,
+			a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL)
 		if err != nil {
 			return err
 		}

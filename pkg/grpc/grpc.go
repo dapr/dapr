@@ -53,7 +53,7 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 }
 
 // CreateAppChannel creates a new gRPC AppChannel.
-func (g *Manager) CreateAppChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, applicationHost string) (channel.AppChannel, error) {
+func (g *Manager) CreateAppChannel(applicationHost string, port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
 	channelAddress := channel.DefaultChannelAddress
 	if applicationHost != channel.DefaultChannelAddress {
 		channelAddress = applicationHost
@@ -64,7 +64,7 @@ func (g *Manager) CreateAppChannel(port, maxConcurrency int, spec config.Tracing
 	}
 
 	g.AppClient = conn
-	ch := grpc_channel.CreateChannel(port, maxConcurrency, conn, spec, channelAddress)
+	ch := grpc_channel.CreateChannel(channelAddress, port, maxConcurrency, conn, spec)
 	return ch, nil
 }
 

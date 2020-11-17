@@ -28,7 +28,7 @@ type Channel struct {
 }
 
 // CreateChannel creates a gRPC connection with user code
-func CreateChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, applicationHost string) *Channel {
+func CreateChannel(applicationHost string, port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
 	c := &Channel{
 		client:      conn,
 		baseAddress: fmt.Sprintf("%s:%d", applicationHost, port),

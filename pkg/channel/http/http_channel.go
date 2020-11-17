@@ -40,7 +40,7 @@ type Channel struct {
 
 // CreateAppChannel creates an HTTP AppChannel.
 // nolint:gosec
-func CreateAppChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool, applicationHost string) (channel.AppChannel, error) {
+func CreateAppChannel(applicationHost string, port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
 	channelAddress := channel.DefaultChannelAddress
 	scheme := httpScheme
 	if sslEnabled {

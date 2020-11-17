@@ -79,7 +79,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 
 		// debuggability - trace info about the first message.  don't trace others so it doesn't flood log.
 		if i == offset {
-			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
+			log.Printf("Sending first publish app at url %s and body %q, this log will not print for subsequent messages for same topic", url, jsonValue)
 		}
 
 		statusCode, err := postSingleMessage(url, jsonValue)
@@ -96,7 +96,6 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 }
 
 func testPublish(t *testing.T, publisherExternalURL string) receivedMessagesResponse {
-	var err error
 	sentTopicDMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-d-topic")
 	require.NoError(t, err)
 
@@ -225,7 +224,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestPubSubNonLocal(t *testing.T) {
-	log.Printf("Enter TestPubSubNonLocal\n")
+	log.Println("Enter TestPubSubNonLocal")
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 

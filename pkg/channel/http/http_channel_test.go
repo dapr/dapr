@@ -272,7 +272,7 @@ func TestContentType(t *testing.T) {
 
 func TestCreateChannel(t *testing.T) {
 	t.Run("ssl scheme", func(t *testing.T) {
-		ch, err := CreateAppChannel(3000, 0, config.TracingSpec{}, true, "127.0.0.1")
+		ch, err := CreateAppChannel("127.0.0.1", 3000, 0, config.TracingSpec{}, true)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
@@ -280,7 +280,7 @@ func TestCreateChannel(t *testing.T) {
 	})
 
 	t.Run("non-ssl scheme", func(t *testing.T) {
-		ch, err := CreateAppChannel(3000, 0, config.TracingSpec{}, false, "127.0.0.1")
+		ch, err := CreateAppChannel("127.0.0.1", 3000, 0, config.TracingSpec{}, false)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
@@ -288,7 +288,7 @@ func TestCreateChannel(t *testing.T) {
 	})
 
 	t.Run("non-localhost", func(t *testing.T) {
-		ch, err := CreateAppChannel(3000, 0, config.TracingSpec{}, false, "10.1.1.2")
+		ch, err := CreateAppChannel("10.1.1.2", 3000, 0, config.TracingSpec{}, false)
 		assert.NoError(t, err)
 
 		b := ch.GetBaseAddress()
