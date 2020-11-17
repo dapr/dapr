@@ -126,9 +126,9 @@ func TestImagePullPolicy(t *testing.T) {
 		expectedPolicy corev1.PullPolicy
 	}{
 		{
-			"TestBlankPullPolicy",
+			"TestDefaultPullPolicy",
 			"",
-			corev1.PullAlways,
+			corev1.PullIfNotPresent,
 		},
 		{
 			"TestAlwaysPullPolicy",
