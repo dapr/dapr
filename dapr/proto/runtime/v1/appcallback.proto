@@ -38,7 +38,7 @@ service AppCallback {
   rpc OnBindingEvent(BindingEventRequest) returns (BindingEventResponse) {}
 }
 
-// TopicEventRequest message is compatiable with CloudEvent spec v1.0
+// TopicEventRequest message is compatible with CloudEvent spec v1.0
 // https://github.com/cloudevents/spec/blob/v1.0/spec.md
 message TopicEventRequest {
   // id identifies the event. Producers MUST ensure that source + id 
@@ -90,7 +90,7 @@ message TopicEventResponse {
 
 // BindingEventRequest represents input bindings event.
 message BindingEventRequest {
-  // Requried. The name of the input binding component.
+  // Required. The name of the input binding component.
   string name = 1;
 
   // Required. The payload that the input bindings sent
@@ -142,7 +142,7 @@ message TopicSubscription {
   // Required. The name of topic which will be subscribed
   string topic = 2;
 
-  // The optional properties used for this topic's subscribtion e.g. session id
+  // The optional properties used for this topic's subscription e.g. session id
   map<string,string> metadata = 3;
 }
 
