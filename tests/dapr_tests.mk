@@ -148,7 +148,7 @@ test-perf-all: check-e2e-env
 setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
 	$(HELM) repo add stable https://charts.helm.sh/stable
-	$(HELM) repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
+	$(HELM) repo add incubator https://charts.helm.sh/incubator
 	$(HELM) repo update
 
 # install redis to the cluster without password
