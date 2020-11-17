@@ -440,7 +440,7 @@ func getPullPolicy(pullPolicy string) corev1.PullPolicy {
 	case "IfNotPresent":
 		return corev1.PullIfNotPresent
 	default:
-		return corev1.PullAlways
+		return corev1.PullIfNotPresent
 	}
 }
 
