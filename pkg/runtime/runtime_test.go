@@ -1317,8 +1317,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{route: "topic1"}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1588,8 +1588,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				routes: map[string]string{
-					topic: topic,
+				routes: map[string]Route{
+					topic: Route{route: topic},
 				},
 			}
 			var grpcServer *grpc.Server
