@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
@@ -26,12 +27,9 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/placement/hashing"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/retry"
-	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/mitchellh/mapstructure"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -41,8 +39,6 @@ import (
 const (
 	daprSeparator        = "||"
 	metadataPartitionKey = "partitionKey"
-
-	placementReconnectInterval = 500 * time.Millisecond
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -51,6 +47,7 @@ var log = logger.NewLogger("dapr.runtime.actor")
 type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
+	Stop()
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
@@ -65,11 +62,7 @@ type Actors interface {
 type actorsRuntime struct {
 	appChannel          channel.AppChannel
 	store               state.Store
-	placementTableLock  *sync.RWMutex
-	placementTables     *hashing.ConsistentHashTables
-	placementSignal     chan struct{}
-	placementBlock      bool
-	operationUpdateLock *sync.Mutex
+	placement           *internal.ActorPlacement
 	grpcConnectionFn    func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
 	config              Config
 	actorsTable         *sync.Map
@@ -94,9 +87,6 @@ type ActiveActorsCount struct {
 }
 
 const (
-	lockOperation          = "lock"
-	unlockOperation        = "unlock"
-	updateOperation        = "update"
 	incompatibleStateStore = "state store does not support transactions which actors require to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/"
 )
 
@@ -112,9 +102,6 @@ func NewActors(
 		appChannel:          appChannel,
 		config:              config,
 		store:               stateStore,
-		placementTableLock:  &sync.RWMutex{},
-		placementTables:     &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
-		operationUpdateLock: &sync.Mutex{},
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
 		activeTimers:        &sync.Map{},
@@ -133,7 +120,7 @@ func NewActors(
 }
 
 func (a *actorsRuntime) Init() error {
-	if a.config.PlacementServiceAddress == "" {
+	if len(a.config.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 	if a.store == nil {
@@ -145,7 +132,21 @@ func (a *actorsRuntime) Init() error {
 		return errors.New(incompatibleStateStore)
 	}
 
-	go a.connectToPlacementService(a.config.PlacementServiceAddress, a.config.HostAddress, a.config.HeartbeatInterval)
+	hostname := fmt.Sprintf("%s:%d", a.config.HostAddress, a.config.Port)
+
+	afterTableUpdateFn := func() {
+		a.drainRebalancedActors()
+		a.evaluateReminders()
+	}
+	appHealthFn := func() bool { return a.appHealthy }
+
+	a.placement = internal.NewActorPlacement(
+		a.config.PlacementAddresses, a.certChain,
+		a.config.AppID, hostname, a.config.HostedActorTypes,
+		appHealthFn,
+		afterTableUpdateFn)
+
+	go a.placement.Start()
 	a.startDeactivationTicker(a.config.ActorDeactivationScanInterval, a.config.ActorIdleTimeout)
 
 	log.Infof("actor runtime started. actor idle timeout: %s. actor scan interval: %s",
@@ -244,12 +245,10 @@ func (a *actorsRuntime) startDeactivationTicker(interval, actorIdleTimeout time.
 }
 
 func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	if a.placementBlock {
-		<-a.placementSignal
-	}
+	a.placement.WaitUntilPlacementTableIsReady()
 
 	actor := req.Actor()
-	targetActorAddress, appID := a.lookupActorAddress(actor.GetActorType(), actor.GetActorId())
+	targetActorAddress, appID := a.placement.LookupActor(actor.GetActorType(), actor.GetActorId())
 	if targetActorAddress == "" {
 		return nil, errors.Errorf("error finding address for actor type %s with id %s", actor.GetActorType(), actor.GetActorId())
 	}
@@ -456,190 +455,6 @@ func (a *actorsRuntime) constructActorStateKey(actorType, actorID, key string) s
 	return a.constructCompositeKey(a.config.AppID, actorType, actorID, key)
 }
 
-func (a *actorsRuntime) connectToPlacementService(placementAddress, hostAddress string, heartbeatInterval time.Duration) {
-	// isConnAlive represents the status of stream channel. This must be changed in receiver loop.
-	// This flag reduces the unnecessary request retry.
-	var isConnAlive bool = true
-	stream := a.newPlacementStreamConn(placementAddress)
-
-	// Establish receive channel to retrieve placement table update
-	go func() {
-		for {
-			// Wait until stream is reconnected.
-			if !isConnAlive || stream == nil {
-				time.Sleep(placementReconnectInterval)
-				continue
-			}
-
-			resp, err := stream.Recv()
-			if err != nil {
-				diag.DefaultMonitoring.ActorStatusReportFailed("recv", "status")
-				log.Warnf("failed to receive placement table update from placement service: %v", err)
-				time.Sleep(heartbeatInterval)
-				continue
-			}
-
-			diag.DefaultMonitoring.ActorStatusReported("recv")
-			a.onPlacementOrder(resp)
-		}
-	}()
-
-	// Send the current host status to placement to register the member and
-	// maintain the status of member by placement.
-	go func() {
-		for {
-			// Wait until stream is reconnected.
-			if !isConnAlive || stream == nil {
-				time.Sleep(placementReconnectInterval)
-				continue
-			}
-
-			host := placementv1pb.Host{
-				Name:     fmt.Sprintf("%s:%d", hostAddress, a.config.Port),
-				Load:     1, // TODO: Use CPU/Memory as load balancing factor
-				Entities: a.config.HostedActorTypes,
-				Port:     int64(a.config.Port),
-				Id:       a.config.AppID,
-			}
-
-			if err := stream.Send(&host); err != nil {
-				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
-				log.Warnf("failed to report status to placement service : %v", err)
-
-				// If receive channel is down, ensure the current stream is closed and get new gRPC stream.
-				stream.CloseSend()
-				isConnAlive = false
-				stream = a.newPlacementStreamConn(placementAddress)
-				isConnAlive = true
-			}
-
-			// appHealthy is the health status of actor service application. This allows placement to update
-			// memberlist and hashing table quickly.
-			if !a.appHealthy {
-				// app is unresponsive, close the stream and disconnect from the placement service.
-				// Then Placement will remove this host from the member list.
-				err := stream.CloseSend()
-				if err != nil {
-					log.Errorf("error closing stream to placement service: %s", err)
-				}
-				continue
-			}
-
-			time.Sleep(heartbeatInterval)
-		}
-	}()
-}
-
-func (a *actorsRuntime) newPlacementStreamConn(placementAddress string) placementv1pb.Placement_ReportDaprStatusClient {
-	log.Infof("starting connection attempt to placement service: %s", placementAddress)
-
-	for {
-		// Stop reconnecting to placement until app is healthy.
-		if !a.appHealthy {
-			time.Sleep(placementReconnectInterval)
-			continue
-		}
-
-		opts, err := dapr_credentials.GetClientOptions(a.certChain, security.TLSServerName)
-		if err != nil {
-			log.Errorf("failed to establish TLS credentials for actor placement service: %s", err)
-			return nil
-		}
-		opts = append(opts, grpc.WithBlock())
-		if diag.DefaultGRPCMonitoring.IsEnabled() {
-			opts = append(
-				opts,
-				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
-		}
-
-		conn, err := grpc.Dial(placementAddress, opts...)
-		if err != nil {
-			log.Warnf("error connecting to placement service: %v", err)
-			diag.DefaultMonitoring.ActorStatusReportFailed("dial", "placement")
-			conn.Close()
-			time.Sleep(placementReconnectInterval)
-			continue
-		}
-
-		client := placementv1pb.NewPlacementClient(conn)
-		stream, err := client.ReportDaprStatus(context.Background())
-		if err != nil {
-			log.Warnf("error establishing client to placement service: %v", err)
-			diag.DefaultMonitoring.ActorStatusReportFailed("establish", "status")
-			conn.Close()
-			time.Sleep(placementReconnectInterval)
-			continue
-		}
-
-		log.Infof("established connection to placement service at %s", placementAddress)
-		return stream
-	}
-}
-
-func (a *actorsRuntime) onPlacementOrder(in *placementv1pb.PlacementOrder) {
-	log.Infof("placement order received: %s", in.Operation)
-	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
-
-	// lock all incoming calls when an updated table arrives
-	a.operationUpdateLock.Lock()
-	defer a.operationUpdateLock.Unlock()
-
-	switch in.Operation {
-	case lockOperation:
-		{
-			a.blockPlacements()
-
-			go func() {
-				time.Sleep(time.Second * 5)
-				a.unblockPlacements()
-			}()
-		}
-	case unlockOperation:
-		{
-			a.unblockPlacements()
-		}
-	case updateOperation:
-		{
-			a.updatePlacements(in.Tables)
-		}
-	}
-}
-
-func (a *actorsRuntime) blockPlacements() {
-	a.placementSignal = make(chan struct{})
-	a.placementBlock = true
-}
-
-func (a *actorsRuntime) unblockPlacements() {
-	if a.placementBlock {
-		a.placementBlock = false
-		close(a.placementSignal)
-	}
-}
-
-func (a *actorsRuntime) updatePlacements(in *placementv1pb.PlacementTables) {
-	a.placementTableLock.Lock()
-	defer a.placementTableLock.Unlock()
-
-	if in.Version != a.placementTables.Version {
-		for k, v := range in.Entries {
-			loadMap := map[string]*hashing.Host{}
-			for lk, lv := range v.LoadMap {
-				loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
-			}
-			c := hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
-			a.placementTables.Entries[k] = c
-		}
-
-		a.placementTables.Version = in.Version
-		a.drainRebalancedActors()
-
-		log.Infof("placement tables updated, version: %s", in.GetVersion())
-
-		a.evaluateReminders()
-	}
-}
-
 func (a *actorsRuntime) drainRebalancedActors() {
 	// visit all currently active actors
 	var wg sync.WaitGroup
@@ -651,7 +466,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			// for each actor, deactivate if no longer hosted locally
 			actorKey := key.(string)
 			actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
-			address, _ := a.lookupActorAddress(actorType, actorID)
+			address, _ := a.placement.LookupActor(actorType, actorID)
 			if address != "" && !a.isActorLocal(address, a.config.HostAddress, a.config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done
 				// cancel any reminders
@@ -726,7 +541,7 @@ func (a *actorsRuntime) evaluateReminders() {
 
 				for i := range reminders {
 					r := reminders[i] // Make a copy since we will refer to this as a reference in this loop.
-					targetActorAddress, _ := a.lookupActorAddress(r.ActorType, r.ActorID)
+					targetActorAddress, _ := a.placement.LookupActor(r.ActorType, r.ActorID)
 					if targetActorAddress == "" {
 						continue
 					}
@@ -751,22 +566,6 @@ func (a *actorsRuntime) evaluateReminders() {
 	wg.Wait()
 	close(a.evaluationChan)
 	a.evaluationBusy = false
-}
-
-func (a *actorsRuntime) lookupActorAddress(actorType, actorID string) (string, string) {
-	if a.placementTables == nil {
-		return "", ""
-	}
-
-	t := a.placementTables.Entries[actorType]
-	if t == nil {
-		return "", ""
-	}
-	host, err := t.GetHost(actorID)
-	if err != nil || host == nil {
-		return "", ""
-	}
-	return host.Name, host.AppID
 }
 
 func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack, error) {
@@ -1253,6 +1052,13 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 	}
 
 	return activeActorsCount
+}
+
+// Stop closes all network connections and resources used in actor runtime
+func (a *actorsRuntime) Stop() {
+	if a.placement != nil {
+		a.placement.Stop()
+	}
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters

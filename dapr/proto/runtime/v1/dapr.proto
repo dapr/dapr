@@ -43,6 +43,15 @@ service Dapr {
 
   // Gets secrets from secret stores.
   rpc GetSecret(GetSecretRequest) returns (GetSecretResponse) {}
+
+  // Register an actor timer.
+  rpc RegisterActorTimer(RegisterActorTimerRequest) returns (google.protobuf.Empty) {}
+
+  // Unregister an actor timer.
+  rpc UnregisterActorTimer(UnregisterActorTimerRequest) returns (google.protobuf.Empty) {}
+
+  // InvokeActor calls a method on an actor.
+  rpc InvokeActor (InvokeActorRequest) returns (InvokeActorResponse) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -226,4 +235,35 @@ message ExecuteStateTransactionRequest {
 
   // The metadata used for transactional operations.
   map<string,string> metadata = 3;
+}
+
+// RegisterActorTimerRequest is the message to register a timer for an actor of a given type and id.
+message RegisterActorTimerRequest {
+  string actor_type = 1;
+  string actor_id = 2;
+  string name = 3;
+  string due_time = 4;
+  string period = 5;
+  string callback = 6;
+  bytes  data = 7;
+}
+
+// UnregisterActorTimerRequest is the message to unregister an actor timer
+message UnregisterActorTimerRequest {
+  string actor_type = 1;
+  string actor_id = 2;
+  string name = 3;
+}
+
+// InvokeActorRequest is the message to call an actor.
+message InvokeActorRequest {
+  string actor_type = 1;
+  string actor_id = 2;
+  string method = 3;
+  bytes  data = 4;
+}
+
+// InvokeActorResponse is the method that returns an actor invocation response.
+message InvokeActorResponse {
+  bytes data = 1;
 }

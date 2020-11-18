@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -23,9 +22,7 @@ import (
 )
 
 const (
-	numHealthChecks = 60  // Number of times to check for endpoint health per app.
-	maxAppMemMb     = 800 // Maximum Mb for app memory allocation.
-	maxSidecarMemMb = 300 // Maximum Mb for sidecar memory allocation.
+	numHealthChecks = 60 // Number of times to check for endpoint health per app.
 )
 
 var tr *runner.TestRunner
@@ -55,29 +52,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorTimerWithStatePerformance(t *testing.T) {
-	p := perf.ParamsFromDefaults()
-
-	if val, ok := os.LookupEnv(perf.ClientConnectionsEnvVar); ok && val != "" {
-		clientConn, err := strconv.Atoi(val)
-		require.NoError(t, err)
-		p.ClientConnections = clientConn
-	}
-	if val, ok := os.LookupEnv(perf.TestDurationEnvVar); ok && val != "" {
-		p.TestDuration = val
-	}
-	if val, ok := os.LookupEnv(perf.PayloadSizeEnvVar); ok && val != "" {
-		payloadSize, err := strconv.Atoi(val)
-		require.NoError(t, err)
-		p.PayloadSizeKB = payloadSize
-	}
-	if val, ok := os.LookupEnv(perf.PayloadEnvVar); ok && val != "" {
-		p.Payload = val
-	}
-	if val, ok := os.LookupEnv(perf.QPSEnvVar); ok && val != "" {
-		qps, err := strconv.Atoi(val)
-		require.NoError(t, err)
-		p.QPS = qps
-	}
+	p := perf.Params()
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
@@ -119,7 +94,6 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 
 	restarts, err := tr.Platform.GetTotalRestarts("testapp")
 	require.NoError(t, err)
-	require.Equal(t, 0, restarts)
 
 	t.Logf("dapr test results: %s", string(daprResp))
 	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
@@ -130,13 +104,15 @@ func TestActorTimerWithStatePerformance(t *testing.T) {
 	err = json.Unmarshal(daprResp, &daprResult)
 	require.NoError(t, err)
 
-	percentiles := map[int]string{1: "75th", 2: "90th"}
+	percentiles := map[int]string{2: "90th", 3: "99th"}
 
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
 	}
 
-	require.True(t, appUsage.MemoryMb < maxAppMemMb)
-	require.True(t, sidecarUsage.MemoryMb < maxSidecarMemMb)
+	require.Equal(t, 0, daprResult.RetCodes.Num400)
+	require.Equal(t, 0, daprResult.RetCodes.Num500)
+	require.Equal(t, 0, restarts)
+	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
 }

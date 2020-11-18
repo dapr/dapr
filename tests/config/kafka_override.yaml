@@ -4,17 +4,15 @@
 # ------------------------------------------------------------
 
 # Install 1 replica for e2e test
-replicas: 1
+replicaCount: 1
 
 # Disable persistent storage
 persistence:
   enabled: false
 
+autoCreateTopicsEnable: true
+
 # Topic creation and configuration for dapr test
-topics:
-  - name: dapr-test
-    partitions: 1
-    replicationFactor: 1
 affinity:
   nodeAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
@@ -28,8 +26,10 @@ affinity:
             operator: In
             values:
             - amd64
+
 zookeeper:
-  replicaCount: 1
+  persistence:
+    enabled: false
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

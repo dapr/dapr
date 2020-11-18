@@ -35,7 +35,7 @@ type testCommandRequest struct {
 
 // appState represents a state in this app.
 type appState struct {
-	Data string `json:"data,omitempty"`
+	Data []byte `json:"data,omitempty"`
 }
 
 // daprState represents a state in Dapr.
@@ -95,7 +95,7 @@ func generateDaprState(kv utils.SimpleKeyValue) daprState {
 		return daprState{key, nil}
 	}
 
-	value := fmt.Sprintf("%v", kv.Value)
+	value := []byte(fmt.Sprintf("%v", kv.Value))
 	return daprState{key, &appState{value}}
 }
 
@@ -116,7 +116,7 @@ func newStateTransactionRequestResponse(keyValues ...utils.StateTransactionKeyVa
 	daprStateTransactions := make([]stateTransaction, 0, len(keyValues))
 	for _, keyValue := range keyValues {
 		daprStateTransactions = append(daprStateTransactions, stateTransaction{
-			keyValue.Key, &appState{keyValue.Value}, keyValue.OperationType,
+			keyValue.Key, &appState{[]byte(keyValue.Value)}, keyValue.OperationType,
 		})
 	}
 
@@ -172,13 +172,13 @@ func generateTestCases(isHTTP bool) []testCase {
 					"save",
 					emptyRequest,
 					emptyResponse,
-					201,
+					204,
 				},
 				{
 					"delete",
 					emptyRequest,
 					emptyResponse,
-					200,
+					204,
 				},
 			},
 			protocol,
@@ -197,7 +197,7 @@ func generateTestCases(isHTTP bool) []testCase {
 					"save",
 					newRequest(utils.SimpleKeyValue{testCase1Key, testCase1Value}),
 					emptyResponse,
-					201,
+					204,
 				},
 				{
 					"get",
@@ -209,7 +209,7 @@ func generateTestCases(isHTTP bool) []testCase {
 					"delete",
 					newRequest(utils.SimpleKeyValue{testCase1Key, nil}),
 					emptyResponse,
-					200,
+					204,
 				},
 				{
 					"get",
@@ -234,7 +234,7 @@ func generateTestCases(isHTTP bool) []testCase {
 					"save",
 					newRequest(testCaseManyKeyValues...),
 					emptyResponse,
-					201,
+					204,
 				},
 				{
 					"get",
@@ -252,13 +252,44 @@ func generateTestCases(isHTTP bool) []testCase {
 					"delete",
 					newRequest(testCaseManyKeys...),
 					emptyResponse,
-					200,
+					204,
 				},
 				{
 					"get",
 					newRequest(testCaseManyKeys...),
 					newResponse(testCaseManyKeys...),
 					200,
+				},
+			},
+			protocol,
+		},
+		{
+			// No comma since this will become the name of the test without spaces.
+			"Test data size edges (default 4MB) " + protocol,
+			[]testStep{
+				{
+					"save",
+					generateSpecificLengthSample(1024 * 1024), // Less than limit
+					emptyResponse,
+					204,
+				},
+				{
+					"save",
+					generateSpecificLengthSample(1024*1024*3 - 55), // Exact limit
+					emptyResponse,
+					204,
+				},
+				{
+					"save",
+					generateSpecificLengthSample(1024*1024*4 + 1), // Limit + 1
+					emptyResponse,
+					500,
+				},
+				{
+					"save",
+					generateSpecificLengthSample(1024 * 1024 * 8), // Greater than limit
+					emptyResponse,
+					500,
 				},
 			},
 			protocol,
@@ -296,6 +327,22 @@ func generateStateTransactionCases(protocolType string) testStateTransactionCase
 		},
 	}
 	return testStateTransactionCase
+}
+
+func generateSpecificLengthSample(sizeInBytes int) requestResponse {
+	key := guuid.New().String()
+	val := make([]byte, sizeInBytes)
+
+	state := []daprState{
+		{
+			key,
+			&appState{val},
+		},
+	}
+
+	return requestResponse{
+		state,
+	}
 }
 
 var tr *runner.TestRunner
@@ -336,16 +383,18 @@ func TestStateApp(t *testing.T) {
 				body, err := json.Marshal(step.request)
 				require.NoError(t, err)
 
-				url := fmt.Sprintf("%s/test/%s/%s", externalURL, tt.protocol, step.command)
+				url := fmt.Sprintf("%s/test/%s/%s/statestore", externalURL, tt.protocol, step.command)
 
 				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
 				require.NoError(t, err)
-				require.Equal(t, step.expectedStatusCode, statusCode)
+				require.Equal(t, step.expectedStatusCode, statusCode, url)
 
 				var appResp requestResponse
-				err = json.Unmarshal(resp, &appResp)
+				if statusCode != 204 {
+					err = json.Unmarshal(resp, &appResp)
 
-				require.NoError(t, err)
+					require.NoError(t, err)
+				}
 
 				for _, er := range step.expectedResponse.States {
 					for _, ri := range appResp.States {
@@ -388,9 +437,9 @@ func TestStateTransactionApps(t *testing.T) {
 				require.NoError(t, err)
 				var url string
 				if tt.protocol == "HTTP" || step.command == "get" {
-					url = strings.TrimSpace(fmt.Sprintf("%s/test/http/%s", externalURL, step.command))
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/http/%s/statestore", externalURL, step.command))
 				} else {
-					url = strings.TrimSpace(fmt.Sprintf("%s/test/grpc/%s", externalURL, step.command))
+					url = strings.TrimSpace(fmt.Sprintf("%s/test/grpc/%s/statestore", externalURL, step.command))
 				}
 				resp, err := utils.HTTPPost(url, body)
 				require.NoError(t, err)
@@ -412,6 +461,106 @@ func TestStateTransactionApps(t *testing.T) {
 					}
 				}
 			}
+		})
+	}
+}
+
+func TestMissingKeyDirect(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	for _, protocol := range []string{"http", "grpc"} {
+		t.Run(fmt.Sprintf("missing_key_%s", protocol), func(t *testing.T) {
+			stateURL := fmt.Sprintf("%s/test/%s/%s/statestore", externalURL, protocol, "get")
+
+			key := guuid.New().String()
+			request := newRequest(utils.SimpleKeyValue{key, nil})
+			body, _ := json.Marshal(request)
+
+			resp, status, err := utils.HTTPPostWithStatus(stateURL, body)
+
+			var states requestResponse
+			json.Unmarshal(resp, &states)
+
+			require.Equal(t, 200, status)
+			require.Nil(t, err)
+			require.Len(t, states.States, 1)
+			require.Equal(t, states.States[0].Key, key)
+			require.Nil(t, states.States[0].Value)
+		})
+	}
+}
+
+func TestMissingAndMisconfiguredStateStore(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		statestore, protocol, errorMessage string
+		status                             int
+	}{
+		{
+			statestore:   "missingstore",
+			protocol:     "http",
+			errorMessage: "expected status code 204, got 400",
+			status:       500,
+		},
+		{
+			statestore:   "missingstore",
+			protocol:     "grpc",
+			errorMessage: "state store missingstore is not found",
+			status:       500,
+		},
+		{
+			statestore:   "badhost-store",
+			protocol:     "http",
+			errorMessage: "expected status code 204, got 400",
+			status:       500,
+		},
+		{
+			statestore:   "badhost-store",
+			protocol:     "grpc",
+			errorMessage: "state store badhost-store is not found",
+			status:       500,
+		},
+		{
+			statestore:   "badpass-store",
+			protocol:     "http",
+			errorMessage: "expected status code 204, got 400",
+			status:       500,
+		},
+		{
+			statestore:   "badpass-store",
+			protocol:     "grpc",
+			errorMessage: "state store badpass-store is not found",
+			status:       500,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("store_%s_%s", tc.statestore, tc.protocol), func(t *testing.T) {
+			// Define state URL for statestore that does not exist.
+			stateURL := fmt.Sprintf("%s/test/%s/%s/%s", externalURL, tc.protocol, "save", tc.statestore)
+
+			request := newRequest(utils.SimpleKeyValue{guuid.New().String(), nil})
+			body, _ := json.Marshal(request)
+
+			resp, status, err := utils.HTTPPostWithStatus(stateURL, body)
+
+			// The state app doesn't persist the real error other than this message
+			require.Contains(t, string(resp), tc.errorMessage)
+			require.Equal(t, tc.status, status)
+			require.Nil(t, err)
 		})
 	}
 }

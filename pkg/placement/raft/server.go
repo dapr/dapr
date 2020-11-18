@@ -7,7 +7,6 @@ package raft
 
 import (
 	"net"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -25,6 +24,9 @@ const (
 	raftLogCacheSize = 512
 
 	commandTimeout = 1 * time.Second
+
+	nameResolveRetryInterval = 2 * time.Second
+	nameResolveMaxRetry      = 120
 )
 
 // PeerInfo represents raft peer node information
@@ -38,31 +40,51 @@ type Server struct {
 	id  string
 	fsm *FSM
 
-	bootstrap bool
-	inMem     bool
-	raftBind  string
-	peers     []PeerInfo
+	inMem    bool
+	raftBind string
+	peers    []PeerInfo
 
+	config        *raft.Config
 	raft          *raft.Raft
 	raftStore     *raftboltdb.BoltStore
 	raftTransport *raft.NetworkTransport
-	raftInmem     *raft.InmemStore
+
+	logStore    raft.LogStore
+	stableStore raft.StableStore
+	snapStore   raft.SnapshotStore
+
+	raftLogStorePath string
 }
 
 // New creates Raft server node.
-func New(id string, inMem, bootstrap bool, peers []PeerInfo) *Server {
+func New(id string, inMem bool, peers []PeerInfo, logStorePath string) *Server {
 	raftBind := raftAddressForID(id, peers)
 	if raftBind == "" {
 		return nil
 	}
 
 	return &Server{
-		id:        id,
-		inMem:     inMem,
-		bootstrap: bootstrap,
-		raftBind:  raftBind,
-		peers:     peers,
+		id:               id,
+		inMem:            inMem,
+		raftBind:         raftBind,
+		peers:            peers,
+		raftLogStorePath: logStorePath,
 	}
+}
+
+func tryResolveRaftAdvertiseAddr(bindAddr string) (*net.TCPAddr, error) {
+	// HACKHACK: Kubernetes POD DNS A record population takes some time
+	// to look up the address after StatefulSet POD is deployed.
+	var err error
+	var addr *net.TCPAddr
+	for retry := 0; retry < nameResolveMaxRetry; retry++ {
+		addr, err = net.ResolveTCPAddr("tcp", bindAddr)
+		if err == nil {
+			return addr, nil
+		}
+		time.Sleep(nameResolveRetryInterval)
+	}
+	return nil, err
 }
 
 // StartRaft starts Raft node with Raft protocol configuration. if config is nil,
@@ -79,13 +101,13 @@ func (s *Server) StartRaft(config *raft.Config) error {
 
 	s.fsm = newFSM()
 
-	// TODO: replace tls enabled transport layer using workload cert
-	addr, err := net.ResolveTCPAddr("tcp", s.raftBind)
+	addr, err := tryResolveRaftAdvertiseAddr(s.raftBind)
 	if err != nil {
 		return err
 	}
 
-	trans, err := raft.NewTCPTransport(s.raftBind, addr, 3, 10*time.Second, os.Stderr)
+	loggerAdapter := newLoggerAdapter()
+	trans, err := raft.NewTCPTransportWithLogger(s.raftBind, addr, 3, 10*time.Second, loggerAdapter)
 	if err != nil {
 		return err
 	}
@@ -94,15 +116,11 @@ func (s *Server) StartRaft(config *raft.Config) error {
 
 	// Build an all in-memory setup for dev mode, otherwise prepare a full
 	// disk-based setup.
-	var logStore raft.LogStore
-	var stable raft.StableStore
-	var snap raft.SnapshotStore
-
 	if s.inMem {
-		s.raftInmem = raft.NewInmemStore()
-		stable = s.raftInmem
-		logStore = s.raftInmem
-		snap = raft.NewInmemSnapshotStore()
+		raftInmem := raft.NewInmemStore()
+		s.stableStore = raftInmem
+		s.logStore = raftInmem
+		s.snapStore = raft.NewInmemSnapshotStore()
 	} else {
 		if err = ensureDir(s.raftStorePath()); err != nil {
 			return errors.Wrap(err, "failed to create log store directory")
@@ -113,16 +131,16 @@ func (s *Server) StartRaft(config *raft.Config) error {
 		if err != nil {
 			return err
 		}
-		stable = s.raftStore
+		s.stableStore = s.raftStore
 
 		// Wrap the store in a LogCache to improve performance.
-		logStore, err = raft.NewLogCache(raftLogCacheSize, s.raftStore)
+		s.logStore, err = raft.NewLogCache(raftLogCacheSize, s.raftStore)
 		if err != nil {
 			return err
 		}
 
 		// Create the snapshot store.
-		snap, err = raft.NewFileSnapshotStore(s.raftStorePath(), snapshotsRetained, os.Stderr)
+		s.snapStore, err = raft.NewFileSnapshotStoreWithLogger(s.raftStorePath(), snapshotsRetained, loggerAdapter)
 		if err != nil {
 			return err
 		}
@@ -131,7 +149,7 @@ func (s *Server) StartRaft(config *raft.Config) error {
 	// Setup Raft configuration.
 	if config == nil {
 		// Set default configuration for raft
-		config = &raft.Config{
+		s.config = &raft.Config{
 			ProtocolVersion:    raft.ProtocolVersionMax,
 			HeartbeatTimeout:   1000 * time.Millisecond,
 			ElectionTimeout:    1000 * time.Millisecond,
@@ -143,59 +161,69 @@ func (s *Server) StartRaft(config *raft.Config) error {
 			SnapshotThreshold:  8192,
 			LeaderLeaseTimeout: 500 * time.Millisecond,
 		}
+	} else {
+		s.config = config
 	}
 
 	// Use LoggerAdapter to integrate with Dapr logger. Log level relies on placement log level.
-	config.Logger = newLoggerAdapter()
-	config.LocalID = raft.ServerID(s.id)
+	s.config.Logger = loggerAdapter
+	s.config.LocalID = raft.ServerID(s.id)
 
 	// If we are in bootstrap or dev mode and the state is clean then we can
 	// bootstrap now.
-	if s.inMem || s.bootstrap {
-		var hasState bool
-		hasState, err = raft.HasExistingState(logStore, stable, snap)
-		if err != nil {
-			return err
-		}
-		if !hasState {
-			configuration := raft.Configuration{
-				Servers: []raft.Server{
-					{
-						ID:      config.LocalID,
-						Address: trans.LocalAddr(),
-					},
-				},
-			}
-
-			if err = raft.BootstrapCluster(config,
-				logStore, stable, snap, trans, configuration); err != nil {
-				return err
-			}
-		}
-	}
-
-	s.raft, err = raft.NewRaft(config, s.fsm, logStore, stable, snap, trans)
+	bootstrapConf, err := s.bootstrapConfig(s.peers)
 	if err != nil {
 		return err
 	}
 
-	// Join all peers to Raft cluster.
-	if s.bootstrap {
-		for _, peer := range s.peers {
-			if err = s.JoinCluster(peer.ID, peer.Address); err != nil {
-				logging.Errorf("failed to join %s, %s: %v", peer.ID, peer.Address, err)
-				continue
-			}
+	if bootstrapConf != nil {
+		if err = raft.BootstrapCluster(
+			s.config, s.logStore, s.stableStore,
+			s.snapStore, trans, *bootstrapConf); err != nil {
+			return err
 		}
 	}
 
-	logging.Debug("Raft server is starting")
+	s.raft, err = raft.NewRaft(s.config, s.fsm, s.logStore, s.stableStore, s.snapStore, s.raftTransport)
+	if err != nil {
+		return err
+	}
+
+	logging.Infof("Raft server is starting on %s...", s.raftBind)
 
 	return err
 }
 
+func (s *Server) bootstrapConfig(peers []PeerInfo) (*raft.Configuration, error) {
+	hasState, err := raft.HasExistingState(s.logStore, s.stableStore, s.snapStore)
+	if err != nil {
+		return nil, err
+	}
+
+	if !hasState {
+		raftConfig := &raft.Configuration{
+			Servers: make([]raft.Server, len(peers)),
+		}
+
+		for i, p := range peers {
+			raftConfig.Servers[i] = raft.Server{
+				ID:      raft.ServerID(p.ID),
+				Address: raft.ServerAddress(p.Address),
+			}
+		}
+
+		return raftConfig, nil
+	}
+
+	// return nil for raft.Configuration to use the existing log store files.
+	return nil, nil
+}
+
 func (s *Server) raftStorePath() string {
-	return logStorePrefix + s.id
+	if s.raftLogStorePath == "" {
+		return logStorePrefix + s.id
+	}
+	return s.raftLogStorePath
 }
 
 // FSM returns fsm
@@ -203,44 +231,9 @@ func (s *Server) FSM() *FSM {
 	return s.fsm
 }
 
-// JoinCluster joins new node to Raft cluster. If node is already the member of cluster,
-// it will skip to add node.
-func (s *Server) JoinCluster(nodeID, addr string) error {
-	if !s.IsLeader() {
-		return errors.New("only leader can join node to the cluster")
-	}
-
-	logging.Debugf("joining peer %s at %s to the cluster.", nodeID, addr)
-
-	configFuture := s.raft.GetConfiguration()
-	if err := configFuture.Error(); err != nil {
-		logging.Errorf("failed to get raft configuration: %v", err)
-		return err
-	}
-
-	for _, srv := range configFuture.Configuration().Servers {
-		// If a node already exists with either the joining node's ID or address,
-		// that node may need to be removed from the config first.
-		if srv.ID == raft.ServerID(nodeID) || srv.Address == raft.ServerAddress(addr) {
-			if srv.Address == raft.ServerAddress(addr) && srv.ID == raft.ServerID(nodeID) {
-				logging.Debugf("node %s at %s is already the member of cluster.", nodeID, addr)
-				return nil
-			}
-
-			future := s.raft.RemoveServer(srv.ID, 0, 0)
-			if err := future.Error(); err != nil {
-				return errors.Wrapf(err, "error removing existing node %s at %s", nodeID, addr)
-			}
-		}
-	}
-
-	f := s.raft.AddVoter(raft.ServerID(nodeID), raft.ServerAddress(addr), 0, 0)
-	if f.Error() != nil {
-		return f.Error()
-	}
-	logging.Debugf("node %s at %s joined successfully", nodeID, addr)
-
-	return nil
+// Raft returns raft node
+func (s *Server) Raft() *raft.Raft {
+	return s.raft
 }
 
 // IsLeader returns true if the current node is leader
@@ -249,22 +242,35 @@ func (s *Server) IsLeader() bool {
 }
 
 // ApplyCommand applies command log to state machine to upsert or remove members.
-func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (interface{}, error) {
+func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, error) {
 	if !s.IsLeader() {
-		return nil, errors.New("this is not the leader node")
+		return false, errors.New("this is not the leader node")
 	}
 
 	cmdLog, err := makeRaftLogCommand(cmdType, data)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
 	future := s.raft.Apply(cmdLog, commandTimeout)
-
 	if err := future.Error(); err != nil {
-		return nil, err
+		return false, err
 	}
 
 	resp := future.Response()
-	return resp, nil
+	return resp.(bool), nil
+}
+
+// Shutdown shutdown raft server gracefully
+func (s *Server) Shutdown() {
+	if s.raft != nil {
+		s.raftTransport.Close()
+		future := s.raft.Shutdown()
+		if err := future.Error(); err != nil {
+			logging.Warnf("error shutting down raft: %v", err)
+		}
+		if s.raftStore != nil {
+			s.raftStore.Close()
+		}
+	}
 }

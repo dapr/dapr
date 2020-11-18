@@ -101,6 +101,9 @@ func TestActorActivation(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 	require.NoError(t, err)
 
+	// Wait until runtime finds the leader of placements.
+	time.Sleep(15 * time.Second)
+
 	t.Run("Actor deactivates due to timeout.", func(t *testing.T) {
 		actorId := "100"
 

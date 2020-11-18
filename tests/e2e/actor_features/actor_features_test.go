@@ -307,6 +307,9 @@ func TestActorFeatures(t *testing.T) {
 
 		tr.Platform.Restart(appName)
 
+		// wait until actors are redistributed.
+		time.Sleep(10 * time.Second)
+
 		newHostname, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
 		require.NoError(t, err)
 
@@ -329,6 +332,9 @@ func TestActorFeatures(t *testing.T) {
 		}
 
 		tr.Platform.Scale(appName, appScaleToCheckRebalance)
+
+		// wait until actors are redistributed.
+		time.Sleep(10 * time.Second)
 
 		anyActorMoved := false
 		for index := 0; index < actorsToCheckRebalance; index++ {
@@ -365,6 +371,9 @@ func TestActorFeatures(t *testing.T) {
 			_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorIDBase+strconv.Itoa(index), "method", "hostname"), []byte{})
 			require.NoError(t, err)
 		}
+
+		// Add delay to make the test robust.
+		time.Sleep(5 * time.Second)
 
 		res, err = utils.HTTPGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
 		require.NoError(t, err)

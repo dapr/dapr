@@ -56,6 +56,12 @@ type API interface {
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
+	SetAppChannel(appChannel channel.AppChannel)
+	SetDirectMessaging(directMessaging messaging.DirectMessaging)
+	SetActorRuntime(actor actors.Actors)
+	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
+	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error)
+	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
 }
 
 type api struct {
@@ -237,6 +243,10 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		req.WithMetadata(incomingMD)
+	}
+
+	if a.directMessaging == nil {
+		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
 	}
 
 	resp, err := a.directMessaging.Invoke(ctx, in.Id, req)
@@ -569,6 +579,70 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	return &empty.Empty{}, nil
 }
 
+func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.CreateTimerRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+		DueTime:   in.DueTime,
+		Period:    in.Period,
+		Callback:  in.Callback,
+	}
+
+	if in.Data != nil {
+		req.Data = in.Data
+	}
+	err := a.actor.CreateTimer(ctx, req)
+	return &empty.Empty{}, err
+}
+
+func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.DeleteTimerRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+	}
+
+	err := a.actor.DeleteTimer(ctx, req)
+	return &empty.Empty{}, err
+}
+
+func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.InvokeActorResponse{}, err
+	}
+
+	req := invokev1.NewInvokeMethodRequest(in.Method)
+	req.WithActor(in.ActorType, in.ActorId)
+	req.WithRawData(in.Data, "")
+
+	resp, err := a.actor.Call(context.TODO(), req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.InvokeActorResponse{}, err
+	}
+
+	_, body := resp.RawData()
+	return &runtimev1pb.InvokeActorResponse{
+		Data: body,
+	}, nil
+}
+
 func (a *api) isSecretAllowed(storeName, key string) bool {
 	if config, ok := a.secretsConfiguration[storeName]; ok {
 		return config.IsSecretAllowed(key)
@@ -593,4 +667,16 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 			diag.DefaultMonitoring.RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, verb, action)
 		}
 	}
+}
+
+func (a *api) SetAppChannel(appChannel channel.AppChannel) {
+	a.appChannel = appChannel
+}
+
+func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
+	a.directMessaging = directMessaging
+}
+
+func (a *api) SetActorRuntime(actor actors.Actors) {
+	a.actor = actor
 }

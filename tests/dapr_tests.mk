@@ -17,7 +17,7 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer service_invocation_http
+PERF_TESTS=actor_timer actor_activation service_invocation_http
 
 KUBECTL=kubectl
 
@@ -146,8 +146,9 @@ test-perf-all: check-e2e-env
 
 # add required helm repo
 setup-helm-init:
-	$(HELM) repo add stable https://kubernetes-charts.storage.googleapis.com/
-	$(HELM) repo add incubator http://storage.googleapis.com/kubernetes-charts-incubator
+	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
+	$(HELM) repo add stable https://charts.helm.sh/stable
+	$(HELM) repo add incubator https://charts.helm.sh/incubator
 	$(HELM) repo update
 
 # install redis to the cluster without password
@@ -159,14 +160,11 @@ delete-test-env-redis:
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) template dapr-kafka incubator/kafka -f ./tests/config/kafka_override.yaml | python ./tests/config/modify_kafka_template.py | kubectl apply -f - --namespace $(DAPR_TEST_NAMESPACE)
-	echo "Waiting for kafka config job to complete"
-	kubectl wait --timeout=10m --for=condition=complete job -n $(DAPR_TEST_NAMESPACE) \
-	  -l app.kubernetes.io/component=kafka-config,app.kubernetes.io/instance=dapr-kafka
+	$(HELM) install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
 # delete kafka from cluster
 delete-test-env-kafka:
-	$(HELM) template dapr-kafka incubator/kafka -f ./tests/config/kafka_override.yaml | python ./tests/config/modify_kafka_template.py | kubectl delete -f - --namespace $(DAPR_TEST_NAMESPACE)
+	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE) 
 
 # Install redis and kafka to test cluster
 setup-test-env: setup-test-env-kafka setup-test-env-redis
@@ -195,6 +193,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_grpc_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
