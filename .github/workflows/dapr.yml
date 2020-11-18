@@ -246,7 +246,7 @@ jobs:
   helmpublish:
     name: Publish helm charts to Helm github pages repo
     needs: publish
-    if: startswith(github.ref, 'refs/tags/v') && !contains(github.ref, '-rc.')
+    if: startswith(github.ref, 'refs/tags/v')
     env:
       ARTIFACT_DIR: ./release
       DAPR_VERSION_ARTIFACT: dapr_version
