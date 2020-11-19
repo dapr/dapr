@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -309,6 +310,38 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	resp := &runtimev1pb.GetBulkStateResponse{}
+
+	// try bulk get first
+	reqs := make([]state.GetRequest, len(in.Keys))
+	for i, k := range in.Keys {
+		r := state.GetRequest{
+			Key:      a.getModifiedStateKey(k),
+			Metadata: in.Metadata,
+		}
+		reqs[i] = r
+	}
+	bulkGet, responses, err := store.BulkGet(reqs)
+	if bulkGet {
+		if err != nil {
+			return resp, err
+		}
+		// if store supports bulk get
+		for _, response := range responses {
+			item := &runtimev1pb.BulkStateItem{
+				Key: a.getOriginalStateKey(response.Key),
+			}
+			if err != nil {
+				item.Error = err.Error()
+			} else if &response != nil {
+				item.Data = response.Data
+				item.Etag = response.ETag
+			}
+			resp.Items = append(resp.Items, item)
+		}
+		return resp, nil
+	}
+
+	// if store doesn't support bulk get, fallback to call get() method one by one
 	limiter := concurrency.NewLimiter(int(in.Parallelism))
 
 	for _, k := range in.Keys {
@@ -319,14 +352,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			}
 
 			r, err := store.Get(&req)
-			store.BulkGet()
 			item := &runtimev1pb.BulkStateItem{
 				Key: param.(string),
 			}
 			if err != nil {
 				item.Error = err.Error()
 			} else if r != nil {
-				item.Key = r.Key
 				item.Data = r.Data
 				item.Etag = r.ETag
 			}
@@ -447,6 +478,17 @@ func (a *api) getModifiedStateKey(key string) string {
 		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
 	}
 	return key
+}
+
+func (a *api) getOriginalStateKey(modifiedStateKey string) string {
+	if a.id != "" {
+		splits := strings.Split(modifiedStateKey, daprSeparator)
+		if len(splits) < 1 {
+			return modifiedStateKey
+		}
+		return splits[1]
+	}
+	return modifiedStateKey
 }
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
