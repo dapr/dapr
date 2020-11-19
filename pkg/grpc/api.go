@@ -319,12 +319,14 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			}
 
 			r, err := store.Get(&req)
+			store.BulkGet()
 			item := &runtimev1pb.BulkStateItem{
 				Key: param.(string),
 			}
 			if err != nil {
 				item.Error = err.Error()
 			} else if r != nil {
+				item.Key = r.Key
 				item.Data = r.Data
 				item.Etag = r.ETag
 			}
