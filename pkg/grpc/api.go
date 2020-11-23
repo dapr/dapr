@@ -309,7 +309,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		return &runtimev1pb.GetBulkStateResponse{}, err
 	}
 
-	resp := &runtimev1pb.GetBulkStateResponse{}
+	bulkResp := &runtimev1pb.GetBulkStateResponse{}
 
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(in.Keys))
@@ -321,28 +321,48 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		reqs[i] = r
 	}
 	bulkGet, responses, err := store.BulkGet(reqs)
+	// if store supports bulk get
 	if bulkGet {
 		if err != nil {
-			return resp, err
+			return bulkResp, err
 		}
-		// if store supports bulk get
-		for _, response := range responses {
-			item := &runtimev1pb.BulkStateItem{
-				Key: a.getOriginalStateKey(response.Key),
+		for i := 0; i < len(responses); i++ {
+			if &responses[i] != nil {
+				item := &runtimev1pb.BulkStateItem{
+					Key: a.getOriginalStateKey(responses[i].Key),
+				}
+				if responses[i].Error != "" {
+					item.Error = responses[i].Error
+				} else {
+					item.Data = responses[i].Data
+					item.Etag = responses[i].ETag
+				}
+				bulkResp.Items = append(bulkResp.Items, item)
 			}
-			if err != nil {
-				item.Error = err.Error()
-			} else if &response != nil {
-				item.Data = response.Data
-				item.Etag = response.ETag
-			}
-			resp.Items = append(resp.Items, item)
 		}
-		return resp, nil
+		return bulkResp, nil
 	}
 
 	// if store doesn't support bulk get, fallback to call get() method one by one
 	limiter := concurrency.NewLimiter(int(in.Parallelism))
+	for i := 0; i < len(reqs); i++ {
+		fn := func(param interface{}) {
+			req := param.(*state.GetRequest)
+			r, err := store.Get(req)
+			item := &runtimev1pb.BulkStateItem{
+				Key: a.getOriginalStateKey(req.Key),
+			}
+			if err != nil {
+				item.Error = err.Error()
+			} else if r != nil {
+				item.Data = r.Data
+				item.Etag = r.ETag
+			}
+			bulkResp.Items = append(bulkResp.Items, item)
+		}
+		limiter.Execute(fn, &reqs[i])
+	}
+	limiter.Wait()
 
 	for _, k := range in.Keys {
 		fn := func(param interface{}) {
@@ -361,14 +381,14 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				item.Data = r.Data
 				item.Etag = r.ETag
 			}
-			resp.Items = append(resp.Items, item)
+			bulkResp.Items = append(bulkResp.Items, item)
 		}
 
 		limiter.Execute(fn, k)
 	}
 	limiter.Wait()
 
-	return resp, nil
+	return bulkResp, nil
 }
 
 func (a *api) getStateStore(name string) (state.Store, error) {
