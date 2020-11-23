@@ -327,18 +327,16 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			return bulkResp, err
 		}
 		for i := 0; i < len(responses); i++ {
-			if &responses[i] != nil {
-				item := &runtimev1pb.BulkStateItem{
-					Key: a.getOriginalStateKey(responses[i].Key),
-				}
-				if responses[i].Error != "" {
-					item.Error = responses[i].Error
-				} else {
-					item.Data = responses[i].Data
-					item.Etag = responses[i].ETag
-				}
-				bulkResp.Items = append(bulkResp.Items, item)
+			item := &runtimev1pb.BulkStateItem{
+				Key: a.getOriginalStateKey(responses[i].Key),
 			}
+			if responses[i].Error != "" {
+				item.Error = responses[i].Error
+			} else {
+				item.Data = responses[i].Data
+				item.Etag = responses[i].ETag
+			}
+			bulkResp.Items = append(bulkResp.Items, item)
 		}
 		return bulkResp, nil
 	}

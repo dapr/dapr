@@ -28,7 +28,6 @@ func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 	return secretstores.GetSecretResponse{}, nil
 }
 
-
 func (c FakeSecretStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{}, nil
 }
