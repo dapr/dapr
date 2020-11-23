@@ -74,7 +74,8 @@ require (
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
 
-	github.com/dapr/components-contrib => /Users/sky/work/code/skyao/components-contrib
+	// TODO: remove this replacement after the PR in components-contrib is merged
+	github.com/dapr/components-contrib => github.com/skyao/components-contrib v1.0.0-rc1.0.20201123121316-9f0ad6b4b713
 
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36

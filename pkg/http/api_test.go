@@ -2260,7 +2260,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 }
 
 // BulkGet performs a bulks get operations
-func (c fakeStateStore) BulkGet(req []state.GetRequest)  (bool, []state.GetResponse, error)  {
+func (c fakeStateStore) BulkGet(req []state.GetRequest)  (bool, []state.BulkGetResponse, error)  {
 	return false, nil, nil
 }
 
