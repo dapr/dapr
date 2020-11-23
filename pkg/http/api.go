@@ -385,15 +385,13 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		for i := 0; i < len(responses) && i < len(req.Keys); i++ {
-			if &responses[i] != nil {
-				bulkResp[i].Key = a.getOriginalStateKey(responses[i].Key)
-				if responses[i].Error != "" {
-					log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
-					bulkResp[i].Error = responses[i].Error
-				} else if &responses[i] != nil {
-					bulkResp[i].Data = jsoniter.RawMessage(responses[i].Data)
-					bulkResp[i].ETag = responses[i].ETag
-				}
+			bulkResp[i].Key = a.getOriginalStateKey(responses[i].Key)
+			if responses[i].Error != "" {
+				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
+				bulkResp[i].Error = responses[i].Error
+			} else {
+				bulkResp[i].Data = jsoniter.RawMessage(responses[i].Data)
+				bulkResp[i].ETag = responses[i].ETag
 			}
 		}
 	} else {
