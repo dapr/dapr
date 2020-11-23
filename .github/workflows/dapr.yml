@@ -16,6 +16,8 @@ on:
     branches:
       - master
       - release-*
+    paths-ignore:
+      - '**/*.md'
 jobs:
   build:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
