@@ -105,20 +105,22 @@ cards = []
 for column in columns:
     cards = cards + [c for c in column.get_cards()]
 
-# generate changes
+contributors = set()
+
+# generate changes and add contributors to set with or without release notes.
 for c in cards:
     issueOrPR = c.get_content()
-    contributors = []
     url = issueOrPR.html_url
     try:
         # only a PR can be converted to a PR object, otherwise will throw error.
         pr = issueOrPR.as_pull_request()
-        contributors.append(pr.user.login)
+        contributors.add("@" + str(pr.user.login))
     except:
         a = [l.login for l in issueOrPR.assignees]
         if len(a) == 0:
             print("Issue is unassigned: {}".format(url))
-        contributors.extend(a)
+        for c in a: 
+            contributors.add("@" + str(c))
     match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
     hasNote = False
     if match:
@@ -135,14 +137,13 @@ for c in cards:
         print("Issue or PR assigned to {} has no release note: {}".format(assignee, url))
 
 warnings=[]
-contributors = set()
 changeLines=[]
 lastSubtitle=""
 
 breakingChangeLines=[]
 lastBreakingChangeSubtitle=""
 
-# generate changes for relase notes
+# generate changes for relase notes (only issues/pr that have release notes)
 for change in sorted(changes, key=lambda c: (get_repo_priority(c[0].name), c[0].stargazers_count * -1, c[0].id, c[1].id)):
     breakingChange='breaking-change' in [l.name for l in change[1].labels]
     subtitle=get_repo_subtitle(change[0].name)
@@ -153,10 +154,6 @@ for change in sorted(changes, key=lambda c: (get_repo_priority(c[0].name), c[0].
     changeUrl = " [" + str(change[1].number) + "](" + change[4] + ")"
     changeLines.append("- " + change[2] + changeUrl)
     
-    # Add all contributors to a set
-    for c in change[3]:
-        contributors.add("@" + str(c))
-
     if breakingChange:
         if lastBreakingChangeSubtitle != subtitle:
             lastBreakingChangeSubtitle = subtitle
