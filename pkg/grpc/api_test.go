@@ -909,7 +909,7 @@ func TestGetState(t *testing.T) {
 		storeName        string
 		key              string
 		errorExcepted    bool
-		expectedResponse runtimev1pb.GetStateResponse
+		expectedResponse *runtimev1pb.GetStateResponse
 		expectedError    codes.Code
 	}{
 		{
@@ -917,7 +917,7 @@ func TestGetState(t *testing.T) {
 			storeName:     "store1",
 			key:           "good-key",
 			errorExcepted: false,
-			expectedResponse: runtimev1pb.GetStateResponse{
+			expectedResponse: &runtimev1pb.GetStateResponse{
 				Data: []byte("test-data"),
 				Etag: "test-etag",
 			},
@@ -928,7 +928,7 @@ func TestGetState(t *testing.T) {
 			storeName:        "no-store",
 			key:              "good-key",
 			errorExcepted:    true,
-			expectedResponse: runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetStateResponse{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -936,7 +936,7 @@ func TestGetState(t *testing.T) {
 			storeName:        "store1",
 			key:              "error-key",
 			errorExcepted:    true,
-			expectedResponse: runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetStateResponse{},
 			expectedError:    codes.Internal,
 		},
 	}
@@ -951,64 +951,14 @@ func TestGetState(t *testing.T) {
 			resp, err := client.GetState(context.Background(), req)
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, *resp, tt.expectedResponse, "Expected responses to be same")
+				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
+				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
 	}
-}
-
-func TestRegisterActorTimer(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
-
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.RegisterActorTimer(context.TODO(), &runtimev1pb.RegisterActorTimerRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
-}
-
-func TestUnregisterActorTimer(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
-
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.UnregisterActorTimer(context.TODO(), &runtimev1pb.UnregisterActorTimerRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
-}
-
-func TestInvokeActor(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
-
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.InvokeActor(context.TODO(), &runtimev1pb.InvokeActorRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
 }
 
 func TestDeleteState(t *testing.T) {
