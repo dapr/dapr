@@ -1,3 +1,5 @@
+PROTOS = operator placement sentry common runtime internals
+
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
 else
@@ -25,14 +27,17 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
-protoc-gen-internals-v1:
-	protoc -I . ./dapr/proto/internals/v1/*.proto --go_out=plugins=grpc:.
-	cp -R ./github.com/dapr/dapr/pkg/proto/internals/v1/*.go ./pkg/proto/internals/v1
 
-protoc-gen-runtime-v1:
-	protoc -I . ./dapr/proto/runtime/v1/*.proto --go_out=plugins=grpc:.
-	cp -R ./github.com/dapr/dapr/pkg/proto/runtime/v1/*.go ./pkg/proto/runtime/v1
+define genProtoForTarget
+.PHONY: $(1)
+protoc-gen-$(1)-v1:
+	protoc -I . ./dapr/proto/$(1)/v1/*.proto --go_out=plugins=grpc:.
+	cp -R ./github.com/dapr/dapr/pkg/proto/$(1)/v1/*.go ./pkg/proto/$(1)/v1
+endef
 
-# TODO(artursouza): Add auto-gen for other protos.
+# Generate proto gen targets
+$(foreach ITEM,$(PROTOS),$(eval $(call genProtoForTarget,$(ITEM))))
 
-protoc-gen: protoc-gen-runtime-v1 protoc-gen-internals-v1
+PROTOC_ALL_TARGETS:=$(foreach ITEM,$(PROTOS),protoc-gen-$(ITEM)-v1)
+
+protoc-gen: $(PROTOC_ALL_TARGETS)
