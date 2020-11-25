@@ -71,7 +71,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 
 ## Get Started using Dapr
 
-See [Getting Started](https://docs.dapr.io/getting-started/).
+See our [Getting Started](https://docs.dapr.io/getting-started/) guide over in our docs.
 
 ## Quickstarts and Samples
 
@@ -88,19 +88,15 @@ Reach out with any questions you may have and we'll make sure to answer then as 
 
 | Platform  | Link        |
 |:----------|:------------|
-| 💬 Instant Message Chat (preferred) | https://discord.com/channels/778680217417809931/778680217417809934
+| 💬 Instant Message Chat (preferred) | [![Discord Banner](https://discord.com/api/guilds/778680217417809931/widget.png?style=banner2)](https://aka.ms/dapr-discord)
 | 📧 Mailing List | https://groups.google.com/forum/#!forum/dapr-dev
 | 🐤 Twitter | [@daprdev](https://twitter.com/daprdev)
 
 ### Community Call
 
-Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome! For [upcoming meeting dates](https://github.com/dapr/community#community-meetings) go to the Dapr community repo
+Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome!
 
-| Asset | Link        |
-|:-----------|:------------|
-| 🔗 Meeting Link & Password | **Zoom Call:** https://us02web.zoom.us/j/85305980190<br>**Password:** eWRhSklVTjJjSnhTaURDcFZaU2ZzQT09
-| 📝 Meeting Notes | https://aka.ms/dapr-meeting-notes
-| 🎥 Meeting Recordings | http://aka.ms/dapr-recordings
+📞 Visit https://aka.ms/dapr-community-call for upcoming dates and the meeting link.
 
 ### Videos and Podcasts
 
@@ -110,6 +106,10 @@ Every two weeks we host a community call to showcase new features, review upcomi
 | 🌎 Conferences | - [Dapr, Rudr, OAM: Mark Russinovich presents next gen app development & deployment](https://www.youtube.com/watch?v=eJCu6a-x9uo)<br>- [Mark Russinovich presents "The Future of Cloud Native Applications with OAM and Dapr"](https://myignite.techcommunity.microsoft.com/sessions/82059)<br>- [Build 2020: Mark Fussell presents Dapr](https://channel9.msdn.com/Events/Build/2020/INT118)
 | 🎤 Hanselminutes | [Dapr Distributed Application Runtime with Mark Russinovich](https://hanselminutes.com/718/dapr-distributed-application-runtime-with-azure-cto-mark-russinovich)
 | 💻 Azure Community Live | [Build microservice applications using DAPR with Mark Fussell ](https://www.youtube.com/watch?v=CgqI7nen-Ng)
+
+### Contributing to Dapr
+
+See the [Development Guide](https://docs.dapr.io/contributing/) to get started with building and developing.
 
 ## Repositories
 
