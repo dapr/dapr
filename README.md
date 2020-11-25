@@ -77,7 +77,8 @@ See our [Getting Started](https://docs.dapr.io/getting-started/) guide over in o
 * Explore additional samples in the Dapr [samples repository](https://github.com/dapr/samples).
 
 ## Community
-We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls. Here is how to get involved:
+We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls.
+For more information on the community engagement, developer and contributing guidelines and more, head over to the [Dapr community repo](https://github.com/dapr/community#dapr-community)
 
 ### Contact Us
 
