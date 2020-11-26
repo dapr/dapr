@@ -181,6 +181,12 @@ message PublishEventRequest {
 
   // The content type for the data (optional).
   string dataContentType = 4;
+
+  // The metadata passing to pub components
+  //
+  // metadata property:
+  // - key : the key of the message.
+  map<string,string> metadata = 5;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings

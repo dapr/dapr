@@ -233,6 +233,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		PubsubName: pubsubName,
 		Topic:      topic,
 		Data:       b,
+		Metadata:   in.Metadata,
 	}
 
 	err = a.publishFn(&req)
