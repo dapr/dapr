@@ -178,6 +178,9 @@ message PublishEventRequest {
 
   // The data which will be published to topic.
   bytes data = 3;
+
+  // The content type for the data (optional).
+  string dataContentType = 4;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings
