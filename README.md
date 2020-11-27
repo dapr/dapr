@@ -3,10 +3,11 @@
 </div>
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
+[![Docker Pulls](https://img.shields.io/docker/pulls/daprio/dapr)](https://hub.docker.com/r/daprio/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
 [![Scheduled e2e test](https://github.com/dapr/dapr/workflows/dapr-test/badge.svg?event=schedule)](https://github.com/dapr/dapr/actions?workflow=dapr-test)
 [![codecov](https://codecov.io/gh/dapr/dapr/branch/master/graph/badge.svg)](https://codecov.io/gh/dapr/dapr)
-[![Gitter](https://badges.gitter.im/Dapr/community.svg)](https://gitter.im/Dapr/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Discord](https://img.shields.io/discord/778680217417809931)](https://discord.com/channels/778680217417809931/778680217417809934)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TODOs](https://badgen.net/https/api.tickgit.com/badgen/github.com/dapr/dapr)](https://www.tickgit.com/browse?repo=github.com/dapr/dapr)
 [![Follow on Twitter](https://img.shields.io/twitter/follow/daprdev.svg?style=social&logo=twitter)](https://twitter.com/intent/follow?screen_name=daprdev)
@@ -70,7 +71,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 
 ## Get Started using Dapr
 
-See [Getting Started](https://docs.dapr.io/getting-started/).
+See our [Getting Started](https://docs.dapr.io/getting-started/) guide over in our docs.
 
 ## Quickstarts and Samples
 
@@ -78,7 +79,8 @@ See [Getting Started](https://docs.dapr.io/getting-started/).
 * Explore additional samples in the Dapr [samples repository](https://github.com/dapr/samples).
 
 ## Community
-We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls. Here is how to get involved:
+We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls.
+For more information on the community engagement, developer and contributing guidelines and more, head over to the [Dapr community repo](https://github.com/dapr/community#dapr-community)
 
 ### Contact Us
 
@@ -86,7 +88,7 @@ Reach out with any questions you may have and we'll make sure to answer then as 
 
 | Platform  | Link        |
 |:----------|:------------|
-| 💬 Instant Message Chat (preferred) | https://gitter.im/Dapr/community
+| 💬 Instant Message Chat (preferred) | [![Discord Banner](https://discord.com/api/guilds/778680217417809931/widget.png?style=banner2)](https://aka.ms/dapr-discord)
 | 📧 Mailing List | https://groups.google.com/forum/#!forum/dapr-dev
 | 🐤 Twitter | [@daprdev](https://twitter.com/daprdev)
 
@@ -94,21 +96,7 @@ Reach out with any questions you may have and we'll make sure to answer then as 
 
 Every two weeks we host a community call to showcase new features, review upcoming milestones, and engage in a Q&A. All are welcome!
 
-**Upcoming Meetings**:
-- Tuesday June 23rd 10am Pacific Time (PST)
-- Tuesday July 7th 10am Pacific Time (PST)
-- Tuesday July 21st 10am Pacific Time (PST)
-- Tuesday August 4th 10am Pacific Time (PST)
-- Tuesday August 18th 10am Pacific Time (PST)
-- Tuesday September 1st 10am Pacific Time (PST)
-- Wednesday September 16th 10am Pacific Time (PST)
-- Tuesday September 29th 10am Pacific Time (PST)
-
-| Asset | Link        |
-|:-----------|:------------|
-| 🔗 Meeting Link & Password | **Zoom Call:** https://us02web.zoom.us/j/85305980190<br>**Password:** eWRhSklVTjJjSnhTaURDcFZaU2ZzQT09
-| 📝 Meeting Notes | https://aka.ms/dapr-meeting-notes
-| 🎥 Meeting Recordings | http://aka.ms/dapr-recordings
+📞 Visit https://aka.ms/dapr-community-call for upcoming dates and the meeting link.
 
 ### Videos and Podcasts
 
@@ -121,13 +109,7 @@ Every two weeks we host a community call to showcase new features, review upcomi
 
 ### Contributing to Dapr
 
-See the [Wiki](https://github.com/dapr/dapr/wiki) for information on contributing to Dapr.
-
-See the [Development Guide](https://github.com/dapr/dapr/blob/master/docs/development) to get started with building and developing.
-
-## Roadmap
-
-See [Roadmap](https://github.com/dapr/dapr/wiki/Roadmap) for what's planned for the Dapr project.
+See the [Development Guide](https://docs.dapr.io/contributing/) to get started with building and developing.
 
 ## Repositories
 

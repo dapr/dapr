@@ -1008,12 +1008,13 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	body := reqCtx.PostBody()
+	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
 
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
 
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
