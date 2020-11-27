@@ -16,6 +16,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -47,6 +48,7 @@ type api struct {
 	endpoints             []Endpoint
 	directMessaging       messaging.DirectMessaging
 	appChannel            channel.AppChannel
+	components            []components_v1alpha1.Component
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
 	secretsConfiguration  map[string]config.SecretsScope
@@ -60,10 +62,17 @@ type api struct {
 	tracingSpec           config.TracingSpec
 }
 
+type registeredComponent struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Version string `json:"version"`
+}
+
 type metadata struct {
-	ID                string                      `json:"id"`
-	ActiveActorsCount []actors.ActiveActorsCount  `json:"actors"`
-	Extended          map[interface{}]interface{} `json:"extended"`
+	ID                   string                      `json:"id"`
+	ActiveActorsCount    []actors.ActiveActorsCount  `json:"actors"`
+	Extended             map[interface{}]interface{} `json:"extended"`
+	RegisteredComponents []registeredComponent       `json:"components"`
 }
 
 const (
@@ -91,6 +100,7 @@ func NewAPI(
 	appID string,
 	appChannel channel.AppChannel,
 	directMessaging messaging.DirectMessaging,
+	components []components_v1alpha1.Component,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
@@ -111,6 +121,7 @@ func NewAPI(
 		id:                    appID,
 		tracingSpec:           tracingSpec,
 	}
+	api.components = components
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
@@ -936,10 +947,22 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
 
+	registeredComponents := []registeredComponent{}
+
+	for _, comp := range a.components {
+		registeredComp := registeredComponent{
+			Name:    comp.Name,
+			Version: comp.Spec.Version,
+			Type:    comp.Spec.Type,
+		}
+		registeredComponents = append(registeredComponents, registeredComp)
+	}
+
 	mtd := metadata{
-		ID:                a.id,
-		ActiveActorsCount: activeActorsCount,
-		Extended:          temp,
+		ID:                   a.id,
+		ActiveActorsCount:    activeActorsCount,
+		Extended:             temp,
+		RegisteredComponents: registeredComponents,
 	}
 
 	mtdBytes, err := a.json.Marshal(mtd)
@@ -1032,7 +1055,7 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 
 func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.readyStatus {
-		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
+		msg := NewErrorResponse("ERR_HEALTH_NOT_READY_juancarlos", messages.ErrHealthNotReady)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
