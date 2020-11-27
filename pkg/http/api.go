@@ -1056,7 +1056,7 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 
 func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
 	if !a.readyStatus {
-		msg := NewErrorResponse("ERR_HEALTH_NOT_READY_juancarlos", messages.ErrHealthNotReady)
+		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
 	} else {
