@@ -1599,7 +1599,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
 				routes: map[string]Route{
-					topic: Route{path: topic},
+					topic: {path: topic},
 				},
 			}
 			var grpcServer *grpc.Server
