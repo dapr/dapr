@@ -94,13 +94,13 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 
 var log = logger.NewLogger("dapr.runtime")
 
-type TopicDetail struct {
-	Route    string
+type Route struct {
+	Path     string
 	Metadata map[string]string
 }
 
 type TopicRoute struct {
-	routes map[string]TopicDetail
+	routes map[string]Route
 }
 
 // DaprRuntime holds all the core components of the runtime
@@ -914,10 +914,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 
 	for _, s := range subscriptions {
 		if _, ok := topicRoutes[s.PubsubName]; !ok {
-			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]TopicDetail)}
+			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
 		}
 
-		topicRoutes[s.PubsubName].routes[s.Topic] = TopicDetail{s.Route, s.Metadata}
+		topicRoutes[s.PubsubName].routes[s.Topic] = Route{s.Route, s.Metadata}
 	}
 
 	if len(topicRoutes) > 0 {
@@ -1076,7 +1076,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	}
 
 	topicDetail := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
-	req := invokev1.NewInvokeMethodRequest(topicDetail.Route)
+	req := invokev1.NewInvokeMethodRequest(topicDetail.Path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
 
