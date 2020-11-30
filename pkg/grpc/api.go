@@ -333,6 +333,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			} else if r != nil {
 				item.Data = r.Data
 				item.Etag = r.ETag
+				item.Metadata = r.Metadata
 			}
 			resp.Items = append(resp.Items, item)
 		}
@@ -381,6 +382,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	if getResponse != nil {
 		response.Etag = getResponse.ETag
 		response.Data = getResponse.Data
+		response.Metadata = getResponse.Metadata
 	}
 	return response, nil
 }
