@@ -316,6 +316,9 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	bulkResp := &runtimev1pb.GetBulkStateResponse{}
+	if len(in.Keys) == 0 {
+		return bulkResp, nil
+	}
 
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(in.Keys))
@@ -365,30 +368,6 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			bulkResp.Items = append(bulkResp.Items, item)
 		}
 		limiter.Execute(fn, &reqs[i])
-	}
-	limiter.Wait()
-
-	for _, k := range in.Keys {
-		fn := func(param interface{}) {
-			req := state.GetRequest{
-				Key:      a.getModifiedStateKey(param.(string)),
-				Metadata: in.Metadata,
-			}
-
-			r, err := store.Get(&req)
-			item := &runtimev1pb.BulkStateItem{
-				Key: param.(string),
-			}
-			if err != nil {
-				item.Error = err.Error()
-			} else if r != nil {
-				item.Data = r.Data
-				item.Etag = r.ETag
-			}
-			bulkResp.Items = append(bulkResp.Items, item)
-		}
-
-		limiter.Execute(fn, k)
 	}
 	limiter.Wait()
 

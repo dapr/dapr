@@ -363,6 +363,11 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
+	if len(req.Keys) == 0 {
+		b, _ := a.json.Marshal(bulkResp)
+		respondWithJSON(reqCtx, fasthttp.StatusOK, b)
+		return
+	}
 
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(req.Keys))
