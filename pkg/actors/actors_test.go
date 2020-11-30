@@ -99,7 +99,7 @@ func newTestActorsRuntimeWithMock(mockAppChannel *channelt.MockAppChannel) *acto
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, "", nil, 0, "", "", "", false, "")
+	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "")
 	a := NewActors(store, mockAppChannel, nil, config, nil, spec)
 
 	return a.(*actorsRuntime)
@@ -892,6 +892,16 @@ func TestActorsAppHealthCheck(t *testing.T) {
 	assert.False(t, testActorRuntime.appHealthy)
 }
 
+func TestShutdown(t *testing.T) {
+	testActorRuntime := newTestActorsRuntime()
+
+	t.Run("no panic when placement is nil", func(t *testing.T) {
+		testActorRuntime.placement = nil
+		testActorRuntime.Stop()
+		// No panic
+	})
+}
+
 func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 	appID := "myapp"
 	actorType := "TestActor"
@@ -904,10 +914,10 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
-	c := NewConfig("localhost:5050", "app1", "placement:5050", []string{"1"}, 3500, "1s", "2s", "3s", true, "default")
+	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default")
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
-	assert.Equal(t, "placement:5050", c.PlacementServiceAddress)
+	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
 	assert.Equal(t, []string{"1"}, c.HostedActorTypes)
 	assert.Equal(t, 3500, c.Port)
 	assert.Equal(t, "1s", c.ActorDeactivationScanInterval.String())

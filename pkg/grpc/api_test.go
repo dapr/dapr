@@ -100,6 +100,10 @@ func (m *mockGRPCAPI) ExecuteStateTransaction(ctx context.Context, in *runtimev1
 	return &empty.Empty{}, nil
 }
 
+func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error) {
+	return &empty.Empty{}, nil
+}
+
 func ExtractSpanContext(ctx context.Context) []byte {
 	span := diag_utils.SpanFromContext(ctx)
 	return []byte(SerializeSpanContext(span.SpanContext()))
@@ -905,7 +909,7 @@ func TestGetState(t *testing.T) {
 		storeName        string
 		key              string
 		errorExcepted    bool
-		expectedResponse runtimev1pb.GetStateResponse
+		expectedResponse *runtimev1pb.GetStateResponse
 		expectedError    codes.Code
 	}{
 		{
@@ -913,7 +917,7 @@ func TestGetState(t *testing.T) {
 			storeName:     "store1",
 			key:           "good-key",
 			errorExcepted: false,
-			expectedResponse: runtimev1pb.GetStateResponse{
+			expectedResponse: &runtimev1pb.GetStateResponse{
 				Data: []byte("test-data"),
 				Etag: "test-etag",
 			},
@@ -924,7 +928,7 @@ func TestGetState(t *testing.T) {
 			storeName:        "no-store",
 			key:              "good-key",
 			errorExcepted:    true,
-			expectedResponse: runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetStateResponse{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -932,7 +936,7 @@ func TestGetState(t *testing.T) {
 			storeName:        "store1",
 			key:              "error-key",
 			errorExcepted:    true,
-			expectedResponse: runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetStateResponse{},
 			expectedError:    codes.Internal,
 		},
 	}
@@ -947,7 +951,8 @@ func TestGetState(t *testing.T) {
 			resp, err := client.GetState(context.Background(), req)
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, *resp, tt.expectedResponse, "Expected responses to be same")
+				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
+				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))

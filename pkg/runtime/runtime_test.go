@@ -97,6 +97,16 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 	}, nil
 }
 
+func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{
+			"key1":   "value1",
+			"_value": "_value_data",
+			"name1":  "value1",
+		},
+	}, nil
+}
+
 func NewMockKubernetesStore() secretstores.SecretStore {
 	return &MockKubernetesStateStore{}
 }
@@ -418,6 +428,8 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
+		rt.startSubscribing()
+
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
@@ -450,6 +462,8 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
+		rt.startSubscribing()
+
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 
@@ -475,6 +489,8 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
+
+		rt.startSubscribing()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -581,6 +597,8 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
+		rt.startSubscribing()
+
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
@@ -610,6 +628,8 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
+
+		rt.startSubscribing()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -672,6 +692,8 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
+
+		rt.startSubscribing()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -1290,7 +1312,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1516,7 +1538,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1738,7 +1760,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewRuntimeConfig(
 		TestRuntimeConfigID,
-		"10.10.10.12",
+		[]string{"10.10.10.12"},
 		"10.10.10.11",
 		cors.DefaultAllowedOrigins,
 		"globalConfig",
@@ -1866,6 +1888,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1875,6 +1903,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -1890,6 +1919,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1899,6 +1934,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
 		fakeResp.WithRawData([]byte("Internal Error"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -1914,6 +1950,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1923,7 +1965,9 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
 		rt.appChannel = mockAppChannel
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
@@ -2088,7 +2132,7 @@ func TestInitBindings(t *testing.T) {
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
 		err := r.initBinding(c)
-		assert.NotEqual(t, "couldn't find input binding bindings.testInputBinding", err.Error())
+		assert.NoError(t, err)
 	})
 
 	t.Run("single output binding", func(t *testing.T) {
@@ -2124,8 +2168,7 @@ func TestInitBindings(t *testing.T) {
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
 		err := r.initBinding(input)
-		assert.Error(t, err)
-		assert.NotEqual(t, "couldn't find input binding bindings.test", err.Error())
+		assert.NoError(t, err)
 
 		output := components_v1alpha1.Component{}
 		output.ObjectMeta.Name = "testinput"

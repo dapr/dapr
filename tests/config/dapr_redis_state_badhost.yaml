@@ -1,0 +1,11 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: badhost-store
+spec:
+  type: state.redis
+  metadata:
+  - name: redisHost
+    value: badhost:6379
+  - name: redisPassword
+    value: ""

@@ -7,10 +7,13 @@ package raft
 
 import (
 	"io"
+	"strconv"
 	"sync"
 
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/hashicorp/go-msgpack/codec"
 	"github.com/hashicorp/raft"
+	"github.com/pkg/errors"
 )
 
 // CommandType is the type of raft command in log entry
@@ -20,7 +23,10 @@ const (
 	// MemberUpsert is the command to update or insert new or existing member info
 	MemberUpsert CommandType = 0
 	// MemberRemove is the command to remove member from actor host member state
-	MemberRemove = 1
+	MemberRemove CommandType = 1
+
+	// TableDisseminate is the reserved command for dissemination loop
+	TableDisseminate CommandType = 100
 )
 
 // FSM implements a finite state machine that is used
@@ -48,28 +54,79 @@ func (c *FSM) State() *DaprHostMemberState {
 	return c.state
 }
 
-func (c *FSM) upsertMember(cmdData []byte) error {
-	c.stateLock.Lock()
-	defer c.stateLock.Unlock()
+// PlacementState returns the current placement tables.
+func (c *FSM) PlacementState() *v1pb.PlacementTables {
+	c.stateLock.RLock()
+	defer c.stateLock.RUnlock()
 
-	var host DaprHostMember
-	if err := unmarshalMsgPack(cmdData, &host); err != nil {
-		return err
+	newTable := &v1pb.PlacementTables{
+		Version: strconv.FormatUint(c.state.TableGeneration, 10),
+		Entries: make(map[string]*v1pb.PlacementTable),
 	}
 
-	return c.state.upsertMember(&host)
+	totalHostSize := 0
+	totalSortedSet := 0
+	totalLoadMap := 0
+
+	entries := c.state.hashingTableMap
+	for k, v := range entries {
+		hosts, sortedSet, loadMap, totalLoad := v.GetInternals()
+		table := v1pb.PlacementTable{
+			Hosts:     make(map[uint64]string),
+			SortedSet: make([]uint64, len(sortedSet)),
+			TotalLoad: totalLoad,
+			LoadMap:   make(map[string]*v1pb.Host),
+		}
+
+		for lk, lv := range hosts {
+			table.Hosts[lk] = lv
+		}
+
+		copy(table.SortedSet, sortedSet)
+
+		for lk, lv := range loadMap {
+			h := v1pb.Host{
+				Name: lv.Name,
+				Load: lv.Load,
+				Port: lv.Port,
+				Id:   lv.AppID,
+			}
+			table.LoadMap[lk] = &h
+		}
+		newTable.Entries[k] = &table
+
+		totalHostSize += len(table.Hosts)
+		totalSortedSet += len(table.SortedSet)
+		totalLoadMap += len(table.LoadMap)
+	}
+
+	logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
+
+	return newTable
 }
 
-func (c *FSM) removeMember(cmdData []byte) error {
+func (c *FSM) upsertMember(cmdData []byte) (bool, error) {
 	c.stateLock.Lock()
 	defer c.stateLock.Unlock()
 
 	var host DaprHostMember
 	if err := unmarshalMsgPack(cmdData, &host); err != nil {
-		return err
+		return false, err
 	}
 
-	return c.state.removeMember(&host)
+	return c.state.upsertMember(&host), nil
+}
+
+func (c *FSM) removeMember(cmdData []byte) (bool, error) {
+	c.stateLock.Lock()
+	defer c.stateLock.Unlock()
+
+	var host DaprHostMember
+	if err := unmarshalMsgPack(cmdData, &host); err != nil {
+		return false, err
+	}
+
+	return c.state.removeMember(&host), nil
 }
 
 // Apply log is invoked once a log entry is committed.
@@ -83,14 +140,21 @@ func (c *FSM) Apply(log *raft.Log) interface{} {
 	}
 
 	var err error
+	var updated bool
 	switch cmdType {
 	case MemberUpsert:
-		err = c.upsertMember(buf[1:])
+		updated, err = c.upsertMember(buf[1:])
 	case MemberRemove:
-		err = c.removeMember(buf[1:])
+		updated, err = c.removeMember(buf[1:])
+	default:
+		err = errors.New("unimplemented command")
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	return updated
 }
 
 // Snapshot is used to support log compaction. This call should

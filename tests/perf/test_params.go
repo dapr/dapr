@@ -1,13 +1,22 @@
 package perf
 
+import (
+	"os"
+	"strconv"
+)
+
 const (
-	DefaultQPS               = 1
-	DefaultClientConnections = 1
-	DefaultTestDuration      = "1m"
-	QPSEnvVar                = "DAPR_PERF_QPS"
-	ClientConnectionsEnvVar  = "DAPR_PERF_CONNECTIONS"
-	TestDurationEnvVar       = "DAPR_TEST_DURATION"
-	PayloadSizeEnvVar        = "DAPR_PAYLOAD_SIZE"
+	defaultQPS               = 1
+	defaultClientConnections = 1
+	defaultPayloadSizeKB     = 0
+	defaultPayload           = ""
+	defaultTestDuration      = "1m"
+
+	qpsEnvVar               = "DAPR_PERF_QPS"
+	clientConnectionsEnvVar = "DAPR_PERF_CONNECTIONS"
+	testDurationEnvVar      = "DAPR_TEST_DURATION"
+	payloadSizeEnvVar       = "DAPR_PAYLOAD_SIZE"
+	payloadEnvVar           = "DAPR_PAYLOAD"
 )
 
 type TestParameters struct {
@@ -16,12 +25,35 @@ type TestParameters struct {
 	TargetEndpoint    string `json:"targetEndpoint"`
 	TestDuration      string `json:"testDuration"`
 	PayloadSizeKB     int    `json:"payloadSizeKB"`
+	Payload           string `json:"payload"`
+	StdClient         bool   `json:"stdClient"`
 }
 
-func ParamsFromDefaults() TestParameters {
+func Params() TestParameters {
 	return TestParameters{
-		QPS:               DefaultQPS,
-		ClientConnections: DefaultClientConnections,
-		TestDuration:      DefaultTestDuration,
+		QPS: atoi(getEnvVarOrDefault(qpsEnvVar, ""), defaultQPS),
+		ClientConnections: atoi(
+			getEnvVarOrDefault(clientConnectionsEnvVar, ""), defaultClientConnections),
+		TestDuration: getEnvVarOrDefault(testDurationEnvVar, defaultTestDuration),
+		Payload:      getEnvVarOrDefault(payloadEnvVar, defaultPayload),
+		PayloadSizeKB: atoi(
+			getEnvVarOrDefault(payloadSizeEnvVar, ""), defaultPayloadSizeKB),
 	}
+}
+
+func atoi(str string, defaultValue int) int {
+	val, err := strconv.Atoi(str)
+	if err != nil {
+		return defaultValue
+	}
+
+	return val
+}
+
+func getEnvVarOrDefault(envVar, defaultValue string) string {
+	if val, ok := os.LookupEnv(envVar); ok && val != "" {
+		return val
+	}
+
+	return defaultValue
 }

@@ -139,7 +139,7 @@ func (c *httpClient) GetState(actorType, actorID, name string) ([]byte, error) {
 func (c *httpClient) WaitUntilDaprIsReady() error {
 	for i := 0; i < 10; i++ {
 		resp, err := c.client.Get(fmt.Sprintf("%s/%s", c.address, "v1.0/healthz"))
-		if err == nil && resp.StatusCode == 200 {
+		if err == nil && resp.StatusCode == 204 {
 			return nil
 		}
 		time.Sleep(time.Millisecond * 500)

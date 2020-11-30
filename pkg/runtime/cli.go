@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	global_config "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
@@ -37,7 +38,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appID := flag.String("app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	controlPlaneAddress := flag.String("control-plane-address", "", "Address for a Dapr control plane")
 	sentryAddress := flag.String("sentry-address", "", "Address for the Sentry CA service")
-	placementServiceHostAddress := flag.String("placement-host-address", "", "Address for the Dapr placement service")
+	placementServiceHostAddr := flag.String("placement-host-address", "", "Addresses for Dapr Actor Placement servers")
 	allowedOrigins := flag.String("allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	enableProfiling := flag.Bool("enable-profiling", false, "Enable profiling")
 	runtimeVersion := flag.Bool("version", false, "Prints the runtime version")
@@ -114,9 +115,9 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
-	placementAddress := ""
-	if *placementServiceHostAddress != "" {
-		placementAddress = *placementServiceHostAddress
+	placementAddresses := []string{}
+	if *placementServiceHostAddr != "" {
+		placementAddresses = parsePlacementAddr(*placementServiceHostAddr)
 	}
 
 	var concurrency int
@@ -129,7 +130,7 @@ func FromFlags() (*DaprRuntime, error) {
 		appPrtcl = *appProtocol
 	}
 
-	runtimeConfig := NewRuntimeConfig(*appID, placementAddress, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
+	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
 		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL)
 
 	var globalConfig *global_config.Configuration
@@ -165,7 +166,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	if configErr != nil {
-		log.Warnf("error loading configuration: %s", configErr)
+		log.Fatalf("error loading configuration: %s", configErr)
 	}
 	if globalConfig == nil {
 		log.Info("loading default configuration")
@@ -177,4 +178,13 @@ func FromFlags() (*DaprRuntime, error) {
 		log.Fatalf(err.Error())
 	}
 	return NewDaprRuntime(runtimeConfig, globalConfig, accessControlList), nil
+}
+
+func parsePlacementAddr(val string) []string {
+	parsed := []string{}
+	p := strings.Split(val, ",")
+	for _, addr := range p {
+		parsed = append(parsed, strings.TrimSpace(addr))
+	}
+	return parsed
 }

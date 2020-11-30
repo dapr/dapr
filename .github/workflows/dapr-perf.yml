@@ -10,7 +10,7 @@ on:
     - cron: '0 */2 * * *'
   repository_dispatch:
     types: [perf-test]
-
+  workflow_dispatch:
 jobs:
   test-perf:
     name: perf tests
@@ -25,10 +25,6 @@ jobs:
       HELMVER: v3.2.1
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
-      DAPR_PERF_QPS: 1000
-      DAPR_PERF_CONNECTIONS: 16
-      DAPR_TEST_DURATION: 1m
-      DAPR_PAYLOAD_SIZE: 1024
     steps:
       - name: Set up container log path
         run: |
@@ -120,13 +116,38 @@ jobs:
         if: env.TEST_CLUSTER != ''
         run: |
           make setup-helm-init
+          make setup-test-env
           kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
       - name: Deploy dapr to ${{ env.TEST_CLUSTER }} cluster
         if: env.TEST_CLUSTER != ''
         run: make docker-deploy-k8s
-      - name: Run Perf tests
+      - name: Deploy test components
         if: env.TEST_CLUSTER != ''
-        run: make test-perf-all
+        run: make setup-test-components
+      - name: Run Perf test service_invocation_http
+        if: env.TEST_CLUSTER != ''
+        env:
+          DAPR_PERF_QPS: 1000
+          DAPR_PERF_CONNECTIONS: 16
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD_SIZE: 1024
+        run: make test-perf-service_invocation_http
+      - name: Run Perf test actor_timer in Java
+        if: env.TEST_CLUSTER != ''
+        env:
+          DAPR_PERF_QPS: 220
+          DAPR_PERF_CONNECTIONS: 10
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD: "{}"
+        run: make test-perf-actor_timer
+      - name: Run Perf test actor_activation in Java
+        if: env.TEST_CLUSTER != ''
+        env:
+          DAPR_PERF_QPS: 500
+          DAPR_PERF_CONNECTIONS: 8
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD: "{}"
+        run: make test-perf-actor_activation
       - name: Save control plane logs
         if: always() && env.TEST_CLUSTER != ''
         run: |

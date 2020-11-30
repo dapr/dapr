@@ -34,6 +34,18 @@ type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+type negativeTestResult struct {
+	MainCallSuccessful bool                   `json:"callSuccessful"`
+	RawBody            []byte                 `json:"rawBody"`
+	RawError           string                 `json:"rawError"`
+	Results            []individualTestResult `json:"results"`
+}
+
+type individualTestResult struct {
+	TestCase       string `json:"case"`
+	CallSuccessful bool   `json:"callSuccessful"`
+}
+
 const numHealthChecks = 60 // Number of times to call the endpoint to check for health.
 
 var tr *runner.TestRunner
@@ -563,5 +575,240 @@ func TestHeaders(t *testing.T) {
 		assert.True(t, ok)
 		assert.NotNil(t, gotSc)
 		assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+	})
+}
+
+func TestNegativeCases(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	t.Run("missing_method_http", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "missing",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
+		require.False(t, testResults.MainCallSuccessful)
+		require.Equal(t, 404, status)
+		require.Contains(t, string(testResults.RawBody), "404 page not found")
+		require.Nil(t, err)
+	})
+
+	t.Run("missing_method_grpc", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "missing",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
+		require.False(t, testResults.MainCallSuccessful)
+		require.Equal(t, 500, status)
+		require.Nil(t, testResults.RawBody)
+		require.Nil(t, err)
+		require.NotNil(t, testResults.RawError)
+		require.Contains(t, testResults.RawError, "rpc error: code = NotFound desc = Not Found")
+	})
+
+	t.Run("missing_service_http", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "missing-service-0",
+			Method:           "posthandler",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
+		require.False(t, testResults.MainCallSuccessful)
+		require.Equal(t, 500, status)
+		require.Contains(t, string(testResults.RawBody), "failed to invoke target missing-service-0 after 3 retries")
+		require.Nil(t, err)
+	})
+
+	t.Run("missing_service_grpc", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "missing-service-0",
+			Method:           "posthandler",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
+		require.False(t, testResults.MainCallSuccessful)
+		require.Equal(t, 500, status)
+		require.Nil(t, testResults.RawBody)
+		require.Nil(t, err)
+		require.NotNil(t, testResults.RawError)
+		require.Contains(t, testResults.RawError, "failed to invoke target missing-service-0 after 3 retries")
+	})
+
+	t.Run("service_timeout_http", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "timeouterror",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		require.False(t, testResults.MainCallSuccessful)
+		require.Equal(t, 500, status)
+		require.Contains(t, string(testResults.RawError), "Client.Timeout exceeded while awaiting headers")
+		require.NotContains(t, string(testResults.RawError), "Client waited longer than it should have.")
+	})
+
+	t.Run("service_timeout_grpc", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "timeouterror",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		require.False(t, testResults.MainCallSuccessful)
+		require.Equal(t, 500, status)
+		require.Contains(t, string(testResults.RawError), "rpc error: code = DeadlineExceeded desc = context deadline exceeded")
+		require.NotContains(t, string(testResults.RawError), "Client waited longer than it should have.")
+	})
+
+	t.Run("service_parse_error_http", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "parseerror",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		require.False(t, testResults.MainCallSuccessful)
+		require.Equal(t, 500, status)
+		require.Contains(t, string(testResults.RawBody), "serialization failed with json")
+		require.Nil(t, err)
+	})
+
+	t.Run("service_parse_error_grpc", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "parseerror",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		require.False(t, testResults.MainCallSuccessful)
+		require.Equal(t, 500, status)
+		require.Nil(t, err)
+		require.Nil(t, testResults.RawBody)
+		require.Contains(t, string(testResults.RawError), "rpc error: code = Unknown desc = Internal Server Error")
+	})
+
+	t.Run("service_large_data_http", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "largedatahttp",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/badservicecalltesthttp", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		require.Nil(t, err)
+		require.True(t, testResults.MainCallSuccessful)
+		require.Len(t, testResults.Results, 4)
+
+		for _, result := range testResults.Results {
+			switch result.TestCase {
+			case "1MB":
+				require.True(t, result.CallSuccessful)
+			case "4MB":
+				require.True(t, result.CallSuccessful)
+			case "4MB+":
+				require.False(t, result.CallSuccessful)
+			case "8MB":
+				require.False(t, result.CallSuccessful)
+			}
+		}
+	})
+
+	t.Run("service_large_data_grpc", func(t *testing.T) {
+		body, err := json.Marshal(testCommandRequest{
+			RemoteApp:        "serviceinvocation-callee-0",
+			Method:           "largedatagrpc",
+			RemoteAppTracing: "true",
+		})
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPPost(fmt.Sprintf("http://%s/badservicecalltestgrpc", externalURL), body)
+
+		var testResults negativeTestResult
+		json.Unmarshal(resp, &testResults)
+
+		require.Nil(t, err)
+		require.True(t, testResults.MainCallSuccessful)
+		require.Len(t, testResults.Results, 4)
+
+		for _, result := range testResults.Results {
+			switch result.TestCase {
+			case "1MB":
+				require.True(t, result.CallSuccessful)
+			case "4MB":
+				require.True(t, result.CallSuccessful)
+			case "4MB+":
+				require.False(t, result.CallSuccessful)
+			case "8MB":
+				require.False(t, result.CallSuccessful)
+			}
+		}
 	})
 }

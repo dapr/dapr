@@ -22,6 +22,8 @@ type TestParameters struct {
 	TargetEndpoint    string `json:"targetEndpoint"`
 	TestDuration      string `json:"testDuration"`
 	PayloadSizeKB     int    `json:"payloadSizeKB"`
+	Payload           string `json:"payload"`
+	StdClient         bool   `json:"stdClient"`
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -68,8 +70,19 @@ func main() {
 // runTest accepts a set of test parameters, runs Fortio with the configured setting and returns
 // the test results in json format.
 func runTest(params TestParameters) ([]byte, error) {
-	args := []string{"load", "-json", "result.json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
-		"-t", params.TestDuration, "-payload-size", fmt.Sprint(params.PayloadSizeKB), params.TargetEndpoint}
+	var args []string
+
+	if len(params.Payload) > 0 {
+		args = []string{"load", "-json", "result.json", "-content-type", "application/json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
+			"-t", params.TestDuration, "-payload", params.Payload}
+	} else {
+		args = []string{"load", "-json", "result.json", "-qps", fmt.Sprint(params.QPS), "-c", fmt.Sprint(params.ClientConnections),
+			"-t", params.TestDuration, "-payload-size", fmt.Sprint(params.PayloadSizeKB)}
+	}
+	if params.StdClient {
+		args = append(args, "-stdclient")
+	}
+	args = append(args, params.TargetEndpoint)
 	fmt.Printf("running test with params: %s", args)
 
 	cmd := exec.Command("fortio", args...)

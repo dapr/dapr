@@ -11,7 +11,7 @@ import "time"
 type Config struct {
 	HostAddress                   string
 	AppID                         string
-	PlacementServiceAddress       string
+	PlacementAddresses            []string
 	HostedActorTypes              []string
 	Port                          int
 	HeartbeatInterval             time.Duration
@@ -30,12 +30,12 @@ const (
 )
 
 // NewConfig returns the actor runtime configuration
-func NewConfig(hostAddress, appID, placementAddress string, hostedActors []string, port int,
+func NewConfig(hostAddress, appID string, placementAddresses []string, hostedActors []string, port int,
 	actorScanInterval, actorIdleTimeout, ongoingCallTimeout string, drainRebalancedActors bool, namespace string) Config {
 	c := Config{
 		HostAddress:                   hostAddress,
 		AppID:                         appID,
-		PlacementServiceAddress:       placementAddress,
+		PlacementAddresses:            placementAddresses,
 		HostedActorTypes:              hostedActors,
 		Port:                          port,
 		HeartbeatInterval:             defaultHeartbeatInterval,
