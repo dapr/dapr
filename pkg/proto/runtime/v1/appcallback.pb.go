@@ -86,7 +86,7 @@ func (BindingEventResponse_BindingEventConcurrency) EnumDescriptor() ([]byte, []
 	return fileDescriptor_830251cb323c018d, []int{3, 0}
 }
 
-// TopicEventRequest message is compatiable with CloudEvent spec v1.0
+// TopicEventRequest message is compatible with CloudEvent spec v1.0
 // https://github.com/cloudevents/spec/blob/v1.0/spec.md
 type TopicEventRequest struct {
 	// id identifies the event. Producers MUST ensure that source + id
@@ -240,7 +240,7 @@ func (m *TopicEventResponse) GetStatus() TopicEventResponse_TopicEventResponseSt
 
 // BindingEventRequest represents input bindings event.
 type BindingEventRequest struct {
-	// Requried. The name of the input binding component.
+	// Required. The name of the input binding component.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Required. The payload that the input bindings sent
 	Data []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
@@ -423,7 +423,7 @@ type TopicSubscription struct {
 	PubsubName string `protobuf:"bytes,1,opt,name=pubsub_name,json=pubsubName,proto3" json:"pubsub_name,omitempty"`
 	// Required. The name of topic which will be subscribed
 	Topic string `protobuf:"bytes,2,opt,name=topic,proto3" json:"topic,omitempty"`
-	// The optional properties used for this topic's subscribtion e.g. session id
+	// The optional properties used for this topic's subscription e.g. session id
 	Metadata             map[string]string `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`

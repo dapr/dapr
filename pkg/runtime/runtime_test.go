@@ -96,6 +96,16 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 	}, nil
 }
 
+func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{
+			"key1":   "value1",
+			"_value": "_value_data",
+			"name1":  "value1",
+		},
+	}, nil
+}
+
 func NewMockKubernetesStore() secretstores.SecretStore {
 	return &MockKubernetesStateStore{}
 }
@@ -1301,7 +1311,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1317,8 +1327,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1527,7 +1537,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1588,8 +1598,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				routes: map[string]string{
-					topic: topic,
+				routes: map[string]Route{
+					topic: {path: topic},
 				},
 			}
 			var grpcServer *grpc.Server
