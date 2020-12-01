@@ -34,6 +34,7 @@ type ComponentSpec struct {
 	Type string `json:"type"`
 	// +optional
 	Version  string         `json:"version"`
+	Critical bool           `json:"critical"`
 	Metadata []MetadataItem `json:"metadata"`
 }
 
