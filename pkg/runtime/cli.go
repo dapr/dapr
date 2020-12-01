@@ -157,7 +157,7 @@ func FromFlags() (*DaprRuntime, error) {
 			namespace = os.Getenv("NAMESPACE")
 			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, client)
 		case modes.StandaloneMode:
-			globalConfig, configErr = global_config.LoadStandaloneConfiguration(*config)
+			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
 
 		if configErr != nil {
