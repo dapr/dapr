@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -314,19 +315,49 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		return &runtimev1pb.GetBulkStateResponse{}, err
 	}
 
-	resp := &runtimev1pb.GetBulkStateResponse{}
-	limiter := concurrency.NewLimiter(int(in.Parallelism))
+	bulkResp := &runtimev1pb.GetBulkStateResponse{}
+	if len(in.Keys) == 0 {
+		return bulkResp, nil
+	}
 
-	for _, k := range in.Keys {
-		fn := func(param interface{}) {
-			req := state.GetRequest{
-				Key:      a.getModifiedStateKey(param.(string)),
-				Metadata: in.Metadata,
-			}
-
-			r, err := store.Get(&req)
+	// try bulk get first
+	reqs := make([]state.GetRequest, len(in.Keys))
+	for i, k := range in.Keys {
+		r := state.GetRequest{
+			Key:      a.getModifiedStateKey(k),
+			Metadata: in.Metadata,
+		}
+		reqs[i] = r
+	}
+	bulkGet, responses, err := store.BulkGet(reqs)
+	// if store supports bulk get
+	if bulkGet {
+		if err != nil {
+			return bulkResp, err
+		}
+		for i := 0; i < len(responses); i++ {
 			item := &runtimev1pb.BulkStateItem{
-				Key: param.(string),
+				Key: a.getOriginalStateKey(responses[i].Key),
+			}
+			if responses[i].Error != "" {
+				item.Error = responses[i].Error
+			} else {
+				item.Data = responses[i].Data
+				item.Etag = responses[i].ETag
+			}
+			bulkResp.Items = append(bulkResp.Items, item)
+		}
+		return bulkResp, nil
+	}
+
+	// if store doesn't support bulk get, fallback to call get() method one by one
+	limiter := concurrency.NewLimiter(int(in.Parallelism))
+	for i := 0; i < len(reqs); i++ {
+		fn := func(param interface{}) {
+			req := param.(*state.GetRequest)
+			r, err := store.Get(req)
+			item := &runtimev1pb.BulkStateItem{
+				Key: a.getOriginalStateKey(req.Key),
 			}
 			if err != nil {
 				item.Error = err.Error()
@@ -334,14 +365,13 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				item.Data = r.Data
 				item.Etag = r.ETag
 			}
-			resp.Items = append(resp.Items, item)
+			bulkResp.Items = append(bulkResp.Items, item)
 		}
-
-		limiter.Execute(fn, k)
+		limiter.Execute(fn, &reqs[i])
 	}
 	limiter.Wait()
 
-	return resp, nil
+	return bulkResp, nil
 }
 
 func (a *api) getStateStore(name string) (state.Store, error) {
@@ -451,6 +481,17 @@ func (a *api) getModifiedStateKey(key string) string {
 		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
 	}
 	return key
+}
+
+func (a *api) getOriginalStateKey(modifiedStateKey string) string {
+	if a.id != "" {
+		splits := strings.Split(modifiedStateKey, daprSeparator)
+		if len(splits) < 1 {
+			return modifiedStateKey
+		}
+		return splits[1]
+	}
+	return modifiedStateKey
 }
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
-
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/pubsub"
@@ -953,6 +952,123 @@ func TestGetState(t *testing.T) {
 				assert.NoError(t, err, "Expected no error")
 				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
 				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+	}
+}
+
+func TestGetBulkState(t *testing.T) {
+	fakeStore := &daprt.MockStateStore{}
+	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == "fakeAPI||good-key"
+	})).Return(
+		&state.GetResponse{
+			Data: []byte("test-data"),
+			ETag: "test-etag",
+		}, nil)
+	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == "fakeAPI||error-key"
+	})).Return(
+		nil,
+		errors.New("failed to get state with error-key"))
+
+	fakeAPI := &api{
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"store1": fakeStore},
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		keys             []string
+		errorExcepted    bool
+		expectedResponse []*runtimev1pb.BulkStateItem
+		expectedError    codes.Code
+	}{
+		{
+			testName:      "get state",
+			storeName:     "store1",
+			keys:          []string{"good-key", "good-key"},
+			errorExcepted: false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{
+				{
+					Data: []byte("test-data"),
+					Etag: "test-etag",
+				},
+				{
+					Data: []byte("test-data"),
+					Etag: "test-etag",
+				},
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:         "get store with non-existing store",
+			storeName:        "no-store",
+			keys:             []string{"good-key", "good-key"},
+			errorExcepted:    true,
+			expectedResponse: []*runtimev1pb.BulkStateItem{},
+			expectedError:    codes.InvalidArgument,
+		},
+		{
+			testName:      "get store with key but error occurs",
+			storeName:     "store1",
+			keys:          []string{"error-key", "error-key"},
+			errorExcepted: false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{
+				{
+					Error: "failed to get state with error-key",
+				},
+				{
+					Error: "failed to get state with error-key",
+				},
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:         "get store with empty keys",
+			storeName:        "store1",
+			keys:             []string{},
+			errorExcepted:    false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{},
+			expectedError:    codes.OK,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetBulkStateRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
+
+			resp, err := client.GetBulkState(context.Background(), req)
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+
+				if len(tt.expectedResponse) == 0 {
+					assert.Equal(t, len(resp.Items), 0, "Expected response to be empty")
+				} else {
+					for i := 0; i < len(resp.Items); i++ {
+						if tt.expectedResponse[i].Error == "" {
+							assert.Equal(t, resp.Items[i].Data, tt.expectedResponse[i].Data, "Expected response Data to be same")
+							assert.Equal(t, resp.Items[i].Etag, tt.expectedResponse[i].Etag, "Expected response Etag to be same")
+						} else {
+							assert.Equal(t, resp.Items[i].Error, tt.expectedResponse[i].Error, "Expected response error to be same")
+						}
+					}
+				}
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
