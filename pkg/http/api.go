@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
@@ -1061,9 +1062,21 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	err = a.publishFn(&req)
 	if err != nil {
+		status := fasthttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
 			fmt.Sprintf(messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+
+		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
+			msg = NewErrorResponse("ERR_PUBSUB_FORBIDDEN", err.Error())
+			status = fasthttp.StatusForbidden
+		}
+
+		if errors.As(err, &runtime_pubsub.NotFoundError{}) {
+			msg = NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
+			status = fasthttp.StatusBadRequest
+		}
+
+		respondWithError(reqCtx, status, msg)
 		log.Debug(msg)
 	} else {
 		respondEmpty(reqCtx)
