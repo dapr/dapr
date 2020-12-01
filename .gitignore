@@ -1,5 +1,8 @@
 /dist
 .idea
+**/.DS_Store
+
+github.com/
 
 .vscode
 
@@ -9,3 +12,4 @@
 **/*.log
 **/.project
 **/.factorypath
+google

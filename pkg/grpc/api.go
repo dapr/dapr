@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -61,6 +62,10 @@ type API interface {
 	SetActorRuntime(actor actors.Actors)
 	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
 	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error)
+	RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*empty.Empty, error)
+	UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*empty.Empty, error)
+	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
+	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*empty.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
 }
 
@@ -213,9 +218,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		body = in.Data
 	}
 
+	contentType := in.DataContentType
+
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, body)
+	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
@@ -308,19 +315,49 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		return &runtimev1pb.GetBulkStateResponse{}, err
 	}
 
-	resp := &runtimev1pb.GetBulkStateResponse{}
-	limiter := concurrency.NewLimiter(int(in.Parallelism))
+	bulkResp := &runtimev1pb.GetBulkStateResponse{}
+	if len(in.Keys) == 0 {
+		return bulkResp, nil
+	}
 
-	for _, k := range in.Keys {
-		fn := func(param interface{}) {
-			req := state.GetRequest{
-				Key:      a.getModifiedStateKey(param.(string)),
-				Metadata: in.Metadata,
-			}
-
-			r, err := store.Get(&req)
+	// try bulk get first
+	reqs := make([]state.GetRequest, len(in.Keys))
+	for i, k := range in.Keys {
+		r := state.GetRequest{
+			Key:      a.getModifiedStateKey(k),
+			Metadata: in.Metadata,
+		}
+		reqs[i] = r
+	}
+	bulkGet, responses, err := store.BulkGet(reqs)
+	// if store supports bulk get
+	if bulkGet {
+		if err != nil {
+			return bulkResp, err
+		}
+		for i := 0; i < len(responses); i++ {
 			item := &runtimev1pb.BulkStateItem{
-				Key: param.(string),
+				Key: a.getOriginalStateKey(responses[i].Key),
+			}
+			if responses[i].Error != "" {
+				item.Error = responses[i].Error
+			} else {
+				item.Data = responses[i].Data
+				item.Etag = responses[i].ETag
+			}
+			bulkResp.Items = append(bulkResp.Items, item)
+		}
+		return bulkResp, nil
+	}
+
+	// if store doesn't support bulk get, fallback to call get() method one by one
+	limiter := concurrency.NewLimiter(int(in.Parallelism))
+	for i := 0; i < len(reqs); i++ {
+		fn := func(param interface{}) {
+			req := param.(*state.GetRequest)
+			r, err := store.Get(req)
+			item := &runtimev1pb.BulkStateItem{
+				Key: a.getOriginalStateKey(req.Key),
 			}
 			if err != nil {
 				item.Error = err.Error()
@@ -328,14 +365,13 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				item.Data = r.Data
 				item.Etag = r.ETag
 			}
-			resp.Items = append(resp.Items, item)
+			bulkResp.Items = append(bulkResp.Items, item)
 		}
-
-		limiter.Execute(fn, k)
+		limiter.Execute(fn, &reqs[i])
 	}
 	limiter.Wait()
 
-	return resp, nil
+	return bulkResp, nil
 }
 
 func (a *api) getStateStore(name string) (state.Store, error) {
@@ -445,6 +481,17 @@ func (a *api) getModifiedStateKey(key string) string {
 		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
 	}
 	return key
+}
+
+func (a *api) getOriginalStateKey(modifiedStateKey string) string {
+	if a.id != "" {
+		splits := strings.Split(modifiedStateKey, daprSeparator)
+		if len(splits) < 1 {
+			return modifiedStateKey
+		}
+		return splits[1]
+	}
+	return modifiedStateKey
 }
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
@@ -581,7 +628,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error) {
 	if a.actor == nil {
-		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -604,7 +651,7 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 
 func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error) {
 	if a.actor == nil {
-		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -619,9 +666,160 @@ func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Unregist
 	return &empty.Empty{}, err
 }
 
+func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.CreateReminderRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+		DueTime:   in.DueTime,
+		Period:    in.Period,
+	}
+
+	if in.Data != nil {
+		req.Data = in.Data
+	}
+	err := a.actor.CreateReminder(ctx, req)
+	return &empty.Empty{}, err
+}
+
+func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := &actors.DeleteReminderRequest{
+		Name:      in.Name,
+		ActorID:   in.ActorId,
+		ActorType: in.ActorType,
+	}
+
+	err := a.actor.DeleteReminder(ctx, req)
+	return &empty.Empty{}, err
+}
+
+func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return nil, err
+	}
+
+	actorType := in.ActorType
+	actorID := in.ActorId
+	key := in.Key
+
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		apiServerLogger.Debug(err)
+		return nil, err
+	}
+
+	req := actors.GetStateRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Key:       key,
+	}
+
+	resp, err := a.actor.GetState(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
+		apiServerLogger.Debug(err)
+		return nil, err
+	}
+
+	return &runtimev1pb.GetActorStateResponse{
+		Data: resp.Data,
+	}, nil
+}
+
+func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*empty.Empty, error) {
+	if a.actor == nil {
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	actorType := in.ActorType
+	actorID := in.ActorId
+	actorOps := []actors.TransactionalOperation{}
+
+	for _, op := range in.Operations {
+		var actorOp actors.TransactionalOperation
+		switch state.OperationType(op.OperationType) {
+		case state.Upsert:
+			setReq := map[string]interface{}{
+				"key":   op.Key,
+				"value": op.Value.Value,
+				// Actor state do not user other attributes from state request.
+			}
+
+			actorOp = actors.TransactionalOperation{
+				Operation: actors.Upsert,
+				Request:   setReq,
+			}
+		case state.Delete:
+			delReq := map[string]interface{}{
+				"key": op.Key,
+				// Actor state do not user other attributes from state request.
+			}
+
+			actorOp = actors.TransactionalOperation{
+				Operation: actors.Delete,
+				Request:   delReq,
+			}
+
+		default:
+			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.OperationType)
+			apiServerLogger.Debug(err)
+			return &empty.Empty{}, err
+		}
+
+		actorOps = append(actorOps, actorOp)
+	}
+
+	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	req := actors.TransactionalRequest{
+		ActorID:    actorID,
+		ActorType:  actorType,
+		Operations: actorOps,
+	}
+
+	err := a.actor.TransactionalStateOperation(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	return &empty.Empty{}, nil
+}
+
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	if a.actor == nil {
-		err := status.Errorf(codes.Unimplemented, messages.ErrActorRuntimeNotFound)
+		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.InvokeActorResponse{}, err
 	}

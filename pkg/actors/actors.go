@@ -553,6 +553,7 @@ func (a *actorsRuntime) evaluateReminders() {
 
 						if !exists {
 							stop := make(chan bool)
+							a.activeReminders.Store(reminderKey, stop)
 							err := a.startReminder(&r, stop)
 							if err != nil {
 								log.Debugf("error starting reminder: %s", err)
@@ -1056,7 +1057,9 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 
 // Stop closes all network connections and resources used in actor runtime
 func (a *actorsRuntime) Stop() {
-	a.placement.Stop()
+	if a.placement != nil {
+		a.placement.Stop()
+	}
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters

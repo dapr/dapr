@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
-
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/pubsub"
@@ -909,7 +908,7 @@ func TestGetState(t *testing.T) {
 		storeName        string
 		key              string
 		errorExcepted    bool
-		expectedResponse runtimev1pb.GetStateResponse
+		expectedResponse *runtimev1pb.GetStateResponse
 		expectedError    codes.Code
 	}{
 		{
@@ -917,7 +916,7 @@ func TestGetState(t *testing.T) {
 			storeName:     "store1",
 			key:           "good-key",
 			errorExcepted: false,
-			expectedResponse: runtimev1pb.GetStateResponse{
+			expectedResponse: &runtimev1pb.GetStateResponse{
 				Data: []byte("test-data"),
 				Etag: "test-etag",
 			},
@@ -928,7 +927,7 @@ func TestGetState(t *testing.T) {
 			storeName:        "no-store",
 			key:              "good-key",
 			errorExcepted:    true,
-			expectedResponse: runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetStateResponse{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -936,7 +935,7 @@ func TestGetState(t *testing.T) {
 			storeName:        "store1",
 			key:              "error-key",
 			errorExcepted:    true,
-			expectedResponse: runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetStateResponse{},
 			expectedError:    codes.Internal,
 		},
 	}
@@ -951,7 +950,8 @@ func TestGetState(t *testing.T) {
 			resp, err := client.GetState(context.Background(), req)
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, *resp, tt.expectedResponse, "Expected responses to be same")
+				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
+				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
@@ -960,55 +960,121 @@ func TestGetState(t *testing.T) {
 	}
 }
 
-func TestRegisterActorTimer(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
+func TestGetBulkState(t *testing.T) {
+	fakeStore := &daprt.MockStateStore{}
+	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == "fakeAPI||good-key"
+	})).Return(
+		&state.GetResponse{
+			Data: []byte("test-data"),
+			ETag: "test-etag",
+		}, nil)
+	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == "fakeAPI||error-key"
+	})).Return(
+		nil,
+		errors.New("failed to get state with error-key"))
 
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
+	fakeAPI := &api{
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"store1": fakeStore},
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
 
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.RegisterActorTimer(context.TODO(), &runtimev1pb.RegisterActorTimerRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
-}
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
 
-func TestUnregisterActorTimer(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
+	client := runtimev1pb.NewDaprClient(clientConn)
 
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
+	testCases := []struct {
+		testName         string
+		storeName        string
+		keys             []string
+		errorExcepted    bool
+		expectedResponse []*runtimev1pb.BulkStateItem
+		expectedError    codes.Code
+	}{
+		{
+			testName:      "get state",
+			storeName:     "store1",
+			keys:          []string{"good-key", "good-key"},
+			errorExcepted: false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{
+				{
+					Data: []byte("test-data"),
+					Etag: "test-etag",
+				},
+				{
+					Data: []byte("test-data"),
+					Etag: "test-etag",
+				},
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:         "get store with non-existing store",
+			storeName:        "no-store",
+			keys:             []string{"good-key", "good-key"},
+			errorExcepted:    true,
+			expectedResponse: []*runtimev1pb.BulkStateItem{},
+			expectedError:    codes.InvalidArgument,
+		},
+		{
+			testName:      "get store with key but error occurs",
+			storeName:     "store1",
+			keys:          []string{"error-key", "error-key"},
+			errorExcepted: false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{
+				{
+					Error: "failed to get state with error-key",
+				},
+				{
+					Error: "failed to get state with error-key",
+				},
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:         "get store with empty keys",
+			storeName:        "store1",
+			keys:             []string{},
+			errorExcepted:    false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{},
+			expectedError:    codes.OK,
+		},
+	}
 
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.UnregisterActorTimer(context.TODO(), &runtimev1pb.UnregisterActorTimerRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
-}
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetBulkStateRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
 
-func TestInvokeActor(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
+			resp, err := client.GetBulkState(context.Background(), req)
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
 
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.InvokeActor(context.TODO(), &runtimev1pb.InvokeActorRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
+				if len(tt.expectedResponse) == 0 {
+					assert.Equal(t, len(resp.Items), 0, "Expected response to be empty")
+				} else {
+					for i := 0; i < len(resp.Items); i++ {
+						if tt.expectedResponse[i].Error == "" {
+							assert.Equal(t, resp.Items[i].Data, tt.expectedResponse[i].Data, "Expected response Data to be same")
+							assert.Equal(t, resp.Items[i].Etag, tt.expectedResponse[i].Etag, "Expected response Etag to be same")
+						} else {
+							assert.Equal(t, resp.Items[i].Error, tt.expectedResponse[i].Error, "Expected response error to be same")
+						}
+					}
+				}
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+	}
 }
 
 func TestDeleteState(t *testing.T) {

@@ -59,6 +59,10 @@ func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) 
 	return &state.GetResponse{Data: item}, nil
 }
 
+func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+	return false, nil, nil
+}
+
 func (f *fakeStateStore) Set(req *state.SetRequest) error {
 	b, _ := json.Marshal(&req.Value)
 	f.lock.Lock()
@@ -890,6 +894,16 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 	time.Sleep(time.Second * 2)
 	assert.False(t, testActorRuntime.appHealthy)
+}
+
+func TestShutdown(t *testing.T) {
+	testActorRuntime := newTestActorsRuntime()
+
+	t.Run("no panic when placement is nil", func(t *testing.T) {
+		testActorRuntime.placement = nil
+		testActorRuntime.Stop()
+		// No panic
+	})
 }
 
 func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {

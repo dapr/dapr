@@ -1320,6 +1320,7 @@ func (a *DaprRuntime) flushOutstandingComponents() {
 }
 
 func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Component) error {
+	log.Debugf("loading component. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
 	res := a.preprocessOneComponent(&comp)
 	if res.unreadyDependency != "" {
 		a.pendingComponentDependents[res.unreadyDependency] = append(a.pendingComponentDependents[res.unreadyDependency], comp)
