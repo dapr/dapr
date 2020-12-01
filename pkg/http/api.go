@@ -340,7 +340,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	if resp == nil {
 		respondEmpty(reqCtx)
 	} else {
-		respondWithJSON(reqCtx, fasthttp.StatusOK, resp.Data)
+		respondCompleteWithJSON(reqCtx, fasthttp.StatusOK, resp.Data, resp.Metadata)
 	}
 }
 
@@ -442,7 +442,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		respondEmpty(reqCtx)
 		return
 	}
-	respondWithETaggedJSON(reqCtx, fasthttp.StatusOK, resp.Data, resp.ETag)
+	respondCompleteWithETaggedJSON(reqCtx, fasthttp.StatusOK, resp.Data, resp.Metadata, resp.ETag)
 }
 
 func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {

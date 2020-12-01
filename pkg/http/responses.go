@@ -31,6 +31,12 @@ func respondWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 }
 
+// respondWithJSON overrides the content-type with application/json
+func respondCompleteWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, metadata map[string]string) {
+	respondComplete(ctx, code, obj, metadata)
+	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+}
+
 // respond sets a default application/json content type if content type is not present
 func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 	ctx.Response.SetStatusCode(code)
@@ -41,9 +47,29 @@ func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 	}
 }
 
+// respond sets a default application/json content type if content type is not present
+func respondComplete(ctx *fasthttp.RequestCtx, code int, obj []byte, metadata map[string]string) {
+	ctx.Response.SetStatusCode(code)
+	ctx.Response.SetBody(obj)
+	for k, v := range metadata {
+		ctx.Response.Header.Set(k, v)
+	}
+
+	if len(ctx.Response.Header.ContentType()) == 0 {
+		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+	}
+}
+
 // respondWithETaggedJSON overrides the content-type with application/json and etag header
 func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag string) {
 	respond(ctx, code, obj)
+	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+	ctx.Response.Header.Set(etagHeader, etag)
+}
+
+// respondWithETaggedJSON overrides the content-type with application/json and etag header
+func respondCompleteWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, metadata map[string]string, etag string) {
+	respondComplete(ctx, code, obj, metadata)
 	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 	ctx.Response.Header.Set(etagHeader, etag)
 }
