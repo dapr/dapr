@@ -29,6 +29,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
@@ -1155,6 +1156,15 @@ func TestPublishTopic(t *testing.T) {
 			if req.Topic == "error-topic" {
 				return errors.New("error when publish")
 			}
+
+			if req.Topic == "err-not-found" {
+				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+			}
+
+			if req.Topic == "err-not-allowed" {
+				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+			}
+
 			return nil
 		},
 	}
@@ -1185,6 +1195,18 @@ func TestPublishTopic(t *testing.T) {
 		Topic:      "error-topic",
 	})
 	assert.Equal(t, codes.Internal, status.Code(err))
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+		Topic:      "err-not-found",
+	})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+		Topic:      "err-not-allowed",
+	})
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestInvokeBinding(t *testing.T) {

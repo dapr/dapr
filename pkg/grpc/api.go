@@ -7,6 +7,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
@@ -238,9 +240,16 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	err = a.publishFn(&req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
-		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
+			nerr = status.Errorf(codes.PermissionDenied, err.Error())
+		}
+
+		if errors.As(err, &runtime_pubsub.NotFoundError{}) {
+			nerr = status.Errorf(codes.NotFound, err.Error())
+		}
+		apiServerLogger.Debug(nerr)
+		return &empty.Empty{}, nerr
 	}
 	return &empty.Empty{}, nil
 }

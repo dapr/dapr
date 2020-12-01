@@ -992,11 +992,11 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	if _, ok := a.pubSubs[req.PubsubName]; !ok {
-		return errors.New("pubsub not found")
+		return runtime_pubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, a.scopedPublishings[req.PubsubName]); !allowed {
-		return errors.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
+		return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
 	return a.pubSubs[req.PubsubName].Publish(req)
