@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
@@ -57,6 +58,15 @@ func TestPubSubEndpoints(t *testing.T) {
 			if req.PubsubName == "errorpubsub" {
 				return fmt.Errorf("Error from pubsub %s", req.PubsubName)
 			}
+
+			if req.PubsubName == "errnotfound" {
+				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+			}
+
+			if req.PubsubName == "errnotallowed" {
+				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+			}
+
 			return nil
 		},
 		json: jsoniter.ConfigFastest,
@@ -167,6 +177,32 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
 		}
 		testAPI.publishFn = savePublishFn
+	})
+
+	t.Run("Pubsub not configured - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/errnotfound/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "pubsub 'errnotfound' not found", resp.ErrorBody["message"])
+		}
+	})
+
+	t.Run("Pubsub not configured - 403", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/errnotallowed/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
+		}
 	})
 
 	fakeServer.Shutdown()
