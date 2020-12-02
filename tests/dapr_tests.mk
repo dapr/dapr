@@ -5,7 +5,7 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorclientapp actorfeatures actorinvocationapp runtime runtime_init
+E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorclientapp actorfeatures actorinvocationapp runtime runtime_init middleware
 
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http
@@ -195,6 +195,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_grpc_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
