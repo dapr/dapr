@@ -26,6 +26,7 @@ const (
 	ErrTopicEmpty           = "topic is empty in pubsub %s"
 	ErrPubsubCloudEventsSer = "error when marshal cloud event envelop for topic %s pubsub %s: %s"
 	ErrPubsubPublishMessage = "error when publish to topic %s in pubsub %s: %s"
+	ErrPubsubForbidden      = "topic %s is not allowed for app id %s"
 
 	// AppChannel
 	ErrChannelNotFound       = "app channel is not initialized"

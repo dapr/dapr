@@ -44,6 +44,8 @@ const (
 )
 
 type Configuration struct {
+	Name string            `json:"-" yaml:"-"`
+	Kind string            `json:"-" yaml:"-"`
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 }
 
@@ -175,28 +177,28 @@ func LoadDefaultConfiguration() *Configuration {
 }
 
 // LoadStandaloneConfiguration gets the path to a config file and loads it into a configuration
-func LoadStandaloneConfiguration(config string) (*Configuration, error) {
+func LoadStandaloneConfiguration(config string) (*Configuration, string, error) {
 	_, err := os.Stat(config)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	b, err := ioutil.ReadFile(config)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	conf := LoadDefaultConfiguration()
 	err = yaml.Unmarshal(b, conf)
 	if err != nil {
-		return nil, err
+		return nil, string(b), err
 	}
 	err = sortAndValidateSecretsConfiguration(conf)
 	if err != nil {
-		return nil, err
+		return nil, string(b), err
 	}
 
-	return conf, nil
+	return conf, string(b), nil
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
