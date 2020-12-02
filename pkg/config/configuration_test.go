@@ -47,7 +47,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			config, err := LoadStandaloneConfiguration(tc.path)
+			config, _, err := LoadStandaloneConfiguration(tc.path)
 			if tc.errorExpected {
 				assert.Error(t, err, "Expected an error")
 				assert.Nil(t, config, "Config should not be loaded")
@@ -79,7 +79,7 @@ func TestMetricSpecForStandAlone(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			config, err := LoadStandaloneConfiguration(tc.confFile)
+			config, _, err := LoadStandaloneConfiguration(tc.confFile)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
 		})
