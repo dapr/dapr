@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
@@ -33,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
@@ -43,6 +45,8 @@ import (
 	"github.com/valyala/fasthttp/fasthttputil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
@@ -54,6 +58,15 @@ func TestPubSubEndpoints(t *testing.T) {
 			if req.PubsubName == "errorpubsub" {
 				return fmt.Errorf("Error from pubsub %s", req.PubsubName)
 			}
+
+			if req.PubsubName == "errnotfound" {
+				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+			}
+
+			if req.PubsubName == "errnotallowed" {
+				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+			}
+
 			return nil
 		},
 		json: jsoniter.ConfigFastest,
@@ -164,6 +177,32 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
 		}
 		testAPI.publishFn = savePublishFn
+	})
+
+	t.Run("Pubsub not configured - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/errnotfound/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "pubsub 'errnotfound' not found", resp.ErrorBody["message"])
+		}
+	})
+
+	t.Run("Pubsub not configured - 403", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/errnotallowed/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
+		}
 	})
 
 	fakeServer.Shutdown()
@@ -1242,7 +1281,43 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		components: []components_v1alpha1.Component{
+			{
+				ObjectMeta: meta_v1.ObjectMeta{
+					Name: "MockComponent1Name",
+				},
+				Spec: components_v1alpha1.ComponentSpec{
+					Type:    "mock.component1Type",
+					Version: "v1.0",
+					Metadata: []components_v1alpha1.MetadataItem{
+						{
+							Name: "actorMockComponent1",
+							Value: components_v1alpha1.DynamicValue{
+								JSON: v1.JSON{Raw: []byte("true")},
+							},
+						},
+					},
+				},
+			},
+			{
+				ObjectMeta: meta_v1.ObjectMeta{
+					Name: "MockComponent2Name",
+				},
+				Spec: components_v1alpha1.ComponentSpec{
+					Type:    "mock.component2Type",
+					Version: "v1.0",
+					Metadata: []components_v1alpha1.MetadataItem{
+						{
+							Name: "actorMockComponent2",
+							Value: components_v1alpha1.DynamicValue{
+								JSON: v1.JSON{Raw: []byte("true")},
+							},
+						},
+					},
+				},
+			},
+		},
+		json: jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
@@ -1251,6 +1326,10 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		"id":       "xyz",
 		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
 		"extended": make(map[string]string),
+		"components": []map[string]interface{}{
+			{"name": "MockComponent1Name", "type": "mock.component1Type", "version": "v1.0"},
+			{"name": "MockComponent2Name", "type": "mock.component2Type", "version": "v1.0"},
+		},
 	}
 	expectedBodyBytes, _ := json.Marshal(expectedBody)
 
