@@ -62,3 +62,7 @@ spec:
           requests:
             cpu: 50m
             memory: 20Mi
+{{- if .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+        - name: {{ .Values.image.imagePullSecrets }}
+{{- end }}
