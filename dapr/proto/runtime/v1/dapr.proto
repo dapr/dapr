@@ -127,6 +127,9 @@ message BulkStateItem {
 
   // The error that was returned from the state store in case of a failed get operation.
   string error = 4;
+
+  // The metadata which will be sent to app.
+  map<string,string> metadata = 5;
 }
 
 // GetStateResponse is the response conveying the state value and etag.
@@ -137,6 +140,9 @@ message GetStateResponse {
   // The entity tag which represents the specific version of data.
   // ETag format is defined by the corresponding data store.
   string etag = 2;
+
+  // The metadata which will be sent to app.
+  map<string,string> metadata = 3;
 }
 
 // DeleteStateRequest is the message to delete key-value states in the specific state store.
