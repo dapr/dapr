@@ -59,6 +59,16 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadStandaloneConfigurationKindName(t *testing.T) {
+	t.Run("test Kind and Name", func(t *testing.T) {
+		config, _, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+		assert.NoError(t, err, "Unexpected error")
+		assert.NotNil(t, config, "Config not loaded as expected")
+		assert.Equal(t, "secretappconfig", config.ObjectMeta.Name)
+		assert.Equal(t, "Configuration", config.TypeMeta.Kind)
+	})
+}
+
 func TestMetricSpecForStandAlone(t *testing.T) {
 	testCases := []struct {
 		name          string
