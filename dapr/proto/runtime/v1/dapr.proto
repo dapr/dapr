@@ -186,7 +186,7 @@ message PublishEventRequest {
   bytes data = 3;
 
   // The content type for the data (optional).
-  string dataContentType = 4;
+  string data_content_type = 4;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings

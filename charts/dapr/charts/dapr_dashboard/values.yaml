@@ -5,6 +5,7 @@ image:
   registry: docker.io/daprio
   name: dashboard
   tag: "0.4.0"
+  imagePullSecrets: ""
 
 nameOverride: ""
 fullnameOverride: ""
