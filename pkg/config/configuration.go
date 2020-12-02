@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 	yaml "gopkg.in/yaml.v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -43,9 +44,12 @@ const (
 	GRPCProtocol        = "grpc"
 )
 
+// Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
-	Name string            `json:"-" yaml:"-"`
-	Kind string            `json:"-" yaml:"-"`
+	metav1.TypeMeta `json:",inline" yaml:",inline"`
+	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
+	metav1.ObjectMeta `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 }
 
