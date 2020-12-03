@@ -152,6 +152,12 @@ spec:
                 properties:
                   samplingRate:
                     type: string
+                  zipkin:
+                    type: object
+                    description: ZipkinSpec defines the Zipkin trace configurations
+                    properties:
+                      endpointAddress:
+                        type: string
                 required:
                 - samplingRate
                 type: object
