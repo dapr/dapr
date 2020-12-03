@@ -154,9 +154,10 @@ spec:
                     type: string
                   zipkin:
                     type: object
-                    description: ZipkinSpec defines the Zipkin trace configurations
+                    description: Defines the Zipkin trace configurations
                     properties:
                       endpointAddress:
+                        description: The endpoint address of Zipkin server to receive traces
                         type: string
                 required:
                 - samplingRate
