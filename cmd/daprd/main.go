@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/components-contrib/state/cassandra"
 	"github.com/dapr/components-contrib/state/cloudstate"
 	"github.com/dapr/components-contrib/state/couchbase"
+	state_dynamodb "github.com/dapr/components-contrib/state/aws/dynamodb"
 	"github.com/dapr/components-contrib/state/gcp/firestore"
 	"github.com/dapr/components-contrib/state/hashicorp/consul"
 	"github.com/dapr/components-contrib/state/hazelcast"
@@ -207,6 +208,9 @@ func main() {
 			}),
 			state_loader.New("rethinkdb", func() state.Store {
 				return rethinkdb.NewRethinkDBStateStore(logContrib)
+			}),
+			state_loader.New("aws.dynamodb", func() state.Store {
+				return state_dynamodb.NewDynamoDBStateStore()
 			}),
 		),
 		runtime.WithPubSubs(
