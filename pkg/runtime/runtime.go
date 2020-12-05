@@ -18,6 +18,7 @@ import (
 
 	nethttp "net/http"
 
+	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
@@ -56,6 +57,8 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
+	openzipkin "github.com/openzipkin/zipkin-go"
+	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
@@ -94,8 +97,13 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 
 var log = logger.NewLogger("dapr.runtime")
 
+type Route struct {
+	path     string
+	metadata map[string]string
+}
+
 type TopicRoute struct {
-	routes map[string]string
+	routes map[string]Route
 }
 
 // DaprRuntime holds all the core components of the runtime
@@ -220,12 +228,28 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	return nil, nil
 }
 
-func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
+// setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
+// but we do so here to explicitly call out the dependency on having `hostAddress` computed.
+func (a *DaprRuntime) setupTracing(hostAddress string, exporters traceExporterStore) error {
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
 	if a.globalConfig.Spec.TracingSpec.Stdout {
-		trace.RegisterExporter(&diag_utils.StdoutExporter{})
+		exporters.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
 
+	// Register zipkin trace exporter if ZipkinSpec is specified
+	if a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress != "" {
+		localEndpoint, err := openzipkin.NewEndpoint(a.runtimeConfig.ID, hostAddress)
+		if err != nil {
+			return err
+		}
+		reporter := zipkinreporter.NewReporter(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
+		exporter := zipkin.NewExporter(reporter, localEndpoint)
+		exporters.RegisterExporter(exporter)
+	}
+	return nil
+}
+
+func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Initialize metrics only if MetricSpec is enabled.
 	if a.globalConfig.Spec.MetricSpec.Enabled {
 		if err := diag.InitMetrics(a.runtimeConfig.ID); err != nil {
@@ -243,11 +267,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	a.hostAddress, err = utils.GetHostAddress()
-	if err != nil {
+	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return errors.Wrap(err, "failed to determine host address")
 	}
-
+	if err = a.setupTracing(a.hostAddress, openCensusExporterStore{}); err != nil {
+		return errors.Wrap(err, "failed to setup tracing")
+	}
 	// Register and initialize name resolution for service discovery.
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
 	err = a.initNameResolution()
@@ -399,7 +424,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 	if !ok {
 		return nil
 	}
-	for topic := range v.routes {
+	for topic, route := range v.routes {
 		allowed := a.isPubSubOperationAllowed(name, topic, a.scopedSubscriptions[name])
 		if !allowed {
 			log.Warnf("subscription to topic %s on pubsub %s is not allowed", topic, name)
@@ -409,7 +434,8 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 		log.Debugf("subscribing to topic=%s on pubsub=%s", topic, name)
 
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
-			Topic: topic,
+			Topic:    topic,
+			Metadata: route.metadata,
 		}, func(msg *pubsub.NewMessage) error {
 			if msg.Metadata == nil {
 				msg.Metadata = make(map[string]string, 1)
@@ -667,7 +693,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.stateStores, a.secretStores,
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.components, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
@@ -909,10 +935,10 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 
 	for _, s := range subscriptions {
 		if _, ok := topicRoutes[s.PubsubName]; !ok {
-			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]string)}
+			topicRoutes[s.PubsubName] = TopicRoute{routes: make(map[string]Route)}
 		}
 
-		topicRoutes[s.PubsubName].routes[s.Topic] = s.Route
+		topicRoutes[s.PubsubName].routes[s.Topic] = Route{path: s.Route, metadata: s.Metadata}
 	}
 
 	if len(topicRoutes) > 0 {
@@ -986,11 +1012,11 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	if _, ok := a.pubSubs[req.PubsubName]; !ok {
-		return errors.New("pubsub not found")
+		return runtime_pubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
 	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, a.scopedPublishings[req.PubsubName]); !allowed {
-		return errors.Errorf("topic %s is not allowed for app id %s", req.Topic, a.runtimeConfig.ID)
+		return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
 	return a.pubSubs[req.PubsubName].Publish(req)
@@ -1071,7 +1097,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	}
 
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
-	req := invokev1.NewInvokeMethodRequest(route)
+	req := invokev1.NewInvokeMethodRequest(route.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, pubsub.ContentType)
 

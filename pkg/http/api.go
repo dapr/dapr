@@ -16,6 +16,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -25,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
@@ -47,6 +49,7 @@ type api struct {
 	endpoints             []Endpoint
 	directMessaging       messaging.DirectMessaging
 	appChannel            channel.AppChannel
+	components            []components_v1alpha1.Component
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
 	secretsConfiguration  map[string]config.SecretsScope
@@ -60,10 +63,17 @@ type api struct {
 	tracingSpec           config.TracingSpec
 }
 
+type registeredComponent struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Version string `json:"version"`
+}
+
 type metadata struct {
-	ID                string                      `json:"id"`
-	ActiveActorsCount []actors.ActiveActorsCount  `json:"actors"`
-	Extended          map[interface{}]interface{} `json:"extended"`
+	ID                   string                      `json:"id"`
+	ActiveActorsCount    []actors.ActiveActorsCount  `json:"actors"`
+	Extended             map[interface{}]interface{} `json:"extended"`
+	RegisteredComponents []registeredComponent       `json:"components"`
 }
 
 const (
@@ -91,6 +101,7 @@ func NewAPI(
 	appID string,
 	appChannel channel.AppChannel,
 	directMessaging messaging.DirectMessaging,
+	components []components_v1alpha1.Component,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
@@ -111,6 +122,7 @@ func NewAPI(
 		id:                    appID,
 		tracingSpec:           tracingSpec,
 	}
+	api.components = components
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
@@ -363,30 +375,70 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
-	limiter := concurrency.NewLimiter(req.Parallelism)
+	if len(req.Keys) == 0 {
+		b, _ := a.json.Marshal(bulkResp)
+		respondWithJSON(reqCtx, fasthttp.StatusOK, b)
+		return
+	}
 
+	// try bulk get first
+	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
-		bulkResp[i].Key = k
-		fn := func(param interface{}) {
-			r := param.(*BulkGetResponse)
-			gr := &state.GetRequest{
-				Key:      a.getModifiedStateKey(r.Key),
-				Metadata: metadata,
-			}
+		r := state.GetRequest{
+			Key:      a.getModifiedStateKey(k),
+			Metadata: req.Metadata,
+		}
+		reqs[i] = r
+	}
+	bulkGet, responses, err := store.BulkGet(reqs)
 
-			resp, err := store.Get(gr)
-			if err != nil {
-				log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
-				r.Error = err.Error()
-			} else if resp != nil {
-				r.Data = jsoniter.RawMessage(resp.Data)
-				r.ETag = resp.ETag
-			}
+	if bulkGet {
+		// if store supports bulk get
+		if err != nil {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
+			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+			log.Debug(msg)
+			return
 		}
 
-		limiter.Execute(fn, &bulkResp[i])
+		for i := 0; i < len(responses) && i < len(req.Keys); i++ {
+			bulkResp[i].Key = a.getOriginalStateKey(responses[i].Key)
+			if responses[i].Error != "" {
+				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
+				bulkResp[i].Error = responses[i].Error
+			} else {
+				bulkResp[i].Data = jsoniter.RawMessage(responses[i].Data)
+				bulkResp[i].ETag = responses[i].ETag
+			}
+		}
+	} else {
+		// if store doesn't support bulk get, fallback to call get() method one by one
+		limiter := concurrency.NewLimiter(req.Parallelism)
+
+		for i, k := range req.Keys {
+			bulkResp[i].Key = k
+
+			fn := func(param interface{}) {
+				r := param.(*BulkGetResponse)
+				gr := &state.GetRequest{
+					Key:      a.getModifiedStateKey(r.Key),
+					Metadata: metadata,
+				}
+
+				resp, err := store.Get(gr)
+				if err != nil {
+					log.Debugf("bulk get: error getting key %s: %s", r.Key, err)
+					r.Error = err.Error()
+				} else if resp != nil {
+					r.Data = jsoniter.RawMessage(resp.Data)
+					r.ETag = resp.ETag
+				}
+			}
+
+			limiter.Execute(fn, &bulkResp[i])
+		}
+		limiter.Wait()
 	}
-	limiter.Wait()
 
 	b, _ := a.json.Marshal(bulkResp)
 	respondWithJSON(reqCtx, fasthttp.StatusOK, b)
@@ -572,6 +624,17 @@ func (a *api) getModifiedStateKey(key string) string {
 	}
 
 	return key
+}
+
+func (a *api) getOriginalStateKey(modifiedStateKey string) string {
+	if a.id != "" {
+		splits := strings.Split(modifiedStateKey, daprSeparator)
+		if len(splits) < 1 {
+			return modifiedStateKey
+		}
+		return splits[1]
+	}
+	return modifiedStateKey
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
@@ -936,10 +999,22 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
 
+	registeredComponents := []registeredComponent{}
+
+	for _, comp := range a.components {
+		registeredComp := registeredComponent{
+			Name:    comp.Name,
+			Version: comp.Spec.Version,
+			Type:    comp.Spec.Type,
+		}
+		registeredComponents = append(registeredComponents, registeredComp)
+	}
+
 	mtd := metadata{
-		ID:                a.id,
-		ActiveActorsCount: activeActorsCount,
-		Extended:          temp,
+		ID:                   a.id,
+		ActiveActorsCount:    activeActorsCount,
+		Extended:             temp,
+		RegisteredComponents: registeredComponents,
 	}
 
 	mtdBytes, err := a.json.Marshal(mtd)
@@ -1010,9 +1085,21 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	err = a.publishFn(&req)
 	if err != nil {
+		status := fasthttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
 			fmt.Sprintf(messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+
+		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
+			msg = NewErrorResponse("ERR_PUBSUB_FORBIDDEN", err.Error())
+			status = fasthttp.StatusForbidden
+		}
+
+		if errors.As(err, &runtime_pubsub.NotFoundError{}) {
+			msg = NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
+			status = fasthttp.StatusBadRequest
+		}
+
+		respondWithError(reqCtx, status, msg)
 		log.Debug(msg)
 	} else {
 		respondEmpty(reqCtx)

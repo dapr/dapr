@@ -63,7 +63,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Global Dapr docker image registry                                       | `docker.io/daprio`      |
-| `global.tag`                              | Global Dapr docker image version tag                                    | `0.11.0`                |
+| `global.tag`                              | Global Dapr docker image version tag                                    | `0.11.0`            |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `Always`                |
 | `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
@@ -102,6 +102,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.replicaCount`             | Number of replicas for Dapr Dashboard                                   | `1`                     |
 | `dapr_dashboard.logLevel`                 | Dapr Dashboard service Log level                                        | `info`                  |
 | `dapr_dashboard.image.registry`           | Dapr Dashboard docker registry                                          | `docker.io/daprio`      |
+| `dapr_dashboard.image.imagePullSecret`    | Dapr Dashboard docker image pull secret for docker registry                                          | `docker.io/daprio`      |
 | `dapr_dashboard.image.name`               | Dapr Dashboard docker image name                                        | `dashboard`             |
 | `dapr_dashboard.image.tag`                | Dapr Dashboard docker image tag                                         | `"0.4.0"`               |
 

@@ -12,10 +12,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
+	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
 	comp_exporters "github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/pubsub"
@@ -31,6 +33,7 @@ import (
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -45,6 +48,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -338,6 +342,78 @@ func TestInitState(t *testing.T) {
 		assert.Error(t, err, "expected error")
 		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
 	})
+}
+
+func TestSetupTracing(t *testing.T) {
+	testcases := []struct {
+		name              string
+		tracingConfig     config.TracingSpec
+		hostAddress       string
+		expectedExporters []trace.Exporter
+		expectedErr       string
+	}{{
+		name:          "no trace exporter",
+		tracingConfig: config.TracingSpec{},
+	}, {
+		name:        "bad host address, failing zipkin",
+		hostAddress: "bad:host:address",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+		},
+		expectedErr: "too many colons",
+	}, {
+		name: "zipkin trace exporter",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+		},
+		expectedExporters: []trace.Exporter{&zipkin.Exporter{}},
+	}, {
+		name: "stdout trace exporter",
+		tracingConfig: config.TracingSpec{
+			Stdout: true,
+		},
+		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}},
+	}, {
+		name: "all trace exporters",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+			Stdout: true,
+		},
+		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}},
+	}}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := NewTestDaprRuntime(modes.StandaloneMode)
+			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
+			if tc.hostAddress != "" {
+				rt.hostAddress = tc.hostAddress
+			}
+			// Setup tracing with the fake trace exporter store to confirm
+			// the right exporter was registered.
+			exporterStore := &fakeTraceExporterStore{}
+			if err := rt.setupTracing(rt.hostAddress, exporterStore); tc.expectedErr != "" {
+				assert.Contains(t, err.Error(), tc.expectedErr)
+			} else {
+				assert.Nil(t, err)
+			}
+			for i, exporter := range exporterStore.exporters {
+				// Exporter types don't expose internals, so we can only validate that
+				// the right type of  exporter was registered.
+				assert.Equal(t, reflect.TypeOf(tc.expectedExporters[i]), reflect.TypeOf(exporter))
+			}
+			// Setup tracing with the OpenCensus global exporter store.
+			// We have no way to validate the result, but we can at least
+			// confirm that nothing blows up.
+			rt.setupTracing(rt.hostAddress, openCensusExporterStore{})
+		})
+	}
 }
 
 func TestInitPubSub(t *testing.T) {
@@ -1327,8 +1403,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1598,8 +1674,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				routes: map[string]string{
-					topic: topic,
+				routes: map[string]Route{
+					topic: {path: topic},
 				},
 			}
 			var grpcServer *grpc.Server
