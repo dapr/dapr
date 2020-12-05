@@ -56,8 +56,6 @@ require (
 )
 
 replace (
-	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
-
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )
