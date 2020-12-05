@@ -17,6 +17,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
+	"github.com/dapr/dapr/pkg/logger"
 	guuid "github.com/google/uuid"
 )
 
@@ -164,6 +167,30 @@ func HTTPDelete(url string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// UploadAzureBlob takes test output data and saves it to an Azure Blob Storage container
+func UploadAzureBlob(accountName, accessKey, container string, data []byte) error {
+	l := logger.NewLogger("dapr-perf-test")
+	b := blobstorage.NewAzureBlobStorage(l)
+
+	err := b.Init(bindings.Metadata{
+		Properties: map[string]string{
+			"storageAccount":    accountName,
+			"storageAccessKey":  accessKey,
+			"container":         container,
+			"publicAccessLevel": "container",
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = b.Invoke(&bindings.InvokeRequest{
+		Operation: bindings.CreateOperation,
+		Data:      data,
+	})
+	return err
 }
 
 func sanitizeHTTPURL(url string) string {
