@@ -326,7 +326,10 @@ func (a *api) SubscribeEvent(in *runtimev1pb.SubscribeEventRequest, srv runtimev
 			return err
 		}
 		// todo How to do trace??
-		srv.Send(envelope)
+		if err := srv.Send(envelope); err != nil {
+			close(ch)
+			break
+		}
 	}
 
 	return nil

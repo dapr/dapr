@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
+	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/dapr/components-contrib v1.0.0-rc1.0.20201127071554-87933ad4bc4b
@@ -33,6 +34,7 @@ require (
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.3.3
 	github.com/moul/http2curl v1.0.0 // indirect
+	github.com/openzipkin/zipkin-go v0.2.2
 	github.com/phayes/freeport v0.0.0-20171002181615-b8543db493a5
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.8.0
