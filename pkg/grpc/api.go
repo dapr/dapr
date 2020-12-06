@@ -82,7 +82,7 @@ type api struct {
 	secretStores          map[string]secretstores.SecretStore
 	secretsConfiguration  map[string]config.SecretsScope
 	publishFn             func(req *pubsub.PublishRequest) error
-	unmarshalMsgFn        func(msg *pubsub.NewMessage) (*runtimev1pb.TopicEventRequest, *pubsub.CloudEventsEnvelope, error)
+	unmarshalMsgFn        func(msg *pubsub.NewMessage) (*runtimev1pb.SubscribeEventResponse, *pubsub.CloudEventsEnvelope, error)
 	pubsubs               map[string]pubsub.PubSub
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -99,7 +99,7 @@ func NewAPI(
 	secretsConfiguration map[string]config.SecretsScope,
 	publishFn func(req *pubsub.PublishRequest) error,
 	pubsubs map[string]pubsub.PubSub,
-	unmarshalMsgFn func(msg *pubsub.NewMessage) (*runtimev1pb.TopicEventRequest, *pubsub.CloudEventsEnvelope, error),
+	unmarshalMsgFn func(msg *pubsub.NewMessage) (*runtimev1pb.SubscribeEventResponse, *pubsub.CloudEventsEnvelope, error),
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
@@ -318,7 +318,7 @@ func (a *api) SubscribeEvent(in *runtimev1pb.SubscribeEventRequest, srv runtimev
 	// loop chan
 	for c := range ch {
 		var (
-			envelope *runtimev1pb.TopicEventRequest
+			envelope *runtimev1pb.SubscribeEventResponse
 			//cloudEvent *pubsub.CloudEventsEnvelope
 			err error
 		)

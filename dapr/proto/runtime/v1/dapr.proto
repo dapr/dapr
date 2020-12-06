@@ -10,7 +10,6 @@ package dapr.proto.runtime.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "dapr/proto/common/v1/common.proto";
-import "dapr/proto/runtime/v1/appcallback.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -44,7 +43,7 @@ service Dapr {
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
 
   // Subscribes events to the specific topic.
-  rpc SubscribeEvent(SubscribeEventRequest) returns (stream TopicEventRequest) {}
+  rpc SubscribeEvent(SubscribeEventRequest) returns (stream SubscribeEventResponse) {}
 
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
@@ -196,7 +195,7 @@ message PublishEventRequest {
   string data_content_type = 4;
 }
 
-// PublishEventRequest is the message to publish event data to pubsub topic
+// SubscribeEventRequest is the message to subscribe event data
 message SubscribeEventRequest {
   // The name of the pubsub component
   string pubsub_name = 1;
@@ -209,6 +208,40 @@ message SubscribeEventRequest {
   // metadata property:
   // - key : the key of the message.
   map<string,string> metadata = 3;
+}
+
+// SubscribeEventResponse message is compatible with CloudEvent spec v1.0
+// https://github.com/cloudevents/spec/blob/v1.0/spec.md
+message SubscribeEventResponse {
+  // id identifies the event. Producers MUST ensure that source + id
+  // is unique for each distinct event. If a duplicate event is re-sent
+  // (e.g. due to a network error) it MAY have the same id.
+  string id = 1;
+
+  // source identifies the context in which an event happened.
+  // Often this will include information such as the type of the
+  // event source, the organization publishing the event or the process
+  // that produced the event. The exact syntax and semantics behind
+  // the data encoded in the URI is defined by the event producer.
+  string source = 2;
+
+  // The type of event related to the originating occurrence.
+  string type = 3;
+
+  // The version of the CloudEvents specification.
+  string spec_version = 4;
+
+  // The content type of data value.
+  string data_content_type = 5;
+
+  // The content of the event.
+  bytes data = 7;
+
+  // The pubsub topic which publisher sent to.
+  string topic = 6;
+
+  // The name of the pubsub the publisher sent to.
+  string pubsub_name = 8;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings
