@@ -11,6 +11,7 @@ const (
 	ErrStateGet                 = "fail to get %s from state store %s: %s"
 	ErrStateDelete              = "failed deleting state with key %s: %s"
 	ErrStateSave                = "failed saving state in state store %s: %s"
+	ErrStateWatch               = "failed watch state in state store %s of key %s. %v"
 
 	// StateTransaction
 	ErrStateStoreNotSupported     = "state store %s doesn't support transaction"
@@ -27,6 +28,7 @@ const (
 	ErrPubsubCloudEventsSer = "error when marshal cloud event envelop for topic %s pubsub %s: %s"
 	ErrPubsubPublishMessage = "error when publish to topic %s in pubsub %s: %s"
 	ErrPubsubForbidden      = "topic %s is not allowed for app id %s"
+	ErrPubsubSubscribe      = "failed subscribe pubsub in pubsub %s for topic %s. %v"
 
 	// AppChannel
 	ErrChannelNotFound       = "app channel is not initialized"

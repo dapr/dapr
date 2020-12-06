@@ -707,7 +707,7 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
-		a.getPublishAdapter(), a.directMessaging, a.actor,
+		a.getPublishAdapter(), a.pubSubs, a.unmarshalMessageGRPC, a.directMessaging, a.actor,
 		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol))
 }
 
@@ -1142,32 +1142,14 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 }
 
 func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
-	var cloudEvent pubsub.CloudEventsEnvelope
-	err := a.json.Unmarshal(msg.Data, &cloudEvent)
-	if err != nil {
-		log.Debugf("error deserializing cloud events proto: %s", err)
+	var (
+		envelope   *runtimev1pb.TopicEventRequest
+		cloudEvent *pubsub.CloudEventsEnvelope
+		err        error
+	)
+	if envelope, cloudEvent, err = a.unmarshalMessageGRPC(msg); err != nil {
 		return err
 	}
-
-	envelope := &runtimev1pb.TopicEventRequest{
-		Id:              cloudEvent.ID,
-		Source:          cloudEvent.Source,
-		DataContentType: cloudEvent.DataContentType,
-		Type:            cloudEvent.Type,
-		SpecVersion:     cloudEvent.SpecVersion,
-		Topic:           msg.Topic,
-		PubsubName:      msg.Metadata[pubsubName],
-	}
-
-	if cloudEvent.Data != nil {
-		envelope.Data = nil
-		if cloudEvent.DataContentType == "text/plain" {
-			envelope.Data = []byte(cloudEvent.Data.(string))
-		} else if cloudEvent.DataContentType == "application/json" {
-			envelope.Data, _ = a.json.Marshal(cloudEvent.Data)
-		}
-	}
-
 	// subject contains the correlationID which is passed span context
 	subject := cloudEvent.Subject
 	sc, _ := diag.SpanContextFromW3CString(subject)
@@ -1215,6 +1197,35 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	}
 	// Consider unknown status field as error and retry
 	return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, res.GetStatus())
+}
+
+func (a *DaprRuntime) unmarshalMessageGRPC(msg *pubsub.NewMessage) (*runtimev1pb.TopicEventRequest, *pubsub.CloudEventsEnvelope, error) {
+	var cloudEvent pubsub.CloudEventsEnvelope
+	err := a.json.Unmarshal(msg.Data, &cloudEvent)
+	if err != nil {
+		log.Debugf("error deserializing cloud events proto: %s", err)
+		return nil, nil, err
+	}
+
+	envelope := &runtimev1pb.TopicEventRequest{
+		Id:              cloudEvent.ID,
+		Source:          cloudEvent.Source,
+		DataContentType: cloudEvent.DataContentType,
+		Type:            cloudEvent.Type,
+		SpecVersion:     cloudEvent.SpecVersion,
+		Topic:           msg.Topic,
+		PubsubName:      msg.Metadata[pubsubName],
+	}
+
+	if cloudEvent.Data != nil {
+		envelope.Data = nil
+		if cloudEvent.DataContentType == "text/plain" {
+			envelope.Data = []byte(cloudEvent.Data.(string))
+		} else if cloudEvent.DataContentType == "application/json" {
+			envelope.Data, _ = a.json.Marshal(cloudEvent.Data)
+		}
+	}
+	return envelope, &cloudEvent, nil
 }
 
 func (a *DaprRuntime) initActors() error {

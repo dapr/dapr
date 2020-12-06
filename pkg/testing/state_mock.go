@@ -8,6 +8,8 @@
 package testing
 
 import (
+	"fmt"
+
 	state "github.com/dapr/components-contrib/state"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -80,6 +82,10 @@ func (_m *MockStateStore) Get(req *state.GetRequest) (*state.GetResponse, error)
 	}
 
 	return r0, r1
+}
+
+func (_m *MockStateStore) Watch(req *state.GetRequest, handler func(msg *state.GetResponse) error) error {
+	return fmt.Errorf("unimplement the feature of store.Watch.")
 }
 
 func (_m *MockStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {

@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dapr/components-contrib/state/rethinkdb"
+
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/runtime"
 
@@ -44,7 +46,6 @@ import (
 	"github.com/dapr/components-contrib/state/mongodb"
 	"github.com/dapr/components-contrib/state/postgresql"
 	state_redis "github.com/dapr/components-contrib/state/redis"
-	"github.com/dapr/components-contrib/state/rethinkdb"
 	"github.com/dapr/components-contrib/state/sqlserver"
 	"github.com/dapr/components-contrib/state/zookeeper"
 	state_loader "github.com/dapr/dapr/pkg/components/state"

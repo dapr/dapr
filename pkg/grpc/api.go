@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
@@ -51,6 +52,7 @@ type API interface {
 
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error)
+	SubscribeEvent(in *runtimev1pb.SubscribeEventRequest, srv runtimev1pb.Dapr_SubscribeEventServer) error
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
@@ -58,6 +60,7 @@ type API interface {
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
+	WatchState(in *runtimev1pb.GetStateRequest, srv runtimev1pb.Dapr_WatchStateServer) error
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
@@ -79,6 +82,8 @@ type api struct {
 	secretStores          map[string]secretstores.SecretStore
 	secretsConfiguration  map[string]config.SecretsScope
 	publishFn             func(req *pubsub.PublishRequest) error
+	unmarshalMsgFn        func(msg *pubsub.NewMessage) (*runtimev1pb.TopicEventRequest, *pubsub.CloudEventsEnvelope, error)
+	pubsubs               map[string]pubsub.PubSub
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
@@ -93,6 +98,8 @@ func NewAPI(
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
 	publishFn func(req *pubsub.PublishRequest) error,
+	pubsubs map[string]pubsub.PubSub,
+	unmarshalMsgFn func(msg *pubsub.NewMessage) (*runtimev1pb.TopicEventRequest, *pubsub.CloudEventsEnvelope, error),
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
@@ -105,6 +112,8 @@ func NewAPI(
 		id:                    appID,
 		appChannel:            appChannel,
 		publishFn:             publishFn,
+		unmarshalMsgFn:        unmarshalMsgFn,
+		pubsubs:               pubsubs,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
 		secretsConfiguration:  secretsConfiguration,
@@ -252,6 +261,75 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &empty.Empty{}, nerr
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) SubscribeEvent(in *runtimev1pb.SubscribeEventRequest, srv runtimev1pb.Dapr_SubscribeEventServer) error {
+	pubsubName := in.PubsubName
+	if pubsubName == "" {
+		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return err
+	}
+
+	topic := in.Topic
+	if topic == "" {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
+		apiServerLogger.Debug(err)
+		return err
+	}
+	var (
+		pubsubInstance pubsub.PubSub
+		ok             bool
+	)
+	if pubsubInstance, ok = a.pubsubs[pubsubName]; !ok {
+		return runtime_pubsub.NotFoundError{PubsubName: pubsubName}
+	}
+
+	req := pubsub.SubscribeRequest{
+		Topic:    in.Topic,
+		Metadata: in.Metadata,
+	}
+	defer func() {
+		if err := recover(); err != nil {
+			apiServerLogger.Infof("the request/stream of sub is fail for some reason: %+v.", err)
+		} else {
+			apiServerLogger.Infof("the request/stream of sub is over for some reason.")
+		}
+		trailer := metadata.Pairs("finish", "true", "timestamp", time.Now().Format(time.StampNano))
+		srv.SetTrailer(trailer)
+	}()
+
+	ch := make(chan *pubsub.NewMessage)
+
+	err := pubsubInstance.Subscribe(req, func(msg *pubsub.NewMessage) error {
+		if msg.Metadata == nil {
+			msg.Metadata = make(map[string]string, 1)
+		}
+		msg.Metadata[pubsubName] = pubsubName
+		ch <- msg
+		return nil
+	})
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrPubsubSubscribe, in.PubsubName, in.Topic, err.Error())
+		apiServerLogger.Debug(err)
+		close(ch)
+		return err
+	}
+	// loop chan
+	for c := range ch {
+		var (
+			envelope *runtimev1pb.TopicEventRequest
+			//cloudEvent *pubsub.CloudEventsEnvelope
+			err error
+		)
+		if envelope, _, err = a.unmarshalMsgFn(c); err != nil {
+			return err
+		}
+		// todo How to do trace??
+		srv.Send(envelope)
+	}
+
+	return nil
 }
 
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
@@ -485,6 +563,55 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+func (a *api) WatchState(in *runtimev1pb.GetStateRequest, ss runtimev1pb.Dapr_WatchStateServer) error {
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return err
+	}
+
+	req := state.GetRequest{
+		Key:      a.getModifiedStateKey(in.Key),
+		Metadata: in.Metadata,
+		Options: state.GetStateOption{
+			Consistency: stateConsistencyToString(in.Consistency),
+		},
+	}
+	defer func() {
+		if err := recover(); err != nil {
+			apiServerLogger.Infof("the request/stream is fail for some reason: %+v.", err)
+		} else {
+			apiServerLogger.Infof("the request/stream is over for some reason.")
+		}
+		trailer := metadata.Pairs("finish", "true", "timestamp", time.Now().Format(time.StampNano))
+		ss.SetTrailer(trailer)
+	}()
+
+	ch := make(chan *state.GetResponse)
+
+	err = store.Watch(&req, func(response *state.GetResponse) error {
+		ch <- response
+		return nil
+	})
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrStateWatch, in.Key, in.StoreName, err.Error())
+		apiServerLogger.Debug(err)
+		close(ch)
+		return err
+	}
+	// loop chan
+	for c := range ch {
+		r := &runtimev1pb.GetStateResponse{
+			Data:     c.Data,
+			Metadata: c.Metadata,
+			Etag:     c.ETag,
+		}
+		ss.Send(r)
+	}
+
+	return nil
 }
 
 func (a *api) getModifiedStateKey(key string) string {
