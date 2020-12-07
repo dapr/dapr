@@ -18,6 +18,7 @@ import (
 
 	nethttp "net/http"
 
+	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
@@ -56,6 +57,8 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
+	openzipkin "github.com/openzipkin/zipkin-go"
+	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
@@ -227,12 +230,28 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	return nil, nil
 }
 
-func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
+// setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
+// but we do so here to explicitly call out the dependency on having `hostAddress` computed.
+func (a *DaprRuntime) setupTracing(hostAddress string, exporters traceExporterStore) error {
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
 	if a.globalConfig.Spec.TracingSpec.Stdout {
-		trace.RegisterExporter(&diag_utils.StdoutExporter{})
+		exporters.RegisterExporter(&diag_utils.StdoutExporter{})
 	}
 
+	// Register zipkin trace exporter if ZipkinSpec is specified
+	if a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress != "" {
+		localEndpoint, err := openzipkin.NewEndpoint(a.runtimeConfig.ID, hostAddress)
+		if err != nil {
+			return err
+		}
+		reporter := zipkinreporter.NewReporter(a.globalConfig.Spec.TracingSpec.Zipkin.EndpointAddress)
+		exporter := zipkin.NewExporter(reporter, localEndpoint)
+		exporters.RegisterExporter(exporter)
+	}
+	return nil
+}
+
+func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Initialize metrics only if MetricSpec is enabled.
 	if a.globalConfig.Spec.MetricSpec.Enabled {
 		if err := diag.InitMetrics(a.runtimeConfig.ID); err != nil {
@@ -250,11 +269,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	a.hostAddress, err = utils.GetHostAddress()
-	if err != nil {
+	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return errors.Wrap(err, "failed to determine host address")
 	}
-
+	if err = a.setupTracing(a.hostAddress, openCensusExporterStore{}); err != nil {
+		return errors.Wrap(err, "failed to setup tracing")
+	}
 	// Register and initialize name resolution for service discovery.
 	a.nameResolutionRegistry.Register(opts.nameResolutions...)
 	err = a.initNameResolution()
