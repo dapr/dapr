@@ -91,7 +91,6 @@ const (
 	nameParam            = "name"
 	consistencyParam     = "consistency"
 	concurrencyParam     = "concurrency"
-	daprSeparator        = "||"
 	pubsubnameparam      = "pubsubname"
 	traceparentHeader    = "traceparent"
 	tracestateHeader     = "tracestate"

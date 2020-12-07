@@ -39,7 +39,6 @@ import (
 )
 
 const (
-	daprSeparator        = "||"
 	daprHTTPStatusHeader = "dapr-http-status"
 )
 
