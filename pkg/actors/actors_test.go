@@ -61,7 +61,7 @@ func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) 
 }
 
 func (f *fakeStateStore) Watch(req *state.GetRequest, handler func(msg *state.GetResponse) error) error {
-	return fmt.Errorf("unimplement the feature of store.Watch.")
+	return fmt.Errorf("unimplement the feature of store.Watch")
 }
 
 func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {

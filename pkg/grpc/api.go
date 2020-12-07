@@ -319,7 +319,7 @@ func (a *api) SubscribeEvent(in *runtimev1pb.SubscribeEventRequest, srv runtimev
 	for c := range ch {
 		var (
 			envelope *runtimev1pb.SubscribeEventResponse
-			//cloudEvent *pubsub.CloudEventsEnvelope
+			// cloudEvent *pubsub.CloudEventsEnvelope
 			err error
 		)
 		if envelope, _, err = a.unmarshalMsgFn(c); err != nil {
