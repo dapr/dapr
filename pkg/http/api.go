@@ -19,6 +19,7 @@ import (
 	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
+	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -357,7 +358,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
-	store, err := a.getStateStoreWithRequestValidation(reqCtx)
+	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
 		log.Debug(err)
 		return
@@ -385,7 +386,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
 		r := state.GetRequest{
-			Key:      a.getModifiedStateKey(k),
+			Key:      state_loader.GetModifiedStateKey(k, storeName, a.id),
 			Metadata: req.Metadata,
 		}
 		reqs[i] = r
@@ -402,7 +403,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		for i := 0; i < len(responses) && i < len(req.Keys); i++ {
-			bulkResp[i].Key = a.getOriginalStateKey(responses[i].Key)
+			bulkResp[i].Key = state_loader.GetOriginalStateKey(responses[i].Key)
 			if responses[i].Error != "" {
 				log.Debugf("bulk get: error getting key %s: %s", bulkResp[i].Key, responses[i].Error)
 				bulkResp[i].Error = responses[i].Error
@@ -421,7 +422,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 			fn := func(param interface{}) {
 				r := param.(*BulkGetResponse)
 				gr := &state.GetRequest{
-					Key:      a.getModifiedStateKey(r.Key),
+					Key:      state_loader.GetModifiedStateKey(r.Key, storeName, a.id),
 					Metadata: metadata,
 				}
 
@@ -444,12 +445,12 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	respondWithJSON(reqCtx, fasthttp.StatusOK, b)
 }
 
-func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, error) {
+func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		msg := NewErrorResponse("ERR_STATE_STORES_NOT_CONFIGURED", messages.ErrStateStoresNotConfigured)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
-		return nil, errors.New(msg.Message)
+		return nil, "", errors.New(msg.Message)
 	}
 
 	storeName := a.getStateStoreName(reqCtx)
@@ -458,13 +459,13 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrStateStoreNotFound, storeName))
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
-		return nil, errors.New(msg.Message)
+		return nil, "", errors.New(msg.Message)
 	}
-	return a.stateStores[storeName], nil
+	return a.stateStores[storeName], storeName, nil
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
-	store, err := a.getStateStoreWithRequestValidation(reqCtx)
+	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
 		log.Debug(err)
 		return
@@ -475,7 +476,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	req := state.GetRequest{
-		Key: a.getModifiedStateKey(key),
+		Key: state_loader.GetModifiedStateKey(key, storeName, a.id),
 		Options: state.GetStateOption{
 			Consistency: consistency,
 		},
@@ -498,7 +499,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
-	store, err := a.getStateStoreWithRequestValidation(reqCtx)
+	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
 		log.Debug(err)
 		return
@@ -513,7 +514,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 
 	req := state.DeleteRequest{
-		Key:  a.getModifiedStateKey(key),
+		Key:  state_loader.GetModifiedStateKey(key, storeName, a.id),
 		ETag: etag,
 		Options: state.DeleteStateOption{
 			Concurrency: concurrency,
@@ -583,7 +584,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
-	store, err := a.getStateStoreWithRequestValidation(reqCtx)
+	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
 		log.Debug(err)
 		return
@@ -599,7 +600,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	for i, r := range reqs {
-		reqs[i].Key = a.getModifiedStateKey(r.Key)
+		reqs[i].Key = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
 	}
 
 	err = store.BulkSet(reqs)
@@ -616,25 +617,6 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 	return reqCtx.UserValue(storeNameParam).(string)
-}
-
-func (a *api) getModifiedStateKey(key string) string {
-	if a.id != "" {
-		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
-	}
-
-	return key
-}
-
-func (a *api) getOriginalStateKey(modifiedStateKey string) string {
-	if a.id != "" {
-		splits := strings.Split(modifiedStateKey, daprSeparator)
-		if len(splits) < 1 {
-			return modifiedStateKey
-		}
-		return splits[1]
-	}
-	return modifiedStateKey
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
@@ -1188,7 +1170,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(msg)
 				return
 			}
-			upsertReq.Key = a.getModifiedStateKey(upsertReq.Key)
+			upsertReq.Key = state_loader.GetModifiedStateKey(upsertReq.Key, storeName, a.id)
 			operations = append(operations, state.TransactionalStateOperation{
 				Request:   upsertReq,
 				Operation: state.Upsert,
@@ -1202,7 +1184,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(msg)
 				return
 			}
-			delReq.Key = a.getModifiedStateKey(delReq.Key)
+			delReq.Key = state_loader.GetModifiedStateKey(delReq.Key, storeName, a.id)
 			operations = append(operations, state.TransactionalStateOperation{
 				Request:   delReq,
 				Operation: state.Delete,
