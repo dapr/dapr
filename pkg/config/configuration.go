@@ -117,8 +117,14 @@ type SelectorField struct {
 }
 
 type TracingSpec struct {
-	SamplingRate string `json:"samplingRate" yaml:"samplingRate"`
-	Stdout       bool   `json:"stdout" yaml:"stdout"`
+	SamplingRate string     `json:"samplingRate" yaml:"samplingRate"`
+	Stdout       bool       `json:"stdout" yaml:"stdout"`
+	Zipkin       ZipkinSpec `json:"zipkin" yaml:"zipkin"`
+}
+
+// ZipkinSpec defines Zipkin trace configurations
+type ZipkinSpec struct {
+	EndpointAddress string `json:"endpointAddress"`
 }
 
 // MetricSpec configuration for metrics
