@@ -31,6 +31,7 @@ import (
 	// State Stores
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/aerospike"
+	state_dynamodb "github.com/dapr/components-contrib/state/aws/dynamodb"
 	state_azure_blobstorage "github.com/dapr/components-contrib/state/azure/blobstorage"
 	state_cosmosdb "github.com/dapr/components-contrib/state/azure/cosmosdb"
 	state_azure_tablestorage "github.com/dapr/components-contrib/state/azure/tablestorage"
@@ -208,6 +209,7 @@ func main() {
 			state_loader.New("rethinkdb", func() state.Store {
 				return rethinkdb.NewRethinkDBStateStore(logContrib)
 			}),
+			state_loader.New("aws.dynamodb", state_dynamodb.NewDynamoDBStateStore),
 		),
 		runtime.WithPubSubs(
 			pubsub_loader.New("redis", func() pubs.PubSub {
