@@ -9,19 +9,26 @@ package utils
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/tests/perf"
 	guuid "github.com/google/uuid"
 )
+
+const GitHubRunID = "GITHUB_RUN_ID"
+const GitHubSHA = "GITHUB_SHA"
+const GitHubREF = "GITHUB_REF"
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
 type SimpleKeyValue struct {
@@ -170,14 +177,33 @@ func HTTPDelete(url string) ([]byte, error) {
 }
 
 // UploadAzureBlob takes test output data and saves it to an Azure Blob Storage container
-func UploadAzureBlob(accountName, accessKey, container string, data []byte) error {
-	l := logger.NewLogger("dapr-perf-test")
-	b := blobstorage.NewAzureBlobStorage(l)
+func UploadAzureBlob(tests []perf.TestResult, testName, daprConsumedMemory, daprConsumedCPU string) error {
+	accountName, accountKey := os.Getenv("AZURE_STORAGE_ACCOUNT"), os.Getenv("AZURE_STORAGE_ACCESS_KEY")
+	if len(accountName) == 0 || len(accountKey) == 0 {
+		return nil
+	}
 
-	err := b.Init(bindings.Metadata{
+	now := time.Now().UTC()
+	y := now.Year()
+	m := now.Month()
+	d := now.Day()
+
+	container := fmt.Sprintf("%v-%v-%v", int(m), d, y)
+
+	r := perf.NewTestReport(tests, testName, os.Getenv(GitHubSHA), os.Getenv(GitHubREF), os.Getenv(GitHubRunID), daprConsumedMemory, daprConsumedCPU)
+
+	b, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+
+	l := logger.NewLogger("dapr-perf-test")
+	azblob := blobstorage.NewAzureBlobStorage(l)
+
+	err = azblob.Init(bindings.Metadata{
 		Properties: map[string]string{
 			"storageAccount":    accountName,
-			"storageAccessKey":  accessKey,
+			"storageAccessKey":  accountKey,
 			"container":         container,
 			"publicAccessLevel": "container",
 		},
@@ -186,9 +212,13 @@ func UploadAzureBlob(accountName, accessKey, container string, data []byte) erro
 		return err
 	}
 
-	_, err = b.Invoke(&bindings.InvokeRequest{
+	filename := fmt.Sprintf("%s-%v-%v-%v", testName, now.Hour(), time.Hour.Minutes(), time.Hour.Seconds())
+	_, err = azblob.Invoke(&bindings.InvokeRequest{
 		Operation: bindings.CreateOperation,
-		Data:      data,
+		Data:      b,
+		Metadata: map[string]string{
+			"blobName": filename,
+		},
 	})
 	return err
 }

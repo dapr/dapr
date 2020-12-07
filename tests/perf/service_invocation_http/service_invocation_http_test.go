@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -123,7 +122,8 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
 
-	err = saveResults(baselineResult, daprResult)
+	err = utils.UploadAzureBlob([]perf.TestResult{baselineResult, daprResult}, "Service Invocation",
+		fmt.Sprintf("%vMB", usage.MemoryMb), fmt.Sprintf("%vm", usage.CPUm))
 	if err != nil {
 		t.Error(err)
 	}
@@ -132,28 +132,4 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
 	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
-}
-
-func saveResults(baseline, dapr perf.TestResult) error {
-	l := []perf.TestResult{
-		baseline,
-		dapr,
-	}
-
-	accountName, accountKey := os.Getenv("AZURE_STORAGE_ACCOUNT"), os.Getenv("AZURE_STORAGE_ACCESS_KEY")
-	if len(accountName) > 0 && len(accountKey) > 0 {
-		now := time.Now().UTC()
-		y := now.Year()
-		m := now.Month()
-		d := now.Day()
-
-		container := fmt.Sprintf("%v-%v-%v", int(m), d, y)
-
-		b, err := json.Marshal(l)
-		if err != nil {
-			return err
-		}
-		return utils.UploadAzureBlob(accountName, accountKey, container, b)
-	}
-	return nil
 }
