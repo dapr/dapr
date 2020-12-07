@@ -46,9 +46,14 @@ type individualTestResult struct {
 	CallSuccessful bool   `json:"callSuccessful"`
 }
 
-const numHealthChecks = 60 // Number of times to call the endpoint to check for health.
+const (
+	numHealthChecks = 60 // Number of times to call the endpoint to check for health.
+)
 
-var tr *runner.TestRunner
+var (
+	tr                 *runner.TestRunner
+	secondaryNamespace = "dapr-tests-2"
+)
 
 func TestMain(m *testing.M) {
 	// These apps will be deployed for hellodapr test before starting actual test
@@ -81,6 +86,23 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc",
 			Replicas:       1,
 			IngressEnabled: false,
+			AppProtocol:    "grpc",
+		},
+		{
+			AppName:        "secondary-ns-http",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation",
+			Replicas:       1,
+			IngressEnabled: false,
+			Namespace:      &secondaryNamespace,
+		},
+		{
+			AppName:        "secondary-ns-grpc",
+			DaprEnabled:    true,
+			ImageName:      "e2e-service_invocation_grpc",
+			Replicas:       1,
+			IngressEnabled: false,
+			Namespace:      &secondaryNamespace,
 			AppProtocol:    "grpc",
 		},
 	}
@@ -143,6 +165,39 @@ var moreServiceinvocationTests = []struct {
 	{
 		"Test gRPC to gRPC",
 		"grpcapp",
+		"grpctogrpctest",
+		"success",
+	},
+}
+
+var crossNamespaceTests = []struct {
+	in               string
+	remoteApp        string
+	appMethod        string
+	expectedResponse string
+}{
+	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
+	{
+		"Test HTTP to HTTP",
+		"secondary-ns-http",
+		"httptohttptest",
+		"success",
+	},
+	{
+		"Test HTTP to gRPC",
+		"secondary-ns-grpc",
+		"httptogrpctest",
+		"success",
+	},
+	{
+		"Test gRPC to HTTP",
+		"secondary-ns-http",
+		"grpctohttptest",
+		"success",
+	},
+	{
+		"Test gRPC to gRPC",
+		"secondary-ns-grpc",
 		"grpctogrpctest",
 		"success",
 	},
@@ -811,4 +866,43 @@ func TestNegativeCases(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestCrossNamespaceCases(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for _, tt := range crossNamespaceTests {
+		remoteAppFQ := fmt.Sprintf("%s.%s", tt.remoteApp, secondaryNamespace)
+		t.Run(tt.in, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: remoteAppFQ,
+				Method:    tt.appMethod,
+			})
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
+
+			t.Logf("url is '%s'\n", url)
+			resp, err := utils.HTTPPost(
+				url,
+				body)
+
+			t.Log("checking err...")
+			require.NoError(t, err)
+
+			var appResp appResponse
+			t.Logf("unmarshalling..%s\n", string(resp))
+			err = json.Unmarshal(resp, &appResp)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedResponse, appResp.Message)
+		})
+	}
 }
