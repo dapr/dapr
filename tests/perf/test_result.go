@@ -70,3 +70,31 @@ type TestResult struct {
 	SocketCount int    `json:"SocketCount"`
 	AbortOn     int    `json:"AbortOn"`
 }
+
+type TestReport struct {
+	Results     []TestResult `json:"Results"`
+	TestName    string       `json:"TestName"`
+	GitHubSHA   string       `json:"GitHubSHA,omitempty"`
+	GitHubREF   string       `json:"GitHubREF,omitempty"`
+	GitHubRunID string       `json:"GitHubRunID,omitempty"`
+	Metrics     testMetrics  `json:"Metrics"`
+}
+
+type testMetrics struct {
+	DaprConsumedMemory string `json:"DaprConsumedMemory"`
+	DaprConsumedCPU    string `json:"DaprConsumedCPU"`
+}
+
+func NewTestReport(results []TestResult, name, sha, ref, runID, memory, cpu string) *TestReport {
+	return &TestReport{
+		Results:     results,
+		TestName:    name,
+		GitHubSHA:   sha,
+		GitHubREF:   ref,
+		GitHubRunID: runID,
+		Metrics: testMetrics{
+			DaprConsumedCPU:    cpu,
+			DaprConsumedMemory: memory,
+		},
+	}
+}
