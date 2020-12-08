@@ -124,7 +124,7 @@ type TracingSpec struct {
 
 // ZipkinSpec defines Zipkin trace configurations
 type ZipkinSpec struct {
-	EndpointAddress string `json:"endpointAddress"`
+	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 }
 
 // MetricSpec configuration for metrics
