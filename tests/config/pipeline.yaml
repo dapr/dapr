@@ -1,0 +1,11 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pipeline
+spec:
+  tracing:
+    samplingRate: "1"
+  httpPipeline:
+    handlers:
+    - type: middleware.http.uppercase
+      name: uppercase
