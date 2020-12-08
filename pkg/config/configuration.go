@@ -197,6 +197,7 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 	if err != nil {
 		return nil, "", err
 	}
+
 	conf := LoadDefaultConfiguration()
 	err = yaml.Unmarshal(b, conf)
 	if err != nil {
