@@ -124,7 +124,7 @@ type TracingSpec struct {
 
 // ZipkinSpec defines Zipkin trace configurations
 type ZipkinSpec struct {
-	EndpointAddress string `json:"endpointAddress"`
+	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 }
 
 // MetricSpec configuration for metrics
@@ -197,7 +197,6 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 	if err != nil {
 		return nil, "", err
 	}
-
 	conf := LoadDefaultConfiguration()
 	err = yaml.Unmarshal(b, conf)
 	if err != nil {
