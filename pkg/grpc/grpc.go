@@ -128,6 +128,10 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 		return nil, err
 	}
 
+	if c, ok := g.connectionPool[address]; ok {
+		c.Close()
+	}
+
 	g.connectionPool[address] = conn
 	g.lock.Unlock()
 

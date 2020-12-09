@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 	yaml "gopkg.in/yaml.v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -43,7 +44,12 @@ const (
 	GRPCProtocol        = "grpc"
 )
 
+// Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
+	metav1.TypeMeta `json:",inline" yaml:",inline"`
+	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
+	metav1.ObjectMeta `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 }
 
@@ -111,8 +117,14 @@ type SelectorField struct {
 }
 
 type TracingSpec struct {
-	SamplingRate string `json:"samplingRate" yaml:"samplingRate"`
-	Stdout       bool   `json:"stdout" yaml:"stdout"`
+	SamplingRate string     `json:"samplingRate" yaml:"samplingRate"`
+	Stdout       bool       `json:"stdout" yaml:"stdout"`
+	Zipkin       ZipkinSpec `json:"zipkin" yaml:"zipkin"`
+}
+
+// ZipkinSpec defines Zipkin trace configurations
+type ZipkinSpec struct {
+	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 }
 
 // MetricSpec configuration for metrics
@@ -175,28 +187,28 @@ func LoadDefaultConfiguration() *Configuration {
 }
 
 // LoadStandaloneConfiguration gets the path to a config file and loads it into a configuration
-func LoadStandaloneConfiguration(config string) (*Configuration, error) {
+func LoadStandaloneConfiguration(config string) (*Configuration, string, error) {
 	_, err := os.Stat(config)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	b, err := ioutil.ReadFile(config)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	conf := LoadDefaultConfiguration()
 	err = yaml.Unmarshal(b, conf)
 	if err != nil {
-		return nil, err
+		return nil, string(b), err
 	}
 	err = sortAndValidateSecretsConfiguration(conf)
 	if err != nil {
-		return nil, err
+		return nil, string(b), err
 	}
 
-	return conf, nil
+	return conf, string(b), nil
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name

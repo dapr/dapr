@@ -47,7 +47,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			config, err := LoadStandaloneConfiguration(tc.path)
+			config, _, err := LoadStandaloneConfiguration(tc.path)
 			if tc.errorExpected {
 				assert.Error(t, err, "Expected an error")
 				assert.Nil(t, config, "Config should not be loaded")
@@ -57,6 +57,16 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadStandaloneConfigurationKindName(t *testing.T) {
+	t.Run("test Kind and Name", func(t *testing.T) {
+		config, _, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+		assert.NoError(t, err, "Unexpected error")
+		assert.NotNil(t, config, "Config not loaded as expected")
+		assert.Equal(t, "secretappconfig", config.ObjectMeta.Name)
+		assert.Equal(t, "Configuration", config.TypeMeta.Kind)
+	})
 }
 
 func TestMetricSpecForStandAlone(t *testing.T) {
@@ -79,7 +89,7 @@ func TestMetricSpecForStandAlone(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			config, err := LoadStandaloneConfiguration(tc.confFile)
+			config, _, err := LoadStandaloneConfiguration(tc.confFile)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
 		})
