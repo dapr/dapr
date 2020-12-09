@@ -20,7 +20,6 @@ import (
 
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
@@ -32,7 +31,6 @@ import (
 	http_channel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
-	exporter_loader "github.com/dapr/dapr/pkg/components/exporters"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -81,7 +79,6 @@ type ComponentCategory string
 
 const (
 	bindingsComponent           ComponentCategory = "bindings"
-	exporterComponent           ComponentCategory = "exporters"
 	pubsubComponent             ComponentCategory = "pubsub"
 	secretStoreComponent        ComponentCategory = "secretstores"
 	stateComponent              ComponentCategory = "state"
@@ -90,7 +87,6 @@ const (
 
 var componentCategoriesNeedProcess = []ComponentCategory{
 	bindingsComponent,
-	exporterComponent,
 	pubsubComponent,
 	secretStoreComponent,
 	stateComponent,
@@ -119,7 +115,6 @@ type DaprRuntime struct {
 	directMessaging        messaging.DirectMessaging
 	stateStoreRegistry     state_loader.Registry
 	secretStoresRegistry   secretstores_loader.Registry
-	exporterRegistry       exporter_loader.Registry
 	nameResolutionRegistry nr_loader.Registry
 	stateStores            map[string]state.Store
 	actor                  actors.Actors
@@ -172,7 +167,6 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		bindingsRegistry:       bindings_loader.NewRegistry(),
 		pubSubRegistry:         pubsub_loader.NewRegistry(),
 		secretStoresRegistry:   secretstores_loader.NewRegistry(),
-		exporterRegistry:       exporter_loader.NewRegistry(),
 		nameResolutionRegistry: nr_loader.NewRegistry(),
 		httpMiddlewareRegistry: http_middleware_loader.NewRegistry(),
 
@@ -281,7 +275,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to init name resolution: %s", err)
 	}
 
-	a.exporterRegistry.Register(opts.exporters...)
 	a.pubSubRegistry.Register(opts.pubsubs...)
 	a.secretStoresRegistry.Register(opts.secretStores...)
 	a.stateStoreRegistry.Register(opts.states...)
@@ -955,28 +948,6 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 	return topicRoutes, nil
 }
 
-func (a *DaprRuntime) initExporter(c components_v1alpha1.Component) error {
-	exporter, err := a.exporterRegistry.Create(c.Spec.Type)
-	if err != nil {
-		log.Warnf("error creating exporter %s: %s", c.Spec.Type, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
-		return err
-	}
-
-	properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
-
-	err = exporter.Init(a.runtimeConfig.ID, a.hostAddress, exporters.Metadata{
-		Properties: properties,
-	})
-	if err != nil {
-		log.Warnf("error initializing exporter %s: %s", c.Spec.Type, err)
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init")
-		return err
-	}
-	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
-	return nil
-}
-
 func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type)
 	if err != nil {
@@ -1396,8 +1367,6 @@ func (a *DaprRuntime) doProcessOneComponent(category ComponentCategory, comp com
 	switch category {
 	case bindingsComponent:
 		return a.initBinding(comp)
-	case exporterComponent:
-		return a.initExporter(comp)
 	case pubsubComponent:
 		return a.initPubSub(comp)
 	case secretStoreComponent:
