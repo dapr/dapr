@@ -19,8 +19,6 @@ import (
 	"testing"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/exporters"
-	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -36,6 +34,7 @@ import (
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
@@ -330,13 +329,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1"}
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
@@ -564,13 +557,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1"}
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -1352,9 +1339,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
-func createExporters(meta exporters.Metadata) {
-	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
-	exporter.Init("fakeID", "fakeAddress", meta)
+func createExporters(buffer *string) {
+	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
+	exporter.Register("fakeID")
 }
 
 func TestV1ActorEndpointsWithTracer(t *testing.T) {
@@ -1363,13 +1350,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1"}
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		actor:       nil,
@@ -1636,13 +1617,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	spec := config.TracingSpec{SamplingRate: "1.0"}
 	pipe := http_middleware.Pipeline{}
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -1731,13 +1706,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 		},
 	})
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -1803,13 +1772,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 		},
 	})
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
