@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/fasthttp/router"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
@@ -216,7 +217,7 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost, fasthttp.MethodDelete, fasthttp.MethodPut},
+			Methods: []string{router.MethodWild},
 			Route:   "invoke/{id}/method/{method:*}",
 			Version: apiVersionV1,
 			Handler: a.onDirectMessage,

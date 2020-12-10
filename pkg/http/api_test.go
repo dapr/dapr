@@ -428,6 +428,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
@@ -456,6 +457,34 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging - HEAD - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodHead, "")
+		fakeReq.WithMetadata(headerMetadata)
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("HEAD", apiPath, nil, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody) // Empty body for HEAD
 	})
 
 	t.Run("Invoke direct messaging without method name - 400 ERR_DIRECT_INVOKE", func(t *testing.T) {
