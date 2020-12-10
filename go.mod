@@ -7,7 +7,7 @@ require (
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/ajg/form v1.5.1 // indirect
-	github.com/dapr/components-contrib v1.0.0-rc1.0.20201127071554-87933ad4bc4b
+	github.com/dapr/components-contrib v1.0.0-rc1.0.20201205153813-d260ec85e66d
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
 	github.com/fasthttp-contrib/websocket v0.0.0-20160511215533-1f3b11f56072 // indirect
 	github.com/fasthttp/router v1.3.2
@@ -74,8 +74,7 @@ require (
 )
 
 replace (
-	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
-	github.com/dapr/components-contrib => github.com/cvictory/components-contrib v1.0.0-rc1.0.20201206124204-b578d6ec0c12
+	github.com/dapr/components-contrib => github.com/cvictory/components-contrib v1.0.0-rc1.0.20201210065127-ebdd6ab65f19
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )

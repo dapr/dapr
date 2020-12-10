@@ -5,7 +5,7 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorclientapp actorfeatures actorinvocationapp runtime runtime_init
+E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorclientapp actorfeatures actorinvocationapp runtime runtime_init middleware
 
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http
@@ -22,6 +22,8 @@ PERF_TESTS=actor_timer actor_activation service_invocation_http
 KUBECTL=kubectl
 
 DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
+
+DAPR_TEST_SECONDARY_NAMESPACE=dapr-tests-2
 
 ifeq ($(DAPR_TEST_NAMESPACE),)
 DAPR_TEST_NAMESPACE=$(DAPR_NAMESPACE)
@@ -87,9 +89,11 @@ endef
 
 create-test-namespace:
 	kubectl create namespace $(DAPR_TEST_NAMESPACE)
+	kubectl create namespace $(DAPR_TEST_SECONDARY_NAMESPACE)
 
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
+	kubectl delete namespace $(DAPR_TEST_SECONDARY_NAMESPACE)
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka
 
@@ -195,6 +199,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_allowlists_grpc_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badhost.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_state_badpass.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
