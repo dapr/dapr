@@ -7,4 +7,3 @@ FROM mcr.microsoft.com/windows/nanoserver:$WINDOWS_VERSION
 # find to keep the container image size small. To keep from doing this rather expensive
 # multistage build every time, we build a small base image and push it to our repo
 COPY --from=servercore /windows/system32/netapi32.dll /windows/system32/netapi32.dll
-ENTRYPOINT []
