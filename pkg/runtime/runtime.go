@@ -1326,22 +1326,27 @@ func (a *DaprRuntime) processComponents() {
 		}
 
 		ch := make(chan error, 1)
-		go func() {
-			ch <- a.processComponentAndDependents(comp)
-		}()
 
 		timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 		if err != nil {
 			timeout = defaultComponentInitTimeout
 		}
 
-		select {
-		case err := <-ch:
-			if err != nil {
-				log.Errorf("process component %s error, %s", comp.Name, err)
+		go func() {
+			select {
+			case ch <- a.processComponentAndDependents(comp):
 			}
-		case <-time.After(timeout):
-			log.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+		}()
+
+		go func() {
+			time.Sleep(timeout)
+			ch <- fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+			close(ch)
+		}()
+
+		err = <-ch
+		if err != nil {
+			log.Error(err.Error())
 		}
 	}
 }
