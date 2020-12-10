@@ -801,9 +801,12 @@ func TestInitPubSub(t *testing.T) {
 		}
 
 		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
+			Metadata:   md,
 		})
 
 		assert.Nil(t, err)
