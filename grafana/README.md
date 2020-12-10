@@ -10,10 +10,10 @@ You can set up [Prometheus](https://docs.dapr.io/operations/monitoring/prometheu
     - Shows Dapr system service status - dapr-operator, dapr-sidecar-injector, dapr-sentry, and dapr-placement
 
 2. [Dapr Sidecar Dashboard](./grafana-sidecar-dashboard.json)
-    - Shows Dapr Sidecar status - sidecar health/resources, throughput/latency of HTTP and gRPC, Actor, mTLS, etc.
+    - Shows Dapr sidecar status - sidecar health/resources, throughput/latency of HTTP and gRPC, Actor, mTLS, etc.
 
 3. [Dapr Actor Dashboard](./grafana-actor-dashboard.json)
-    - Shows Dapr Sidecar status - actor invocation throughput/latency, timer/reminder triggers, and turn-based concurrnecy.
+    - Shows Dapr sidecar status - actor invocation throughput/latency, timer/reminder triggers, and turn-based concurrnecy.
 
 ## Reference
 
