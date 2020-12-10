@@ -1333,9 +1333,7 @@ func (a *DaprRuntime) processComponents() {
 		}
 
 		go func() {
-			select {
-			case ch <- a.processComponentAndDependents(comp):
-			}
+			ch <- a.processComponentAndDependents(comp)
 		}()
 
 		go func() {
