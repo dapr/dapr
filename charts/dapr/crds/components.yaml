@@ -37,6 +37,8 @@ spec:
           spec:
             description: ComponentSpec is the spec for a component
             properties:
+              initTimeout:
+                type: string
               metadata:
                 items:
                   description: MetadataItem is a name/value pair for a metadata

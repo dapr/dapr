@@ -209,7 +209,7 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 
 func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error) {
 	url := fmt.Sprintf("http://localhost:%s/v1.0/invoke/%s/method/%s", strconv.Itoa(daprPort), remoteApp, method)
-	fmt.Printf("invoke url is %s", url)
+	fmt.Printf("invoke url is %s\n", url)
 
 	var t io.Reader = nil
 	if data != nil {
@@ -771,7 +771,7 @@ func httpToGrpcTest(w http.ResponseWriter, r *http.Request) {
 // and expects the response to contain the same string inside an appResponse.
 // It calls methods with all 4 http methods (verbs)
 func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Enter httpToGrpcTest")
+	fmt.Println("Enter httpTohttpTest")
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
@@ -794,7 +794,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 		"http://localhost:%s/v1.0/invoke/%s/method/%s",
 		strconv.Itoa(daprPort), commandBody.RemoteApp,
 		"posthandler")
-	fmt.Printf("post invoke url is %s", url)
+	fmt.Printf("post invoke url is %s\n", url)
 	b, err := json.Marshal(testMessage)
 	if err != nil {
 		fmt.Printf("marshal had error %s\n", err)
