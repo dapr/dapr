@@ -80,11 +80,12 @@ const (
 type ComponentCategory string
 
 const (
-	bindingsComponent    ComponentCategory = "bindings"
-	exporterComponent    ComponentCategory = "exporters"
-	pubsubComponent      ComponentCategory = "pubsub"
-	secretStoreComponent ComponentCategory = "secretstores"
-	stateComponent       ComponentCategory = "state"
+	bindingsComponent           ComponentCategory = "bindings"
+	exporterComponent           ComponentCategory = "exporters"
+	pubsubComponent             ComponentCategory = "pubsub"
+	secretStoreComponent        ComponentCategory = "secretstores"
+	stateComponent              ComponentCategory = "state"
+	defaultComponentInitTimeout                   = time.Second * 5
 )
 
 var componentCategoriesNeedProcess = []ComponentCategory{
@@ -1324,9 +1325,27 @@ func (a *DaprRuntime) processComponents() {
 		if comp.Name == "" {
 			continue
 		}
-		err := a.processComponentAndDependents(comp)
+
+		ch := make(chan error, 1)
+
+		timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 		if err != nil {
-			log.Errorf("process component %s error, %s", comp.Name, err)
+			timeout = defaultComponentInitTimeout
+		}
+
+		go func() {
+			ch <- a.processComponentAndDependents(comp)
+		}()
+
+		go func() {
+			time.Sleep(timeout)
+			ch <- fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+			close(ch)
+		}()
+
+		err = <-ch
+		if err != nil {
+			log.Error(err.Error())
 		}
 	}
 }
