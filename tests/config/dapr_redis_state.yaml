@@ -9,6 +9,7 @@ metadata:
   name: statestore
 spec:
   type: state.redis
+  initTimeout: 1m
   metadata:
   - name: redisHost
     secretKeyRef:
