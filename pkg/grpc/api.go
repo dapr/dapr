@@ -271,9 +271,9 @@ func (a *api) SubscribeEvent(srv runtimev1pb.Dapr_SubscribeEventServer) error {
 	mdPubsubName := "pubsubName"
 	defer func() {
 		if err := recover(); err != nil {
-			apiServerLogger.Errorf("the Bidirectional of sub is fail for some reason: %+v.", err)
+			apiServerLogger.Errorf("the Bidirectional of sub is fail for some reason: %+v", err)
 		} else {
-			apiServerLogger.Infof("the Bidirectional sub is over for some reason.")
+			apiServerLogger.Infof("the Bidirectional sub is over for some reason")
 		}
 		trailer := metadata.Pairs("finish", "true", "timestamp", time.Now().Format(time.StampNano))
 		srv.SetTrailer(trailer)
@@ -340,20 +340,25 @@ func (a *api) SubscribeEvent(srv runtimev1pb.Dapr_SubscribeEventServer) error {
 			apiServerLogger.Warnf("send the message(%v) failed. %v", envelope, err)
 			if err == io.EOF {
 				close(done)
-				return errors.New("the channel is closed.")
+				return errors.New("the channel is closed")
 			}
-			return errors.New("send the envelope failed.")
+			return errors.New("send the envelope failed")
 		} else {
 			ch := make(chan *runtimev1pb.ConsumeEventResponse)
 			msgMap.Store(envelope.Id, ch)
 			select {
 			case val := <-ch:
+				msgMap.Delete(envelope.Id)
+				if val == nil {
+					return errors.New("consumer the message error for channel is closed")
+				}
 				if val.GetStatus() == runtimev1pb.ConsumeEventResponse_SUCCESS {
 					return nil
 				} else {
 					return errors.New("consumer the message error")
 				}
 			}
+			msgMap.Delete(envelope.Id)
 			return errors.New("consumer the message error")
 		}
 	})
