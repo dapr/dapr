@@ -129,6 +129,7 @@ type AccessControlSpec struct {
 	DefaultAction string `json:"defaultAction" yaml:"defaultAction"`
 	// +optional
 	TrustDomain string          `json:"trustDomain" yaml:"trustDomain"`
+	// +optional
 	AppPolicies []AppPolicySpec `json:"policies" yaml:"policies"`
 }
 
