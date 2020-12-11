@@ -4,7 +4,6 @@ RUN apk add -U --no-cache ca-certificates
 
 FROM scratch
 ARG PKG_FILES
-ENTRYPOINT []
 WORKDIR /
 COPY --from=alpine /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY /$PKG_FILES /
