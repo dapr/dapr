@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/dapr/pkg/components/exporters"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pubsub"
@@ -16,7 +15,6 @@ type (
 		secretStores    []secretstores.SecretStore
 		states          []state.State
 		pubsubs         []pubsub.PubSub
-		exporters       []exporters.Exporter
 		nameResolutions []nameresolution.NameResolution
 		inputBindings   []bindings.InputBinding
 		outputBindings  []bindings.OutputBinding
@@ -45,13 +43,6 @@ func WithStates(states ...state.State) Option {
 func WithPubSubs(pubsubs ...pubsub.PubSub) Option {
 	return func(o *runtimeOpts) {
 		o.pubsubs = append(o.pubsubs, pubsubs...)
-	}
-}
-
-// WithExporters adds exporter components to the runtime.
-func WithExporters(exporters ...exporters.Exporter) Option {
-	return func(o *runtimeOpts) {
-		o.exporters = append(o.exporters, exporters...)
 	}
 }
 

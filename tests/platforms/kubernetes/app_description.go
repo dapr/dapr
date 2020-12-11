@@ -26,4 +26,5 @@ type AppDescription struct {
 	DaprCPURequest    string
 	DaprMemoryLimit   string
 	DaprMemoryRequest string
+	Namespace         *string
 }

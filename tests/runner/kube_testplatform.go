@@ -72,7 +72,7 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 	}
 
 	for _, comp := range comps {
-		c.ComponentResources.Add(kube.NewDaprComponent(c.KubeClient, kube.DaprTestNamespace, comp))
+		c.ComponentResources.Add(kube.NewDaprComponent(c.KubeClient, getNamespaceOrDefault(comp.Namespace), comp))
 	}
 
 	// setup component resources
@@ -114,7 +114,7 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		app.AppMemoryRequest = c.appMemoryRequest()
 
 		log.Printf("Adding app %v", app)
-		c.AppResources.Add(kube.NewAppManager(c.KubeClient, kube.DaprTestNamespace, app))
+		c.AppResources.Add(kube.NewAppManager(c.KubeClient, getNamespaceOrDefault(app.Namespace), app))
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
@@ -325,4 +325,11 @@ func (c *KubeTestPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
 		CPUm:     cpu,
 		MemoryMb: mem,
 	}, nil
+}
+
+func getNamespaceOrDefault(namespace *string) string {
+	if namespace == nil {
+		return kube.DaprTestNamespace
+	}
+	return *namespace
 }
