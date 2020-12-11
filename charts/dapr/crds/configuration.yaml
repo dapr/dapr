@@ -67,8 +67,6 @@ spec:
                     type: array
                   trustDomain:
                     type: string
-                required:
-                - policies
                 type: object
               httpPipeline:
                 description: PipelineSpec defines the middleware pipeline
