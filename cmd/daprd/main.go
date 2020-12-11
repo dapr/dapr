@@ -66,13 +66,6 @@ import (
 	pubsub_redis "github.com/dapr/components-contrib/pubsub/redis"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 
-	// Exporters
-	"github.com/dapr/components-contrib/exporters"
-	"github.com/dapr/components-contrib/exporters/native"
-	"github.com/dapr/components-contrib/exporters/stringexporter"
-	"github.com/dapr/components-contrib/exporters/zipkin"
-	exporters_loader "github.com/dapr/dapr/pkg/components/exporters"
-
 	// Name resolutions
 	nr "github.com/dapr/components-contrib/nameresolution"
 	nr_kubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
@@ -103,6 +96,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/mqtt"
 	"github.com/dapr/components-contrib/bindings/postgres"
+	"github.com/dapr/components-contrib/bindings/postmark"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
 	"github.com/dapr/components-contrib/bindings/rethinkdb/statechange"
@@ -247,17 +241,6 @@ func main() {
 				return pubsub_pulsar.NewPulsar(logContrib)
 			}),
 		),
-		runtime.WithExporters(
-			exporters_loader.New("zipkin", func() exporters.Exporter {
-				return zipkin.NewZipkinExporter(logContrib)
-			}),
-			exporters_loader.New("string", func() exporters.Exporter {
-				return stringexporter.NewStringExporter(logContrib)
-			}),
-			exporters_loader.New("native", func() exporters.Exporter {
-				return native.NewNativeExporter(logContrib)
-			}),
-		),
 		runtime.WithNameResolutions(
 			nr_loader.New("mdns", func() nr.Resolver {
 				return nr_mdns.NewResolver(logContrib)
@@ -388,6 +371,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("postgres", func() bindings.OutputBinding {
 				return postgres.NewPostgres(logContrib)
+			}),
+			bindings_loader.NewOutput("postmark", func() bindings.OutputBinding {
+				return postmark.NewPostmark(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

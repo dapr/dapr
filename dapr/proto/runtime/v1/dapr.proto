@@ -193,6 +193,12 @@ message PublishEventRequest {
 
   // The content type for the data (optional).
   string data_content_type = 4;
+
+  // The metadata passing to pub components
+  //
+  // metadata property:
+  // - key : the key of the message.
+  map<string,string> metadata = 5;
 }
 
 // ConsumeEventResponse is the result of consuming message.

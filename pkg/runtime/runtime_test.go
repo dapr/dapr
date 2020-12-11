@@ -19,7 +19,6 @@ import (
 
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
-	comp_exporters "github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -27,7 +26,6 @@ import (
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/dapr/pkg/components/exporters"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
@@ -216,16 +214,6 @@ func TestDoProcessComponent(t *testing.T) {
 		},
 	}
 
-	exportersComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: "testexporter",
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type:     "exporters.mockExporter",
-			Metadata: getFakeMetadataItems(),
-		},
-	}
-
 	t.Run("test error on pubsub init", func(t *testing.T) {
 		// setup
 		mockPubSub := new(daprt.MockPubSub)
@@ -249,29 +237,7 @@ func TestDoProcessComponent(t *testing.T) {
 		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
 	})
 
-	t.Run("test error on exporter init", func(t *testing.T) {
-		// setup
-		mockExporter := new(daprt.MockExporter)
-
-		rt.exporterRegistry.Register(
-			exporters.New("mockExporter", func() comp_exporters.Exporter {
-				return mockExporter
-			}),
-		)
-		mockExporter.On("Init", TestRuntimeConfigID, "", comp_exporters.Metadata{
-			Properties: getFakeProperties(),
-			Buffer:     nil,
-		}).Return(assert.AnError)
-
-		// act
-		err := rt.doProcessOneComponent(exporterComponent, exportersComponent)
-
-		// assert
-		assert.Error(t, err, "expected an error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
-	})
-
-	t.Run("test invalid category componen", func(t *testing.T) {
+	t.Run("test invalid category component", func(t *testing.T) {
 		// act
 		err := rt.doProcessOneComponent(ComponentCategory("invalid"), pubsubComponent)
 
@@ -801,9 +767,12 @@ func TestInitPubSub(t *testing.T) {
 		}
 
 		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
+			Metadata:   md,
 		})
 
 		assert.Nil(t, err)
@@ -1185,8 +1154,6 @@ func TestExtractComponentCategory(t *testing.T) {
 		{"pubsubs.redis", ""},
 		{"secretstores.azure.keyvault", "secretstores"},
 		{"secretstore.azure.keyvault", ""},
-		{"exporters.zipkin", "exporters"},
-		{"exporter.zipkin", ""},
 		{"state.redis", "state"},
 		{"states.redis", ""},
 		{"bindings.kafka", "bindings"},
