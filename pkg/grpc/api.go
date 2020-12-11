@@ -9,8 +9,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -52,7 +54,7 @@ type API interface {
 
 	// Dapr Service methods
 	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error)
-	SubscribeEvent(in *runtimev1pb.SubscribeEventRequest, srv runtimev1pb.Dapr_SubscribeEventServer) error
+	SubscribeEvent(srv runtimev1pb.Dapr_SubscribeEventServer) error
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
@@ -263,72 +265,124 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	return &empty.Empty{}, nil
 }
 
-func (a *api) SubscribeEvent(in *runtimev1pb.SubscribeEventRequest, srv runtimev1pb.Dapr_SubscribeEventServer) error {
-	pubsubName := in.PubsubName
-	if pubsubName == "" {
-		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
-		apiServerLogger.Debug(err)
-		return err
-	}
-
-	topic := in.Topic
-	if topic == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
-		apiServerLogger.Debug(err)
-		return err
-	}
-	var (
-		pubsubInstance pubsub.PubSub
-		ok             bool
-	)
-	if pubsubInstance, ok = a.pubsubs[pubsubName]; !ok {
-		return runtime_pubsub.NotFoundError{PubsubName: pubsubName}
-	}
-
-	req := pubsub.SubscribeRequest{
-		Topic:    in.Topic,
-		Metadata: in.Metadata,
-	}
+func (a *api) SubscribeEvent(srv runtimev1pb.Dapr_SubscribeEventServer) error {
+	mdTopic := "topic"
+	mdPubsubName := "pubsubName"
 	defer func() {
 		if err := recover(); err != nil {
-			apiServerLogger.Infof("the request/stream of sub is fail for some reason: %+v.", err)
+			apiServerLogger.Errorf("the Bidirectional of sub is fail for some reason: %+v.", err)
 		} else {
-			apiServerLogger.Infof("the request/stream of sub is over for some reason.")
+			apiServerLogger.Infof("the Bidirectional sub is over for some reason.")
 		}
 		trailer := metadata.Pairs("finish", "true", "timestamp", time.Now().Format(time.StampNano))
 		srv.SetTrailer(trailer)
 	}()
+	// Read metadata from client.
+	md, ok := metadata.FromIncomingContext(srv.Context())
+	if !ok {
+		return status.Errorf(codes.DataLoss, "SubscribeEvent: failed to get metadata")
+	}
+	var (
+		curPubsub     pubsub.PubSub
+		curPubsubName string
+	)
+	if p, ok := md[mdPubsubName]; ok {
+		if len(p) != 1 {
+			return status.Errorf(codes.DataLoss, "SubscribeEvent: size of pubsubName not equals to 1")
+		}
+		curPubsubName = p[0]
+		curPubsub = a.pubsubs[curPubsubName]
+	}
+	var topic string
+	if t, ok := md[mdTopic]; ok {
+		if len(t) != 1 {
+			return status.Errorf(codes.DataLoss, "SubscribeEvent: size of pubsubName not equals to 1")
+		}
+		topic = t[0]
+	}
+	var topicMD map[string]string
+	for k, v := range md {
+		if k == mdTopic || k == mdPubsubName {
+			continue
+		}
+		if len(v) != 1 {
+			return status.Errorf(codes.DataLoss, "SubscribeEvent: size of metadata value not equals to 1")
+		}
+		topicMD[k] = v[0]
+	}
+	req := pubsub.SubscribeRequest{
+		Topic:    topic,
+		Metadata: topicMD,
+	}
 
-	ch := make(chan *pubsub.NewMessage)
+	ch := make(chan *runtimev1pb.ConsumeEventResponse)
+	done := make(chan struct{})
+	var msgMap sync.Map
 
-	err := pubsubInstance.Subscribe(req, func(msg *pubsub.NewMessage) error {
+	err := curPubsub.Subscribe(req, func(msg *pubsub.NewMessage) error {
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
 		}
-		msg.Metadata[pubsubName] = pubsubName
-		ch <- msg
-		return nil
-	})
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrPubsubSubscribe, in.PubsubName, in.Topic, err.Error())
-		apiServerLogger.Debug(err)
-		close(ch)
-		return err
-	}
-	// loop chan
-	for c := range ch {
+		msg.Metadata[mdPubsubName] = curPubsubName
 		var (
 			envelope *runtimev1pb.SubscribeEventResponse
 			// cloudEvent *pubsub.CloudEventsEnvelope
 			err error
 		)
-		if envelope, _, err = a.unmarshalMsgFn(c); err != nil {
-			return err
+		if envelope, _, err = a.unmarshalMsgFn(msg); err != nil {
+			//ignore the message
+			apiServerLogger.Warnf("unmarshal the message failed. %v", envelope)
+			return nil
 		}
 		// todo How to do trace??
 		if err := srv.Send(envelope); err != nil {
-			close(ch)
+			apiServerLogger.Warnf("send the message(%v) failed. %v", envelope, err)
+			if err == io.EOF {
+				close(done)
+				return errors.New("the channel is closed.")
+			}
+			return errors.New("send the envelope failed.")
+		} else {
+			ch := make(chan *runtimev1pb.ConsumeEventResponse)
+			msgMap.Store(envelope.Id, ch)
+			select {
+			case val := <-ch:
+				if val.GetStatus() == runtimev1pb.ConsumeEventResponse_SUCCESS {
+					return nil
+				} else {
+					return errors.New("consumer the message error")
+				}
+			}
+			return errors.New("consumer the message error")
+		}
+	})
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrPubsubSubscribe, curPubsub, topic, err.Error())
+		apiServerLogger.Debug(err)
+		close(ch)
+		return err
+	}
+	// Send Head to notify the client subscribe the message is finished.
+	header := metadata.New(map[string]string{"success": "true", "timestamp": time.Now().Format(time.StampMilli)})
+	srv.SendHeader(header)
+
+	// Receive the message.
+	for {
+		msgResp, err := srv.Recv()
+		if err == io.EOF {
+			close(done)
 			break
+		}
+		if err != nil {
+			break
+		}
+		msgID := msgResp.MessageId
+		if v, ok := msgMap.Load(msgID); ok {
+			if vv, ok := v.(chan *runtimev1pb.ConsumeEventResponse); ok {
+				vv <- msgResp
+			}
+		} else {
+			apiServerLogger.Warnf("can't find the message of ID:%s for it is timeout or some reason.", msgID)
 		}
 	}
 
@@ -588,22 +642,25 @@ func (a *api) WatchState(in *runtimev1pb.GetStateRequest, ss runtimev1pb.Dapr_Wa
 		} else {
 			apiServerLogger.Infof("the request/stream is over for some reason.")
 		}
-		trailer := metadata.Pairs("finish", "true", "timestamp", time.Now().Format(time.StampNano))
+		trailer := metadata.Pairs("finish", "true", "timestamp", time.Now().Format(time.StampMilli))
 		ss.SetTrailer(trailer)
 	}()
 
 	ch := make(chan *state.GetResponse)
 
-	err = store.Watch(&req, func(response *state.GetResponse) error {
-		ch <- response
-		return nil
-	})
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateWatch, in.Key, in.StoreName, err.Error())
-		apiServerLogger.Debug(err)
-		close(ch)
-		return err
-	}
+	go func() {
+		err = store.Watch(&req, func(response *state.GetResponse) error {
+			ch <- response
+			return nil
+		})
+		if err != nil {
+			err = status.Errorf(codes.Internal, messages.ErrStateWatch, in.Key, in.StoreName, err.Error())
+			apiServerLogger.Debug(err)
+			close(ch)
+			return
+		}
+	}()
+
 	// loop chan
 	for c := range ch {
 		r := &runtimev1pb.GetStateResponse{

@@ -43,7 +43,7 @@ service Dapr {
   rpc PublishEvent(PublishEventRequest) returns (google.protobuf.Empty) {}
 
   // Subscribes events to the specific topic.
-  rpc SubscribeEvent(SubscribeEventRequest) returns (stream SubscribeEventResponse) {}
+  rpc SubscribeEvent(stream ConsumeEventResponse) returns (stream SubscribeEventResponse) {}
 
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
@@ -195,19 +195,20 @@ message PublishEventRequest {
   string data_content_type = 4;
 }
 
-// SubscribeEventRequest is the message to subscribe event data
-message SubscribeEventRequest {
-  // The name of the pubsub component
-  string pubsub_name = 1;
+// ConsumeEventResponse is the result of consuming message.
+message ConsumeEventResponse {
+    // The pubsub topic
+    string topic = 1;
 
-  // The pubsub topic
-  string topic = 2;
+    // The message ID, If the meessage id = -1, it means it not a message response because The `optional` is not support.
+    string message_id = 2;
 
-  // The metadata passing to pub components
-  //
-  // metadata property:
-  // - key : the key of the message.
-  map<string,string> metadata = 3;
+    enum EventStatus {
+        SUCCESS = 0;
+        RETRY = 1;
+        FAIL = 2;
+    }
+    EventStatus Status = 3;
 }
 
 // SubscribeEventResponse message is compatible with CloudEvent spec v1.0
