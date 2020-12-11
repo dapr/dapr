@@ -32,10 +32,10 @@ func cleanupStates() {
 
 func TestMembershipChangeWorker(t *testing.T) {
 	// This test, due to concurrency, is somewhat indeterministic
-	// about the code paths being hit. So we run several times to excerise
+	// about the code paths being hit. So we run several times to exercise
 	// more code paths. There is no guarantee we can hit all of them, but
 	// it is strictly better than running once.
-	runNTimes(t, 10, func(t *testing.T) {
+	runNTimes(t, 15, func(t *testing.T) {
 		serverAddress, testServer, cleanupServer := newTestPlacementServer(testRaftServer)
 		testServer.hasLeadership = true
 
