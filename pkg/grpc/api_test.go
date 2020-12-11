@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/exporters"
-	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -31,6 +29,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
@@ -114,21 +113,16 @@ func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
 
-func configureTestTraceExporter(meta exporters.Metadata) {
-	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
-	exporter.Init("fakeID", "fakeAddress", meta)
+func configureTestTraceExporter(buffer *string) {
+	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
+	exporter.Register("fakeID")
 }
 
 func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	var buffer = ""
-	configureTestTraceExporter(exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	})
+	configureTestTraceExporter(&buffer)
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc.NewServer(

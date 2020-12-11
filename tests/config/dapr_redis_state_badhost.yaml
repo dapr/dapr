@@ -4,6 +4,7 @@ metadata:
   name: badhost-store
 spec:
   type: state.redis
+  initTimeout: 1m
   metadata:
   - name: redisHost
     value: badhost:6379
