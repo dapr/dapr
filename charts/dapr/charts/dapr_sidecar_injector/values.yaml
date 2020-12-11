@@ -9,3 +9,4 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
+sidecarImagePullPolicy: Always
