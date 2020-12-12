@@ -95,6 +95,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/mqtt"
 	"github.com/dapr/components-contrib/bindings/postgres"
+	"github.com/dapr/components-contrib/bindings/postmark"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
 	"github.com/dapr/components-contrib/bindings/rethinkdb/statechange"
@@ -369,6 +370,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("postgres", func() bindings.OutputBinding {
 				return postgres.NewPostgres(logContrib)
+			}),
+			bindings_loader.NewOutput("postmark", func() bindings.OutputBinding {
+				return postmark.NewPostmark(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(

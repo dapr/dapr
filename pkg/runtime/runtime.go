@@ -1296,26 +1296,9 @@ func (a *DaprRuntime) processComponents() {
 			continue
 		}
 
-		ch := make(chan error, 1)
-
-		timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
+		err := a.processComponentAndDependents(comp)
 		if err != nil {
-			timeout = defaultComponentInitTimeout
-		}
-
-		go func() {
-			ch <- a.processComponentAndDependents(comp)
-		}()
-
-		go func() {
-			time.Sleep(timeout)
-			ch <- fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
-			close(ch)
-		}()
-
-		err = <-ch
-		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("process component %s error, %s", comp.Name, err)
 		}
 	}
 }
@@ -1342,8 +1325,24 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 		return errors.Errorf("incorrect type %s", comp.Spec.Type)
 	}
 
-	if err := a.doProcessOneComponent(compCategory, comp); err != nil {
-		return err
+	ch := make(chan error, 1)
+
+	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
+	if err != nil {
+		timeout = defaultComponentInitTimeout
+	}
+
+	go func() {
+		ch <- a.doProcessOneComponent(compCategory, comp)
+	}()
+
+	select {
+	case err := <-ch:
+		if err != nil {
+			return err
+		}
+	case <-time.After(timeout):
+		return fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
 	}
 
 	log.Infof("component loaded. name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
