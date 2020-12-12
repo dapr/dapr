@@ -16,6 +16,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 )
@@ -97,6 +98,50 @@ func TestInvokeMethod(t *testing.T) {
 		assert.NoError(t, err)
 		_, body := response.RawData()
 		assert.Equal(t, "param1=val1&param2=val2", string(body))
+	})
+
+	t.Run("query string by url query", func(t *testing.T) {
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "0",
+			},
+		}
+		th.serverURL = server.URL[len("http://"):]
+		fakeReq := invokev1.NewInvokeMethodRequest("method?foo=bar")
+		fakeReq.Message().HttpExtension = &commonv1pb.HTTPExtension{
+			Verb: commonv1pb.HTTPExtension_POST,
+		}
+
+		// act
+		response, err := c.InvokeMethod(ctx, fakeReq)
+
+		// assert
+		assert.NoError(t, err)
+		_, body := response.RawData()
+		assert.Equal(t, "foo=bar", string(body))
+	})
+
+	t.Run("query string by url query and WithHTTPExtension", func(t *testing.T) {
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{},
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "0",
+			},
+		}
+		th.serverURL = server.URL[len("http://"):]
+		fakeReq := invokev1.NewInvokeMethodRequest("method?foo=bar")
+		fakeReq.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+
+		// act
+		response, err := c.InvokeMethod(ctx, fakeReq)
+
+		// assert
+		assert.NoError(t, err)
+		_, body := response.RawData()
+		assert.Equal(t, "foo=bar&param1=val1&param2=val2", string(body))
 	})
 
 	t.Run("tracing is enabled", func(t *testing.T) {

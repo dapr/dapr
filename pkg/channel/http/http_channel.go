@@ -6,10 +6,12 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dapr/dapr/pkg/channel"
@@ -133,6 +135,17 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	uri := fmt.Sprintf("%s/%s", h.baseAddress, req.Message().GetMethod())
 	channelReq.SetRequestURI(uri)
+	if strings.Contains(uri, "?") {
+		if req.Message().HttpExtension.GetQuerystring() == nil {
+			req.Message().HttpExtension.Querystring = map[string]string{}
+		}
+		for _, q := range bytes.Split(channelReq.URI().QueryString(), []byte("&")) {
+			kv := bytes.Split(q, []byte("="))
+			if len(kv) == 2 {
+				req.Message().HttpExtension.Querystring[string(kv[0])] = string(kv[1])
+			}
+		}
+	}
 	channelReq.URI().SetQueryString(req.EncodeHTTPQueryString())
 	channelReq.Header.SetMethod(req.Message().HttpExtension.Verb.String())
 
