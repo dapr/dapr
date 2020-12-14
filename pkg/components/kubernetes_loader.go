@@ -51,7 +51,6 @@ func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component
 	for _, c := range comps {
 		var component components_v1alpha1.Component
 		component.Spec = components_v1alpha1.ComponentSpec{}
-		component.Spec.Critical = true
 		err := json.Unmarshal(c, &component)
 		if err != nil {
 			log.Warnf("error deserializing component: %s", err)

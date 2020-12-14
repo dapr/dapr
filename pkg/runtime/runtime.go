@@ -1330,7 +1330,7 @@ func (a *DaprRuntime) processComponents() {
 		err := a.processComponentAndDependents(comp)
 		if err != nil {
 			log.Errorf("process component %s error, %s", comp.Name, err)
-			if comp.Spec.Critical {
+			if !comp.Spec.IgnoreErrors {
 				a.allCriticalComponentsLoaded = false
 			}
 		}

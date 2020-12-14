@@ -79,7 +79,6 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 	for {
 		var comp components_v1alpha1.Component
 		comp.Spec = components_v1alpha1.ComponentSpec{}
-		comp.Spec.Critical = true
 		err := s.decode(scanner, &comp)
 		if err == io.EOF {
 			break
