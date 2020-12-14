@@ -39,7 +39,6 @@ type ComponentSpec struct {
 	Metadata     []MetadataItem `json:"metadata"`
   // +optional
 	InitTimeout string         `json:"initTimeout"`
-	Metadata    []MetadataItem `json:"metadata"`
 }
 
 // MetadataItem is a name/value pair for a metadata
