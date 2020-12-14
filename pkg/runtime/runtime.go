@@ -1479,6 +1479,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 	appHost := a.getApplicationHost()
 	if len(appHost) != 0 {
 		a.applicationHostAddress = appHost
+		log.Warnf("Enabling insecure non-localhost communication to %s", a.applicationHostAddress)
 	} else {
 		a.applicationHostAddress = channel.DefaultChannelAddress
 	}
