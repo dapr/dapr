@@ -50,6 +50,7 @@ const (
 	ErrSecretStoreNotFound      = "failed finding secret store with key %s"
 	ErrPermissionDenied         = "access denied by policy to get %q from %q"
 	ErrSecretGet                = "failed getting secret with key %s from secret store %s: %s"
+	ErrBulkSecretGet            = "failed getting secrets from secret store %s: %s"
 
 	// DirectMessaging
 	ErrDirectInvoke         = "fail to invoke, id: %s, err: %s"
