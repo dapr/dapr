@@ -45,6 +45,9 @@ service Dapr {
   // Gets secrets from secret stores.
   rpc GetSecret(GetSecretRequest) returns (GetSecretResponse) {}
 
+  // Gets a bulk of secrets
+  rpc GetBulkSecret(GetBulkSecretRequest) returns (GetBulkSecretResponse) {}
+
   // Register an actor timer.
   rpc RegisterActorTimer(RegisterActorTimerRequest) returns (google.protobuf.Empty) {}
 
@@ -240,6 +243,22 @@ message GetSecretRequest {
 // GetSecretResponse is the response message to convey the requested secret.
 message GetSecretResponse {
   // data is the secret value. Some secret store, such as kubernetes secret
+  // store, can save multiple secrets for single secret key.
+  map<string, string> data = 1;
+}
+
+// GetBulkSecretRequest is the message to get the secrets from secret store.
+message GetBulkSecretRequest {
+  // The name of secret store.
+  string store_name = 1;
+
+  // The metadata which will be sent to secret store components.
+  map<string,string> metadata = 2;
+}
+
+// GetBulkSecretResponse is the response message to convey the requested secret.
+message GetBulkSecretResponse {
+  // data hold the secret values. Some secret store, such as kubernetes secret
   // store, can save multiple secrets for single secret key.
   map<string, string> data = 1;
 }

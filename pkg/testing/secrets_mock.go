@@ -29,7 +29,9 @@ func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 }
 
 func (c FakeSecretStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.GetSecretResponse, error) {
-	return secretstores.GetSecretResponse{}, nil
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{"good-key": "life is good"},
+	}, nil
 }
 
 func (c FakeSecretStore) Init(metadata secretstores.Metadata) error {
