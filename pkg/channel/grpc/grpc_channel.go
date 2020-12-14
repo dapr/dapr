@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -28,11 +27,11 @@ type Channel struct {
 	tracingSpec config.TracingSpec
 }
 
-// CreateLocalChannel creates a gRPC connection with user code
-func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
+// CreateChannel creates a gRPC connection with user code
+func CreateChannel(applicationHost string, port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
 	c := &Channel{
 		client:      conn,
-		baseAddress: fmt.Sprintf("%s:%d", channel.DefaultChannelAddress, port),
+		baseAddress: fmt.Sprintf("%s:%d", applicationHost, port),
 		tracingSpec: spec,
 	}
 	if maxConcurrency > 0 {

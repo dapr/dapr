@@ -52,15 +52,19 @@ func (g *Manager) SetAuthenticator(auth security.Authenticator) {
 	g.auth = auth
 }
 
-// CreateLocalChannel creates a new gRPC AppChannel
-func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
-	conn, err := g.GetGRPCConnection(fmt.Sprintf("127.0.0.1:%v", port), "", "", true, false, sslEnabled)
+// CreateAppChannel creates a new gRPC AppChannel.
+func (g *Manager) CreateAppChannel(applicationHost string, port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
+	channelAddress := channel.DefaultChannelAddress
+	if applicationHost != channel.DefaultChannelAddress {
+		channelAddress = applicationHost
+	}
+	conn, err := g.GetGRPCConnection(fmt.Sprintf("%s:%v", channelAddress, port), "", "", true, false, sslEnabled)
 	if err != nil {
 		return nil, errors.Errorf("error establishing connection to app grpc on port %v: %s", port, err)
 	}
 
 	g.AppClient = conn
-	ch := grpc_channel.CreateLocalChannel(port, maxConcurrency, conn, spec)
+	ch := grpc_channel.CreateChannel(channelAddress, port, maxConcurrency, conn, spec)
 	return ch, nil
 }
 

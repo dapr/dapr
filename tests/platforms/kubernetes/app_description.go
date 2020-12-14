@@ -10,6 +10,7 @@ type AppDescription struct {
 	AppName           string
 	AppPort           int
 	AppProtocol       string
+	AppHost           string
 	DaprEnabled       bool
 	ImageName         string
 	RegistryName      string
