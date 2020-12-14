@@ -853,7 +853,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 	}
 
-	if a.actorStateStoreName == "" || a.actorStateStoreCount != 1 {
+	if a.hostingActors() && (a.actorStateStoreName == "" || a.actorStateStoreCount != 1) {
 		log.Warnf("either no actor state store or multiple actor state stores are specified in the configuration, actor stores specified: %d", a.actorStateStoreCount)
 	}
 
@@ -1226,6 +1226,10 @@ func (a *DaprRuntime) initActors() error {
 	err = act.Init()
 	a.actor = act
 	return err
+}
+
+func (a *DaprRuntime) hostingActors() bool {
+	return len(a.appConfig.Entities) > 0
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {

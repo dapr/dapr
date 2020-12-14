@@ -2178,6 +2178,23 @@ func TestInitActors(t *testing.T) {
 		err := r.initActors()
 		assert.Error(t, err)
 	})
+
+	t.Run("actors hosted = true", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+		r.appConfig = config.ApplicationConfig{
+			Entities: []string{"actor1"},
+		}
+
+		hosted := r.hostingActors()
+		assert.True(t, hosted)
+	})
+
+	t.Run("actors hosted = false", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+
+		hosted := r.hostingActors()
+		assert.False(t, hosted)
+	})
 }
 
 func TestInitBindings(t *testing.T) {
