@@ -837,6 +837,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		}
 
 		a.stateStores[s.ObjectMeta.Name] = store
+		state_loader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 
 		// set specified actor store if "actorStateStore" is true in the spec.
 		actorStoreSpecified := props[actorStateStore]
