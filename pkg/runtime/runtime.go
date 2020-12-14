@@ -144,6 +144,8 @@ type DaprRuntime struct {
 
 	pendingComponents          chan components_v1alpha1.Component
 	pendingComponentDependents map[string][]components_v1alpha1.Component
+
+	allCriticalComponentsLoaded bool
 }
 
 type componentPreprocessRes struct {
@@ -200,7 +202,7 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	d := time.Since(start).Seconds() * 1000
 	log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
 
-	if a.daprHTTPAPI != nil {
+	if a.daprHTTPAPI != nil && a.allCriticalComponentsLoaded {
 		// gRPC server start failure is logged as Fatal in initRuntime method. Setting the status only when runtime is initialized.
 		a.daprHTTPAPI.MarkStatusAsReady()
 	}
@@ -284,6 +286,8 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.stateStoreRegistry.Register(opts.states...)
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
+
+	a.allCriticalComponentsLoaded = true
 
 	go a.processComponents()
 	err = a.beginComponentsUpdates()
@@ -1304,6 +1308,9 @@ func (a *DaprRuntime) processComponents() {
 		err := a.processComponentAndDependents(comp)
 		if err != nil {
 			log.Errorf("process component %s error, %s", comp.Name, err)
+			if !comp.Spec.IgnoreErrors {
+				a.allCriticalComponentsLoaded = false
+			}
 		}
 	}
 }
