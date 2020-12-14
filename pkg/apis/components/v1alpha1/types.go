@@ -34,8 +34,12 @@ type ComponentSpec struct {
 	Type string `json:"type"`
 	// +optional
 	Version      string         `json:"version"`
+  // +optional
 	IgnoreErrors bool           `json:"ignoreErrors"`
 	Metadata     []MetadataItem `json:"metadata"`
+  // +optional
+	InitTimeout string         `json:"initTimeout"`
+	Metadata    []MetadataItem `json:"metadata"`
 }
 
 // MetadataItem is a name/value pair for a metadata
@@ -70,7 +74,7 @@ type ComponentList struct {
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value
 type DynamicValue struct {
-	v1.JSON
+	v1.JSON `json:",inline"`
 }
 
 // String returns the string representation of the raw value.

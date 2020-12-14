@@ -38,6 +38,6 @@ webhooks:
     - pods
     operations:
     - CREATE
-  failurePolicy: Ignore
+  failurePolicy: {{ .Values.webhookFailurePolicy}}
   sideEffects: None
   admissionReviewVersions: ["v1", "v1beta1"]

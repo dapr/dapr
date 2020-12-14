@@ -80,9 +80,11 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.replicaCount`              | Number of replicas for Operator                                         | `1`                     |
 | `dapr_operator.logLevel`                  | Operator Log level                                                      | `info`                  |
 | `dapr_operator.image.name`                | Operator docker image name (`global.registry/dapr_operator.image.name`) | `dapr`                  |
+| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                               | `Always`                     |
 | `dapr_sidecar_injector.replicaCount`      | Number of replicas for Sidecar Injector                                 | `1`                     |
 | `dapr_sidecar_injector.logLevel`          | Sidecar Injector Log level                                              | `info`                  |
 | `dapr_sidecar_injector.image.name`        | Dapr runtime sidecar image name injecting to application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`                 |
+| `dapr_sidecar_injector.webhookFailurePolicy` | Failure policy for the sidecar injector                              | `Ignore`                |
 | `dapr_sentry.replicaCount`                | Number of replicas for Sentry CA                                        | `1`                     |
 | `dapr_sentry.logLevel`                    | Sentry CA Log level                                                     | `info`                  |
 | `dapr_sentry.image.name`                  | Sentry CA docker image name (`global.registry/dapr_sentry.image.name`)  | `dapr`                  |
