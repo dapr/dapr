@@ -2494,6 +2494,14 @@ func TestV1SecretEndpoints(t *testing.T) {
 
 		testAPI.secretStores = fakeStores
 	})
+
+	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/bulk", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading secrets should succeed")
+	})
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {

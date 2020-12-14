@@ -772,6 +772,71 @@ func TestGetSecret(t *testing.T) {
 	}
 }
 
+func TestGetBulkSecret(t *testing.T) {
+	fakeStore := daprt.FakeSecretStore{}
+	fakeStores := map[string]secretstores.SecretStore{
+		"store1": fakeStore,
+	}
+	secretsConfiguration := map[string]config.SecretsScope{
+		"store1": {
+			DefaultAccess: config.AllowAccess,
+			DeniedSecrets: []string{"not-allowed"},
+		},
+	}
+	expectedResponse := "life is good"
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		key              string
+		errorExcepted    bool
+		expectedResponse string
+		expectedError    codes.Code
+	}{
+		{
+			testName:         "Good Key from unrestricted store",
+			storeName:        "store1",
+			key:              "good-key",
+			errorExcepted:    false,
+			expectedResponse: expectedResponse,
+		},
+	}
+	// Setup Dapr API server
+	fakeAPI := &api{
+		id:                   "fakeAPI",
+		secretStores:         fakeStores,
+		secretsConfiguration: secretsConfiguration,
+	}
+	// Run test server
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	// Create gRPC test client
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	// act
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetBulkSecretRequest{
+				StoreName: tt.storeName,
+			}
+			resp, err := client.GetBulkSecret(context.Background(), req)
+
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+	}
+}
+
 func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")

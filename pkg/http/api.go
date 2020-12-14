@@ -189,6 +189,12 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 			Version: apiVersionV1,
 			Handler: a.onGetSecret,
 		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "secrets/{secretStoreName}/bulk",
+			Version: apiVersionV1,
+			Handler: a.onBulkGetSecret,
+		},
 	}
 }
 
@@ -577,6 +583,55 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 	if resp.Data == nil {
 		respondEmpty(reqCtx)
 		return
+	}
+
+	respBytes, _ := a.json.Marshal(resp.Data)
+	respondWithJSON(reqCtx, fasthttp.StatusOK, respBytes)
+}
+
+func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
+	if a.secretStores == nil || len(a.secretStores) == 0 {
+		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		log.Debug(msg)
+		return
+	}
+
+	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
+
+	if a.secretStores[secretStoreName] == nil {
+		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
+		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
+		log.Debug(msg)
+		return
+	}
+
+	metadata := getMetadataFromRequest(reqCtx)
+
+	req := secretstores.BulkGetSecretRequest{
+		Metadata: metadata,
+	}
+
+	resp, err := a.secretStores[secretStoreName].BulkGetSecret(req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_SECRET_GET",
+			fmt.Sprintf(messages.ErrBulkSecretGet, secretStoreName, err.Error()))
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		log.Debug(msg)
+		return
+	}
+
+	if resp.Data == nil {
+		respondEmpty(reqCtx)
+		return
+	}
+
+	for key := range resp.Data {
+		if !a.isSecretAllowed(secretStoreName, key) {
+			msg := NewErrorResponse("ERR_PERMISSION_DENIED", fmt.Sprintf(messages.ErrPermissionDenied, key, secretStoreName))
+			respondWithError(reqCtx, fasthttp.StatusForbidden, msg)
+			return
+		}
 	}
 
 	respBytes, _ := a.json.Marshal(resp.Data)
