@@ -71,7 +71,7 @@ type ComponentList struct {
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value
 type DynamicValue struct {
-	v1.JSON
+	v1.JSON `json:",inline"`
 }
 
 // String returns the string representation of the raw value.

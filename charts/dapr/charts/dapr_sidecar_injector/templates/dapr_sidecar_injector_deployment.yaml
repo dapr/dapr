@@ -87,6 +87,8 @@ spec:
 {{- else }}
           value: "{{ .Values.global.registry }}/daprd:{{ .Values.global.tag }}"
 {{- end }}
+        - name: SIDECAR_IMAGE_PULL_POLICY
+          value: "{{ .Values.sidecarImagePullPolicy }}"
         - name: NAMESPACE
           valueFrom:
             fieldRef:
