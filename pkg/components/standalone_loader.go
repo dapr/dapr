@@ -77,8 +77,9 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 	scanner.Split(s.splitYamlDoc)
 
 	for {
-		var component components_v1alpha1.Component
-		err := s.decode(scanner, &component)
+		var comp components_v1alpha1.Component
+		comp.Spec = components_v1alpha1.ComponentSpec{}
+		err := s.decode(scanner, &comp)
 		if err == io.EOF {
 			break
 		}
@@ -87,7 +88,7 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 			errors = append(errors, err)
 			continue
 		}
-		list = append(list, component)
+		list = append(list, comp)
 	}
 
 	return list, errors
