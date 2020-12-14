@@ -1299,7 +1299,11 @@ func (a *DaprRuntime) processComponents() {
 
 		err := a.processComponentAndDependents(comp)
 		if err != nil {
-			log.Errorf("process component %s error, %s", comp.Name, err)
+			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
+			if !comp.Spec.IgnoreErrors {
+				log.Fatalf(e)
+			}
+			log.Errorf(e)
 		}
 	}
 }

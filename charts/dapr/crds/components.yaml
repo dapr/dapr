@@ -39,6 +39,8 @@ spec:
             properties:
               initTimeout:
                 type: string
+              ignoreErrors:
+                type: boolean
               metadata:
                 items:
                   description: MetadataItem is a name/value pair for a metadata
