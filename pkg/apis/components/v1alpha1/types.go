@@ -33,12 +33,12 @@ type Component struct {
 type ComponentSpec struct {
 	Type string `json:"type"`
 	// +optional
-	Version      string         `json:"version"`
-  // +optional
+	Version string `json:"version"`
+	// +optional
 	IgnoreErrors bool           `json:"ignoreErrors"`
 	Metadata     []MetadataItem `json:"metadata"`
-  // +optional
-	InitTimeout string         `json:"initTimeout"`
+	// +optional
+	InitTimeout string `json:"initTimeout"`
 }
 
 // MetadataItem is a name/value pair for a metadata
