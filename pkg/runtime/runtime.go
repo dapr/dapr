@@ -1301,7 +1301,6 @@ func (a *DaprRuntime) processComponents() {
 			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
 			if !comp.Spec.IgnoreErrors {
 				log.Fatalf(e)
-
 			}
 			log.Errorf(e)
 		}
