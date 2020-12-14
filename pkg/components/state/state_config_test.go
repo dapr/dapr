@@ -1,6 +1,7 @@
 package state
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,7 @@ func TestMain(m *testing.M) {
 	SaveStateConfiguration("store5", map[string]string{strategyKey: "other-fixed-prefix"})
 	// if strategyKey not set
 	SaveStateConfiguration("store6", map[string]string{})
-	m.Run()
+	os.Exit(m.Run())
 }
 
 func TestNonePrefix(t *testing.T) {
