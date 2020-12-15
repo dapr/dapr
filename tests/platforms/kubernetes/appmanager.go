@@ -99,6 +99,7 @@ func (m *AppManager) Init() error {
 	}
 
 	// Validate daprd side car is injected
+	// App without daprd side car should not have ingress enabled (for testing purposes) else throw error
 	if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
 		return err
 	}
@@ -206,7 +207,7 @@ func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err erro
 // ValidiateSideCar validates that dapr side car is running in dapr enabled pods
 func (m *AppManager) ValidiateSideCar() (bool, error) {
 	if !m.app.DaprEnabled {
-		return false, fmt.Errorf("dapr is not enabled for this app")
+		return false, nil
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -465,12 +466,20 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	return result, nil
 }
 
-// SaveContainerLogs get container logs for all containers in the pod and saves them to disk
-func (m *AppManager) SaveContainerLogs() error {
-	if !m.app.DaprEnabled {
-		return fmt.Errorf("dapr is not enabled for this app")
+// GetServiceDNSName returns the DNS for the service based on https://kubernetes.io/docs/concepts/services-networking/dns-pod-service
+func (m *AppManager) GetServiceDNSName() (string, error) {
+	if int(m.app.Replicas) != 1 {
+		return "", fmt.Errorf("number of replicas should be 1")
 	}
 
+	// <service_name>.namespace should be resolved to <service_name>.namespace.svc.cluster.local
+	// but in Windows it does not do so. https://kubernetes.io/docs/setup/production-environment/windows/intro-windows-in-kubernetes/#dns-limitations
+	// using full form.
+	return fmt.Sprintf("%s.%s.svc.cluster.local", m.app.AppName, m.namespace), nil
+}
+
+// SaveContainerLogs get container logs for all containers in the pod and saves them to disk
+func (m *AppManager) SaveContainerLogs() error {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods

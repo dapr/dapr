@@ -4,6 +4,8 @@ metadata:
   name: badpass-store
 spec:
   type: state.redis
+  initTimeout: 1m
+  ignoreErrors: true
   metadata:
   - name: redisHost
     value: localhost:6379

@@ -15,9 +15,6 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/bindings"
-
-	"github.com/dapr/components-contrib/exporters"
-	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -30,7 +27,9 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
@@ -114,21 +113,16 @@ func SerializeSpanContext(ctx trace.SpanContext) string {
 	return fmt.Sprintf("%s;%s;%d", ctx.SpanID.String(), ctx.TraceID.String(), ctx.TraceOptions)
 }
 
-func configureTestTraceExporter(meta exporters.Metadata) {
-	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
-	exporter.Init("fakeID", "fakeAddress", meta)
+func configureTestTraceExporter(buffer *string) {
+	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
+	exporter.Register("fakeID")
 }
 
 func startTestServerWithTracing(port int) (*grpc.Server, *string) {
 	lis, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	var buffer = ""
-	configureTestTraceExporter(exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	})
+	configureTestTraceExporter(&buffer)
 
 	spec := config.TracingSpec{SamplingRate: "1"}
 	server := grpc.NewServer(
@@ -778,6 +772,71 @@ func TestGetSecret(t *testing.T) {
 	}
 }
 
+func TestGetBulkSecret(t *testing.T) {
+	fakeStore := daprt.FakeSecretStore{}
+	fakeStores := map[string]secretstores.SecretStore{
+		"store1": fakeStore,
+	}
+	secretsConfiguration := map[string]config.SecretsScope{
+		"store1": {
+			DefaultAccess: config.AllowAccess,
+			DeniedSecrets: []string{"not-allowed"},
+		},
+	}
+	expectedResponse := "life is good"
+
+	testCases := []struct {
+		testName         string
+		storeName        string
+		key              string
+		errorExcepted    bool
+		expectedResponse string
+		expectedError    codes.Code
+	}{
+		{
+			testName:         "Good Key from unrestricted store",
+			storeName:        "store1",
+			key:              "good-key",
+			errorExcepted:    false,
+			expectedResponse: expectedResponse,
+		},
+	}
+	// Setup Dapr API server
+	fakeAPI := &api{
+		id:                   "fakeAPI",
+		secretStores:         fakeStores,
+		secretsConfiguration: secretsConfiguration,
+	}
+	// Run test server
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	// Create gRPC test client
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	// act
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetBulkSecretRequest{
+				StoreName: tt.storeName,
+			}
+			resp, err := client.GetBulkSecret(context.Background(), req)
+
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
+				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+	}
+}
+
 func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, &api{id: "fakeAPI"}, "")
@@ -909,7 +968,7 @@ func TestGetState(t *testing.T) {
 		storeName        string
 		key              string
 		errorExcepted    bool
-		expectedResponse runtimev1pb.GetStateResponse
+		expectedResponse *runtimev1pb.GetStateResponse
 		expectedError    codes.Code
 	}{
 		{
@@ -917,7 +976,7 @@ func TestGetState(t *testing.T) {
 			storeName:     "store1",
 			key:           "good-key",
 			errorExcepted: false,
-			expectedResponse: runtimev1pb.GetStateResponse{
+			expectedResponse: &runtimev1pb.GetStateResponse{
 				Data: []byte("test-data"),
 				Etag: "test-etag",
 			},
@@ -928,7 +987,7 @@ func TestGetState(t *testing.T) {
 			storeName:        "no-store",
 			key:              "good-key",
 			errorExcepted:    true,
-			expectedResponse: runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetStateResponse{},
 			expectedError:    codes.InvalidArgument,
 		},
 		{
@@ -936,7 +995,7 @@ func TestGetState(t *testing.T) {
 			storeName:        "store1",
 			key:              "error-key",
 			errorExcepted:    true,
-			expectedResponse: runtimev1pb.GetStateResponse{},
+			expectedResponse: &runtimev1pb.GetStateResponse{},
 			expectedError:    codes.Internal,
 		},
 	}
@@ -951,7 +1010,8 @@ func TestGetState(t *testing.T) {
 			resp, err := client.GetState(context.Background(), req)
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, *resp, tt.expectedResponse, "Expected responses to be same")
+				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
+				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
@@ -960,55 +1020,121 @@ func TestGetState(t *testing.T) {
 	}
 }
 
-func TestRegisterActorTimer(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
+func TestGetBulkState(t *testing.T) {
+	fakeStore := &daprt.MockStateStore{}
+	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == "fakeAPI||good-key"
+	})).Return(
+		&state.GetResponse{
+			Data: []byte("test-data"),
+			ETag: "test-etag",
+		}, nil)
+	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
+		return req.Key == "fakeAPI||error-key"
+	})).Return(
+		nil,
+		errors.New("failed to get state with error-key"))
 
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
+	fakeAPI := &api{
+		id:          "fakeAPI",
+		stateStores: map[string]state.Store{"store1": fakeStore},
+	}
+	port, _ := freeport.GetFreePort()
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
 
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.RegisterActorTimer(context.TODO(), &runtimev1pb.RegisterActorTimerRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
-}
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
 
-func TestUnregisterActorTimer(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
+	client := runtimev1pb.NewDaprClient(clientConn)
 
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
+	testCases := []struct {
+		testName         string
+		storeName        string
+		keys             []string
+		errorExcepted    bool
+		expectedResponse []*runtimev1pb.BulkStateItem
+		expectedError    codes.Code
+	}{
+		{
+			testName:      "get state",
+			storeName:     "store1",
+			keys:          []string{"good-key", "good-key"},
+			errorExcepted: false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{
+				{
+					Data: []byte("test-data"),
+					Etag: "test-etag",
+				},
+				{
+					Data: []byte("test-data"),
+					Etag: "test-etag",
+				},
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:         "get store with non-existing store",
+			storeName:        "no-store",
+			keys:             []string{"good-key", "good-key"},
+			errorExcepted:    true,
+			expectedResponse: []*runtimev1pb.BulkStateItem{},
+			expectedError:    codes.InvalidArgument,
+		},
+		{
+			testName:      "get store with key but error occurs",
+			storeName:     "store1",
+			keys:          []string{"error-key", "error-key"},
+			errorExcepted: false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{
+				{
+					Error: "failed to get state with error-key",
+				},
+				{
+					Error: "failed to get state with error-key",
+				},
+			},
+			expectedError: codes.OK,
+		},
+		{
+			testName:         "get store with empty keys",
+			storeName:        "store1",
+			keys:             []string{},
+			errorExcepted:    false,
+			expectedResponse: []*runtimev1pb.BulkStateItem{},
+			expectedError:    codes.OK,
+		},
+	}
 
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.UnregisterActorTimer(context.TODO(), &runtimev1pb.UnregisterActorTimerRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
-}
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			req := &runtimev1pb.GetBulkStateRequest{
+				StoreName: tt.storeName,
+				Keys:      tt.keys,
+			}
 
-func TestInvokeActor(t *testing.T) {
-	t.Run("actors not initialized", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-		server := startDaprAPIServer(port, &api{
-			id: "fakeAPI",
-		}, "")
-		defer server.Stop()
+			resp, err := client.GetBulkState(context.Background(), req)
+			if !tt.errorExcepted {
+				assert.NoError(t, err, "Expected no error")
 
-		clientConn := createTestClient(port)
-		defer clientConn.Close()
-
-		client := runtimev1pb.NewDaprClient(clientConn)
-		_, err := client.InvokeActor(context.TODO(), &runtimev1pb.InvokeActorRequest{})
-		assert.Equal(t, codes.Unimplemented, status.Code(err))
-	})
+				if len(tt.expectedResponse) == 0 {
+					assert.Equal(t, len(resp.Items), 0, "Expected response to be empty")
+				} else {
+					for i := 0; i < len(resp.Items); i++ {
+						if tt.expectedResponse[i].Error == "" {
+							assert.Equal(t, resp.Items[i].Data, tt.expectedResponse[i].Data, "Expected response Data to be same")
+							assert.Equal(t, resp.Items[i].Etag, tt.expectedResponse[i].Etag, "Expected response Etag to be same")
+						} else {
+							assert.Equal(t, resp.Items[i].Error, tt.expectedResponse[i].Error, "Expected response error to be same")
+						}
+					}
+				}
+			} else {
+				assert.Error(t, err, "Expected error")
+				assert.Equal(t, tt.expectedError, status.Code(err))
+			}
+		})
+	}
 }
 
 func TestDeleteState(t *testing.T) {
@@ -1089,6 +1215,15 @@ func TestPublishTopic(t *testing.T) {
 			if req.Topic == "error-topic" {
 				return errors.New("error when publish")
 			}
+
+			if req.Topic == "err-not-found" {
+				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+			}
+
+			if req.Topic == "err-not-allowed" {
+				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+			}
+
 			return nil
 		},
 	}
@@ -1119,6 +1254,18 @@ func TestPublishTopic(t *testing.T) {
 		Topic:      "error-topic",
 	})
 	assert.Equal(t, codes.Internal, status.Code(err))
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+		Topic:      "err-not-found",
+	})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName: "pubsub",
+		Topic:      "err-not-allowed",
+	})
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestInvokeBinding(t *testing.T) {

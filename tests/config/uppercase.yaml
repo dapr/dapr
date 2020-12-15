@@ -1,0 +1,10 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: uppercase
+spec:
+  ignoreErrors: true
+  type: middleware.http.uppercase
+  metadata:
+    - name: scopes
+      value: "*"

@@ -33,7 +33,8 @@ const (
 	daprAppPortKey                    = "dapr.io/app-port"
 	daprConfigKey                     = "dapr.io/config"
 	daprAppProtocolKey                = "dapr.io/app-protocol"
-	appIDKey                          = "dapr.io/app-id"
+	daprAppIDKey                      = "dapr.io/app-id"
+	daprAppHostKey                    = "dapr.io/app-host"
 	daprEnableProfilingKey            = "dapr.io/enable-profiling"
 	daprLogLevel                      = "dapr.io/log-level"
 	daprAPITokenSecret                = "dapr.io/api-token-secret" /* #nosec */
@@ -83,7 +84,7 @@ const (
 )
 
 func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
-	namespace, image string, kubeClient *kubernetes.Clientset, daprClient scheme.Interface) ([]PatchOperation, error) {
+	namespace, image, imagePullPolicy string, kubeClient *kubernetes.Clientset, daprClient scheme.Interface) ([]PatchOperation, error) {
 	req := ar.Request
 	var pod corev1.Pod
 	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
@@ -113,6 +114,8 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		return nil, err
 	}
 
+	applicationHost := getAppHost(pod)
+
 	// Keep DNS resolution outside of getSidecarContainer for unit testing.
 	placementAddress := fmt.Sprintf("%s:50005", getKubernetesDNS(placementService, namespace))
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
@@ -130,7 +133,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, req.Namespace, apiSrvAddress, placementAddress, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
+	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, imagePullPolicy, applicationHost, req.Namespace, apiSrvAddress, placementAddress, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +288,11 @@ func getMetricsPort(annotations map[string]string) int {
 }
 
 func getAppID(pod corev1.Pod) string {
-	return getStringAnnotationOrDefault(pod.Annotations, appIDKey, pod.GetName())
+	return getStringAnnotationOrDefault(pod.Annotations, daprAppIDKey, pod.GetName())
+}
+
+func getAppHost(pod corev1.Pod) string {
+	return getStringAnnotationOrDefault(pod.Annotations, daprAppHostKey, "")
 }
 
 func getLogLevel(annotations map[string]string) string {
@@ -431,7 +438,21 @@ func getKubernetesDNS(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
 }
 
-func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, namespace, controlPlaneAddress, placementServiceAddress string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
+func getPullPolicy(pullPolicy string) corev1.PullPolicy {
+	switch pullPolicy {
+	case "Always":
+		return corev1.PullAlways
+	case "Never":
+		return corev1.PullNever
+	case "IfNotPresent":
+		return corev1.PullIfNotPresent
+	default:
+		return corev1.PullIfNotPresent
+	}
+}
+
+func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, imagePullPolicy, applicationHost, namespace, controlPlaneAddress, placementServiceAddress string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
+	// TODO consider reducing number of parameters to the method.
 	appPort, err := getAppPort(annotations)
 	if err != nil {
 		return nil, err
@@ -448,12 +469,15 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 	}
 
 	sslEnabled := appSSLEnabled(annotations)
+
+	pullPolicy := getPullPolicy(imagePullPolicy)
+
 	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: pullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
 				ContainerPort: int32(sidecarHTTPPort),
@@ -485,6 +509,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, na
 			{
 				Name:  "NAMESPACE",
 				Value: namespace,
+			},
+			{
+				Name:  "APPLICATION_HOST",
+				Value: applicationHost,
 			},
 		},
 		Args: []string{

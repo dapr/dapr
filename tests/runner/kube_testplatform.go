@@ -72,7 +72,7 @@ func (c *KubeTestPlatform) addComponents(comps []kube.ComponentDescription) erro
 	}
 
 	for _, comp := range comps {
-		c.ComponentResources.Add(kube.NewDaprComponent(c.KubeClient, kube.DaprTestNamespace, comp))
+		c.ComponentResources.Add(kube.NewDaprComponent(c.KubeClient, getNamespaceOrDefault(comp.Namespace), comp))
 	}
 
 	// setup component resources
@@ -114,7 +114,7 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 		app.AppMemoryRequest = c.appMemoryRequest()
 
 		log.Printf("Adding app %v", app)
-		c.AppResources.Add(kube.NewAppManager(c.KubeClient, kube.DaprTestNamespace, app))
+		c.AppResources.Add(kube.NewAppManager(c.KubeClient, getNamespaceOrDefault(app.Namespace), app))
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
@@ -235,6 +235,17 @@ func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error
 	return pods[0].Name, pods[0].IP, nil
 }
 
+// GetServiceDNSName returns the FQDN of the host(pod) running 'name'
+func (c *KubeTestPlatform) GetServiceDNSName(name string) (string, error) {
+	app := c.AppResources.FindActiveResource(name)
+	sqdns, err := app.(*kube.AppManager).GetServiceDNSName()
+	if err != nil {
+		return "", err
+	}
+
+	return sqdns, nil
+}
+
 // Scale changes the number of replicas of the app
 func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 	app := c.AppResources.FindActiveResource(name)
@@ -314,4 +325,11 @@ func (c *KubeTestPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
 		CPUm:     cpu,
 		MemoryMb: mem,
 	}, nil
+}
+
+func getNamespaceOrDefault(namespace *string) string {
+	if namespace == nil {
+		return kube.DaprTestNamespace
+	}
+	return *namespace
 }

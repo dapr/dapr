@@ -12,12 +12,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
+	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
-	comp_exporters "github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -25,12 +26,12 @@ import (
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/dapr/pkg/components/exporters"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -45,6 +46,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -87,6 +89,16 @@ func (m *MockKubernetesStateStore) Init(metadata secretstores.Metadata) error {
 }
 
 func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{
+			"key1":   "value1",
+			"_value": "_value_data",
+			"name1":  "value1",
+		},
+	}, nil
+}
+
+func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.GetSecretResponse, error) {
 	return secretstores.GetSecretResponse{
 		Data: map[string]string{
 			"key1":   "value1",
@@ -202,16 +214,6 @@ func TestDoProcessComponent(t *testing.T) {
 		},
 	}
 
-	exportersComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: "testexporter",
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type:     "exporters.mockExporter",
-			Metadata: getFakeMetadataItems(),
-		},
-	}
-
 	t.Run("test error on pubsub init", func(t *testing.T) {
 		// setup
 		mockPubSub := new(daprt.MockPubSub)
@@ -235,29 +237,7 @@ func TestDoProcessComponent(t *testing.T) {
 		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
 	})
 
-	t.Run("test error on exporter init", func(t *testing.T) {
-		// setup
-		mockExporter := new(daprt.MockExporter)
-
-		rt.exporterRegistry.Register(
-			exporters.New("mockExporter", func() comp_exporters.Exporter {
-				return mockExporter
-			}),
-		)
-		mockExporter.On("Init", TestRuntimeConfigID, "", comp_exporters.Metadata{
-			Properties: getFakeProperties(),
-			Buffer:     nil,
-		}).Return(assert.AnError)
-
-		// act
-		err := rt.doProcessOneComponent(exporterComponent, exportersComponent)
-
-		// assert
-		assert.Error(t, err, "expected an error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
-	})
-
-	t.Run("test invalid category componen", func(t *testing.T) {
+	t.Run("test invalid category component", func(t *testing.T) {
 		// act
 		err := rt.doProcessOneComponent(ComponentCategory("invalid"), pubsubComponent)
 
@@ -328,6 +308,78 @@ func TestInitState(t *testing.T) {
 		assert.Error(t, err, "expected error")
 		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
 	})
+}
+
+func TestSetupTracing(t *testing.T) {
+	testcases := []struct {
+		name              string
+		tracingConfig     config.TracingSpec
+		hostAddress       string
+		expectedExporters []trace.Exporter
+		expectedErr       string
+	}{{
+		name:          "no trace exporter",
+		tracingConfig: config.TracingSpec{},
+	}, {
+		name:        "bad host address, failing zipkin",
+		hostAddress: "bad:host:address",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+		},
+		expectedErr: "too many colons",
+	}, {
+		name: "zipkin trace exporter",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+		},
+		expectedExporters: []trace.Exporter{&zipkin.Exporter{}},
+	}, {
+		name: "stdout trace exporter",
+		tracingConfig: config.TracingSpec{
+			Stdout: true,
+		},
+		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}},
+	}, {
+		name: "all trace exporters",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+			Stdout: true,
+		},
+		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}},
+	}}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := NewTestDaprRuntime(modes.StandaloneMode)
+			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
+			if tc.hostAddress != "" {
+				rt.daprHostAddress = tc.hostAddress
+			}
+			// Setup tracing with the fake trace exporter store to confirm
+			// the right exporter was registered.
+			exporterStore := &fakeTraceExporterStore{}
+			if err := rt.setupTracing(rt.daprHostAddress, exporterStore); tc.expectedErr != "" {
+				assert.Contains(t, err.Error(), tc.expectedErr)
+			} else {
+				assert.Nil(t, err)
+			}
+			for i, exporter := range exporterStore.exporters {
+				// Exporter types don't expose internals, so we can only validate that
+				// the right type of  exporter was registered.
+				assert.Equal(t, reflect.TypeOf(tc.expectedExporters[i]), reflect.TypeOf(exporter))
+			}
+			// Setup tracing with the OpenCensus global exporter store.
+			// We have no way to validate the result, but we can at least
+			// confirm that nothing blows up.
+			rt.setupTracing(rt.daprHostAddress, openCensusExporterStore{})
+		})
+	}
 }
 
 func TestInitPubSub(t *testing.T) {
@@ -715,9 +767,12 @@ func TestInitPubSub(t *testing.T) {
 		}
 
 		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
+			Metadata:   md,
 		})
 
 		assert.Nil(t, err)
@@ -1099,8 +1154,6 @@ func TestExtractComponentCategory(t *testing.T) {
 		{"pubsubs.redis", ""},
 		{"secretstores.azure.keyvault", "secretstores"},
 		{"secretstore.azure.keyvault", ""},
-		{"exporters.zipkin", "exporters"},
-		{"exporter.zipkin", ""},
 		{"state.redis", "state"},
 		{"states.redis", ""},
 		{"bindings.kafka", "bindings"},
@@ -1301,7 +1354,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1317,8 +1370,8 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1527,7 +1580,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1588,8 +1641,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				routes: map[string]string{
-					topic: topic,
+				routes: map[string]Route{
+					topic: {path: topic},
 				},
 			}
 			var grpcServer *grpc.Server
@@ -1985,6 +2038,25 @@ func TestNamespace(t *testing.T) {
 	})
 }
 
+func TestApplicationHost(t *testing.T) {
+	t.Run("empty application host", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		ns := rt.getApplicationHost()
+
+		assert.Empty(t, ns)
+	})
+
+	t.Run("non-empty application host", func(t *testing.T) {
+		os.Setenv("APPLICATION_HOST", "host.a.com")
+		defer os.Clearenv()
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		ns := rt.getApplicationHost()
+
+		assert.Equal(t, "host.a.com", ns)
+	})
+}
+
 func TestAuthorizedComponents(t *testing.T) {
 	testCompName := "fakeComponent"
 
@@ -2105,6 +2177,23 @@ func TestInitActors(t *testing.T) {
 
 		err := r.initActors()
 		assert.Error(t, err)
+	})
+
+	t.Run("actors hosted = true", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+		r.appConfig = config.ApplicationConfig{
+			Entities: []string{"actor1"},
+		}
+
+		hosted := r.hostingActors()
+		assert.True(t, hosted)
+	})
+
+	t.Run("actors hosted = false", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+
+		hosted := r.hostingActors()
+		assert.False(t, hosted)
 	})
 }
 

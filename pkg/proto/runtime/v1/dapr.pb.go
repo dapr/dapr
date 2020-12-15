@@ -8,6 +8,7 @@ import (
 	fmt "fmt"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	proto "github.com/golang/protobuf/proto"
+	any "github.com/golang/protobuf/ptypes/any"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -264,10 +265,12 @@ type BulkStateItem struct {
 	// ETag format is defined by the corresponding data store.
 	Etag string `protobuf:"bytes,3,opt,name=etag,proto3" json:"etag,omitempty"`
 	// The error that was returned from the state store in case of a failed get operation.
-	Error                string   `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Error string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	// The metadata which will be sent to app.
+	Metadata             map[string]string `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
 func (m *BulkStateItem) Reset()         { *m = BulkStateItem{} }
@@ -323,16 +326,25 @@ func (m *BulkStateItem) GetError() string {
 	return ""
 }
 
+func (m *BulkStateItem) GetMetadata() map[string]string {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
 // GetStateResponse is the response conveying the state value and etag.
 type GetStateResponse struct {
 	// The byte array data
 	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	// The entity tag which represents the specific version of data.
 	// ETag format is defined by the corresponding data store.
-	Etag                 string   `protobuf:"bytes,2,opt,name=etag,proto3" json:"etag,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Etag string `protobuf:"bytes,2,opt,name=etag,proto3" json:"etag,omitempty"`
+	// The metadata which will be sent to app.
+	Metadata             map[string]string `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
 func (m *GetStateResponse) Reset()         { *m = GetStateResponse{} }
@@ -372,6 +384,13 @@ func (m *GetStateResponse) GetEtag() string {
 		return m.Etag
 	}
 	return ""
+}
+
+func (m *GetStateResponse) GetMetadata() map[string]string {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
 }
 
 // DeleteStateRequest is the message to delete key-value states in the specific state store.
@@ -510,10 +529,17 @@ type PublishEventRequest struct {
 	// The pubsub topic
 	Topic string `protobuf:"bytes,2,opt,name=topic,proto3" json:"topic,omitempty"`
 	// The data which will be published to topic.
-	Data                 []byte   `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	Data []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	// The content type for the data (optional).
+	DataContentType string `protobuf:"bytes,4,opt,name=data_content_type,json=dataContentType,proto3" json:"data_content_type,omitempty"`
+	// The metadata passing to pub components
+	//
+	// metadata property:
+	// - key : the key of the message.
+	Metadata             map[string]string `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
 func (m *PublishEventRequest) Reset()         { *m = PublishEventRequest{} }
@@ -558,6 +584,20 @@ func (m *PublishEventRequest) GetTopic() string {
 func (m *PublishEventRequest) GetData() []byte {
 	if m != nil {
 		return m.Data
+	}
+	return nil
+}
+
+func (m *PublishEventRequest) GetDataContentType() string {
+	if m != nil {
+		return m.DataContentType
+	}
+	return ""
+}
+
+func (m *PublishEventRequest) GetMetadata() map[string]string {
+	if m != nil {
+		return m.Metadata
 	}
 	return nil
 }
@@ -787,6 +827,98 @@ func (m *GetSecretResponse) GetData() map[string]string {
 	return nil
 }
 
+// GetBulkSecretRequest is the message to get the secrets from secret store.
+type GetBulkSecretRequest struct {
+	// The name of secret store.
+	StoreName string `protobuf:"bytes,1,opt,name=store_name,json=storeName,proto3" json:"store_name,omitempty"`
+	// The metadata which will be sent to secret store components.
+	Metadata             map[string]string `protobuf:"bytes,2,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *GetBulkSecretRequest) Reset()         { *m = GetBulkSecretRequest{} }
+func (m *GetBulkSecretRequest) String() string { return proto.CompactTextString(m) }
+func (*GetBulkSecretRequest) ProtoMessage()    {}
+func (*GetBulkSecretRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_da511bac0105b1e5, []int{13}
+}
+
+func (m *GetBulkSecretRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetBulkSecretRequest.Unmarshal(m, b)
+}
+func (m *GetBulkSecretRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetBulkSecretRequest.Marshal(b, m, deterministic)
+}
+func (m *GetBulkSecretRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetBulkSecretRequest.Merge(m, src)
+}
+func (m *GetBulkSecretRequest) XXX_Size() int {
+	return xxx_messageInfo_GetBulkSecretRequest.Size(m)
+}
+func (m *GetBulkSecretRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetBulkSecretRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetBulkSecretRequest proto.InternalMessageInfo
+
+func (m *GetBulkSecretRequest) GetStoreName() string {
+	if m != nil {
+		return m.StoreName
+	}
+	return ""
+}
+
+func (m *GetBulkSecretRequest) GetMetadata() map[string]string {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
+// GetBulkSecretResponse is the response message to convey the requested secret.
+type GetBulkSecretResponse struct {
+	// data hold the secret values. Some secret store, such as kubernetes secret
+	// store, can save multiple secrets for single secret key.
+	Data                 map[string]string `protobuf:"bytes,1,rep,name=data,proto3" json:"data,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *GetBulkSecretResponse) Reset()         { *m = GetBulkSecretResponse{} }
+func (m *GetBulkSecretResponse) String() string { return proto.CompactTextString(m) }
+func (*GetBulkSecretResponse) ProtoMessage()    {}
+func (*GetBulkSecretResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_da511bac0105b1e5, []int{14}
+}
+
+func (m *GetBulkSecretResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetBulkSecretResponse.Unmarshal(m, b)
+}
+func (m *GetBulkSecretResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetBulkSecretResponse.Marshal(b, m, deterministic)
+}
+func (m *GetBulkSecretResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetBulkSecretResponse.Merge(m, src)
+}
+func (m *GetBulkSecretResponse) XXX_Size() int {
+	return xxx_messageInfo_GetBulkSecretResponse.Size(m)
+}
+func (m *GetBulkSecretResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetBulkSecretResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetBulkSecretResponse proto.InternalMessageInfo
+
+func (m *GetBulkSecretResponse) GetData() map[string]string {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
 // TransactionalStateOperation is the message to execute a specified operation with a key-value pair.
 type TransactionalStateOperation struct {
 	// The type of operation to be executed
@@ -802,7 +934,7 @@ func (m *TransactionalStateOperation) Reset()         { *m = TransactionalStateO
 func (m *TransactionalStateOperation) String() string { return proto.CompactTextString(m) }
 func (*TransactionalStateOperation) ProtoMessage()    {}
 func (*TransactionalStateOperation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_da511bac0105b1e5, []int{13}
+	return fileDescriptor_da511bac0105b1e5, []int{15}
 }
 
 func (m *TransactionalStateOperation) XXX_Unmarshal(b []byte) error {
@@ -854,7 +986,7 @@ func (m *ExecuteStateTransactionRequest) Reset()         { *m = ExecuteStateTran
 func (m *ExecuteStateTransactionRequest) String() string { return proto.CompactTextString(m) }
 func (*ExecuteStateTransactionRequest) ProtoMessage()    {}
 func (*ExecuteStateTransactionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_da511bac0105b1e5, []int{14}
+	return fileDescriptor_da511bac0105b1e5, []int{16}
 }
 
 func (m *ExecuteStateTransactionRequest) XXX_Unmarshal(b []byte) error {
@@ -914,7 +1046,7 @@ func (m *RegisterActorTimerRequest) Reset()         { *m = RegisterActorTimerReq
 func (m *RegisterActorTimerRequest) String() string { return proto.CompactTextString(m) }
 func (*RegisterActorTimerRequest) ProtoMessage()    {}
 func (*RegisterActorTimerRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_da511bac0105b1e5, []int{15}
+	return fileDescriptor_da511bac0105b1e5, []int{17}
 }
 
 func (m *RegisterActorTimerRequest) XXX_Unmarshal(b []byte) error {
@@ -998,7 +1130,7 @@ func (m *UnregisterActorTimerRequest) Reset()         { *m = UnregisterActorTime
 func (m *UnregisterActorTimerRequest) String() string { return proto.CompactTextString(m) }
 func (*UnregisterActorTimerRequest) ProtoMessage()    {}
 func (*UnregisterActorTimerRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_da511bac0105b1e5, []int{16}
+	return fileDescriptor_da511bac0105b1e5, []int{18}
 }
 
 func (m *UnregisterActorTimerRequest) XXX_Unmarshal(b []byte) error {
@@ -1040,6 +1172,350 @@ func (m *UnregisterActorTimerRequest) GetName() string {
 	return ""
 }
 
+// RegisterActorReminderRequest is the message to register a reminder for an actor of a given type and id.
+type RegisterActorReminderRequest struct {
+	ActorType            string   `protobuf:"bytes,1,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId              string   `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Name                 string   `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	DueTime              string   `protobuf:"bytes,4,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
+	Period               string   `protobuf:"bytes,5,opt,name=period,proto3" json:"period,omitempty"`
+	Data                 []byte   `protobuf:"bytes,6,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *RegisterActorReminderRequest) Reset()         { *m = RegisterActorReminderRequest{} }
+func (m *RegisterActorReminderRequest) String() string { return proto.CompactTextString(m) }
+func (*RegisterActorReminderRequest) ProtoMessage()    {}
+func (*RegisterActorReminderRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_da511bac0105b1e5, []int{19}
+}
+
+func (m *RegisterActorReminderRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_RegisterActorReminderRequest.Unmarshal(m, b)
+}
+func (m *RegisterActorReminderRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_RegisterActorReminderRequest.Marshal(b, m, deterministic)
+}
+func (m *RegisterActorReminderRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RegisterActorReminderRequest.Merge(m, src)
+}
+func (m *RegisterActorReminderRequest) XXX_Size() int {
+	return xxx_messageInfo_RegisterActorReminderRequest.Size(m)
+}
+func (m *RegisterActorReminderRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RegisterActorReminderRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RegisterActorReminderRequest proto.InternalMessageInfo
+
+func (m *RegisterActorReminderRequest) GetActorType() string {
+	if m != nil {
+		return m.ActorType
+	}
+	return ""
+}
+
+func (m *RegisterActorReminderRequest) GetActorId() string {
+	if m != nil {
+		return m.ActorId
+	}
+	return ""
+}
+
+func (m *RegisterActorReminderRequest) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *RegisterActorReminderRequest) GetDueTime() string {
+	if m != nil {
+		return m.DueTime
+	}
+	return ""
+}
+
+func (m *RegisterActorReminderRequest) GetPeriod() string {
+	if m != nil {
+		return m.Period
+	}
+	return ""
+}
+
+func (m *RegisterActorReminderRequest) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+// UnregisterActorReminderRequest is the message to unregister an actor reminder.
+type UnregisterActorReminderRequest struct {
+	ActorType            string   `protobuf:"bytes,1,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId              string   `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Name                 string   `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *UnregisterActorReminderRequest) Reset()         { *m = UnregisterActorReminderRequest{} }
+func (m *UnregisterActorReminderRequest) String() string { return proto.CompactTextString(m) }
+func (*UnregisterActorReminderRequest) ProtoMessage()    {}
+func (*UnregisterActorReminderRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_da511bac0105b1e5, []int{20}
+}
+
+func (m *UnregisterActorReminderRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_UnregisterActorReminderRequest.Unmarshal(m, b)
+}
+func (m *UnregisterActorReminderRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_UnregisterActorReminderRequest.Marshal(b, m, deterministic)
+}
+func (m *UnregisterActorReminderRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UnregisterActorReminderRequest.Merge(m, src)
+}
+func (m *UnregisterActorReminderRequest) XXX_Size() int {
+	return xxx_messageInfo_UnregisterActorReminderRequest.Size(m)
+}
+func (m *UnregisterActorReminderRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_UnregisterActorReminderRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UnregisterActorReminderRequest proto.InternalMessageInfo
+
+func (m *UnregisterActorReminderRequest) GetActorType() string {
+	if m != nil {
+		return m.ActorType
+	}
+	return ""
+}
+
+func (m *UnregisterActorReminderRequest) GetActorId() string {
+	if m != nil {
+		return m.ActorId
+	}
+	return ""
+}
+
+func (m *UnregisterActorReminderRequest) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+// GetActorStateRequest is the message to get key-value states from specific actor.
+type GetActorStateRequest struct {
+	ActorType            string   `protobuf:"bytes,1,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId              string   `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Key                  string   `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetActorStateRequest) Reset()         { *m = GetActorStateRequest{} }
+func (m *GetActorStateRequest) String() string { return proto.CompactTextString(m) }
+func (*GetActorStateRequest) ProtoMessage()    {}
+func (*GetActorStateRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_da511bac0105b1e5, []int{21}
+}
+
+func (m *GetActorStateRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetActorStateRequest.Unmarshal(m, b)
+}
+func (m *GetActorStateRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetActorStateRequest.Marshal(b, m, deterministic)
+}
+func (m *GetActorStateRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetActorStateRequest.Merge(m, src)
+}
+func (m *GetActorStateRequest) XXX_Size() int {
+	return xxx_messageInfo_GetActorStateRequest.Size(m)
+}
+func (m *GetActorStateRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetActorStateRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetActorStateRequest proto.InternalMessageInfo
+
+func (m *GetActorStateRequest) GetActorType() string {
+	if m != nil {
+		return m.ActorType
+	}
+	return ""
+}
+
+func (m *GetActorStateRequest) GetActorId() string {
+	if m != nil {
+		return m.ActorId
+	}
+	return ""
+}
+
+func (m *GetActorStateRequest) GetKey() string {
+	if m != nil {
+		return m.Key
+	}
+	return ""
+}
+
+// GetActorStateResponse is the response conveying the actor's state value.
+type GetActorStateResponse struct {
+	Data                 []byte   `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetActorStateResponse) Reset()         { *m = GetActorStateResponse{} }
+func (m *GetActorStateResponse) String() string { return proto.CompactTextString(m) }
+func (*GetActorStateResponse) ProtoMessage()    {}
+func (*GetActorStateResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_da511bac0105b1e5, []int{22}
+}
+
+func (m *GetActorStateResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetActorStateResponse.Unmarshal(m, b)
+}
+func (m *GetActorStateResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetActorStateResponse.Marshal(b, m, deterministic)
+}
+func (m *GetActorStateResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetActorStateResponse.Merge(m, src)
+}
+func (m *GetActorStateResponse) XXX_Size() int {
+	return xxx_messageInfo_GetActorStateResponse.Size(m)
+}
+func (m *GetActorStateResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetActorStateResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetActorStateResponse proto.InternalMessageInfo
+
+func (m *GetActorStateResponse) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+// ExecuteActorStateTransactionRequest is the message to execute multiple operations on a specified actor.
+type ExecuteActorStateTransactionRequest struct {
+	ActorType            string                              `protobuf:"bytes,1,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId              string                              `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Operations           []*TransactionalActorStateOperation `protobuf:"bytes,3,rep,name=operations,proto3" json:"operations,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                            `json:"-"`
+	XXX_unrecognized     []byte                              `json:"-"`
+	XXX_sizecache        int32                               `json:"-"`
+}
+
+func (m *ExecuteActorStateTransactionRequest) Reset()         { *m = ExecuteActorStateTransactionRequest{} }
+func (m *ExecuteActorStateTransactionRequest) String() string { return proto.CompactTextString(m) }
+func (*ExecuteActorStateTransactionRequest) ProtoMessage()    {}
+func (*ExecuteActorStateTransactionRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_da511bac0105b1e5, []int{23}
+}
+
+func (m *ExecuteActorStateTransactionRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ExecuteActorStateTransactionRequest.Unmarshal(m, b)
+}
+func (m *ExecuteActorStateTransactionRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ExecuteActorStateTransactionRequest.Marshal(b, m, deterministic)
+}
+func (m *ExecuteActorStateTransactionRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExecuteActorStateTransactionRequest.Merge(m, src)
+}
+func (m *ExecuteActorStateTransactionRequest) XXX_Size() int {
+	return xxx_messageInfo_ExecuteActorStateTransactionRequest.Size(m)
+}
+func (m *ExecuteActorStateTransactionRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExecuteActorStateTransactionRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExecuteActorStateTransactionRequest proto.InternalMessageInfo
+
+func (m *ExecuteActorStateTransactionRequest) GetActorType() string {
+	if m != nil {
+		return m.ActorType
+	}
+	return ""
+}
+
+func (m *ExecuteActorStateTransactionRequest) GetActorId() string {
+	if m != nil {
+		return m.ActorId
+	}
+	return ""
+}
+
+func (m *ExecuteActorStateTransactionRequest) GetOperations() []*TransactionalActorStateOperation {
+	if m != nil {
+		return m.Operations
+	}
+	return nil
+}
+
+// TransactionalAcorStateOperation is the message to execute a specified operation with a key-value pair.
+type TransactionalActorStateOperation struct {
+	OperationType        string   `protobuf:"bytes,1,opt,name=operationType,proto3" json:"operationType,omitempty"`
+	Key                  string   `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value                *any.Any `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *TransactionalActorStateOperation) Reset()         { *m = TransactionalActorStateOperation{} }
+func (m *TransactionalActorStateOperation) String() string { return proto.CompactTextString(m) }
+func (*TransactionalActorStateOperation) ProtoMessage()    {}
+func (*TransactionalActorStateOperation) Descriptor() ([]byte, []int) {
+	return fileDescriptor_da511bac0105b1e5, []int{24}
+}
+
+func (m *TransactionalActorStateOperation) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_TransactionalActorStateOperation.Unmarshal(m, b)
+}
+func (m *TransactionalActorStateOperation) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_TransactionalActorStateOperation.Marshal(b, m, deterministic)
+}
+func (m *TransactionalActorStateOperation) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TransactionalActorStateOperation.Merge(m, src)
+}
+func (m *TransactionalActorStateOperation) XXX_Size() int {
+	return xxx_messageInfo_TransactionalActorStateOperation.Size(m)
+}
+func (m *TransactionalActorStateOperation) XXX_DiscardUnknown() {
+	xxx_messageInfo_TransactionalActorStateOperation.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TransactionalActorStateOperation proto.InternalMessageInfo
+
+func (m *TransactionalActorStateOperation) GetOperationType() string {
+	if m != nil {
+		return m.OperationType
+	}
+	return ""
+}
+
+func (m *TransactionalActorStateOperation) GetKey() string {
+	if m != nil {
+		return m.Key
+	}
+	return ""
+}
+
+func (m *TransactionalActorStateOperation) GetValue() *any.Any {
+	if m != nil {
+		return m.Value
+	}
+	return nil
+}
+
 // InvokeActorRequest is the message to call an actor.
 type InvokeActorRequest struct {
 	ActorType            string   `protobuf:"bytes,1,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
@@ -1055,7 +1531,7 @@ func (m *InvokeActorRequest) Reset()         { *m = InvokeActorRequest{} }
 func (m *InvokeActorRequest) String() string { return proto.CompactTextString(m) }
 func (*InvokeActorRequest) ProtoMessage()    {}
 func (*InvokeActorRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_da511bac0105b1e5, []int{17}
+	return fileDescriptor_da511bac0105b1e5, []int{25}
 }
 
 func (m *InvokeActorRequest) XXX_Unmarshal(b []byte) error {
@@ -1116,7 +1592,7 @@ func (m *InvokeActorResponse) Reset()         { *m = InvokeActorResponse{} }
 func (m *InvokeActorResponse) String() string { return proto.CompactTextString(m) }
 func (*InvokeActorResponse) ProtoMessage()    {}
 func (*InvokeActorResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_da511bac0105b1e5, []int{18}
+	return fileDescriptor_da511bac0105b1e5, []int{26}
 }
 
 func (m *InvokeActorResponse) XXX_Unmarshal(b []byte) error {
@@ -1152,11 +1628,14 @@ func init() {
 	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry")
 	proto.RegisterType((*GetBulkStateResponse)(nil), "dapr.proto.runtime.v1.GetBulkStateResponse")
 	proto.RegisterType((*BulkStateItem)(nil), "dapr.proto.runtime.v1.BulkStateItem")
+	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.BulkStateItem.MetadataEntry")
 	proto.RegisterType((*GetStateResponse)(nil), "dapr.proto.runtime.v1.GetStateResponse")
+	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.GetStateResponse.MetadataEntry")
 	proto.RegisterType((*DeleteStateRequest)(nil), "dapr.proto.runtime.v1.DeleteStateRequest")
 	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.DeleteStateRequest.MetadataEntry")
 	proto.RegisterType((*SaveStateRequest)(nil), "dapr.proto.runtime.v1.SaveStateRequest")
 	proto.RegisterType((*PublishEventRequest)(nil), "dapr.proto.runtime.v1.PublishEventRequest")
+	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.PublishEventRequest.MetadataEntry")
 	proto.RegisterType((*InvokeBindingRequest)(nil), "dapr.proto.runtime.v1.InvokeBindingRequest")
 	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.InvokeBindingRequest.MetadataEntry")
 	proto.RegisterType((*InvokeBindingResponse)(nil), "dapr.proto.runtime.v1.InvokeBindingResponse")
@@ -1165,105 +1644,134 @@ func init() {
 	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.GetSecretRequest.MetadataEntry")
 	proto.RegisterType((*GetSecretResponse)(nil), "dapr.proto.runtime.v1.GetSecretResponse")
 	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.GetSecretResponse.DataEntry")
+	proto.RegisterType((*GetBulkSecretRequest)(nil), "dapr.proto.runtime.v1.GetBulkSecretRequest")
+	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.GetBulkSecretRequest.MetadataEntry")
+	proto.RegisterType((*GetBulkSecretResponse)(nil), "dapr.proto.runtime.v1.GetBulkSecretResponse")
+	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry")
 	proto.RegisterType((*TransactionalStateOperation)(nil), "dapr.proto.runtime.v1.TransactionalStateOperation")
 	proto.RegisterType((*ExecuteStateTransactionRequest)(nil), "dapr.proto.runtime.v1.ExecuteStateTransactionRequest")
 	proto.RegisterMapType((map[string]string)(nil), "dapr.proto.runtime.v1.ExecuteStateTransactionRequest.MetadataEntry")
 	proto.RegisterType((*RegisterActorTimerRequest)(nil), "dapr.proto.runtime.v1.RegisterActorTimerRequest")
 	proto.RegisterType((*UnregisterActorTimerRequest)(nil), "dapr.proto.runtime.v1.UnregisterActorTimerRequest")
+	proto.RegisterType((*RegisterActorReminderRequest)(nil), "dapr.proto.runtime.v1.RegisterActorReminderRequest")
+	proto.RegisterType((*UnregisterActorReminderRequest)(nil), "dapr.proto.runtime.v1.UnregisterActorReminderRequest")
+	proto.RegisterType((*GetActorStateRequest)(nil), "dapr.proto.runtime.v1.GetActorStateRequest")
+	proto.RegisterType((*GetActorStateResponse)(nil), "dapr.proto.runtime.v1.GetActorStateResponse")
+	proto.RegisterType((*ExecuteActorStateTransactionRequest)(nil), "dapr.proto.runtime.v1.ExecuteActorStateTransactionRequest")
+	proto.RegisterType((*TransactionalActorStateOperation)(nil), "dapr.proto.runtime.v1.TransactionalActorStateOperation")
 	proto.RegisterType((*InvokeActorRequest)(nil), "dapr.proto.runtime.v1.InvokeActorRequest")
 	proto.RegisterType((*InvokeActorResponse)(nil), "dapr.proto.runtime.v1.InvokeActorResponse")
 }
 
-func init() { proto.RegisterFile("dapr/proto/runtime/v1/dapr.proto", fileDescriptor_da511bac0105b1e5) }
+func init() {
+	proto.RegisterFile("dapr/proto/runtime/v1/dapr.proto", fileDescriptor_da511bac0105b1e5)
+}
 
 var fileDescriptor_da511bac0105b1e5 = []byte{
-	// 1219 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x58, 0xcd, 0x72, 0xdb, 0xd4,
-	0x17, 0x8f, 0xfc, 0x11, 0xc7, 0xc7, 0x49, 0xff, 0xf9, 0xdf, 0xa4, 0xc1, 0x51, 0x0a, 0x35, 0x22,
-	0x43, 0xd3, 0x96, 0x51, 0xb0, 0x4b, 0x27, 0x6d, 0x0a, 0x8b, 0xe6, 0x83, 0x4c, 0x16, 0x94, 0xa0,
-	0x24, 0x2c, 0x98, 0x61, 0x52, 0x59, 0x3a, 0x75, 0x54, 0xeb, 0x0b, 0xe9, 0x4a, 0x83, 0x59, 0xf0,
-	0x14, 0x2c, 0x79, 0x00, 0x60, 0xc5, 0x23, 0xf0, 0x00, 0xec, 0x78, 0x11, 0x5e, 0x80, 0x19, 0x46,
-	0xf7, 0x4a, 0xb2, 0x1c, 0x5b, 0x8a, 0x93, 0x4c, 0xd8, 0x78, 0xee, 0x3d, 0xba, 0xe7, 0x9c, 0xdf,
-	0xf9, 0xb8, 0x3f, 0x1d, 0x19, 0x5a, 0xba, 0xea, 0x7a, 0x9b, 0xae, 0xe7, 0x50, 0x67, 0xd3, 0x0b,
-	0x6c, 0x6a, 0x58, 0xb8, 0x19, 0xb6, 0x37, 0x23, 0xa9, 0xcc, 0xa4, 0xe4, 0xee, 0x70, 0x2d, 0xc7,
-	0x27, 0xe4, 0xb0, 0x2d, 0xae, 0xf5, 0x1c, 0xa7, 0x67, 0x22, 0x57, 0xed, 0x06, 0x6f, 0x36, 0xd1,
-	0x72, 0xe9, 0x80, 0x9f, 0x13, 0xdf, 0xcf, 0x58, 0xd5, 0x1c, 0xcb, 0x72, 0xec, 0xc8, 0x28, 0x5f,
-	0xf1, 0x23, 0x12, 0xc2, 0xf2, 0xa1, 0x1d, 0x3a, 0x7d, 0x3c, 0x46, 0x2f, 0x34, 0x34, 0x54, 0xf0,
-	0xbb, 0x00, 0x7d, 0x4a, 0xee, 0x40, 0xc9, 0xd0, 0x9b, 0x42, 0x4b, 0xd8, 0xa8, 0x2b, 0x25, 0x43,
-	0x27, 0x9f, 0x41, 0xcd, 0x42, 0xdf, 0x57, 0x7b, 0xd8, 0x2c, 0xb7, 0x84, 0x8d, 0x46, 0xe7, 0x03,
-	0x39, 0x03, 0x28, 0x36, 0x19, 0xb6, 0x65, 0x6e, 0x2c, 0xb6, 0xa2, 0x24, 0x3a, 0xd2, 0x2f, 0x25,
-	0xf8, 0xdf, 0x01, 0xd2, 0x63, 0xaa, 0xd2, 0xd4, 0xc5, 0xbb, 0x00, 0x3e, 0x75, 0x3c, 0x3c, 0xb3,
-	0x55, 0x0b, 0x63, 0x57, 0x75, 0x26, 0x79, 0xa5, 0x5a, 0x48, 0x16, 0xa1, 0xdc, 0xc7, 0x41, 0xb3,
-	0xc4, 0xe4, 0xd1, 0x92, 0x9c, 0x42, 0x43, 0x73, 0x6c, 0xdf, 0xf0, 0x29, 0xda, 0xda, 0x80, 0xe1,
-	0xb8, 0xd3, 0x79, 0x32, 0x19, 0x07, 0xf3, 0xf4, 0xa5, 0x4b, 0x0d, 0xc7, 0xf6, 0xf9, 0x66, 0x77,
-	0xa8, 0xaa, 0x64, 0xed, 0x90, 0x23, 0x98, 0xb3, 0x90, 0xaa, 0xba, 0x4a, 0xd5, 0x66, 0xa5, 0x55,
-	0xde, 0x68, 0x74, 0x3e, 0x91, 0x27, 0x26, 0x5b, 0xbe, 0x10, 0x81, 0xfc, 0x45, 0xac, 0xb6, 0x6f,
-	0x53, 0x6f, 0xa0, 0xa4, 0x56, 0xc4, 0x17, 0xb0, 0x30, 0xf2, 0x28, 0x89, 0x45, 0x18, 0xc6, 0xb2,
-	0x0c, 0xd5, 0x50, 0x35, 0x03, 0x8c, 0xe3, 0xe3, 0x9b, 0xed, 0xd2, 0x33, 0x41, 0xfa, 0x47, 0x80,
-	0xa5, 0x03, 0xa4, 0x3b, 0x81, 0xd9, 0xbf, 0x4a, 0xba, 0x08, 0x54, 0xfa, 0x38, 0xf0, 0x9b, 0xa5,
-	0x56, 0x79, 0xa3, 0xae, 0xb0, 0x35, 0x69, 0x41, 0xc3, 0x55, 0x3d, 0xd5, 0x34, 0xd1, 0x34, 0x7c,
-	0x8b, 0x25, 0xac, 0xaa, 0x64, 0x45, 0xe4, 0x64, 0x2c, 0xf6, 0x67, 0xf9, 0xb1, 0x5f, 0x84, 0x74,
-	0x3b, 0xf1, 0x2b, 0xb0, 0x3c, 0xea, 0xcb, 0x77, 0x1d, 0xdb, 0x47, 0xb2, 0x0d, 0x55, 0x83, 0xa2,
-	0xe5, 0x37, 0x05, 0x86, 0x73, 0x3d, 0x07, 0x67, 0xaa, 0x78, 0x48, 0xd1, 0x52, 0xb8, 0x8a, 0x74,
-	0x06, 0x0b, 0x23, 0xf2, 0x09, 0x80, 0x08, 0x54, 0x58, 0x16, 0x22, 0x3c, 0xf3, 0x0a, 0x5b, 0x47,
-	0x32, 0xa4, 0x6a, 0x8f, 0x25, 0xae, 0xae, 0xb0, 0x75, 0x04, 0x1c, 0x3d, 0xcf, 0xf1, 0x9a, 0x15,
-	0x0e, 0x9c, 0x6d, 0xa4, 0x6d, 0x58, 0x1c, 0x36, 0x47, 0x0c, 0x38, 0xb1, 0x28, 0x4c, 0xb0, 0x58,
-	0x1a, 0x5a, 0x94, 0x7e, 0x2d, 0x01, 0xd9, 0x43, 0x13, 0x29, 0xde, 0xec, 0x7a, 0x4c, 0x42, 0xfb,
-	0x29, 0xd4, 0x1c, 0x7e, 0x09, 0x18, 0xde, 0x46, 0x47, 0xba, 0xfc, 0xba, 0x28, 0x89, 0x0a, 0x39,
-	0xce, 0x74, 0x47, 0x95, 0x65, 0x7d, 0x2b, 0x27, 0xeb, 0xe3, 0xf8, 0x6f, 0xa7, 0x39, 0xde, 0xc2,
-	0xe2, 0xb1, 0x1a, 0x5e, 0x29, 0x51, 0x5b, 0x30, 0xeb, 0x47, 0xc7, 0xf9, 0xd5, 0x68, 0x74, 0xee,
-	0x17, 0x64, 0x80, 0xf5, 0x4c, 0x7c, 0x5c, 0x7a, 0x0d, 0x4b, 0x47, 0x41, 0xd7, 0x34, 0xfc, 0xf3,
-	0xfd, 0x10, 0x6d, 0x9a, 0xb8, 0xbb, 0x0f, 0x0d, 0x37, 0xe8, 0xfa, 0x41, 0x37, 0xeb, 0x0f, 0xb8,
-	0x88, 0x39, 0x5c, 0x86, 0x2a, 0x75, 0x5c, 0x43, 0x4b, 0xd0, 0xb3, 0x4d, 0xda, 0x0d, 0xe5, 0x61,
-	0x37, 0x48, 0x7f, 0x0b, 0x09, 0xfb, 0xee, 0x18, 0xb6, 0x6e, 0xd8, 0xbd, 0xc4, 0x07, 0x81, 0x4a,
-	0xc6, 0x38, 0x5b, 0x4f, 0x6c, 0xd0, 0xd3, 0x4c, 0x81, 0xca, 0x2c, 0xba, 0xe7, 0x39, 0x05, 0x9a,
-	0xe4, 0x26, 0xaf, 0x44, 0xe4, 0x1e, 0xd4, 0x1d, 0x17, 0x3d, 0x35, 0xea, 0x82, 0xb8, 0xcf, 0x87,
-	0x82, 0x9b, 0x15, 0xf0, 0x0f, 0x01, 0xee, 0x5e, 0xc0, 0x52, 0x70, 0x5d, 0xbe, 0xce, 0xc4, 0xc7,
-	0xab, 0xb7, 0x3d, 0x5d, 0x7c, 0xdc, 0xe6, 0xed, 0xf4, 0xe0, 0x5f, 0x02, 0xbf, 0xec, 0xa8, 0x79,
-	0x48, 0xaf, 0x7d, 0x5b, 0xbf, 0x1a, 0x2b, 0xdd, 0xd3, 0x82, 0xb7, 0x4e, 0xd6, 0xd7, 0xed, 0x44,
-	0xf5, 0x93, 0x00, 0xff, 0xcf, 0x78, 0x8a, 0x8b, 0xf2, 0x79, 0x5a, 0x94, 0x08, 0x61, 0xe7, 0x72,
-	0x84, 0x71, 0xe2, 0xf7, 0x52, 0x78, 0x4c, 0x5f, 0xdc, 0x82, 0xfa, 0xde, 0xb5, 0x60, 0xfd, 0x08,
-	0x6b, 0x27, 0x9e, 0x6a, 0xfb, 0xaa, 0x16, 0xf5, 0x9e, 0x6a, 0xc6, 0x44, 0x15, 0xf7, 0x22, 0x59,
-	0x87, 0x85, 0xb4, 0x31, 0x4f, 0x06, 0x6e, 0x92, 0xf9, 0x51, 0x21, 0x79, 0x0e, 0x35, 0x8f, 0xe7,
-	0x8e, 0x39, 0x98, 0x82, 0x03, 0x92, 0xf3, 0xd2, 0xef, 0x25, 0x78, 0x6f, 0xff, 0x7b, 0xd4, 0x82,
-	0x98, 0xdd, 0x32, 0x60, 0x92, 0xd2, 0xdf, 0x83, 0x61, 0xa1, 0xc7, 0x2b, 0xaf, 0x00, 0xa4, 0x60,
-	0x12, 0x0a, 0xca, 0xcb, 0x63, 0x41, 0xa4, 0x4a, 0xc6, 0x0a, 0x39, 0x1b, 0xeb, 0x9d, 0xdd, 0x1c,
-	0x8b, 0xc5, 0xd0, 0x6f, 0xa7, 0x93, 0xfe, 0x14, 0x60, 0x55, 0xc1, 0x5e, 0x34, 0x5e, 0x79, 0x2f,
-	0x35, 0xea, 0x78, 0x27, 0x86, 0x85, 0x5e, 0xe6, 0xa2, 0xa8, 0x91, 0xf0, 0x8c, 0x0e, 0xcb, 0x55,
-	0x67, 0x12, 0x56, 0xaa, 0x55, 0x98, 0xe3, 0x8f, 0x0d, 0x3d, 0xb6, 0x5c, 0x63, 0xfb, 0x43, 0x3d,
-	0x25, 0xc5, 0x72, 0x86, 0x14, 0x57, 0x61, 0x4e, 0x0f, 0xf0, 0x2c, 0x0a, 0x37, 0x26, 0xaa, 0x9a,
-	0x1e, 0x60, 0xe4, 0x90, 0xac, 0xc0, 0xac, 0x8b, 0x9e, 0xe1, 0xe8, 0xcd, 0x2a, 0x7b, 0x10, 0xef,
-	0x88, 0x08, 0x73, 0x9a, 0x6a, 0x9a, 0x5d, 0x55, 0xeb, 0x37, 0x67, 0xd9, 0x93, 0x74, 0x9f, 0x72,
-	0x50, 0x2d, 0x43, 0xd2, 0x7d, 0x58, 0x3b, 0xb5, 0xbd, 0xff, 0x26, 0x1e, 0xe9, 0x07, 0x20, 0x9c,
-	0xc9, 0x98, 0xa3, 0x9b, 0xfb, 0x58, 0x81, 0x59, 0x0b, 0xe9, 0xb9, 0xa3, 0xc7, 0x5e, 0xe2, 0x5d,
-	0x1a, 0x68, 0x25, 0x13, 0xe8, 0x43, 0x58, 0x1a, 0xf1, 0x9d, 0xcf, 0xcb, 0x9d, 0x9f, 0xeb, 0x50,
-	0xd9, 0x53, 0x5d, 0x8f, 0xe8, 0xb0, 0x30, 0xf2, 0xf9, 0x40, 0x1e, 0x17, 0xf2, 0xf3, 0xe8, 0x47,
-	0x86, 0xb8, 0x5e, 0xfc, 0x0d, 0xc1, 0x01, 0x48, 0x33, 0xe4, 0x5b, 0x98, 0x4b, 0xa6, 0x2b, 0xf2,
-	0xe1, 0x74, 0xb3, 0xb9, 0xf8, 0xe0, 0xd2, 0x73, 0xa9, 0x79, 0x03, 0xe6, 0xb3, 0x13, 0x27, 0x79,
-	0x34, 0xfd, 0x08, 0x2c, 0x3e, 0x9e, 0xea, 0x6c, 0xea, 0xea, 0x15, 0xd4, 0xd3, 0xf9, 0x85, 0xe4,
-	0x41, 0xbc, 0x38, 0xe1, 0x88, 0x2b, 0x32, 0xff, 0xca, 0x93, 0x93, 0xaf, 0x3c, 0x79, 0x3f, 0xfa,
-	0xca, 0x93, 0x66, 0x88, 0x02, 0x8d, 0xcc, 0xe8, 0x45, 0x1e, 0x4e, 0x3d, 0x9e, 0x15, 0xd8, 0x7c,
-	0x0b, 0xef, 0xe4, 0xd0, 0x06, 0x79, 0x7a, 0x2d, 0x9a, 0x29, 0xf0, 0x75, 0x02, 0xf3, 0xd9, 0x19,
-	0x2b, 0x37, 0xf5, 0x13, 0x06, 0xb1, 0x02, 0xab, 0x66, 0xd2, 0x95, 0xf1, 0x3c, 0x70, 0x49, 0x57,
-	0x8e, 0x4e, 0x45, 0xe2, 0x47, 0x57, 0x19, 0x31, 0xa4, 0x19, 0xf2, 0x1a, 0xea, 0xe9, 0x0b, 0x90,
-	0x3c, 0x98, 0xf2, 0x25, 0x2e, 0x6e, 0x4c, 0xfb, 0x2e, 0x65, 0x1e, 0xc8, 0x38, 0xa1, 0x92, 0x8f,
-	0x73, 0x2c, 0xe4, 0x72, 0x6f, 0x41, 0xc6, 0x74, 0x58, 0x9e, 0x44, 0x72, 0x24, 0xef, 0x4d, 0x55,
-	0xc0, 0x88, 0x05, 0x5e, 0xde, 0x40, 0x23, 0xc3, 0x30, 0xb9, 0xdd, 0x3a, 0xce, 0x80, 0xe2, 0xa3,
-	0x69, 0x8e, 0x26, 0xf9, 0xda, 0x31, 0x00, 0x0c, 0x87, 0x6b, 0x84, 0xed, 0x1d, 0x88, 0x98, 0xea,
-	0x28, 0xd2, 0xf4, 0xbf, 0x69, 0xf7, 0x0c, 0x7a, 0x1e, 0x74, 0x23, 0xb2, 0x61, 0x7f, 0xae, 0xf0,
-	0x1f, 0xb7, 0xdf, 0x1b, 0xfb, 0xef, 0xe5, 0x45, 0xbc, 0xfc, 0xad, 0xb4, 0x16, 0xe9, 0xcb, 0xbb,
-	0xa6, 0x81, 0x36, 0x95, 0x5f, 0x06, 0xd4, 0xe9, 0xa1, 0x2d, 0x1f, 0x78, 0xae, 0x26, 0x87, 0xed,
-	0xee, 0x2c, 0xd3, 0x7b, 0xf2, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x71, 0x1f, 0xec, 0xe8, 0xc1,
-	0x11, 0x00, 0x00,
+	// 1495 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xcc, 0x59, 0xcb, 0x6f, 0xdc, 0x44,
+	0x18, 0xc7, 0xbb, 0x79, 0x7e, 0xdb, 0xf4, 0x31, 0x4d, 0x4b, 0xea, 0x94, 0x36, 0xb8, 0x15, 0x6d,
+	0x13, 0xe4, 0x90, 0x94, 0xd2, 0x36, 0x85, 0x43, 0xf3, 0xa0, 0x2a, 0x12, 0xa5, 0x38, 0x09, 0x48,
+	0x48, 0x28, 0x78, 0xbd, 0xd3, 0xad, 0x9b, 0x5d, 0x7b, 0xf1, 0x63, 0x45, 0x38, 0x70, 0xe4, 0x2f,
+	0xe0, 0x88, 0xc4, 0x15, 0x38, 0x21, 0x71, 0xe1, 0x88, 0xb8, 0x81, 0xb8, 0xf1, 0x6f, 0x70, 0xe0,
+	0x1f, 0x40, 0x62, 0x5e, 0xf6, 0x8e, 0xd7, 0xf6, 0xc4, 0x49, 0x59, 0xc4, 0x25, 0xb1, 0xc7, 0x33,
+	0xdf, 0xe3, 0xf7, 0x7d, 0xf3, 0xfb, 0xbe, 0x99, 0x85, 0x85, 0x96, 0xdd, 0x0b, 0x96, 0x7b, 0x81,
+	0x1f, 0xf9, 0xcb, 0x41, 0xec, 0x45, 0x6e, 0x17, 0x2f, 0xf7, 0x57, 0x96, 0xe9, 0xa8, 0xc9, 0x46,
+	0xd1, 0xb9, 0xc1, 0xb3, 0x29, 0x66, 0x98, 0xfd, 0x15, 0xfd, 0x42, 0xdb, 0xf7, 0xdb, 0x1d, 0xcc,
+	0x97, 0x36, 0xe3, 0x27, 0xcb, 0xb6, 0x77, 0xc0, 0x67, 0xe9, 0xf3, 0xc3, 0x9f, 0x70, 0xb7, 0x17,
+	0x25, 0x1f, 0x5f, 0x96, 0x14, 0x3a, 0x7e, 0xb7, 0xeb, 0x7b, 0x54, 0x1f, 0x7f, 0xe2, 0x53, 0x0c,
+	0x0c, 0xb3, 0x0f, 0xbd, 0xbe, 0xbf, 0x8f, 0xb7, 0x71, 0xd0, 0x77, 0x1d, 0x6c, 0xe1, 0x4f, 0x63,
+	0x1c, 0x46, 0xe8, 0x24, 0xd4, 0xdc, 0xd6, 0x9c, 0xb6, 0xa0, 0x5d, 0x9f, 0xb6, 0xc8, 0x13, 0x7a,
+	0x0b, 0x26, 0xbb, 0x38, 0x0c, 0xed, 0x36, 0x9e, 0xab, 0x93, 0xc1, 0xc6, 0xea, 0x15, 0x53, 0xb2,
+	0x55, 0x88, 0xec, 0xaf, 0x98, 0x5c, 0x98, 0x90, 0x62, 0x25, 0x6b, 0x8c, 0x6f, 0x6b, 0x70, 0xea,
+	0x01, 0x8e, 0xb6, 0x23, 0x3b, 0x4a, 0x55, 0xbc, 0x04, 0x10, 0x46, 0x7e, 0x80, 0xf7, 0x3c, 0xbb,
+	0x8b, 0x85, 0xaa, 0x69, 0x36, 0xf2, 0x88, 0x0c, 0xa0, 0xd3, 0x50, 0xdf, 0xc7, 0x07, 0x73, 0x35,
+	0x36, 0x4e, 0x1f, 0xd1, 0x2e, 0x34, 0x1c, 0xdf, 0x0b, 0xdd, 0x30, 0xc2, 0x9e, 0x73, 0xc0, 0xec,
+	0x38, 0xb9, 0x7a, 0xb3, 0xd8, 0x0e, 0xa6, 0xe9, 0xbd, 0x5e, 0xe4, 0x92, 0x05, 0xfc, 0x65, 0x63,
+	0xb0, 0xd4, 0x92, 0xe5, 0xa0, 0xc7, 0x30, 0xd5, 0xc5, 0x91, 0xdd, 0xb2, 0x23, 0x7b, 0x6e, 0x6c,
+	0xa1, 0x4e, 0x7c, 0x7b, 0xdd, 0x2c, 0x8c, 0x83, 0x39, 0xe4, 0x81, 0xf9, 0xae, 0x58, 0xb6, 0xe5,
+	0x45, 0xc1, 0x81, 0x95, 0x4a, 0xd1, 0xef, 0xc1, 0x4c, 0xe6, 0x53, 0xe2, 0x8b, 0x36, 0xf0, 0x65,
+	0x16, 0xc6, 0xfb, 0x76, 0x27, 0xc6, 0xc2, 0x3f, 0xfe, 0xb2, 0x56, 0xbb, 0xa3, 0x19, 0x7f, 0x6b,
+	0x70, 0x96, 0x28, 0x5a, 0x8f, 0x3b, 0xfb, 0x47, 0x81, 0x0b, 0xc1, 0x18, 0x91, 0x1b, 0x12, 0x79,
+	0x75, 0xf2, 0x81, 0x3d, 0xa3, 0x05, 0x68, 0xf4, 0xec, 0xc0, 0xee, 0x74, 0x70, 0xc7, 0x0d, 0xbb,
+	0x0c, 0xb0, 0x71, 0x4b, 0x1e, 0x42, 0x3b, 0x39, 0xdf, 0xef, 0x94, 0xfb, 0x3e, 0x6c, 0xd2, 0x68,
+	0xfc, 0xb7, 0x60, 0x36, 0xab, 0x2b, 0xec, 0x91, 0x60, 0x61, 0xb4, 0x06, 0xe3, 0x6e, 0x84, 0xbb,
+	0x21, 0x91, 0x42, 0xed, 0xbc, 0x5a, 0x62, 0x67, 0xba, 0xf0, 0x21, 0x99, 0x6c, 0xf1, 0x25, 0xc6,
+	0x9f, 0x1a, 0xcc, 0x64, 0x3e, 0x14, 0x58, 0x44, 0x00, 0x64, 0x30, 0x50, 0x83, 0x4e, 0x58, 0xec,
+	0x99, 0x8e, 0x11, 0x3f, 0xda, 0x0c, 0x39, 0x02, 0x2a, 0x7d, 0xa6, 0x96, 0xe3, 0x20, 0xf0, 0x03,
+	0x82, 0x17, 0xb3, 0x9c, 0xbd, 0xa0, 0x47, 0x12, 0x90, 0xe3, 0xcc, 0xc0, 0xd5, 0x2a, 0x06, 0x8e,
+	0x06, 0xc2, 0xdf, 0x34, 0x38, 0x3d, 0xc8, 0x55, 0x81, 0x5f, 0xe2, 0x9f, 0x56, 0xe0, 0x5f, 0x4d,
+	0xf2, 0xef, 0x7d, 0xc9, 0x93, 0x3a, 0xf3, 0xe4, 0xd6, 0xa1, 0xdb, 0x81, 0xab, 0x18, 0x8d, 0x33,
+	0xdf, 0xd5, 0x00, 0x6d, 0xe2, 0x0e, 0x8e, 0xf0, 0xf3, 0xb1, 0x47, 0x51, 0x2c, 0xdf, 0x84, 0x49,
+	0x9f, 0x73, 0x04, 0x8b, 0x66, 0x63, 0xd5, 0x38, 0x9c, 0x4d, 0xac, 0x64, 0x09, 0xda, 0xce, 0xc5,
+	0xfc, 0x76, 0x09, 0x52, 0x79, 0xfb, 0x47, 0x83, 0xd5, 0x33, 0x38, 0xbd, 0x6d, 0xf7, 0x8f, 0x04,
+	0xd4, 0x6d, 0x98, 0x08, 0xe9, 0x74, 0xce, 0x1c, 0x8d, 0xd5, 0xcb, 0x0a, 0x04, 0xd8, 0x96, 0x12,
+	0xd3, 0x8d, 0x6f, 0x6a, 0x70, 0xf6, 0x71, 0xdc, 0x24, 0x34, 0xf2, 0x74, 0xab, 0x8f, 0xbd, 0x28,
+	0xd1, 0x77, 0x99, 0x90, 0x4e, 0xdc, 0x0c, 0xe3, 0xa6, 0xac, 0x10, 0xf8, 0x10, 0xd3, 0x48, 0xcc,
+	0x8f, 0xfc, 0x9e, 0xeb, 0x24, 0xe6, 0xb3, 0x97, 0x34, 0x3d, 0xeb, 0x52, 0x7a, 0x2e, 0xc2, 0x19,
+	0xfa, 0x7f, 0x8f, 0xb0, 0x35, 0xa1, 0xea, 0x68, 0x2f, 0x3a, 0xe8, 0x61, 0xb1, 0xed, 0x4e, 0xd1,
+	0x0f, 0x1b, 0x7c, 0x7c, 0x87, 0x0c, 0x67, 0x98, 0x6c, 0x5c, 0xc9, 0x64, 0x05, 0x46, 0x8f, 0x26,
+	0x1a, 0x7f, 0x69, 0x49, 0x71, 0x5d, 0x77, 0xbd, 0x96, 0xeb, 0xb5, 0x13, 0x88, 0x88, 0xaf, 0x12,
+	0x36, 0xec, 0xb9, 0x90, 0x7e, 0x76, 0x73, 0x5b, 0xf1, 0x6e, 0x89, 0x4f, 0x45, 0x6a, 0xca, 0x9c,
+	0x42, 0x17, 0x61, 0xda, 0xef, 0xe1, 0xc0, 0xa6, 0x59, 0x2c, 0xe0, 0x1c, 0x0c, 0x3c, 0x9f, 0xcb,
+	0x3f, 0x6b, 0x70, 0x6e, 0xc8, 0x16, 0x05, 0xfd, 0x7c, 0x20, 0xf9, 0xc7, 0xb3, 0x6f, 0xad, 0x9a,
+	0x7f, 0xa3, 0xe4, 0x9b, 0x3f, 0x04, 0x79, 0x62, 0x27, 0xc0, 0xd1, 0xb1, 0xd9, 0xe6, 0x68, 0x2c,
+	0x2a, 0xeb, 0x1a, 0x8d, 0x57, 0x5f, 0x69, 0x70, 0x46, 0xd2, 0x24, 0x82, 0xf2, 0x76, 0x1a, 0x14,
+	0x55, 0xc5, 0xca, 0xad, 0x33, 0x37, 0x53, 0xf3, 0xd8, 0x7a, 0xfd, 0x36, 0x4c, 0x6f, 0x1e, 0xcb,
+	0xac, 0x5f, 0xb5, 0x41, 0xb5, 0x3f, 0x0a, 0xe0, 0xbb, 0xb9, 0xcc, 0xb9, 0x7b, 0x48, 0xdf, 0x32,
+	0x7a, 0x88, 0xbf, 0x26, 0xb9, 0x3f, 0xa4, 0x4d, 0xc0, 0xfc, 0x4e, 0x06, 0xe6, 0x37, 0xaa, 0x59,
+	0xfa, 0x6f, 0x43, 0xfd, 0x05, 0xcc, 0xef, 0x04, 0xb6, 0x17, 0xda, 0x0e, 0xdd, 0xe6, 0x76, 0x47,
+	0xd4, 0x34, 0xb1, 0xed, 0xd1, 0x55, 0x98, 0x49, 0x39, 0x80, 0x12, 0xaa, 0x10, 0x9a, 0x1d, 0x44,
+	0x77, 0x61, 0x32, 0xe0, 0x18, 0x32, 0x05, 0x15, 0xca, 0x45, 0x32, 0xdf, 0xf8, 0xa1, 0x06, 0x97,
+	0xb6, 0x3e, 0xc3, 0x4e, 0x2c, 0x0a, 0xa1, 0x64, 0x4c, 0x12, 0x74, 0x42, 0x4c, 0x69, 0x88, 0xf3,
+	0x31, 0xb7, 0x00, 0x52, 0x63, 0x92, 0x6a, 0x55, 0x96, 0xb2, 0x0a, 0x4f, 0x2d, 0x49, 0x0a, 0xda,
+	0xcb, 0x6d, 0xd3, 0x8d, 0x12, 0x89, 0x6a, 0xd3, 0x47, 0x93, 0x51, 0xbf, 0x6b, 0x70, 0xc1, 0xc2,
+	0x6d, 0x7a, 0x50, 0x09, 0xee, 0x3b, 0x04, 0x88, 0x1d, 0x62, 0x4c, 0x20, 0x6d, 0x11, 0x9b, 0x0e,
+	0xf2, 0xb2, 0x28, 0xe0, 0x62, 0x23, 0x2c, 0x54, 0x17, 0x60, 0x8a, 0x7f, 0x26, 0xe7, 0x38, 0x2e,
+	0x79, 0x92, 0xbd, 0x3f, 0x6c, 0xa5, 0xf5, 0xa7, 0x2e, 0xd5, 0x1f, 0x32, 0xbd, 0x15, 0xe3, 0x3d,
+	0xea, 0xae, 0xa8, 0x09, 0x93, 0xe4, 0x9d, 0x2a, 0x44, 0xe7, 0x61, 0x82, 0x20, 0xe6, 0xfa, 0x2d,
+	0x52, 0x58, 0xe9, 0x07, 0xf1, 0x86, 0x74, 0x98, 0x72, 0xc8, 0x49, 0xa2, 0x69, 0x3b, 0xfb, 0x73,
+	0x13, 0xec, 0x4b, 0xfa, 0x9e, 0xd2, 0xfd, 0xe4, 0x80, 0xee, 0x8d, 0x7d, 0x98, 0xdf, 0xf5, 0x82,
+	0xff, 0xc6, 0x1f, 0xe3, 0x47, 0x0d, 0x2e, 0x66, 0xb0, 0xb3, 0x70, 0x97, 0x94, 0x8f, 0xff, 0x11,
+	0x7c, 0x09, 0x44, 0x13, 0x12, 0x44, 0x1e, 0x5c, 0x1a, 0x82, 0x68, 0xa4, 0x66, 0x1b, 0x4d, 0x46,
+	0xbf, 0x4c, 0xd1, 0x70, 0xd3, 0x78, 0x4c, 0x2d, 0x22, 0xbf, 0xeb, 0x69, 0x7e, 0x1b, 0x4b, 0x8c,
+	0x16, 0x65, 0x1d, 0xe5, 0x2d, 0x81, 0xf1, 0x93, 0x06, 0x57, 0xc4, 0x56, 0x1b, 0xac, 0x28, 0xa0,
+	0x8a, 0xe3, 0x1b, 0xf8, 0x61, 0x86, 0x46, 0xea, 0xca, 0xbe, 0x3d, 0x43, 0x23, 0x03, 0x7b, 0x0a,
+	0xb9, 0xc4, 0xf8, 0x52, 0x83, 0x85, 0xc3, 0x16, 0x54, 0xa4, 0xd9, 0x7c, 0x3f, 0xb1, 0x98, 0x90,
+	0x04, 0xbf, 0x7d, 0x99, 0x35, 0xf9, 0xbd, 0x8f, 0x99, 0xdc, 0xfb, 0x98, 0xf7, 0xbd, 0x03, 0x41,
+	0x1d, 0xc6, 0xe7, 0x80, 0x78, 0xbf, 0x24, 0x12, 0xe8, 0x79, 0x11, 0x23, 0x09, 0x4c, 0xf8, 0xec,
+	0x29, 0x49, 0x60, 0x1e, 0x55, 0xf1, 0x96, 0xc6, 0x6f, 0x4c, 0x8a, 0xdf, 0x0d, 0x38, 0x9b, 0xd1,
+	0x5d, 0x1e, 0xea, 0xd5, 0x5f, 0x66, 0x60, 0x6c, 0x93, 0xc0, 0x8e, 0x5a, 0x30, 0x93, 0xb9, 0x83,
+	0x42, 0x4b, 0xca, 0x2e, 0x30, 0x7b, 0x53, 0xa5, 0x5f, 0x55, 0x5f, 0x44, 0x71, 0x03, 0x8c, 0x17,
+	0xd0, 0xc7, 0x30, 0x95, 0x1c, 0x58, 0xd1, 0x2b, 0xd5, 0x2e, 0x78, 0xf4, 0x6b, 0x15, 0x4f, 0xbe,
+	0x44, 0xbc, 0x0b, 0x27, 0xe4, 0x6b, 0x0b, 0xb4, 0x58, 0xfd, 0x1e, 0x45, 0x5f, 0xaa, 0x34, 0x37,
+	0x55, 0xf5, 0x08, 0xa6, 0xd3, 0x53, 0x1e, 0x2a, 0x33, 0x71, 0xf8, 0x1c, 0xa8, 0x9f, 0xcf, 0xa5,
+	0xcc, 0x16, 0xbd, 0x2a, 0x24, 0xf2, 0x2c, 0x68, 0x48, 0x07, 0x54, 0x74, 0xa3, 0xf2, 0x21, 0x56,
+	0x21, 0xf3, 0x19, 0xbc, 0x58, 0x52, 0x31, 0xd1, 0xad, 0x63, 0x55, 0x58, 0x85, 0xae, 0x1d, 0x38,
+	0x21, 0x9f, 0xe9, 0x4a, 0xa1, 0x2f, 0x38, 0xf8, 0x29, 0xa4, 0x76, 0x92, 0xac, 0x14, 0xa7, 0x8e,
+	0x43, 0xb2, 0x32, 0x7b, 0xf6, 0xd2, 0x5f, 0x3d, 0xca, 0x41, 0x86, 0x68, 0xfb, 0x04, 0xa6, 0xd3,
+	0x36, 0x1b, 0x5d, 0xab, 0x78, 0x54, 0xd0, 0xaf, 0x57, 0xed, 0xd8, 0xb9, 0x3f, 0x99, 0x0e, 0x13,
+	0x2d, 0x1d, 0xa1, 0x63, 0x2e, 0xf5, 0xa7, 0xb0, 0x69, 0x65, 0xfe, 0xa0, 0x7c, 0xe7, 0x82, 0x5e,
+	0x2b, 0x91, 0x52, 0xda, 0xe4, 0x28, 0xe2, 0xd3, 0x82, 0xd9, 0xa2, 0x6e, 0x02, 0x95, 0xb5, 0x84,
+	0x8a, 0xd6, 0x43, 0xa1, 0xe5, 0x09, 0x9c, 0x2b, 0xec, 0x22, 0xd0, 0xcd, 0x2a, 0xae, 0x0c, 0x15,
+	0x6f, 0xf5, 0x7e, 0x29, 0x29, 0xfc, 0xa5, 0xfb, 0x45, 0xdd, 0x28, 0xa8, 0x33, 0x3b, 0x53, 0x90,
+	0x55, 0x99, 0x90, 0x6b, 0x0d, 0x54, 0x99, 0x90, 0xaf, 0xf1, 0x44, 0x5b, 0x04, 0x17, 0x55, 0x05,
+	0x1d, 0xad, 0xa9, 0xe9, 0x40, 0xd5, 0x05, 0x28, 0xe3, 0xd6, 0x90, 0xea, 0x50, 0x29, 0xa7, 0xe5,
+	0xeb, 0xa4, 0xbe, 0x58, 0x65, 0x6a, 0xe2, 0xdd, 0xba, 0x0b, 0xe0, 0xfa, 0x7c, 0x45, 0x7f, 0x65,
+	0x1d, 0x68, 0x3d, 0x7b, 0x4c, 0x57, 0x86, 0x1f, 0xad, 0xb4, 0xdd, 0xe8, 0x69, 0xdc, 0xa4, 0x25,
+	0x89, 0xfd, 0xc4, 0xc3, 0xff, 0xf4, 0xf6, 0xdb, 0xb9, 0x5f, 0x80, 0xee, 0x89, 0xc7, 0xef, 0x6b,
+	0xf3, 0x74, 0xbd, 0xb9, 0xd1, 0x71, 0x09, 0x43, 0x99, 0xf7, 0xe3, 0xc8, 0x6f, 0x63, 0xcf, 0x7c,
+	0x10, 0xf4, 0x1c, 0x22, 0xbc, 0x39, 0xc1, 0xd6, 0xdd, 0xfc, 0x27, 0x00, 0x00, 0xff, 0xff, 0x40,
+	0x08, 0xe3, 0xac, 0x47, 0x1a, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
-var _ grpc.ClientConn
+var _ grpc.ClientConnInterface
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion4
+const _ = grpc.SupportPackageIsVersion6
 
 // DaprClient is the client API for Dapr service.
 //
@@ -1287,19 +1795,29 @@ type DaprClient interface {
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
 	GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error)
+	// Gets a bulk of secrets
+	GetBulkSecret(ctx context.Context, in *GetBulkSecretRequest, opts ...grpc.CallOption) (*GetBulkSecretResponse, error)
 	// Register an actor timer.
 	RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Unregister an actor timer.
 	UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// Register an actor reminder.
+	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// Unregister an actor reminder.
+	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// Gets the state for a specific actor.
+	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
+	// Executes state transactions for a specified actor
+	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(ctx context.Context, in *InvokeActorRequest, opts ...grpc.CallOption) (*InvokeActorResponse, error)
 }
 
 type daprClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewDaprClient(cc *grpc.ClientConn) DaprClient {
+func NewDaprClient(cc grpc.ClientConnInterface) DaprClient {
 	return &daprClient{cc}
 }
 
@@ -1384,6 +1902,15 @@ func (c *daprClient) GetSecret(ctx context.Context, in *GetSecretRequest, opts .
 	return out, nil
 }
 
+func (c *daprClient) GetBulkSecret(ctx context.Context, in *GetBulkSecretRequest, opts ...grpc.CallOption) (*GetBulkSecretResponse, error) {
+	out := new(GetBulkSecretResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetBulkSecret", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RegisterActorTimer", in, out, opts...)
@@ -1396,6 +1923,42 @@ func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTi
 func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorTimer", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RegisterActorReminder", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error) {
+	out := new(GetActorStateResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetActorState", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1431,10 +1994,20 @@ type DaprServer interface {
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
 	GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error)
+	// Gets a bulk of secrets
+	GetBulkSecret(context.Context, *GetBulkSecretRequest) (*GetBulkSecretResponse, error)
 	// Register an actor timer.
 	RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*empty.Empty, error)
 	// Unregister an actor timer.
 	UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*empty.Empty, error)
+	// Register an actor reminder.
+	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*empty.Empty, error)
+	// Unregister an actor reminder.
+	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*empty.Empty, error)
+	// Gets the state for a specific actor.
+	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
+	// Executes state transactions for a specified actor
+	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*empty.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error)
 }
@@ -1470,11 +2043,26 @@ func (*UnimplementedDaprServer) InvokeBinding(ctx context.Context, req *InvokeBi
 func (*UnimplementedDaprServer) GetSecret(ctx context.Context, req *GetSecretRequest) (*GetSecretResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSecret not implemented")
 }
+func (*UnimplementedDaprServer) GetBulkSecret(ctx context.Context, req *GetBulkSecretRequest) (*GetBulkSecretResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBulkSecret not implemented")
+}
 func (*UnimplementedDaprServer) RegisterActorTimer(ctx context.Context, req *RegisterActorTimerRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterActorTimer not implemented")
 }
 func (*UnimplementedDaprServer) UnregisterActorTimer(ctx context.Context, req *UnregisterActorTimerRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorTimer not implemented")
+}
+func (*UnimplementedDaprServer) RegisterActorReminder(ctx context.Context, req *RegisterActorReminderRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterActorReminder not implemented")
+}
+func (*UnimplementedDaprServer) UnregisterActorReminder(ctx context.Context, req *UnregisterActorReminderRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorReminder not implemented")
+}
+func (*UnimplementedDaprServer) GetActorState(ctx context.Context, req *GetActorStateRequest) (*GetActorStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
+}
+func (*UnimplementedDaprServer) ExecuteActorStateTransaction(ctx context.Context, req *ExecuteActorStateTransactionRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExecuteActorStateTransaction not implemented")
 }
 func (*UnimplementedDaprServer) InvokeActor(ctx context.Context, req *InvokeActorRequest) (*InvokeActorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeActor not implemented")
@@ -1646,6 +2234,24 @@ func _Dapr_GetSecret_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_GetBulkSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBulkSecretRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetBulkSecret(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetBulkSecret",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetBulkSecret(ctx, req.(*GetBulkSecretRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_RegisterActorTimer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterActorTimerRequest)
 	if err := dec(in); err != nil {
@@ -1678,6 +2284,78 @@ func _Dapr_UnregisterActorTimer_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).UnregisterActorTimer(ctx, req.(*UnregisterActorTimerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_RegisterActorReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterActorReminderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).RegisterActorReminder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/RegisterActorReminder",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).RegisterActorReminder(ctx, req.(*RegisterActorReminderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_UnregisterActorReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnregisterActorReminderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).UnregisterActorReminder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).UnregisterActorReminder(ctx, req.(*UnregisterActorReminderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_GetActorState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetActorStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetActorState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetActorState",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetActorState(ctx, req.(*GetActorStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ExecuteActorStateTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecuteActorStateTransactionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ExecuteActorStateTransaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ExecuteActorStateTransaction(ctx, req.(*ExecuteActorStateTransactionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1741,12 +2419,32 @@ var _Dapr_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Dapr_GetSecret_Handler,
 		},
 		{
+			MethodName: "GetBulkSecret",
+			Handler:    _Dapr_GetBulkSecret_Handler,
+		},
+		{
 			MethodName: "RegisterActorTimer",
 			Handler:    _Dapr_RegisterActorTimer_Handler,
 		},
 		{
 			MethodName: "UnregisterActorTimer",
 			Handler:    _Dapr_UnregisterActorTimer_Handler,
+		},
+		{
+			MethodName: "RegisterActorReminder",
+			Handler:    _Dapr_RegisterActorReminder_Handler,
+		},
+		{
+			MethodName: "UnregisterActorReminder",
+			Handler:    _Dapr_UnregisterActorReminder_Handler,
+		},
+		{
+			MethodName: "GetActorState",
+			Handler:    _Dapr_GetActorState_Handler,
+		},
+		{
+			MethodName: "ExecuteActorStateTransaction",
+			Handler:    _Dapr_ExecuteActorStateTransaction_Handler,
 		},
 		{
 			MethodName: "InvokeActor",

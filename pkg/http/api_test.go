@@ -19,13 +19,12 @@ import (
 	"testing"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/exporters"
-	"github.com/dapr/components-contrib/exporters/stringexporter"
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
 	http_middleware_loader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
@@ -33,7 +32,9 @@ import (
 	"github.com/dapr/dapr/pkg/logger"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	routing "github.com/fasthttp/router"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
@@ -43,6 +44,8 @@ import (
 	"github.com/valyala/fasthttp/fasthttputil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
@@ -54,6 +57,15 @@ func TestPubSubEndpoints(t *testing.T) {
 			if req.PubsubName == "errorpubsub" {
 				return fmt.Errorf("Error from pubsub %s", req.PubsubName)
 			}
+
+			if req.PubsubName == "errnotfound" {
+				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+			}
+
+			if req.PubsubName == "errnotallowed" {
+				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+			}
+
 			return nil
 		},
 		json: jsoniter.ConfigFastest,
@@ -164,6 +176,32 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
 		}
 		testAPI.publishFn = savePublishFn
+	})
+
+	t.Run("Pubsub not configured - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/errnotfound/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "pubsub 'errnotfound' not found", resp.ErrorBody["message"])
+		}
+	})
+
+	t.Run("Pubsub not configured - 403", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/errnotallowed/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
+			// assert
+			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
+		}
 	})
 
 	fakeServer.Shutdown()
@@ -291,13 +329,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1"}
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) { return nil, nil },
@@ -396,6 +428,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
@@ -424,25 +457,61 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
-	t.Run("Invoke direct messaging without method name - 400 ERR_DIRECT_INVOKE", func(t *testing.T) {
-		apiPath := "v1.0/invoke/fakeAppID/method"
-		fakeData := []byte("fakeData")
+	t.Run("Invoke direct messaging - HEAD - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 
 		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
-		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
-		fakeReq.WithRawData(fakeData, "application/json")
+		fakeReq.WithHTTPExtension(gohttp.MethodHead, "")
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
 
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
+
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		resp := fakeServer.DoRequest("HEAD", apiPath, nil, nil)
 
 		// assert
-		assert.Equal(t, 400, resp.StatusCode)
-		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte{}, resp.RawBody) // Empty body for HEAD
+	})
+
+	t.Run("Invoke direct messaging route '/' - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/invoke/fakeAppID/method/"
+
+		fakeReq := invokev1.NewInvokeMethodRequest("/")
+		fakeReq.WithHTTPExtension(gohttp.MethodGet, "")
+		fakeReq.WithMetadata(headerMetadata)
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
 	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE", func(t *testing.T) {
@@ -525,13 +594,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1"}
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -1242,7 +1305,43 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		json:  jsoniter.ConfigFastest,
+		components: []components_v1alpha1.Component{
+			{
+				ObjectMeta: meta_v1.ObjectMeta{
+					Name: "MockComponent1Name",
+				},
+				Spec: components_v1alpha1.ComponentSpec{
+					Type:    "mock.component1Type",
+					Version: "v1.0",
+					Metadata: []components_v1alpha1.MetadataItem{
+						{
+							Name: "actorMockComponent1",
+							Value: components_v1alpha1.DynamicValue{
+								JSON: v1.JSON{Raw: []byte("true")},
+							},
+						},
+					},
+				},
+			},
+			{
+				ObjectMeta: meta_v1.ObjectMeta{
+					Name: "MockComponent2Name",
+				},
+				Spec: components_v1alpha1.ComponentSpec{
+					Type:    "mock.component2Type",
+					Version: "v1.0",
+					Metadata: []components_v1alpha1.MetadataItem{
+						{
+							Name: "actorMockComponent2",
+							Value: components_v1alpha1.DynamicValue{
+								JSON: v1.JSON{Raw: []byte("true")},
+							},
+						},
+					},
+				},
+			},
+		},
+		json: jsoniter.ConfigFastest,
 	}
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints())
@@ -1251,6 +1350,10 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		"id":       "xyz",
 		"actors":   []map[string]interface{}{{"type": "abcd", "count": 10}, {"type": "xyz", "count": 5}},
 		"extended": make(map[string]string),
+		"components": []map[string]interface{}{
+			{"name": "MockComponent1Name", "type": "mock.component1Type", "version": "v1.0"},
+			{"name": "MockComponent2Name", "type": "mock.component2Type", "version": "v1.0"},
+		},
 	}
 	expectedBodyBytes, _ := json.Marshal(expectedBody)
 
@@ -1273,9 +1376,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
-func createExporters(meta exporters.Metadata) {
-	exporter := stringexporter.NewStringExporter(logger.NewLogger("fakeLogger"))
-	exporter.Init("fakeID", "fakeAddress", meta)
+func createExporters(buffer *string) {
+	exporter := testtrace.NewStringExporter(buffer, logger.NewLogger("fakeLogger"))
+	exporter.Register("fakeID")
 }
 
 func TestV1ActorEndpointsWithTracer(t *testing.T) {
@@ -1284,13 +1387,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1"}
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		actor:       nil,
@@ -1557,13 +1654,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	spec := config.TracingSpec{SamplingRate: "1.0"}
 	pipe := http_middleware.Pipeline{}
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -1652,13 +1743,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 		},
 	})
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -1724,13 +1809,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 		},
 	})
 
-	meta := exporters.Metadata{
-		Buffer: &buffer,
-		Properties: map[string]string{
-			"Enabled": "true",
-		},
-	}
-	createExporters(meta)
+	createExporters(&buffer)
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
@@ -2259,6 +2338,11 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	return nil, nil
 }
 
+// BulkGet performs a bulks get operations
+func (c fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+	return false, nil, nil
+}
+
 func (c fakeStateStore) Init(metadata state.Metadata) error {
 	c.counter = 0
 	return nil
@@ -2409,6 +2493,14 @@ func TestV1SecretEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_SECRET_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
 
 		testAPI.secretStores = fakeStores
+	})
+
+	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/bulk", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading secrets should succeed")
 	})
 }
 

@@ -88,7 +88,13 @@ type SelectorField struct {
 
 // TracingSpec defines distributed tracing configuration
 type TracingSpec struct {
-	SamplingRate string `json:"samplingRate"`
+	SamplingRate string     `json:"samplingRate"`
+	Zipkin       ZipkinSpec `json:"zipkin"`
+}
+
+// ZipkinSpec defines Zipkin trace configurations
+type ZipkinSpec struct {
+	EndpointAddresss string `json:"endpointAddress"`
 }
 
 // MetricSpec defines metrics configuration
@@ -122,7 +128,8 @@ type AccessControlSpec struct {
 	// +optional
 	DefaultAction string `json:"defaultAction" yaml:"defaultAction"`
 	// +optional
-	TrustDomain string          `json:"trustDomain" yaml:"trustDomain"`
+	TrustDomain string `json:"trustDomain" yaml:"trustDomain"`
+	// +optional
 	AppPolicies []AppPolicySpec `json:"policies" yaml:"policies"`
 }
 

@@ -123,13 +123,16 @@ func (a *actorsRuntime) Init() error {
 	if len(a.config.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
-	if a.store == nil {
-		log.Warn("actors: state store must be present to initialize the actor runtime")
-	}
 
-	_, ok := a.store.(state.TransactionalStore)
-	if !ok {
-		return errors.New(incompatibleStateStore)
+	if len(a.config.HostedActorTypes) > 0 {
+		if a.store == nil {
+			log.Warn("actors: state store must be present to initialize the actor runtime")
+		}
+
+		_, ok := a.store.(state.TransactionalStore)
+		if !ok {
+			return errors.New(incompatibleStateStore)
+		}
 	}
 
 	hostname := fmt.Sprintf("%s:%d", a.config.HostAddress, a.config.Port)
@@ -553,6 +556,7 @@ func (a *actorsRuntime) evaluateReminders() {
 
 						if !exists {
 							stop := make(chan bool)
+							a.activeReminders.Store(reminderKey, stop)
 							err := a.startReminder(&r, stop)
 							if err != nil {
 								log.Debugf("error starting reminder: %s", err)

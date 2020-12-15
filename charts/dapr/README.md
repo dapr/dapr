@@ -16,7 +16,7 @@ This chart installs Dapr via "child-charts":
 ## Prerequisites
 
 * Kubernetes cluster with RBAC (Role-Based Access Control) enabled is required
-* Helm 3.0.2 or newer
+* Helm 3.4.0 or newer
 
 ## Resources Required
 The chart deploys pods that consume minimum resources as specified in the resources configuration parameter.
@@ -63,7 +63,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Global Dapr docker image registry                                       | `docker.io/daprio`      |
-| `global.tag`                              | Global Dapr docker image version tag                                    | `0.11.0`                |
+| `global.tag`                              | Global Dapr docker image version tag                                    | `0.11.0`            |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `Always`                |
 | `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
@@ -80,9 +80,11 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.replicaCount`              | Number of replicas for Operator                                         | `1`                     |
 | `dapr_operator.logLevel`                  | Operator Log level                                                      | `info`                  |
 | `dapr_operator.image.name`                | Operator docker image name (`global.registry/dapr_operator.image.name`) | `dapr`                  |
+| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                               | `Always`                     |
 | `dapr_sidecar_injector.replicaCount`      | Number of replicas for Sidecar Injector                                 | `1`                     |
 | `dapr_sidecar_injector.logLevel`          | Sidecar Injector Log level                                              | `info`                  |
 | `dapr_sidecar_injector.image.name`        | Dapr runtime sidecar image name injecting to application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`                 |
+| `dapr_sidecar_injector.webhookFailurePolicy` | Failure policy for the sidecar injector                              | `Ignore`                |
 | `dapr_sentry.replicaCount`                | Number of replicas for Sentry CA                                        | `1`                     |
 | `dapr_sentry.logLevel`                    | Sentry CA Log level                                                     | `info`                  |
 | `dapr_sentry.image.name`                  | Sentry CA docker image name (`global.registry/dapr_sentry.image.name`)  | `dapr`                  |
@@ -102,6 +104,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.replicaCount`             | Number of replicas for Dapr Dashboard                                   | `1`                     |
 | `dapr_dashboard.logLevel`                 | Dapr Dashboard service Log level                                        | `info`                  |
 | `dapr_dashboard.image.registry`           | Dapr Dashboard docker registry                                          | `docker.io/daprio`      |
+| `dapr_dashboard.image.imagePullSecret`    | Dapr Dashboard docker image pull secret for docker registry                                          | `docker.io/daprio`      |
 | `dapr_dashboard.image.name`               | Dapr Dashboard docker image name                                        | `dashboard`             |
 | `dapr_dashboard.image.tag`                | Dapr Dashboard docker image tag                                         | `"0.4.0"`               |
 
