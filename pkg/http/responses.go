@@ -35,7 +35,7 @@ func respondWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 // respond sets a default application/json content type if content type is not present
 func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 	ctx.Response.SetStatusCode(code)
-	ctx.Response.SetBody(bytes.ReplaceAll(obj, []byte("%20"), []byte(" ")))
+	ctx.Response.SetBody(obj)
 
 	if len(ctx.Response.Header.ContentType()) == 0 {
 		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
@@ -51,7 +51,7 @@ func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag
 
 func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {
 	b, _ := json.Marshal(&resp)
-	respondWithJSON(ctx, code, b)
+	respondWithJSON(ctx, code, bytes.ReplaceAll(b, []byte("%20"), []byte(" ")))
 }
 
 func respondEmpty(ctx *fasthttp.RequestCtx) {
