@@ -6,6 +6,7 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 
 	jsoniter "github.com/json-iterator/go"
@@ -34,7 +35,7 @@ func respondWithJSON(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 // respond sets a default application/json content type if content type is not present
 func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 	ctx.Response.SetStatusCode(code)
-	ctx.Response.SetBody(obj)
+	ctx.Response.SetBody(bytes.ReplaceAll(obj, []byte("%20"), []byte(" ")))
 
 	if len(ctx.Response.Header.ContentType()) == 0 {
 		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
