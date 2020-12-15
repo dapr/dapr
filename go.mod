@@ -6,7 +6,8 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
-	github.com/dapr/components-contrib v1.0.0-rc1.0.20201209222832-6079c3b1136f
+	github.com/dapr/components-contrib v1.0.0-rc2
+	github.com/dapr/go-sdk v0.11.1
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
 	github.com/fasthttp/router v1.3.2
 	github.com/fsnotify/fsnotify v1.4.7
@@ -38,7 +39,7 @@ require (
 	go.opencensus.io v0.22.4
 	go.opentelemetry.io/otel v0.13.0
 	go.uber.org/atomic v1.5.0
-	google.golang.org/genproto v0.0.0-20200904004341-0bd0a958aa1d
+	google.golang.org/genproto v0.0.0-20201022181438-0ff5f38871d5
 	google.golang.org/grpc v1.33.1
 	gopkg.in/square/go-jose.v2 v2.5.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
