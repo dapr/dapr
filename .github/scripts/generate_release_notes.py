@@ -123,14 +123,17 @@ for c in cards:
             contributors.add("@" + str(c))
     match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
     hasNote = False
+    repo = issueOrPR.repository
     if match:
-        repo = issueOrPR.repository
         note = match.group(1).strip()
         if note:
             if note.upper() not in ["NOT APPLICABLE", "N/A"]:
                 changes.append((repo, issueOrPR, note, contributors, url))
             hasNote = True
     if not hasNote:
+        # Auto-generate a release note as fallback.
+        note = '**RESOLVED** ' + issueOrPR.title
+        changes.append((repo, issueOrPR, note, contributors, url))
         assignee = 'nobody'
         if issueOrPR.assignee:
             assignee = issueOrPR.assignee.login
