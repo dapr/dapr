@@ -3,13 +3,11 @@ module github.com/dapr/dapr
 go 1.15
 
 require (
-	contrib.go.opencensus.io/exporter/ocagent v0.7.0 // indirect
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/dapr/components-contrib v1.0.0-rc2.0.20201216184327-a03a96c28267
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
-	github.com/docker/docker v0.7.3-0.20190327010347-be7ac8be2ae0 // indirect
 	github.com/fasthttp/router v1.3.2
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
@@ -53,9 +51,6 @@ require (
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.20.0
 	sigs.k8s.io/controller-runtime v0.7.0
-	sigs.k8s.io/structured-merge-diff v1.0.1-0.20191108220359-b1b620dd3f06 // indirect
-	sigs.k8s.io/structured-merge-diff/v2 v2.0.1 // indirect
-	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
 replace (
