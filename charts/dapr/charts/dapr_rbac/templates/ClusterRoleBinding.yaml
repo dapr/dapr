@@ -30,22 +30,22 @@ metadata:
   name: dapr-operator-admin
 rules:
 - apiGroups: ["*"]
-  resources: ["serviceaccounts", "deployments", "services", "configmaps", "secrets", "components", "configurations"]
+  resources: ["serviceaccounts", "deployments", "services", "configmaps", "secrets", "components", "configurations", "leases"]
   verbs: ["get"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations", "subscriptions"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases"]
   verbs: ["list"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "components", "configurations", "subscriptions"]
+  resources: ["deployments", "services", "components", "configurations", "subscriptions", "leases"]
   verbs: ["watch"]
 - apiGroups: ["*"]
-  resources: ["services", "secrets", "configmaps"]
+  resources: ["services", "secrets", "configmaps", "leases"]
   verbs: ["update"]
 - apiGroups: ["*"]
-  resources: ["services"]
+  resources: ["services", "leases"]
   verbs: ["delete"]
 - apiGroups: ["*"]
-  resources: ["deployments", "services", "configmaps", "events"]
+  resources: ["deployments", "services", "configmaps", "events", "leases"]
   verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
