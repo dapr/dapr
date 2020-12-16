@@ -59,7 +59,8 @@ func NewDaprHandler(mgr ctrl.Manager) *DaprHandler {
 // Init allows for various startup tasks
 func (h *DaprHandler) Init() error {
 	if err := h.mgr.GetFieldIndexer().IndexField(
-		&corev1.Service{}, daprServiceOwnerField, func(rawObj runtime.Object) []string {
+		context.TODO(),
+		&corev1.Service{}, daprServiceOwnerField, func(rawObj client.Object) []string {
 			svc := rawObj.(*corev1.Service)
 			owner := meta_v1.GetControllerOf(svc)
 			if owner == nil || owner.APIVersion != appsv1.SchemeGroupVersion.String() || owner.Kind != "Deployment" {
@@ -81,9 +82,7 @@ func (h *DaprHandler) daprServiceName(appID string) string {
 }
 
 // Reconcile the expected services for deployments annotated for Dapr.
-func (h *DaprHandler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
-
+func (h *DaprHandler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var deployment appsv1.Deployment
 	expectedService := false
 	if err := h.Get(ctx, req.NamespacedName, &deployment); err != nil {
