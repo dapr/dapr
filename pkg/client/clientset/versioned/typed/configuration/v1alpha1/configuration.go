@@ -19,6 +19,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"time"
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -70,7 +71,7 @@ func (c *configurations) Get(name string, options v1.GetOptions) (result *v1alph
 		Resource("configurations").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -87,7 +88,7 @@ func (c *configurations) List(opts v1.ListOptions) (result *v1alpha1.Configurati
 		Resource("configurations").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -104,7 +105,7 @@ func (c *configurations) Watch(opts v1.ListOptions) (watch.Interface, error) {
 		Resource("configurations").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(context.TODO())
 }
 
 // Create takes the representation of a configuration and creates it.  Returns the server's representation of the configuration, and an error, if there is any.
@@ -114,7 +115,7 @@ func (c *configurations) Create(configuration *v1alpha1.Configuration) (result *
 		Namespace(c.ns).
 		Resource("configurations").
 		Body(configuration).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -127,7 +128,7 @@ func (c *configurations) Update(configuration *v1alpha1.Configuration) (result *
 		Resource("configurations").
 		Name(configuration.Name).
 		Body(configuration).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -139,7 +140,7 @@ func (c *configurations) Delete(name string, options *v1.DeleteOptions) error {
 		Resource("configurations").
 		Name(name).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -155,7 +156,7 @@ func (c *configurations) DeleteCollection(options *v1.DeleteOptions, listOptions
 		VersionedParams(&listOptions, scheme.ParameterCodec).
 		Timeout(timeout).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -168,7 +169,7 @@ func (c *configurations) Patch(name string, pt types.PatchType, data []byte, sub
 		SubResource(subresources...).
 		Name(name).
 		Body(data).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }

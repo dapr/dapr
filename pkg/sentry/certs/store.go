@@ -1,6 +1,7 @@
 package certs
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 
@@ -45,7 +46,7 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 	}
 
 	// We update and not create because sentry expects a secret to already exist
-	_, err = kubeClient.CoreV1().Secrets(namespace).Update(secret)
+	_, err = kubeClient.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "failed saving secret to kubernetes")
 	}
@@ -69,7 +70,7 @@ func CredentialsExist(conf config.SentryConfig) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		s, err := kubeClient.CoreV1().Secrets(namespace).Get(KubeScrtName, metav1.GetOptions{})
+		s, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), KubeScrtName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
