@@ -6,6 +6,7 @@
 package injector
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -221,7 +222,7 @@ LoopEnv:
 }
 
 func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(certs.KubeScrtName, meta_v1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}

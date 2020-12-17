@@ -95,7 +95,7 @@ func NewInjector(authUID string, config Config, daprClient scheme.Interface, kub
 }
 
 func ReplicasetAccountUID(kubeClient *kubernetes.Clientset) (string, error) {
-	r, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get("replicaset-controller", metav1.GetOptions{})
+	r, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get(context.TODO(), "replicaset-controller", metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
