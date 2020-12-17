@@ -35,7 +35,7 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/valyala/fasthttp v1.16.0
 	github.com/yuin/gopher-lua v0.0.0-20200603152657-dc2b0ca8b37e // indirect
-	go.opencensus.io v0.22.4
+	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.13.0
 	go.uber.org/atomic v1.6.0
 	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a
