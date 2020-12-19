@@ -19,6 +19,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"time"
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -70,7 +71,7 @@ func (c *components) Get(name string, options v1.GetOptions) (result *v1alpha1.C
 		Resource("components").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -87,7 +88,7 @@ func (c *components) List(opts v1.ListOptions) (result *v1alpha1.ComponentList, 
 		Resource("components").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -104,7 +105,7 @@ func (c *components) Watch(opts v1.ListOptions) (watch.Interface, error) {
 		Resource("components").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(context.TODO())
 }
 
 // Create takes the representation of a component and creates it.  Returns the server's representation of the component, and an error, if there is any.
@@ -114,7 +115,7 @@ func (c *components) Create(component *v1alpha1.Component) (result *v1alpha1.Com
 		Namespace(c.ns).
 		Resource("components").
 		Body(component).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -127,7 +128,7 @@ func (c *components) Update(component *v1alpha1.Component) (result *v1alpha1.Com
 		Resource("components").
 		Name(component.Name).
 		Body(component).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -139,7 +140,7 @@ func (c *components) Delete(name string, options *v1.DeleteOptions) error {
 		Resource("components").
 		Name(name).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -155,7 +156,7 @@ func (c *components) DeleteCollection(options *v1.DeleteOptions, listOptions v1.
 		VersionedParams(&listOptions, scheme.ParameterCodec).
 		Timeout(timeout).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -168,7 +169,7 @@ func (c *components) Patch(name string, pt types.PatchType, data []byte, subreso
 		SubResource(subresources...).
 		Name(name).
 		Body(data).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
