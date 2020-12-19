@@ -6,7 +6,6 @@
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 
 	jsoniter "github.com/json-iterator/go"
@@ -51,7 +50,7 @@ func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag
 
 func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {
 	b, _ := json.Marshal(&resp)
-	respondWithJSON(ctx, code, bytes.ReplaceAll(b, []byte("%20"), []byte(" ")))
+	respondWithJSON(ctx, code, b)
 }
 
 func respondEmpty(ctx *fasthttp.RequestCtx) {
