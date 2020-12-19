@@ -85,8 +85,8 @@ func TestUnscapeURIQueryHandler(t *testing.T) {
 
 			assert.Equal(t, expectedNewRequestURI, newRequestURI)
 		}
-
 	})
+
 	t.Run("with invalid Request", func(t *testing.T) {
 		testRequests := [][2]string{
 			{"/%s/state/unknown%%2state%%20store/key", "Failed to unescape request /%s/state/unknown%%2state%%20store/key with error invalid URL escape \"%%2s\""},
