@@ -14,7 +14,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"sort"
 	"testing"
 	"time"
@@ -23,6 +22,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 var tr *runner.TestRunner
@@ -36,14 +36,24 @@ const (
 	randomOffsetMax           = 99
 	numberOfMessagesToPublish = 100
 
-	publisherAppName  = "pubsub-publisher"
-	subscriberAppName = "pubsub-subscriber"
+	receiveMessageRetries = 5
+
+	publisherAppName      = "pubsub-publisher"
+	subscriberAppName     = "pubsub-subscriber"
+	subscriberAppNameGRPC = subscriberAppName + "-grpc"
 )
 
 // sent to the publisher app, which will publish data to dapr
 type publishCommand struct {
-	Topic string `json:"topic"`
-	Data  string `json:"data"`
+	Topic    string `json:"topic"`
+	Data     string `json:"data"`
+	Protocol string `json:"protocol"`
+}
+
+type callSubscriberMethodRequest struct {
+	RemoteApp string `json:"remoteApp"`
+	Protocol  string `json:"protocol"`
+	Method    string `json:"method"`
 }
 
 // data returned from the subscriber app
@@ -54,13 +64,16 @@ type receivedMessagesResponse struct {
 }
 
 // sends messages to the publisher app.  The publisher app does the actual publish
-func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([]string, error) {
+func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, protocol string) ([]string, error) {
 	var sentMessages []string
-	commandBody := publishCommand{Topic: topic}
+	commandBody := publishCommand{
+		Topic:    fmt.Sprintf("%s-%s", topic, protocol),
+		Protocol: protocol,
+	}
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
 		// create and marshal message
-		commandBody.Data = fmt.Sprintf("message-%d", i)
+		commandBody.Data = fmt.Sprintf("message-%s-%d", protocol, i)
 		jsonValue, err := json.Marshal(commandBody)
 		require.NoError(t, err)
 
@@ -85,15 +98,15 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string) ([
 	return sentMessages, nil
 }
 
-func testPublish(t *testing.T, publisherExternalURL string) receivedMessagesResponse {
+func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
 	var err error
-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic")
+	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol)
 	require.NoError(t, err)
 
-	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic")
+	sentTopicBMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-b-topic", protocol)
 	require.NoError(t, err)
 
-	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic")
+	sentTopicCMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-c-topic", protocol)
 	require.NoError(t, err)
 
 	return receivedMessagesResponse{
@@ -116,18 +129,20 @@ func postSingleMessage(url string, data []byte) (int, error) {
 	return statusCode, err
 }
 
-func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _ string) string {
+func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
 	log.Printf("Test publish subscribe success flow\n")
-	sentMessages := testPublish(t, publisherExternalURL)
+	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
-	validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	return subscriberExternalURL
 }
 
-func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _ string) string {
+func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
 	log.Printf("Test publish without topic\n")
-	commandBody := publishCommand{}
+	commandBody := publishCommand{
+		Protocol: protocol,
+	}
 	commandBody.Data = "unsuccessful message"
 	jsonValue, err := json.Marshal(commandBody)
 	require.NoError(t, err)
@@ -144,26 +159,38 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 	return subscriberExternalURL
 }
 
-func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName string) string {
+func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 	if subscriberResponse == "empty-json" {
 		log.Println("Initialize the sets again in the subscriber application for this scenario ...")
+		req := callSubscriberMethodRequest{
+			RemoteApp: subscriberAppName,
+			Method:    "initialize",
+			Protocol:  protocol,
+		}
 		// only for the empty-json scenario, initialize empty sets in the subscriber app
-		_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/initialize", nil)
+		reqBytes, _ := json.Marshal(req)
+		_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, code)
 	}
 
 	// set to respond with specified subscriber response
-	_, code, err := utils.HTTPPostWithStatus(subscriberExternalURL+"/tests/set-respond-"+subscriberResponse, nil)
+	req := callSubscriberMethodRequest{
+		RemoteApp: subscriberAppName,
+		Method:    "set-respond-" + subscriberResponse,
+		Protocol:  protocol,
+	}
+	reqBytes, _ := json.Marshal(req)
+	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, code)
-	sentMessages := testPublish(t, publisherExternalURL)
+	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
 		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	}
 
 	// restart application
@@ -172,14 +199,22 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	require.NoError(t, err, "error restarting subscriber")
 	subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
-	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
-	require.NoError(t, err)
+	if protocol == "http" {
+		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
+		require.NoError(t, err)
+	} else {
+		conn, err := grpc.Dial(subscriberExternalURL, grpc.WithInsecure())
+		if err != nil {
+			log.Printf("Could not connect to app %s: %s", subscriberExternalURL, err.Error())
+		}
+		defer conn.Close()
+	}
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
 		log.Printf("Validating no redelivered messages...")
 		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, receivedMessagesResponse{
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA: []string{},
 			ReceivedByTopicB: []string{},
@@ -189,24 +224,43 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
 		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, subscriberExternalURL, sentMessages)
+		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	}
 	return subscriberExternalURL
 }
 
-func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL string, sentMessages receivedMessagesResponse) {
+func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {
 	// this is the subscribe app's endpoint, not a dapr endpoint
-	url := fmt.Sprintf("http://%s/tests/get", subscriberExternalURL)
+	url := fmt.Sprintf("http://%s/tests/callSubscriberMethod", publisherExternalURL)
 	log.Printf("Getting messages received by subscriber using url %s", url)
 
-	resp, err := utils.HTTPPost(url, nil)
-	require.NoError(t, err)
+	request := callSubscriberMethodRequest{
+		RemoteApp: subscriberApp,
+		Protocol:  protocol,
+		Method:    "getMessages",
+	}
+
+	rawReq, _ := json.Marshal(request)
 
 	var appResp receivedMessagesResponse
-	err = json.Unmarshal(resp, &appResp)
-	require.NoError(t, err)
+	for retryCount := 0; retryCount < receiveMessageRetries; retryCount++ {
+		resp, err := utils.HTTPPost(url, rawReq)
+		require.NoError(t, err)
 
-	log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC))
+		err = json.Unmarshal(resp, &appResp)
+		require.NoError(t, err)
+
+		log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC))
+
+		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
+			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
+			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) {
+			log.Printf("Differing lengths in received vs. sent messages, retrying.")
+			time.Sleep(1 * time.Second)
+		} else {
+			break
+		}
+	}
 
 	// Sort messages first because the delivered messages cannot be ordered.
 	sort.Strings(sentMessages.ReceivedByTopicA)
@@ -216,11 +270,6 @@ func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL st
 	sort.Strings(sentMessages.ReceivedByTopicC)
 	sort.Strings(appResp.ReceivedByTopicC)
 
-	if !reflect.DeepEqual(sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA) {
-		for i := 0; i < len(sentMessages.ReceivedByTopicA); i++ {
-			log.Printf("%s, %s", sentMessages.ReceivedByTopicA[i], appResp.ReceivedByTopicA[i])
-		}
-	}
 	require.Equal(t, sentMessages.ReceivedByTopicA, appResp.ReceivedByTopicA)
 	require.Equal(t, sentMessages.ReceivedByTopicB, appResp.ReceivedByTopicB)
 	require.Equal(t, sentMessages.ReceivedByTopicC, appResp.ReceivedByTopicC)
@@ -245,6 +294,14 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 		},
+		{
+			AppName:        subscriberAppNameGRPC,
+			DaprEnabled:    true,
+			ImageName:      "e2e-pubsub-subscriber_grpc",
+			Replicas:       1,
+			IngressEnabled: true,
+			AppProtocol:    "grpc",
+		},
 	}
 
 	log.Printf("Creating TestRunner\n")
@@ -255,7 +312,7 @@ func TestMain(m *testing.M) {
 
 var pubsubTests = []struct {
 	name               string
-	handler            func(*testing.T, string, string, string, string) string
+	handler            func(*testing.T, string, string, string, string, string) string
 	subscriberResponse string
 }{
 	{
@@ -294,7 +351,7 @@ func TestPubSub(t *testing.T) {
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
 	subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
-	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
+	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURLHTTP must not be empty!")
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
@@ -305,8 +362,14 @@ func TestPubSub(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, tc := range pubsubTests {
-		t.Run(tc.name, func(t *testing.T) {
-			subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName)
-		})
+		for _, protocol := range []string{"http", "grpc"} {
+			t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
+				subAppName := subscriberAppName
+				if protocol == "grpc" {
+					subAppName = subscriberAppNameGRPC
+				}
+				subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subAppName, protocol)
+			})
+		}
 	}
 }

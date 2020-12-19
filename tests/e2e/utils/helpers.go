@@ -194,7 +194,10 @@ func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
 		// CheckRedirect), or failure to speak HTTP (such as a network
 		// connectivity problem). A non-2xx status code doesn't cause an
 		// error.
-		return nil, resp.StatusCode, err
+		if resp != nil {
+			return nil, resp.StatusCode, err
+		}
+		return nil, http.StatusInternalServerError, err
 	}
 
 	body, err := extractBody(resp.Body)

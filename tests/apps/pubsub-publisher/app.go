@@ -7,30 +7,44 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/gorilla/mux"
+	"google.golang.org/grpc"
 )
 
 const (
-	appPort    = 3000
-	daprPort   = 3500
-	pubsubName = "messagebus"
+	appPort      = 3000
+	daprPortHTTP = 3500
+	daprPortGRPC = 50001
+	pubsubName   = "messagebus"
 )
 
 type publishCommand struct {
-	Topic string `json:"topic"`
-	Data  string `json:"data"`
+	Topic    string `json:"topic"`
+	Data     string `json:"data"`
+	Protocol string `json:"protocol"`
 }
 
 type appResponse struct {
 	Message   string `json:"message,omitempty"`
 	StartTime int    `json:"start_time,omitempty"`
 	EndTime   int    `json:"end_time,omitempty"`
+}
+
+type callSubscriberMethodRequest struct {
+	RemoteApp string `json:"remoteApp"`
+	Protocol  string `json:"protocol"`
+	Method    string `json:"method"`
 }
 
 // indexHandler is the handler for root path
@@ -58,6 +72,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("    commandBody.Topic=%s", commandBody.Topic)
 	log.Printf("    commandBody.Data=%s", commandBody.Data)
+	log.Printf("    commandBody.Protocol=%s", commandBody.Protocol)
 
 	// based on commandBody.Topic, send to the appropriate topic
 	resp := appResponse{Message: fmt.Sprintf("%s is not supported", commandBody.Topic)}
@@ -75,29 +90,27 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// publish to dapr
-	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPort, pubsubName, commandBody.Topic)
-	log.Printf("Publishing using url %s and body '%s'", url, jsonValue)
+	var status int
+	if commandBody.Protocol == "grpc" {
+		status, err = performPublishGRPC(commandBody.Topic, jsonValue)
+	} else {
+		status, err = performPublishHTTP(commandBody.Topic, jsonValue)
+	}
 
-	postResp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
-		if postResp != nil {
-			log.Printf("Publish failed with error=%s, StatusCode=%d", err.Error(), postResp.StatusCode)
-		} else {
-			log.Printf("Publish failed with error=%s, response is nil", err.Error())
-		}
+		log.Printf("Publish failed with error=%s, StatusCode=%d", err.Error(), status)
 
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: err.Error(),
 		})
 		return
 	}
-	defer postResp.Body.Close()
 
 	// pass on status code to the calling application
-	w.WriteHeader(postResp.StatusCode)
+	w.WriteHeader(status)
 
-	if postResp.StatusCode == http.StatusOK {
+	if status == http.StatusOK || status == http.StatusNoContent {
 		log.Printf("Publish succeeded")
 		resp = appResponse{Message: "Success"}
 	} else {
@@ -108,6 +121,137 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	resp.EndTime = epoch()
 
 	json.NewEncoder(w).Encode(resp)
+}
+
+// nolint:gosec
+func performPublishHTTP(topic string, jsonValue []byte) (int, error) {
+	url := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPortHTTP, pubsubName, topic)
+	log.Printf("Publishing using url %s and body '%s'", url, jsonValue)
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonValue))
+
+	if err != nil {
+		if resp != nil {
+			return resp.StatusCode, err
+		} else {
+			return http.StatusInternalServerError, err
+		}
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode, nil
+}
+
+func performPublishGRPC(topic string, jsonValue []byte) (int, error) {
+	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
+	log.Printf("Connecting to dapr using url %s", url)
+
+	conn, err := grpc.Dial(url, grpc.WithInsecure())
+	if err != nil {
+		log.Printf("Could not connect to dapr: %s", err.Error())
+		return http.StatusInternalServerError, err
+	}
+	defer conn.Close()
+
+	client := runtimev1pb.NewDaprClient(conn)
+
+	req := &runtimev1pb.PublishEventRequest{
+		PubsubName: pubsubName,
+		Topic:      topic,
+		Data:       jsonValue,
+	}
+	_, err = client.PublishEvent(context.Background(), req)
+
+	if err != nil {
+		log.Printf("Publish failed: %s", err.Error())
+
+		if strings.Contains(err.Error(), "topic is empty") {
+			return http.StatusNotFound, err
+		}
+		return http.StatusInternalServerError, err
+	}
+	return http.StatusNoContent, nil
+}
+
+func callSubscriberMethod(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+
+	if err != nil {
+		log.Printf("Could not read request body: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var req callSubscriberMethodRequest
+	json.Unmarshal(body, &req)
+
+	log.Printf("callSubscriberMethod: Call %s on %s", req.Method, req.RemoteApp)
+
+	var resp []byte
+	if req.Protocol == "grpc" {
+		resp, err = callMethodGRPC(req.RemoteApp, req.Method)
+	} else {
+		resp, err = callMethodHTTP(req.RemoteApp, req.Method)
+	}
+
+	if err != nil {
+		log.Printf("Could not get logs from %s: %s", req.RemoteApp, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(resp)
+}
+
+func callMethodGRPC(appName, method string) ([]byte, error) {
+	url := fmt.Sprintf("localhost:%d", daprPortGRPC)
+	log.Printf("Connecting to dapr using url %s", url)
+
+	conn, err := grpc.Dial(url, grpc.WithInsecure())
+	if err != nil {
+		log.Printf("Could not connect to dapr: %s", err.Error())
+		return nil, err
+	}
+	defer conn.Close()
+
+	client := runtimev1pb.NewDaprClient(conn)
+
+	invokeReq := &commonv1pb.InvokeRequest{
+		Method: method,
+	}
+	invokeReq.HttpExtension = &commonv1pb.HTTPExtension{
+		Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value["POST"]),
+	}
+	req := &runtimev1pb.InvokeServiceRequest{
+		Message: invokeReq,
+		Id:      appName,
+	}
+
+	resp, err := client.InvokeService(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Data.Value, nil
+}
+
+func callMethodHTTP(appName, method string) ([]byte, error) {
+	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/%s", daprPortHTTP, appName, method)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte{})) //nolint: gosec
+
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
 }
 
 // epoch returns the current unix epoch timestamp
@@ -122,6 +266,7 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/tests/publish", performPublish).Methods("POST")
+	router.HandleFunc("/tests/callSubscriberMethod", callSubscriberMethod).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
