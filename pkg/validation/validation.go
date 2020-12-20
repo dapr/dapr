@@ -28,7 +28,7 @@ func ValidateKubernetesAppID(appID string) error {
 	if len(r) == 0 {
 		return nil
 	}
-	s := fmt.Sprintf("invalid app id: %s", strings.Join(r, ","))
+	s := fmt.Sprintf("invalid app id(input: %s): %s", appID, strings.Join(r, ","))
 	return errors.New(s)
 }
 
