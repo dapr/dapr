@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -476,19 +475,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
-	runAsNonRoot := true
-	var securityContext *corev1.SecurityContext
-	if runtime.GOOS == "linux" {
-		securityContext = &corev1.SecurityContext{
-			RunAsNonRoot: &runAsNonRoot,
-		}
-	}
-
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
 		ImagePullPolicy: pullPolicy,
-		SecurityContext: securityContext,
 		Ports: []corev1.ContainerPort{
 			{
 				ContainerPort: int32(sidecarHTTPPort),
