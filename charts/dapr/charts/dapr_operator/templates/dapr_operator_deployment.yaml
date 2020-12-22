@@ -63,8 +63,10 @@ spec:
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: true
+{{- end }}
         env:
         - name: NAMESPACE
           valueFrom:

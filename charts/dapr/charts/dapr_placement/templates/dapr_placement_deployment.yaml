@@ -118,8 +118,10 @@ spec:
 {{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"
 {{- end }}
+{{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: true
+{{- end }}
         env:
           - name: PLACEMENT_ID
             valueFrom:
