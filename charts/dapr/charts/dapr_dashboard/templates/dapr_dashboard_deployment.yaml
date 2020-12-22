@@ -50,6 +50,8 @@ spec:
       - name: dapr-dashboard
         image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        securityContext:
+          runAsNonRoot: true
         env:
         - name: NAMESPACE
           valueFrom:

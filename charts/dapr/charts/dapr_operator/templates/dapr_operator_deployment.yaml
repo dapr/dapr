@@ -63,6 +63,8 @@ spec:
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        securityContext:
+          runAsNonRoot: true
         env:
         - name: NAMESPACE
           valueFrom:

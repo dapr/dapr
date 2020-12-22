@@ -76,6 +76,8 @@ spec:
 {{- end }}
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
+        securityContext:
+          runAsNonRoot: true
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt

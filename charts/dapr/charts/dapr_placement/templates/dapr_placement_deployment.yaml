@@ -118,6 +118,8 @@ spec:
 {{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"
 {{- end }}
+        securityContext:
+          runAsNonRoot: true
         env:
           - name: PLACEMENT_ID
             valueFrom:
