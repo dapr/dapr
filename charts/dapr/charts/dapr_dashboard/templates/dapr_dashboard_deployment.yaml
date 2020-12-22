@@ -29,10 +29,12 @@ spec:
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneOs }}
+{{- if .Values.global.daprControlPlaneArch }}
                   - key: kubernetes.io/arch
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
+{{- end }}
 {{- if eq .Values.global.ha.enabled true }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
