@@ -53,20 +53,22 @@ var invalidJSON = []byte{0x7b, 0x7b}
 func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		publishFn: func(req *pubsub.PublishRequest) error {
-			if req.PubsubName == "errorpubsub" {
-				return fmt.Errorf("Error from pubsub %s", req.PubsubName)
-			}
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			PublishFn: func(req *pubsub.PublishRequest) error {
+				if req.PubsubName == "errorpubsub" {
+					return fmt.Errorf("Error from pubsub %s", req.PubsubName)
+				}
 
-			if req.PubsubName == "errnotfound" {
-				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
-			}
+				if req.PubsubName == "errnotfound" {
+					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+				}
 
-			if req.PubsubName == "errnotallowed" {
-				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
-			}
+				if req.PubsubName == "errnotallowed" {
+					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				}
 
-			return nil
+				return nil
+			},
 		},
 		json: jsoniter.ConfigFastest,
 	}
@@ -166,8 +168,8 @@ func TestPubSubEndpoints(t *testing.T) {
 	t.Run("Pubsub not configured - 400", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
-		savePublishFn := testAPI.publishFn
-		testAPI.publishFn = nil
+		savePubSubAdapter := testAPI.pubsubAdapter
+		testAPI.pubsubAdapter = nil
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
@@ -175,7 +177,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
 		}
-		testAPI.publishFn = savePublishFn
+		testAPI.pubsubAdapter = savePubSubAdapter
 	})
 
 	t.Run("Pubsub not configured - 400", func(t *testing.T) {

@@ -729,12 +729,12 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol))
 }
 
-func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
+func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
 	if a.pubSubs == nil || len(a.pubSubs) == 0 {
 		return nil
 	}
 
-	return a.Publish
+	return a
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
@@ -999,6 +999,15 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	return a.pubSubs[req.PubsubName].Publish(req)
 }
 
+// PubSubFeatures is an adapter method for the runtime to list features of a PubSub.
+func (a *DaprRuntime) PubSubFeatures(pubsubName string) ([]pubsub.Feature, error) {
+	if _, ok := a.pubSubs[pubsubName]; !ok {
+		return nil, runtime_pubsub.NotFoundError{PubsubName: pubsubName}
+	}
+
+	return a.pubSubs[pubsubName].Features(), nil
+}
+
 func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
 	inAllowedTopics := false
 
@@ -1071,6 +1080,11 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err == nil {
 		subject = cloudEvent.Subject
+
+		if cloudEvent.HasExpired() {
+			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent.ID, cloudEvent.Expiration)
+			return nil
+		}
 	}
 
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
@@ -1118,7 +1132,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		case pubsub.Retry:
 			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
 		case pubsub.Drop:
-			log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
+			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
 			return nil
 		}
 		// Consider unknown status field as error and retry
@@ -1144,6 +1158,11 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	if err != nil {
 		log.Debugf("error deserializing cloud events proto: %s", err)
 		return err
+	}
+
+	if cloudEvent.HasExpired() {
+		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent.ID, cloudEvent.Expiration)
+		return nil
 	}
 
 	envelope := &runtimev1pb.TopicEventRequest{
