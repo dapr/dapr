@@ -68,6 +68,12 @@ service Dapr {
 
   // InvokeActor calls a method on an actor.
   rpc InvokeActor (InvokeActorRequest) returns (InvokeActorResponse) {}
+
+  // Gets metadata of the sidecar
+  rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
+
+  // Sets value in extended metadata of the sidecar
+  rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -356,4 +362,28 @@ message InvokeActorRequest {
 // InvokeActorResponse is the method that returns an actor invocation response.
 message InvokeActorResponse {
   bytes data = 1;
+}
+
+// GetMetadataResponse is a message that is returned on GetMetadata rpc call
+message GetMetadataResponse {
+  string id = 1;
+  repeated ActiveActorsCount active_actors_count = 2;
+  repeated RegisteredComponents registered_components = 3;
+  map<string,string> extended_metadata = 4;
+}
+
+message ActiveActorsCount {
+  string type = 1;
+  int32 count = 2;
+}
+
+message RegisteredComponents {
+  string name = 1;
+  string type = 2;
+  string version = 3;
+}
+
+message SetMetadataRequest {
+  string key = 1;
+  string value = 2;
 }
