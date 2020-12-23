@@ -29,10 +29,12 @@ spec:
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneOs }}
+{{- if .Values.global.daprControlPlaneArch }}
                   - key: kubernetes.io/arch
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
+{{- end }}
 {{- if eq .Values.global.ha.enabled true }}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -48,6 +50,10 @@ spec:
       - name: dapr-dashboard
         image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{- if eq .Values.global.daprControlPlaneOs "linux" }}
+        securityContext:
+          runAsNonRoot: true
+{{- end }}
         env:
         - name: NAMESPACE
           valueFrom:

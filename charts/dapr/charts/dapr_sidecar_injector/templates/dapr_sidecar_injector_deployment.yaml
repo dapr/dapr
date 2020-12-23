@@ -76,6 +76,10 @@ spec:
 {{- end }}
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
+{{- if eq .Values.global.daprControlPlaneOs "linux" }}
+        securityContext:
+          runAsNonRoot: true
+{{- end }}
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt
@@ -126,10 +130,12 @@ spec:
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneOs }}
+{{- if .Values.global.daprControlPlaneArch }}
                   - key: kubernetes.io/arch
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}
