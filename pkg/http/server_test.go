@@ -72,6 +72,7 @@ func TestUnscapeURIQueryHandler(t *testing.T) {
 			{"/%s/state/unknown%%20state store", "/%s/state/unknown state store"},
 			{"/%s/state/unknown state%%20store", "/%s/state/unknown state store"},
 			{"/%s/state/unknown state store", "/%s/state/unknown state store"},
+			{"/%s/state/statestore%%2Fhello", "/%s/state/statestore/hello"},
 		}
 		for _, testRequest := range testRequests {
 			r := &fasthttp.RequestCtx{
