@@ -80,6 +80,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.replicaCount`              | Number of replicas for Operator                                         | `1`                     |
 | `dapr_operator.logLevel`                  | Operator Log level                                                      | `info`                  |
 | `dapr_operator.image.name`                | Operator docker image name (`global.registry/dapr_operator.image.name`) | `dapr`                  |
+| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                               | `Always`                     |
 | `dapr_sidecar_injector.replicaCount`      | Number of replicas for Sidecar Injector                                 | `1`                     |
 | `dapr_sidecar_injector.logLevel`          | Sidecar Injector Log level                                              | `info`                  |
 | `dapr_sidecar_injector.image.name`        | Dapr runtime sidecar image name injecting to application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`                 |
@@ -105,7 +106,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.image.registry`           | Dapr Dashboard docker registry                                          | `docker.io/daprio`      |
 | `dapr_dashboard.image.imagePullSecret`    | Dapr Dashboard docker image pull secret for docker registry                                          | `docker.io/daprio`      |
 | `dapr_dashboard.image.name`               | Dapr Dashboard docker image name                                        | `dashboard`             |
-| `dapr_dashboard.image.tag`                | Dapr Dashboard docker image tag                                         | `"0.4.0"`               |
+| `dapr_dashboard.image.tag`                | Dapr Dashboard docker image tag                                         | `"0.5.0"`               |
 
 ## Example of highly available configuration of the control plane
 

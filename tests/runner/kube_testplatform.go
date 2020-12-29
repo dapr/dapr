@@ -235,6 +235,17 @@ func (c *KubeTestPlatform) GetAppHostDetails(name string) (string, string, error
 	return pods[0].Name, pods[0].IP, nil
 }
 
+// GetServiceDNSName returns the FQDN of the host(pod) running 'name'
+func (c *KubeTestPlatform) GetServiceDNSName(name string) (string, error) {
+	app := c.AppResources.FindActiveResource(name)
+	sqdns, err := app.(*kube.AppManager).GetServiceDNSName()
+	if err != nil {
+		return "", err
+	}
+
+	return sqdns, nil
+}
+
 // Scale changes the number of replicas of the app
 func (c *KubeTestPlatform) Scale(name string, replicas int32) error {
 	app := c.AppResources.FindActiveResource(name)

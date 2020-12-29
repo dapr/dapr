@@ -6,6 +6,7 @@
 package injector
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -33,7 +34,8 @@ const (
 	daprAppPortKey                    = "dapr.io/app-port"
 	daprConfigKey                     = "dapr.io/config"
 	daprAppProtocolKey                = "dapr.io/app-protocol"
-	appIDKey                          = "dapr.io/app-id"
+	daprAppIDKey                      = "dapr.io/app-id"
+	daprAppHostKey                    = "dapr.io/app-host"
 	daprEnableProfilingKey            = "dapr.io/enable-profiling"
 	daprLogLevel                      = "dapr.io/log-level"
 	daprAPITokenSecret                = "dapr.io/api-token-secret" /* #nosec */
@@ -113,6 +115,8 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		return nil, err
 	}
 
+	applicationHost := getAppHost(pod)
+
 	// Keep DNS resolution outside of getSidecarContainer for unit testing.
 	placementAddress := fmt.Sprintf("%s:50005", getKubernetesDNS(placementService, namespace))
 	sentryAddress := fmt.Sprintf("%s:80", getKubernetesDNS(sentryService, namespace))
@@ -130,7 +134,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 
 	tokenMount := getTokenVolumeMount(pod)
-	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, imagePullPolicy, req.Namespace, apiSrvAddress, placementAddress, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
+	sidecarContainer, err := getSidecarContainer(pod.Annotations, id, image, imagePullPolicy, applicationHost, req.Namespace, apiSrvAddress, placementAddress, tokenMount, trustAnchors, certChain, certKey, sentryAddress, mtlsEnabled, identity)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +222,7 @@ LoopEnv:
 }
 
 func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(certs.KubeScrtName, meta_v1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
@@ -285,7 +289,11 @@ func getMetricsPort(annotations map[string]string) int {
 }
 
 func getAppID(pod corev1.Pod) string {
-	return getStringAnnotationOrDefault(pod.Annotations, appIDKey, pod.GetName())
+	return getStringAnnotationOrDefault(pod.Annotations, daprAppIDKey, pod.GetName())
+}
+
+func getAppHost(pod corev1.Pod) string {
+	return getStringAnnotationOrDefault(pod.Annotations, daprAppHostKey, "")
 }
 
 func getLogLevel(annotations map[string]string) string {
@@ -444,7 +452,8 @@ func getPullPolicy(pullPolicy string) corev1.PullPolicy {
 	}
 }
 
-func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, imagePullPolicy, namespace, controlPlaneAddress, placementServiceAddress string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
+func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, imagePullPolicy, applicationHost, namespace, controlPlaneAddress, placementServiceAddress string, tokenVolumeMount *corev1.VolumeMount, trustAnchors, certChain, certKey, sentryAddress string, mtlsEnabled bool, identity string) (*corev1.Container, error) {
+	// TODO consider reducing number of parameters to the method.
 	appPort, err := getAppPort(annotations)
 	if err != nil {
 		return nil, err
@@ -466,10 +475,15 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
+	allowPrivilegeEscalation := false
+
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
 		ImagePullPolicy: pullPolicy,
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+		},
 		Ports: []corev1.ContainerPort{
 			{
 				ContainerPort: int32(sidecarHTTPPort),
@@ -501,6 +515,10 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			{
 				Name:  "NAMESPACE",
 				Value: namespace,
+			},
+			{
+				Name:  "APPLICATION_HOST",
+				Value: applicationHost,
 			},
 		},
 		Args: []string{

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/channel"
+	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -42,7 +42,6 @@ import (
 )
 
 const (
-	daprSeparator        = "||"
 	daprHTTPStatusHeader = "dapr-http-status"
 )
 
@@ -60,6 +59,7 @@ type API interface {
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
+	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
 	WatchState(in *runtimev1pb.GetStateRequest, srv runtimev1pb.Dapr_WatchStateServer) error
@@ -74,6 +74,8 @@ type API interface {
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*empty.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
+	GetMetadata(ctx context.Context, empty *empty.Empty) (*runtimev1pb.GetMetadataResponse, error)
+	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -474,7 +476,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
 		r := state.GetRequest{
-			Key:      a.getModifiedStateKey(k),
+			Key:      state_loader.GetModifiedStateKey(k, in.StoreName, a.id),
 			Metadata: in.Metadata,
 		}
 		reqs[i] = r
@@ -487,7 +489,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		}
 		for i := 0; i < len(responses); i++ {
 			item := &runtimev1pb.BulkStateItem{
-				Key: a.getOriginalStateKey(responses[i].Key),
+				Key: state_loader.GetOriginalStateKey(responses[i].Key),
 			}
 			if responses[i].Error != "" {
 				item.Error = responses[i].Error
@@ -507,7 +509,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			req := param.(*state.GetRequest)
 			r, err := store.Get(req)
 			item := &runtimev1pb.BulkStateItem{
-				Key: a.getOriginalStateKey(req.Key),
+				Key: state_loader.GetOriginalStateKey(req.Key),
 			}
 			if err != nil {
 				item.Error = err.Error()
@@ -544,7 +546,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	}
 
 	req := state.GetRequest{
-		Key:      a.getModifiedStateKey(in.Key),
+		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
 		Metadata: in.Metadata,
 		Options: state.GetStateOption{
 			Consistency: stateConsistencyToString(in.Consistency),
@@ -577,7 +579,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	reqs := []state.SetRequest{}
 	for _, s := range in.States {
 		req := state.SetRequest{
-			Key:      a.getModifiedStateKey(s.Key),
+			Key:      state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id),
 			Metadata: s.Metadata,
 			Value:    s.Value,
 			ETag:     s.Etag,
@@ -608,7 +610,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	}
 
 	req := state.DeleteRequest{
-		Key:      a.getModifiedStateKey(in.Key),
+		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
 		Metadata: in.Metadata,
 		ETag:     in.Etag,
 	}
@@ -636,7 +638,7 @@ func (a *api) WatchState(in *runtimev1pb.GetStateRequest, ss runtimev1pb.Dapr_Wa
 	}
 
 	req := state.GetRequest{
-		Key:      a.getModifiedStateKey(in.Key),
+		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
 		Metadata: in.Metadata,
 		Options: state.GetStateOption{
 			Consistency: stateConsistencyToString(in.Consistency),
@@ -680,24 +682,6 @@ func (a *api) WatchState(in *runtimev1pb.GetStateRequest, ss runtimev1pb.Dapr_Wa
 	return nil
 }
 
-func (a *api) getModifiedStateKey(key string) string {
-	if a.id != "" {
-		return fmt.Sprintf("%s%s%s", a.id, daprSeparator, key)
-	}
-	return key
-}
-
-func (a *api) getOriginalStateKey(modifiedStateKey string) string {
-	if a.id != "" {
-		splits := strings.Split(modifiedStateKey, daprSeparator)
-		if len(splits) < 1 {
-			return modifiedStateKey
-		}
-		return splits[1]
-	}
-	return modifiedStateKey
-}
-
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
@@ -739,6 +723,48 @@ func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (
 	return response, nil
 }
 
+func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error) {
+	if a.secretStores == nil || len(a.secretStores) == 0 {
+		err := status.Error(codes.FailedPrecondition, messages.ErrSecretStoreNotConfigured)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetBulkSecretResponse{}, err
+	}
+
+	secretStoreName := in.StoreName
+
+	if a.secretStores[secretStoreName] == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrSecretStoreNotFound, secretStoreName)
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetBulkSecretResponse{}, err
+	}
+
+	req := secretstores.BulkGetSecretRequest{
+		Metadata: in.Metadata,
+	}
+
+	getResponse, err := a.secretStores[secretStoreName].BulkGetSecret(req)
+
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrBulkSecretGet, secretStoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetBulkSecretResponse{}, err
+	}
+
+	for key := range getResponse.Data {
+		if !a.isSecretAllowed(in.StoreName, key) {
+			err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, key, in.StoreName)
+			apiServerLogger.Debug(err)
+			return &runtimev1pb.GetBulkSecretResponse{}, err
+		}
+	}
+
+	response := &runtimev1pb.GetBulkSecretResponse{}
+	if getResponse.Data != nil {
+		response.Data = getResponse.Data
+	}
+	return response, nil
+}
+
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		err := status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
@@ -768,7 +794,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
-				Key: a.getModifiedStateKey(req.Key),
+				Key: state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
 				// Limitation:
 				// components that cannot handle byte array need to deserialize/serialize in
 				// component specific way in components-contrib repo.
@@ -791,7 +817,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 		case state.Delete:
 			delReq := state.DeleteRequest{
-				Key:      a.getModifiedStateKey(req.Key),
+				Key:      state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
 				Metadata: req.Metadata,
 				ETag:     req.Etag,
 			}
@@ -1043,6 +1069,16 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	return &runtimev1pb.InvokeActorResponse{
 		Data: body,
 	}, nil
+}
+
+//todo unimpements
+func (a *api) GetMetadata(ctx context.Context, empty *empty.Empty) (*runtimev1pb.GetMetadataResponse, error) {
+	return nil, nil
+}
+
+//todo unimpements
+func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error) {
+	return nil, nil
 }
 
 func (a *api) isSecretAllowed(storeName, key string) bool {

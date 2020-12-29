@@ -359,12 +359,12 @@ func TestSetupTracing(t *testing.T) {
 			rt := NewTestDaprRuntime(modes.StandaloneMode)
 			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
 			if tc.hostAddress != "" {
-				rt.hostAddress = tc.hostAddress
+				rt.daprHostAddress = tc.hostAddress
 			}
 			// Setup tracing with the fake trace exporter store to confirm
 			// the right exporter was registered.
 			exporterStore := &fakeTraceExporterStore{}
-			if err := rt.setupTracing(rt.hostAddress, exporterStore); tc.expectedErr != "" {
+			if err := rt.setupTracing(rt.daprHostAddress, exporterStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.Nil(t, err)
@@ -377,7 +377,7 @@ func TestSetupTracing(t *testing.T) {
 			// Setup tracing with the OpenCensus global exporter store.
 			// We have no way to validate the result, but we can at least
 			// confirm that nothing blows up.
-			rt.setupTracing(rt.hostAddress, openCensusExporterStore{})
+			rt.setupTracing(rt.daprHostAddress, openCensusExporterStore{})
 		})
 	}
 }
@@ -2038,6 +2038,25 @@ func TestNamespace(t *testing.T) {
 	})
 }
 
+func TestApplicationHost(t *testing.T) {
+	t.Run("empty application host", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		ns := rt.getApplicationHost()
+
+		assert.Empty(t, ns)
+	})
+
+	t.Run("non-empty application host", func(t *testing.T) {
+		os.Setenv("APPLICATION_HOST", "host.a.com")
+		defer os.Clearenv()
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		ns := rt.getApplicationHost()
+
+		assert.Equal(t, "host.a.com", ns)
+	})
+}
+
 func TestAuthorizedComponents(t *testing.T) {
 	testCompName := "fakeComponent"
 
@@ -2158,6 +2177,23 @@ func TestInitActors(t *testing.T) {
 
 		err := r.initActors()
 		assert.Error(t, err)
+	})
+
+	t.Run("actors hosted = true", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+		r.appConfig = config.ApplicationConfig{
+			Entities: []string{"actor1"},
+		}
+
+		hosted := r.hostingActors()
+		assert.True(t, hosted)
+	})
+
+	t.Run("actors hosted = false", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+
+		hosted := r.hostingActors()
+		assert.False(t, hosted)
 	})
 }
 

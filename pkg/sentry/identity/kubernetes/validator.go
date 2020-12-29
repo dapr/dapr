@@ -1,12 +1,14 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/pkg/errors"
 	kauthapi "k8s.io/api/authentication/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8s "k8s.io/client-go/kubernetes"
 	kauth "k8s.io/client-go/kubernetes/typed/authentication/v1"
 )
@@ -35,7 +37,7 @@ func (v *validator) Validate(id, token, namespace string) error {
 		return errors.Errorf("%s: token field in request must not be empty", errPrefix)
 	}
 
-	review, err := v.auth.TokenReviews().Create(&kauthapi.TokenReview{Spec: kauthapi.TokenReviewSpec{Token: token}})
+	review, err := v.auth.TokenReviews().Create(context.TODO(), &kauthapi.TokenReview{Spec: kauthapi.TokenReviewSpec{Token: token}}, v1.CreateOptions{})
 	if err != nil {
 		return err
 	}

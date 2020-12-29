@@ -51,6 +51,9 @@ service Dapr {
   // Gets secrets from secret stores.
   rpc GetSecret(GetSecretRequest) returns (GetSecretResponse) {}
 
+  // Gets a bulk of secrets
+  rpc GetBulkSecret(GetBulkSecretRequest) returns (GetBulkSecretResponse) {}
+
   // Register an actor timer.
   rpc RegisterActorTimer(RegisterActorTimerRequest) returns (google.protobuf.Empty) {}
 
@@ -71,6 +74,12 @@ service Dapr {
 
   // InvokeActor calls a method on an actor.
   rpc InvokeActor (InvokeActorRequest) returns (InvokeActorResponse) {}
+
+  // Gets metadata of the sidecar
+  rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
+
+  // Sets value in extended metadata of the sidecar
+  rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -300,6 +309,22 @@ message GetSecretResponse {
   map<string, string> data = 1;
 }
 
+// GetBulkSecretRequest is the message to get the secrets from secret store.
+message GetBulkSecretRequest {
+  // The name of secret store.
+  string store_name = 1;
+
+  // The metadata which will be sent to secret store components.
+  map<string,string> metadata = 2;
+}
+
+// GetBulkSecretResponse is the response message to convey the requested secret.
+message GetBulkSecretResponse {
+  // data hold the secret values. Some secret store, such as kubernetes secret
+  // store, can save multiple secrets for single secret key.
+  map<string, string> data = 1;
+}
+
 // TransactionalStateOperation is the message to execute a specified operation with a key-value pair.
 message TransactionalStateOperation {
   // The type of operation to be executed
@@ -393,4 +418,28 @@ message InvokeActorRequest {
 // InvokeActorResponse is the method that returns an actor invocation response.
 message InvokeActorResponse {
   bytes data = 1;
+}
+
+// GetMetadataResponse is a message that is returned on GetMetadata rpc call
+message GetMetadataResponse {
+  string id = 1;
+  repeated ActiveActorsCount active_actors_count = 2;
+  repeated RegisteredComponents registered_components = 3;
+  map<string,string> extended_metadata = 4;
+}
+
+message ActiveActorsCount {
+  string type = 1;
+  int32 count = 2;
+}
+
+message RegisteredComponents {
+  string name = 1;
+  string type = 2;
+  string version = 3;
+}
+
+message SetMetadataRequest {
+  string key = 1;
+  string value = 2;
 }

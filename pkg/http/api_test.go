@@ -487,23 +487,31 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, []byte{}, resp.RawBody) // Empty body for HEAD
 	})
 
-	t.Run("Invoke direct messaging without method name - 400 ERR_DIRECT_INVOKE", func(t *testing.T) {
-		apiPath := "v1.0/invoke/fakeAppID/method"
-		fakeData := []byte("fakeData")
+	t.Run("Invoke direct messaging route '/' - 200 OK", func(t *testing.T) {
+		apiPath := "v1.0/invoke/fakeAppID/method/"
 
-		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
-		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
-		fakeReq.WithRawData(fakeData, "application/json")
+		fakeReq := invokev1.NewInvokeMethodRequest("/")
+		fakeReq.WithHTTPExtension(gohttp.MethodGet, "")
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
 
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeDirectMessageResponse, nil).Once()
+
 		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		// assert
-		assert.Equal(t, 400, resp.StatusCode)
-		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
 	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE", func(t *testing.T) {
@@ -2489,6 +2497,14 @@ func TestV1SecretEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_SECRET_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
 
 		testAPI.secretStores = fakeStores
+	})
+
+	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/secrets/%s/bulk", storeName)
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		// assert
+		assert.Equal(t, 200, resp.StatusCode, "reading secrets should succeed")
 	})
 }
 

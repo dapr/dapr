@@ -68,7 +68,6 @@ import (
 const (
 	appConfigEndpoint = "dapr/config"
 	actorStateStore   = "actorStateStore"
-
 	// output bindings concurrency
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
@@ -128,7 +127,8 @@ type DaprRuntime struct {
 	nameResolver           nr.Resolver
 	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
-	hostAddress            string
+	daprHostAddress        string
+	applicationHostAddress string
 	actorStateStoreName    string
 	actorStateStoreCount   int
 	authenticator          security.Authenticator
@@ -212,6 +212,10 @@ func (a *DaprRuntime) getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
+func (a *DaprRuntime) getApplicationHost() string {
+	return os.Getenv("APPLICATION_HOST")
+}
+
 func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 	if a.runtimeConfig.Mode == modes.KubernetesMode {
 		client, _, err := client.GetOperatorClient(a.runtimeConfig.Kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.CertChain)
@@ -262,10 +266,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return err
 	}
 
-	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
+	if a.daprHostAddress, err = utils.GetHostAddress(); err != nil {
 		return errors.Wrap(err, "failed to determine host address")
 	}
-	if err = a.setupTracing(a.hostAddress, openCensusExporterStore{}); err != nil {
+	if err = a.setupTracing(a.daprHostAddress, openCensusExporterStore{}); err != nil {
 		return errors.Wrap(err, "failed to setup tracing")
 	}
 	// Register and initialize name resolution for service discovery.
@@ -689,7 +693,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.components, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.daprHostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
 	server.StartNonBlocking()
@@ -716,7 +720,7 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, a.namespace, trustDomain)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.daprHostAddress, port, a.namespace, trustDomain)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
@@ -837,6 +841,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		}
 
 		a.stateStores[s.ObjectMeta.Name] = store
+		state_loader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 
 		// set specified actor store if "actorStateStore" is true in the spec.
 		actorStoreSpecified := props[actorStateStore]
@@ -848,7 +853,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
 	}
 
-	if a.actorStateStoreName == "" || a.actorStateStoreCount != 1 {
+	if a.hostingActors() && (a.actorStateStoreName == "" || a.actorStateStoreCount != 1) {
 		log.Warnf("either no actor state store or multiple actor state stores are specified in the configuration, actor stores specified: %d", a.actorStateStoreCount)
 	}
 
@@ -1037,7 +1042,7 @@ func (a *DaprRuntime) initNameResolution() error {
 		// properties to register mDNS instances.
 		resolverMetadata.Properties = map[string]string{
 			nr.MDNSInstanceName:    a.runtimeConfig.ID,
-			nr.MDNSInstanceAddress: a.hostAddress,
+			nr.MDNSInstanceAddress: a.daprHostAddress,
 			nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
 		}
 	default:
@@ -1254,12 +1259,17 @@ func (a *DaprRuntime) initActors() error {
 	if err != nil {
 		return err
 	}
-	actorConfig := actors.NewConfig(a.hostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.appConfig.Entities,
+
+	actorConfig := actors.NewConfig(a.daprHostAddress, a.runtimeConfig.ID, a.runtimeConfig.PlacementAddresses, a.appConfig.Entities,
 		a.runtimeConfig.InternalGRPCPort, a.appConfig.ActorScanInterval, a.appConfig.ActorIdleTimeout, a.appConfig.DrainOngoingCallTimeout, a.appConfig.DrainRebalancedActors, a.namespace)
 	act := actors.NewActors(a.stateStores[a.actorStateStoreName], a.appChannel, a.grpc.GetGRPCConnection, actorConfig, a.runtimeConfig.CertChain, a.globalConfig.Spec.TracingSpec)
 	err = act.Init()
 	a.actor = act
 	return err
+}
+
+func (a *DaprRuntime) hostingActors() bool {
+	return len(a.appConfig.Entities) > 0
 }
 
 func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.Component) []components_v1alpha1.Component {
@@ -1338,7 +1348,11 @@ func (a *DaprRuntime) processComponents() {
 
 		err := a.processComponentAndDependents(comp)
 		if err != nil {
-			log.Errorf("process component %s error, %s", comp.Name, err)
+			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
+			if !comp.Spec.IgnoreErrors {
+				log.Fatalf(e)
+			}
+			log.Errorf(e)
 		}
 	}
 }
@@ -1507,10 +1521,17 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		return
 	}
 
-	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
+	appHost := a.getApplicationHost()
+	if len(appHost) != 0 {
+		a.applicationHostAddress = appHost
+		log.Warnf("Enabling insecure non-localhost communication to %s", a.applicationHostAddress)
+	} else {
+		a.applicationHostAddress = channel.DefaultChannelAddress
+	}
+	log.Infof("application host: %s. application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", a.applicationHostAddress, string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("localhost", fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort(a.applicationHostAddress, fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()
 			break
@@ -1587,18 +1608,19 @@ func (a *DaprRuntime) getConfigurationGRPC() (*config.ApplicationConfig, error) 
 
 func (a *DaprRuntime) createAppChannel() error {
 	if a.runtimeConfig.ApplicationPort > 0 {
-		var channelCreatorFn func(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error)
+		var channelCreatorFn func(applicationHost string, port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error)
 
 		switch a.runtimeConfig.ApplicationProtocol {
 		case GRPCProtocol:
-			channelCreatorFn = a.grpc.CreateLocalChannel
+			channelCreatorFn = a.grpc.CreateAppChannel
 		case HTTPProtocol:
-			channelCreatorFn = http_channel.CreateLocalChannel
+			channelCreatorFn = http_channel.CreateAppChannel
 		default:
 			return errors.Errorf("cannot create app channel for protocol %s", string(a.runtimeConfig.ApplicationProtocol))
 		}
 
-		ch, err := channelCreatorFn(a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency, a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL)
+		ch, err := channelCreatorFn(a.applicationHostAddress, a.runtimeConfig.ApplicationPort, a.runtimeConfig.MaxConcurrency,
+			a.globalConfig.Spec.TracingSpec, a.runtimeConfig.AppSSL)
 		if err != nil {
 			return err
 		}
