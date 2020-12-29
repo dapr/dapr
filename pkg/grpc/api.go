@@ -347,13 +347,11 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		}
 		for i := 0; i < len(responses); i++ {
 			item := &runtimev1pb.BulkStateItem{
-				Key: state_loader.GetOriginalStateKey(responses[i].Key),
-			}
-			if responses[i].Error != "" {
-				item.Error = responses[i].Error
-			} else {
-				item.Data = responses[i].Data
-				item.Etag = responses[i].ETag
+				Key:      state_loader.GetOriginalStateKey(responses[i].Key),
+				Data:     responses[i].Data,
+				Etag:     responses[i].ETag,
+				Metadata: responses[i].Metadata,
+				Error:    responses[i].Error,
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
 		}
