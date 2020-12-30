@@ -297,7 +297,6 @@ github.com/cyberdelia/templates v0.0.0-20141128023046-ca7fffd4298c/go.mod h1:GyV
 github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjmUv0qGF43aKCIKVE9A=
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
-github.com/dapr/components-contrib v0.9.113 h1:IMD5/8MNGzDklfm9u6x2+eN5GTZiEuMi+pAEOC9LCTM=
 github.com/dapr/components-contrib v1.0.0-rc2.0.20201229222852-e6dadfab6c66 h1:cAaBomTJwy57q0uwCG8h0u9hHdb5N+DKRYQLaTjdShs=
 github.com/dapr/components-contrib v1.0.0-rc2.0.20201229222852-e6dadfab6c66/go.mod h1:wmTSIgXHIqYeFCoCJDZTbDDw86ZqP/SeGbyp4ZKS+Y0=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
