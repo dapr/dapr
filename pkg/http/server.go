@@ -15,8 +15,6 @@ import (
 	cors_dapr "github.com/dapr/dapr/pkg/cors"
 	"github.com/dapr/dapr/pkg/logger"
 
-	"net/url"
-
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -58,8 +56,7 @@ func (s *server) StartNonBlocking() {
 		useAPIAuthentication(
 			s.useCors(
 				s.useComponents(
-					unscapeURIQuery(
-						s.useRouter()))))
+					s.useRouter())))
 
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
@@ -126,20 +123,6 @@ func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 			next(ctx)
 		} else {
 			ctx.Error("invalid api token", http.StatusUnauthorized)
-		}
-	}
-}
-
-func unscapeURIQuery(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		unescapedRequestURI, err := url.QueryUnescape(string(ctx.RequestURI()))
-		if err == nil {
-			log.Info("RequestURI unescaped successfully")
-			ctx.Request.SetRequestURI(unescapedRequestURI)
-			next(ctx)
-		} else {
-			errorMessage := fmt.Sprintf("Failed to unescape request %s with error %s", ctx.RequestURI(), err.Error())
-			ctx.Error(errorMessage, fasthttp.StatusBadRequest)
 		}
 	}
 }

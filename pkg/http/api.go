@@ -7,6 +7,7 @@ package http
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -459,7 +460,10 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 		return nil, "", errors.New(msg.Message)
 	}
 
-	storeName := a.getStateStoreName(reqCtx)
+	storeName, err := a.getStateStoreName(reqCtx)
+	if err != nil {
+		return nil, "", err
+	}
 
 	if a.stateStores[storeName] == nil {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrStateStoreNotFound, storeName))
@@ -491,7 +495,6 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	resp, err := store.Get(&req)
 	if err != nil {
-		storeName := a.getStateStoreName(reqCtx)
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
@@ -547,7 +550,10 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
+	secretStoreName, err := a.getParameterValue(reqCtx, secretStoreNameParam)
+	if err != nil {
+		return
+	}
 
 	if a.secretStores[secretStoreName] == nil {
 		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
@@ -597,7 +603,10 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
+	secretStoreName, err := a.getParameterValue(reqCtx, secretStoreNameParam)
+	if err != nil {
+		return
+	}
 
 	if a.secretStores[secretStoreName] == nil {
 		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
@@ -660,7 +669,6 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		storeName := a.getStateStoreName(reqCtx)
 		msg := NewErrorResponse("ERR_STATE_SAVE", fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
 		log.Debug(msg)
@@ -670,8 +678,20 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	respondEmpty(reqCtx)
 }
 
-func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
-	return reqCtx.UserValue(storeNameParam).(string)
+func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) (string, error) {
+	return a.getParameterValue(reqCtx, storeNameParam)
+}
+
+func (a *api) getParameterValue(reqCtx *fasthttp.RequestCtx, parameterName string) (string, error) {
+	parameterValueRaw := reqCtx.UserValue(parameterName).(string)
+	parameterValue, err := url.QueryUnescape(parameterValueRaw)
+	if err != nil {
+		msg := NewErrorResponse("ERR_PARAMETER_PARSE_ERROR", fmt.Sprintf(messages.ErrMalformedParameter, parameterName, parameterValueRaw, err.Error()))
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		log.Debug(msg)
+		return parameterValueRaw, errors.New(msg.Message)
+	}
+	return parameterValue, nil
 }
 
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
@@ -1072,7 +1092,11 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
+	pubsubName, err := a.getParameterValue(reqCtx, pubsubnameparam)
+	if err != nil {
+		return
+	}
+
 	if pubsubName == "" {
 		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
 		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)

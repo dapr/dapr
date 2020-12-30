@@ -4,6 +4,7 @@ const (
 	// Http
 	ErrMalformedRequest     = "failed deserializing HTTP body: %s"
 	ErrMalformedRequestData = "can't serialize request data field: %s"
+	ErrMalformedParameter   = "failed to unparse parameter %s with value %s. Error: %s"
 
 	// State
 	ErrStateStoresNotConfigured = "state store is not configured"

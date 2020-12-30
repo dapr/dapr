@@ -204,6 +204,29 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("PubSub with invalid PubSub Component Name - 400 ERR_PARAMETER_PARSE_ERROR", func(t *testing.T) {
+		invalidPubSubNameTests := [][2]string{
+			{"unknown%2pubsub", "failed to unparse parameter pubsubname with value unknown%2pubsub. Error: invalid URL escape \"%2p\""},
+		}
+		for _, invalidPubSubNameTest := range invalidPubSubNameTests {
+			pubsubName := invalidPubSubNameTest[0]
+			r := &fasthttp.RequestCtx{
+				Request: fasthttp.Request{},
+			}
+			r.SetUserValue(pubsubnameparam, pubsubName)
+			testAPI.onPublish(r)
+			requestResponseStatusCode := r.Response.StatusCode()
+			expectedResponseBody := map[string]interface{}{
+				"errorCode": "ERR_PARAMETER_PARSE_ERROR",
+				"message":   invalidPubSubNameTest[1],
+			}
+			expectedResponseBodyBytes, _ := json.Marshal(expectedResponseBody)
+			// assert
+			assert.Equal(t, fasthttp.StatusBadRequest, requestResponseStatusCode, "PubSub Name not properly escaped should return invalid request error code")
+			assert.Equal(t, expectedResponseBodyBytes, r.Response.Body(), "PubSub Name not properly escaped should return proper error message and code")
+		}
+	})
+
 	fakeServer.Shutdown()
 }
 
@@ -1983,14 +2006,17 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 		}
 		url = url[:len(url)-1]
 	}
-	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
+	r, err := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
+	if err != nil {
+		panic(fmt.Errorf("failed to create request: %v", err))
+	}
 	r.Header.Set("Content-Type", "application/json")
 	if len(headers) == 1 {
 		r.Header.Set("If-Match", headers[0])
 	}
 	res, err := f.client.Do(r)
 	if err != nil {
-		panic(fmt.Errorf("failed to request: %v", err))
+		panic(fmt.Errorf("failed to execute request: %v", err))
 	}
 
 	bodyBytes, _ := ioutil.ReadAll(res.Body)
@@ -2016,39 +2042,46 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
-	fakeStore := fakeStateStore{}
+	fakeStore1 := fakeStateStore{}
+	fakeStore2 := fakeStateStore{}
+	fakeStore3 := fakeStateStore{}
 	fakeStores := map[string]state.Store{
-		"store1": fakeStore,
+		"store1":  fakeStore1,
+		"store 2": fakeStore2,
+		"store/3": fakeStore3,
 	}
 	testAPI := &api{
 		stateStores: fakeStores,
 		json:        jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
-	storeName := "store1"
+	storeNames := []string{"store1", "store%202", "store%2F3"}
 
 	t.Run("Get state - 400 ERR_STATE_STORE_NOT_FOUND or NOT_CONFIGURED", func(t *testing.T) {
 		apisAndMethods := map[string][]string{
-			"v1.0/state/nonexistantStore/bad-key":     {"GET", "DELETE"},
-			"v1.0/state/nonexistantStore/":            {"POST", "PUT"},
-			"v1.0/state/nonexistantStore/bulk":        {"POST", "PUT"},
-			"v1.0/state/nonexistantStore/transaction": {"POST", "PUT"},
+			"v1.0/state/%s/bad-key":     {"GET", "DELETE"},
+			"v1.0/state/%s":             {"POST", "PUT"},
+			"v1.0/state/%s/bulk":        {"POST", "PUT"},
+			"v1.0/state/%s/transaction": {"POST", "PUT"},
 		}
+		nonexistantStores := []string{"nonexistantStore", "non%20existant%20Store", "non%20existant%20Store%2Ftest"}
+		for _, nonexistantStore := range nonexistantStores {
+			for apiPath, testMethods := range apisAndMethods {
+				apiPath = fmt.Sprintf(apiPath, nonexistantStore)
+				for _, method := range testMethods {
+					testAPI.stateStores = nil
+					resp := fakeServer.DoRequest(method, apiPath, nil, nil)
+					// assert
+					assert.Equal(t, 500, resp.StatusCode, apiPath)
+					assert.Equal(t, "ERR_STATE_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+					testAPI.stateStores = fakeStores
 
-		for apiPath, testMethods := range apisAndMethods {
-			for _, method := range testMethods {
-				testAPI.stateStores = nil
-				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
-				// assert
-				assert.Equal(t, 500, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_STATE_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
-				testAPI.stateStores = fakeStores
-
-				// act
-				resp = fakeServer.DoRequest(method, apiPath, nil, nil)
-				// assert
-				assert.Equal(t, 400, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_STATE_STORE_NOT_FOUND", resp.ErrorBody["errorCode"], apiPath)
+					// act
+					resp = fakeServer.DoRequest(method, apiPath, nil, nil)
+					// assert
+					assert.Equal(t, 400, resp.StatusCode, apiPath)
+					assert.Equal(t, "ERR_STATE_STORE_NOT_FOUND", resp.ErrorBody["errorCode"], apiPath)
+				}
 			}
 		}
 	})
@@ -2076,215 +2109,271 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Get state - 204 No Content Found", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/bad-key", storeName)
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-		// assert
-		assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
-		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/bad-key", storeName)
+			// act
+			resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "reading non-existing key should return 204")
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
 	})
 
 	t.Run("Get state - Good Key", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-		// assert
-		assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
-		assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
+			// act
+			resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "reading existing key should succeed")
+			assert.Equal(t, etag, resp.RawHeader.Get("ETag"), "failed to read etag")
+		}
 	})
 
 	t.Run("Get state - Upstream error", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/error-key", storeName)
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-		// assert
-		assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
-		assert.Equal(t, "ERR_STATE_GET", resp.ErrorBody["errorCode"])
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/error-key", storeName)
+			// act
+			resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
+			assert.Equal(t, "ERR_STATE_GET", resp.ErrorBody["errorCode"])
+		}
 	})
 
 	t.Run("Update state - PUT verb supported", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
-		request := []state.SetRequest{{
-			Key:  "good-key",
-			ETag: "",
-		}}
-		b, _ := json.Marshal(request)
-		// act
-		resp := fakeServer.DoRequest("PUT", apiPath, b, nil)
-		// assert
-		assert.Equal(t, 204, resp.StatusCode, "updating the state store with the PUT verb should succeed")
-		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+			request := []state.SetRequest{{
+				Key:  "good-key",
+				ETag: "",
+			}}
+			b, _ := json.Marshal(request)
+			// act
+			resp := fakeServer.DoRequest("PUT", apiPath, b, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "updating the state store with the PUT verb should succeed")
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
 	})
 
 	t.Run("Update state - No ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
-		request := []state.SetRequest{{
-			Key:  "good-key",
-			ETag: "",
-		}}
-		b, _ := json.Marshal(request)
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		// assert
-		assert.Equal(t, 204, resp.StatusCode, "updating existing key without etag should succeed")
-		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+			request := []state.SetRequest{{
+				Key:  "good-key",
+				ETag: "",
+			}}
+			b, _ := json.Marshal(request)
+			// act
+			resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "updating existing key without etag should succeed")
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
 	})
 
 	t.Run("Update state - State Error", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
-		request := []state.SetRequest{{
-			Key:  "error-key",
-			ETag: "",
-		}}
-		b, _ := json.Marshal(request)
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		// assert
-		assert.Equal(t, 500, resp.StatusCode, "state error should return 500 status")
-		assert.Equal(t, "ERR_STATE_SAVE", resp.ErrorBody["errorCode"])
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+			request := []state.SetRequest{{
+				Key:  "error-key",
+				ETag: "",
+			}}
+			b, _ := json.Marshal(request)
+			// act
+			resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "state error should return 500 status")
+			assert.Equal(t, "ERR_STATE_SAVE", resp.ErrorBody["errorCode"])
+		}
 	})
 
 	t.Run("Update state - Matching ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
-		request := []state.SetRequest{{
-			Key:  "good-key",
-			ETag: etag,
-		}}
-		b, _ := json.Marshal(request)
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		// assert
-		assert.Equal(t, 204, resp.StatusCode, "updating existing key with matching etag should succeed")
-		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+			request := []state.SetRequest{{
+				Key:  "good-key",
+				ETag: etag,
+			}}
+			b, _ := json.Marshal(request)
+			// act
+			resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "updating existing key with matching etag should succeed")
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
 	})
 
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
-		request := []state.SetRequest{{
-			Key:  "good-key",
-			ETag: "BAD ETAG",
-		}}
-		b, _ := json.Marshal(request)
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		// assert
-		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+			request := []state.SetRequest{{
+				Key:  "good-key",
+				ETag: "BAD ETAG",
+			}}
+			b, _ := json.Marshal(request)
+			// act
+			resp := fakeServer.DoRequest("POST", apiPath, b, nil)
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+		}
 	})
 
 	t.Run("Delete state - No ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
-		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
-		// assert
-		assert.Equal(t, 204, resp.StatusCode, "updating existing key without etag should succeed")
-		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
+			// act
+			resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "updating existing key without etag should succeed")
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
 	})
 
 	t.Run("Delete state - Matching ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
-		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, etag)
-		// assert
-		assert.Equal(t, 204, resp.StatusCode, "updating existing key with matching etag should succeed")
-		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
+			// act
+			resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, etag)
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "updating existing key with matching etag should succeed")
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
 	})
 
 	t.Run("Delete state - Bad ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
-		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "BAD ETAG")
-		// assert
-		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
+			// act
+			resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "BAD ETAG")
+			// assert
+			assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
+		}
 	})
 
 	t.Run("Bulk state get - Empty request", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
-		request := BulkGetRequest{}
-		body, _ := json.Marshal(request)
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
-		// assert
-		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on an empty body")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+			request := BulkGetRequest{}
+			body, _ := json.Marshal(request)
+			// act
+			resp := fakeServer.DoRequest("POST", apiPath, body, nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on an empty body")
+		}
 	})
 
 	t.Run("Bulk state get - PUT request", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
-		request := BulkGetRequest{}
-		body, _ := json.Marshal(request)
-		// act
-		resp := fakeServer.DoRequest("PUT", apiPath, body, nil)
-		// assert
-		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on an empty body")
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+			request := BulkGetRequest{}
+			body, _ := json.Marshal(request)
+			// act
+			resp := fakeServer.DoRequest("PUT", apiPath, body, nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on an empty body")
+		}
 	})
 
 	t.Run("Bulk state get - normal request", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
-		request := BulkGetRequest{
-			Keys: []string{"good-key", "foo"},
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+			request := BulkGetRequest{
+				Keys: []string{"good-key", "foo"},
+			}
+			body, _ := json.Marshal(request)
+
+			// act
+
+			resp := fakeServer.DoRequest("POST", apiPath, body, nil)
+
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on a normal request")
+
+			var responses []BulkGetResponse
+
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
+
+			expectedResponses := []BulkGetResponse{
+				{
+					Key:   "good-key",
+					Data:  jsoniter.RawMessage("life is good"),
+					ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+					Error: "",
+				},
+				{
+					Key:   "foo",
+					Data:  nil,
+					ETag:  "",
+					Error: "",
+				},
+			}
+
+			assert.Equal(t, expectedResponses, responses, "Responses do not match")
 		}
-		body, _ := json.Marshal(request)
-
-		// act
-
-		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
-
-		// assert
-		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed on a normal request")
-
-		var responses []BulkGetResponse
-
-		assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
-
-		expectedResponses := []BulkGetResponse{
-			{
-				Key:   "good-key",
-				Data:  jsoniter.RawMessage("life is good"),
-				ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
-				Error: "",
-			},
-			{
-				Key:   "foo",
-				Data:  nil,
-				ETag:  "",
-				Error: "",
-			},
-		}
-
-		assert.Equal(t, expectedResponses, responses, "Responses do not match")
 	})
 
 	t.Run("Bulk state get - one key returns error", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
-		request := BulkGetRequest{
-			Keys: []string{"good-key", "error-key"},
+		for _, storeName := range storeNames {
+			apiPath := fmt.Sprintf("v1.0/state/%s/bulk", storeName)
+			request := BulkGetRequest{
+				Keys: []string{"good-key", "error-key"},
+			}
+			body, _ := json.Marshal(request)
+			// act
+			resp := fakeServer.DoRequest("POST", apiPath, body, nil)
+			// assert
+			assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed even if key not found")
+
+			var responses []BulkGetResponse
+
+			assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
+
+			expectedResponses := []BulkGetResponse{
+				{
+					Key:   "good-key",
+					Data:  jsoniter.RawMessage("life is good"),
+					ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+					Error: "",
+				},
+				{
+					Key:   "error-key",
+					Data:  nil,
+					ETag:  "",
+					Error: "UPSTREAM STATE ERROR",
+				},
+			}
+
+			assert.Equal(t, expectedResponses, responses, "Responses do not match")
 		}
-		body, _ := json.Marshal(request)
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
-		// assert
-		assert.Equal(t, 200, resp.StatusCode, "Bulk API should succeed even if key not found")
-
-		var responses []BulkGetResponse
-
-		assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
-
-		expectedResponses := []BulkGetResponse{
-			{
-				Key:   "good-key",
-				Data:  jsoniter.RawMessage("life is good"),
-				ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
-				Error: "",
-			},
-			{
-				Key:   "error-key",
-				Data:  nil,
-				ETag:  "",
-				Error: "UPSTREAM STATE ERROR",
-			},
-		}
-
-		assert.Equal(t, expectedResponses, responses, "Responses do not match")
 	})
+
+	t.Run("Get state with invalid Store Name - 400 ERR_PARAMETER_PARSE_ERROR", func(t *testing.T) {
+		invalidStoreNameTests := [][2]string{
+			{"unknown%2state%20store", "failed to unparse parameter storeName with value unknown%2state%20store. Error: invalid URL escape \"%2s\""},
+			{"unknown%2state store", "failed to unparse parameter storeName with value unknown%2state store. Error: invalid URL escape \"%2s\""},
+			{"unknown state%2store", "failed to unparse parameter storeName with value unknown state%2store. Error: invalid URL escape \"%2s\""},
+		}
+		for _, invalidStoreNameTest := range invalidStoreNameTests {
+			storeName := invalidStoreNameTest[0]
+			r := &fasthttp.RequestCtx{
+				Request: fasthttp.Request{},
+			}
+			r.SetUserValue(storeNameParam, storeName)
+			testAPI.getStateStoreWithRequestValidation(r)
+			requestResponseStatusCode := r.Response.StatusCode()
+			expectedResponseBody := map[string]interface{}{
+				"errorCode": "ERR_PARAMETER_PARSE_ERROR",
+				"message":   invalidStoreNameTest[1],
+			}
+			expectedResponseBodyBytes, _ := json.Marshal(expectedResponseBody)
+			// assert
+			assert.Equal(t, fasthttp.StatusBadRequest, requestResponseStatusCode, "Store Name not properly escaped should return invalid request error code")
+			assert.Equal(t, expectedResponseBodyBytes, r.Response.Body(), "Store Name not properly escaped should return proper error message and code")
+		}
+	})
+
 }
 
 type fakeStateStore struct {
@@ -2369,21 +2458,21 @@ func TestV1SecretEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	fakeStore := daprt.FakeSecretStore{}
 	fakeStores := map[string]secretstores.SecretStore{
-		"store1": fakeStore,
-		"store2": fakeStore,
-		"store3": fakeStore,
-		"store4": fakeStore,
+		"store1":  fakeStore,
+		"store 2": fakeStore,
+		"store/3": fakeStore,
+		"store4":  fakeStore,
 	}
 	secretsConfiguration := map[string]config.SecretsScope{
 		"store1": {
 			DefaultAccess: config.AllowAccess,
 			DeniedSecrets: []string{"not-allowed"},
 		},
-		"store2": {
+		"store 2": {
 			DefaultAccess:  config.DenyAccess,
 			AllowedSecrets: []string{"good-key"},
 		},
-		"store3": {
+		"store/3": {
 			DefaultAccess:  config.AllowAccess,
 			AllowedSecrets: []string{"good-key"},
 		},
@@ -2396,8 +2485,8 @@ func TestV1SecretEndpoints(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructSecretEndpoints())
 	storeName := "store1"
-	deniedStoreName := "store2"
-	restrictedStore := "store3"
+	deniedStoreName := "store%202"
+	restrictedStore := "store%2F3"
 	unrestrictedStore := "store4" // No configuration defined for the store
 
 	t.Run("Get secret- 401 ERR_SECRET_STORE_NOT_FOUND", func(t *testing.T) {
@@ -2501,6 +2590,31 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "reading secrets should succeed")
+	})
+
+	t.Run("Get secret with invalid Secret Store Name - 400 ERR_PARAMETER_PARSE_ERROR", func(t *testing.T) {
+		invalidSecretStoreNameTests := [][2]string{
+			{"unknown%2secret%20store", "failed to unparse parameter secretStoreName with value unknown%2secret%20store. Error: invalid URL escape \"%2s\""},
+			{"unknown%2secret store", "failed to unparse parameter secretStoreName with value unknown%2secret store. Error: invalid URL escape \"%2s\""},
+			{"unknown secret%2store", "failed to unparse parameter secretStoreName with value unknown secret%2store. Error: invalid URL escape \"%2s\""},
+		}
+		for _, invalidSecretStoreNameTest := range invalidSecretStoreNameTests {
+			secretStoreName := invalidSecretStoreNameTest[0]
+			r := &fasthttp.RequestCtx{
+				Request: fasthttp.Request{},
+			}
+			r.SetUserValue(secretStoreNameParam, secretStoreName)
+			testAPI.onGetSecret(r)
+			requestResponseStatusCode := r.Response.StatusCode()
+			expectedResponseBody := map[string]interface{}{
+				"errorCode": "ERR_PARAMETER_PARSE_ERROR",
+				"message":   invalidSecretStoreNameTest[1],
+			}
+			expectedResponseBodyBytes, _ := json.Marshal(expectedResponseBody)
+			// assert
+			assert.Equal(t, fasthttp.StatusBadRequest, requestResponseStatusCode, "Secret Store Name not properly escaped should return invalid request error code")
+			assert.Equal(t, expectedResponseBodyBytes, r.Response.Body(), "Secret Store Name not properly escaped should return proper error message and code")
+		}
 	})
 }
 
