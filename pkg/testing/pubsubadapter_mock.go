@@ -13,7 +13,8 @@ import (
 
 // MockPubSubAdapter is mock for PubSubAdapter
 type MockPubSubAdapter struct {
-	PublishFn func(req *pubsub.PublishRequest) error
+	PublishFn   func(req *pubsub.PublishRequest) error
+	GetPubSubFn func(pubsubName string) pubsub.PubSub
 }
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
@@ -25,5 +26,5 @@ func (a *MockPubSubAdapter) Publish(req *pubsub.PublishRequest) error {
 
 // GetPubSub is an adapter method to fetch a pubsub
 func (a *MockPubSubAdapter) GetPubSub(pubsubName string) pubsub.PubSub {
-	return nil
+	return a.GetPubSubFn(pubsubName)
 }

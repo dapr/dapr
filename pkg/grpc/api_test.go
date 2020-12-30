@@ -1227,6 +1227,9 @@ func TestPublishTopic(t *testing.T) {
 
 				return nil
 			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				return &daprt.MockPubSub{}
+			},
 		},
 	}
 	server := startTestServerAPI(port, srv)

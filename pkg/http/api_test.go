@@ -69,6 +69,9 @@ func TestPubSubEndpoints(t *testing.T) {
 
 				return nil
 			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				return &daprt.MockPubSub{}
+			},
 		},
 		json: jsoniter.ConfigFastest,
 	}
@@ -175,7 +178,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "ERR_PUBSUB_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 		}
 		testAPI.pubsubAdapter = savePubSubAdapter
 	})
