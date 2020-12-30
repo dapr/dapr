@@ -23,7 +23,7 @@ func (a *MockPubSubAdapter) Publish(req *pubsub.PublishRequest) error {
 	return a.PublishFn(req)
 }
 
-// PubSubFeatures is an adapter method for the runtime to list features of a PubSub.
-func (a *MockPubSubAdapter) PubSubFeatures(pubsubName string) ([]pubsub.Feature, error) {
-	return nil, nil
+// GetPubSub is an adapter method to fetch a pubsub
+func (a *MockPubSubAdapter) GetPubSub(pubsubName string) pubsub.PubSub {
+	return nil
 }

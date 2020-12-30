@@ -1066,7 +1066,7 @@ func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	if a.pubsubAdapter == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", messages.ErrPubsubNotFound)
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
@@ -1075,6 +1075,14 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	if pubsubName == "" {
 		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
+		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)
+		log.Debug(msg)
+		return
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
 		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)
 		log.Debug(msg)
 		return
@@ -1099,14 +1107,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
 
-	features, err := a.pubsubAdapter.PubSubFeatures(pubsubName)
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_FEATURES_NOT_FOUND",
-			fmt.Sprintf(messages.ErrPubSubFeaturesNotFound, pubsubName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
+	features := thepubsub.Features()
 
 	envelope.ApplyMetadata(features, metadata)
 	b, err := a.json.Marshal(envelope)

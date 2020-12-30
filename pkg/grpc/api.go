@@ -195,7 +195,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
 	if a.pubsubAdapter == nil {
-		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotFound)
+		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -203,6 +203,13 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	pubsubName := in.PubsubName
 	if pubsubName == "" {
 		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -226,12 +233,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
 
-	features, err := a.pubsubAdapter.PubSubFeatures(pubsubName)
-	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrPubSubFeaturesNotFound, pubsubName, err.Error())
-		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
-	}
+	features := thepubsub.Features()
 
 	envelope.ApplyMetadata(features, in.Metadata)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)

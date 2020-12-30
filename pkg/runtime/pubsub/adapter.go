@@ -11,6 +11,6 @@ import (
 
 // Adapter is the interface for message buses
 type Adapter interface {
-	PubSubFeatures(pubsubName string) ([]contrib_pubsub.Feature, error)
+	GetPubSub(pubsubName string) contrib_pubsub.PubSub
 	Publish(req *contrib_pubsub.PublishRequest) error
 }

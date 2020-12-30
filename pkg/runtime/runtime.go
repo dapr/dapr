@@ -988,7 +988,8 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
-	if _, ok := a.pubSubs[req.PubsubName]; !ok {
+	thepubsub := a.GetPubSub(req.PubsubName)
+	if thepubsub == nil {
 		return runtime_pubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
@@ -999,13 +1000,9 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	return a.pubSubs[req.PubsubName].Publish(req)
 }
 
-// PubSubFeatures is an adapter method for the runtime to list features of a PubSub.
-func (a *DaprRuntime) PubSubFeatures(pubsubName string) ([]pubsub.Feature, error) {
-	if _, ok := a.pubSubs[pubsubName]; !ok {
-		return nil, runtime_pubsub.NotFoundError{PubsubName: pubsubName}
-	}
-
-	return a.pubSubs[pubsubName].Features(), nil
+// GetPubSub is an adapter method to find a pubsub by name
+func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
+	return a.pubSubs[pubsubName]
 }
 
 func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
