@@ -21,8 +21,9 @@ const (
 	ErrInvokeOutputBinding = "error when invoke output binding %s: %s"
 
 	// PubSub
-	ErrPubsubNotFound       = "no pubsub is configured"
+	ErrPubsubNotConfigured  = "no pubsub is configured"
 	ErrPubsubEmpty          = "pubsub name is empty"
+	ErrPubsubNotFound       = "pubsub %s not found"
 	ErrTopicEmpty           = "topic is empty in pubsub %s"
 	ErrPubsubCloudEventsSer = "error when marshal cloud event envelop for topic %s pubsub %s: %s"
 	ErrPubsubPublishMessage = "error when publish to topic %s in pubsub %s: %s"
