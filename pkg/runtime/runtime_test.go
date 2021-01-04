@@ -1354,7 +1354,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1440,10 +1440,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
-		var cloudEvent pubsub.CloudEventsEnvelope
+		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1568,10 +1568,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
-		var cloudEvent pubsub.CloudEventsEnvelope
+		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
+		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1580,7 +1580,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 

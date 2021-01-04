@@ -30,7 +30,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/golang/protobuf/ptypes/empty"
-	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -227,15 +226,26 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		body = in.Data
 	}
 
-	contentType := in.DataContentType
-
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
+
+	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		ID:              a.id,
+		Topic:           in.Topic,
+		DataContentType: in.DataContentType,
+		Data:            body,
+		TraceID:         corID,
+		Pubsub:          in.PubsubName,
+	})
+	if err != nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
 
 	features := thepubsub.Features()
+	pubsub.ApplyMetadata(envelope, features, in.Metadata)
 
-	envelope.ApplyMetadata(features, in.Metadata)
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
