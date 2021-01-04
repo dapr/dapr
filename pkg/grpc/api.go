@@ -575,17 +575,18 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		return &runtimev1pb.GetBulkSecretResponse{}, err
 	}
 
-	for key := range getResponse.Data {
-		if !a.isSecretAllowed(in.StoreName, key) {
-			err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, key, in.StoreName)
-			apiServerLogger.Debug(err)
-			return &runtimev1pb.GetBulkSecretResponse{}, err
+	filteredSecrets := map[string]string{}
+	for key, v := range getResponse.Data {
+		if a.isSecretAllowed(secretStoreName, key) {
+			filteredSecrets[key] = v
+		} else {
+			apiServerLogger.Debugf(messages.ErrPermissionDenied, key, in.StoreName)
 		}
 	}
 
 	response := &runtimev1pb.GetBulkSecretResponse{}
 	if getResponse.Data != nil {
-		response.Data = getResponse.Data
+		response.Data = filteredSecrets
 	}
 	return response, nil
 }
