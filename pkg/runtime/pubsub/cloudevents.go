@@ -6,7 +6,6 @@
 package pubsub
 
 import (
-	"github.com/dapr/components-contrib/pubsub"
 	contrib_pubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/google/uuid"
 )
@@ -26,6 +25,6 @@ func NewCloudEvent(req *CloudEvent) (map[string]interface{}, error) {
 	if req.DataContentType == contrib_pubsub.ContentType {
 		return contrib_pubsub.FromCloudEvent(req.Data, req.Topic, req.Pubsub, req.TraceID)
 	}
-	return pubsub.NewCloudEventsEnvelope(uuid.New().String(), req.ID, contrib_pubsub.DefaultCloudEventType, "", req.Topic, req.Pubsub,
+	return contrib_pubsub.NewCloudEventsEnvelope(uuid.New().String(), req.ID, contrib_pubsub.DefaultCloudEventType, "", req.Topic, req.Pubsub,
 		req.DataContentType, req.Data, req.TraceID), nil
 }

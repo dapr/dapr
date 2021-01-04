@@ -238,7 +238,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		Pubsub:          in.PubsubName,
 	})
 	if err != nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
