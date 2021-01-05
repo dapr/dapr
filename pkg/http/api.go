@@ -29,7 +29,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -1105,11 +1104,26 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
+
+	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		ID:              a.id,
+		Topic:           topic,
+		DataContentType: contentType,
+		Data:            body,
+		TraceID:         corID,
+		Pubsub:          pubsubName,
+	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+			fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		log.Debug(msg)
+		return
+	}
 
 	features := thepubsub.Features()
 
-	envelope.ApplyMetadata(features, metadata)
+	pubsub.ApplyMetadata(envelope, features, metadata)
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
