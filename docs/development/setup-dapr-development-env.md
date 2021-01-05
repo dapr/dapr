@@ -27,7 +27,7 @@ This document helps you get started developing Dapr. If you find any problem whi
 1. The Go language environment [(instructions)](https://golang.org/doc/install#windows).
    Make sure that your GOPATH and PATH are configured correctly - You may set environment variables through the "Environment Variables" button on the "Advanced" tab of the "System" control panel. Some versions of Windows provide this control panel through the "Advanced System Settings" option inside the "System" control panel.
    ```
-   GOPATH=c:\go
+   GOPATH=%USERPROFILE%\go
    PATH=%GOPATH%\bin;...
    ```
 2. [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Go debugging
