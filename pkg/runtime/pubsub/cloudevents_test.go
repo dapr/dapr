@@ -6,6 +6,7 @@
 package pubsub
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,9 +47,17 @@ func TestNewCloudEvent(t *testing.T) {
 	})
 
 	t.Run("custom cloudevent", func(t *testing.T) {
+		m := map[string]interface{}{
+			"specversion":     "1.0",
+			"id":              "event",
+			"datacontenttype": "text/plain",
+			"data":            "world",
+		}
+		b, _ := json.Marshal(m)
+
 		ce, err := NewCloudEvent(&CloudEvent{
-			Data:            []byte("world"),
-			DataContentType: "text/plain",
+			Data:            b,
+			DataContentType: "application/cloudevents+json",
 			Topic:           "topic1",
 			TraceID:         "trace1",
 			Pubsub:          "pubsub",
