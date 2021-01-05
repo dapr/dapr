@@ -673,10 +673,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
-	subscribed := a.isAppSubscribedToBinding(name)
-	if !subscribed {
-		return errors.Errorf("app not subscribed to binding %s", name)
-	}
 	err := binding.Read(func(resp *bindings.ReadResponse) error {
 		if resp != nil {
 			err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
@@ -1704,6 +1700,12 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 	}
 	for name, binding := range a.inputBindings {
 		go func(name string, binding bindings.InputBinding) {
+			subscribed := a.isAppSubscribedToBinding(name)
+			if !subscribed {
+				log.Infof("app-id=%s has not subscribed to binding %s.", a.runtimeConfig.ID, name)
+				return
+			}
+
 			err := a.readFromBinding(name, binding)
 			if err != nil {
 				log.Errorf("error reading from input binding %s: %s", name, err)
