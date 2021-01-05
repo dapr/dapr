@@ -36,8 +36,10 @@ require (
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.13.0
 	go.uber.org/atomic v1.6.0
-	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a
-	google.golang.org/grpc v1.33.1
+	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb // indirect
+	golang.org/x/sys v0.0.0-20201202213521-69691e467435 // indirect
+	google.golang.org/genproto v0.0.0-20201204160425-06b3db808446
+	google.golang.org/grpc v1.34.0
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/yaml.v2 v2.3.0
 	k8s.io/api v0.20.0
@@ -52,6 +54,7 @@ require (
 )
 
 replace (
+	github.com/dapr/go-sdk v0.11.1 => github.com/dapr/go-sdk v1.0.0-rc-3
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )

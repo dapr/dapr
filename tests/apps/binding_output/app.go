@@ -7,17 +7,21 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
+	dapr "github.com/dapr/go-sdk/client"
+
 	"github.com/gorilla/mux"
 )
 
 const (
-	appPort  = 3000
-	daprPort = 3500
+	appPort      = 3000
+	daprPort     = 3500
+	daprPortGRPC = 50001
 )
 
 type testCommandRequest struct {
@@ -40,6 +44,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Entered testHandler")
 	var requestBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&requestBody)
 	if err != nil {
@@ -76,12 +81,72 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func sendGRPC(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Entered sendGRPC")
+	var requestBody testCommandRequest
+	err := json.NewDecoder(r.Body).Decode(&requestBody)
+	if err != nil {
+		log.Printf("error parsing request body: %s", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	client, err := dapr.NewClientWithAddress(fmt.Sprintf(":%d", daprPortGRPC))
+	if err != nil {
+		log.Printf("Could not make dapr client: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer client.Close()
+
+	for _, message := range requestBody.Messages {
+		body, _ := json.Marshal(&message)
+
+		log.Printf("Sending message: %s", body)
+		req := dapr.InvokeBindingRequest{
+			Name:      "test-topic-grpc",
+			Data:      body,
+			Operation: "create",
+		}
+
+		err = client.InvokeOutputBinding(context.Background(), &req)
+		if err != nil {
+			log.Printf("Error sending request to GRPC output binding: %s", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("error: " + err.Error()))
+			return
+		}
+	}
+}
+
+func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Entered getReceivedTopicsGRPC")
+
+	client, err := dapr.NewClientWithAddress(fmt.Sprintf(":%d", daprPortGRPC))
+	if err != nil {
+		log.Printf("Could not make dapr client: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer client.Close()
+
+	resp, err := client.InvokeMethodWithContent(context.Background(), "bindinginputgrpc", "GetReceivedTopics", "POST", &dapr.DataContent{})
+	if err != nil {
+		log.Printf("Could not get received messages: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(resp)
+}
+
 // appRouter initializes restful api router
 func appRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/tests/send", testHandler).Methods("POST")
+	router.HandleFunc("/tests/sendGRPC", sendGRPC).Methods("POST")
+	router.HandleFunc("/tests/get_received_topics_grpc", getReceivedTopicsGRPC).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 
