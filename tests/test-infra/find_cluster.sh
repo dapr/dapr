@@ -26,7 +26,7 @@ echo "Selected Dapr Test Resource group: $DAPR_TEST_RESOURCE_GROUP"
 echo "Selected Kubernetes Namespace: $DAPR_TEST_NAMESPACE"
 
 # Find the available cluster
-for clustername in `cat $1 | xargs`; do
+for clustername in `cat $1 | sed 's/\r//g' | xargs`; do
     echo "Scanning $clustername ..."
 
     echo "Switching to $clustername context..."
