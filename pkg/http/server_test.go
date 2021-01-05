@@ -206,8 +206,6 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 		srv := newServer()
 		h := srv.unescapeRequestParametersHandler(mh)
 		for _, parameter := range parameters {
-			//parameterName := parameter[0]
-			//parameterValue := parameter[1]
 			r := &fasthttp.RequestCtx{
 				Request: fasthttp.Request{},
 			}
