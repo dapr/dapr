@@ -30,7 +30,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -58,7 +57,7 @@ type api struct {
 	secretsConfiguration  map[string]config.SecretsScope
 	json                  jsoniter.API
 	actor                 actors.Actors
-	publishFn             func(req *pubsub.PublishRequest) error
+	pubsubAdapter         runtime_pubsub.Adapter
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	id                    string
 	extendedMetadata      sync.Map
@@ -107,7 +106,7 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
-	publishFn func(*pubsub.PublishRequest) error,
+	pubsubAdapter runtime_pubsub.Adapter,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec) API {
@@ -119,7 +118,7 @@ func NewAPI(
 		secretsConfiguration:  secretsConfiguration,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
-		publishFn:             publishFn,
+		pubsubAdapter:         pubsubAdapter,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		id:                    appID,
 		tracingSpec:           tracingSpec,
@@ -1085,8 +1084,8 @@ func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	if a.publishFn == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", messages.ErrPubsubNotFound)
+	if a.pubsubAdapter == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
@@ -1104,6 +1103,14 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
+		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)
+		log.Debug(msg)
+		return
+	}
+
 	topic := reqCtx.UserValue(topicParam).(string)
 	// FIXME: isn't it "" instead?
 	if topic == "/" {
@@ -1115,13 +1122,32 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	body := reqCtx.PostBody()
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
+	metadata := getMetadataFromRequest(reqCtx)
 
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
 
+	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		ID:              a.id,
+		Topic:           topic,
+		DataContentType: contentType,
+		Data:            body,
+		TraceID:         corID,
+		Pubsub:          pubsubName,
+	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+			fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		log.Debug(msg)
+		return
+	}
+
+	features := thepubsub.Features()
+
+	pubsub.ApplyMetadata(envelope, features, metadata)
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
@@ -1135,9 +1161,10 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		PubsubName: pubsubName,
 		Topic:      topic,
 		Data:       b,
+		Metadata:   metadata,
 	}
 
-	err = a.publishFn(&req)
+	err = a.pubsubAdapter.Publish(&req)
 	if err != nil {
 		status := fasthttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",

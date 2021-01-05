@@ -30,7 +30,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/golang/protobuf/ptypes/empty"
-	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -78,7 +77,7 @@ type api struct {
 	stateStores           map[string]state.Store
 	secretStores          map[string]secretstores.SecretStore
 	secretsConfiguration  map[string]config.SecretsScope
-	publishFn             func(req *pubsub.PublishRequest) error
+	pubsubAdapter         runtime_pubsub.Adapter
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
@@ -92,7 +91,7 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
-	publishFn func(req *pubsub.PublishRequest) error,
+	pubsubAdapter runtime_pubsub.Adapter,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
@@ -104,7 +103,7 @@ func NewAPI(
 		actor:                 actor,
 		id:                    appID,
 		appChannel:            appChannel,
-		publishFn:             publishFn,
+		pubsubAdapter:         pubsubAdapter,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
 		secretsConfiguration:  secretsConfiguration,
@@ -194,8 +193,8 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
-	if a.publishFn == nil {
-		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotFound)
+	if a.pubsubAdapter == nil {
+		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -203,6 +202,13 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	pubsubName := in.PubsubName
 	if pubsubName == "" {
 		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -220,11 +226,26 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		body = in.Data
 	}
 
-	contentType := in.DataContentType
-
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
+
+	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		ID:              a.id,
+		Topic:           in.Topic,
+		DataContentType: in.DataContentType,
+		Data:            body,
+		TraceID:         corID,
+		Pubsub:          in.PubsubName,
+	})
+	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	features := thepubsub.Features()
+	pubsub.ApplyMetadata(envelope, features, in.Metadata)
+
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
@@ -239,7 +260,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		Metadata:   in.Metadata,
 	}
 
-	err = a.publishFn(&req)
+	err = a.pubsubAdapter.Publish(&req)
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {

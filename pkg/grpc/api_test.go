@@ -1211,20 +1211,25 @@ func TestPublishTopic(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
 	srv := &api{
-		publishFn: func(req *pubsub.PublishRequest) error {
-			if req.Topic == "error-topic" {
-				return errors.New("error when publish")
-			}
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			PublishFn: func(req *pubsub.PublishRequest) error {
+				if req.Topic == "error-topic" {
+					return errors.New("error when publish")
+				}
 
-			if req.Topic == "err-not-found" {
-				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
-			}
+				if req.Topic == "err-not-found" {
+					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+				}
 
-			if req.Topic == "err-not-allowed" {
-				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
-			}
+				if req.Topic == "err-not-allowed" {
+					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				}
 
-			return nil
+				return nil
+			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				return &daprt.MockPubSub{}
+			},
 		},
 	}
 	server := startTestServerAPI(port, srv)
