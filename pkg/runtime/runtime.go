@@ -1701,7 +1701,7 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 	for name, binding := range a.inputBindings {
 		go func(name string, binding bindings.InputBinding) {
 			if !a.isAppSubscribedToBinding(name) {
-				log.Infof("app-id=%s has not subscribed to binding %s.", a.runtimeConfig.ID, name)
+				log.Infof("app has not subscribed to binding %s.", name)
 				return
 			}
 
