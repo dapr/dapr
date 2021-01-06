@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -1435,6 +1436,60 @@ func TestExecuteStateTransaction(t *testing.T) {
 	}
 }
 
+func TestGetMetadata(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	fakeComponent := components_v1alpha.Component{}
+	fakeComponent.Name = "testComponent"
+	fakeAPI := &api{
+		id:         "fakeAPI",
+		components: []components_v1alpha.Component{fakeComponent},
+	}
+	fakeAPI.extendedMetadata.Store("testKey", "testValue")
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	response, err := client.GetMetadata(context.Background(), &empty.Empty{})
+	assert.NoError(t, err, "Expected no error")
+	assert.Len(t, response.RegisteredComponents, 1, "One component should be returned")
+	assert.Equal(t, response.RegisteredComponents[0].Name, "testComponent")
+	assert.Contains(t, response.ExtendedMetadata, "testKey")
+	assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
+}
+func TestSetMetadata(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	fakeComponent := components_v1alpha.Component{}
+	fakeComponent.Name = "testComponent"
+	fakeAPI := &api{
+		id: "fakeAPI",
+	}
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	req := &runtimev1pb.SetMetadataRequest{
+		Key:   "testKey",
+		Value: "testValue",
+	}
+	_, err := client.SetMetadata(context.Background(), req)
+	assert.NoError(t, err, "Expected no error")
+	temp := make(map[string]string)
+
+	// Copy synchronously so it can be serialized to JSON.
+	fakeAPI.extendedMetadata.Range(func(key, value interface{}) bool {
+		temp[key.(string)] = value.(string)
+		return true
+	})
+
+	assert.Contains(t, temp, "testKey")
+	assert.Equal(t, temp["testKey"], "testValue")
+}
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG

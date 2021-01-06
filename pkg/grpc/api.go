@@ -10,12 +10,14 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -68,6 +70,10 @@ type API interface {
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*empty.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
+	// Gets metadata of the sidecar
+	GetMetadata(ctx context.Context, in *empty.Empty) (*runtimev1pb.GetMetadataResponse, error)
+	// Sets value in extended metadata of the sidecar
+	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error)
 }
 
 type api struct {
@@ -83,6 +89,8 @@ type api struct {
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	appProtocol           string
+	extendedMetadata      sync.Map
+	components            []components_v1alpha.Component
 }
 
 // NewAPI returns a new gRPC API
@@ -97,7 +105,8 @@ func NewAPI(
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
 	accessControlList *config.AccessControlList,
-	appProtocol string) API {
+	appProtocol string,
+	components []components_v1alpha.Component) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
@@ -933,4 +942,35 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
+}
+
+func (a *api) GetMetadata(ctx context.Context, in *empty.Empty) (*runtimev1pb.GetMetadataResponse, error) {
+	temp := make(map[string]string)
+
+	// Copy synchronously so it can be serialized to JSON.
+	a.extendedMetadata.Range(func(key, value interface{}) bool {
+		temp[key.(string)] = value.(string)
+		return true
+	})
+	registeredComponents := []*runtimev1pb.RegisteredComponents{}
+
+	for _, comp := range a.components {
+		registeredComp := &runtimev1pb.RegisteredComponents{
+			Name:    comp.Name,
+			Version: comp.Spec.Version,
+			Type:    comp.Spec.Type,
+		}
+		registeredComponents = append(registeredComponents, registeredComp)
+	}
+	response := &runtimev1pb.GetMetadataResponse{
+		ExtendedMetadata:     temp,
+		RegisteredComponents: registeredComponents,
+	}
+	return response, nil
+}
+
+// Sets value in extended metadata of the sidecar
+func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error) {
+	a.extendedMetadata.Store(in.Key, in.Value)
+	return &empty.Empty{}, nil
 }
