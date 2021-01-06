@@ -129,6 +129,7 @@ See the [Development Guide](https://docs.dapr.io/contributing/) to get started w
 | [Dotnet-sdk](https://github.com/dapr/dotnet-sdk) | Dapr SDK for .NET Core
 | [Rust-sdk](https://github.com/dapr/rust-sdk) | Dapr SDK for Rust
 | [Cpp-sdk](https://github.com/dapr/cpp-sdk) | Dapr SDK for C++
+| [PHP-sdk](https://github.com/dapr/php-sdk) | Dapr SDK for PHP
 
 
 ## Code of Conduct
