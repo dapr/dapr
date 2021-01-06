@@ -143,7 +143,6 @@ func (s *server) unescapeRequestParametersHandler(next fasthttp.RequestHandler) 
 			switch value.(type) {
 			case string:
 				if !parseError {
-					log.Info(fmt.Sprintf("parameter: %s, value: %v", parameter, value))
 					parameterValue := fmt.Sprintf("%v", value)
 					parameterUnescapedValue, err := url.QueryUnescape(parameterValue)
 					if err == nil {
