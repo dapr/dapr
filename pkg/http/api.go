@@ -625,15 +625,16 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	for key := range resp.Data {
-		if !a.isSecretAllowed(secretStoreName, key) {
-			msg := NewErrorResponse("ERR_PERMISSION_DENIED", fmt.Sprintf(messages.ErrPermissionDenied, key, secretStoreName))
-			respondWithError(reqCtx, fasthttp.StatusForbidden, msg)
-			return
+	filteredSecrets := map[string]string{}
+	for key, v := range resp.Data {
+		if a.isSecretAllowed(secretStoreName, key) {
+			filteredSecrets[key] = v
+		} else {
+			log.Debugf(messages.ErrPermissionDenied, key, secretStoreName)
 		}
 	}
 
-	respBytes, _ := a.json.Marshal(resp.Data)
+	respBytes, _ := a.json.Marshal(filteredSecrets)
 	respondWithJSON(reqCtx, fasthttp.StatusOK, respBytes)
 }
 
