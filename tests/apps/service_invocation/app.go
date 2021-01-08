@@ -1071,7 +1071,10 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 	var testResponse negativeTestResult
 
 	client := newHTTPClient()
-	client.Timeout = 5 * time.Second
+	// Explicitly set the timeout to force an error
+	if commandBody.Method == "timeouterror" {
+		client.Timeout = 5 * time.Second
+	}
 	resp, err := client.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(b)) // nolint
 
 	testResponse.MainCallSuccessful = err == nil && resp.StatusCode == 200
@@ -1110,7 +1113,12 @@ func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("dapr address is %s\n", daprAddress)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	timeoutDuration := time.Duration(30)
+	// Shorten the timeout if we want to force the error
+	if commandBody.Method == "timeouterror" {
+		timeoutDuration = time.Duration(5)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration*time.Second)
 	defer cancel()
 
 	conn, err := grpc.DialContext(ctx, daprAddress, grpc.WithInsecure())
