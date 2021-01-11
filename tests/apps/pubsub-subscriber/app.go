@@ -21,9 +21,9 @@ import (
 
 const (
 	appPort = 3000
-	pubsubA = "pubsub-a-topic"
-	pubsubB = "pubsub-b-topic"
-	pubsubC = "pubsub-c-topic"
+	pubsubA = "pubsub-a-topic-http"
+	pubsubB = "pubsub-b-topic-http"
+	pubsubC = "pubsub-c-topic-http"
 	pubsubD = "pubsub-d-topic"
 )
 
@@ -302,12 +302,12 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 
-	router.HandleFunc("/tests/get", getReceivedMessages).Methods("POST")
-	router.HandleFunc("/tests/set-respond-error", setRespondWithError).Methods("POST")
-	router.HandleFunc("/tests/set-respond-retry", setRespondWithRetry).Methods("POST")
-	router.HandleFunc("/tests/set-respond-empty-json", setRespondEmptyJSON).Methods("POST")
-	router.HandleFunc("/tests/set-respond-invalid-status", setRespondInvalidStatus).Methods("POST")
-	router.HandleFunc("/tests/initialize", initializeHandler).Methods("POST")
+	router.HandleFunc("/getMessages", getReceivedMessages).Methods("POST")
+	router.HandleFunc("/set-respond-error", setRespondWithError).Methods("POST")
+	router.HandleFunc("/set-respond-retry", setRespondWithRetry).Methods("POST")
+	router.HandleFunc("/set-respond-empty-json", setRespondEmptyJSON).Methods("POST")
+	router.HandleFunc("/set-respond-invalid-status", setRespondInvalidStatus).Methods("POST")
+	router.HandleFunc("/initialize", initializeHandler).Methods("POST")
 
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
 

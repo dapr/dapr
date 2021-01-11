@@ -152,7 +152,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, subscriberExternalURL, d
 
 func getAppResponse(t *testing.T, externalURL string) receivedMessagesResponse {
 	// this is the app's endpoint, not a dapr endpoint
-	url := fmt.Sprintf("http://%s/tests/get", externalURL)
+	url := fmt.Sprintf("http://%s/getMessages", externalURL)
 	log.Printf("Getting messages received by app using url %s", url)
 
 	resp, err := utils.HTTPPost(url, nil)
