@@ -5,7 +5,7 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorclientapp actorfeatures actorinvocationapp runtime runtime_init middleware
+E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber pubsub-subscriber_grpc actorapp actorclientapp actorfeatures actorinvocationapp runtime runtime_init middleware
 
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http
