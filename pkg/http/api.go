@@ -687,9 +687,8 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 	}
 	if etag {
 		return code, message, r
-	} else {
-		message = err.Error()
 	}
+	message = err.Error()
 
 	return fasthttp.StatusInternalServerError, message, r
 }
