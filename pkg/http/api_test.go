@@ -2726,3 +2726,55 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	})
 	fakeServer.Shutdown()
 }
+
+func TestStateStoreErrors(t *testing.T) {
+	t.Run("non etag error", func(t *testing.T) {
+		a := &api{}
+		err := errors.New("error")
+		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+
+		assert.Equal(t, 500, c)
+		assert.Equal(t, "error", m)
+		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+	})
+
+	t.Run("etag mismatch error", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+
+		assert.Equal(t, 409, c)
+		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
+		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+	})
+
+	t.Run("etag invalid error", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+
+		assert.Equal(t, 400, c)
+		assert.Equal(t, "invalid etag value: error", m)
+		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+	})
+
+	t.Run("etag error mismatch", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		e, c, m := a.etagError(err)
+
+		assert.Equal(t, true, e)
+		assert.Equal(t, 409, c)
+		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
+	})
+
+	t.Run("etag error invalid", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		e, c, m := a.etagError(err)
+
+		assert.Equal(t, true, e)
+		assert.Equal(t, 400, c)
+		assert.Equal(t, "invalid etag value: error", m)
+	})
+}

@@ -481,11 +481,27 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateSave, in.StoreName, err.Error())
+		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+// stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error
+func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
+	e, ok := err.(*state.ETagError)
+	if !ok {
+		return status.Errorf(codes.Internal, format, args...)
+	}
+	switch e.Kind() {
+	case state.ETagMismatch:
+		return status.Errorf(codes.AlreadyExists, format, args...)
+	case state.ETagInvalid:
+		return status.Errorf(codes.InvalidArgument, format, args...)
+	}
+
+	return status.Errorf(codes.Internal, format, args...)
 }
 
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
@@ -509,7 +525,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	err = store.Delete(&req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateDelete, in.Key, err.Error())
+		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}

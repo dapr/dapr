@@ -530,9 +530,11 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	err = store.Delete(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf(messages.ErrStateDelete, key, err))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
+		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
+
+		respondWithError(reqCtx, statusCode, resp)
+		log.Debug(resp.Message)
 		return
 	}
 	respondEmpty(reqCtx)
@@ -661,13 +663,52 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	err = store.BulkSet(reqs)
 	if err != nil {
 		storeName := a.getStateStoreName(reqCtx)
-		msg := NewErrorResponse("ERR_STATE_SAVE", fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+
+		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
+
+		respondWithError(reqCtx, statusCode, resp)
+		log.Debug(resp.Message)
 		return
 	}
 
 	respondEmpty(reqCtx)
+}
+
+// stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error
+func (a *api) stateErrorResponse(err error, errorCode string) (int, string, ErrorResponse) {
+	var message string
+	var code int
+	var etag bool
+	etag, code, message = a.etagError(err)
+
+	r := ErrorResponse{
+		ErrorCode: errorCode,
+	}
+	if etag {
+		return code, message, r
+	} else {
+		message = err.Error()
+	}
+
+	return fasthttp.StatusInternalServerError, message, r
+}
+
+// etagError checks if the error from the state store is an etag error and returns a bool for indication,
+// an status code and an error message
+func (a *api) etagError(err error) (bool, int, string) {
+	e, ok := err.(*state.ETagError)
+	if !ok {
+		return false, -1, ""
+	}
+	switch e.Kind() {
+	case state.ETagMismatch:
+		return true, fasthttp.StatusConflict, e.Error()
+	case state.ETagInvalid:
+		return true, fasthttp.StatusBadRequest, e.Error()
+	}
+
+	return false, -1, ""
 }
 
 func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {

@@ -24,6 +24,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -1490,6 +1491,57 @@ func TestSetMetadata(t *testing.T) {
 	assert.Contains(t, temp, "testKey")
 	assert.Equal(t, temp["testKey"], "testValue")
 }
+
+func TestStateStoreErrors(t *testing.T) {
+	t.Run("save etag mismatch", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = AlreadyExists desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
+	})
+
+	t.Run("save etag invalid", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = failed saving state in state store a: invalid etag value: error", err2.Error())
+	})
+
+	t.Run("save non etag", func(t *testing.T) {
+		a := &api{}
+		err := errors.New("error")
+		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = Internal desc = failed saving state in state store a: error", err2.Error())
+	})
+
+	t.Run("delete etag mismatch", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = AlreadyExists desc = failed deleting state with key a: possible etag mismatch. error from state store: error", err2.Error())
+	})
+
+	t.Run("delete etag invalid", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = failed deleting state with key a: invalid etag value: error", err2.Error())
+	})
+
+	t.Run("delete non etag", func(t *testing.T) {
+		a := &api{}
+		err := errors.New("error")
+		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = Internal desc = failed deleting state with key a: error", err2.Error())
+	})
+}
+
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG
