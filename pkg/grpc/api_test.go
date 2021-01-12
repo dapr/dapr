@@ -1498,7 +1498,7 @@ func TestStateStoreErrors(t *testing.T) {
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
 		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
 
-		assert.Equal(t, "rpc error: code = AlreadyExists desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
+		assert.Equal(t, "rpc error: code = Aborted desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
 	})
 
 	t.Run("save etag invalid", func(t *testing.T) {
@@ -1522,7 +1522,7 @@ func TestStateStoreErrors(t *testing.T) {
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
 		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
 
-		assert.Equal(t, "rpc error: code = AlreadyExists desc = failed deleting state with key a: possible etag mismatch. error from state store: error", err2.Error())
+		assert.Equal(t, "rpc error: code = Aborted desc = failed deleting state with key a: possible etag mismatch. error from state store: error", err2.Error())
 	})
 
 	t.Run("delete etag invalid", func(t *testing.T) {
