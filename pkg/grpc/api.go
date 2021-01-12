@@ -496,7 +496,7 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 	}
 	switch e.Kind() {
 	case state.ETagMismatch:
-		return status.Errorf(codes.AlreadyExists, format, args...)
+		return status.Errorf(codes.Aborted, format, args...)
 	case state.ETagInvalid:
 		return status.Errorf(codes.InvalidArgument, format, args...)
 	}
