@@ -542,15 +542,19 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	var reqs []state.DeleteRequest
 	for _, item := range in.States {
-		reqs = append(reqs, state.DeleteRequest{
-			Key: item.Key,
-			ETag: item.Etag,
+		req := state.DeleteRequest{
+			Key:      state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id),
+			ETag:     item.Etag,
 			Metadata: item.Metadata,
-			Options: state.DeleteStateOption {
+		}
+		if item.Options != nil {
+			req.Options = state.DeleteStateOption{
 				Concurrency: stateConcurrencyToString(item.Options.Concurrency),
 				Consistency: stateConsistencyToString(item.Options.Consistency),
-			},
-		})
+			}
+		}
+		reqs = append(reqs, req)
+
 	}
 	err = store.BulkDelete(reqs)
 	if err != nil {
@@ -559,7 +563,6 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	}
 	return &empty.Empty{}, nil
 }
-
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
