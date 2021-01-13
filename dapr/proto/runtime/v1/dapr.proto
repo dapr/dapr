@@ -32,7 +32,10 @@ service Dapr {
 
   // Deletes the state for a specific key.
   rpc DeleteState(DeleteStateRequest) returns (google.protobuf.Empty) {}
-  
+
+  // Deletes a bulk of state items for a list of keys
+  rpc DeleteBulkState(DeleteBulkStateRequest) returns (google.protobuf.Empty) {}
+
   // Executes transactions for a specified store
   rpc ExecuteStateTransaction(ExecuteStateTransactionRequest) returns (google.protobuf.Empty) {}
 
@@ -172,6 +175,15 @@ message DeleteStateRequest {
 
   // The metadata which will be sent to state store components.
   map<string,string> metadata = 5;
+}
+
+// DeleteBulkStateRequest is the message to delete a list of key-value states from specific state store.
+message DeleteBulkStateRequest {
+  // The name of state store.
+  string store_name = 1;
+
+  // The array of the state key values.
+  repeated common.v1.StateItem states = 2;
 }
 
 // SaveStateRequest is the message to save multiple states into state store.

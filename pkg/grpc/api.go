@@ -59,6 +59,7 @@ type API interface {
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
+	DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*empty.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
@@ -531,6 +532,34 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	}
 	return &empty.Empty{}, nil
 }
+
+func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*empty.Empty, error) {
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	var reqs []state.DeleteRequest
+	for _, item := range in.States {
+		reqs = append(reqs, state.DeleteRequest{
+			Key: item.Key,
+			ETag: item.Etag,
+			Metadata: item.Metadata,
+			Options: state.DeleteStateOption {
+				Concurrency: stateConcurrencyToString(item.Options.Concurrency),
+				Consistency: stateConsistencyToString(item.Options.Consistency),
+			},
+		})
+	}
+	err = store.BulkDelete(reqs)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+	return &empty.Empty{}, nil
+}
+
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	if a.secretStores == nil || len(a.secretStores) == 0 {
