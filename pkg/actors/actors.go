@@ -499,9 +499,6 @@ func (a *actorsRuntime) drainRebalancedActors() {
 					}
 				}
 
-				// don't allow state changes
-				a.actorsTable.Delete(key)
-
 				diag.DefaultMonitoring.ActorRebalanced(actorType)
 
 				for {
