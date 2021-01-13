@@ -635,12 +635,6 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 		} else {
 			nextInvokeTime = registeredTime.Add(dueTime)
 		}
-	} else {
-		if !lastFiredTime.IsZero() {
-			nextInvokeTime = lastFiredTime.Add(dueTime)
-		} else {
-			nextInvokeTime = registeredTime.Add(dueTime)
-		}
 	}
 
 	return nextInvokeTime, nil
