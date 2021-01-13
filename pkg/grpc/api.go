@@ -540,7 +540,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		return &empty.Empty{}, err
 	}
 
-	var reqs []state.DeleteRequest
+	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
 		req := state.DeleteRequest{
 			Key:      state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id),
@@ -554,7 +554,6 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 			}
 		}
 		reqs = append(reqs, req)
-
 	}
 	err = store.BulkDelete(reqs)
 	if err != nil {
