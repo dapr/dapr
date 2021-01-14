@@ -1542,6 +1542,32 @@ func TestStateStoreErrors(t *testing.T) {
 	})
 }
 
+func TestExtractEtag(t *testing.T) {
+	t.Run("no etag present", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{})
+		assert.False(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("empty etag exists", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{
+			Etag: &commonv1pb.Etag{},
+		})
+		assert.True(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("non-empty etag exists", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{
+			Etag: &commonv1pb.Etag{
+				Value: "a",
+			},
+		})
+		assert.True(t, ok)
+		assert.Equal(t, "a", etag)
+	})
+}
+
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {
 	concurrencyOption := commonv1pb.StateOptions_CONCURRENCY_FIRST_WRITE
 	consistencyOption := commonv1pb.StateOptions_CONSISTENCY_STRONG

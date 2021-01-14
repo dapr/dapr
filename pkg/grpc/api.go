@@ -468,7 +468,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			Key:      state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id),
 			Metadata: s.Metadata,
 			Value:    s.Value,
-			ETag:     s.Etag,
+		}
+		if s.Etag != nil {
+			req.ETag = &s.Etag.Value
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
@@ -514,7 +516,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	req := state.DeleteRequest{
 		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
 		Metadata: in.Metadata,
-		ETag:     in.Etag,
+	}
+	if in.Etag != nil {
+		req.ETag = &in.Etag.Value
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
@@ -616,6 +620,13 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 	return response, nil
 }
 
+func extractEtag(req *commonv1pb.StateItem) (bool, string) {
+	if req.Etag != nil {
+		return true, req.Etag.Value
+	}
+	return false, ""
+}
+
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		err := status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
@@ -642,6 +653,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	for _, inputReq := range in.Operations {
 		var operation state.TransactionalStateOperation
 		var req = inputReq.Request
+
+		hasEtag, etag := extractEtag(req)
+
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
@@ -651,9 +665,11 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				// component specific way in components-contrib repo.
 				Value:    req.Value,
 				Metadata: req.Metadata,
-				ETag:     req.Etag,
 			}
 
+			if hasEtag {
+				setReq.ETag = &etag
+			}
 			if req.Options != nil {
 				setReq.Options = state.SetStateOption{
 					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
@@ -670,9 +686,11 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			delReq := state.DeleteRequest{
 				Key:      state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
 				Metadata: req.Metadata,
-				ETag:     req.Etag,
 			}
 
+			if hasEtag {
+				delReq.ETag = &etag
+			}
 			if req.Options != nil {
 				delReq.Options = state.DeleteStateOption{
 					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
