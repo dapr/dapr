@@ -2134,11 +2134,11 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - State Error", func(t *testing.T) {
-		etag := ""
+		empty := ""
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "error-key",
-			ETag: &etag,
+			ETag: &empty,
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2163,11 +2163,11 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
-		etag := "BAD ETAG"
+		invalidEtag := "BAD ETAG"
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "good-key",
-			ETag: &etag,
+			ETag: &invalidEtag,
 		}}
 		b, _ := json.Marshal(request)
 		// act
