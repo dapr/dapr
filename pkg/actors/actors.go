@@ -734,7 +734,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	_, err = a.callLocalActor(context.Background(), req)
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
-		a.updateReminderTrack(key, reminder)
+		err = a.updateReminderTrack(key, reminder)
 	} else {
 		log.Debugf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
