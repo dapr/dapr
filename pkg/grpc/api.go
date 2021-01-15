@@ -548,8 +548,10 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	for _, item := range in.States {
 		req := state.DeleteRequest{
 			Key:      state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id),
-			ETag:     item.Etag,
 			Metadata: item.Metadata,
+		}
+		if item.Etag != nil {
+			req.ETag = &item.Etag.Value
 		}
 		if item.Options != nil {
 			req.Options = state.DeleteStateOption{
