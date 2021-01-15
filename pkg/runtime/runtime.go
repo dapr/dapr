@@ -20,6 +20,7 @@ import (
 
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
@@ -81,6 +82,7 @@ const (
 	pubsubComponent             ComponentCategory = "pubsub"
 	secretStoreComponent        ComponentCategory = "secretstores"
 	stateComponent              ComponentCategory = "state"
+	middlewareComponent         ComponentCategory = "middleware"
 	defaultComponentInitTimeout                   = time.Second * 5
 )
 
@@ -89,6 +91,7 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	pubsubComponent,
 	secretStoreComponent,
 	stateComponent,
+	middlewareComponent,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -284,6 +287,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.stateStoreRegistry.Register(opts.states...)
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
+	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
 	go a.processComponents()
 	err = a.beginComponentsUpdates()
@@ -298,8 +302,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.flushOutstandingComponents()
 
-	// Register and initialize HTTP middleware
-	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -1084,7 +1086,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
 	req := invokev1.NewInvokeMethodRequest(route.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.Data, pubsub.ContentType)
+	req.WithRawData(msg.Data, contenttype.CloudEventContentType)
 
 	sc, _ := diag.SpanContextFromW3CString(traceID)
 	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
