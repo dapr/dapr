@@ -19,6 +19,7 @@ import (
 
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -1354,7 +1355,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1366,7 +1367,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.Data, pubsub.ContentType)
+	fakeReq.WithRawData(testPubSubMessage.Data, contenttype.CloudEventContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.topicRoutes = map[string]TopicRoute{}
@@ -1440,10 +1441,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
-		var cloudEvent pubsub.CloudEventsEnvelope
+		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1568,10 +1569,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(testPubSubMessage)
 
 		// assert
-		var cloudEvent pubsub.CloudEventsEnvelope
+		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
+		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1580,7 +1581,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -2166,6 +2167,10 @@ func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler func(
 }
 
 func (m *mockPublishPubSub) Close() error {
+	return nil
+}
+
+func (m *mockPublishPubSub) Features() []pubsub.Feature {
 	return nil
 }
 

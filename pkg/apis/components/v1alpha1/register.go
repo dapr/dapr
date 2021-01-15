@@ -37,7 +37,6 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&Component{},
 		&ComponentList{},
 	)
-	scheme.AddKnownTypes(SchemeGroupVersion)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

@@ -38,8 +38,8 @@ const (
 
 	receiveMessageRetries = 5
 
-	publisherAppName  = "pubsub-publisher"
-	subscriberAppName = "pubsub-subscriber"
+	publisherAppName      = "pubsub-publisher-grpc"
+	subscriberAppNameGRPC = "pubsub-subscriber-grpc"
 )
 
 // sent to the publisher app, which will publish data to dapr
@@ -287,11 +287,12 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 		},
 		{
-			AppName:        subscriberAppName,
+			AppName:        subscriberAppNameGRPC,
 			DaprEnabled:    true,
-			ImageName:      "e2e-pubsub-subscriber",
+			ImageName:      "e2e-pubsub-subscriber_grpc",
 			Replicas:       1,
 			IngressEnabled: true,
+			AppProtocol:    "grpc",
 		},
 	}
 
@@ -336,12 +337,12 @@ var pubsubTests = []struct {
 	},
 }
 
-func TestPubSubHTTP(t *testing.T) {
-	log.Println("Enter TestPubSubHTTP")
+func TestPubSubGRPC(t *testing.T) {
+	log.Println("Enter TestPubSubGRPC")
 	publisherExternalURL := tr.Platform.AcquireAppExternalURL(publisherAppName)
 	require.NotEmpty(t, publisherExternalURL, "publisherExternalURL must not be empty!")
 
-	subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
+	subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppNameGRPC)
 	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURLHTTP must not be empty!")
 
 	// This initial probe makes the test wait a little bit longer when needed,
@@ -349,13 +350,10 @@ func TestPubSubHTTP(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
-	require.NoError(t, err)
-
-	protocol := "http"
+	protocol := "grpc"
 	for _, tc := range pubsubTests {
 		t.Run(fmt.Sprintf("%s_%s", tc.name, protocol), func(t *testing.T) {
-			subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppName, protocol)
+			subscriberExternalURL = tc.handler(t, publisherExternalURL, subscriberExternalURL, tc.subscriberResponse, subscriberAppNameGRPC, protocol)
 		})
 	}
 }

@@ -20,6 +20,7 @@ import (
 
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
@@ -81,6 +82,7 @@ const (
 	pubsubComponent             ComponentCategory = "pubsub"
 	secretStoreComponent        ComponentCategory = "secretstores"
 	stateComponent              ComponentCategory = "state"
+	middlewareComponent         ComponentCategory = "middleware"
 	defaultComponentInitTimeout                   = time.Second * 5
 )
 
@@ -89,6 +91,7 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	pubsubComponent,
 	secretStoreComponent,
 	stateComponent,
+	middlewareComponent,
 }
 
 var log = logger.NewLogger("dapr.runtime")
@@ -284,6 +287,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.stateStoreRegistry.Register(opts.states...)
 	a.bindingsRegistry.RegisterInputBindings(opts.inputBindings...)
 	a.bindingsRegistry.RegisterOutputBindings(opts.outputBindings...)
+	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 
 	go a.processComponents()
 	err = a.beginComponentsUpdates()
@@ -298,8 +302,6 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.flushOutstandingComponents()
 
-	// Register and initialize HTTP middleware
-	a.httpMiddlewareRegistry.Register(opts.httpMiddleware...)
 	pipeline, err := a.buildHTTPPipeline()
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
@@ -673,10 +675,6 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 }
 
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
-	subscribed := a.isAppSubscribedToBinding(name)
-	if !subscribed {
-		return errors.Errorf("app not subscribed to binding %s", name)
-	}
 	err := binding.Read(func(resp *bindings.ReadResponse) error {
 		if resp != nil {
 			err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
@@ -725,16 +723,18 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
-		a.getPublishAdapter(), a.pubSubs, a.unmarshalSubscribeEventGRPC, a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol))
+		//a.getPublishAdapter(), a.pubSubs, a.unmarshalSubscribeEventGRPC, a.directMessaging, a.actor,
+		//a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol))
+		a.unmarshalSubscribeEventGRPC, a.getPublishAdapter(), a.directMessaging, a.actor,
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.components)
 }
 
-func (a *DaprRuntime) getPublishAdapter() func(*pubsub.PublishRequest) error {
+func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
 	if a.pubSubs == nil || len(a.pubSubs) == 0 {
 		return nil
 	}
 
-	return a.Publish
+	return a
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
@@ -988,7 +988,8 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
-	if _, ok := a.pubSubs[req.PubsubName]; !ok {
+	thepubsub := a.GetPubSub(req.PubsubName)
+	if thepubsub == nil {
 		return runtime_pubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
@@ -997,6 +998,11 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 	}
 
 	return a.pubSubs[req.PubsubName].Publish(req)
+}
+
+// GetPubSub is an adapter method to find a pubsub by name
+func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
+	return a.pubSubs[pubsubName]
 }
 
 func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
@@ -1066,20 +1072,25 @@ func (a *DaprRuntime) initNameResolution() error {
 }
 
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
-	subject := ""
-	var cloudEvent pubsub.CloudEventsEnvelope
+	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
-	if err == nil {
-		subject = cloudEvent.Subject
+	if err != nil {
+		log.Debug(errors.Errorf("failed to deserialize cloudevent: %s", err))
+		return err
+	}
+	traceID := cloudEvent[pubsub.TraceIDField].(string)
+
+	if pubsub.HasExpired(cloudEvent) {
+		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
+		return nil
 	}
 
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
 	req := invokev1.NewInvokeMethodRequest(route.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
-	req.WithRawData(msg.Data, pubsub.ContentType)
+	req.WithRawData(msg.Data, contenttype.CloudEventContentType)
 
-	// subject contains the correlationID which is passed span context
-	sc, _ := diag.SpanContextFromW3CString(subject)
+	sc, _ := diag.SpanContextFromW3CString(traceID)
 	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
 
@@ -1104,7 +1115,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		var appResponse pubsub.AppResponse
 		err := a.json.Unmarshal(body, &appResponse)
 		if err != nil {
-			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent.ID)
+			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField].(string))
 			// Return no error so message does not get reprocessed.
 			return nil
 		}
@@ -1116,40 +1127,57 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		case pubsub.Success:
 			return nil
 		case pubsub.Retry:
-			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+			return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField].(string))
 		case pubsub.Drop:
-			log.Warn("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
+			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField].(string))
 			return nil
 		}
 		// Consider unknown status field as error and retry
-		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, appResponse.Status)
+		return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField].(string), appResponse.Status)
 	}
 
 	if statusCode == nethttp.StatusNotFound {
 		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
 		// https://cloud.google.com/apis/design/errors#handling_errors
-		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
+		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
 		return nil
 	}
 
 	// Every error from now on is a retriable error.
-	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
-	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent.ID, body, statusCode)
+	log.Warnf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
+	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
 }
 
 func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
-	var (
-		envelope   *runtimev1pb.TopicEventRequest
-		cloudEvent *pubsub.CloudEventsEnvelope
-		err        error
-	)
-	if envelope, cloudEvent, err = a.unmarshalTopicEventGRPC(msg); err != nil {
+	var cloudEvent map[string]interface{}
+	err := a.json.Unmarshal(msg.Data, &cloudEvent)
+	if err != nil {
+		log.Debugf("error deserializing cloud events proto: %s", err)
 		return err
 	}
-	// subject contains the correlationID which is passed span context
-	subject := cloudEvent.Subject
-	sc, _ := diag.SpanContextFromW3CString(subject)
+
+	if pubsub.HasExpired(cloudEvent) {
+		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
+		return nil
+	}
+
+	envelope := &runtimev1pb.TopicEventRequest{
+		Id:              cloudEvent[pubsub.IDField].(string),
+		Source:          cloudEvent[pubsub.SourceField].(string),
+		DataContentType: cloudEvent[pubsub.DataContentTypeField].(string),
+		Type:            cloudEvent[pubsub.TypeField].(string),
+		SpecVersion:     cloudEvent[pubsub.SpecVersionField].(string),
+		Topic:           msg.Topic,
+		PubsubName:      msg.Metadata[pubsubName],
+	}
+
+	if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
+		envelope.Data = []byte(cloudEvent[pubsub.DataField].(string))
+	}
+
+	traceID := cloudEvent[pubsub.TraceIDField].(string)
+	sc, _ := diag.SpanContextFromW3CString(traceID)
 	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 
 	// no ops if trace is off
@@ -1171,11 +1199,11 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		errStatus, hasErrStatus := status.FromError(err)
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
-			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
+			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField].(string), err)
 			return nil
 		}
 
-		err = errors.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent.ID, err)
+		err = errors.Errorf("error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField].(string), err)
 		log.Debug(err)
 		// on error from application, return error for redelivery of event
 		return err
@@ -1187,71 +1215,43 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		// success from protobuf definition
 		return nil
 	case runtimev1pb.TopicEventResponse_RETRY:
-		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		return errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField].(string))
 	case runtimev1pb.TopicEventResponse_DROP:
-		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField].(string))
 		return nil
 	}
 	// Consider unknown status field as error and retry
-	return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent.ID, res.GetStatus())
+	return errors.Errorf("unknown status returned from app while processing pub/sub event %v: %v", cloudEvent[pubsub.IDField].(string), res.GetStatus())
 }
 
-func (a *DaprRuntime) unmarshalTopicEventGRPC(msg *pubsub.NewMessage) (*runtimev1pb.TopicEventRequest, *pubsub.CloudEventsEnvelope, error) {
-	var cloudEvent pubsub.CloudEventsEnvelope
+func (a *DaprRuntime) unmarshalSubscribeEventGRPC(msg *pubsub.NewMessage) (*runtimev1pb.SubscribeEventResponse, error) {
+	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
 		log.Debugf("error deserializing cloud events proto: %s", err)
-		return nil, nil, err
+		return nil, err
 	}
 
-	envelope := &runtimev1pb.TopicEventRequest{
-		Id:              cloudEvent.ID,
-		Source:          cloudEvent.Source,
-		DataContentType: cloudEvent.DataContentType,
-		Type:            cloudEvent.Type,
-		SpecVersion:     cloudEvent.SpecVersion,
-		Topic:           msg.Topic,
-		PubsubName:      msg.Metadata[pubsubName],
-	}
-
-	if cloudEvent.Data != nil {
-		envelope.Data = nil
-		if cloudEvent.DataContentType == "text/plain" {
-			envelope.Data = []byte(cloudEvent.Data.(string))
-		} else if cloudEvent.DataContentType == "application/json" {
-			envelope.Data, _ = a.json.Marshal(cloudEvent.Data)
-		}
-	}
-	return envelope, &cloudEvent, nil
-}
-
-func (a *DaprRuntime) unmarshalSubscribeEventGRPC(msg *pubsub.NewMessage) (*runtimev1pb.SubscribeEventResponse, *pubsub.CloudEventsEnvelope, error) {
-	var cloudEvent pubsub.CloudEventsEnvelope
-	err := a.json.Unmarshal(msg.Data, &cloudEvent)
-	if err != nil {
-		log.Debugf("error deserializing cloud events proto: %s", err)
-		return nil, nil, err
+	if pubsub.HasExpired(cloudEvent) {
+		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
+		return nil, nil
 	}
 
 	envelope := &runtimev1pb.SubscribeEventResponse{
-		Id:              cloudEvent.ID,
-		Source:          cloudEvent.Source,
-		DataContentType: cloudEvent.DataContentType,
-		Type:            cloudEvent.Type,
-		SpecVersion:     cloudEvent.SpecVersion,
+		Id:              cloudEvent[pubsub.IDField].(string),
+		Source:          cloudEvent[pubsub.SourceField].(string),
+		DataContentType: cloudEvent[pubsub.DataContentTypeField].(string),
+		Type:            cloudEvent[pubsub.TypeField].(string),
+		SpecVersion:     cloudEvent[pubsub.SpecVersionField].(string),
 		Topic:           msg.Topic,
 		PubsubName:      msg.Metadata[pubsubName],
 	}
 
-	if cloudEvent.Data != nil {
-		envelope.Data = nil
-		if cloudEvent.DataContentType == "text/plain" {
-			envelope.Data = []byte(cloudEvent.Data.(string))
-		} else if cloudEvent.DataContentType == "application/json" {
-			envelope.Data, _ = a.json.Marshal(cloudEvent.Data)
-		}
+	if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
+		envelope.Data = []byte(cloudEvent[pubsub.DataField].(string))
 	}
-	return envelope, &cloudEvent, nil
+
+	return envelope, nil
 }
 
 func (a *DaprRuntime) initActors() error {
@@ -1734,6 +1734,11 @@ func (a *DaprRuntime) startReadingFromBindings() error {
 	}
 	for name, binding := range a.inputBindings {
 		go func(name string, binding bindings.InputBinding) {
+			if !a.isAppSubscribedToBinding(name) {
+				log.Infof("app has not subscribed to binding %s.", name)
+				return
+			}
+
 			err := a.readFromBinding(name, binding)
 			if err != nil {
 				log.Errorf("error reading from input binding %s: %s", name, err)

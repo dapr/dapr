@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -33,7 +34,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/golang/protobuf/ptypes/empty"
-	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -74,25 +74,31 @@ type API interface {
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*empty.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
-	GetMetadata(ctx context.Context, empty *empty.Empty) (*runtimev1pb.GetMetadataResponse, error)
+
+	// Gets metadata of the sidecar
+	GetMetadata(ctx context.Context, in *empty.Empty) (*runtimev1pb.GetMetadataResponse, error)
+	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error)
 }
 
 type api struct {
-	actor                 actors.Actors
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
-	stateStores           map[string]state.Store
-	secretStores          map[string]secretstores.SecretStore
-	secretsConfiguration  map[string]config.SecretsScope
-	publishFn             func(req *pubsub.PublishRequest) error
-	unmarshalMsgFn        func(msg *pubsub.NewMessage) (*runtimev1pb.SubscribeEventResponse, *pubsub.CloudEventsEnvelope, error)
-	pubsubs               map[string]pubsub.PubSub
+	actor                actors.Actors
+	directMessaging      messaging.DirectMessaging
+	appChannel           channel.AppChannel
+	stateStores          map[string]state.Store
+	secretStores         map[string]secretstores.SecretStore
+	secretsConfiguration map[string]config.SecretsScope
+	//publishFn             func(req *pubsub.PublishRequest) error
+	unmarshalMsgFn func(msg *pubsub.NewMessage) (*runtimev1pb.SubscribeEventResponse, error)
+	//pubsubs               map[string]pubsub.PubSub
+	pubsubAdapter         runtime_pubsub.Adapter
 	id                    string
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	appProtocol           string
+	extendedMetadata      sync.Map
+	components            []components_v1alpha.Component
 }
 
 // NewAPI returns a new gRPC API
@@ -101,23 +107,24 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
-	publishFn func(req *pubsub.PublishRequest) error,
-	pubsubs map[string]pubsub.PubSub,
-	unmarshalMsgFn func(msg *pubsub.NewMessage) (*runtimev1pb.SubscribeEventResponse, *pubsub.CloudEventsEnvelope, error),
+	//publishFn func(req *pubsub.PublishRequest) error,
+	//pubsubs map[string]pubsub.PubSub,
+	unmarshalMsgFn func(msg *pubsub.NewMessage) (*runtimev1pb.SubscribeEventResponse, error),
+	pubsubAdapter runtime_pubsub.Adapter,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec,
 	accessControlList *config.AccessControlList,
-	appProtocol string) API {
+	appProtocol string,
+	components []components_v1alpha.Component) API {
 	return &api{
 		directMessaging:       directMessaging,
 		actor:                 actor,
 		id:                    appID,
 		appChannel:            appChannel,
-		publishFn:             publishFn,
 		unmarshalMsgFn:        unmarshalMsgFn,
-		pubsubs:               pubsubs,
+		pubsubAdapter:         pubsubAdapter,
 		stateStores:           stateStores,
 		secretStores:          secretStores,
 		secretsConfiguration:  secretsConfiguration,
@@ -207,8 +214,8 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
-	if a.publishFn == nil {
-		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotFound)
+	if a.pubsubAdapter == nil {
+		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -216,6 +223,13 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	pubsubName := in.PubsubName
 	if pubsubName == "" {
 		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -233,11 +247,26 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		body = in.Data
 	}
 
-	contentType := in.DataContentType
-
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
+
+	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		ID:              a.id,
+		Topic:           in.Topic,
+		DataContentType: in.DataContentType,
+		Data:            body,
+		TraceID:         corID,
+		Pubsub:          in.PubsubName,
+	})
+	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	features := thepubsub.Features()
+	pubsub.ApplyMetadata(envelope, features, in.Metadata)
+
 	b, err := jsoniter.ConfigFastest.Marshal(envelope)
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
@@ -252,7 +281,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		Metadata:   in.Metadata,
 	}
 
-	err = a.publishFn(&req)
+	err = a.pubsubAdapter.Publish(&req)
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtime_pubsub.NotAllowedError{}) {
@@ -294,7 +323,7 @@ func (a *api) SubscribeEvent(srv runtimev1pb.Dapr_SubscribeEventServer) error {
 			return status.Errorf(codes.DataLoss, "SubscribeEvent: size of pubsubName not equals to 1")
 		}
 		curPubsubName = p[0]
-		curPubsub = a.pubsubs[curPubsubName]
+		curPubsub = a.pubsubAdapter.GetPubSub(curPubsubName)
 	}
 	var topic string
 	if t, ok := md[mdTopic]; ok {
@@ -332,7 +361,7 @@ func (a *api) SubscribeEvent(srv runtimev1pb.Dapr_SubscribeEventServer) error {
 			// cloudEvent *pubsub.CloudEventsEnvelope
 			err error
 		)
-		if envelope, _, err = a.unmarshalMsgFn(msg); err != nil {
+		if envelope, err = a.unmarshalMsgFn(msg); err != nil {
 			//ignore the message
 			apiServerLogger.Warnf("unmarshal the message failed. %v", envelope)
 			return nil
@@ -489,13 +518,11 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		}
 		for i := 0; i < len(responses); i++ {
 			item := &runtimev1pb.BulkStateItem{
-				Key: state_loader.GetOriginalStateKey(responses[i].Key),
-			}
-			if responses[i].Error != "" {
-				item.Error = responses[i].Error
-			} else {
-				item.Data = responses[i].Data
-				item.Etag = responses[i].ETag
+				Key:      state_loader.GetOriginalStateKey(responses[i].Key),
+				Data:     responses[i].Data,
+				Etag:     responses[i].ETag,
+				Metadata: responses[i].Metadata,
+				Error:    responses[i].Error,
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
 		}
@@ -582,7 +609,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			Key:      state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id),
 			Metadata: s.Metadata,
 			Value:    s.Value,
-			ETag:     s.Etag,
+		}
+		if s.Etag != nil {
+			req.ETag = &s.Etag.Value
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
@@ -595,11 +624,27 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	err = store.BulkSet(reqs)
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateSave, in.StoreName, err.Error())
+		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
 	return &empty.Empty{}, nil
+}
+
+// stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error
+func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
+	e, ok := err.(*state.ETagError)
+	if !ok {
+		return status.Errorf(codes.Internal, format, args...)
+	}
+	switch e.Kind() {
+	case state.ETagMismatch:
+		return status.Errorf(codes.Aborted, format, args...)
+	case state.ETagInvalid:
+		return status.Errorf(codes.InvalidArgument, format, args...)
+	}
+
+	return status.Errorf(codes.Internal, format, args...)
 }
 
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
@@ -612,7 +657,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	req := state.DeleteRequest{
 		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
 		Metadata: in.Metadata,
-		ETag:     in.Etag,
+	}
+	if in.Etag != nil {
+		req.ETag = &in.Etag.Value
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
@@ -623,7 +670,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	err = store.Delete(&req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateDelete, in.Key, err.Error())
+		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
 		return &empty.Empty{}, err
 	}
@@ -750,19 +797,27 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		return &runtimev1pb.GetBulkSecretResponse{}, err
 	}
 
-	for key := range getResponse.Data {
-		if !a.isSecretAllowed(in.StoreName, key) {
-			err := status.Errorf(codes.PermissionDenied, messages.ErrPermissionDenied, key, in.StoreName)
-			apiServerLogger.Debug(err)
-			return &runtimev1pb.GetBulkSecretResponse{}, err
+	filteredSecrets := map[string]string{}
+	for key, v := range getResponse.Data {
+		if a.isSecretAllowed(secretStoreName, key) {
+			filteredSecrets[key] = v
+		} else {
+			apiServerLogger.Debugf(messages.ErrPermissionDenied, key, in.StoreName)
 		}
 	}
 
 	response := &runtimev1pb.GetBulkSecretResponse{}
 	if getResponse.Data != nil {
-		response.Data = getResponse.Data
+		response.Data = filteredSecrets
 	}
 	return response, nil
+}
+
+func extractEtag(req *commonv1pb.StateItem) (bool, string) {
+	if req.Etag != nil {
+		return true, req.Etag.Value
+	}
+	return false, ""
 }
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
@@ -791,6 +846,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	for _, inputReq := range in.Operations {
 		var operation state.TransactionalStateOperation
 		var req = inputReq.Request
+
+		hasEtag, etag := extractEtag(req)
+
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
@@ -800,9 +858,11 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				// component specific way in components-contrib repo.
 				Value:    req.Value,
 				Metadata: req.Metadata,
-				ETag:     req.Etag,
 			}
 
+			if hasEtag {
+				setReq.ETag = &etag
+			}
 			if req.Options != nil {
 				setReq.Options = state.SetStateOption{
 					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
@@ -819,9 +879,11 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			delReq := state.DeleteRequest{
 				Key:      state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
 				Metadata: req.Metadata,
-				ETag:     req.Etag,
 			}
 
+			if hasEtag {
+				delReq.ETag = &etag
+			}
 			if req.Options != nil {
 				delReq.Options = state.DeleteStateOption{
 					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
@@ -1071,16 +1133,6 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	}, nil
 }
 
-//todo unimpements
-func (a *api) GetMetadata(ctx context.Context, empty *empty.Empty) (*runtimev1pb.GetMetadataResponse, error) {
-	return nil, nil
-}
-
-//todo unimpements
-func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error) {
-	return nil, nil
-}
-
 func (a *api) isSecretAllowed(storeName, key string) bool {
 	if config, ok := a.secretsConfiguration[storeName]; ok {
 		return config.IsSecretAllowed(key)
@@ -1117,4 +1169,35 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
+}
+
+func (a *api) GetMetadata(ctx context.Context, in *empty.Empty) (*runtimev1pb.GetMetadataResponse, error) {
+	temp := make(map[string]string)
+
+	// Copy synchronously so it can be serialized to JSON.
+	a.extendedMetadata.Range(func(key, value interface{}) bool {
+		temp[key.(string)] = value.(string)
+		return true
+	})
+	registeredComponents := []*runtimev1pb.RegisteredComponents{}
+
+	for _, comp := range a.components {
+		registeredComp := &runtimev1pb.RegisteredComponents{
+			Name:    comp.Name,
+			Version: comp.Spec.Version,
+			Type:    comp.Spec.Type,
+		}
+		registeredComponents = append(registeredComponents, registeredComp)
+	}
+	response := &runtimev1pb.GetMetadataResponse{
+		ExtendedMetadata:     temp,
+		RegisteredComponents: registeredComponents,
+	}
+	return response, nil
+}
+
+// Sets value in extended metadata of the sidecar
+func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error) {
+	a.extendedMetadata.Store(in.Key, in.Value)
+	return &empty.Empty{}, nil
 }

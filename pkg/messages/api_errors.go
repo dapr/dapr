@@ -22,13 +22,15 @@ const (
 	ErrInvokeOutputBinding = "error when invoke output binding %s: %s"
 
 	// PubSub
-	ErrPubsubNotFound       = "no pubsub is configured"
-	ErrPubsubEmpty          = "pubsub name is empty"
-	ErrTopicEmpty           = "topic is empty in pubsub %s"
-	ErrPubsubCloudEventsSer = "error when marshal cloud event envelop for topic %s pubsub %s: %s"
-	ErrPubsubPublishMessage = "error when publish to topic %s in pubsub %s: %s"
-	ErrPubsubForbidden      = "topic %s is not allowed for app id %s"
-	ErrPubsubSubscribe      = "failed subscribe pubsub in pubsub %s for topic %s. %v"
+	ErrPubsubSubscribe          = "failed subscribe pubsub in pubsub %s for topic %s. %v"
+	ErrPubsubNotConfigured      = "no pubsub is configured"
+	ErrPubsubEmpty              = "pubsub name is empty"
+	ErrPubsubNotFound           = "pubsub %s not found"
+	ErrTopicEmpty               = "topic is empty in pubsub %s"
+	ErrPubsubCloudEventsSer     = "error when marshalling cloud event envelope for topic %s pubsub %s: %s"
+	ErrPubsubPublishMessage     = "error when publish to topic %s in pubsub %s: %s"
+	ErrPubsubForbidden          = "topic %s is not allowed for app id %s"
+	ErrPubsubCloudEventCreation = "cannot create cloudevent: %s"
 
 	// AppChannel
 	ErrChannelNotFound       = "app channel is not initialized"

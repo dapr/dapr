@@ -177,5 +177,4 @@ func (o *operator) Run(ctx context.Context) {
 	}()
 
 	o.apiServer.Run(certChain)
-	cancel()
 }

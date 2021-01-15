@@ -53,20 +53,25 @@ var invalidJSON = []byte{0x7b, 0x7b}
 func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		publishFn: func(req *pubsub.PublishRequest) error {
-			if req.PubsubName == "errorpubsub" {
-				return fmt.Errorf("Error from pubsub %s", req.PubsubName)
-			}
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			PublishFn: func(req *pubsub.PublishRequest) error {
+				if req.PubsubName == "errorpubsub" {
+					return fmt.Errorf("Error from pubsub %s", req.PubsubName)
+				}
 
-			if req.PubsubName == "errnotfound" {
-				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
-			}
+				if req.PubsubName == "errnotfound" {
+					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+				}
 
-			if req.PubsubName == "errnotallowed" {
-				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
-			}
+				if req.PubsubName == "errnotallowed" {
+					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				}
 
-			return nil
+				return nil
+			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				return &daprt.MockPubSub{}
+			},
 		},
 		json: jsoniter.ConfigFastest,
 	}
@@ -166,16 +171,16 @@ func TestPubSubEndpoints(t *testing.T) {
 	t.Run("Pubsub not configured - 400", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
-		savePublishFn := testAPI.publishFn
-		testAPI.publishFn = nil
+		savePubSubAdapter := testAPI.pubsubAdapter
+		testAPI.pubsubAdapter = nil
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "ERR_PUBSUB_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 		}
-		testAPI.publishFn = savePublishFn
+		testAPI.pubsubAdapter = savePubSubAdapter
 	})
 
 	t.Run("Pubsub not configured - 400", func(t *testing.T) {
@@ -2105,8 +2110,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Update state - PUT verb supported", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
-			Key:  "good-key",
-			ETag: "",
+			Key: "good-key",
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2119,8 +2123,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Update state - No ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
-			Key:  "good-key",
-			ETag: "",
+			Key: "good-key",
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2131,10 +2134,11 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - State Error", func(t *testing.T) {
+		empty := ""
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "error-key",
-			ETag: "",
+			ETag: &empty,
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2148,7 +2152,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "good-key",
-			ETag: etag,
+			ETag: &etag,
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2159,10 +2163,11 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
+		invalidEtag := "BAD ETAG"
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "good-key",
-			ETag: "BAD ETAG",
+			ETag: &invalidEtag,
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2317,7 +2322,7 @@ func (c fakeStateStore) BulkSet(req []state.SetRequest) error {
 
 func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 	if req.Key == "good-key" {
-		if req.ETag != "" && req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
+		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
 			return errors.New("ETag mismatch")
 		}
 		return nil
@@ -2354,7 +2359,7 @@ func (c fakeStateStore) Init(metadata state.Metadata) error {
 
 func (c fakeStateStore) Set(req *state.SetRequest) error {
 	if req.Key == "good-key" {
-		if req.ETag != "" && req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
+		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
 			return errors.New("ETag mismatch")
 		}
 		return nil
@@ -2724,4 +2729,90 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_STATE_TRANSACTION", resp.ErrorBody["errorCode"], apiPath)
 	})
 	fakeServer.Shutdown()
+}
+
+func TestStateStoreErrors(t *testing.T) {
+	t.Run("non etag error", func(t *testing.T) {
+		a := &api{}
+		err := errors.New("error")
+		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+
+		assert.Equal(t, 500, c)
+		assert.Equal(t, "error", m)
+		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+	})
+
+	t.Run("etag mismatch error", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+
+		assert.Equal(t, 409, c)
+		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
+		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+	})
+
+	t.Run("etag invalid error", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+
+		assert.Equal(t, 400, c)
+		assert.Equal(t, "invalid etag value: error", m)
+		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+	})
+
+	t.Run("etag error mismatch", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		e, c, m := a.etagError(err)
+
+		assert.Equal(t, true, e)
+		assert.Equal(t, 409, c)
+		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
+	})
+
+	t.Run("etag error invalid", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		e, c, m := a.etagError(err)
+
+		assert.Equal(t, true, e)
+		assert.Equal(t, 400, c)
+		assert.Equal(t, "invalid etag value: error", m)
+	})
+}
+
+func TestExtractEtag(t *testing.T) {
+	t.Run("no etag present", func(t *testing.T) {
+		r := fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+		}
+
+		ok, etag := extractEtag(&r)
+		assert.False(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("empty etag exists", func(t *testing.T) {
+		r := fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+		}
+		r.Request.Header.Add("If-Match", "")
+
+		ok, etag := extractEtag(&r)
+		assert.True(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("non-empty etag exists", func(t *testing.T) {
+		r := fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+		}
+		r.Request.Header.Add("If-Match", "a")
+
+		ok, etag := extractEtag(&r)
+		assert.True(t, ok)
+		assert.Equal(t, "a", etag)
+	})
 }

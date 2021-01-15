@@ -29,7 +29,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/fasthttp/router"
-	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -57,7 +56,7 @@ type api struct {
 	secretsConfiguration  map[string]config.SecretsScope
 	json                  jsoniter.API
 	actor                 actors.Actors
-	publishFn             func(req *pubsub.PublishRequest) error
+	pubsubAdapter         runtime_pubsub.Adapter
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	id                    string
 	extendedMetadata      sync.Map
@@ -106,7 +105,7 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
-	publishFn func(*pubsub.PublishRequest) error,
+	pubsubAdapter runtime_pubsub.Adapter,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec) API {
@@ -118,7 +117,7 @@ func NewAPI(
 		secretsConfiguration:  secretsConfiguration,
 		json:                  jsoniter.ConfigFastest,
 		actor:                 actor,
-		publishFn:             publishFn,
+		pubsubAdapter:         pubsubAdapter,
 		sendToOutputBindingFn: sendToOutputBindingFn,
 		id:                    appID,
 		tracingSpec:           tracingSpec,
@@ -504,6 +503,20 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	respondWithETaggedJSON(reqCtx, fasthttp.StatusOK, resp.Data, resp.ETag)
 }
 
+func extractEtag(reqCtx *fasthttp.RequestCtx) (bool, string) {
+	var etag string
+	var hasEtag bool
+	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
+		if string(key) == "If-Match" {
+			etag = string(value)
+			hasEtag = true
+			return
+		}
+	})
+
+	return hasEtag, etag
+}
+
 func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
@@ -512,16 +525,13 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
-	etag := string(reqCtx.Request.Header.Peek("If-Match"))
 
 	concurrency := string(reqCtx.QueryArgs().Peek(concurrencyParam))
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 
 	metadata := getMetadataFromRequest(reqCtx)
-
 	req := state.DeleteRequest{
-		Key:  state_loader.GetModifiedStateKey(key, storeName, a.id),
-		ETag: etag,
+		Key: state_loader.GetModifiedStateKey(key, storeName, a.id),
 		Options: state.DeleteStateOption{
 			Concurrency: concurrency,
 			Consistency: consistency,
@@ -529,11 +539,18 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
+	exists, etag := extractEtag(reqCtx)
+	if exists {
+		req.ETag = &etag
+	}
+
 	err = store.Delete(&req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_STATE_DELETE", fmt.Sprintf(messages.ErrStateDelete, key, err))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
+		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
+
+		respondWithError(reqCtx, statusCode, resp)
+		log.Debug(resp.Message)
 		return
 	}
 	respondEmpty(reqCtx)
@@ -626,15 +643,16 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	for key := range resp.Data {
-		if !a.isSecretAllowed(secretStoreName, key) {
-			msg := NewErrorResponse("ERR_PERMISSION_DENIED", fmt.Sprintf(messages.ErrPermissionDenied, key, secretStoreName))
-			respondWithError(reqCtx, fasthttp.StatusForbidden, msg)
-			return
+	filteredSecrets := map[string]string{}
+	for key, v := range resp.Data {
+		if a.isSecretAllowed(secretStoreName, key) {
+			filteredSecrets[key] = v
+		} else {
+			log.Debugf(messages.ErrPermissionDenied, key, secretStoreName)
 		}
 	}
 
-	respBytes, _ := a.json.Marshal(resp.Data)
+	respBytes, _ := a.json.Marshal(filteredSecrets)
 	respondWithJSON(reqCtx, fasthttp.StatusOK, respBytes)
 }
 
@@ -661,13 +679,51 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	err = store.BulkSet(reqs)
 	if err != nil {
 		storeName := a.getStateStoreName(reqCtx)
-		msg := NewErrorResponse("ERR_STATE_SAVE", fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+
+		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
+
+		respondWithError(reqCtx, statusCode, resp)
+		log.Debug(resp.Message)
 		return
 	}
 
 	respondEmpty(reqCtx)
+}
+
+// stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error
+func (a *api) stateErrorResponse(err error, errorCode string) (int, string, ErrorResponse) {
+	var message string
+	var code int
+	var etag bool
+	etag, code, message = a.etagError(err)
+
+	r := ErrorResponse{
+		ErrorCode: errorCode,
+	}
+	if etag {
+		return code, message, r
+	}
+	message = err.Error()
+
+	return fasthttp.StatusInternalServerError, message, r
+}
+
+// etagError checks if the error from the state store is an etag error and returns a bool for indication,
+// an status code and an error message
+func (a *api) etagError(err error) (bool, int, string) {
+	e, ok := err.(*state.ETagError)
+	if !ok {
+		return false, -1, ""
+	}
+	switch e.Kind() {
+	case state.ETagMismatch:
+		return true, fasthttp.StatusConflict, e.Error()
+	case state.ETagInvalid:
+		return true, fasthttp.StatusBadRequest, e.Error()
+	}
+
+	return false, -1, ""
 }
 
 func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
@@ -1065,8 +1121,8 @@ func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	if a.publishFn == nil {
-		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", messages.ErrPubsubNotFound)
+	if a.pubsubAdapter == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
 		return
@@ -1075,6 +1131,14 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	if pubsubName == "" {
 		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
+		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)
+		log.Debug(msg)
+		return
+	}
+
+	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
+	if thepubsub == nil {
+		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
 		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)
 		log.Debug(msg)
 		return
@@ -1091,13 +1155,32 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	body := reqCtx.PostBody()
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
+	metadata := getMetadataFromRequest(reqCtx)
 
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
-	envelope := pubsub.NewCloudEventsEnvelope(uuid.New().String(), a.id, pubsub.DefaultCloudEventType, corID, topic, pubsubName, contentType, body)
 
+	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+		ID:              a.id,
+		Topic:           topic,
+		DataContentType: contentType,
+		Data:            body,
+		TraceID:         corID,
+		Pubsub:          pubsubName,
+	})
+	if err != nil {
+		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+			fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		log.Debug(msg)
+		return
+	}
+
+	features := thepubsub.Features()
+
+	pubsub.ApplyMetadata(envelope, features, metadata)
 	b, err := a.json.Marshal(envelope)
 	if err != nil {
 		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
@@ -1111,9 +1194,10 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		PubsubName: pubsubName,
 		Topic:      topic,
 		Data:       b,
+		Metadata:   metadata,
 	}
 
-	err = a.publishFn(&req)
+	err = a.pubsubAdapter.Publish(&req)
 	if err != nil {
 		status := fasthttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",

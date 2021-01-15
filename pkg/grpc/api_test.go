@@ -18,11 +18,13 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	components_v1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -1211,20 +1213,25 @@ func TestPublishTopic(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
 	srv := &api{
-		publishFn: func(req *pubsub.PublishRequest) error {
-			if req.Topic == "error-topic" {
-				return errors.New("error when publish")
-			}
+		pubsubAdapter: &daprt.MockPubSubAdapter{
+			PublishFn: func(req *pubsub.PublishRequest) error {
+				if req.Topic == "error-topic" {
+					return errors.New("error when publish")
+				}
 
-			if req.Topic == "err-not-found" {
-				return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
-			}
+				if req.Topic == "err-not-found" {
+					return runtime_pubsub.NotFoundError{PubsubName: "errnotfound"}
+				}
 
-			if req.Topic == "err-not-allowed" {
-				return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
-			}
+				if req.Topic == "err-not-allowed" {
+					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				}
 
-			return nil
+				return nil
+			},
+			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
+				return &daprt.MockPubSub{}
+			},
 		},
 	}
 	server := startTestServerAPI(port, srv)
@@ -1428,6 +1435,137 @@ func TestExecuteStateTransaction(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetMetadata(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	fakeComponent := components_v1alpha.Component{}
+	fakeComponent.Name = "testComponent"
+	fakeAPI := &api{
+		id:         "fakeAPI",
+		components: []components_v1alpha.Component{fakeComponent},
+	}
+	fakeAPI.extendedMetadata.Store("testKey", "testValue")
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	response, err := client.GetMetadata(context.Background(), &empty.Empty{})
+	assert.NoError(t, err, "Expected no error")
+	assert.Len(t, response.RegisteredComponents, 1, "One component should be returned")
+	assert.Equal(t, response.RegisteredComponents[0].Name, "testComponent")
+	assert.Contains(t, response.ExtendedMetadata, "testKey")
+	assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
+}
+func TestSetMetadata(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+	fakeComponent := components_v1alpha.Component{}
+	fakeComponent.Name = "testComponent"
+	fakeAPI := &api{
+		id: "fakeAPI",
+	}
+	server := startDaprAPIServer(port, fakeAPI, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+	req := &runtimev1pb.SetMetadataRequest{
+		Key:   "testKey",
+		Value: "testValue",
+	}
+	_, err := client.SetMetadata(context.Background(), req)
+	assert.NoError(t, err, "Expected no error")
+	temp := make(map[string]string)
+
+	// Copy synchronously so it can be serialized to JSON.
+	fakeAPI.extendedMetadata.Range(func(key, value interface{}) bool {
+		temp[key.(string)] = value.(string)
+		return true
+	})
+
+	assert.Contains(t, temp, "testKey")
+	assert.Equal(t, temp["testKey"], "testValue")
+}
+
+func TestStateStoreErrors(t *testing.T) {
+	t.Run("save etag mismatch", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = Aborted desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
+	})
+
+	t.Run("save etag invalid", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = failed saving state in state store a: invalid etag value: error", err2.Error())
+	})
+
+	t.Run("save non etag", func(t *testing.T) {
+		a := &api{}
+		err := errors.New("error")
+		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = Internal desc = failed saving state in state store a: error", err2.Error())
+	})
+
+	t.Run("delete etag mismatch", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = Aborted desc = failed deleting state with key a: possible etag mismatch. error from state store: error", err2.Error())
+	})
+
+	t.Run("delete etag invalid", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = InvalidArgument desc = failed deleting state with key a: invalid etag value: error", err2.Error())
+	})
+
+	t.Run("delete non etag", func(t *testing.T) {
+		a := &api{}
+		err := errors.New("error")
+		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = Internal desc = failed deleting state with key a: error", err2.Error())
+	})
+}
+
+func TestExtractEtag(t *testing.T) {
+	t.Run("no etag present", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{})
+		assert.False(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("empty etag exists", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{
+			Etag: &commonv1pb.Etag{},
+		})
+		assert.True(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("non-empty etag exists", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{
+			Etag: &commonv1pb.Etag{
+				Value: "a",
+			},
+		})
+		assert.True(t, ok)
+		assert.Equal(t, "a", etag)
+	})
 }
 
 func GenerateStateOptionsTestCase() (*commonv1pb.StateOptions, state.SetStateOption) {

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 
 	"github.com/phayes/freeport"
 	apiv1 "k8s.io/api/core/v1"
@@ -128,10 +127,11 @@ func startPortForwarding(req PortForwardRequest) error {
 	}
 
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", req.pod.Namespace, req.pod.Name)
-	hostIP := strings.TrimLeft(req.restConfig.Host, "htps:/")
-	serverURL := url.URL{Scheme: "https", Path: path, Host: hostIP}
+	serverURL, _ := url.Parse(req.restConfig.Host)
+	serverURL.Scheme = "https"
+	serverURL.Path = path
 
-	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)
+	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, serverURL)
 
 	var ports []string //nolint: prealloc
 	for i, p := range req.podPorts {

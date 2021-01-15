@@ -5,7 +5,7 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber actorapp actorclientapp actorfeatures actorinvocationapp runtime runtime_init middleware
+E2E_TEST_APPS=hellodapr stateapp secretapp service_invocation service_invocation_grpc binding_input binding_output pubsub-publisher pubsub-subscriber pubsub-subscriber_grpc actorapp actorclientapp actorfeatures actorinvocationapp runtime runtime_init middleware
 
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http
@@ -98,6 +98,8 @@ delete-test-namespace:
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
+
+perf-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-perf-app-all push-perf-app-all test-perf-all
 
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
