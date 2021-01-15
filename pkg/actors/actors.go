@@ -856,11 +856,10 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		return err
 	}
 
-	t := a.configureTicker(d)
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
-	go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, name, dueTime, period, callback string, data interface{}) {
+	go func(stop chan (bool), actorType, actorID, name, dueTime, period, callback string, data interface{}) {
 		if dueTime != "" {
 			d, err := time.ParseDuration(dueTime)
 			if err == nil {
@@ -884,6 +883,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 		actorKey := a.constructCompositeKey(actorType, actorID)
 
+		ticker := a.configureTicker(d)
 		for {
 			select {
 			case <-ticker.C:
@@ -904,7 +904,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 				return
 			}
 		}
-	}(t, stop, req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
+	}(stop, req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
 	return nil
 }
 
