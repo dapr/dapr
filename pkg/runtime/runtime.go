@@ -81,6 +81,7 @@ const (
 	pubsubComponent             ComponentCategory = "pubsub"
 	secretStoreComponent        ComponentCategory = "secretstores"
 	stateComponent              ComponentCategory = "state"
+	middlewareComponent         ComponentCategory = "middleware"
 	defaultComponentInitTimeout                   = time.Second * 5
 )
 
@@ -89,6 +90,7 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	pubsubComponent,
 	secretStoreComponent,
 	stateComponent,
+	middlewareComponent,
 }
 
 var log = logger.NewLogger("dapr.runtime")
