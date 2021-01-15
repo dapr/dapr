@@ -167,7 +167,7 @@ message DeleteStateRequest {
 
   // The entity tag which represents the specific version of data.
   // The exact ETag format is defined by the corresponding data store.
-  string etag = 3;
+  common.v1.Etag etag = 3;
 
   // State operation options which includes concurrency/
   // consistency/retry_policy.

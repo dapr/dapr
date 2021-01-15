@@ -320,9 +320,31 @@ func generateStateTransactionCases(protocolType string) testStateTransactionCase
 			{
 				"get",
 				newStateTransactionRequestResponse(
+					utils.StateTransactionKeyValue{testCase1Key, "", ""},
+				),
+				newResponse(utils.SimpleKeyValue{testCase1Key, nil}),
+			},
+			{
+				"get",
+				newStateTransactionRequestResponse(
 					utils.StateTransactionKeyValue{testCase2Key, "", ""},
 				),
 				newResponse(utils.SimpleKeyValue{testCase2Key, testCase2Value}),
+			},
+			{
+				"transact",
+				newStateTransactionRequestResponse(
+					utils.StateTransactionKeyValue{testCase1Key, testCase1Value, "upsert"},
+					utils.StateTransactionKeyValue{testCase1Key, testCase2Value, "upsert"},
+				),
+				emptyResponse,
+			},
+			{
+				"get",
+				newStateTransactionRequestResponse(
+					utils.StateTransactionKeyValue{testCase1Key, "", ""},
+				),
+				newResponse(utils.SimpleKeyValue{testCase1Key, testCase2Value}),
 			},
 		},
 	}
