@@ -50,7 +50,6 @@ func (t *testContentTypeHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 }
 
 type testHandlerHeaders struct {
-	appToken string
 }
 
 func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
