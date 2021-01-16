@@ -14,11 +14,15 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -380,6 +384,114 @@ func TestSetupTracing(t *testing.T) {
 			rt.setupTracing(rt.daprHostAddress, openCensusExporterStore{})
 		})
 	}
+}
+
+func TestMetadataUUID(t *testing.T) {
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	pubsubComponent.Spec.Metadata = append(
+		pubsubComponent.Spec.Metadata,
+		components_v1alpha1.MetadataItem{
+			Name: "consumerID",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{uuid}"),
+				},
+			},
+		}, components_v1alpha1.MetadataItem{
+			Name: "twoUUIDs",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{uuid} {uuid}"),
+				},
+			},
+		})
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		consumerID := metadata.Properties["consumerID"]
+		uuid0, err := uuid.Parse(consumerID)
+		assert.Nil(t, err)
+
+		twoUUIDs := metadata.Properties["twoUUIDs"]
+		uuids := strings.Split(twoUUIDs, " ")
+		assert.Equal(t, 2, len(uuids))
+		uuid1, err := uuid.Parse(uuids[0])
+		assert.Nil(t, err)
+		uuid2, err := uuid.Parse(uuids[1])
+		assert.Nil(t, err)
+
+		assert.NotEqual(t, uuid0, uuid1)
+		assert.NotEqual(t, uuid0, uuid2)
+		assert.NotEqual(t, uuid1, uuid2)
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
+func TestConsumerID(t *testing.T) {
+	metadata := []components_v1alpha1.MetadataItem{
+		{
+			Name: "host",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("localhost"),
+				},
+			},
+		},
+		{
+			Name: "password",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("fakePassword"),
+				},
+			},
+		},
+	}
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Metadata: metadata,
+		},
+	}
+
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		consumerID := metadata.Properties["consumerID"]
+		assert.Equal(t, TestRuntimeConfigID, consumerID)
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
 }
 
 func TestInitPubSub(t *testing.T) {
@@ -1366,7 +1478,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.Data, pubsub.ContentType)
+	fakeReq.WithRawData(testPubSubMessage.Data, contenttype.CloudEventContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.topicRoutes = map[string]TopicRoute{}
