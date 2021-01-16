@@ -13,6 +13,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -21,18 +22,20 @@ import (
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code
 type Channel struct {
-	client      *grpc.ClientConn
-	baseAddress string
-	ch          chan int
-	tracingSpec config.TracingSpec
+	client           *grpc.ClientConn
+	baseAddress      string
+	ch               chan int
+	tracingSpec      config.TracingSpec
+	appMetadataToken string
 }
 
 // CreateChannel creates a gRPC connection with user code
 func CreateChannel(applicationHost string, port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec) *Channel {
 	c := &Channel{
-		client:      conn,
-		baseAddress: fmt.Sprintf("%s:%d", applicationHost, port),
-		tracingSpec: spec,
+		client:           conn,
+		baseAddress:      fmt.Sprintf("%s:%d", applicationHost, port),
+		tracingSpec:      spec,
+		appMetadataToken: auth.GetAppToken(),
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan int, maxConcurrency)
@@ -71,6 +74,11 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 
 	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
 	grpcMetadata := invokev1.InternalMetadataToGrpcMetadata(ctx, req.Metadata(), true)
+
+	if g.appMetadataToken != "" {
+		grpcMetadata.Set(auth.APITokenHeader, g.appMetadataToken)
+	}
+
 	// Prepare gRPC Metadata
 	ctx = metadata.NewOutgoingContext(context.Background(), grpcMetadata)
 
