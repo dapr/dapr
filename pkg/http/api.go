@@ -184,15 +184,15 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "secrets/{secretStoreName}/{key}",
-			Version: apiVersionV1,
-			Handler: a.onGetSecret,
-		},
-		{
-			Methods: []string{fasthttp.MethodGet},
 			Route:   "secrets/{secretStoreName}/bulk",
 			Version: apiVersionV1,
 			Handler: a.onBulkGetSecret,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "secrets/{secretStoreName}/{key}",
+			Version: apiVersionV1,
+			Handler: a.onGetSecret,
 		},
 	}
 }
