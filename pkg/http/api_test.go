@@ -36,12 +36,15 @@ import (
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	routing "github.com/fasthttp/router"
+	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -434,6 +437,41 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging with Internal Error Response - 500 Internal", func(t *testing.T) {
+		d := &epb.ErrorInfo{
+			Reason: "fakeReason",
+		}
+		details, _ := ptypes.MarshalAny(d)
+
+		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(int32(codes.Internal), "InternalError", []*any.Any{details})
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+		fakeReq.WithMetadata(headerMetadata)
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeInternalErrorResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.Equal(t, []byte("{\"code\":13,\"message\":\"InternalError\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"reason\":\"fakeReason\"}]}"), resp.RawBody)
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {

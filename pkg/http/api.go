@@ -29,6 +29,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/fasthttp/router"
+	"github.com/golang/protobuf/jsonpb"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -769,6 +770,11 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	statusCode := int(resp.Status().Code)
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
+		if statusCode != fasthttp.StatusOK {
+			m := jsonpb.Marshaler{}
+			jsonBody, _ := m.MarshalToString(resp.Status())
+			body = []byte(jsonBody)
+		}
 	}
 
 	respond(reqCtx, statusCode, body)

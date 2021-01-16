@@ -11,6 +11,7 @@ import (
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
@@ -73,11 +74,15 @@ func TestResponseData(t *testing.T) {
 	})
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
+		s := &commonv1pb.StateItem{Key: "custom_key"}
+		b, err := ptypes.MarshalAny(s)
+		assert.NoError(t, err)
+
 		resp := NewInvokeMethodResponse(0, "OK", nil)
-		resp.r.Message.Data = &any.Any{TypeUrl: "fake", Value: []byte("fake")}
+		resp.r.Message.Data = b
 		contentType, bData := resp.RawData()
-		assert.Equal(t, "", contentType)
-		assert.Equal(t, []byte("fake"), bData)
+		assert.Equal(t, ProtobufContentType, contentType)
+		assert.Equal(t, b.Value, bData)
 	})
 }
 
