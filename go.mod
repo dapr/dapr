@@ -8,7 +8,7 @@ require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/dapr/components-contrib v1.0.0-rc2.0.20210114222852-01147e559dbf
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
-	github.com/fasthttp/router v1.3.2
+	github.com/fasthttp/router v1.3.5
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/protobuf v1.4.3
@@ -35,7 +35,7 @@ require (
 	github.com/prometheus/common v0.14.0
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.6.1
-	github.com/valyala/fasthttp v1.16.0
+	github.com/valyala/fasthttp v1.19.0
 	github.com/yuin/gopher-lua v0.0.0-20200603152657-dc2b0ca8b37e // indirect
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.13.0
