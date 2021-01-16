@@ -503,6 +503,20 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	respondWithETaggedJSON(reqCtx, fasthttp.StatusOK, resp.Data, resp.ETag)
 }
 
+func extractEtag(reqCtx *fasthttp.RequestCtx) (bool, string) {
+	var etag string
+	var hasEtag bool
+	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
+		if string(key) == "If-Match" {
+			etag = string(value)
+			hasEtag = true
+			return
+		}
+	})
+
+	return hasEtag, etag
+}
+
 func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
@@ -511,21 +525,23 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
-	etag := string(reqCtx.Request.Header.Peek("If-Match"))
 
 	concurrency := string(reqCtx.QueryArgs().Peek(concurrencyParam))
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 
 	metadata := getMetadataFromRequest(reqCtx)
-
 	req := state.DeleteRequest{
-		Key:  state_loader.GetModifiedStateKey(key, storeName, a.id),
-		ETag: etag,
+		Key: state_loader.GetModifiedStateKey(key, storeName, a.id),
 		Options: state.DeleteStateOption{
 			Concurrency: concurrency,
 			Consistency: consistency,
 		},
 		Metadata: metadata,
+	}
+
+	exists, etag := extractEtag(reqCtx)
+	if exists {
+		req.ETag = &etag
 	}
 
 	err = store.Delete(&req)

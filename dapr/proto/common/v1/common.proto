@@ -89,13 +89,19 @@ message StateItem {
 
   // The entity tag which represents the specific version of data.
   // The exact ETag format is defined by the corresponding data store.
-  string etag = 3;
+  Etag etag = 3;
 
   // The metadata which will be passed to state store component.
   map<string,string> metadata = 4;
 
   // Options for concurrency and consistency to save the state.
   StateOptions options = 5;
+}
+
+// Etag represents a state item version
+message Etag {
+  // value sets the etag value
+  string value = 1;
 }
 
 // StateOptions configures concurrency and consistency for state operations
