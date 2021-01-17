@@ -836,6 +836,10 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 }
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
+	var (
+		err             error
+		dueTime, period time.Duration
+	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
@@ -851,22 +855,20 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		close(stopChan.(chan bool))
 	}
 
-	d, err := time.ParseDuration(req.Period)
-	if err != nil {
+	if period, err = time.ParseDuration(req.Period); err != nil {
 		return err
 	}
+	if len(req.DueTime) > 0 {
+		if dueTime, err = time.ParseDuration(req.DueTime); err != nil {
+			return err
+		}
+	}
 
-	t := a.configureTicker(d)
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
-	go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, name, dueTime, period, callback string, data interface{}) {
-		if dueTime != "" {
-			d, err := time.ParseDuration(dueTime)
-			if err == nil {
-				time.Sleep(d)
-			}
-		}
+	go func(stop chan (bool), req *CreateTimerRequest) {
+		time.Sleep(dueTime)
 
 		// Check if timer is still active
 		select {
@@ -877,34 +879,37 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 			break
 		}
 
-		err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
+		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
+			req.Period, req.Callback, req.Data)
 		if err != nil {
 			log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
 		}
 
-		actorKey := a.constructCompositeKey(actorType, actorID)
+		ticker := a.configureTicker(period)
+		actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 
 		for {
 			select {
 			case <-ticker.C:
 				_, exists := a.actorsTable.Load(actorKey)
 				if exists {
-					err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
+					err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
+						req.Period, req.Callback, req.Data)
 					if err != nil {
 						log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
 					}
 				} else {
 					a.DeleteTimer(ctx, &DeleteTimerRequest{
-						Name:      name,
-						ActorID:   actorID,
-						ActorType: actorType,
+						Name:      req.Name,
+						ActorID:   req.ActorID,
+						ActorType: req.ActorType,
 					})
 				}
 			case <-stop:
 				return
 			}
 		}
-	}(t, stop, req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
+	}(stop, req)
 	return nil
 }
 
