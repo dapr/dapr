@@ -28,5 +28,4 @@ func TestServerConfig(t *testing.T) {
 	assert.Equal(t, vals[3], c.NameSpace)
 	assert.Equal(t, vals[4], c.TrustDomain)
 	assert.Equal(t, vals[5], c.MaxRequestBodySize)
-
 }

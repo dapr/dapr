@@ -193,8 +193,7 @@ func (s *server) getGRPCServer() (*grpc_go.Server, error) {
 		go s.startWorkloadCertRotation()
 	}
 
-	opts = append(opts, grpc_go.MaxRecvMsgSize(s.config.MaxRequestBodySize*1024*1024))
-	opts = append(opts, grpc_go.MaxSendMsgSize(s.config.MaxRequestBodySize*1024*1024))
+	opts = append(opts, grpc_go.MaxRecvMsgSize(s.config.MaxRequestBodySize*1024*1024), grpc_go.MaxSendMsgSize(s.config.MaxRequestBodySize*1024*1024))
 
 	return grpc_go.NewServer(opts...), nil
 }

@@ -464,7 +464,6 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		resolver,
 		a.globalConfig.Spec.TracingSpec,
 		a.runtimeConfig.MaxRequestBodySize)
-
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {
