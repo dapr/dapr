@@ -55,6 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	openzipkin "github.com/openzipkin/zipkin-go"
 	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
@@ -960,7 +961,11 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	}
 
 	properties := a.convertMetadataItemsToProperties(c.Spec.Metadata)
-	properties["consumerID"] = a.runtimeConfig.ID
+	consumerID := strings.TrimSpace(properties["consumerID"])
+	if consumerID == "" {
+		consumerID = a.runtimeConfig.ID
+	}
+	properties["consumerID"] = consumerID
 
 	err = pubSub.Init(pubsub.Metadata{
 		Properties: properties,
@@ -1648,7 +1653,11 @@ func (a *DaprRuntime) initSecretStore(c components_v1alpha1.Component) error {
 func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alpha1.MetadataItem) map[string]string {
 	properties := map[string]string{}
 	for _, c := range items {
-		properties[c.Name] = c.Value.String()
+		val := c.Value.String()
+		for strings.Contains(val, "{uuid}") {
+			val = strings.Replace(val, "{uuid}", uuid.New().String(), 1)
+		}
+		properties[c.Name] = val
 	}
 	return properties
 }
