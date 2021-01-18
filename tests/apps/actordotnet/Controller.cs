@@ -8,8 +8,9 @@ namespace DaprDemoActor
   using Dapr.Actors;
   using Dapr.Actors.Client;
   using Microsoft.AspNetCore.Mvc;
-  using System.Threading.Tasks;
   using System.IO;
+  using System.Threading.Tasks;
+  using System.Text;
 
   [ApiController]
   [Route("/")]
@@ -25,10 +26,9 @@ namespace DaprDemoActor
     [HttpPost("carFromJSON/{actorType}/{actorId}")]
     public async Task<ActionResult<Car>> CarFromJSONAsync([FromRoute] string actorType, [FromRoute] string actorId)
     {
-      using (var ms = new MemoryStream(2048))
+      using (var reader = new StreamReader(Request.Body, Encoding.UTF8))
       {
-        await Request.Body.CopyToAsync(ms);
-        string json = System.Text.Encoding.UTF8.GetString(ms.ToArray());
+        string json = await reader.ReadToEndAsync();
         var proxy = ActorProxy.Create(new ActorId(actorId), actorType);
         return await proxy.InvokeAsync<string, Car>("CarFromJSONAsync", json);
       }
