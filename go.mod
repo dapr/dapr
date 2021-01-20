@@ -42,6 +42,7 @@ require (
 	go.uber.org/atomic v1.6.0
 	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a
 	google.golang.org/grpc v1.33.1
+	google.golang.org/protobuf v1.25.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/square/go-jose.v2 v2.5.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
