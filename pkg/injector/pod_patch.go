@@ -39,6 +39,7 @@ const (
 	daprEnableProfilingKey            = "dapr.io/enable-profiling"
 	daprLogLevel                      = "dapr.io/log-level"
 	daprAPITokenSecret                = "dapr.io/api-token-secret" /* #nosec */
+	daprAppTokenSecret                = "dapr.io/app-token-secret" /* #nosec */
 	daprLogAsJSON                     = "dapr.io/log-as-json"
 	daprAppMaxConcurrencyKey          = "dapr.io/app-max-concurrency"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
@@ -314,6 +315,10 @@ func appSSLEnabled(annotations map[string]string) bool {
 
 func getAPITokenSecret(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprAPITokenSecret, "")
+}
+
+func GetAppTokenSecret(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprAppTokenSecret, "")
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -600,6 +605,21 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 					Key: "token",
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: secret,
+					},
+				},
+			},
+		})
+	}
+
+	appSecret := GetAppTokenSecret(annotations)
+	if appSecret != "" {
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name: auth.AppAPITokenEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "token",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: appSecret,
 					},
 				},
 			},
