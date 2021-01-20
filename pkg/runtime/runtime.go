@@ -1314,11 +1314,11 @@ func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Com
 }
 
 func (a *DaprRuntime) processComponents() {
-	log.Debugf("Following components will be loaded:")
+	log.Debug("Following components will be loaded:")
 	for comp := range a.pendingComponents {
 		log.Debugf("- name: %s, type: %s", comp.ObjectMeta.Name, comp.Spec.Type)
 	}
-	
+
 	for comp := range a.pendingComponents {
 		if comp.Name == "" {
 			continue
