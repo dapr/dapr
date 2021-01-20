@@ -830,7 +830,7 @@ func TestGetBulkSecret(t *testing.T) {
 
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
+				assert.Equal(t, resp.Data[tt.key].Secrets[tt.key], tt.expectedResponse, "Expected responses to be same")
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
