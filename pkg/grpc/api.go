@@ -604,7 +604,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		return &runtimev1pb.GetBulkSecretResponse{}, err
 	}
 
-	filteredSecrets := map[string]string{}
+	filteredSecrets := map[string]map[string]string{}
 	for key, v := range getResponse.Data {
 		if a.isSecretAllowed(secretStoreName, key) {
 			filteredSecrets[key] = v
@@ -615,7 +615,10 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 
 	response := &runtimev1pb.GetBulkSecretResponse{}
 	if getResponse.Data != nil {
-		response.Data = filteredSecrets
+		response.Data = map[string]*runtimev1pb.SecretResponse{}
+		for key, v := range filteredSecrets {
+			response.Data[key] = &runtimev1pb.SecretResponse{Secrets: v}
+		}
 	}
 	return response, nil
 }
