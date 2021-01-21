@@ -624,23 +624,15 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 		}
 	}
 
-	if reminder.Period != "" {
+	// the first execution reminder task
+	if lastFiredTime.IsZero() {
+		nextInvokeTime = registeredTime.Add(dueTime)
+	} else {
 		period, err := time.ParseDuration(reminder.Period)
 		if err != nil {
 			return nextInvokeTime, errors.Wrap(err, "error parsing reminder period")
 		}
-
-		if !lastFiredTime.IsZero() {
-			nextInvokeTime = lastFiredTime.Add(period)
-		} else {
-			nextInvokeTime = registeredTime.Add(dueTime)
-		}
-	} else {
-		if !lastFiredTime.IsZero() {
-			nextInvokeTime = lastFiredTime.Add(dueTime)
-		} else {
-			nextInvokeTime = registeredTime.Add(dueTime)
-		}
+		nextInvokeTime = lastFiredTime.Add(period)
 	}
 
 	return nextInvokeTime, nil
