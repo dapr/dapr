@@ -5,7 +5,10 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr \
+E2E_TEST_APPS=actorjava \
+actordotnet \
+actorpython \
+hellodapr \
 stateapp \
 secretapp \
 service_invocation \
@@ -21,10 +24,7 @@ actorfeatures \
 actorinvocationapp \
 runtime \
 runtime_init \
-middleware \
-actorjava \
-actordotnet \
-actorpython
+middleware
 
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http
