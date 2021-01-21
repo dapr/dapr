@@ -12,10 +12,10 @@ import (
 	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type mockOperator struct {
@@ -25,7 +25,7 @@ func (o *mockOperator) GetConfiguration(ctx context.Context, in *operatorv1pb.Ge
 	return nil, nil
 }
 
-func (o *mockOperator) ListComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListComponentResponse, error) {
+func (o *mockOperator) ListComponents(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	component := v1alpha1.Component{}
 	component.ObjectMeta.Name = "test"
 	component.Spec = v1alpha1.ComponentSpec{
@@ -38,7 +38,7 @@ func (o *mockOperator) ListComponents(ctx context.Context, in *empty.Empty) (*op
 	}, nil
 }
 
-func (o *mockOperator) ListSubscriptions(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (o *mockOperator) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	subscription := subscriptions.Subscription{}
 	subscription.ObjectMeta.Name = "test"
 	subscription.Spec = subscriptions.SubscriptionSpec{
@@ -53,7 +53,7 @@ func (o *mockOperator) ListSubscriptions(ctx context.Context, in *empty.Empty) (
 	}, nil
 }
 
-func (o *mockOperator) ComponentUpdate(in *empty.Empty, srv operatorv1pb.Operator_ComponentUpdateServer) error {
+func (o *mockOperator) ComponentUpdate(in *emptypb.Empty, srv operatorv1pb.Operator_ComponentUpdateServer) error {
 	return nil
 }
 
