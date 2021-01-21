@@ -117,7 +117,7 @@ spec:
       volumes:
         - name: credentials
           secret:
-            secretName: dapr-trust-bundle       
+            secretName: dapr-trust-bundle
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
