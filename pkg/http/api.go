@@ -29,13 +29,13 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/fasthttp/router"
-	"github.com/golang/protobuf/jsonpb"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // API returns a list of HTTP endpoints for Dapr
@@ -771,13 +771,16 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 		if statusCode != fasthttp.StatusOK {
-			m := jsonpb.Marshaler{}
-			jsonBody, _ := m.MarshalToString(resp.Status())
-			body = []byte(jsonBody)
+			body, err = protojson.Marshal(resp.Status())
 		}
 	}
 
-	respond(reqCtx, statusCode, body)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+	} else {
+		respond(reqCtx, statusCode, body)
+	}
 }
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
