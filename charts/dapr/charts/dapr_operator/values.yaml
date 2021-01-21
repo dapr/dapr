@@ -7,8 +7,11 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 
+runAsNonRoot: true
+
 ports:
   protocol: TCP
   port: 80
   targetPort: 6500
-  
+
+resources: {}

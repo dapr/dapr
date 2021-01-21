@@ -56,10 +56,23 @@ helm uninstall dapr -n dapr-system
 
 *Before* upgrading Dapr, make sure you have exported the existing certs. Follow the upgrade HowTo instructions in [Upgrading Dapr with Helm](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#upgrading-dapr-with-helm).
 
+
+## Resource configuration
+By default, all deployments are configured with blank `resources` attributes, which means that pods will consume as much cpu and memory as they want. This is probably fine for a local development or a non-production setup, but for production you should configure them. Consult Dapr docs and [Kubernetes docs](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) for guidance on setting these values.
+
+For example, in order to configure the `memory.requests` setting for the `dapr-operator` deployment, configure a values.yml file with the following:
+```yaml
+dapr_operator:
+  resources:
+    requests:
+      memory: 200Mi
+```
+
 ## Configuration
 
 The Helm chart has the follow configuration options that can be supplied:
 
+### Global options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `global.registry`                         | Global Dapr docker image registry                                       | `docker.io/daprio`      |
@@ -77,21 +90,31 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
+
+### Dapr Dashboard options:
+| Parameter                                 | Description                                                             | Default                 |
+|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
+| `dapr_dashboard.replicaCount`             | Number of replicas                                 | `1`                     |
+| `dapr_dashboard.logLevel`                 | service Log level                                        | `info`                  |
+| `dapr_dashboard.image.registry`           | docker registry                                          | `docker.io/daprio`      |
+| `dapr_dashboard.image.imagePullSecret`    | docker image pull secret for docker registry                                          | `docker.io/daprio`      |
+| `dapr_dashboard.image.name`               | docker image name                                        | `dashboard`             |
+| `dapr_dashboard.image.tag`                | docker image tag                                         | `"0.5.0"`               |
+| `dapr_dashboard.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
+| `dapr_dashboard.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+
+### Dapr Operator options:
+| Parameter                                 | Description                                                             | Default                 |
+|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `dapr_operator.replicaCount`              | Number of replicas for Operator                                         | `1`                     |
 | `dapr_operator.logLevel`                  | Operator Log level                                                      | `info`                  |
 | `dapr_operator.image.name`                | Operator docker image name (`global.registry/dapr_operator.image.name`) | `dapr`                  |
-| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                               | `Always`                     |
-| `dapr_sidecar_injector.replicaCount`      | Number of replicas for Sidecar Injector                                 | `1`                     |
-| `dapr_sidecar_injector.logLevel`          | Sidecar Injector Log level                                              | `info`                  |
-| `dapr_sidecar_injector.image.name`        | Dapr runtime sidecar image name injecting to application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`                 |
-| `dapr_sidecar_injector.webhookFailurePolicy` | Failure policy for the sidecar injector                              | `Ignore`                |
-| `dapr_sentry.replicaCount`                | Number of replicas for Sentry CA                                        | `1`                     |
-| `dapr_sentry.logLevel`                    | Sentry CA Log level                                                     | `info`                  |
-| `dapr_sentry.image.name`                  | Sentry CA docker image name (`global.registry/dapr_sentry.image.name`)  | `dapr`                  |
-| `dapr_sentry.tls.issuer.certPEM`          | Issuer Certificate cert                                                 | `""`                    |
-| `dapr_sentry.tls.issuer.keyPEM`           | Issuer Private Key cert                                                 | `""`                    |
-| `dapr_sentry.tls.root.certPEM`            | Root Certificate cert                                                   | `""`                    |
-| `dapr_sentry.trustDomain`                 | Trust domain (logical group to manage app trust relationship) for access control list | `cluster.local`  |
+| `dapr_operator.runAsNonRoot`              | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
+| `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+
+### Dapr Placement options:
+| Parameter                                 | Description                                                             | Default                 |
+|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
 | `dapr_placement.replicaCount`             | Number of replicas for Dapr Placement                                   | `1`                     |
 | `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
 | `dapr_placement.logLevel`                 | Dapr Placement service Log level                                        | `info`                  |
@@ -101,12 +124,38 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.cluster.logStoreWinPath`  | Mount path for persistent volume for log store in windows when `global.ha.enabled` is true | `C:\\raft-log`   |
 | `dapr_placement.volumeclaims.storageSize` | Attached volume size | `1Gi`   |
 | `dapr_placement.volumeclaims.storageClassName` | storage class name |    |
-| `dapr_dashboard.replicaCount`             | Number of replicas for Dapr Dashboard                                   | `1`                     |
-| `dapr_dashboard.logLevel`                 | Dapr Dashboard service Log level                                        | `info`                  |
-| `dapr_dashboard.image.registry`           | Dapr Dashboard docker registry                                          | `docker.io/daprio`      |
-| `dapr_dashboard.image.imagePullSecret`    | Dapr Dashboard docker image pull secret for docker registry                                          | `docker.io/daprio`      |
-| `dapr_dashboard.image.name`               | Dapr Dashboard docker image name                                        | `dashboard`             |
-| `dapr_dashboard.image.tag`                | Dapr Dashboard docker image tag                                         | `"0.5.0"`               |
+| `dapr_placement.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
+| `dapr_placement.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+
+### Dapr Sentry options:
+| Parameter                                 | Description                                                             | Default                 |
+|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
+| `dapr_sentry.replicaCount`                | Number of replicas for Sentry CA                                        | `1`                     |
+| `dapr_sentry.logLevel`                    | Sentry CA Log level                                                     | `info`                  |
+| `dapr_sentry.image.name`                  | Sentry CA docker image name (`global.registry/dapr_sentry.image.name`)  | `dapr`                  |
+| `dapr_sentry.tls.issuer.certPEM`          | Issuer Certificate cert                                                 | `""`                    |
+| `dapr_sentry.tls.issuer.keyPEM`           | Issuer Private Key cert                                                 | `""`                    |
+| `dapr_sentry.tls.root.certPEM`            | Root Certificate cert                                                   | `""`                    |
+| `dapr_sentry.trustDomain`                 | Trust domain (logical group to manage app trust relationship) for access control list | `cluster.local`  |
+| `dapr_sentry.runAsNonRoot`                | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
+| `dapr_sentry.resources`                   | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+
+### Dapr Sidecar Injector options:
+| Parameter                                 | Description                                                             | Default                 |
+|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
+| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                               | `Always`                     |
+| `dapr_sidecar_injector.replicaCount`      | Number of replicas for Sidecar Injector                                 | `1`                     |
+| `dapr_sidecar_injector.logLevel`          | Sidecar Injector Log level                                              | `info`                  |
+| `dapr_sidecar_injector.image.name`        | Dapr runtime sidecar image name injecting to application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`                 |
+| `dapr_sidecar_injector.webhookFailurePolicy` | Failure policy for the sidecar injector                              | `Ignore`                |
+| `dapr_sidecar_injector.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
+| `dapr_sidecar_injector.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
+
+
+
+
+
+
 
 ## Example of highly available configuration of the control plane
 

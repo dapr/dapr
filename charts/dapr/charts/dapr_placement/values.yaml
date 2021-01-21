@@ -22,3 +22,6 @@ volumeclaims:
   storageClassName:
 
 replicationFactor: 100
+
+runAsNonRoot: true
+resources: {}
