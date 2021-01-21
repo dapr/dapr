@@ -22,6 +22,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	grpc_status "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
@@ -407,4 +409,15 @@ func cloneBytes(data []byte) []byte {
 	cloneData := make([]byte, len(data))
 	copy(cloneData, data)
 	return cloneData
+}
+
+// ProtobufToJSON serializes Protobuf message to json format.
+func ProtobufToJSON(message protoreflect.ProtoMessage) ([]byte, error) {
+	marshaler := protojson.MarshalOptions{
+		Multiline:       false,
+		Indent:          "",
+		UseProtoNames:   false,
+		EmitUnpopulated: false,
+	}
+	return marshaler.Marshal(message)
 }

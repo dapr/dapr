@@ -327,3 +327,17 @@ func TestCloneBytes(t *testing.T) {
 		assert.NotSame(t, orig, cloneBytes(orig))
 	})
 }
+
+func TestProtobufToJSON(t *testing.T) {
+	tpb := &epb.DebugInfo{
+		StackEntries: []string{
+			"first stack",
+			"second stack",
+		},
+	}
+
+	jsonBody, err := ProtobufToJSON(tpb)
+	assert.NoError(t, err)
+	t.Log(string(jsonBody))
+	assert.Equal(t, []byte("{\"stackEntries\":[\"first stack\", \"second stack\"]}"), jsonBody)
+}

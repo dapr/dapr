@@ -35,7 +35,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // API returns a list of HTTP endpoints for Dapr
@@ -771,7 +770,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 		if statusCode != fasthttp.StatusOK {
-			body, err = protojson.Marshal(resp.Status())
+			body, err = invokev1.ProtobufToJSON(resp.Status())
 		}
 	}
 
