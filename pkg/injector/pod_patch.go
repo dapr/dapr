@@ -55,6 +55,7 @@ const (
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
+	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprAppSSLKey                     = "dapr.io/app-ssl"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
@@ -321,6 +322,10 @@ func GetAppTokenSecret(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprAppTokenSecret, "")
 }
 
+func getMaxRequestBodySize(annotations map[string]string) (int32, error) {
+	return getInt32Annotation(annotations, daprMaxRequestBodySize)
+}
+
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
 	enabled, ok := annotations[key]
 	if !ok {
@@ -482,6 +487,11 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	allowPrivilegeEscalation := false
 
+	requestBodySize, err := getMaxRequestBodySize(annotations)
+	if err != nil {
+		log.Warn(err)
+	}
+
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
@@ -541,6 +551,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
 			"--sentry-address", sentryAddress,
 			"--metrics-port", fmt.Sprintf("%v", metricsPort),
+			"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler:             httpHandler,

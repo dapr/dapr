@@ -63,8 +63,13 @@ func (s *server) StartNonBlocking() {
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
 
+	customServer := &fasthttp.Server{
+		Handler:            handler,
+		MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+	}
+
 	go func() {
-		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), handler))
+		log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
 	}()
 
 	if s.config.EnableProfiling {
