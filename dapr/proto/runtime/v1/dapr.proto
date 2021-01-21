@@ -274,11 +274,16 @@ message GetBulkSecretRequest {
   map<string,string> metadata = 2;
 }
 
-// GetBulkSecretResponse is the response message to convey the requested secret.
+// SecretResponse is a map of decrypted string/string values
+message SecretResponse {
+  map<string, string> secrets = 1;
+}
+
+// GetBulkSecretResponse is the response message to convey the requested secrets.
 message GetBulkSecretResponse {
   // data hold the secret values. Some secret store, such as kubernetes secret
   // store, can save multiple secrets for single secret key.
-  map<string, string> data = 1;
+  map<string, SecretResponse> data = 1;
 }
 
 // TransactionalStateOperation is the message to execute a specified operation with a key-value pair.

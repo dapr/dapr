@@ -643,7 +643,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	filteredSecrets := map[string]string{}
+	filteredSecrets := map[string]map[string]string{}
 	for key, v := range resp.Data {
 		if a.isSecretAllowed(secretStoreName, key) {
 			filteredSecrets[key] = v

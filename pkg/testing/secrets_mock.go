@@ -28,9 +28,12 @@ func (c FakeSecretStore) GetSecret(req secretstores.GetSecretRequest) (secretsto
 	return secretstores.GetSecretResponse{}, nil
 }
 
-func (c FakeSecretStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.GetSecretResponse, error) {
-	return secretstores.GetSecretResponse{
-		Data: map[string]string{"good-key": "life is good"},
+func (c FakeSecretStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+	response := map[string]map[string]string{}
+	response["good-key"] = map[string]string{"good-key": "life is good"}
+
+	return secretstores.BulkGetSecretResponse{
+		Data: response,
 	}, nil
 }
 
