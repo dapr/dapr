@@ -414,7 +414,6 @@ func cloneBytes(data []byte) []byte {
 // ProtobufToJSON serializes Protobuf message to json format.
 func ProtobufToJSON(message protoreflect.ProtoMessage) ([]byte, error) {
 	marshaler := protojson.MarshalOptions{
-		Multiline:       false,
 		Indent:          "",
 		UseProtoNames:   false,
 		EmitUnpopulated: false,

@@ -339,5 +339,11 @@ func TestProtobufToJSON(t *testing.T) {
 	jsonBody, err := ProtobufToJSON(tpb)
 	assert.NoError(t, err)
 	t.Log(string(jsonBody))
-	assert.Equal(t, []byte("{\"stackEntries\":[\"first stack\", \"second stack\"]}"), jsonBody)
+
+	// protojson produces different indentation space based on OS
+	// For linux
+	comp1 := "{\"stackEntries\":[\"first stack\",\"second stack\"]}" == string(jsonBody)
+	// For mac and windows
+	comp2 := "{\"stackEntries\":[\"first stack\", \"second stack\"]}" == string(jsonBody)
+	assert.True(t, comp1 || comp2)
 }
