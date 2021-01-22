@@ -1932,7 +1932,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		-1,
 		false,
 		"",
-		false)
+		false, 4)
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 	return rt
