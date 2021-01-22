@@ -209,8 +209,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
 github.com/dapr/components-contrib v1.0.0-rc2.0.20210120162831-5018196c58a0/go.mod h1:wmTSIgXHIqYeFCoCJDZTbDDw86ZqP/SeGbyp4ZKS+Y0=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
-github.com/dapr/dapr v1.0.0-rc.2.0.20210120190900-dfe7edb55c6d h1:9EXxpHSSQixEbSCamxMi/cCtaUEEnFgPcPiRNXSRH9Y=
-github.com/dapr/dapr v1.0.0-rc.2.0.20210120190900-dfe7edb55c6d/go.mod h1:hmLcngbeNvuVn6Ukj+ZGv825otjiYbvvlHgdoZbtlXg=
+github.com/dapr/dapr v1.0.0-rc.2.0.20210122073344-d48d25e83cf4 h1:qi9lgJh6lAPBLF0UIGYpLy8OhJSFjiQoMB5equhFsqs=
+github.com/dapr/dapr v1.0.0-rc.2.0.20210122073344-d48d25e83cf4/go.mod h1:hmLcngbeNvuVn6Ukj+ZGv825otjiYbvvlHgdoZbtlXg=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad/go.mod h1:yeOIFBz6+BigHpk4ASJbgQDVjQ8+00oCWrFyOAFdob8=
 github.com/davecgh/go-spew v0.0.0-20151105211317-5215b55f46b2/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
