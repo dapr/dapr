@@ -124,7 +124,6 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	workloadCert := resp.GetWorkloadCertificate()
 	validTimestamp := resp.GetValidUntil()
-	err = validTimestamp.CheckValid()
 	if err = validTimestamp.CheckValid(); err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
 		return nil, errors.Wrap(err, "error parsing ValidUntil")
