@@ -2110,8 +2110,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Update state - PUT verb supported", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
-			Key:  "good-key",
-			ETag: "",
+			Key: "good-key",
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2124,8 +2123,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Update state - No ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
-			Key:  "good-key",
-			ETag: "",
+			Key: "good-key",
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2136,10 +2134,11 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - State Error", func(t *testing.T) {
+		empty := ""
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "error-key",
-			ETag: "",
+			ETag: &empty,
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2153,7 +2152,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "good-key",
-			ETag: etag,
+			ETag: &etag,
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2164,10 +2163,11 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
+		invalidEtag := "BAD ETAG"
 		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
 		request := []state.SetRequest{{
 			Key:  "good-key",
-			ETag: "BAD ETAG",
+			ETag: &invalidEtag,
 		}}
 		b, _ := json.Marshal(request)
 		// act
@@ -2322,7 +2322,7 @@ func (c fakeStateStore) BulkSet(req []state.SetRequest) error {
 
 func (c fakeStateStore) Delete(req *state.DeleteRequest) error {
 	if req.Key == "good-key" {
-		if req.ETag != "" && req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
+		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
 			return errors.New("ETag mismatch")
 		}
 		return nil
@@ -2355,7 +2355,7 @@ func (c fakeStateStore) Init(metadata state.Metadata) error {
 
 func (c fakeStateStore) Set(req *state.SetRequest) error {
 	if req.Key == "good-key" {
-		if req.ETag != "" && req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
+		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
 			return errors.New("ETag mismatch")
 		}
 		return nil
@@ -2776,5 +2776,39 @@ func TestStateStoreErrors(t *testing.T) {
 		assert.Equal(t, true, e)
 		assert.Equal(t, 400, c)
 		assert.Equal(t, "invalid etag value: error", m)
+	})
+}
+
+func TestExtractEtag(t *testing.T) {
+	t.Run("no etag present", func(t *testing.T) {
+		r := fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+		}
+
+		ok, etag := extractEtag(&r)
+		assert.False(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("empty etag exists", func(t *testing.T) {
+		r := fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+		}
+		r.Request.Header.Add("If-Match", "")
+
+		ok, etag := extractEtag(&r)
+		assert.True(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("non-empty etag exists", func(t *testing.T) {
+		r := fasthttp.RequestCtx{
+			Request: fasthttp.Request{},
+		}
+		r.Request.Header.Add("If-Match", "a")
+
+		ok, etag := extractEtag(&r)
+		assert.True(t, ok)
+		assert.Equal(t, "a", etag)
 	})
 }

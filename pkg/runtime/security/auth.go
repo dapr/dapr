@@ -12,7 +12,6 @@ import (
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/golang/protobuf/ptypes"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/pkg/errors"
@@ -125,12 +124,12 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	workloadCert := resp.GetWorkloadCertificate()
 	validTimestamp := resp.GetValidUntil()
-	expiry, err := ptypes.Timestamp(validTimestamp)
-	if err != nil {
+	if err = validTimestamp.CheckValid(); err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("invalid_ts")
 		return nil, errors.Wrap(err, "error parsing ValidUntil")
 	}
 
+	expiry := validTimestamp.AsTime()
 	trustChain := x509.NewCertPool()
 	for _, c := range resp.GetTrustChainCertificates() {
 		ok := trustChain.AppendCertsFromPEM(c)

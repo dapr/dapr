@@ -31,12 +31,12 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -50,30 +50,30 @@ type API interface {
 	CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 
 	// Dapr Service methods
-	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error)
+	PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error)
 	InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error)
 	InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRequest) (*runtimev1pb.InvokeBindingResponse, error)
 	GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error)
 	GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error)
 	GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error)
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
-	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error)
-	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error)
-	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error)
+	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
+	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
+	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error)
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
-	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error)
-	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error)
-	RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*empty.Empty, error)
-	UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*empty.Empty, error)
+	RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error)
+	UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error)
+	RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error)
+	UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error)
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
-	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*empty.Empty, error)
+	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
 	// Gets metadata of the sidecar
-	GetMetadata(ctx context.Context, in *empty.Empty) (*runtimev1pb.GetMetadataResponse, error)
+	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
-	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error)
+	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
 }
 
 type api struct {
@@ -201,32 +201,32 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), nil
 }
 
-func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
+func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	if a.pubsubAdapter == nil {
 		err := status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	pubsubName := in.PubsubName
 	if pubsubName == "" {
 		err := status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
 	if thepubsub == nil {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	topic := in.Topic
 	if topic == "" {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	body := []byte{}
@@ -249,7 +249,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	features := thepubsub.Features()
@@ -259,7 +259,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	if err != nil {
 		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	req := pubsub.PublishRequest{
@@ -280,9 +280,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			nerr = status.Errorf(codes.NotFound, err.Error())
 		}
 		apiServerLogger.Debug(nerr)
-		return &empty.Empty{}, nerr
+		return &emptypb.Empty{}, nerr
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
@@ -455,11 +455,11 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	return response, nil
 }
 
-func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
+func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	reqs := []state.SetRequest{}
@@ -468,7 +468,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			Key:      state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id),
 			Metadata: s.Metadata,
 			Value:    s.Value,
-			ETag:     s.Etag,
+		}
+		if s.Etag != nil {
+			req.ETag = &s.Etag.Value
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
@@ -483,9 +485,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 // stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error
@@ -504,17 +506,19 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 	return status.Errorf(codes.Internal, format, args...)
 }
 
-func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
+func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
 	store, err := a.getStateStore(in.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	req := state.DeleteRequest{
 		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
 		Metadata: in.Metadata,
-		ETag:     in.Etag,
+	}
+	if in.Etag != nil {
+		req.ETag = &in.Etag.Value
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
@@ -527,9 +531,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 func (a *api) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
@@ -600,7 +604,7 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 		return &runtimev1pb.GetBulkSecretResponse{}, err
 	}
 
-	filteredSecrets := map[string]string{}
+	filteredSecrets := map[string]map[string]string{}
 	for key, v := range getResponse.Data {
 		if a.isSecretAllowed(secretStoreName, key) {
 			filteredSecrets[key] = v
@@ -611,16 +615,26 @@ func (a *api) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRe
 
 	response := &runtimev1pb.GetBulkSecretResponse{}
 	if getResponse.Data != nil {
-		response.Data = filteredSecrets
+		response.Data = map[string]*runtimev1pb.SecretResponse{}
+		for key, v := range filteredSecrets {
+			response.Data[key] = &runtimev1pb.SecretResponse{Secrets: v}
+		}
 	}
 	return response, nil
 }
 
-func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
+func extractEtag(req *commonv1pb.StateItem) (bool, string) {
+	if req.Etag != nil {
+		return true, req.Etag.Value
+	}
+	return false, ""
+}
+
+func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
 	if a.stateStores == nil || len(a.stateStores) == 0 {
 		err := status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	storeName := in.StoreName
@@ -628,20 +642,23 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if a.stateStores[storeName] == nil {
 		err := status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, storeName)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
 	if !ok {
 		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, storeName)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	operations := []state.TransactionalStateOperation{}
 	for _, inputReq := range in.Operations {
 		var operation state.TransactionalStateOperation
 		var req = inputReq.Request
+
+		hasEtag, etag := extractEtag(req)
+
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
@@ -651,9 +668,11 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				// component specific way in components-contrib repo.
 				Value:    req.Value,
 				Metadata: req.Metadata,
-				ETag:     req.Etag,
 			}
 
+			if hasEtag {
+				setReq.ETag = &etag
+			}
 			if req.Options != nil {
 				setReq.Options = state.SetStateOption{
 					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
@@ -670,9 +689,11 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			delReq := state.DeleteRequest{
 				Key:      state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
 				Metadata: req.Metadata,
-				ETag:     req.Etag,
 			}
 
+			if hasEtag {
+				delReq.ETag = &etag
+			}
 			if req.Options != nil {
 				delReq.Options = state.DeleteStateOption{
 					Concurrency: stateConcurrencyToString(req.Options.Concurrency),
@@ -688,7 +709,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		default:
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
 			apiServerLogger.Debug(err)
-			return &empty.Empty{}, err
+			return &emptypb.Empty{}, err
 		}
 
 		operations = append(operations, operation)
@@ -702,16 +723,16 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error) {
+func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
 	if a.actor == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	req := &actors.CreateTimerRequest{
@@ -727,14 +748,14 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 		req.Data = in.Data
 	}
 	err := a.actor.CreateTimer(ctx, req)
-	return &empty.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
-func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*empty.Empty, error) {
+func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
 	if a.actor == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	req := &actors.DeleteTimerRequest{
@@ -744,14 +765,14 @@ func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Unregist
 	}
 
 	err := a.actor.DeleteTimer(ctx, req)
-	return &empty.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
-func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*empty.Empty, error) {
+func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
 	if a.actor == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	req := &actors.CreateReminderRequest{
@@ -766,14 +787,14 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		req.Data = in.Data
 	}
 	err := a.actor.CreateReminder(ctx, req)
-	return &empty.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
-func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*empty.Empty, error) {
+func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
 	if a.actor == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	req := &actors.DeleteReminderRequest{
@@ -783,7 +804,7 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 	}
 
 	err := a.actor.DeleteReminder(ctx, req)
-	return &empty.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
@@ -826,11 +847,11 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	}, nil
 }
 
-func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*empty.Empty, error) {
+func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
 	if a.actor == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	actorType := in.ActorType
@@ -865,7 +886,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		default:
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.OperationType)
 			apiServerLogger.Debug(err)
-			return &empty.Empty{}, err
+			return &emptypb.Empty{}, err
 		}
 
 		actorOps = append(actorOps, actorOp)
@@ -879,7 +900,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	if !hosted {
 		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
 	req := actors.TransactionalRequest{
@@ -892,10 +913,10 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
 		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		return &emptypb.Empty{}, err
 	}
 
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
@@ -960,7 +981,7 @@ func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
 }
 
-func (a *api) GetMetadata(ctx context.Context, in *empty.Empty) (*runtimev1pb.GetMetadataResponse, error) {
+func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
 	temp := make(map[string]string)
 
 	// Copy synchronously so it can be serialized to JSON.
@@ -986,7 +1007,7 @@ func (a *api) GetMetadata(ctx context.Context, in *empty.Empty) (*runtimev1pb.Ge
 }
 
 // Sets value in extended metadata of the sidecar
-func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*empty.Empty, error) {
+func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }

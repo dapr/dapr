@@ -32,10 +32,6 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
-	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/any"
-	"github.com/golang/protobuf/ptypes/empty"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +42,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const maxGRPCServerUptime = 100 * time.Millisecond
@@ -65,8 +64,8 @@ func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalIn
 	return resp.Proto(), nil
 }
 
-func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
 func (m *mockGRPCAPI) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
@@ -85,24 +84,24 @@ func (m *mockGRPCAPI) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkS
 	return &runtimev1pb.GetBulkStateResponse{}, nil
 }
 
-func (m *mockGRPCAPI) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (m *mockGRPCAPI) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (m *mockGRPCAPI) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
 func (m *mockGRPCAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	return &runtimev1pb.GetSecretResponse{}, nil
 }
 
-func (m *mockGRPCAPI) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (m *mockGRPCAPI) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
-func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (m *mockGRPCAPI) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
 func ExtractSpanContext(ctx context.Context) []byte {
@@ -310,10 +309,10 @@ func TestCallLocal(t *testing.T) {
 	})
 }
 
-func mustMarshalAny(msg proto.Message) *any.Any {
-	any, err := ptypes.MarshalAny(msg)
+func mustMarshalAny(msg proto.Message) *anypb.Any {
+	any, err := anypb.New(msg)
 	if err != nil {
-		panic(fmt.Sprintf("ptypes.MarshalAny(%+v) failed: %v", msg, err))
+		panic(fmt.Sprintf("anypb.New((%+v) failed: %v", msg, err))
 	}
 	return any
 }
@@ -355,7 +354,7 @@ func TestAPIToken(t *testing.T) {
 			Id: "fakeAppID",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "fakeMethod",
-				Data:   &any.Any{Value: []byte("testData")},
+				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
 		md := metadata.Pairs("dapr-api-token", token)
@@ -403,7 +402,7 @@ func TestAPIToken(t *testing.T) {
 			Id: "fakeAppID",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "fakeMethod",
-				Data:   &any.Any{Value: []byte("testData")},
+				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
 		md := metadata.Pairs("dapr-api-token", "4567")
@@ -445,7 +444,7 @@ func TestAPIToken(t *testing.T) {
 			Id: "fakeAppID",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "fakeMethod",
-				Data:   &any.Any{Value: []byte("testData")},
+				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
 		_, err := client.InvokeService(context.Background(), req)
@@ -536,7 +535,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 				Id: "fakeAppID",
 				Message: &commonv1pb.InvokeRequest{
 					Method: "fakeMethod",
-					Data:   &any.Any{Value: []byte("testData")},
+					Data:   &anypb.Any{Value: []byte("testData")},
 				},
 			}
 			var header metadata.MD
@@ -573,7 +572,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 	t.Run("handle grpc response code", func(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(
 			int32(codes.Unimplemented), "Unimplemented",
-			[]*any.Any{
+			[]*anypb.Any{
 				mustMarshalAny(&epb.ResourceInfo{
 					ResourceType: "sidecar",
 					ResourceName: "invoke/service",
@@ -605,7 +604,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 			Id: "fakeAppID",
 			Message: &commonv1pb.InvokeRequest{
 				Method: "fakeMethod",
-				Data:   &any.Any{Value: []byte("testData")},
+				Data:   &anypb.Any{Value: []byte("testData")},
 			},
 		}
 		_, err := client.InvokeService(context.Background(), req)
@@ -830,7 +829,7 @@ func TestGetBulkSecret(t *testing.T) {
 
 			if !tt.errorExcepted {
 				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
+				assert.Equal(t, resp.Data[tt.key].Secrets[tt.key], tt.expectedResponse, "Expected responses to be same")
 			} else {
 				assert.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
@@ -1453,7 +1452,7 @@ func TestGetMetadata(t *testing.T) {
 	defer clientConn.Close()
 
 	client := runtimev1pb.NewDaprClient(clientConn)
-	response, err := client.GetMetadata(context.Background(), &empty.Empty{})
+	response, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 	assert.NoError(t, err, "Expected no error")
 	assert.Len(t, response.RegisteredComponents, 1, "One component should be returned")
 	assert.Equal(t, response.RegisteredComponents[0].Name, "testComponent")
@@ -1539,6 +1538,32 @@ func TestStateStoreErrors(t *testing.T) {
 		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = Internal desc = failed deleting state with key a: error", err2.Error())
+	})
+}
+
+func TestExtractEtag(t *testing.T) {
+	t.Run("no etag present", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{})
+		assert.False(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("empty etag exists", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{
+			Etag: &commonv1pb.Etag{},
+		})
+		assert.True(t, ok)
+		assert.Empty(t, etag)
+	})
+
+	t.Run("non-empty etag exists", func(t *testing.T) {
+		ok, etag := extractEtag(&commonv1pb.StateItem{
+			Etag: &commonv1pb.Etag{
+				Value: "a",
+			},
+		})
+		assert.True(t, ok)
+		assert.Equal(t, "a", etag)
 	})
 }
 

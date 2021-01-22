@@ -621,23 +621,15 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 		}
 	}
 
-	if reminder.Period != "" {
+	// the first execution reminder task
+	if lastFiredTime.IsZero() {
+		nextInvokeTime = registeredTime.Add(dueTime)
+	} else {
 		period, err := time.ParseDuration(reminder.Period)
 		if err != nil {
 			return nextInvokeTime, errors.Wrap(err, "error parsing reminder period")
 		}
-
-		if !lastFiredTime.IsZero() {
-			nextInvokeTime = lastFiredTime.Add(period)
-		} else {
-			nextInvokeTime = registeredTime.Add(dueTime)
-		}
-	} else {
-		if !lastFiredTime.IsZero() {
-			nextInvokeTime = lastFiredTime.Add(dueTime)
-		} else {
-			nextInvokeTime = registeredTime.Add(dueTime)
-		}
+		nextInvokeTime = lastFiredTime.Add(period)
 	}
 
 	return nextInvokeTime, nil
@@ -731,7 +723,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	_, err = a.callLocalActor(context.Background(), req)
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
-		a.updateReminderTrack(key, reminder)
+		err = a.updateReminderTrack(key, reminder)
 	} else {
 		log.Debugf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}

@@ -34,14 +34,19 @@ This document helps you get started developing Dapr. If you find any problem whi
     Delve for Go (NOTE: this is NOT Delve from the Office365) is a debugger utility is a debugger for the Go programming language.  Please refer to [Delve Home Page](https://github.com/go-delve/delve) for a detailed explaination.
 3. [Git for Windows](https://gitforwindows.org)
    * Install [Git with chocolatey](https://chocolatey.org/packages/git) and ensure that Git bin directory is in PATH environment variable
-    ```bash
+    ```powershell
     choco install git -y --package-parameters="/GitAndUnixToolsOnPath /WindowsTerminal /NoShellIntegration"
     ```
 4. [MinGW](http://www.mingw.org/)
-  Install [MinGW with chocolatey](https://chocolatey.org/packages/mingw) and ensure that MinGW bin directory is in PATH environment variable
+  Install [MinGW v8.1.0 with chocolatey](https://chocolatey.org/packages/mingw/8.1.0) and ensure that MinGW bin directory is in PATH environment variable. Version 8.1.0 is the last version that installs mingw32-make.exe.
 
-    ```bash
-    choco install mingw
+    ```powesrshell
+    choco install mingw --version 8.1.0
+    ```
+5. Rename mingw32-make.exe to make.exe from an administrative PowerShell.
+
+    ```powershell
+    copy C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin\mingw32-make.exe C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin\make.exe
     ```
 
 ## Setup Kubernetes development environment
