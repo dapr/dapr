@@ -12,8 +12,8 @@ import (
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/valyala/fasthttp"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
@@ -87,7 +87,7 @@ func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *In
 		contentType = JSONContentType
 	}
 	imr.r.Message.ContentType = contentType
-	imr.r.Message.Data = &any.Any{Value: data}
+	imr.r.Message.Data = &anypb.Any{Value: data}
 	return imr
 }
 

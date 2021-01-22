@@ -11,11 +11,10 @@ import (
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestInvocationResponse(t *testing.T) {
@@ -29,7 +28,7 @@ func TestInvocationResponse(t *testing.T) {
 func TestInternalInvocationResponse(t *testing.T) {
 	t.Run("valid internal invoke response", func(t *testing.T) {
 		m := &commonv1pb.InvokeResponse{
-			Data:        &any.Any{Value: []byte("response")},
+			Data:        &anypb.Any{Value: []byte("response")},
 			ContentType: "application/json",
 		}
 		pb := internalv1pb.InternalInvokeResponse{
@@ -75,8 +74,7 @@ func TestResponseData(t *testing.T) {
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
 		s := &commonv1pb.StateItem{Key: "custom_key"}
-		b, err := ptypes.MarshalAny(s)
-		assert.NoError(t, err)
+		b := anypb.New(s)
 
 		resp := NewInvokeMethodResponse(0, "OK", nil)
 		resp.r.Message.Data = b

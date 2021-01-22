@@ -27,9 +27,9 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
-	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 var httpMethods []string
@@ -229,7 +229,7 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.InvokeServiceRequest {
 	msg := &commonv1pb.InvokeRequest{Method: method}
 	msg.ContentType = jsonContentType
-	msg.Data = &any.Any{Value: body}
+	msg.Data = &anypb.Any{Value: body}
 	if httpVerb != "" {
 		msg.HttpExtension = &commonv1pb.HTTPExtension{
 			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
@@ -502,7 +502,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 		Id: commandBody.RemoteApp,
 		Message: &commonv1pb.InvokeRequest{
 			Method:      "retrieve_request_object",
-			Data:        &any.Any{Value: []byte("GRPCToGRPCTest")},
+			Data:        &anypb.Any{Value: []byte("GRPCToGRPCTest")},
 			ContentType: "text/plain; utf-8",
 		},
 	}
@@ -606,7 +606,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 		Id: commandBody.RemoteApp,
 		Message: &commonv1pb.InvokeRequest{
 			Method:      "retrieve_request_object",
-			Data:        &any.Any{Value: []byte("GRPCToHTTPTest")},
+			Data:        &anypb.Any{Value: []byte("GRPCToHTTPTest")},
 			ContentType: "text/plain; utf-8",
 			HttpExtension: &commonv1pb.HTTPExtension{
 				Verb: commonv1pb.HTTPExtension_POST,

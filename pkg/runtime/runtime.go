@@ -54,7 +54,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	openzipkin "github.com/openzipkin/zipkin-go"
@@ -63,6 +62,7 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -472,7 +472,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	}
 
 	go func() {
-		stream, err := a.operatorClient.ComponentUpdate(context.Background(), &empty.Empty{})
+		stream, err := a.operatorClient.ComponentUpdate(context.Background(), &emptypb.Empty{})
 		if err != nil {
 			log.Errorf("error from operator stream: %s", err)
 			return
@@ -740,7 +740,7 @@ func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
 	client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-	resp, err := client.ListInputBindings(context.Background(), &empty.Empty{})
+	resp, err := client.ListInputBindings(context.Background(), &emptypb.Empty{})
 	bindings := []string{}
 
 	if err == nil && resp != nil {
