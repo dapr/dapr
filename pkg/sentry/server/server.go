@@ -14,10 +14,10 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/csr"
 	"github.com/dapr/dapr/pkg/sentry/identity"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
-	"github.com/golang/protobuf/ptypes"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -173,8 +173,8 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, err
 	}
 
-	expiry, err := ptypes.TimestampProto(signed.Certificate.NotAfter)
-	if err != nil {
+	expiry := timestamppb.New(signed.Certificate.NotAfter)
+	if err = expiry.CheckValid(); err != nil {
 		return nil, errors.Wrap(err, "could not validate certificate validity")
 	}
 
