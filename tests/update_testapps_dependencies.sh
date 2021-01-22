@@ -11,7 +11,6 @@ appsdirName='apps'
 for appdir in * ; do
    if test -f "$appsroot/$appdir/go.mod"; then
       cd $appsroot/$appdir > /dev/null
-      # Make sure update 
       go get -u github.com/dapr/dapr@$DAPR_CORE_COMMIT
       go mod tidy
       echo "successfully updated dapr dependency for $appdir"
