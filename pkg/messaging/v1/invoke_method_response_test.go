@@ -74,7 +74,8 @@ func TestResponseData(t *testing.T) {
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
 		s := &commonv1pb.StateItem{Key: "custom_key"}
-		b := anypb.New(s)
+		b, err := anypb.New(s)
+		assert.NoError(t, err)
 
 		resp := NewInvokeMethodResponse(0, "OK", nil)
 		resp.r.Message.Data = b
