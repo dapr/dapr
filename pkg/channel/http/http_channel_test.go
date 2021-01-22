@@ -270,6 +270,56 @@ func TestContentType(t *testing.T) {
 	})
 }
 
+func TestAppToken(t *testing.T) {
+	t.Run("token present", func(t *testing.T) {
+		ctx := context.Background()
+		testServer := httptest.NewServer(&testHandlerHeaders{})
+		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}, appHeaderToken: "token1"}
+
+		req := invokev1.NewInvokeMethodRequest("method")
+		req.WithHTTPExtension(http.MethodPost, "")
+
+		// act
+		response, err := c.InvokeMethod(ctx, req)
+
+		// assert
+		assert.NoError(t, err)
+		_, body := response.RawData()
+
+		actual := map[string]string{}
+		json.Unmarshal(body, &actual)
+
+		_, hasToken := actual["Dapr-Api-Token"]
+		assert.NoError(t, err)
+		assert.True(t, hasToken)
+		testServer.Close()
+	})
+
+	t.Run("token not present", func(t *testing.T) {
+		ctx := context.Background()
+		testServer := httptest.NewServer(&testHandlerHeaders{})
+		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}}
+
+		req := invokev1.NewInvokeMethodRequest("method")
+		req.WithHTTPExtension(http.MethodPost, "")
+
+		// act
+		response, err := c.InvokeMethod(ctx, req)
+
+		// assert
+		assert.NoError(t, err)
+		_, body := response.RawData()
+
+		actual := map[string]string{}
+		json.Unmarshal(body, &actual)
+
+		_, hasToken := actual["Dapr-Api-Token"]
+		assert.NoError(t, err)
+		assert.False(t, hasToken)
+		testServer.Close()
+	})
+}
+
 func TestCreateChannel(t *testing.T) {
 	t.Run("ssl scheme", func(t *testing.T) {
 		ch, err := CreateAppChannel("127.0.0.1", 3000, 0, config.TracingSpec{}, true)
