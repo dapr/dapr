@@ -31,8 +31,10 @@ make gen-proto
 Whenever there are breaking changes in the proto files, we need to update the e2e test apps to use the correct version of dapr dependencies. This can be done by navigating to the tests folder and running the commands:-
 
 ```
-./update_testapps_dependencies.sh
+# Use the last commit of dapr.
+./update_testapps_dependencies.sh be08e5520173beb93e5d5f047dbde405e78db658
 ```
+
 **Note**: On Windows, use the mingw tools to execute the bash script
 
 Check in all the go.mod files for the test apps that have now been modified to point to the latest dapr version.
