@@ -5,7 +5,10 @@
 
 # E2E test app list
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
-E2E_TEST_APPS=hellodapr \
+E2E_TEST_APPS=actorjava \
+actordotnet \
+actorpython \
+hellodapr \
 stateapp \
 secretapp \
 service_invocation \
@@ -21,10 +24,7 @@ actorfeatures \
 actorinvocationapp \
 runtime \
 runtime_init \
-middleware \
-actorjava \
-actordotnet \
-actorpython
+middleware
 
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http
@@ -75,12 +75,16 @@ endif
 define genTestAppImageBuild
 .PHONY: build-e2e-app-$(1)
 build-e2e-app-$(1): check-e2e-env
-	if [ -f "$(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)" ]; then \
-		$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG); \
-	else \
-		CGO_ENABLED=0 GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -o $(E2E_TESTAPP_DIR)/$(1)/app$(BINARY_EXT_LOCAL) $(E2E_TESTAPP_DIR)/$(1)/app.go && \
-		$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG); \
-	fi
+ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
+	CGO_ENABLED=0 GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -o $(E2E_TESTAPP_DIR)/$(1)/app$(BINARY_EXT_LOCAL) $(E2E_TESTAPP_DIR)/$(1)/app.go
+	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+else
+# Builds of E2E apps within Docker works for Windows but are too slow. Disabling them for now.
+# See https://github.com/dapr/dapr/issues/2695
+ifeq ($(TARGET_OS),linux)
+	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+endif
+endif
 endef
 
 # Generate test app image build targets
@@ -89,7 +93,15 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageBuild,$(ITEM))))
 define genTestAppImagePush
 .PHONY: push-e2e-app-$(1)
 push-e2e-app-$(1): check-e2e-env
+ifeq ($(TARGET_OS),windows)
+ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
+# Builds of E2E apps within Docker works for Windows but are too slow. Disabling them for now.
+# See https://github.com/dapr/dapr/issues/2695
 	$(DOCKER) push $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+endif
+else
+	$(DOCKER) push $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
+endif
 endef
 
 # Generate test app image push targets
