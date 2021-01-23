@@ -504,7 +504,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\"proto: google.protobuf.Any: unable to resolve \\\"malformed\\\": not found\"}", string(resp.RawBody))
+		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""))
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
