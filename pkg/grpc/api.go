@@ -238,28 +238,36 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
-	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
-		ID:              a.id,
-		Topic:           in.Topic,
-		DataContentType: in.DataContentType,
-		Data:            body,
-		TraceID:         corID,
-		Pubsub:          in.PubsubName,
-	})
-	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
-		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
-	}
-
 	features := thepubsub.Features()
-	pubsub.ApplyMetadata(envelope, features, in.Metadata)
+	var (
+		b   []byte
+		err error
+	)
+	if pubsub.FeatureRawData.IsPresent(features) {
+		b = body
+	} else {
+		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+			ID:              a.id,
+			Topic:           in.Topic,
+			DataContentType: in.DataContentType,
+			Data:            body,
+			TraceID:         corID,
+			Pubsub:          in.PubsubName,
+		})
+		if err != nil {
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+			apiServerLogger.Debug(err)
+			return &empty.Empty{}, err
+		}
 
-	b, err := jsoniter.ConfigFastest.Marshal(envelope)
-	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
-		apiServerLogger.Debug(err)
-		return &empty.Empty{}, err
+		pubsub.ApplyMetadata(envelope, features, in.Metadata)
+
+		b, err = jsoniter.ConfigFastest.Marshal(envelope)
+		if err != nil {
+			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+			apiServerLogger.Debug(err)
+			return &empty.Empty{}, err
+		}
 	}
 
 	req := pubsub.PublishRequest{

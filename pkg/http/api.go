@@ -1162,32 +1162,41 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	// Populate W3C traceparent to cloudevent envelope
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
-	envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
-		ID:              a.id,
-		Topic:           topic,
-		DataContentType: contentType,
-		Data:            body,
-		TraceID:         corID,
-		Pubsub:          pubsubName,
-	})
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-			fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
-
 	features := thepubsub.Features()
+	var (
+		b   []byte
+		err error
+	)
+	if pubsub.FeatureRawData.IsPresent(features) {
+		b = body
+	} else {
+		envelope, err := runtime_pubsub.NewCloudEvent(&runtime_pubsub.CloudEvent{
+			ID:              a.id,
+			Topic:           topic,
+			DataContentType: contentType,
+			Data:            body,
+			TraceID:         corID,
+			Pubsub:          pubsubName,
+		})
+		if err != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
+			respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+			log.Debug(msg)
+			return
+		}
 
-	pubsub.ApplyMetadata(envelope, features, metadata)
-	b, err := a.json.Marshal(envelope)
-	if err != nil {
-		msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-			fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
+		features := thepubsub.Features()
+
+		pubsub.ApplyMetadata(envelope, features, metadata)
+		b, err = a.json.Marshal(envelope)
+		if err != nil {
+			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
+				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
+			respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+			log.Debug(msg)
+			return
+		}
 	}
 
 	req := pubsub.PublishRequest{
