@@ -770,16 +770,14 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 		if statusCode != fasthttp.StatusOK {
-			body, err = invokev1.ProtobufToJSON(resp.Status())
+			if body, err = invokev1.ProtobufToJSON(resp.Status()); err != nil {
+				msg := NewErrorResponse("ERR_MALFORMED_RESPONSE", err.Error())
+				respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+				return
+			}
 		}
 	}
-
-	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
-	} else {
-		respond(reqCtx, statusCode, body)
-	}
+	respond(reqCtx, statusCode, body)
 }
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
