@@ -1,0 +1,8 @@
+FROM python:3.7-windowsservercore
+WORKDIR /app
+ADD . /app
+RUN pip install -r requirements.txt
+
+EXPOSE 3000
+ENTRYPOINT ["python"]
+CMD ["flask_service.py"]
