@@ -1,3 +1,5 @@
+{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-trust-bundle-test"}}
+---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -5,9 +7,15 @@ metadata:
   labels:
     app: dapr-sentry
 data:
-  {{ if .Values.tls.issuer.certPEM }}issuer.crt: {{ b64enc .Values.tls.issuer.certPEM | trim }}{{ end }}
-  {{ if .Values.tls.issuer.keyPEM }}issuer.key: {{ b64enc .Values.tls.issuer.keyPEM | trim }}{{end}}
-  {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}{{end}}
+  {{ if .Values.tls.issuer.certPEM }}issuer.crt: {{ b64enc .Values.tls.issuer.certPEM | trim }}
+  {{ else if $existingSecret }}issuer.crt: {{ index $existingSecret.data "issuer.crt" }}
+  {{ end }}
+  {{ if .Values.tls.issuer.keyPEM }}issuer.key: {{ b64enc .Values.tls.issuer.keyPEM | trim }}
+  {{ else if $existingSecret }}issuer.key: {{ index $existingSecret.data "issuer.key" }}
+  {{end}}
+  {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
+  {{ else if $existingSecret }}ca.crt: {{ index $existingSecret.data "ca.crt" }}
+  {{end}}
 ---
 apiVersion: apps/v1
 kind: Deployment
