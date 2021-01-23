@@ -1,4 +1,4 @@
-{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-trust-bundle-test"}}
+{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-trust-bundle"}}
 ---
 apiVersion: v1
 kind: Secret
