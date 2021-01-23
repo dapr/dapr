@@ -438,7 +438,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
 	})
 
-	t.Run("Invoke direct messaging with Internal Error Response - 500 Internal", func(t *testing.T) {
+	t.Run("Invoke direct messaging with InvalidArgument Response - 400 Bad request", func(t *testing.T) {
 		d := &epb.ErrorInfo{
 			Reason: "fakeReason",
 		}
