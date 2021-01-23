@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
@@ -54,7 +55,7 @@ func TestInvokeMethod(t *testing.T) {
 	defer closeConnection(t, conn)
 	assert.NoError(t, err)
 
-	c := Channel{baseAddress: "localhost:9998", client: conn}
+	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1"}
 	req := invokev1.NewInvokeMethodRequest("method")
 	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 	response, err := c.InvokeMethod(context.Background(), req)
@@ -69,6 +70,7 @@ func TestInvokeMethod(t *testing.T) {
 
 	assert.Equal(t, "POST", actual["httpverb"])
 	assert.Equal(t, "method", actual["method"])
+	assert.Equal(t, "token1", actual[auth.APITokenHeader])
 	assert.Equal(t, "{\"param1\":\"val1\",\"param2\":\"val2\"}", actual["querystring"])
 }
 

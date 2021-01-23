@@ -184,15 +184,15 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "secrets/{secretStoreName}/{key}",
-			Version: apiVersionV1,
-			Handler: a.onGetSecret,
-		},
-		{
-			Methods: []string{fasthttp.MethodGet},
 			Route:   "secrets/{secretStoreName}/bulk",
 			Version: apiVersionV1,
 			Handler: a.onBulkGetSecret,
+		},
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "secrets/{secretStoreName}/{key}",
+			Version: apiVersionV1,
+			Handler: a.onGetSecret,
 		},
 	}
 }
@@ -643,7 +643,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	filteredSecrets := map[string]string{}
+	filteredSecrets := map[string]map[string]string{}
 	for key, v := range resp.Data {
 		if a.isSecretAllowed(secretStoreName, key) {
 			filteredSecrets[key] = v

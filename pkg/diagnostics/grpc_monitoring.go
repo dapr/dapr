@@ -10,12 +10,12 @@ import (
 	"time"
 
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/golang/protobuf/proto"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // This implementation is inspired by
