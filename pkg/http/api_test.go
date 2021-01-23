@@ -458,14 +458,11 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(fakeInternalErrorResponse, nil).Once()
+		mockDirectMessaging.On(
+			"Invoke",
+			mock.AnythingOfType("*fasthttp.RequestCtx"),
+			"fakeAppID",
+			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeInternalErrorResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -495,14 +492,11 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.Calls = nil // reset call count
 
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(func(a context.Context) bool {
-				return true
-			}), mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(fakeInternalErrorResponse, nil).Once()
+		mockDirectMessaging.On(
+			"Invoke",
+			mock.AnythingOfType("*fasthttp.RequestCtx"),
+			"fakeAppID",
+			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeInternalErrorResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -510,7 +504,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\"proto:\u00a0google.protobuf.Any: unable to resolve \\\"malformed\\\": not found\"}", string(resp.RawBody))
+		assert.Equal(t, "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\"proto: google.protobuf.Any: unable to resolve \\\"malformed\\\": not found\"}", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
