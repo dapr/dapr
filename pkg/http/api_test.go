@@ -457,7 +457,15 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke").Return(fakeInternalErrorResponse, nil).Once()
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeInternalErrorResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -486,7 +494,15 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		fakeReq.WithMetadata(headerMetadata)
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke").Return(fakeInternalErrorResponse, nil).Once()
+
+		mockDirectMessaging.On("Invoke",
+			mock.MatchedBy(func(a context.Context) bool {
+				return true
+			}), mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
+			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
+				return true
+			})).Return(fakeInternalErrorResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
