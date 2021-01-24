@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "18e64bff104f05e6ff923b7f885ac759",
+    "content-hash": "d40b7cadb00f50aea77250e60eab914b",
     "packages": [
         {
             "name": "dapr/php-sdk",
-            "version": "dev-fix/deserialize",
+            "version": "dev-main",
             "source": {
                 "type": "git",
                 "url": "https://github.com/dapr/php-sdk.git",
-                "reference": "3edba41aad1542d60983d1475b48b4ed53362ff0"
+                "reference": "56429b46cdac9c6d33ffaba24e5628f92a6fa4cd"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/dapr/php-sdk/zipball/3edba41aad1542d60983d1475b48b4ed53362ff0",
-                "reference": "3edba41aad1542d60983d1475b48b4ed53362ff0",
+                "url": "https://api.github.com/repos/dapr/php-sdk/zipball/56429b46cdac9c6d33ffaba24e5628f92a6fa4cd",
+                "reference": "56429b46cdac9c6d33ffaba24e5628f92a6fa4cd",
                 "shasum": ""
             },
             "require": {
@@ -33,6 +33,7 @@
                 "phpunit/phpunit": "^9",
                 "vimeo/psalm": "^4.3"
             },
+            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -53,9 +54,9 @@
             "description": "Dapr Implementation in PHP",
             "support": {
                 "issues": "https://github.com/dapr/php-sdk/issues",
-                "source": "https://github.com/dapr/php-sdk/tree/fix/deserialize"
+                "source": "https://github.com/dapr/php-sdk/tree/main"
             },
-            "time": "2021-01-24T11:43:17+00:00"
+            "time": "2021-01-24T15:15:14+00:00"
         },
         {
             "name": "monolog/monolog",

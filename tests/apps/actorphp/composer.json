@@ -10,7 +10,7 @@
         }
     ],
     "require": {
-        "dapr/php-sdk": "dev-fix/deserialize",
+        "dapr/php-sdk": "dev-main",
         "monolog/monolog": "^2.2"
     },
     "autoload": {
