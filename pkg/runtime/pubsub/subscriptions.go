@@ -15,7 +15,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/ghodss/yaml"
-	"github.com/golang/protobuf/ptypes/empty"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -70,7 +70,7 @@ func filterSubscriptions(subscriptions []Subscription, log logger.Logger) []Subs
 func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logger) []Subscription {
 	var subscriptions []Subscription
 
-	resp, err := channel.ListTopicSubscriptions(context.Background(), &empty.Empty{})
+	resp, err := channel.ListTopicSubscriptions(context.Background(), &emptypb.Empty{})
 	if err != nil {
 		// Unexpected response: both GRPC and HTTP have to log the same level.
 		log.Errorf(getTopicsError, err)
@@ -145,7 +145,7 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 // DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes
 func DeclarativeKubernetes(client operatorv1pb.OperatorClient, log logger.Logger) []Subscription {
 	var subs []Subscription
-	resp, err := client.ListSubscriptions(context.TODO(), &empty.Empty{})
+	resp, err := client.ListSubscriptions(context.TODO(), &emptypb.Empty{})
 	if err != nil {
 		log.Errorf("failed to list subscriptions from operator: %s", err)
 		return subs

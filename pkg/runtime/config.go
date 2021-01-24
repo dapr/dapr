@@ -27,6 +27,8 @@ const (
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints
 	DefaultMetricsPort = 9090
+	// DefaultMaxRequestBodySize is the default option for the maximum body size in MB for Dapr HTTP servers
+	DefaultMaxRequestBodySize = 4
 )
 
 // Config holds the Dapr Runtime configuration
@@ -50,6 +52,7 @@ type Config struct {
 	SentryServiceAddress string
 	CertChain            *credentials.CertChain
 	AppSSL               bool
+	MaxRequestBodySize   int
 }
 
 // NewRuntimeConfig returns a new runtime config
@@ -57,7 +60,7 @@ func NewRuntimeConfig(
 	id string, placementAddresses []string,
 	controlPlaneAddress, allowedOrigins, globalConfig, componentsPath, appProtocol, mode string,
 	httpPort, internalGRPCPort, apiGRPCPort, appPort, profilePort int,
-	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool) *Config {
+	enableProfiling bool, maxConcurrency int, mtlsEnabled bool, sentryAddress string, appSSL bool, maxRequestBodySize int) *Config {
 	return &Config{
 		ID:                  id,
 		HTTPPort:            httpPort,
@@ -81,5 +84,6 @@ func NewRuntimeConfig(
 		mtlsEnabled:          mtlsEnabled,
 		SentryServiceAddress: sentryAddress,
 		AppSSL:               appSSL,
+		MaxRequestBodySize:   maxRequestBodySize,
 	}
 }

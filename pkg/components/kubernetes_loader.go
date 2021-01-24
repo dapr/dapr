@@ -14,8 +14,8 @@ import (
 	config "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/logger"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/golang/protobuf/ptypes/empty"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var log = logger.NewLogger("dapr.runtime.components")
@@ -41,7 +41,7 @@ func NewKubernetesComponents(configuration config.KubernetesConfig, operatorClie
 
 // LoadComponents returns components from a given control plane address
 func (k *KubernetesComponents) LoadComponents() ([]components_v1alpha1.Component, error) {
-	resp, err := k.client.ListComponents(context.Background(), &empty.Empty{}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
+	resp, err := k.client.ListComponents(context.Background(), &emptypb.Empty{}, grpc_retry.WithMax(operatorMaxRetries), grpc_retry.WithPerRetryTimeout(operatorCallTimeout))
 	if err != nil {
 		return nil, err
 	}

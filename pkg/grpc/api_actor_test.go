@@ -12,11 +12,11 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestRegisterActorReminder(t *testing.T) {
@@ -193,7 +193,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 					{
 						OperationType: "upsert",
 						Key:           "key1",
-						Value:         &any.Any{Value: data},
+						Value:         &anypb.Any{Value: data},
 					},
 					{
 						OperationType: "delete",

@@ -54,7 +54,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	openzipkin "github.com/openzipkin/zipkin-go"
@@ -63,6 +62,7 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -322,6 +322,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Start HTTP Server
 	a.startHTTPServer(a.runtimeConfig.HTTPPort, a.runtimeConfig.ProfilePort, a.runtimeConfig.AllowedOrigins, pipeline)
 	log.Infof("http server is running on port %v", a.runtimeConfig.HTTPPort)
+	log.Infof("The request body size parameter is: %v", a.runtimeConfig.MaxRequestBodySize)
 
 	err = a.startGRPCInternalServer(grpcAPI, a.runtimeConfig.InternalGRPCPort)
 	if err != nil {
@@ -461,7 +462,8 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		a.appChannel,
 		a.grpc.GetGRPCConnection,
 		resolver,
-		a.globalConfig.Spec.TracingSpec)
+		a.globalConfig.Spec.TracingSpec,
+		a.runtimeConfig.MaxRequestBodySize)
 }
 
 func (a *DaprRuntime) beginComponentsUpdates() error {
@@ -470,7 +472,7 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 	}
 
 	go func() {
-		stream, err := a.operatorClient.ComponentUpdate(context.Background(), &empty.Empty{})
+		stream, err := a.operatorClient.ComponentUpdate(context.Background(), &emptypb.Empty{})
 		if err != nil {
 			log.Errorf("error from operator stream: %s", err)
 			return
@@ -692,7 +694,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.components, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
-	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.daprHostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling)
+	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.daprHostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
 	server.StartNonBlocking()
@@ -719,7 +721,7 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 	if a.accessControlList != nil {
 		trustDomain = a.accessControlList.TrustDomain
 	}
-	return grpc.NewServerConfig(a.runtimeConfig.ID, a.daprHostAddress, port, a.namespace, trustDomain)
+	return grpc.NewServerConfig(a.runtimeConfig.ID, a.daprHostAddress, port, a.namespace, trustDomain, a.runtimeConfig.MaxRequestBodySize)
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
@@ -738,7 +740,7 @@ func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() []string {
 	client := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)
-	resp, err := client.ListInputBindings(context.Background(), &empty.Empty{})
+	resp, err := client.ListInputBindings(context.Background(), &emptypb.Empty{})
 	bindings := []string{}
 
 	if err == nil && resp != nil {
