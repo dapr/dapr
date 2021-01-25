@@ -10,6 +10,7 @@ metadata:
   namespace: loadtest
 spec:
   type: state.redis
+  version: v1
   metadata:
   - name: redisHost
     value: redis-master.components.svc.cluster.local:6379
