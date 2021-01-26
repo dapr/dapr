@@ -54,12 +54,7 @@ spec:
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         resources:
-          limits:
-            cpu: 1000m
-            memory: 500Mi
-          requests:
-            cpu: 250m
-            memory: 100Mi
+{{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
           - name: credentials
             mountPath: /var/run/dapr/credentials
@@ -120,7 +115,7 @@ spec:
 {{- end }}
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsNonRoot: true
+          runAsNonRoot: {{ .Values.runAsNonRoot }}
 {{- end }}
         env:
           - name: PLACEMENT_ID

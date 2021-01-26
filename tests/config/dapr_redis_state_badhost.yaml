@@ -6,6 +6,7 @@ spec:
   type: state.redis
   initTimeout: 1m
   ignoreErrors: true
+  version: v1
   metadata:
   - name: redisHost
     value: badhost:6379

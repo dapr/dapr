@@ -42,8 +42,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -434,6 +436,75 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, []byte("fakeDirectMessageResponse"), resp.RawBody)
+	})
+
+	t.Run("Invoke direct messaging with InvalidArgument Response - 400 Bad request", func(t *testing.T) {
+		d := &epb.ErrorInfo{
+			Reason: "fakeReason",
+		}
+		details, _ := anypb.New(d)
+
+		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(
+			int32(codes.InvalidArgument),
+			"InvalidArgument",
+			[]*anypb.Any{details})
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+		fakeReq.WithMetadata(headerMetadata)
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.On(
+			"Invoke",
+			mock.AnythingOfType("*fasthttp.RequestCtx"),
+			"fakeAppID",
+			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeInternalErrorResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 400, resp.StatusCode)
+
+		// protojson produces different indentation space based on OS
+		// For linux
+		comp1 := string(resp.RawBody) == "{\"code\":3,\"message\":\"InvalidArgument\",\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\",\"reason\":\"fakeReason\"}]}"
+		// For mac and windows
+		comp2 := string(resp.RawBody) == "{\"code\":3, \"message\":\"InvalidArgument\", \"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\", \"reason\":\"fakeReason\"}]}"
+		assert.True(t, comp1 || comp2)
+	})
+
+	t.Run("Invoke direct messaging with malformed status response", func(t *testing.T) {
+		malformedDetails := &anypb.Any{TypeUrl: "malformed"}
+		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(int32(codes.Internal), "InternalError", []*anypb.Any{malformedDetails})
+		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
+		fakeData := []byte("fakeData")
+
+		fakeReq := invokev1.NewInvokeMethodRequest("fakeMethod")
+		fakeReq.WithHTTPExtension(gohttp.MethodPost, "")
+		fakeReq.WithRawData(fakeData, "application/json")
+		fakeReq.WithMetadata(headerMetadata)
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.On(
+			"Invoke",
+			mock.AnythingOfType("*fasthttp.RequestCtx"),
+			"fakeAppID",
+			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeInternalErrorResponse, nil).Once()
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
+
+		// assert
+		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 500, resp.StatusCode)
+		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""))
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {

@@ -643,7 +643,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	filteredSecrets := map[string]string{}
+	filteredSecrets := map[string]map[string]string{}
 	for key, v := range resp.Data {
 		if a.isSecretAllowed(secretStoreName, key) {
 			filteredSecrets[key] = v
@@ -769,8 +769,14 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	statusCode := int(resp.Status().Code)
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
+		if statusCode != fasthttp.StatusOK {
+			if body, err = invokev1.ProtobufToJSON(resp.Status()); err != nil {
+				msg := NewErrorResponse("ERR_MALFORMED_RESPONSE", err.Error())
+				respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+				return
+			}
+		}
 	}
-
 	respond(reqCtx, statusCode, body)
 }
 

@@ -78,7 +78,7 @@ spec:
         - "{{ .Values.global.prometheus.port }}"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsNonRoot: true
+          runAsNonRoot: {{ .Values.runAsNonRoot }}
 {{- end }}
         env:
         - name: TLS_CERT_FILE
@@ -107,12 +107,7 @@ spec:
           protocol: TCP
 {{- end }}
         resources:
-          limits:
-            cpu: 1000m
-            memory: 200Mi
-          requests:
-            cpu: 100m
-            memory: 20Mi
+{{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
         - name: cert
           mountPath: /dapr/cert

@@ -102,13 +102,15 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 	}, nil
 }
 
-func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.GetSecretResponse, error) {
-	return secretstores.GetSecretResponse{
-		Data: map[string]string{
-			"key1":   "value1",
-			"_value": "_value_data",
-			"name1":  "value1",
-		},
+func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+	response := map[string]map[string]string{}
+	response["k8s-secret"] = map[string]string{
+		"key1":   "value1",
+		"_value": "_value_data",
+		"name1":  "value1",
+	}
+	return secretstores.BulkGetSecretResponse{
+		Data: response,
 	}, nil
 }
 
@@ -1502,6 +1504,36 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
+	t.Run("succeeded to publish message without TraceID", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
+		delete(envelope, pubsub.TraceIDField)
+		bNoTraceID, err := json.Marshal(envelope)
+		assert.Nil(t, err)
+
+		message := &pubsub.NewMessage{
+			Topic:    topic,
+			Data:     bNoTraceID,
+			Metadata: map[string]string{pubsubName: TestPubsubName},
+		}
+
+		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.Topic)
+		fakeReqNoTraceID.WithHTTPExtension(http.MethodPost, "")
+		fakeReqNoTraceID.WithRawData(message.Data, contenttype.CloudEventContentType)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
+
+		// act
+		err = rt.publishMessageHTTP(message)
+
+		// assert
+		assert.Nil(t, err)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
 	t.Run("succeeded to publish message to user app with non-json response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -1930,7 +1962,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		-1,
 		false,
 		"",
-		false)
+		false, 4)
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 	return rt

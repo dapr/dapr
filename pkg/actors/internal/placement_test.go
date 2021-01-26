@@ -276,7 +276,7 @@ func newTestServer() (string, *testServer, func()) {
 
 type testServer struct {
 	isLeader           bool
-	lastHost           placementv1pb.Host
+	lastHost           *placementv1pb.Host
 	recvCount          int
 	lastTimestamp      time.Time
 	recvError          error
@@ -298,7 +298,7 @@ func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStat
 			return nil
 		}
 		s.recvCount++
-		s.lastHost = *req
+		s.lastHost = req
 		s.lastTimestamp = time.Now()
 	}
 }
