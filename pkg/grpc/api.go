@@ -31,6 +31,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/golang/protobuf/ptypes/empty"
 	jsoniter "github.com/json-iterator/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -59,6 +60,7 @@ type API interface {
 	GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error)
 	SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error)
 	DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error)
+	DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error)
 	ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error)
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
@@ -530,6 +532,38 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	err = store.Delete(&req)
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+	return &empty.Empty{}, nil
+}
+
+func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*empty.Empty, error) {
+	store, err := a.getStateStore(in.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &empty.Empty{}, err
+	}
+
+	reqs := make([]state.DeleteRequest, 0, len(in.States))
+	for _, item := range in.States {
+		req := state.DeleteRequest{
+			Key:      state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id),
+			Metadata: item.Metadata,
+		}
+		if item.Etag != nil {
+			req.ETag = &item.Etag.Value
+		}
+		if item.Options != nil {
+			req.Options = state.DeleteStateOption{
+				Concurrency: stateConcurrencyToString(item.Options.Concurrency),
+				Consistency: stateConsistencyToString(item.Options.Consistency),
+			}
+		}
+		reqs = append(reqs, req)
+	}
+	err = store.BulkDelete(reqs)
+	if err != nil {
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}

@@ -5,6 +5,7 @@ metadata:
 spec:
   type: state.redis
   initTimeout: 1m
+  version: v1
   ignoreErrors: true
   metadata:
   - name: redisHost
