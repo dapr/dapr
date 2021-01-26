@@ -73,11 +73,15 @@ func TestResponseData(t *testing.T) {
 	})
 
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
+		s := &commonv1pb.StateItem{Key: "custom_key"}
+		b, err := anypb.New(s)
+		assert.NoError(t, err)
+
 		resp := NewInvokeMethodResponse(0, "OK", nil)
-		resp.r.Message.Data = &anypb.Any{TypeUrl: "fake", Value: []byte("fake")}
+		resp.r.Message.Data = b
 		contentType, bData := resp.RawData()
-		assert.Equal(t, "", contentType)
-		assert.Equal(t, []byte("fake"), bData)
+		assert.Equal(t, ProtobufContentType, contentType)
+		assert.Equal(t, b.Value, bData)
 	})
 }
 

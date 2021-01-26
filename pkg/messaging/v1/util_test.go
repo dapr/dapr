@@ -327,3 +327,23 @@ func TestCloneBytes(t *testing.T) {
 		assert.NotSame(t, orig, cloneBytes(orig))
 	})
 }
+
+func TestProtobufToJSON(t *testing.T) {
+	tpb := &epb.DebugInfo{
+		StackEntries: []string{
+			"first stack",
+			"second stack",
+		},
+	}
+
+	jsonBody, err := ProtobufToJSON(tpb)
+	assert.NoError(t, err)
+	t.Log(string(jsonBody))
+
+	// protojson produces different indentation space based on OS
+	// For linux
+	comp1 := string(jsonBody) == "{\"stackEntries\":[\"first stack\",\"second stack\"]}"
+	// For mac and windows
+	comp2 := string(jsonBody) == "{\"stackEntries\":[\"first stack\", \"second stack\"]}"
+	assert.True(t, comp1 || comp2)
+}
