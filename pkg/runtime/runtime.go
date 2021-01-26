@@ -1083,21 +1083,26 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		log.Debug(errors.Errorf("failed to deserialize cloudevent: %s", err))
 		return err
 	}
-	traceID := cloudEvent[pubsub.TraceIDField].(string)
 
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
 		return nil
 	}
 
+	ctx := context.Background()
+	var span *trace.Span
+
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
 	req := invokev1.NewInvokeMethodRequest(route.path)
 	req.WithHTTPExtension(nethttp.MethodPost, "")
 	req.WithRawData(msg.Data, contenttype.CloudEventContentType)
 
-	sc, _ := diag.SpanContextFromW3CString(traceID)
-	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+	if cloudEvent[pubsub.TraceIDField] != nil {
+		traceID := cloudEvent[pubsub.TraceIDField].(string)
+		sc, _ := diag.SpanContextFromW3CString(traceID)
+		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
@@ -1181,13 +1186,17 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		envelope.Data = []byte(cloudEvent[pubsub.DataField].(string))
 	}
 
-	traceID := cloudEvent[pubsub.TraceIDField].(string)
-	sc, _ := diag.SpanContextFromW3CString(traceID)
-	spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+	ctx := context.Background()
+	var span *trace.Span
+	if cloudEvent[pubsub.TraceIDField] != nil {
+		traceID := cloudEvent[pubsub.TraceIDField].(string)
+		sc, _ := diag.SpanContextFromW3CString(traceID)
+		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 
-	// no ops if trace is off
-	ctx, span := diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
-	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+		// no ops if trace is off
+		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	}
 
 	// call appcallback
 	clientV1 := runtimev1pb.NewAppCallbackClient(a.grpc.AppClient)

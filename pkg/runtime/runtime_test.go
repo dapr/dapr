@@ -1504,6 +1504,36 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
+	t.Run("succeeded to publish message without TraceID", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
+		delete(envelope, pubsub.TraceIDField)
+		bNoTraceID, err := json.Marshal(envelope)
+		assert.Nil(t, err)
+
+		message := &pubsub.NewMessage{
+			Topic:    topic,
+			Data:     bNoTraceID,
+			Metadata: map[string]string{pubsubName: TestPubsubName},
+		}
+
+		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.Topic)
+		fakeReqNoTraceID.WithHTTPExtension(http.MethodPost, "")
+		fakeReqNoTraceID.WithRawData(message.Data, contenttype.CloudEventContentType)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
+
+		// act
+		err = rt.publishMessageHTTP(message)
+
+		// assert
+		assert.Nil(t, err)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
 	t.Run("succeeded to publish message to user app with non-json response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
