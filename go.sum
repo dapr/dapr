@@ -144,6 +144,8 @@ github.com/Azure/go-autorest/tracing v0.6.0/go.mod h1:+vhtPC754Xsa23ID7GlGsrdKBp
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
+github.com/DATA-DOG/go-sqlmock v1.5.0 h1:Shsta01QNfFxHCfpW6YH2STWB0MudeXXEWMr20OEh60=
+github.com/DATA-DOG/go-sqlmock v1.5.0/go.mod h1:f/Ixk793poVmq4qj/V1dPUg2JEAKC73Q5eFN3EC/SaM=
 github.com/DataDog/datadog-go v2.2.0+incompatible/go.mod h1:LButxg5PwREeZtORoXG3tL4fMGNddJ+vMq1mwgfaqoQ=
 github.com/DataDog/zstd v1.3.6-0.20190409195224-796139022798 h1:2T/jmrHeTezcCM58lvEQXs0UpQJCo5SoGAcg+mbSTIg=
 github.com/DataDog/zstd v1.3.6-0.20190409195224-796139022798/go.mod h1:1jcaCB/ufaK+sKp1NBhlGmpz41jOoPQ35bpF36t7BBo=
@@ -297,8 +299,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
 github.com/dapr/components-contrib v1.0.0-rc2/go.mod h1:5r95bQ7UqLfjJA6oomcc1L+mDTXSTPTGg3hmGhoJIxs=
-github.com/dapr/components-contrib v1.0.0-rc2.0.20210125194103-11454d7ccf8b h1:jvwkTIsBr32nB35EaWIi14zl44RXy8jjLQA88EEpPZ8=
-github.com/dapr/components-contrib v1.0.0-rc2.0.20210125194103-11454d7ccf8b/go.mod h1:eC/MvL5iLzCFbbVyP+kZGc2ODS7mdU0pteMaRxwYl3Q=
+github.com/dapr/components-contrib v1.0.0-rc2.0.20210126070847-27344d4e4ce7 h1:8z9Tf9MDBzcs3gbS5d+Nu0/WYFgyPf4rny6dlqZy/0Y=
+github.com/dapr/components-contrib v1.0.0-rc2.0.20210126070847-27344d4e4ce7/go.mod h1:QfUGn11U9MlKIyQpjVmf+p+3aCQ9qOGp7SIiH2lcC30=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
 github.com/dapr/dapr v1.0.0-rc.2/go.mod h1:raAV9hKG114OTTudY8tfajM1EELp8YasLbK6OLgKuG0=
 github.com/dapr/go-sdk v0.0.0-20200121181907-48249cda2fad h1:RKWoYovBc+B9ltvjtZLMnbu49stSucH8rZze3MeqyvQ=

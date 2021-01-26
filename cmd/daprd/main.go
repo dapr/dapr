@@ -94,6 +94,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
 	"github.com/dapr/components-contrib/bindings/mqtt"
+	"github.com/dapr/components-contrib/bindings/mysql"
 	"github.com/dapr/components-contrib/bindings/postgres"
 	"github.com/dapr/components-contrib/bindings/postmark"
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
@@ -373,6 +374,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("postmark", func() bindings.OutputBinding {
 				return postmark.NewPostmark(logContrib)
+			}),
+			bindings_loader.NewOutput("mysql", func() bindings.OutputBinding {
+				return mysql.NewMysql(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
