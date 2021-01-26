@@ -10,3 +10,5 @@ nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
 sidecarImagePullPolicy: Always
+runAsNonRoot: true
+resources: {}
