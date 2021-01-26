@@ -1175,6 +1175,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		SpecVersion:     cloudEvent[pubsub.SpecVersionField].(string),
 		Topic:           msg.Topic,
 		PubsubName:      msg.Metadata[pubsubName],
+		Metadata:        msg.Metadata,
 	}
 
 	if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
