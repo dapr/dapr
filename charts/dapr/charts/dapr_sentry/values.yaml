@@ -19,3 +19,6 @@ tls:
   root:
     certPEM: ""
   trustDomain: cluster.local
+
+runAsNonRoot: true
+resources: {}
