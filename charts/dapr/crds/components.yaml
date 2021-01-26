@@ -73,6 +73,7 @@ spec:
             required:
             - metadata
             - type
+            - version
             type: object
         type: object
     served: true
