@@ -133,5 +133,9 @@ func (imr *InvokeMethodResponse) RawData() (string, []byte) {
 		contentType = JSONContentType
 	}
 
+	if dataTypeURL != "" {
+		contentType = ProtobufContentType
+	}
+
 	return contentType, dataValue
 }

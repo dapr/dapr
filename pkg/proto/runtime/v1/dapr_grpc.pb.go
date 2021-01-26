@@ -5,10 +5,10 @@ package runtime
 import (
 	context "context"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -27,13 +27,15 @@ type DaprClient interface {
 	// Gets a bulk of state items for a list of keys
 	GetBulkState(ctx context.Context, in *GetBulkStateRequest, opts ...grpc.CallOption) (*GetBulkStateResponse, error)
 	// Saves the state for a specific key.
-	SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Deletes the state for a specific key.
-	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// Deletes a bulk of state items for a list of keys
+	DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Executes transactions for a specified store
-	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Publishes events to the specific topic.
-	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -41,23 +43,23 @@ type DaprClient interface {
 	// Gets a bulk of secrets
 	GetBulkSecret(ctx context.Context, in *GetBulkSecretRequest, opts ...grpc.CallOption) (*GetBulkSecretResponse, error)
 	// Register an actor timer.
-	RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Unregister an actor timer.
-	UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Register an actor reminder.
-	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Unregister an actor reminder.
-	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(ctx context.Context, in *InvokeActorRequest, opts ...grpc.CallOption) (*InvokeActorResponse, error)
 	// Gets metadata of the sidecar
-	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
+	GetMetadata(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
-	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type daprClient struct {
@@ -95,8 +97,8 @@ func (c *daprClient) GetBulkState(ctx context.Context, in *GetBulkStateRequest, 
 	return out, nil
 }
 
-func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SaveState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -104,8 +106,8 @@ func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts .
 	return out, nil
 }
 
-func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DeleteState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -113,8 +115,17 @@ func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, op
 	return out, nil
 }
 
-func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DeleteBulkState", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -122,8 +133,8 @@ func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteSta
 	return out, nil
 }
 
-func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishEvent", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -158,8 +169,8 @@ func (c *daprClient) GetBulkSecret(ctx context.Context, in *GetBulkSecretRequest
 	return out, nil
 }
 
-func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RegisterActorTimer", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -167,8 +178,8 @@ func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTi
 	return out, nil
 }
 
-func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorTimer", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -176,8 +187,8 @@ func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterAct
 	return out, nil
 }
 
-func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RegisterActorReminder", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -185,8 +196,8 @@ func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActo
 	return out, nil
 }
 
-func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -203,8 +214,8 @@ func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest
 	return out, nil
 }
 
-func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -221,7 +232,7 @@ func (c *daprClient) InvokeActor(ctx context.Context, in *InvokeActorRequest, op
 	return out, nil
 }
 
-func (c *daprClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
+func (c *daprClient) GetMetadata(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
 	out := new(GetMetadataResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetMetadata", in, out, opts...)
 	if err != nil {
@@ -230,8 +241,8 @@ func (c *daprClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ..
 	return out, nil
 }
 
-func (c *daprClient) SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SetMetadata", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -250,13 +261,15 @@ type DaprServer interface {
 	// Gets a bulk of state items for a list of keys
 	GetBulkState(context.Context, *GetBulkStateRequest) (*GetBulkStateResponse, error)
 	// Saves the state for a specific key.
-	SaveState(context.Context, *SaveStateRequest) (*emptypb.Empty, error)
+	SaveState(context.Context, *SaveStateRequest) (*empty.Empty, error)
 	// Deletes the state for a specific key.
-	DeleteState(context.Context, *DeleteStateRequest) (*emptypb.Empty, error)
+	DeleteState(context.Context, *DeleteStateRequest) (*empty.Empty, error)
+	// Deletes a bulk of state items for a list of keys
+	DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*empty.Empty, error)
 	// Executes transactions for a specified store
-	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error)
+	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*empty.Empty, error)
 	// Publishes events to the specific topic.
-	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
+	PublishEvent(context.Context, *PublishEventRequest) (*empty.Empty, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -264,23 +277,23 @@ type DaprServer interface {
 	// Gets a bulk of secrets
 	GetBulkSecret(context.Context, *GetBulkSecretRequest) (*GetBulkSecretResponse, error)
 	// Register an actor timer.
-	RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*emptypb.Empty, error)
+	RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*empty.Empty, error)
 	// Unregister an actor timer.
-	UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*emptypb.Empty, error)
+	UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*empty.Empty, error)
 	// Register an actor reminder.
-	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error)
+	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*empty.Empty, error)
 	// Unregister an actor reminder.
-	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error)
+	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*empty.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
+	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*empty.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error)
 	// Gets metadata of the sidecar
-	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
+	GetMetadata(context.Context, *empty.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
-	SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error)
+	SetMetadata(context.Context, *SetMetadataRequest) (*empty.Empty, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -296,16 +309,19 @@ func (UnimplementedDaprServer) GetState(context.Context, *GetStateRequest) (*Get
 func (UnimplementedDaprServer) GetBulkState(context.Context, *GetBulkStateRequest) (*GetBulkStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBulkState not implemented")
 }
-func (UnimplementedDaprServer) SaveState(context.Context, *SaveStateRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) SaveState(context.Context, *SaveStateRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SaveState not implemented")
 }
-func (UnimplementedDaprServer) DeleteState(context.Context, *DeleteStateRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) DeleteState(context.Context, *DeleteStateRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteState not implemented")
 }
-func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteBulkState not implemented")
+}
+func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteStateTransaction not implemented")
 }
-func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
@@ -317,31 +333,31 @@ func (UnimplementedDaprServer) GetSecret(context.Context, *GetSecretRequest) (*G
 func (UnimplementedDaprServer) GetBulkSecret(context.Context, *GetBulkSecretRequest) (*GetBulkSecretResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBulkSecret not implemented")
 }
-func (UnimplementedDaprServer) RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterActorTimer not implemented")
 }
-func (UnimplementedDaprServer) UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorTimer not implemented")
 }
-func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterActorReminder not implemented")
 }
-func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorReminder not implemented")
 }
 func (UnimplementedDaprServer) GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
 }
-func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteActorStateTransaction not implemented")
 }
 func (UnimplementedDaprServer) InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeActor not implemented")
 }
-func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error) {
+func (UnimplementedDaprServer) GetMetadata(context.Context, *empty.Empty) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
 }
-func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetMetadata not implemented")
 }
 
@@ -442,6 +458,24 @@ func _Dapr_DeleteState_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).DeleteState(ctx, req.(*DeleteStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DeleteBulkState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteBulkStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteBulkState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/DeleteBulkState",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteBulkState(ctx, req.(*DeleteBulkStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -663,7 +697,7 @@ func _Dapr_InvokeActor_Handler(srv interface{}, ctx context.Context, dec func(in
 }
 
 func _Dapr_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -675,7 +709,7 @@ func _Dapr_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetMetadata",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).GetMetadata(ctx, req.(*emptypb.Empty))
+		return srv.(DaprServer).GetMetadata(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -724,6 +758,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteState",
 			Handler:    _Dapr_DeleteState_Handler,
+		},
+		{
+			MethodName: "DeleteBulkState",
+			Handler:    _Dapr_DeleteBulkState_Handler,
 		},
 		{
 			MethodName: "ExecuteStateTransaction",
