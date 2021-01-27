@@ -543,8 +543,14 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 	if found {
 		// The ACL might have the operation specified as /invoke/*. Here "/*" is stored as the postfix.
 		// Match postfix
-		if operationPolicy.OperationPostFix != "/*" && !strings.HasPrefix(operationPolicy.OperationPostFix, inputOperationPostfix) {
-			return isActionAllowed(action), actionPolicy
+		if strings.Contains(operationPolicy.OperationPostFix, "/*") {
+			if !strings.HasPrefix(inputOperationPostfix, strings.Replace(operationPolicy.OperationPostFix, "/*", "", -1)) {
+				return false, actionPolicy
+			}
+		} else {
+			if operationPolicy.OperationPostFix != inputOperationPostfix {
+				return false, actionPolicy
+			}
 		}
 
 		// Operation prefix and postfix match. Now check the operation specific policy
