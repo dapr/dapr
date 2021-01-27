@@ -545,11 +545,11 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 		// Match postfix
 		if strings.Contains(operationPolicy.OperationPostFix, "/*") {
 			if !strings.HasPrefix(inputOperationPostfix, strings.ReplaceAll(operationPolicy.OperationPostFix, "/*", "")) {
-				return false, actionPolicy
+				return isActionAllowed(action), actionPolicy
 			}
 		} else {
 			if operationPolicy.OperationPostFix != inputOperationPostfix {
-				return false, actionPolicy
+				return isActionAllowed(action), actionPolicy
 			}
 		}
 
