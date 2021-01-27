@@ -365,12 +365,12 @@ func TestSetupTracing(t *testing.T) {
 			rt := NewTestDaprRuntime(modes.StandaloneMode)
 			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
 			if tc.hostAddress != "" {
-				rt.daprHostAddress = tc.hostAddress
+				rt.hostAddress = tc.hostAddress
 			}
 			// Setup tracing with the fake trace exporter store to confirm
 			// the right exporter was registered.
 			exporterStore := &fakeTraceExporterStore{}
-			if err := rt.setupTracing(rt.daprHostAddress, exporterStore); tc.expectedErr != "" {
+			if err := rt.setupTracing(rt.hostAddress, exporterStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.Nil(t, err)
@@ -383,7 +383,7 @@ func TestSetupTracing(t *testing.T) {
 			// Setup tracing with the OpenCensus global exporter store.
 			// We have no way to validate the result, but we can at least
 			// confirm that nothing blows up.
-			rt.setupTracing(rt.daprHostAddress, openCensusExporterStore{})
+			rt.setupTracing(rt.hostAddress, openCensusExporterStore{})
 		})
 	}
 }
@@ -2179,25 +2179,6 @@ func TestNamespace(t *testing.T) {
 		ns := rt.getNamespace()
 
 		assert.Equal(t, "a", ns)
-	})
-}
-
-func TestApplicationHost(t *testing.T) {
-	t.Run("empty application host", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		ns := rt.getApplicationHost()
-
-		assert.Empty(t, ns)
-	})
-
-	t.Run("non-empty application host", func(t *testing.T) {
-		os.Setenv("APPLICATION_HOST", "host.a.com")
-		defer os.Clearenv()
-
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		ns := rt.getApplicationHost()
-
-		assert.Equal(t, "host.a.com", ns)
 	})
 }
 

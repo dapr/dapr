@@ -85,46 +85,6 @@ func (m *MockPlatform) GetTotalRestarts(appName string) (int, error) {
 	return 0, args.Error(0)
 }
 
-func (m *MockPlatform) GetServiceDNSName(appName string) (string, error) {
-	args := m.Called(appName)
-	return appName + ".local", args.Error(0)
-}
-
-func TestStartNonLocalDaprDisabledApps(t *testing.T) {
-	fakeApps := []kube.AppDescription{
-		{
-			AppName:        "fakeapp",
-			DaprEnabled:    false,
-			ImageName:      "fakeapp",
-			RegistryName:   "fakeregistry",
-			Replicas:       1,
-			IngressEnabled: false,
-		},
-	}
-
-	t.Run("Run Runner successfully", func(t *testing.T) {
-		mockPlatform := new(MockPlatform)
-		mockPlatform.On("tearDown").Return(nil)
-		mockPlatform.On("setup").Return(nil)
-		mockPlatform.On("addApps", fakeApps).Return(nil)
-
-		fakeRunner := &TestRunner{
-			id:       "fakeRunner",
-			testApps: fakeApps,
-			Platform: mockPlatform,
-		}
-
-		ret := fakeRunner.StartNonLocalDaprDisabledApps()
-		assert.Equal(t, 0, ret)
-		fakeRunner.TearDown()
-
-		mockPlatform.AssertNumberOfCalls(t, "setup", 1)
-		mockPlatform.AssertNumberOfCalls(t, "tearDown", 1)
-		mockPlatform.AssertNumberOfCalls(t, "addApps", 1)
-		mockPlatform.AssertNumberOfCalls(t, "addComponents", 0)
-	})
-}
-
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{
