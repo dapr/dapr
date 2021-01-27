@@ -99,7 +99,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_dashboard.image.registry`           | docker registry                                          | `docker.io/daprio`      |
 | `dapr_dashboard.image.imagePullSecret`    | docker image pull secret for docker registry                                          | `docker.io/daprio`      |
 | `dapr_dashboard.image.name`               | docker image name                                        | `dashboard`             |
-| `dapr_dashboard.image.tag`                | docker image tag                                         | `"0.5.0"`               |
+| `dapr_dashboard.image.tag`                | docker image tag                                         | `"0.6.0"`               |
 | `dapr_dashboard.serviceType`              | Type of [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to use for the Dapr Dashboard service | `ClusterIP` |
 | `dapr_dashboard.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_dashboard.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
