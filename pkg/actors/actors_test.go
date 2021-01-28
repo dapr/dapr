@@ -262,6 +262,92 @@ func TestCreateReminder(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestCreateTimer(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+	requestTests := []*CreateTimerRequest{
+		&CreateTimerRequest{
+			Name:      "timer1",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "5s",
+			Period:    "2s",
+			Data:      nil,
+		},
+		&CreateTimerRequest{
+			Name:      "timer2",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "5s",
+			Period:    "",
+			Data:      nil,
+		},
+		&CreateTimerRequest{
+			Name:      "timer3",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "",
+			Period:    "2s",
+			Data:      nil,
+		},
+		&CreateTimerRequest{
+			Name:      "timer4",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "0s",
+			Period:    "2s",
+			Data:      nil,
+		},
+		&CreateTimerRequest{
+			Name:      "timer4",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "0",
+			Period:    "2s",
+			Data:      nil,
+		},
+	}
+	requestIllegalTests := []*CreateTimerRequest{
+		&CreateTimerRequest{
+			Name:      "timer5",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "wehows",
+			Period:    "2s",
+			Data:      nil,
+		},
+	}
+	// register actor_type & actor_id
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+	for _, test := range requestIllegalTests {
+		err := testActorsRuntime.CreateTimer(ctx, test)
+		assert.NotNil(t, err)
+	}
+	for _, test := range requestTests {
+		err := testActorsRuntime.CreateTimer(ctx, test)
+		assert.Nil(t, err)
+	}
+}
+
+func TestStartTimer(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+	// register actor_type & actor_id
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID)
+	stop := make(chan bool, 1)
+	go testActorsRuntime.startTimer(ctx, stop,
+		&CreateTimerRequest{
+			Name:      "timer1",
+			ActorID:   actorID,
+			ActorType: actorType,
+			DueTime:   "5s",
+			Period:    "2s",
+			Data:      nil,
+		})
+	time.Sleep(8 * time.Second)
+}
 func TestOverrideReminder(t *testing.T) {
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
@@ -474,7 +560,7 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 
 		time.Sleep(5 * time.Second)
 
-		// Test only the last reminder update fires
+		// Test only the last timer update fires
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 }
@@ -506,7 +592,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 
 		time.Sleep(2*time.Second + 100*time.Millisecond)
 
-		// Test only the last reminder update fires
+		// Test only the last timer update fires
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 }
