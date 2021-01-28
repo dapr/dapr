@@ -913,7 +913,6 @@ func (a *actorsRuntime) startTimer(ctx context.Context,
 			return
 		}
 	}
-	return
 }
 
 func (a *actorsRuntime) configureTicker(d time.Duration) *time.Ticker {
