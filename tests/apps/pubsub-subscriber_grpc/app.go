@@ -17,8 +17,8 @@ import (
 
 	"net"
 
-	"github.com/golang/protobuf/ptypes/any"
-	"github.com/golang/protobuf/ptypes/empty"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -94,7 +94,7 @@ func initializeSets() {
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	log.Printf("Got invoked method %s\n", in.Method)
 
-	respBody := &any.Any{}
+	respBody := &anypb.Any{}
 	switch in.Method {
 	case "getMessages":
 		respBody.Value = s.getReceivedMessages()
@@ -154,7 +154,7 @@ func (s *server) setRespondWithInvalidStatus() {
 
 // Dapr will call this method to get the list of topics the app wants to subscribe to. In this example, we are telling Dapr
 // To subscribe to a topic named TopicA
-func (s *server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
+func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	log.Println("List Topic Subscription called")
 	return &pb.ListTopicSubscriptionsResponse{
 		Subscriptions: []*pb.TopicSubscription{
@@ -230,7 +230,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 
 // Dapr will call this method to get the list of bindings the app will get invoked by. In this example, we are telling Dapr
 // To invoke our app with a binding named storage
-func (s *server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.ListInputBindingsResponse, error) {
+func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
 	log.Println("List Input Bindings called")
 	return &pb.ListInputBindingsResponse{}, nil
 }

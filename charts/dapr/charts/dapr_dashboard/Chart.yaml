@@ -2,5 +2,4 @@ apiVersion: v1
 appVersion: "1.0"
 description: A Helm chart for Dapr Dashboard
 name: dapr_dashboard
-# Chart now requires nonroot image - using edge temporarily in master until we have a new dashboard release.
-version: edge
+version: 0.6.0

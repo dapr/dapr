@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
@@ -24,20 +23,6 @@ import (
 )
 
 // TODO: Add APIVersion testing
-
-func TestCreateChannel(t *testing.T) {
-	t.Run("Test empty application host", func(t *testing.T) {
-		c := CreateChannel("", 9999, 1, nil, config.TracingSpec{})
-		assert.Equal(t, ":9999", c.baseAddress)
-		close(c.ch)
-	})
-
-	t.Run("Test non-empty application host", func(t *testing.T) {
-		c := CreateChannel("10.1.1.2", 9999, 1, nil, config.TracingSpec{})
-		assert.Equal(t, "10.1.1.2:9999", c.baseAddress)
-		close(c.ch)
-	})
-}
 
 func TestInvokeMethod(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:9998")
@@ -52,7 +37,7 @@ func TestInvokeMethod(t *testing.T) {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
 	conn, err := grpc.Dial("localhost:9998", opts...)
-	defer closeConnection(t, conn)
+	defer close(t, conn)
 	assert.NoError(t, err)
 
 	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1"}
@@ -74,7 +59,7 @@ func TestInvokeMethod(t *testing.T) {
 	assert.Equal(t, "{\"param1\":\"val1\",\"param2\":\"val2\"}", actual["querystring"])
 }
 
-func closeConnection(t *testing.T, c io.Closer) {
+func close(t *testing.T, c io.Closer) {
 	err := c.Close()
 	if err != nil {
 		assert.Fail(t, fmt.Sprintf("unable to close %s", err))
