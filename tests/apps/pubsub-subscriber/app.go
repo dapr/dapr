@@ -24,7 +24,6 @@ const (
 	pubsubA = "pubsub-a-topic-http"
 	pubsubB = "pubsub-b-topic-http"
 	pubsubC = "pubsub-c-topic-http"
-	pubsubD = "pubsub-d-topic"
 )
 
 type appResponse struct {
@@ -39,7 +38,6 @@ type receivedMessagesResponse struct {
 	ReceivedByTopicA []string `json:"pubsub-a-topic"`
 	ReceivedByTopicB []string `json:"pubsub-b-topic"`
 	ReceivedByTopicC []string `json:"pubsub-c-topic"`
-	ReceivedByTopicD []string `json:"pubsub-d-topic"`
 }
 
 type subscription struct {
@@ -53,7 +51,6 @@ var (
 	receivedMessagesA sets.String
 	receivedMessagesB sets.String
 	receivedMessagesC sets.String
-	receivedMessagesD sets.String
 	// boolean variable to respond with empty json message if set
 	respondWithEmptyJSON bool
 	// boolean variable to respond with error if set
@@ -96,11 +93,6 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			Topic:      pubsubC,
 			Route:      pubsubC,
 		},
-		{
-			PubsubName: pubsubName,
-			Topic:      pubsubD,
-			Route:      pubsubD,
-		},
 	}
 	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
 
@@ -108,7 +100,7 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(t)
 }
 
-// this handles messages published to all topics
+// this handles messages published to "pubsub-a-topic"
 func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("aHandler is called %s\n", r.URL)
 
@@ -177,8 +169,6 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesB.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubC) && !receivedMessagesC.Has(msg) {
 		receivedMessagesC.Insert(msg)
-	} else if strings.HasSuffix(r.URL.String(), pubsubD) && !receivedMessagesD.Has(msg) {
-		receivedMessagesD.Insert(msg)
 	} else {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
@@ -231,7 +221,6 @@ func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 		ReceivedByTopicA: receivedMessagesA.List(),
 		ReceivedByTopicB: receivedMessagesB.List(),
 		ReceivedByTopicC: receivedMessagesC.List(),
-		ReceivedByTopicD: receivedMessagesD.List(),
 	}
 
 	log.Printf("receivedMessagesResponse=%s", response)
@@ -292,7 +281,6 @@ func initializeSets() {
 	receivedMessagesA = sets.NewString()
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
-	receivedMessagesD = sets.NewString()
 }
 
 // appRouter initializes restful api router
@@ -314,7 +302,6 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/"+pubsubA, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubB, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubC, subscribeHandler).Methods("POST")
-	router.HandleFunc("/"+pubsubD, subscribeHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
