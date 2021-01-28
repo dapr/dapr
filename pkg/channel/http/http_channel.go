@@ -42,16 +42,12 @@ type Channel struct {
 	appHeaderToken string
 }
 
-// CreateAppChannel creates an HTTP AppChannel.
+// CreateLocalChannel creates an HTTP AppChannel
 // nolint:gosec
-func CreateAppChannel(applicationHost string, port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
-	channelAddress := channel.DefaultChannelAddress
+func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEnabled bool) (channel.AppChannel, error) {
 	scheme := httpScheme
 	if sslEnabled {
 		scheme = httpsScheme
-	}
-	if applicationHost != channel.DefaultChannelAddress {
-		channelAddress = applicationHost
 	}
 
 	c := &Channel{
@@ -59,7 +55,7 @@ func CreateAppChannel(applicationHost string, port, maxConcurrency int, spec con
 			MaxConnsPerHost:           1000000,
 			MaxIdemponentCallAttempts: 0,
 		},
-		baseAddress:    fmt.Sprintf("%s://%s:%d", scheme, channelAddress, port),
+		baseAddress:    fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
 		tracingSpec:    spec,
 		appHeaderToken: auth.GetAppToken(),
 	}

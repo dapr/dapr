@@ -365,12 +365,12 @@ func TestSetupTracing(t *testing.T) {
 			rt := NewTestDaprRuntime(modes.StandaloneMode)
 			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
 			if tc.hostAddress != "" {
-				rt.daprHostAddress = tc.hostAddress
+				rt.hostAddress = tc.hostAddress
 			}
 			// Setup tracing with the fake trace exporter store to confirm
 			// the right exporter was registered.
 			exporterStore := &fakeTraceExporterStore{}
-			if err := rt.setupTracing(rt.daprHostAddress, exporterStore); tc.expectedErr != "" {
+			if err := rt.setupTracing(rt.hostAddress, exporterStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				assert.Nil(t, err)
@@ -383,7 +383,7 @@ func TestSetupTracing(t *testing.T) {
 			// Setup tracing with the OpenCensus global exporter store.
 			// We have no way to validate the result, but we can at least
 			// confirm that nothing blows up.
-			rt.setupTracing(rt.daprHostAddress, openCensusExporterStore{})
+			rt.setupTracing(rt.hostAddress, openCensusExporterStore{})
 		})
 	}
 }
@@ -1504,6 +1504,36 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
+	t.Run("succeeded to publish message without TraceID", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
+		delete(envelope, pubsub.TraceIDField)
+		bNoTraceID, err := json.Marshal(envelope)
+		assert.Nil(t, err)
+
+		message := &pubsub.NewMessage{
+			Topic:    topic,
+			Data:     bNoTraceID,
+			Metadata: map[string]string{pubsubName: TestPubsubName},
+		}
+
+		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.Topic)
+		fakeReqNoTraceID.WithHTTPExtension(http.MethodPost, "")
+		fakeReqNoTraceID.WithRawData(message.Data, contenttype.CloudEventContentType)
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
+
+		// act
+		err = rt.publishMessageHTTP(message)
+
+		// assert
+		assert.Nil(t, err)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
 	t.Run("succeeded to publish message to user app with non-json response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -2149,25 +2179,6 @@ func TestNamespace(t *testing.T) {
 		ns := rt.getNamespace()
 
 		assert.Equal(t, "a", ns)
-	})
-}
-
-func TestApplicationHost(t *testing.T) {
-	t.Run("empty application host", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		ns := rt.getApplicationHost()
-
-		assert.Empty(t, ns)
-	})
-
-	t.Run("non-empty application host", func(t *testing.T) {
-		os.Setenv("APPLICATION_HOST", "host.a.com")
-		defer os.Clearenv()
-
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		ns := rt.getApplicationHost()
-
-		assert.Equal(t, "host.a.com", ns)
 	})
 }
 

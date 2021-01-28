@@ -4,6 +4,7 @@ metadata:
   name: uppercase
 spec:
   ignoreErrors: true
+  version: v1
   type: middleware.http.uppercase
   metadata:
     - name: scopes

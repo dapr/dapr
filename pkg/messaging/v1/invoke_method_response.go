@@ -8,9 +8,9 @@ package v1
 import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	any "github.com/golang/protobuf/ptypes/any"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // InvokeMethodResponse holds InternalInvokeResponse protobuf message
@@ -20,7 +20,7 @@ type InvokeMethodResponse struct {
 }
 
 // NewInvokeMethodResponse returns new InvokeMethodResponse object with status
-func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetails []*any.Any) *InvokeMethodResponse {
+func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetails []*anypb.Any) *InvokeMethodResponse {
 	return &InvokeMethodResponse{
 		r: &internalv1pb.InternalInvokeResponse{
 			Status:  &internalv1pb.Status{Code: statusCode, Message: statusMessage, Details: statusDetails},
@@ -33,7 +33,7 @@ func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetai
 func InternalInvokeResponse(resp *internalv1pb.InternalInvokeResponse) (*InvokeMethodResponse, error) {
 	rsp := &InvokeMethodResponse{r: resp}
 	if resp.Message == nil {
-		resp.Message = &commonv1pb.InvokeResponse{Data: &any.Any{Value: []byte{}}}
+		resp.Message = &commonv1pb.InvokeResponse{Data: &anypb.Any{Value: []byte{}}}
 	}
 
 	return rsp, nil
@@ -54,7 +54,7 @@ func (imr *InvokeMethodResponse) WithRawData(data []byte, contentType string) *I
 	imr.r.Message.ContentType = contentType
 
 	// Clone data to prevent GC from deallocating data
-	imr.r.Message.Data = &any.Any{Value: cloneBytes(data)}
+	imr.r.Message.Data = &anypb.Any{Value: cloneBytes(data)}
 
 	return imr
 }
@@ -131,6 +131,10 @@ func (imr *InvokeMethodResponse) RawData() (string, []byte) {
 	// set content_type to application/json only if typeurl is unset and data is given
 	if contentType == "" && (dataTypeURL == "" && dataValue != nil) {
 		contentType = JSONContentType
+	}
+
+	if dataTypeURL != "" {
+		contentType = ProtobufContentType
 	}
 
 	return contentType, dataValue

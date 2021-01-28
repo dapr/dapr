@@ -804,9 +804,22 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 			Namespace:   "ns2",
 			AppID:       srcAppID,
 		}
-		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/a/b", common.HTTPExtension_PUT, HTTPProtocol, accessControlList)
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/b/b", common.HTTPExtension_PUT, HTTPProtocol, accessControlList)
 		// Action = Default action for the app
 		assert.False(t, isAllowed)
+	})
+
+	t.Run("test when non-matching operation post fix is specified in policy spec", func(t *testing.T) {
+		srcAppID := app2
+		accessControlList, _ := initializeAccessControlList()
+		spiffeID := SpiffeID{
+			TrustDomain: "domain1",
+			Namespace:   "ns2",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/a/b", common.HTTPExtension_PUT, HTTPProtocol, accessControlList)
+		// Action = Default action for the app
+		assert.True(t, isAllowed)
 	})
 
 	t.Run("test with grpc invocation", func(t *testing.T) {
@@ -843,5 +856,12 @@ func TestGetOperationPrefixAndPostfix(t *testing.T) {
 		prefix, postfix := getOperationPrefixAndPostfix(operation)
 		assert.Equal(t, "/invoke", prefix)
 		assert.Equal(t, "/", postfix)
+	})
+
+	t.Run("test operation multi path post fix exists", func(t *testing.T) {
+		operation := "/invoke/a/b/*"
+		prefix, postfix := getOperationPrefixAndPostfix(operation)
+		assert.Equal(t, "/invoke", prefix)
+		assert.Equal(t, "/a/b/*", postfix)
 	})
 }

@@ -3,7 +3,7 @@ global:
   tag: "1.0.0-rc.2"
   dnsSuffix: ".cluster.local"
   logAsJson: false
-  imagePullPolicy: Always
+  imagePullPolicy: IfNotPresent
   imagePullSecrets: ""
   ha:
     enabled: false
