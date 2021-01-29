@@ -27,7 +27,7 @@ func New(name string, factoryMethod func() state.Store) State {
 // Registry is an interface for a component that returns registered state store implementations
 type Registry interface {
 	Register(components ...State)
-	CreateStateStore(name string) (state.Store, error)
+	Create(name, version string) (state.Store, error)
 }
 
 type stateStoreRegistry struct {
@@ -49,11 +49,22 @@ func (s *stateStoreRegistry) Register(components ...State) {
 	}
 }
 
-func (s *stateStoreRegistry) CreateStateStore(name string) (state.Store, error) {
-	if method, ok := s.stateStores[name]; ok {
+func (s *stateStoreRegistry) Create(name, version string) (state.Store, error) {
+	if method, ok := s.getSecretStore(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find state store %s", name)
+	return nil, errors.Errorf("couldn't find state store %s/%s", name, version)
+}
+
+func (s *stateStoreRegistry) getSecretStore(name, version string) (func() state.Store, bool) {
+	stateStoreFn, ok := s.stateStores[name+"/"+version]
+	if ok {
+		return stateStoreFn, true
+	}
+	if version == "" || version == "v0" || version == "v1" {
+		stateStoreFn, ok = s.stateStores[name]
+	}
+	return stateStoreFn, ok
 }
 
 func createFullName(name string) string {

@@ -22,7 +22,7 @@ type (
 	// Registry is used to get registered secret store implementations
 	Registry interface {
 		Register(components ...SecretStore)
-		Create(name string) (secretstores.SecretStore, error)
+		Create(name, version string) (secretstores.SecretStore, error)
 	}
 
 	secretStoreRegistry struct {
@@ -53,12 +53,23 @@ func (s *secretStoreRegistry) Register(components ...SecretStore) {
 }
 
 // Create instantiates a secret store based on `name`.
-func (s *secretStoreRegistry) Create(name string) (secretstores.SecretStore, error) {
-	if method, ok := s.secretStores[name]; ok {
+func (s *secretStoreRegistry) Create(name, version string) (secretstores.SecretStore, error) {
+	if method, ok := s.getSecretStore(name, version); ok {
 		return method(), nil
 	}
 
-	return nil, errors.Errorf("couldn't find secret store %s", name)
+	return nil, errors.Errorf("couldn't find secret store %s/%s", name, version)
+}
+
+func (s *secretStoreRegistry) getSecretStore(name, version string) (func() secretstores.SecretStore, bool) {
+	secretStoreFn, ok := s.secretStores[name+"/"+version]
+	if ok {
+		return secretStoreFn, true
+	}
+	if version == "" || version == "v0" || version == "v1" {
+		secretStoreFn, ok = s.secretStores[name]
+	}
+	return secretStoreFn, ok
 }
 
 func createFullName(name string) string {
