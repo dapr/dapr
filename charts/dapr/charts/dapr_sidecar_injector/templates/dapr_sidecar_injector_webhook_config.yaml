@@ -21,10 +21,6 @@ data:
   {{ else }}tls.key: {{ b64enc $cert.Key }}
   {{ end }}
 
-  # only stored to allow helm to perform lookup in order to fill the caBundle attribute below
-  {{ if $existingSecret }}ca.crt: {{ index $existingSecret.data "ca.crt" }}
-  {{ else }}ca.crt: {{ b64enc $ca.Cert }}
-  {{ end }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
@@ -39,7 +35,7 @@ webhooks:
       namespace: {{ .Release.Namespace }}
       name: dapr-sidecar-injector
       path: "/mutate"
-    caBundle: {{ if $existingSecret }}{{ index $existingSecret.data "ca.crt" }}{{ else }}{{ b64enc $ca.Cert }}{{ end }}
+    caBundle: {{ if $existingSecret }}{{ index $existingSecret.data "tls.crt" }}{{ else }}{{ b64enc $ca.Cert }}{{ end }}
   rules:
   - apiGroups:
     - ""
