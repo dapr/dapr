@@ -285,7 +285,7 @@ jobs:
             git config --global user.name "dapr-bot"
             git add --all
 
-            # Check the dapr-${daprVersion}.tgz file is modified.
+            # Check if the dapr-${daprVersion}.tgz file is modified.
             if git diff --name-only --staged | grep -q ${daprVersion}; then
               # If it is, we update the Helm chart, since this is an intentional update.
               git commit -m "Release - $daprVersion"
