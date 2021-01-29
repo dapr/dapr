@@ -1,4 +1,5 @@
 {{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-sidecar-injector-cert"}}
+{{- $existingWebHookConfig := lookup "admissionregistration.k8s.io/v1" "MutatingWebhookConfiguration" .Release.Namespace "dapr-sidecar-injector"}}
 {{- $ca := genCA "dapr-sidecar-injector-ca" 3650 }}
 {{- $cn := printf "dapr-sidecar-injector" }}
 {{- $altName1 := printf "dapr-sidecar-injector.%s" .Release.Namespace }}
@@ -20,7 +21,6 @@ data:
   {{ if $existingSecret }}tls.key: {{ index $existingSecret.data "tls.key" }}
   {{ else }}tls.key: {{ b64enc $cert.Key }}
   {{ end }}
-
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
@@ -35,7 +35,7 @@ webhooks:
       namespace: {{ .Release.Namespace }}
       name: dapr-sidecar-injector
       path: "/mutate"
-    caBundle: {{ if $existingSecret }}{{ index $existingSecret.data "tls.crt" }}{{ else }}{{ b64enc $ca.Cert }}{{ end }}
+    caBundle: {{ if $existingWebHookConfig }}{{ (index $existingWebHookConfig.webhooks 0).clientConfig.caBundle }}{{ else }}{{ b64enc $ca.Cert }}{{ end }}
   rules:
   - apiGroups:
     - ""
