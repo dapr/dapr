@@ -829,8 +829,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
 	var (
-		err             error
-		dueTime, period time.Duration
+		err error
 	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
@@ -847,62 +846,73 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		close(stopChan.(chan bool))
 	}
 
-	if period, err = time.ParseDuration(req.Period); err != nil {
-		return err
+	if len(req.Period) > 0 {
+		if _, err = time.ParseDuration(req.Period); err != nil {
+			log.Errorf("req.Period: %s, err:%s\n", req.Period, err.Error())
+			return err
+		}
 	}
 	if len(req.DueTime) > 0 {
-		if dueTime, err = time.ParseDuration(req.DueTime); err != nil {
+		if _, err = time.ParseDuration(req.DueTime); err != nil {
+			log.Errorf("req.DueTime: %s, err:%s\n", req.DueTime, err.Error())
 			return err
 		}
 	}
 
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
+	go a.startTimer(ctx, stop, req)
 
-	go func(stop chan (bool), req *CreateTimerRequest) {
-		time.Sleep(dueTime)
-
-		// Check if timer is still active
-		select {
-		case <-stop:
-			log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
-			return
-		default:
-			break
-		}
-
-		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
-			req.Period, req.Callback, req.Data)
-		if err != nil {
-			log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
-		}
-
-		ticker := a.configureTicker(period)
-		actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
-
-		for {
-			select {
-			case <-ticker.C:
-				_, exists := a.actorsTable.Load(actorKey)
-				if exists {
-					err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
-						req.Period, req.Callback, req.Data)
-					if err != nil {
-						log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
-					}
-				} else {
-					a.DeleteTimer(ctx, &DeleteTimerRequest{
-						Name:      req.Name,
-						ActorID:   req.ActorID,
-						ActorType: req.ActorType,
-					})
-				}
-			case <-stop:
-				return
-			}
-		}
-	}(stop, req)
 	return nil
+}
+
+func (a *actorsRuntime) startTimer(ctx context.Context,
+	stop chan (bool), req *CreateTimerRequest) {
+	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
+	timerKey := a.constructCompositeKey(actorKey, req.Name)
+	period, _ := time.ParseDuration(req.Period)
+	dueTime, _ := time.ParseDuration(req.DueTime)
+
+	time.Sleep(dueTime)
+
+	// Check if timer is still active
+	select {
+	case <-stop:
+		log.Infof("Time: %v with parameters: DueTime: %v, Period: %v, Data: %v has been deleted.", timerKey, req.DueTime, req.Period, req.Data)
+		return
+	default:
+		break
+	}
+
+	err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
+		req.Period, req.Callback, req.Data)
+	if err != nil {
+		log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+	}
+
+	ticker := a.configureTicker(period)
+
+	for {
+		select {
+		case <-ticker.C:
+			_, exists := a.actorsTable.Load(actorKey)
+			if exists {
+				err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
+					req.Period, req.Callback, req.Data)
+				if err != nil {
+					log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
+				}
+			} else {
+				a.DeleteTimer(ctx, &DeleteTimerRequest{
+					Name:      req.Name,
+					ActorID:   req.ActorID,
+					ActorType: req.ActorType,
+				})
+			}
+		case <-stop:
+			return
+		}
+	}
 }
 
 func (a *actorsRuntime) configureTicker(d time.Duration) *time.Ticker {
