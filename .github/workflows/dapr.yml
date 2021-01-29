@@ -284,5 +284,14 @@ jobs:
             git config --global user.email "daprweb@microsoft.com"
             git config --global user.name "dapr-bot"
             git add --all
-            git commit -m "Release - $daprVersion"
-            git push
+
+            # Check the dapr-${daprVersion}.tgz file is modified.
+            if git diff --name-only --staged | grep -q ${daprVersion}; then
+              # If it is, we update the Helm chart, since this is an intentional update.
+              git commit -m "Release - $daprVersion"
+              git push
+            else
+              # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
+              echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
+              exit -1
+            fi
