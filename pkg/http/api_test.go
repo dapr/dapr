@@ -460,7 +460,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.AnythingOfType("*fasthttp.RequestCtx"),
+			mock.AnythingOfType("*context.valueCtx"),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeInternalErrorResponse, nil).Once()
 
@@ -494,7 +494,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.AnythingOfType("*fasthttp.RequestCtx"),
+			mock.AnythingOfType("*context.valueCtx"),
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeInternalErrorResponse, nil).Once()
 

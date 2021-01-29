@@ -6,6 +6,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -34,6 +35,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
+	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -730,6 +732,18 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 	return reqCtx.UserValue(storeNameParam).(string)
 }
 
+func (a *api) newInternalGRPCCtxWithReqHeaders(ctx context.Context, header *fasthttp.RequestHeader) context.Context {
+	md := map[string][]string{}
+	header.VisitAll(func(key []byte, value []byte) {
+		ketStr := strings.ToLower(string(key))
+		md[ketStr] = []string{string(value)}
+	})
+	return grpcmetadata.NewOutgoingContext(
+		ctx,
+		md,
+	)
+}
+
 func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	targetID := reqCtx.UserValue(idParam).(string)
 	verb := strings.ToUpper(string(reqCtx.Method()))
@@ -747,7 +761,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	// Save headers to internal metadata
 	req.WithFastHTTPHeaders(&reqCtx.Request.Header)
 
-	resp, err := a.directMessaging.Invoke(reqCtx, targetID, req)
+	resp, err := a.directMessaging.Invoke(a.newInternalGRPCCtxWithReqHeaders(reqCtx, &reqCtx.Request.Header), targetID, req)
 	// err does not represent user application response
 	if err != nil {
 		// Allowlists policies that are applied on the callee side can return a Permission Denied error.
