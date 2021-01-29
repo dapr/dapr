@@ -21,6 +21,7 @@ import (
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
+	contrib_contenttype "github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
@@ -1181,9 +1182,9 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 	if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
 
-		if envelope.DataContentType == pubsub.DefaultCloudEventDataContentType {
+		if contrib_contenttype.IsStringContentType(envelope.DataContentType) {
 			envelope.Data = []byte(data.(string))
-		} else if envelope.DataContentType == "application/json" {
+		} else if contrib_contenttype.IsJSONContentType(envelope.DataContentType) {
 			envelope.Data, _ = a.json.Marshal(data)
 		}
 	}
