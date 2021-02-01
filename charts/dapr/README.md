@@ -54,7 +54,7 @@ helm uninstall dapr -n dapr-system
 
 ## Upgrade the charts
 
-*Before* upgrading Dapr, make sure you have exported the existing certs. Follow the upgrade HowTo instructions in [Upgrading Dapr with Helm](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#upgrading-dapr-with-helm).
+Follow the upgrade HowTo instructions in [Upgrading Dapr with Helm](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#upgrading-dapr-with-helm).
 
 
 ## Resource configuration
@@ -180,7 +180,7 @@ Configure a values file with these options:
 dapr_dashboard:
   runAsNonRoot: false
   logLevel: DEBUG
-  serviceType: NodePort  # Allows retrieving the dashboard url by running minikube service list
+  serviceType: NodePort  # Allows retrieving the dashboard url by running the command "minikube service list"
 dapr_placement:
   runAsNonRoot: false
   logLevel: DEBUG
