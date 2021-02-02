@@ -101,6 +101,7 @@ import (
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
 	"github.com/dapr/components-contrib/bindings/rethinkdb/statechange"
+	"github.com/dapr/components-contrib/bindings/smtp"
 	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
 	"github.com/dapr/components-contrib/bindings/twilio/sms"
 	"github.com/dapr/components-contrib/bindings/twitter"
@@ -381,6 +382,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("mysql", func() bindings.OutputBinding {
 				return mysql.NewMysql(logContrib)
+			}),
+			bindings_loader.NewOutput("smtp", func() bindings.OutputBinding {
+				return smtp.NewMysql(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
