@@ -6,7 +6,6 @@
 package pubsub
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -65,9 +64,6 @@ func (p *pubSubRegistry) Create(name, version string) (pubsub.PubSub, error) {
 func (p *pubSubRegistry) getPubSub(name, version string) (func() pubsub.PubSub, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
-	for key := range p.messageBuses {
-		fmt.Println(key, nameLower+"/"+versionLower, name+"/"+version)
-	}
 	pubSubFn, ok := p.messageBuses[nameLower+"/"+versionLower]
 	if ok {
 		return pubSubFn, true
