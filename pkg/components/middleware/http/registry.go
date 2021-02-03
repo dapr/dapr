@@ -6,7 +6,7 @@
 package http
 
 import (
-	"fmt"
+	"strings"
 
 	middleware "github.com/dapr/components-contrib/middleware"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -62,16 +62,19 @@ func (p *httpMiddlewareRegistry) Create(name, version string, metadata middlewar
 }
 
 func (p *httpMiddlewareRegistry) getMiddleware(name, version string) (func(middleware.Metadata) http_middleware.Middleware, bool) {
-	middlewareFn, ok := p.middleware[name+"/"+version]
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	middlewareFn, ok := p.middleware[nameLower+"/"+versionLower]
 	if ok {
 		return middlewareFn, true
 	}
-	if version == "" || version == "v0" || version == "v1" {
-		middlewareFn, ok = p.middleware[name]
+	switch versionLower {
+	case "", "v0", "v1":
+		middlewareFn, ok = p.middleware[nameLower]
 	}
 	return middlewareFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("middleware.http.%s", name)
+	return strings.ToLower("middleware.http." + name)
 }

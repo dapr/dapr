@@ -6,7 +6,7 @@
 package bindings
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/pkg/errors"
@@ -108,27 +108,33 @@ func (b *bindingsRegistry) HasOutputBinding(name, version string) bool {
 }
 
 func (b *bindingsRegistry) getInputBinding(name, version string) (func() bindings.InputBinding, bool) {
-	binding, ok := b.inputBindings[name+"/"+version]
-	if ok {
-		return binding, true
-	}
-	if version == "" || version == "v0" || version == "v1" {
-		binding, ok = b.inputBindings[name]
-	}
-	return binding, ok
-}
-
-func (b *bindingsRegistry) getOutputBinding(name, version string) (func() bindings.OutputBinding, bool) {
-	bindingFn, ok := b.outputBindings[name+"/"+version]
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	bindingFn, ok := b.inputBindings[nameLower+"/"+versionLower]
 	if ok {
 		return bindingFn, true
 	}
-	if version == "" || version == "v0" || version == "v1" {
-		bindingFn, ok = b.outputBindings[name]
+	switch versionLower {
+	case "", "v0", "v1":
+		bindingFn, ok = b.inputBindings[nameLower]
+	}
+	return bindingFn, ok
+}
+
+func (b *bindingsRegistry) getOutputBinding(name, version string) (func() bindings.OutputBinding, bool) {
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	bindingFn, ok := b.outputBindings[nameLower+"/"+versionLower]
+	if ok {
+		return bindingFn, true
+	}
+	switch versionLower {
+	case "", "v0", "v1":
+		bindingFn, ok = b.outputBindings[nameLower]
 	}
 	return bindingFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("bindings.%s", name)
+	return strings.ToLower("bindings." + name)
 }

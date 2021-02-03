@@ -6,7 +6,7 @@
 package state
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/pkg/errors"
@@ -57,16 +57,19 @@ func (s *stateStoreRegistry) Create(name, version string) (state.Store, error) {
 }
 
 func (s *stateStoreRegistry) getSecretStore(name, version string) (func() state.Store, bool) {
-	stateStoreFn, ok := s.stateStores[name+"/"+version]
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	stateStoreFn, ok := s.stateStores[nameLower+"/"+versionLower]
 	if ok {
 		return stateStoreFn, true
 	}
-	if version == "" || version == "v0" || version == "v1" {
-		stateStoreFn, ok = s.stateStores[name]
+	switch versionLower {
+	case "", "v0", "v1":
+		stateStoreFn, ok = s.stateStores[nameLower]
 	}
 	return stateStoreFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("state.%s", name)
+	return strings.ToLower("state." + name)
 }

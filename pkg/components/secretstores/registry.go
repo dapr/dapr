@@ -6,7 +6,7 @@
 package secretstores
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/pkg/errors"
@@ -62,16 +62,19 @@ func (s *secretStoreRegistry) Create(name, version string) (secretstores.SecretS
 }
 
 func (s *secretStoreRegistry) getSecretStore(name, version string) (func() secretstores.SecretStore, bool) {
-	secretStoreFn, ok := s.secretStores[name+"/"+version]
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	secretStoreFn, ok := s.secretStores[nameLower+"/"+versionLower]
 	if ok {
 		return secretStoreFn, true
 	}
-	if version == "" || version == "v0" || version == "v1" {
-		secretStoreFn, ok = s.secretStores[name]
+	switch versionLower {
+	case "", "v0", "v1":
+		secretStoreFn, ok = s.secretStores[nameLower]
 	}
 	return secretStoreFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("secretstores.%s", name)
+	return strings.ToLower("secretstores." + name)
 }

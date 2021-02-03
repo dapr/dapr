@@ -6,6 +6,7 @@
 package secretstores_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -51,6 +52,11 @@ func TestRegistry(t *testing.T) {
 
 		// assert v2
 		pV2, e := testRegistry.Create(componentName, "v2")
+		assert.NoError(t, e)
+		assert.Same(t, mockV2, pV2)
+
+		// check case-insensitivity
+		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2")
 		assert.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 	})

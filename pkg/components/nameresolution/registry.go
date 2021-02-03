@@ -6,7 +6,7 @@
 package nameresolution
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -62,16 +62,19 @@ func (s *nameResolutionRegistry) Create(name, version string) (nr.Resolver, erro
 }
 
 func (s *nameResolutionRegistry) getResolver(name, version string) (func() nr.Resolver, bool) {
-	resolverFn, ok := s.resolvers[name+"/"+version]
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	resolverFn, ok := s.resolvers[nameLower+"/"+versionLower]
 	if ok {
 		return resolverFn, true
 	}
-	if version == "" || version == "v0" || version == "v1" {
-		resolverFn, ok = s.resolvers[name]
+	switch versionLower {
+	case "", "v0", "v1":
+		resolverFn, ok = s.resolvers[nameLower]
 	}
 	return resolverFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("nameresolution.%s", name)
+	return strings.ToLower("nameresolution." + name)
 }

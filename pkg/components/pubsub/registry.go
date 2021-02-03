@@ -7,6 +7,7 @@ package pubsub
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -62,16 +63,22 @@ func (p *pubSubRegistry) Create(name, version string) (pubsub.PubSub, error) {
 }
 
 func (p *pubSubRegistry) getPubSub(name, version string) (func() pubsub.PubSub, bool) {
-	pubSubFn, ok := p.messageBuses[name+"/"+version]
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	for key := range p.messageBuses {
+		fmt.Println(key, nameLower+"/"+versionLower, name+"/"+version)
+	}
+	pubSubFn, ok := p.messageBuses[nameLower+"/"+versionLower]
 	if ok {
 		return pubSubFn, true
 	}
-	if version == "" || version == "v0" || version == "v1" {
-		pubSubFn, ok = p.messageBuses[name]
+	switch versionLower {
+	case "", "v0", "v1":
+		pubSubFn, ok = p.messageBuses[nameLower]
 	}
 	return pubSubFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("pubsub.%s", name)
+	return strings.ToLower("pubsub." + name)
 }

@@ -6,6 +6,7 @@
 package pubsub
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dapr/components-contrib/pubsub"
@@ -36,32 +37,40 @@ func TestCreatePubSub(t *testing.T) {
 	testRegistry := NewRegistry()
 
 	t.Run("pubsub messagebus is registered", func(t *testing.T) {
-		const PubSubName = "mockPubSub"
-		const PubSubNameV2 = "mockPubSub/v2"
+		const (
+			pubSubName    = "mockPubSub"
+			pubSubNameV2  = "mockPubSub/v2"
+			componentName = "pubsub." + pubSubName
+		)
 
 		// Initiate mock object
 		mockPubSub := new(daprt.MockPubSub)
 		mockPubSubV2 := new(daprt.MockPubSub)
 
 		// act
-		testRegistry.Register(New(PubSubName, func() pubsub.PubSub {
+		testRegistry.Register(New(pubSubName, func() pubsub.PubSub {
 			return mockPubSub
 		}))
-		testRegistry.Register(New(PubSubNameV2, func() pubsub.PubSub {
+		testRegistry.Register(New(pubSubNameV2, func() pubsub.PubSub {
 			return mockPubSubV2
 		}))
 
 		// assert v0 and v1
-		p, e := testRegistry.Create(createFullName(PubSubName), "v0")
+		p, e := testRegistry.Create(componentName, "v0")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSub, p)
 
-		p, e = testRegistry.Create(createFullName(PubSubName), "v1")
+		p, e = testRegistry.Create(componentName, "v1")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSub, p)
 
 		// assert v2
-		pV2, e := testRegistry.Create(createFullName(PubSubName), "v2")
+		pV2, e := testRegistry.Create(componentName, "v2")
+		assert.NoError(t, e)
+		assert.Same(t, mockPubSubV2, pV2)
+
+		// check case-insensitivity
+		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2")
 		assert.NoError(t, e)
 		assert.Same(t, mockPubSubV2, pV2)
 	})

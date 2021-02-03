@@ -6,6 +6,7 @@
 package bindings_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -59,6 +60,11 @@ func TestRegistry(t *testing.T) {
 		// assert v2
 		assert.True(t, testRegistry.HasInputBinding(componentName, "v2"))
 		pV2, e := testRegistry.CreateInputBinding(componentName, "v2")
+		assert.NoError(t, e)
+		assert.Same(t, mockInputV2, pV2)
+
+		// check case-insensitivity
+		pV2, e = testRegistry.CreateInputBinding(strings.ToUpper(componentName), "V2")
 		assert.NoError(t, e)
 		assert.Same(t, mockInputV2, pV2)
 	})

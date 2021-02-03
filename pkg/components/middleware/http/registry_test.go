@@ -7,6 +7,7 @@ package http_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -60,6 +61,11 @@ func TestRegistry(t *testing.T) {
 
 		// assert v2
 		pV2, e := testRegistry.Create(componentName, "v2", metadata)
+		assert.NoError(t, e)
+		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2))
+
+		// check case-insensitivity
+		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", metadata)
 		assert.NoError(t, e)
 		assert.Equal(t, fmt.Sprintf("%v", mockV2), fmt.Sprintf("%v", pV2))
 	})
