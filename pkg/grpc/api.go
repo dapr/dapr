@@ -193,7 +193,6 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 		errMessage = fmt.Sprintf("error in method normalization: %s", err)
 		apiServerLogger.Debugf(errMessage)
 		return false, errMessage
-
 	}
 
 	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
