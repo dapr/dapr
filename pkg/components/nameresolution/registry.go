@@ -6,10 +6,12 @@
 package nameresolution
 
 import (
-	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/pkg/errors"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
@@ -22,7 +24,7 @@ type (
 	// Registry handles registering and creating name resolution components.
 	Registry interface {
 		Register(components ...NameResolution)
-		Create(name string) (nr.Resolver, error)
+		Create(name, version string) (nr.Resolver, error)
 	}
 
 	nameResolutionRegistry struct {
@@ -53,13 +55,26 @@ func (s *nameResolutionRegistry) Register(components ...NameResolution) {
 }
 
 // Create instantiates a name resolution resolver based on `name`.
-func (s *nameResolutionRegistry) Create(name string) (nr.Resolver, error) {
-	if method, ok := s.resolvers[createFullName(name)]; ok {
+func (s *nameResolutionRegistry) Create(name, version string) (nr.Resolver, error) {
+	if method, ok := s.getResolver(createFullName(name), version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find name resolver %s", name)
+	return nil, errors.Errorf("couldn't find name resolver %s/%s", name, version)
+}
+
+func (s *nameResolutionRegistry) getResolver(name, version string) (func() nr.Resolver, bool) {
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	resolverFn, ok := s.resolvers[nameLower+"/"+versionLower]
+	if ok {
+		return resolverFn, true
+	}
+	if components.IsInitialVersion(versionLower) {
+		resolverFn, ok = s.resolvers[nameLower]
+	}
+	return resolverFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("nameresolution.%s", name)
+	return strings.ToLower("nameresolution." + name)
 }
