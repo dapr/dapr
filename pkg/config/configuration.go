@@ -104,6 +104,7 @@ type PipelineSpec struct {
 type HandlerSpec struct {
 	Name         string       `json:"name" yaml:"name"`
 	Type         string       `json:"type" yaml:"type"`
+	Version      string       `json:"version" yaml:"version"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
