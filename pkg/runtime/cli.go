@@ -181,7 +181,7 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
-	accessControlList, err = global_config.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec)
+	accessControlList, err = global_config.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
