@@ -125,7 +125,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.cluster.logStoreWinPath`  | Mount path for persistent volume for log store in windows when `global.ha.enabled` is true | `C:\\raft-log`   |
 | `dapr_placement.volumeclaims.storageSize` | Attached volume size | `1Gi`   |
 | `dapr_placement.volumeclaims.storageClassName` | storage class name |    |
-| `dapr_placement.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
+| `dapr_placement.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. Does not apply unless `forceInMemoryLog` is set to `true`. You may have to set this to `false` when running in Minikube | `false` |
 | `dapr_placement.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 
 ### Dapr Sentry options:
