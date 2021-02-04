@@ -294,7 +294,7 @@ func containsKey(s []string, key string) bool {
 }
 
 // ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
-func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControlList, error) {
+func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string) (*AccessControlList, error) {
 	if accessControlSpec.TrustDomain == "" &&
 		accessControlSpec.DefaultAction == "" &&
 		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
@@ -359,6 +359,11 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControl
 				operation = "/" + operation
 			}
 			operationPrefix, operationPostfix := getOperationPrefixAndPostfix(operation)
+
+			if protocol == HTTPProtocol {
+				operationPrefix = strings.ToLower(operationPrefix)
+				operationPostfix = strings.ToLower(operationPostfix)
+			}
 
 			operationActions := AccessControlListOperationAction{
 				OperationPostFix: operationPostfix,
@@ -547,7 +552,6 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 	// The acl may specify the operation in a format /invoke/*, get and match only the prefix first
 	operationPolicy, found := appPolicy.AppOperationActions[inputOperationPrefix]
-
 	if found {
 		// The ACL might have the operation specified as /invoke/*. Here "/*" is stored as the postfix.
 		// Match postfix
