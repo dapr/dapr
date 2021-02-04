@@ -8,8 +8,10 @@ package bindings
 import (
 	"strings"
 
-	"github.com/dapr/components-contrib/bindings"
 	"github.com/pkg/errors"
+
+	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
@@ -128,8 +130,7 @@ func (b *bindingsRegistry) getOutputBinding(name, version string) (func() bindin
 	if ok {
 		return bindingFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		bindingFn, ok = b.outputBindings[nameLower]
 	}
 	return bindingFn, ok

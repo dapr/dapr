@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
@@ -68,8 +69,7 @@ func (p *pubSubRegistry) getPubSub(name, version string) (func() pubsub.PubSub, 
 	if ok {
 		return pubSubFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		pubSubFn, ok = p.messageBuses[nameLower]
 	}
 	return pubSubFn, ok

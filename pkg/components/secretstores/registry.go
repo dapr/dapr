@@ -8,8 +8,10 @@ package secretstores
 import (
 	"strings"
 
-	"github.com/dapr/components-contrib/secretstores"
 	"github.com/pkg/errors"
+
+	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
@@ -68,8 +70,7 @@ func (s *secretStoreRegistry) getSecretStore(name, version string) (func() secre
 	if ok {
 		return secretStoreFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		secretStoreFn, ok = s.secretStores[nameLower]
 	}
 	return secretStoreFn, ok

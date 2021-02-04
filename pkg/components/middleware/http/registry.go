@@ -8,9 +8,11 @@ package http
 import (
 	"strings"
 
-	middleware "github.com/dapr/components-contrib/middleware"
-	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/pkg/errors"
+
+	middleware "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/dapr/pkg/components"
+	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
 )
 
 type (
@@ -68,8 +70,7 @@ func (p *httpMiddlewareRegistry) getMiddleware(name, version string) (func(middl
 	if ok {
 		return middlewareFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		middlewareFn, ok = p.middleware[nameLower]
 	}
 	return middlewareFn, ok

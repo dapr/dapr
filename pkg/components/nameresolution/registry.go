@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
@@ -68,8 +69,7 @@ func (s *nameResolutionRegistry) getResolver(name, version string) (func() nr.Re
 	if ok {
 		return resolverFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		resolverFn, ok = s.resolvers[nameLower]
 	}
 	return resolverFn, ok
