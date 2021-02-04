@@ -539,11 +539,19 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 	inputOperationPrefix, inputOperationPostfix := getOperationPrefixAndPostfix(inputOperation)
 
+	// If HTTP, make case-insensitive
+	if appProtocol == HTTPProtocol {
+		inputOperationPrefix = strings.ToLower(inputOperationPrefix)
+		inputOperationPostfix = strings.ToLower(inputOperationPostfix)
+	}
+
 	// The acl may specify the operation in a format /invoke/*, get and match only the prefix first
 	operationPolicy, found := appPolicy.AppOperationActions[inputOperationPrefix]
+
 	if found {
 		// The ACL might have the operation specified as /invoke/*. Here "/*" is stored as the postfix.
 		// Match postfix
+
 		if strings.Contains(operationPolicy.OperationPostFix, "/*") {
 			if !strings.HasPrefix(inputOperationPostfix, strings.ReplaceAll(operationPolicy.OperationPostFix, "/*", "")) {
 				return isActionAllowed(action), actionPolicy

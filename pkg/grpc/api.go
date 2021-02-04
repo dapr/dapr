@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/PuerkitoBio/purell"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -163,6 +164,14 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	return resp.Proto(), err
 }
 
+func normalizeOperation(operation string) string {
+	s, err := purell.NormalizeURLString(operation, purell.FlagsUsuallySafeGreedy|purell.FlagRemoveDuplicateSlashes)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
 func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := config.GetAndParseSpiffeID(ctx)
@@ -176,7 +185,7 @@ func (a *api) applyAccessControlPolicies(ctx context.Context, operation string, 
 		namespace = spiffeID.Namespace
 		trustDomain = spiffeID.TrustDomain
 	}
-	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, a.accessControlList)
+	action, actionPolicy := config.IsOperationAllowedByAccessControlPolicy(spiffeID, appID, normalizeOperation(operation), httpVerb, appProtocol, a.accessControlList)
 	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
 
 	var errMessage string

@@ -705,6 +705,19 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		assert.True(t, isAllowed)
 	})
 
+	t.Run("test http case-sensitivity when matching operation post fix", func(t *testing.T) {
+		srcAppID := app1
+		accessControlList, _ := initializeAccessControlList()
+		spiffeID := SpiffeID{
+			TrustDomain: "public",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "Op2", common.HTTPExtension_POST, HTTPProtocol, accessControlList)
+		// Action = Ignore policy and apply default action for app
+		assert.False(t, isAllowed)
+	})
+
 	t.Run("test when http verb is not found", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList()
@@ -794,6 +807,19 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/a", common.HTTPExtension_PUT, HTTPProtocol, accessControlList)
 		// Action = Default action for the specific verb
 		assert.True(t, isAllowed)
+	})
+
+	t.Run("test grpc case-sensitivity when matching operation post fix", func(t *testing.T) {
+		srcAppID := app2
+		accessControlList, _ := initializeAccessControlList()
+		spiffeID := SpiffeID{
+			TrustDomain: "domain1",
+			Namespace:   "ns2",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/OP4", common.HTTPExtension_NONE, GRPCProtocol, accessControlList)
+		// Action = Default action for the specific verb
+		assert.False(t, isAllowed)
 	})
 
 	t.Run("test when non-matching operation post fix is specified in policy spec", func(t *testing.T) {
