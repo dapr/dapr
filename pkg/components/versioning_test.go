@@ -17,7 +17,7 @@ func TestIsInitialVersion(t *testing.T) {
 		version string
 		initial bool
 	}{
-		"unknown":             {version: "", initial: true},
+		"empty version":       {version: "", initial: true},
 		"unstable":            {version: "v0", initial: true},
 		"first stable":        {version: "v1", initial: true},
 		"second stable":       {version: "v2", initial: false},
