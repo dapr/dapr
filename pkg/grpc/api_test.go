@@ -1570,56 +1570,56 @@ func TestExtractEtag(t *testing.T) {
 func TestNormalizeOperation(t *testing.T) {
 	t.Run("normal path no slash", func(t *testing.T) {
 		p := "path"
-		p = normalizeOperation(p)
+		p, _ = normalizeOperation(p)
 
 		assert.Equal(t, "path", p)
 	})
 
 	t.Run("normal path caps", func(t *testing.T) {
 		p := "Path"
-		p = normalizeOperation(p)
+		p, _ = normalizeOperation(p)
 
 		assert.Equal(t, "Path", p)
 	})
 
 	t.Run("single slash", func(t *testing.T) {
 		p := "/path"
-		p = normalizeOperation(p)
+		p, _ = normalizeOperation(p)
 
 		assert.Equal(t, "/path", p)
 	})
 
 	t.Run("multiple slashes", func(t *testing.T) {
 		p := "///path"
-		p = normalizeOperation(p)
+		p, _ = normalizeOperation(p)
 
 		assert.Equal(t, "/path", p)
 	})
 
 	t.Run("prefix", func(t *testing.T) {
 		p := "../path"
-		p = normalizeOperation(p)
+		p, _ = normalizeOperation(p)
 
 		assert.Equal(t, "path", p)
 	})
 
 	t.Run("encoded", func(t *testing.T) {
 		p := "path%72"
-		p = normalizeOperation(p)
+		p, _ = normalizeOperation(p)
 
 		assert.Equal(t, "pathr", p)
 	})
 
 	t.Run("normal multiple paths", func(t *testing.T) {
 		p := "path1/path2/path3"
-		p = normalizeOperation(p)
+		p, _ = normalizeOperation(p)
 
 		assert.Equal(t, "path1/path2/path3", p)
 	})
 
 	t.Run("normal multiple paths leading slash", func(t *testing.T) {
 		p := "/path1/path2/path3"
-		p = normalizeOperation(p)
+		p, _ = normalizeOperation(p)
 
 		assert.Equal(t, "/path1/path2/path3", p)
 	})
