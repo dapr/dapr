@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -190,7 +191,7 @@ func encode(csr bool, csrOrCert []byte, privKey *ecdsa.PrivateKey, pkcs8 bool) (
 	var err error
 
 	if pkcs8 {
-		if encodedKey, err = x509.MarshalECPrivateKey(privKey); err != nil {
+		if encodedKey, err = x509.MarshalPKCS8PrivateKey(privKey); err != nil {
 			return nil, nil, err
 		}
 		privPem = pem.EncodeToMemory(&pem.Block{Type: blockTypePrivateKey, Bytes: encodedKey})
@@ -211,4 +212,82 @@ func newSerialNumber() (*big.Int, error) {
 		return nil, errors.Wrap(err, "error generating serial number")
 	}
 	return serialNum, nil
+}
+
+type CredentialRequests struct {
+	PrivateKey  *certs.PrivateKey
+	Certificate *x509.CertificateRequest
+}
+
+func PEMCredentialRequestsFromFiles(certPem, keyPem []byte) (*CredentialRequests, error) {
+	pk, err := certs.DecodePEMKey(keyPem)
+	if err != nil {
+		return nil, err
+	}
+
+	crts, err := DecodePEMCertificateRequests(certPem)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(crts) == 0 {
+		return nil, errors.New("no certificates found")
+	}
+
+	match := matchCertificateAndKey(pk, crts[0])
+	if !match {
+		return nil, errors.New("error validating credentials: public and private key pair do not match")
+	}
+
+	creds := &CredentialRequests{
+		PrivateKey:  pk,
+		Certificate: crts[0],
+	}
+
+	return creds, nil
+}
+
+func DecodePEMCertificateRequests(rest []byte) ([]*x509.CertificateRequest, error) {
+	var certs []*x509.CertificateRequest
+	for len(rest) > 0 {
+		var err error
+		var cert *x509.CertificateRequest
+
+		cert, rest, err = decodeCertificateRequestPEM(rest)
+		if err != nil {
+			return nil, err
+		}
+		if cert != nil {
+			// it's a cert, add to pool
+			certs = append(certs, cert)
+		}
+	}
+	return certs, nil
+}
+
+func decodeCertificateRequestPEM(rest []byte) (*x509.CertificateRequest, []byte, error) {
+	block, rest := pem.Decode(rest)
+	if block == nil {
+		return nil, rest, errors.New("invalid PEM certificate")
+	}
+	if block.Type != encodeMsgCSR {
+		return nil, nil, nil
+	}
+	c, err := x509.ParseCertificateRequest(block.Bytes)
+	return c, rest, err
+}
+
+func matchCertificateAndKey(pk *certs.PrivateKey, cert *x509.CertificateRequest) bool {
+	switch pk.Type {
+	case certs.ECPrivateKey, certs.PKCS8PrivateKey:
+		key := pk.Key.(*ecdsa.PrivateKey)
+		pub, ok := cert.PublicKey.(*ecdsa.PublicKey)
+		return ok && pub.X.Cmp(key.X) == 0 && pub.Y.Cmp(key.Y) == 0
+	case certs.RSAPrivateKey:
+		key := pk.Key.(*rsa.PrivateKey)
+		pub, ok := cert.PublicKey.(*rsa.PublicKey)
+		return ok && pub.N.Cmp(key.N) == 0 && pub.E == key.E
+	default:
+		return false
+	}
 }
