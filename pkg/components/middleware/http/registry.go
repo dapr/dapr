@@ -6,11 +6,13 @@
 package http
 
 import (
-	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
 
 	middleware "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/dapr/pkg/components"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
-	"github.com/pkg/errors"
 )
 
 type (
@@ -23,7 +25,7 @@ type (
 	// Registry is the interface for callers to get registered HTTP middleware
 	Registry interface {
 		Register(components ...Middleware)
-		Create(name string, metadata middleware.Metadata) (http_middleware.Middleware, error)
+		Create(name, version string, metadata middleware.Metadata) (http_middleware.Middleware, error)
 	}
 
 	httpMiddlewareRegistry struct {
@@ -54,13 +56,26 @@ func (p *httpMiddlewareRegistry) Register(components ...Middleware) {
 }
 
 // Create instantiates a HTTP middleware based on `name`.
-func (p *httpMiddlewareRegistry) Create(name string, metadata middleware.Metadata) (http_middleware.Middleware, error) {
-	if method, ok := p.middleware[name]; ok {
+func (p *httpMiddlewareRegistry) Create(name, version string, metadata middleware.Metadata) (http_middleware.Middleware, error) {
+	if method, ok := p.getMiddleware(name, version); ok {
 		return method(metadata), nil
 	}
-	return nil, errors.Errorf("HTTP middleware %s has not been registered", name)
+	return nil, errors.Errorf("HTTP middleware %s/%s has not been registered", name, version)
+}
+
+func (p *httpMiddlewareRegistry) getMiddleware(name, version string) (func(middleware.Metadata) http_middleware.Middleware, bool) {
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	middlewareFn, ok := p.middleware[nameLower+"/"+versionLower]
+	if ok {
+		return middlewareFn, true
+	}
+	if components.IsInitialVersion(versionLower) {
+		middlewareFn, ok = p.middleware[nameLower]
+	}
+	return middlewareFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("middleware.http.%s", name)
+	return strings.ToLower("middleware.http." + name)
 }

@@ -6,6 +6,7 @@
 package pubsub
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dapr/components-contrib/pubsub"
@@ -32,38 +33,54 @@ func TestCreateFullName(t *testing.T) {
 	})
 }
 
-func TestNewPubSubRegistry(t *testing.T) {
-	registry0 := NewRegistry()
-	registry1 := NewRegistry()
-
-	assert.Equal(t, registry0, registry1, "should be the same object")
-}
-
 func TestCreatePubSub(t *testing.T) {
 	testRegistry := NewRegistry()
 
 	t.Run("pubsub messagebus is registered", func(t *testing.T) {
-		const PubSubName = "mockPubSub"
+		const (
+			pubSubName    = "mockPubSub"
+			pubSubNameV2  = "mockPubSub/v2"
+			componentName = "pubsub." + pubSubName
+		)
+
 		// Initiate mock object
 		mockPubSub := new(daprt.MockPubSub)
+		mockPubSubV2 := new(daprt.MockPubSub)
 
 		// act
-		testRegistry.Register(New(PubSubName, func() pubsub.PubSub {
+		testRegistry.Register(New(pubSubName, func() pubsub.PubSub {
 			return mockPubSub
 		}))
-		p, e := testRegistry.Create(createFullName(PubSubName))
+		testRegistry.Register(New(pubSubNameV2, func() pubsub.PubSub {
+			return mockPubSubV2
+		}))
 
-		// assert
-		assert.Equal(t, mockPubSub, p)
-		assert.Nil(t, e)
+		// assert v0 and v1
+		p, e := testRegistry.Create(componentName, "v0")
+		assert.NoError(t, e)
+		assert.Same(t, mockPubSub, p)
+
+		p, e = testRegistry.Create(componentName, "v1")
+		assert.NoError(t, e)
+		assert.Same(t, mockPubSub, p)
+
+		// assert v2
+		pV2, e := testRegistry.Create(componentName, "v2")
+		assert.NoError(t, e)
+		assert.Same(t, mockPubSubV2, pV2)
+
+		// check case-insensitivity
+		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2")
+		assert.NoError(t, e)
+		assert.Same(t, mockPubSubV2, pV2)
 	})
 
 	t.Run("pubsub messagebus is not registered", func(t *testing.T) {
-		const PubSubName = "fakeBus"
+		const PubSubName = "fakePubSub"
 
 		// act
-		p, actualError := testRegistry.Create(createFullName(PubSubName))
-		expectedError := errors.Errorf("couldn't find message bus %s", createFullName(PubSubName))
+		p, actualError := testRegistry.Create(createFullName(PubSubName), "v1")
+		expectedError := errors.Errorf("couldn't find message bus %s/v1", createFullName(PubSubName))
 		// assert
 		assert.Nil(t, p)
 		assert.Equal(t, expectedError.Error(), actualError.Error())

@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
 	"os"
 	"sync"
 	"time"
@@ -131,7 +130,7 @@ func (c *defaultCA) ValidateCSR(csr *x509.CertificateRequest) error {
 func shouldCreateCerts(conf config.SentryConfig) bool {
 	exists, err := certs.CredentialsExist(conf)
 	if err != nil {
-		log.Errorf("error chcecking if credetials exist: %s", err)
+		log.Errorf("error checking if credentials exist: %s", err)
 	}
 	if exists {
 		return false
@@ -140,11 +139,11 @@ func shouldCreateCerts(conf config.SentryConfig) bool {
 	if _, err = os.Stat(conf.RootCertPath); os.IsNotExist(err) {
 		return true
 	}
-	b, err := ioutil.ReadFile(conf.IssuerCertPath)
-	if err != nil {
+	fInfo, err := os.Stat(conf.IssuerCertPath)
+	if os.IsNotExist(err) || fInfo.Size() == 0 {
 		return true
 	}
-	return len(b) == 0
+	return false
 }
 
 func detectCertificates(path string) error {
@@ -166,9 +165,11 @@ func detectCertificates(path string) error {
 }
 
 func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
-	var issuerCreds *certs.Credentials
-	var rootCertBytes []byte
-	var issuerCertBytes []byte
+	var (
+		issuerCreds     *certs.Credentials
+		rootCertBytes   []byte
+		issuerCertBytes []byte
+	)
 
 	// certs exist on disk or getting created, load them when ready
 	if !shouldCreateCerts(c.config) {
@@ -187,15 +188,8 @@ func (c *defaultCA) validateAndBuildTrustBundle() (*trustRootBundle, error) {
 			return nil, errors.Wrap(err, "error reading PEM credentials")
 		}
 
-		rootCertBytes, err = ioutil.ReadFile(c.config.RootCertPath)
-		if err != nil {
-			return nil, errors.Wrap(err, "error reading root cert from disk")
-		}
-
-		issuerCertBytes, err = ioutil.ReadFile(c.config.IssuerCertPath)
-		if err != nil {
-			return nil, errors.Wrap(err, "error reading issuer cert from disk")
-		}
+		rootCertBytes = certChain.RootCA
+		issuerCertBytes = certChain.Cert
 	} else {
 		// create self signed root and issuer certs
 		log.Info("root and issuer certs not found: generating self signed CA")
