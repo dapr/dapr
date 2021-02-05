@@ -1781,7 +1781,7 @@ func buildHTTPPineline(spec config.PipelineSpec) http_middleware.Pipeline {
 	}))
 	var handlers []http_middleware.Middleware
 	for i := 0; i < len(spec.Handlers); i++ {
-		handler, err := registry.Create(spec.Handlers[i].Type, middleware.Metadata{})
+		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{})
 		if err != nil {
 			return http_middleware.Pipeline{}
 		}
