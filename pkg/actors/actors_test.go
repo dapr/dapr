@@ -342,11 +342,11 @@ func TestStartTimer(t *testing.T) {
 			Name:      "timer1",
 			ActorID:   actorID,
 			ActorType: actorType,
-			DueTime:   "5s",
-			Period:    "2s",
+			DueTime:   "2s",
+			Period:    "1s",
 			Data:      nil,
 		})
-	time.Sleep(8 * time.Second)
+	time.Sleep(3 * time.Second)
 }
 func TestOverrideReminder(t *testing.T) {
 	ctx := context.Background()
