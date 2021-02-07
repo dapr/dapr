@@ -45,16 +45,20 @@ func (o *Options) SetAppID(id string) {
 func (o *Options) AttachCmdFlags(
 	stringVar func(p *string, name string, value string, usage string),
 	boolVar func(p *bool, name string, value bool, usage string)) {
-	stringVar(
-		&o.OutputLevel,
-		"log-level",
-		defaultOutputLevel,
-		"Options are debug, info, warning, error, or fatal")
-	boolVar(
-		&o.JSONFormatEnabled,
-		"log-as-json",
-		defaultJSONOutput,
-		"print log as JSON (default false)")
+	if stringVar != nil {
+		stringVar(
+			&o.OutputLevel,
+			"log-level",
+			defaultOutputLevel,
+			"Options are debug, info, warn, error, or fatal (default info)")
+	}
+	if boolVar != nil {
+		boolVar(
+			&o.JSONFormatEnabled,
+			"log-as-json",
+			defaultJSONOutput,
+			"print log as JSON (default false)")
+	}
 }
 
 // DefaultOptions returns default values of Options
