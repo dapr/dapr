@@ -56,7 +56,7 @@ func TestInvokeMethod(t *testing.T) {
 	assert.Equal(t, "POST", actual["httpverb"])
 	assert.Equal(t, "method", actual["method"])
 	assert.Equal(t, "token1", actual[auth.APITokenHeader])
-	assert.Equal(t, "{\"param1\":\"val1\",\"param2\":\"val2\"}", actual["querystring"])
+	assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
 }
 
 func close(t *testing.T, c io.Closer) {
