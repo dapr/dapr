@@ -39,7 +39,7 @@ message HTTPExtension {
   // Required. HTTP verb.
   Verb verb = 1;
 
-  // querystring includes HTTP querystring.
+  // Optional. querystring represents an encoded HTTP url query string in the following format: name=value&name2=value2
   string querystring = 2;
 }
 
