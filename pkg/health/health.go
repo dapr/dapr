@@ -43,9 +43,9 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 	signalChan := make(chan bool, 1)
 
 	go func(ch chan<- bool, endpointAddress string, options *healthCheckOptions) {
-		ticker := time.NewTicker(options.interval)
-		failureCount := 0
 		time.Sleep(options.initialDelay)
+		failureCount := 0
+		ticker := time.NewTicker(options.interval)
 
 		client := &fasthttp.Client{
 			MaxConnsPerHost:           5, // Limit Keep-Alive connections
@@ -64,6 +64,7 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 			if err != nil || resp.StatusCode() != options.successStatusCode {
 				failureCount++
 				if failureCount == options.failureThreshold {
+					failureCount--
 					ch <- false
 				}
 			} else {
