@@ -19,7 +19,10 @@ import (
 	"github.com/ghodss/yaml"
 )
 
-const yamlSeparator = "\n---"
+const (
+	yamlSeparator = "\n---"
+	componentKind = "Component"
+)
 
 // StandaloneComponents loads components in a standalone mode environment
 type StandaloneComponents struct {
@@ -88,6 +91,11 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 			errors = append(errors, err)
 			continue
 		}
+
+		if comp.Kind != componentKind {
+			continue
+		}
+
 		list = append(list, comp)
 	}
 
