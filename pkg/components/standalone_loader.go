@@ -86,11 +86,6 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 		if err == io.EOF {
 			break
 		}
-		if err != nil {
-			log.Warnf("error parsing yaml resource in %s : %s", filename, err)
-			errors = append(errors, err)
-			continue
-		}
 
 		if comp.Kind != componentKind {
 			continue
