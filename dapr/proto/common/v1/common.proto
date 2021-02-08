@@ -40,7 +40,7 @@ message HTTPExtension {
   Verb verb = 1;
 
   // querystring includes HTTP querystring.
-  map<string, string> querystring = 2;
+  string querystring = 2;
 }
 
 // InvokeRequest is the message to invoke a method with the data.
