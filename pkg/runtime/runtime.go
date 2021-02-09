@@ -1075,7 +1075,6 @@ func (a *DaprRuntime) initNameResolution() error {
 
 func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	var cloudEvent map[string]interface{}
-
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
 		log.Debug(errors.Errorf("failed to deserialize cloudevent: %s", err))
@@ -1085,12 +1084,6 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
 		return nil
-	}
-
-	msg.Data, err = a.json.Marshal(cloudEvent)
-	if err != nil {
-		log.Debug(errors.Errorf("failed to serialize cloudevent: %s", err))
-		return err
 	}
 
 	ctx := context.Background()

@@ -1739,37 +1739,6 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
-
-	t.Run("succeed to publish message on binary data", func(t *testing.T) {
-		mockAppChannel := new(channelt.MockAppChannel)
-		rt.appChannel = mockAppChannel
-		envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "application/binary", []byte{0x1, 0x1}, "")
-		b, err := json.Marshal(envelope)
-		assert.Nil(t, err)
-
-		testPubSubMessage := &pubsub.NewMessage{
-			Topic:    topic,
-			Data:     b,
-			Metadata: map[string]string{pubsubName: TestPubsubName},
-		}
-
-		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		fakeResp.WithRawData([]byte("OK"), "application/json")
-		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-			_, rawData := req.RawData()
-			var data map[string]interface{}
-			json.Unmarshal(rawData, &data)
-			return data["data_base64"] != nil
-		})).Return(fakeResp, nil)
-
-		// act
-		err = rt.publishMessageHTTP(testPubSubMessage)
-
-		// assert
-		assert.Nil(t, err)
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
-	})
 }
 
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
