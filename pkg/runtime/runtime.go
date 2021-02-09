@@ -1082,20 +1082,15 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		return err
 	}
 
-	contentType := cloudEvent[pubsub.DataContentTypeField].(string)
-	if !contenttype.IsStringContentType(contentType) && !contenttype.IsJSONContentType(contentType) {
-		// this is a binary content type
-		cloudEvent["data_base64"] = cloudEvent[pubsub.DataField]
-		msg.Data, err = a.json.Marshal(cloudEvent)
-		if err != nil {
-			log.Debug(errors.Errorf("failed to serialize cloudevent: %s", err))
-			return err
-		}
-	}
-
 	if pubsub.HasExpired(cloudEvent) {
 		log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField].(string), cloudEvent[pubsub.ExpirationField].(string))
 		return nil
+	}
+
+	msg.Data, err = a.json.Marshal(cloudEvent)
+	if err != nil {
+		log.Debug(errors.Errorf("failed to serialize cloudevent: %s", err))
+		return err
 	}
 
 	ctx := context.Background()
