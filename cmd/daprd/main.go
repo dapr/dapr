@@ -384,7 +384,7 @@ func main() {
 				return mysql.NewMysql(logContrib)
 			}),
 			bindings_loader.NewOutput("smtp", func() bindings.OutputBinding {
-				return smtp.NewMysql(logContrib)
+				return smtp.NewSMTP(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
