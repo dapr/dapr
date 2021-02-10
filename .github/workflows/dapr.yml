@@ -186,7 +186,10 @@ jobs:
               tar xzvf $tgzfile -C $RELEASE_DIR
             done
           done
-
+      - name: generate checksum files
+        run: cd ${ARTIFACT_DIR} && for i in *; do sha256sum -b $i > "$i.sha256"; done && cd -
+      - name: lists artifacts
+        run: ls -l ${{ env.ARTIFACT_DIR }}
       - name: publish binaries to github
         if: startswith(github.ref, 'refs/tags/v')
         run: |
