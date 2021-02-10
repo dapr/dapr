@@ -1448,7 +1448,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 		secretStoreName := a.authSecretStoreOrDefault(component)
 		secretStore := a.getSecretStore(secretStoreName)
 		if secretStore == nil {
-			log.Warnf("component %s references a secret store that doesn't exist: %s", component.Name, secretStoreName)
+			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
 			return component, secretStoreName
 		}
 
