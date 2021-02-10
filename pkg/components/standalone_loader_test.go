@@ -52,6 +52,41 @@ spec:
 	assert.Equal(t, "value1", components[0].Spec.Metadata[0].Value.String())
 }
 
+func TestStandaloneDecodeInvalidComponent(t *testing.T) {
+	request := &StandaloneComponents{
+		config: config.StandaloneConfig{
+			ComponentsPath: "test_component_path",
+		},
+	}
+	yaml := `
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+   name: testsub
+spec:
+   metadata:
+   - name: prop1
+     value: value1
+   - name: prop2
+     value: value2
+`
+	components, errs := request.decodeYaml("components/messagebus.yaml", []byte(yaml))
+	assert.Len(t, components, 0)
+	assert.Len(t, errs, 0)
+}
+
+func TestStandaloneDecodeUnsuspectingFile(t *testing.T) {
+	request := &StandaloneComponents{
+		config: config.StandaloneConfig{
+			ComponentsPath: "test_component_path",
+		},
+	}
+
+	components, errs := request.decodeYaml("components/messagebus.yaml", []byte("hey there"))
+	assert.Len(t, components, 0)
+	assert.Len(t, errs, 0)
+}
+
 func TestStandaloneDecodeInvalidYaml(t *testing.T) {
 	request := &StandaloneComponents{
 		config: config.StandaloneConfig{
@@ -66,7 +101,7 @@ metadata:
 name: statestore`
 	components, errs := request.decodeYaml("components/messagebus.yaml", []byte(yaml))
 	assert.Len(t, components, 0)
-	assert.Len(t, errs, 1)
+	assert.Len(t, errs, 0)
 }
 
 func TestStandaloneDecodeValidMultiYaml(t *testing.T) {
@@ -153,7 +188,7 @@ spec:
 `
 	components, errs := request.decodeYaml("components/messagebus.yaml", []byte(yaml))
 	assert.Len(t, components, 2)
-	assert.Len(t, errs, 1)
+	assert.Len(t, errs, 0)
 
 	assert.Equal(t, "statestore1", components[0].Name)
 	assert.Equal(t, "state.couchbase", components[0].Spec.Type)

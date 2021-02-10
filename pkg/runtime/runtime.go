@@ -879,6 +879,7 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 		for _, scope := range s.Scopes {
 			if scope == a.runtimeConfig.ID {
 				found = true
+				break
 			}
 		}
 
