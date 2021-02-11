@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -104,6 +104,7 @@ type PipelineSpec struct {
 type HandlerSpec struct {
 	Name         string       `json:"name" yaml:"name"`
 	Type         string       `json:"type" yaml:"type"`
+	Version      string       `json:"version" yaml:"version"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
@@ -293,7 +294,7 @@ func containsKey(s []string, key string) bool {
 }
 
 // ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
-func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControlList, error) {
+func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string) (*AccessControlList, error) {
 	if accessControlSpec.TrustDomain == "" &&
 		accessControlSpec.DefaultAction == "" &&
 		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
@@ -358,6 +359,11 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControl
 				operation = "/" + operation
 			}
 			operationPrefix, operationPostfix := getOperationPrefixAndPostfix(operation)
+
+			if protocol == HTTPProtocol {
+				operationPrefix = strings.ToLower(operationPrefix)
+				operationPostfix = strings.ToLower(operationPostfix)
+			}
 
 			operationActions := AccessControlListOperationAction{
 				OperationPostFix: operationPostfix,
@@ -538,11 +544,18 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 	inputOperationPrefix, inputOperationPostfix := getOperationPrefixAndPostfix(inputOperation)
 
+	// If HTTP, make case-insensitive
+	if appProtocol == HTTPProtocol {
+		inputOperationPrefix = strings.ToLower(inputOperationPrefix)
+		inputOperationPostfix = strings.ToLower(inputOperationPostfix)
+	}
+
 	// The acl may specify the operation in a format /invoke/*, get and match only the prefix first
 	operationPolicy, found := appPolicy.AppOperationActions[inputOperationPrefix]
 	if found {
 		// The ACL might have the operation specified as /invoke/*. Here "/*" is stored as the postfix.
 		// Match postfix
+
 		if strings.Contains(operationPolicy.OperationPostFix, "/*") {
 			if !strings.HasPrefix(inputOperationPostfix, strings.ReplaceAll(operationPolicy.OperationPostFix, "/*", "")) {
 				return isActionAllowed(action), actionPolicy

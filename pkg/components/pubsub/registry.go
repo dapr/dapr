@@ -1,15 +1,17 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
 package pubsub
 
 import (
-	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/pubsub"
-	"github.com/pkg/errors"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
@@ -22,7 +24,7 @@ type (
 	// Registry is the interface for callers to get registered pub-sub components
 	Registry interface {
 		Register(components ...PubSub)
-		Create(name string) (pubsub.PubSub, error)
+		Create(name, version string) (pubsub.PubSub, error)
 	}
 
 	pubSubRegistry struct {
@@ -53,13 +55,26 @@ func (p *pubSubRegistry) Register(components ...PubSub) {
 }
 
 // Create instantiates a pub/sub based on `name`.
-func (p *pubSubRegistry) Create(name string) (pubsub.PubSub, error) {
-	if method, ok := p.messageBuses[name]; ok {
+func (p *pubSubRegistry) Create(name, version string) (pubsub.PubSub, error) {
+	if method, ok := p.getPubSub(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find message bus %s", name)
+	return nil, errors.Errorf("couldn't find message bus %s/%s", name, version)
+}
+
+func (p *pubSubRegistry) getPubSub(name, version string) (func() pubsub.PubSub, bool) {
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	pubSubFn, ok := p.messageBuses[nameLower+"/"+versionLower]
+	if ok {
+		return pubSubFn, true
+	}
+	if components.IsInitialVersion(versionLower) {
+		pubSubFn, ok = p.messageBuses[nameLower]
+	}
+	return pubSubFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("pubsub.%s", name)
+	return strings.ToLower("pubsub." + name)
 }

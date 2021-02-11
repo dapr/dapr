@@ -1,15 +1,17 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
 package bindings
 
 import (
-	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/pkg/errors"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
@@ -29,10 +31,10 @@ type (
 	Registry interface {
 		RegisterInputBindings(components ...InputBinding)
 		RegisterOutputBindings(components ...OutputBinding)
-		HasInputBinding(name string) bool
-		HasOutputBinding(name string) bool
-		CreateInputBinding(name string) (bindings.InputBinding, error)
-		CreateOutputBinding(name string) (bindings.OutputBinding, error)
+		HasInputBinding(name, version string) bool
+		HasOutputBinding(name, version string) bool
+		CreateInputBinding(name, version string) (bindings.InputBinding, error)
+		CreateOutputBinding(name, version string) (bindings.OutputBinding, error)
 	}
 
 	bindingsRegistry struct {
@@ -80,33 +82,60 @@ func (b *bindingsRegistry) RegisterOutputBindings(components ...OutputBinding) {
 }
 
 // Create instantiates an input binding based on `name`.
-func (b *bindingsRegistry) CreateInputBinding(name string) (bindings.InputBinding, error) {
-	if method, ok := b.inputBindings[name]; ok {
+func (b *bindingsRegistry) CreateInputBinding(name, version string) (bindings.InputBinding, error) {
+	if method, ok := b.getInputBinding(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find input binding %s", name)
+	return nil, errors.Errorf("couldn't find input binding %s/%s", name, version)
 }
 
 // Create instantiates an output binding based on `name`.
-func (b *bindingsRegistry) CreateOutputBinding(name string) (bindings.OutputBinding, error) {
-	if method, ok := b.outputBindings[name]; ok {
+func (b *bindingsRegistry) CreateOutputBinding(name, version string) (bindings.OutputBinding, error) {
+	if method, ok := b.getOutputBinding(name, version); ok {
 		return method(), nil
 	}
-	return nil, errors.Errorf("couldn't find output binding %s", name)
+	return nil, errors.Errorf("couldn't find output binding %s/%s", name, version)
 }
 
 // HasInputBinding checks if an input binding based on `name` exists in the registry.
-func (b *bindingsRegistry) HasInputBinding(name string) bool {
-	_, ok := b.inputBindings[name]
+func (b *bindingsRegistry) HasInputBinding(name, version string) bool {
+	_, ok := b.getInputBinding(name, version)
 	return ok
 }
 
 // HasOutputBinding checks if an output binding based on `name` exists in the registry.
-func (b *bindingsRegistry) HasOutputBinding(name string) bool {
-	_, ok := b.outputBindings[name]
+func (b *bindingsRegistry) HasOutputBinding(name, version string) bool {
+	_, ok := b.getOutputBinding(name, version)
 	return ok
 }
 
+func (b *bindingsRegistry) getInputBinding(name, version string) (func() bindings.InputBinding, bool) {
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	bindingFn, ok := b.inputBindings[nameLower+"/"+versionLower]
+	if ok {
+		return bindingFn, true
+	}
+	switch versionLower {
+	case "", "v0", "v1":
+		bindingFn, ok = b.inputBindings[nameLower]
+	}
+	return bindingFn, ok
+}
+
+func (b *bindingsRegistry) getOutputBinding(name, version string) (func() bindings.OutputBinding, bool) {
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	bindingFn, ok := b.outputBindings[nameLower+"/"+versionLower]
+	if ok {
+		return bindingFn, true
+	}
+	if components.IsInitialVersion(versionLower) {
+		bindingFn, ok = b.outputBindings[nameLower]
+	}
+	return bindingFn, ok
+}
+
 func createFullName(name string) string {
-	return fmt.Sprintf("bindings.%s", name)
+	return strings.ToLower("bindings." + name)
 }

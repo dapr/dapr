@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -74,6 +74,7 @@ import (
 
 	// Bindings
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/bindings/alicloud/oss"
 	"github.com/dapr/components-contrib/bindings/apns"
 	"github.com/dapr/components-contrib/bindings/aws/dynamodb"
 	"github.com/dapr/components-contrib/bindings/aws/kinesis"
@@ -101,6 +102,7 @@ import (
 	bindings_rabbitmq "github.com/dapr/components-contrib/bindings/rabbitmq"
 	"github.com/dapr/components-contrib/bindings/redis"
 	"github.com/dapr/components-contrib/bindings/rethinkdb/statechange"
+	"github.com/dapr/components-contrib/bindings/smtp"
 	"github.com/dapr/components-contrib/bindings/twilio/sendgrid"
 	"github.com/dapr/components-contrib/bindings/twilio/sms"
 	"github.com/dapr/components-contrib/bindings/twitter"
@@ -298,6 +300,9 @@ func main() {
 			}),
 		),
 		runtime.WithOutputBindings(
+			bindings_loader.NewOutput("alicloud.oss", func() bindings.OutputBinding {
+				return oss.NewAliCloudOSS(logContrib)
+			}),
 			bindings_loader.NewOutput("apns", func() bindings.OutputBinding {
 				return apns.NewAPNS(logContrib)
 			}),
@@ -381,6 +386,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("mysql", func() bindings.OutputBinding {
 				return mysql.NewMysql(logContrib)
+			}),
+			bindings_loader.NewOutput("smtp", func() bindings.OutputBinding {
+				return smtp.NewSMTP(logContrib)
 			}),
 		),
 		runtime.WithHTTPMiddleware(
