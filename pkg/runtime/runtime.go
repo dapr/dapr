@@ -7,6 +7,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -1180,7 +1181,15 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		PubsubName:      msg.Metadata[pubsubName],
 	}
 
-	if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
+	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
+		decoded, decodeErr := base64.StdEncoding.DecodeString(data.(string))
+		if decodeErr != nil {
+			log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
+			return err
+		}
+
+		envelope.Data = decoded
+	} else if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
 
 		if contenttype.IsStringContentType(envelope.DataContentType) {
