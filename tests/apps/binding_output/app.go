@@ -13,7 +13,11 @@ import (
 	"log"
 	"net/http"
 
-	dapr "github.com/dapr/go-sdk/client"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/golang/protobuf/ptypes/any"
+
+	"google.golang.org/grpc"
 
 	"github.com/gorilla/mux"
 )
@@ -91,25 +95,27 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := dapr.NewClientWithAddress(fmt.Sprintf(":%d", daprPortGRPC))
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", daprPortGRPC), grpc.WithInsecure())
 	if err != nil {
 		log.Printf("Could not make dapr client: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	defer client.Close()
+	defer conn.Close()
+
+	client := runtimev1pb.NewDaprClient(conn)
 
 	for _, message := range requestBody.Messages {
 		body, _ := json.Marshal(&message)
 
 		log.Printf("Sending message: %s", body)
-		req := dapr.InvokeBindingRequest{
+		req := runtimev1pb.InvokeBindingRequest{
 			Name:      "test-topic-grpc",
 			Data:      body,
 			Operation: "create",
 		}
 
-		err = client.InvokeOutputBinding(context.Background(), &req)
+		_, err = client.InvokeBinding(context.Background(), &req)
 		if err != nil {
 			log.Printf("Error sending request to GRPC output binding: %s", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -122,21 +128,34 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered getReceivedTopicsGRPC")
 
-	client, err := dapr.NewClientWithAddress(fmt.Sprintf(":%d", daprPortGRPC))
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", daprPortGRPC), grpc.WithInsecure())
 	if err != nil {
 		log.Printf("Could not make dapr client: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	defer client.Close()
+	defer conn.Close()
 
-	resp, err := client.InvokeMethodWithContent(context.Background(), "bindinginputgrpc", "GetReceivedTopics", "POST", &dapr.DataContent{})
+	client := runtimev1pb.NewDaprClient(conn)
+
+	req := runtimev1pb.InvokeServiceRequest{
+		Id: "bindinginputgrpc",
+		Message: &commonv1pb.InvokeRequest{
+			Method: "GetReceivedTopics",
+			Data:   &any.Any{},
+			HttpExtension: &commonv1pb.HTTPExtension{
+				Verb: commonv1pb.HTTPExtension_POST,
+			},
+		},
+	}
+
+	resp, err := client.InvokeService(context.Background(), &req)
 	if err != nil {
 		log.Printf("Could not get received messages: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Write(resp)
+	w.Write(resp.Data.Value)
 }
 
 // appRouter initializes restful api router
