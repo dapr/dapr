@@ -1,15 +1,17 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
 package secretstores
 
 import (
-	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/secretstores"
-	"github.com/pkg/errors"
+	"github.com/dapr/dapr/pkg/components"
 )
 
 type (
@@ -22,7 +24,7 @@ type (
 	// Registry is used to get registered secret store implementations
 	Registry interface {
 		Register(components ...SecretStore)
-		Create(name string) (secretstores.SecretStore, error)
+		Create(name, version string) (secretstores.SecretStore, error)
 	}
 
 	secretStoreRegistry struct {
@@ -53,14 +55,27 @@ func (s *secretStoreRegistry) Register(components ...SecretStore) {
 }
 
 // Create instantiates a secret store based on `name`.
-func (s *secretStoreRegistry) Create(name string) (secretstores.SecretStore, error) {
-	if method, ok := s.secretStores[name]; ok {
+func (s *secretStoreRegistry) Create(name, version string) (secretstores.SecretStore, error) {
+	if method, ok := s.getSecretStore(name, version); ok {
 		return method(), nil
 	}
 
-	return nil, errors.Errorf("couldn't find secret store %s", name)
+	return nil, errors.Errorf("couldn't find secret store %s/%s", name, version)
+}
+
+func (s *secretStoreRegistry) getSecretStore(name, version string) (func() secretstores.SecretStore, bool) {
+	nameLower := strings.ToLower(name)
+	versionLower := strings.ToLower(version)
+	secretStoreFn, ok := s.secretStores[nameLower+"/"+versionLower]
+	if ok {
+		return secretStoreFn, true
+	}
+	if components.IsInitialVersion(versionLower) {
+		secretStoreFn, ok = s.secretStores[nameLower]
+	}
+	return secretStoreFn, ok
 }
 
 func createFullName(name string) string {
-	return fmt.Sprintf("secretstores.%s", name)
+	return strings.ToLower("secretstores." + name)
 }

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -195,6 +195,7 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 		},
 		Spec: components_v1alpha1.ComponentSpec{
 			Type:     "pubsubs.mockPubSub",
+			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
 		},
 	}
@@ -216,6 +217,7 @@ func TestDoProcessComponent(t *testing.T) {
 		},
 		Spec: components_v1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
 		},
 	}
@@ -260,7 +262,8 @@ func TestInitState(t *testing.T) {
 			Name: TestPubsubName,
 		},
 		Spec: components_v1alpha1.ComponentSpec{
-			Type: "state.mockState",
+			Type:    "state.mockState",
+			Version: "v1",
 			Metadata: []components_v1alpha1.MetadataItem{
 				{
 					Name: "actorStateStore",
@@ -395,6 +398,7 @@ func TestMetadataUUID(t *testing.T) {
 		},
 		Spec: components_v1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
 		},
 	}
@@ -473,6 +477,7 @@ func TestConsumerID(t *testing.T) {
 		},
 		Spec: components_v1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
 			Metadata: metadata,
 		},
 	}
@@ -506,6 +511,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub",
+				Version:  "v1",
 				Metadata: getFakeMetadataItems(),
 			},
 		}, {
@@ -514,6 +520,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub2",
+				Version:  "v1",
 				Metadata: getFakeMetadataItems(),
 			},
 		},
@@ -996,10 +1003,11 @@ func TestInitSecretStores(t *testing.T) {
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("secret store is registered", func(t *testing.T) {
@@ -1010,14 +1018,16 @@ func TestInitSecretStores(t *testing.T) {
 				return m
 			}))
 
-		rt.processComponentAndDependents(components_v1alpha1.Component{
+		err := rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		})
+		assert.NoError(t, err)
 		assert.NotNil(t, rt.secretStores["kubernetesMock"])
 	})
 
@@ -1035,7 +1045,8 @@ func TestInitSecretStores(t *testing.T) {
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		})
 
@@ -1149,7 +1160,8 @@ func TestProcessComponentSecrets(t *testing.T) {
 			Name: "mockBinding",
 		},
 		Spec: components_v1alpha1.ComponentSpec{
-			Type: "bindings.mock",
+			Type:    "bindings.mock",
+			Version: "v1",
 			Metadata: []components_v1alpha1.MetadataItem{
 				{
 					Name: "a",
@@ -1194,7 +1206,8 @@ func TestProcessComponentSecrets(t *testing.T) {
 				Name: "kubernetes",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetes",
+				Type:    "secretstores.kubernetes",
+				Version: "v1",
 			},
 		})
 
@@ -1281,7 +1294,8 @@ func TestExtractComponentCategory(t *testing.T) {
 		t.Run(tt.specType, func(t *testing.T) {
 			fakeComp := components_v1alpha1.Component{
 				Spec: components_v1alpha1.ComponentSpec{
-					Type: tt.specType,
+					Type:    tt.specType,
+					Version: "v1",
 				},
 			}
 			assert.Equal(t, string(rt.extractComponentCategory(fakeComp)), tt.category)
@@ -1309,7 +1323,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		}
 		rt.flushOutstandingComponents()
@@ -1327,7 +1342,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMock2",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		}
 		rt.flushOutstandingComponents()
@@ -1369,7 +1385,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMockGrandChild",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMockGrandChild",
+				Type:    "secretstores.kubernetesMockGrandChild",
+				Version: "v1",
 				Metadata: []components_v1alpha1.MetadataItem{
 					{
 						Name: "a",
@@ -1389,7 +1406,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMockChild",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMockChild",
+				Type:    "secretstores.kubernetesMockChild",
+				Version: "v1",
 				Metadata: []components_v1alpha1.MetadataItem{
 					{
 						Name: "a",
@@ -1409,7 +1427,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		}
 		rt.flushOutstandingComponents()
@@ -1426,7 +1445,8 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 			Name: "fakeSecretStore",
 		},
 		Spec: components_v1alpha1.ComponentSpec{
-			Type: "secretstores.fake.secretstore",
+			Type:    "secretstores.fake.secretstore",
+			Version: "v1",
 			Metadata: []components_v1alpha1.MetadataItem{
 				{
 					Name: "a",
