@@ -9,8 +9,9 @@
             "email": "landers.robert@gmail.com"
         }
     ],
+    "minimum-stability": "dev",
     "require": {
-        "dapr/php-sdk": "dev-main"
+        "dapr/php-sdk": "1.*"
     },
     "autoload": {
         "psr-4": {
