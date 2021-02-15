@@ -11,7 +11,7 @@ use Test\ICarActor;
 require_once __DIR__.'/../vendor/autoload.php';
 
 $app = App::create(
-    configure: fn(ContainerBuilder $builder) => $builder->addDefinitions(['dapr.actors' => fn() => [CarActor::class]])
+    configure: fn(ContainerBuilder $builder) => $builder->addDefinitions(['dapr.log.level' => \Psr\Log\LogLevel::DEBUG, 'dapr.actors' => fn() => [CarActor::class]])
 );
 
 $app->post(
