@@ -1,9 +1,8 @@
 FROM php:8-cli
 
-ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 RUN apt-get update && apt-get install -y wget git unzip && apt-get clean
-RUN chmod +x /usr/local/bin/install-php-extensions && sync && \
-    install-php-extensions curl zip
+RUN install-php-extensions curl zip
 EXPOSE 3000
 RUN mkdir -p /app
 WORKDIR /app

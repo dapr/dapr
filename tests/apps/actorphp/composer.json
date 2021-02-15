@@ -10,8 +10,7 @@
         }
     ],
     "require": {
-        "dapr/php-sdk": "dev-main",
-        "monolog/monolog": "^2.2"
+        "dapr/php-sdk": "dev-main"
     },
     "autoload": {
         "psr-4": {
