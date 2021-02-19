@@ -99,6 +99,8 @@ spec:
                           type: object
                         type:
                           type: string
+                        version:
+                          type: string
                       required:
                       - name
                       - type
@@ -157,6 +159,8 @@ spec:
                       endpointAddress:
                         description: The endpoint address of Zipkin server to receive traces
                         type: string
+                  stdout:
+                    type: boolean
                 required:
                 - samplingRate
                 type: object
