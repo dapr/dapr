@@ -264,13 +264,6 @@ func sortAndValidateSecretsConfiguration(conf *Configuration) error {
 
 // Check if the secret is allowed to be accessed.
 func (c SecretsScope) IsSecretAllowed(key string) bool {
-	// By default set allow access for the secret store.
-	var access string = AllowAccess
-	// Check and set deny access.
-	if strings.EqualFold(c.DefaultAccess, DenyAccess) {
-		access = DenyAccess
-	}
-
 	// If the allowedSecrets list is not empty then check if the access is specifically allowed for this key.
 	if len(c.AllowedSecrets) != 0 {
 		return containsKey(c.AllowedSecrets, key)
@@ -283,7 +276,7 @@ func (c SecretsScope) IsSecretAllowed(key string) bool {
 	}
 
 	// Check if defined default access is allow.
-	return access == AllowAccess
+	return strings.EqualFold(c.DefaultAccess, DenyAccess)
 }
 
 // Runs Binary Search on a sorted list of strings to find a key.
@@ -297,7 +290,7 @@ func containsKey(s []string, key string) bool {
 func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string) (*AccessControlList, error) {
 	if accessControlSpec.TrustDomain == "" &&
 		accessControlSpec.DefaultAction == "" &&
-		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
+		len(accessControlSpec.AppPolicies) == 0 {
 		// No ACL has been specified
 		log.Debugf("No Access control policy specified")
 		return nil, nil
@@ -305,16 +298,15 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string
 
 	var accessControlList AccessControlList
 	accessControlList.PolicySpec = make(map[string]AccessControlListPolicySpec)
-	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
 
 	accessControlList.TrustDomain = accessControlSpec.TrustDomain
 	if accessControlSpec.TrustDomain == "" {
 		accessControlList.TrustDomain = DefaultTrustDomain
 	}
 
-	accessControlList.DefaultAction = accessControlSpec.DefaultAction
+	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
 	if accessControlSpec.DefaultAction == "" {
-		if accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) > 0 {
+		if len(accessControlSpec.AppPolicies) > 0 {
 			// Some app level policies have been specified but not default global action is set. Default to more secure option - Deny
 			log.Warnf("No global default action has been specified. Setting default global action as Deny")
 			accessControlList.DefaultAction = DenyAccess
@@ -324,15 +316,18 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string
 		}
 	}
 
-	var invalidTrustDomain []string
-	var invalidNamespace []string
-	var invalidAppName bool
+	var (
+		invalidTrustDomain []string
+		invalidNamespace   []string
+		invalidAppName     bool
+	)
 	accessControlList.PolicySpec = make(map[string]AccessControlListPolicySpec)
 	for _, appPolicySpec := range accessControlSpec.AppPolicies {
-		invalid := false
 		if appPolicySpec.AppName == "" {
 			invalidAppName = true
 		}
+
+		invalid := false
 		if appPolicySpec.TrustDomain == "" {
 			invalidTrustDomain = append(invalidTrustDomain, appPolicySpec.AppName)
 			invalid = true
@@ -394,11 +389,11 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string
 	}
 
 	if len(invalidTrustDomain) > 0 || len(invalidNamespace) > 0 || invalidAppName {
-		return nil, errors.New(fmt.Sprintf(
+		return nil, errors.Errorf(
 			"invalid access control spec. missing trustdomain for apps: %v, missing namespace for apps: %v, missing app name on at least one of the app policies: %v",
 			invalidTrustDomain,
 			invalidNamespace,
-			invalidAppName))
+			invalidAppName)
 	}
 
 	return &accessControlList, nil
@@ -607,6 +602,7 @@ func getKeyForAppID(appID, namespace string) string {
 // e.g.: /invoke/*, prefix = /invoke, postfix = /*
 func getOperationPrefixAndPostfix(operation string) (string, string) {
 	operationParts := strings.Split(operation, "/")
+
 	operationPrefix := "/" + operationParts[1]
 	operationPostfix := "/" + strings.Join(operationParts[2:], "/")
 
