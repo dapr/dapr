@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Microsoft Corporation.
+ * Copyright (c) Microsoft Corporation and Dapr Contributors.
  * Licensed under the MIT License.
  */
 
@@ -16,7 +16,7 @@ import io.dapr.actors.runtime.ActorRuntimeContext;
 import io.dapr.apps.actor.Car;
 
 /*
- * Copyright (c) Microsoft Corporation.
+ * Copyright (c) Microsoft Corporation and Dapr Contributors.
  * Licensed under the MIT License.
  */
 public class CarActorImpl extends AbstractActor implements CarActor {

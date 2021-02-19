@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -213,14 +213,26 @@ func extractMessage(body []byte) (string, error) {
 	return msg, nil
 }
 
+func unique(slice []string) []string {
+	keys := make(map[string]bool)
+	list := []string{}
+	for _, entry := range slice {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
 // the test calls this to get the messages received
 func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 	log.Println("Enter getReceivedMessages")
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicA: receivedMessagesA.List(),
-		ReceivedByTopicB: receivedMessagesB.List(),
-		ReceivedByTopicC: receivedMessagesC.List(),
+		ReceivedByTopicA: unique(receivedMessagesA.List()),
+		ReceivedByTopicB: unique(receivedMessagesB.List()),
+		ReceivedByTopicC: unique(receivedMessagesC.List()),
 	}
 
 	log.Printf("receivedMessagesResponse=%s", response)

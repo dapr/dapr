@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -7,6 +7,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -879,6 +880,7 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 		for _, scope := range s.Scopes {
 			if scope == a.runtimeConfig.ID {
 				found = true
+				break
 			}
 		}
 
@@ -1179,7 +1181,15 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		PubsubName:      msg.Metadata[pubsubName],
 	}
 
-	if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
+	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
+		decoded, decodeErr := base64.StdEncoding.DecodeString(data.(string))
+		if decodeErr != nil {
+			log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
+			return err
+		}
+
+		envelope.Data = decoded
+	} else if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
 
 		if contenttype.IsStringContentType(envelope.DataContentType) {
@@ -1447,6 +1457,7 @@ func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Comp
 		secretStoreName := a.authSecretStoreOrDefault(component)
 		secretStore := a.getSecretStore(secretStoreName)
 		if secretStore == nil {
+			log.Warnf("component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
 			return component, secretStoreName
 		}
 
