@@ -8,6 +8,8 @@ package state
 import (
 	"fmt"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -27,14 +29,20 @@ type StoreConfiguration struct {
 	keyPrefixStrategy string
 }
 
-func SaveStateConfiguration(storeName string, metadata map[string]string) {
+func SaveStateConfiguration(storeName string, metadata map[string]string) error {
 	strategy := metadata[strategyKey]
 	strategy = strings.ToLower(strategy)
 	if strategy == "" {
 		strategy = strategyDefault
 	}
+	if sc, ok := statesConfiguration[storeName]; ok {
+		if sc.keyPrefixStrategy != strategy {
+			return errors.Errorf("the storename occurs inconsistency, new: %s, old: %s", strategy, sc.keyPrefixStrategy)
+		}
+	}
 
 	statesConfiguration[storeName] = &StoreConfiguration{keyPrefixStrategy: strategy}
+	return nil
 }
 
 func GetModifiedStateKey(key, storeName, appID string) string {

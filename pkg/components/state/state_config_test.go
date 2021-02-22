@@ -18,6 +18,13 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestSaveStateConfiguration(t *testing.T) {
+	err := SaveStateConfiguration("storename", map[string]string{strategyKey: strategyAppid})
+	require.Nil(t, err, "success")
+	err = SaveStateConfiguration("storename", map[string]string{strategyKey: strategyNone})
+	require.NotNil(t, err, "failed")
+}
+
 func TestNonePrefix(t *testing.T) {
 	var key = "state-key-1234567"
 
