@@ -1229,7 +1229,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField].(string), err)
 			return nil
 		} else if hasErrStatus && (errStatus.Code() == codes.Unavailable) {
-			log.Warnf("gRPC handler unavailable to process pub/sub event %v: %s", cloudEvent.ID, err)
+			log.Warnf("gRPC handler unavailable to process pub/sub event %v: %s", cloudEvent[pubsub.IDField].(string), err)
 			return err
 		}
 
@@ -1524,7 +1524,7 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.ApplicationProtocol), a.runtimeConfig.ApplicationPort)
 
 	for {
-		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("localhost", fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprintf("%v", a.runtimeConfig.ApplicationPort)), time.Millisecond*500)
 		if conn != nil {
 			conn.Close()
 			break
