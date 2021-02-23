@@ -390,11 +390,11 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
-		key, err := state_loader.GetModifiedStateKey(k, storeName, a.id)
-		if err != nil {
-			msg := NewErrorResponse("ERR_PARAM_REQUEST", err.Error())
+		key, err1 := state_loader.GetModifiedStateKey(k, storeName, a.id)
+		if err1 != nil {
+			msg := NewErrorResponse("ERR_PARAM_REQUEST", err1.Error())
 			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
-			log.Debug(err)
+			log.Debug(err1)
 			return
 		}
 		r := state.GetRequest{
