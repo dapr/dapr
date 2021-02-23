@@ -384,7 +384,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
 		key, err1 := state_loader.GetModifiedStateKey(k, in.StoreName, a.id)
-		if err != nil {
+		if err1 != nil {
 			return &runtimev1pb.GetBulkStateResponse{}, err1
 		}
 		r := state.GetRequest{
@@ -492,7 +492,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	reqs := []state.SetRequest{}
 	for _, s := range in.States {
 		key, err1 := state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
-		if err != nil {
+		if err1 != nil {
 			return &emptypb.Empty{}, err1
 		}
 		req := state.SetRequest{
@@ -581,7 +581,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
 		key, err1 := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
-		if err != nil {
+		if err1 != nil {
 			return &empty.Empty{}, err1
 		}
 		req := state.DeleteRequest{
