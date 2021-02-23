@@ -383,9 +383,9 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
-		key, err := state_loader.GetModifiedStateKey(k, in.StoreName, a.id)
+		key, err1 := state_loader.GetModifiedStateKey(k, in.StoreName, a.id)
 		if err != nil {
-			return &runtimev1pb.GetBulkStateResponse{}, err
+			return &runtimev1pb.GetBulkStateResponse{}, err1
 		}
 		r := state.GetRequest{
 			Key:      key,
@@ -491,9 +491,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	reqs := []state.SetRequest{}
 	for _, s := range in.States {
-		key, err := state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
+		key, err1 := state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
 		if err != nil {
-			return &emptypb.Empty{}, err
+			return &emptypb.Empty{}, err1
 		}
 		req := state.SetRequest{
 			Key:      key,
@@ -580,9 +580,9 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
-		key, err := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
+		key, err1 := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
 		if err != nil {
-			return &empty.Empty{}, err
+			return &empty.Empty{}, err1
 		}
 		req := state.DeleteRequest{
 			Key:      key,
