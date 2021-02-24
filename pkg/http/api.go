@@ -791,7 +791,7 @@ func (a *api) getActorWithRequestValidation(reqCtx *fasthttp.RequestCtx, req int
 
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
-	if !reflect.ValueOf(req).IsNil() {
+	if req != nil && !reflect.ValueOf(req).IsNil() {
 		if err = a.json.Unmarshal(reqCtx.PostBody(), req); err != nil {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
