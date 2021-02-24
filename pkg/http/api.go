@@ -671,7 +671,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	if len(reqs) <= 0 {
+	if len(reqs) == 0 {
 		respondEmpty(reqCtx)
 		return
 	}
@@ -1299,7 +1299,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	if len(req.Operations) <= 0 {
+	if len(req.Operations) == 0 {
 		respondEmpty(reqCtx)
 		return
 	}
