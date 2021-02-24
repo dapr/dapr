@@ -786,7 +786,7 @@ func (a *api) getActorWithRequestValidation(reqCtx *fasthttp.RequestCtx, req int
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		return "", "", err
+		return "", "", errors.New(msg.Message)
 	}
 
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
