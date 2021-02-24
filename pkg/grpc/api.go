@@ -729,13 +729,12 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		var req = inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
-
+		key, err := state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
-			key, err := state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
-			if err != nil {
-				return &emptypb.Empty{}, err
-			}
 			setReq := state.SetRequest{
 				Key: key,
 				// Limitation:
@@ -761,10 +760,6 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			}
 
 		case state.Delete:
-			key, err := state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
-			if err != nil {
-				return &emptypb.Empty{}, err
-			}
 			delReq := state.DeleteRequest{
 				Key:      key,
 				Metadata: req.Metadata,
