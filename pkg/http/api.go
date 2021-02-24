@@ -392,7 +392,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	for i, k := range req.Keys {
 		key, err1 := state_loader.GetModifiedStateKey(k, storeName, a.id)
 		if err1 != nil {
-			msg := NewErrorResponse("ERR_MALFORMED_REQUEST",  fmt.Sprintf(messages.ErrMalformedRequest, err1)
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST",  fmt.Sprintf(messages.ErrMalformedRequest, err1))
 			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 			log.Debug(err1)
 			return
@@ -495,7 +495,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	k, err := state_loader.GetModifiedStateKey(key, storeName, a.id)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST",  fmt.Sprintf(messages.ErrMalformedRequest, err)
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST",  fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(err)
 		return
