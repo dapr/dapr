@@ -392,7 +392,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	for i, k := range req.Keys {
 		key, err1 := state_loader.GetModifiedStateKey(k, storeName, a.id)
 		if err1 != nil {
-			msg := NewErrorResponse("ERR_MALFORMED_REQUEST",  fmt.Sprintf(messages.ErrMalformedRequest, err1))
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err1))
 			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 			log.Debug(err1)
 			return
@@ -495,7 +495,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	k, err := state_loader.GetModifiedStateKey(key, storeName, a.id)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST",  fmt.Sprintf(messages.ErrMalformedRequest, err))
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(err)
 		return
@@ -552,6 +552,8 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromRequest(reqCtx)
 	k, err := state_loader.GetModifiedStateKey(key, storeName, a.id)
 	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(err)
 		return
 	}
@@ -700,6 +702,8 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	for i, r := range reqs {
 		reqs[i].Key, err = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
 		if err != nil {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 			log.Debug(err)
 			return
 		}
@@ -1340,6 +1344,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			}
 			upsertReq.Key, err = state_loader.GetModifiedStateKey(upsertReq.Key, storeName, a.id)
 			if err != nil {
+				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+				respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 				log.Debug(err)
 				return
 			}
@@ -1359,6 +1365,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			}
 			delReq.Key, err = state_loader.GetModifiedStateKey(delReq.Key, storeName, a.id)
 			if err != nil {
+				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+				respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 				log.Debug(err)
 				return
 			}
