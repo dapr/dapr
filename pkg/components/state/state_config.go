@@ -85,7 +85,7 @@ func getStateConfiguration(storeName string) *StoreConfiguration {
 
 func checkKeyIllegal(key string) error {
 	if strings.Contains(key, daprSeparator) {
-		return errors.Errorf("the input key '%s' can't '%s', include keyPrefix or user's request key", key, daprSeparator)
+		return errors.Errorf("input key/keyPrefix '%s' can't contain '%s'", key, daprSeparator)
 	}
 	return nil
 }
