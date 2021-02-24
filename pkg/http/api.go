@@ -7,6 +7,7 @@ package http
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -780,27 +781,35 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	respond(reqCtx, statusCode, body)
 }
 
-func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
+func (a *api) getActorWithRequestValidation(reqCtx *fasthttp.RequestCtx, req interface{}) (string, string, error) {
+	var err error
 	if a.actor == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		return
+		return "", "", err
 	}
 
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
+	if !reflect.ValueOf(req).IsNil() {
+		if err = a.json.Unmarshal(reqCtx.PostBody(), req); err != nil {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
+			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+			return "", "", err
+		}
+	}
+	return actorType, actorID, nil
+}
 
+func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	var req actors.CreateReminderRequest
-	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
+	actorType, actorID, err := a.getActorWithRequestValidation(reqCtx, &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
-		log.Debug(msg)
+		log.Debug(err)
 		return
 	}
 
-	req.Name = name
+	req.Name = reqCtx.UserValue(nameParam).(string)
 	req.ActorType = actorType
 	req.ActorID = actorID
 
@@ -815,27 +824,14 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
-
 	var req actors.CreateTimerRequest
-	err := a.json.Unmarshal(reqCtx.PostBody(), &req)
+	actorType, actorID, err := a.getActorWithRequestValidation(reqCtx, &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
-		log.Debug(msg)
+		log.Debug(err)
 		return
 	}
 
-	req.Name = name
+	req.Name = reqCtx.UserValue(nameParam).(string)
 	req.ActorType = actorType
 	req.ActorID = actorID
 
@@ -850,24 +846,19 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+	actorType, actorID, err := a.getActorWithRequestValidation(reqCtx, nil)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
-
 	req := actors.DeleteReminderRequest{
-		Name:      name,
+		Name:      reqCtx.UserValue(nameParam).(string),
 		ActorID:   actorID,
 		ActorType: actorType,
 	}
 
-	err := a.actor.DeleteReminder(reqCtx, &req)
+	err = a.actor.DeleteReminder(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", fmt.Sprintf(messages.ErrActorReminderDelete, err))
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
@@ -878,23 +869,10 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	body := reqCtx.PostBody()
-
 	var ops []actors.TransactionalOperation
-	err := a.json.Unmarshal(body, &ops)
+	actorType, actorID, err := a.getActorWithRequestValidation(reqCtx, &ops)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
-		log.Debug(msg)
+		log.Debug(err)
 		return
 	}
 
@@ -927,21 +905,16 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+	actorType, actorID, err := a.getActorWithRequestValidation(reqCtx, nil)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
 
 	resp, err := a.actor.GetReminder(reqCtx, &actors.GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
-		Name:      name,
+		Name:      reqCtx.UserValue(nameParam).(string),
 	})
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", fmt.Sprintf(messages.ErrActorReminderGet, err))
@@ -961,23 +934,18 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+	actorType, actorID, err := a.getActorWithRequestValidation(reqCtx, nil)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
-
 	req := actors.DeleteTimerRequest{
-		Name:      name,
+		Name:      reqCtx.UserValue(nameParam).(string),
 		ActorID:   actorID,
 		ActorType: actorType,
 	}
-	err := a.actor.DeleteTimer(reqCtx, &req)
+	err = a.actor.DeleteTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", fmt.Sprintf(messages.ErrActorTimerDelete, err))
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
@@ -988,15 +956,11 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+	actorType, actorID, err := a.getActorWithRequestValidation(reqCtx, nil)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	method := reqCtx.UserValue(methodParam).(string)
 	body := reqCtx.PostBody()
@@ -1034,15 +998,11 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
-	if a.actor == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
+	actorType, actorID, err := a.getActorWithRequestValidation(reqCtx, nil)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
 
 	hosted := a.actor.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
