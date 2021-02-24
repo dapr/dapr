@@ -843,6 +843,7 @@ func (a *DaprRuntime) initState(s components_v1alpha1.Component) error {
 		err = state_loader.SaveStateConfiguration(s.ObjectMeta.Name, props)
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init")
+			log.Warnf("error save state keyprefix: %s", err.Error())
 			return err
 		}
 
