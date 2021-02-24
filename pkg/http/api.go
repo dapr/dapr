@@ -392,7 +392,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	for i, k := range req.Keys {
 		key, err1 := state_loader.GetModifiedStateKey(k, storeName, a.id)
 		if err1 != nil {
-			msg := NewErrorResponse("ERR_PARAM_REQUEST", err1.Error())
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST",  fmt.Sprintf(messages.ErrMalformedRequest, err1)
 			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 			log.Debug(err1)
 			return
