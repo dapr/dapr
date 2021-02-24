@@ -495,6 +495,8 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	k, err := state_loader.GetModifiedStateKey(key, storeName, a.id)
 	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST",  fmt.Sprintf(messages.ErrMalformedRequest, err)
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(err)
 		return
 	}
