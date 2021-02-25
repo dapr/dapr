@@ -1080,7 +1080,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMessage) error {
 	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
@@ -1093,7 +1093,6 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		return nil
 	}
 
-	ctx := context.Background()
 	var span *trace.Span
 
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
@@ -1105,7 +1104,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -1204,7 +1203,6 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMes
 		}
 	}
 
-	ctx := context.Background()
 	var span *trace.Span
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
@@ -1212,7 +1210,7 @@ func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMes
 		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 
 		// no ops if trace is off
-		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
 
