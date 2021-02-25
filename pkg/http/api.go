@@ -1367,7 +1367,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			if err != nil {
 				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
 				respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
-				log.Debug(err)
+				log.Debug(msg)
 				return
 			}
 			operations = append(operations, state.TransactionalStateOperation{
