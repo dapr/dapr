@@ -19,6 +19,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	guuid "github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,6 +37,7 @@ const (
 	actorsToCheckMetadata                 = 5                                    // How many actors to create in get metdata test.
 	appScaleToCheckMetadata               = 1                                    // How many instances of the app to test get metadata.
 	actorInvokeURLFormat                  = "%s/test/testactorfeatures/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
+	actorDeleteURLFormat                  = "%s/actors/testactorfeatures/%s"     // URL to deactivate an actor in test app.
 	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
 	actorMetadataURLFormat                = "%s/test/metadata"
 )
@@ -57,6 +59,13 @@ type activeActorsCount struct {
 type metadata struct {
 	ID     string              `json:"id"`
 	Actors []activeActorsCount `json:"actors"`
+}
+
+type actorReminderOrTimer struct {
+	Data     string `json:"data,omitempty"`
+	DueTime  string `json:"dueTime,omitempty"`
+	Period   string `json:"period,omitempty"`
+	Callback string `json:"callback,omitempty"`
 }
 
 func parseLogEntries(resp []byte) []actorLogEntry {
@@ -181,7 +190,14 @@ func TestActorFeatures(t *testing.T) {
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
 		require.NoError(t, err)
 		// Set reminder
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), []byte{})
+		req := actorReminderOrTimer{
+			Data:    "reminderdata",
+			DueTime: "1s",
+			Period:  "1s",
+		}
+		reqBody, err := json.Marshal(req)
+		require.NoError(t, err)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
 		require.NoError(t, err)
 
 		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
@@ -196,6 +212,151 @@ func TestActorFeatures(t *testing.T) {
 		require.True(t, countActorAction(resp, actorID, reminderName) >= minimumCallsForTimerAndReminderResult)
 	})
 
+	t.Run("Actor single fire reminder.", func(t *testing.T) {
+		// Each test needs to have a different actorID
+		actorID := "1001a"
+
+		// Reset reminder
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+		// Set reminder
+		req := actorReminderOrTimer{
+			Data:    "reminderdata",
+			DueTime: "1s",
+		}
+		reqBody, _ := json.Marshal(req)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		require.NoError(t, err)
+
+		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
+
+		// Reset reminder
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+		require.True(t, countActorAction(resp, actorID, reminderName) == 1)
+	})
+
+	t.Run("Actor reset reminder.", func(t *testing.T) {
+		// Each test needs to have a different actorID
+		actorID := "1001b"
+
+		// Reset reminder
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+		// Set reminder
+		req := actorReminderOrTimer{
+			Data:    "reminderdata",
+			DueTime: "1s",
+			Period:  "5s",
+		}
+		reqBody, _ := json.Marshal(req)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		require.NoError(t, err)
+
+		time.Sleep(3 * time.Second)
+
+		// Reset reminder (before first period trigger)
+		req.DueTime = "20s"
+		reqBody, _ = json.Marshal(req)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+
+		time.Sleep(10 * time.Second)
+
+		// Delete reminder
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+		require.True(t, countActorAction(resp, actorID, reminderName) == 1)
+	})
+
+	t.Run("Actor reminder with deactivate.", func(t *testing.T) {
+		// Each test needs to have a different actorID
+		actorID := "1001c"
+
+		// Reset reminder
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+		// Set reminder
+		req := actorReminderOrTimer{
+			Data:    "reminderdata",
+			DueTime: "1s",
+			Period:  "1s",
+		}
+		reqBody, _ := json.Marshal(req)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		require.NoError(t, err)
+
+		sleepTime := secondsToCheckTimerAndReminderResult / 2 * time.Second
+		time.Sleep(sleepTime)
+
+		resp, err := utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+		firstCount := countActorAction(resp, actorID, reminderName)
+		// Min call is based off of having a 1s period/due time, the amount of seconds we've waited, and a bit of room for timing.
+		require.GreaterOrEqual(t, firstCount, 9)
+
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorDeleteURLFormat, externalURL, actorID))
+
+		time.Sleep(sleepTime)
+
+		// Reset reminder
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+
+		resp, err = utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+		require.Greater(t, countActorAction(resp, actorID, reminderName), firstCount)
+		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult)
+	})
+
+	t.Run("Actor reminder with app restart.", func(t *testing.T) {
+		// Each test needs to have a different actorID
+		actorID := "1001d"
+
+		// Reset reminder
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+		// Set reminder
+		req := actorReminderOrTimer{
+			Data:    "reminderdata",
+			DueTime: "1s",
+			Period:  "1s",
+		}
+		reqBody, _ := json.Marshal(req)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
+		require.NoError(t, err)
+
+		sleepTime := secondsToCheckTimerAndReminderResult / 2 * time.Second
+		time.Sleep(sleepTime)
+
+		resp, err := utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+		firstCount := countActorAction(resp, actorID, reminderName)
+		// Min call is based off of having a 1s period/due time, the amount of seconds we've waited, and a bit of room for timing.
+		require.GreaterOrEqual(t, firstCount, 9)
+
+		err = tr.Platform.Restart(appName)
+		assert.NoError(t, err)
+		externalURL = tr.Platform.AcquireAppExternalURL(appName)
+		require.NotEmpty(t, externalURL, "Could not get external URL after app restart.")
+
+		time.Sleep(sleepTime)
+
+		// Reset reminder
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+
+		resp, err = utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+		require.Greater(t, countActorAction(resp, actorID, reminderName), firstCount)
+		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult)
+	})
+
 	t.Run("Actor timer.", func(t *testing.T) {
 		// Each test needs to have a different actorID
 		actorID := "1002"
@@ -206,7 +367,13 @@ func TestActorFeatures(t *testing.T) {
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
 		require.NoError(t, err)
 		// Set timer
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName), []byte{})
+		req := actorReminderOrTimer{
+			Data:    "timerdata",
+			DueTime: "1s",
+			Period:  "1s",
+		}
+		reqBody, _ := json.Marshal(req)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName), reqBody)
 		require.NoError(t, err)
 
 		time.Sleep(secondsToCheckTimerAndReminderResult * time.Second)
@@ -219,6 +386,43 @@ func TestActorFeatures(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, countActorAction(resp, actorID, timerName) >= 1)
 		require.True(t, countActorAction(resp, actorID, timerName) >= minimumCallsForTimerAndReminderResult)
+	})
+
+	t.Run("Actor reset timer.", func(t *testing.T) {
+		// Each test needs to have a different actorID
+		actorID := "1002a"
+
+		// Activate actor.
+		utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "justToActivate"), []byte{})
+		// Reset timer
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
+		require.NoError(t, err)
+		// Set timer
+		req := actorReminderOrTimer{
+			Data:    "timerdata",
+			DueTime: "1s",
+			Period:  "5s",
+		}
+		reqBody, _ := json.Marshal(req)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName), reqBody)
+		require.NoError(t, err)
+
+		time.Sleep(3 * time.Second)
+
+		// Reset timer (before first period trigger)
+		req.DueTime = "20s"
+		reqBody, _ = json.Marshal(req)
+		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName), reqBody)
+
+		time.Sleep(10 * time.Second)
+
+		// Delete timer
+		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "timers", timerName))
+		require.NoError(t, err)
+
+		resp, err := utils.HTTPGet(logsURL)
+		require.NoError(t, err)
+		require.Equal(t, 1, countActorAction(resp, actorID, timerName))
 	})
 
 	t.Run("Actor concurrency same actor id.", func(t *testing.T) {
