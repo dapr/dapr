@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -7,13 +7,12 @@ package v1
 
 import (
 	"errors"
-	"net/url"
 	"strings"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/valyala/fasthttp"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
@@ -87,7 +86,7 @@ func (imr *InvokeMethodRequest) WithRawData(data []byte, contentType string) *In
 		contentType = JSONContentType
 	}
 	imr.r.Message.ContentType = contentType
-	imr.r.Message.Data = &any.Any{Value: data}
+	imr.r.Message.Data = &anypb.Any{Value: data}
 	return imr
 }
 
@@ -98,18 +97,9 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 		httpMethod = int32(commonv1pb.HTTPExtension_POST)
 	}
 
-	metadata := map[string]string{}
-	if querystring != "" {
-		params, _ := url.ParseQuery(querystring)
-
-		for k, v := range params {
-			metadata[k] = v[0]
-		}
-	}
-
 	imr.r.Message.HttpExtension = &commonv1pb.HTTPExtension{
 		Verb:        commonv1pb.HTTPExtension_Verb(httpMethod),
-		Querystring: metadata,
+		Querystring: querystring,
 	}
 
 	return imr
@@ -122,16 +112,7 @@ func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 		return ""
 	}
 
-	qs := m.GetHttpExtension().Querystring
-	if len(qs) == 0 {
-		return ""
-	}
-
-	params := url.Values{}
-	for k, v := range qs {
-		params.Add(k, v)
-	}
-	return params.Encode()
+	return m.GetHttpExtension().Querystring
 }
 
 // APIVersion gets API version of InvokeMethodRequest

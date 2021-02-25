@@ -1,3 +1,5 @@
+{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-sidecar-injector-cert"}}
+{{- $existingWebHookConfig := lookup "admissionregistration.k8s.io/v1" "MutatingWebhookConfiguration" .Release.Namespace "dapr-sidecar-injector"}}
 {{- $ca := genCA "dapr-sidecar-injector-ca" 3650 }}
 {{- $cn := printf "dapr-sidecar-injector" }}
 {{- $altName1 := printf "dapr-sidecar-injector.%s" .Release.Namespace }}
@@ -12,8 +14,13 @@ metadata:
   labels:
     app: dapr-sidecar-injector
 data:
-  tls.crt: {{ b64enc $cert.Cert }}
-  tls.key: {{ b64enc $cert.Key }}
+  {{ if $existingSecret }}tls.crt: {{ index $existingSecret.data "tls.crt" }}
+  {{ else }}tls.crt: {{ b64enc $cert.Cert }}
+  {{ end }}
+
+  {{ if $existingSecret }}tls.key: {{ index $existingSecret.data "tls.key" }}
+  {{ else }}tls.key: {{ b64enc $cert.Key }}
+  {{ end }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
@@ -28,7 +35,7 @@ webhooks:
       namespace: {{ .Release.Namespace }}
       name: dapr-sidecar-injector
       path: "/mutate"
-    caBundle: {{ b64enc $ca.Cert }}
+    caBundle: {{ if $existingWebHookConfig }}{{ (index $existingWebHookConfig.webhooks 0).clientConfig.caBundle }}{{ else }}{{ b64enc $ca.Cert }}{{ end }}
   rules:
   - apiGroups:
     - ""
@@ -38,6 +45,6 @@ webhooks:
     - pods
     operations:
     - CREATE
-  failurePolicy: Ignore
+  failurePolicy: {{ .Values.webhookFailurePolicy}}
   sideEffects: None
   admissionReviewVersions: ["v1", "v1beta1"]

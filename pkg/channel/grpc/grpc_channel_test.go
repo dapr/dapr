@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -17,6 +17,7 @@ import (
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
@@ -39,7 +40,7 @@ func TestInvokeMethod(t *testing.T) {
 	defer close(t, conn)
 	assert.NoError(t, err)
 
-	c := Channel{baseAddress: "localhost:9998", client: conn}
+	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1"}
 	req := invokev1.NewInvokeMethodRequest("method")
 	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 	response, err := c.InvokeMethod(context.Background(), req)
@@ -54,7 +55,8 @@ func TestInvokeMethod(t *testing.T) {
 
 	assert.Equal(t, "POST", actual["httpverb"])
 	assert.Equal(t, "method", actual["method"])
-	assert.Equal(t, "{\"param1\":\"val1\",\"param2\":\"val2\"}", actual["querystring"])
+	assert.Equal(t, "token1", actual[auth.APITokenHeader])
+	assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
 }
 
 func close(t *testing.T, c io.Closer) {

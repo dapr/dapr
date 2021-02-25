@@ -1,11 +1,12 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
 package injector
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -37,6 +38,7 @@ const (
 	daprEnableProfilingKey            = "dapr.io/enable-profiling"
 	daprLogLevel                      = "dapr.io/log-level"
 	daprAPITokenSecret                = "dapr.io/api-token-secret" /* #nosec */
+	daprAppTokenSecret                = "dapr.io/app-token-secret" /* #nosec */
 	daprLogAsJSON                     = "dapr.io/log-as-json"
 	daprAppMaxConcurrencyKey          = "dapr.io/app-max-concurrency"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
@@ -52,6 +54,7 @@ const (
 	daprReadinessProbeTimeoutKey      = "dapr.io/sidecar-readiness-probe-timeout-seconds"
 	daprReadinessProbePeriodKey       = "dapr.io/sidecar-readiness-probe-period-seconds"
 	daprReadinessProbeThresholdKey    = "dapr.io/sidecar-readiness-probe-threshold"
+	daprMaxRequestBodySize            = "dapr.io/http-max-request-size"
 	daprAppSSLKey                     = "dapr.io/app-ssl"
 	containersPath                    = "/spec/containers"
 	sidecarHTTPPort                   = 3500
@@ -218,7 +221,7 @@ LoopEnv:
 }
 
 func getTrustAnchorsAndCertChain(kubeClient *kubernetes.Clientset, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(certs.KubeScrtName, meta_v1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), certs.KubeScrtName, meta_v1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
@@ -306,6 +309,14 @@ func appSSLEnabled(annotations map[string]string) bool {
 
 func getAPITokenSecret(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprAPITokenSecret, "")
+}
+
+func GetAppTokenSecret(annotations map[string]string) string {
+	return getStringAnnotationOrDefault(annotations, daprAppTokenSecret, "")
+}
+
+func getMaxRequestBodySize(annotations map[string]string) (int32, error) {
+	return getInt32Annotation(annotations, daprMaxRequestBodySize)
 }
 
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
@@ -466,10 +477,20 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 
 	httpHandler := getProbeHTTPHandler(sidecarHTTPPort, apiVersionV1, sidecarHealthzPath)
 
+	allowPrivilegeEscalation := false
+
+	requestBodySize, err := getMaxRequestBodySize(annotations)
+	if err != nil {
+		log.Warn(err)
+	}
+
 	c := &corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           daprSidecarImage,
 		ImagePullPolicy: pullPolicy,
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+		},
 		Ports: []corev1.ContainerPort{
 			{
 				ContainerPort: int32(sidecarHTTPPort),
@@ -518,6 +539,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
 			"--sentry-address", sentryAddress,
 			"--metrics-port", fmt.Sprintf("%v", metricsPort),
+			"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler:             httpHandler,
@@ -582,6 +604,21 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 					Key: "token",
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: secret,
+					},
+				},
+			},
+		})
+	}
+
+	appSecret := GetAppTokenSecret(annotations)
+	if appSecret != "" {
+		c.Env = append(c.Env, corev1.EnvVar{
+			Name: auth.AppAPITokenEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					Key: "token",
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: appSecret,
 					},
 				},
 			},

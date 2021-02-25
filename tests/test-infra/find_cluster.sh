@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
 
 # ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
 # This script scans all AKS clusters in test cluster pools to find the available test cluster
 
-# The test cluster pool for e2e test
-# TODO: Add more aks test clusters
-testclusterpool=(
-    "dapr-aks-e2e-05"
-    "dapr-aks-e2e-06"
-    "dapr-aks-e2e-07"
-    "dapr-aks-e2e-08"
-)
+# Usage: find_cluster.sh <cluster_list_file>
 
 # Define max e2e test timeout, 1.5 hours
 [ -z "$MAX_TEST_TIMEOUT" ] && MAX_TEST_TIMEOUT=5400
@@ -33,7 +26,7 @@ echo "Selected Dapr Test Resource group: $DAPR_TEST_RESOURCE_GROUP"
 echo "Selected Kubernetes Namespace: $DAPR_TEST_NAMESPACE"
 
 # Find the available cluster
-for clustername in ${testclusterpool[@]}; do
+for clustername in `cat $1 | sed 's/\r//g' | sort -R | xargs`; do
     echo "Scanning $clustername ..."
 
     echo "Switching to $clustername context..."

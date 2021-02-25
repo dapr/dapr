@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
@@ -16,5 +16,9 @@ done
 
 echo "Trying to delete namespace..."
 kubectl delete namespace $1 --timeout=10m
+
+for pod in `kubectl get pods -n $1 -o name`; do
+	kubectl delete --force -n $1 $pod
+done
 
 exit 0

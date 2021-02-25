@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -123,13 +123,16 @@ func (a *actorsRuntime) Init() error {
 	if len(a.config.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
-	if a.store == nil {
-		log.Warn("actors: state store must be present to initialize the actor runtime")
-	}
 
-	_, ok := a.store.(state.TransactionalStore)
-	if !ok {
-		return errors.New(incompatibleStateStore)
+	if len(a.config.HostedActorTypes) > 0 {
+		if a.store == nil {
+			log.Warn("actors: state store must be present to initialize the actor runtime")
+		}
+
+		_, ok := a.store.(state.TransactionalStore)
+		if !ok {
+			return errors.New(incompatibleStateStore)
+		}
 	}
 
 	hostname := fmt.Sprintf("%s:%d", a.config.HostAddress, a.config.Port)
@@ -621,23 +624,15 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 		}
 	}
 
-	if reminder.Period != "" {
+	// the first execution reminder task
+	if lastFiredTime.IsZero() {
+		nextInvokeTime = registeredTime.Add(dueTime)
+	} else {
 		period, err := time.ParseDuration(reminder.Period)
 		if err != nil {
 			return nextInvokeTime, errors.Wrap(err, "error parsing reminder period")
 		}
-
-		if !lastFiredTime.IsZero() {
-			nextInvokeTime = lastFiredTime.Add(period)
-		} else {
-			nextInvokeTime = registeredTime.Add(dueTime)
-		}
-	} else {
-		if !lastFiredTime.IsZero() {
-			nextInvokeTime = lastFiredTime.Add(dueTime)
-		} else {
-			nextInvokeTime = registeredTime.Add(dueTime)
-		}
+		nextInvokeTime = lastFiredTime.Add(period)
 	}
 
 	return nextInvokeTime, nil
@@ -731,7 +726,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	_, err = a.callLocalActor(context.Background(), req)
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
-		a.updateReminderTrack(key, reminder)
+		err = a.updateReminderTrack(key, reminder)
 	} else {
 		log.Debugf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
@@ -833,6 +828,10 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 }
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
+	var (
+		err             error
+		dueTime, period time.Duration
+	)
 	a.activeTimersLock.Lock()
 	defer a.activeTimersLock.Unlock()
 	actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
@@ -848,22 +847,20 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 		close(stopChan.(chan bool))
 	}
 
-	d, err := time.ParseDuration(req.Period)
-	if err != nil {
+	if period, err = time.ParseDuration(req.Period); err != nil {
 		return err
 	}
+	if len(req.DueTime) > 0 {
+		if dueTime, err = time.ParseDuration(req.DueTime); err != nil {
+			return err
+		}
+	}
 
-	t := a.configureTicker(d)
 	stop := make(chan bool, 1)
 	a.activeTimers.Store(timerKey, stop)
 
-	go func(ticker *time.Ticker, stop chan (bool), actorType, actorID, name, dueTime, period, callback string, data interface{}) {
-		if dueTime != "" {
-			d, err := time.ParseDuration(dueTime)
-			if err == nil {
-				time.Sleep(d)
-			}
-		}
+	go func(stop chan (bool), req *CreateTimerRequest) {
+		time.Sleep(dueTime)
 
 		// Check if timer is still active
 		select {
@@ -874,34 +871,37 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 			break
 		}
 
-		err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
+		err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
+			req.Period, req.Callback, req.Data)
 		if err != nil {
 			log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
 		}
 
-		actorKey := a.constructCompositeKey(actorType, actorID)
+		ticker := a.configureTicker(period)
+		actorKey := a.constructCompositeKey(req.ActorType, req.ActorID)
 
 		for {
 			select {
 			case <-ticker.C:
 				_, exists := a.actorsTable.Load(actorKey)
 				if exists {
-					err := a.executeTimer(actorType, actorID, name, dueTime, period, callback, data)
+					err := a.executeTimer(req.ActorType, req.ActorID, req.Name, req.DueTime,
+						req.Period, req.Callback, req.Data)
 					if err != nil {
 						log.Debugf("error invoking timer on actor %s: %s", actorKey, err)
 					}
 				} else {
 					a.DeleteTimer(ctx, &DeleteTimerRequest{
-						Name:      name,
-						ActorID:   actorID,
-						ActorType: actorType,
+						Name:      req.Name,
+						ActorID:   req.ActorID,
+						ActorType: req.ActorType,
 					})
 				}
 			case <-stop:
 				return
 			}
 		}
-	}(t, stop, req.ActorType, req.ActorID, req.Name, req.DueTime, req.Period, req.Callback, req.Data)
+	}(stop, req)
 	return nil
 }
 
@@ -1040,10 +1040,12 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
 	actorCountMap := map[string]int{}
+	for _, actorType := range a.config.HostedActorTypes {
+		actorCountMap[actorType] = 0
+	}
 	a.actorsTable.Range(func(key, value interface{}) bool {
 		actorType, _ := a.getActorTypeAndIDFromKey(key.(string))
 		actorCountMap[actorType]++
-
 		return true
 	})
 

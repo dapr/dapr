@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -37,7 +37,6 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&Subscription{},
 		&SubscriptionList{},
 	)
-	scheme.AddKnownTypes(SchemeGroupVersion)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

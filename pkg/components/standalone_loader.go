@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -19,7 +19,10 @@ import (
 	"github.com/ghodss/yaml"
 )
 
-const yamlSeparator = "\n---"
+const (
+	yamlSeparator = "\n---"
+	componentKind = "Component"
+)
 
 // StandaloneComponents loads components in a standalone mode environment
 type StandaloneComponents struct {
@@ -77,17 +80,18 @@ func (s *StandaloneComponents) decodeYaml(filename string, b []byte) ([]componen
 	scanner.Split(s.splitYamlDoc)
 
 	for {
-		var component components_v1alpha1.Component
-		err := s.decode(scanner, &component)
+		var comp components_v1alpha1.Component
+		comp.Spec = components_v1alpha1.ComponentSpec{}
+		err := s.decode(scanner, &comp)
 		if err == io.EOF {
 			break
 		}
-		if err != nil {
-			log.Warnf("error parsing yaml resource in %s : %s", filename, err)
-			errors = append(errors, err)
+
+		if comp.Kind != componentKind {
 			continue
 		}
-		list = append(list, component)
+
+		list = append(list, comp)
 	}
 
 	return list, errors

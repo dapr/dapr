@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -131,27 +131,29 @@ func (c *FSM) removeMember(cmdData []byte) (bool, error) {
 
 // Apply log is invoked once a log entry is committed.
 func (c *FSM) Apply(log *raft.Log) interface{} {
-	buf := log.Data
-	cmdType := CommandType(buf[0])
+	var (
+		err     error
+		updated bool
+	)
 
 	if log.Index < c.state.Index {
 		logging.Warnf("old: %d, new index: %d. skip apply", c.state.Index, log.Index)
-		return nil
+		return false
 	}
 
-	var err error
-	var updated bool
-	switch cmdType {
+	switch CommandType(log.Data[0]) {
 	case MemberUpsert:
-		updated, err = c.upsertMember(buf[1:])
+		updated, err = c.upsertMember(log.Data[1:])
 	case MemberRemove:
-		updated, err = c.removeMember(buf[1:])
+		updated, err = c.removeMember(log.Data[1:])
 	default:
 		err = errors.New("unimplemented command")
 	}
 
 	if err != nil {
-		return err
+		logging.Errorf("fsm apply entry log failed. data: %s, error: %s",
+			string(log.Data), err.Error())
+		return false
 	}
 
 	return updated

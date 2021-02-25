@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -49,6 +49,7 @@ type directMessaging struct {
 	tracingSpec         config.TracingSpec
 	hostAddress         string
 	hostName            string
+	maxRequestBodySize  int
 }
 
 type remoteApp struct {
@@ -64,7 +65,7 @@ func NewDirectMessaging(
 	appChannel channel.AppChannel,
 	clientConnFn messageClientConnection,
 	resolver nr.Resolver,
-	tracingSpec config.TracingSpec) DirectMessaging {
+	tracingSpec config.TracingSpec, maxRequestBodySize int) DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 	return &directMessaging{
@@ -78,6 +79,7 @@ func NewDirectMessaging(
 		tracingSpec:         tracingSpec,
 		hostAddress:         hAddr,
 		hostName:            hName,
+		maxRequestBodySize:  maxRequestBodySize,
 	}
 }
 
@@ -157,7 +159,11 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, namespace, ap
 	d.addDestinationAppIDHeaderToMetadata(appID, req)
 
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
-	resp, err := clientV1.CallLocal(ctx, req.Proto())
+
+	var opts []grpc.CallOption
+	opts = append(opts, grpc.MaxCallRecvMsgSize(d.maxRequestBodySize*1024*1024), grpc.MaxCallSendMsgSize(d.maxRequestBodySize*1024*1024))
+
+	resp, err := clientV1.CallLocal(ctx, req.Proto(), opts...)
 	if err != nil {
 		return nil, err
 	}

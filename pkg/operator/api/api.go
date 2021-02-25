@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -17,9 +17,9 @@ import (
 	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/logger"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -88,7 +88,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 }
 
 // GetComponents returns a list of Dapr components
-func (a *apiServer) ListComponents(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListComponentResponse, error) {
+func (a *apiServer) ListComponents(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListComponentResponse, error) {
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components); err != nil {
 		return nil, errors.Wrap(err, "error getting components")
@@ -109,7 +109,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *empty.Empty) (*opera
 }
 
 // ListSubscriptions returns a list of Dapr pub/sub subscriptions
-func (a *apiServer) ListSubscriptions(ctx context.Context, in *empty.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
+func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*operatorv1pb.ListSubscriptionsResponse, error) {
 	var subs subscriptionsapi.SubscriptionList
 	if err := a.Client.List(ctx, &subs); err != nil {
 		return nil, errors.Wrap(err, "error getting subscriptions")
@@ -130,7 +130,7 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *empty.Empty) (*op
 }
 
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified
-func (a *apiServer) ComponentUpdate(in *empty.Empty, srv operatorv1pb.Operator_ComponentUpdateServer) error {
+func (a *apiServer) ComponentUpdate(in *emptypb.Empty, srv operatorv1pb.Operator_ComponentUpdateServer) error {
 	log.Info("sidecar connected for component updates")
 
 	for c := range a.updateChan {

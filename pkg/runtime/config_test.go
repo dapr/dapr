@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -13,7 +13,7 @@ import (
 
 func TestNewConfig(t *testing.T) {
 	c := NewRuntimeConfig("app1", []string{"localhost:5050"}, "localhost:5051", "*", "config", "components", "http", "kubernetes",
-		3500, 50002, 50001, 8080, 7070, true, 1, true, "localhost:5052", true)
+		3500, 50002, 50001, 8080, 7070, true, 1, true, "localhost:5052", true, 4)
 
 	assert.Equal(t, "app1", c.ID)
 	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
@@ -33,4 +33,5 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, true, c.mtlsEnabled)
 	assert.Equal(t, "localhost:5052", c.SentryServiceAddress)
 	assert.Equal(t, true, c.AppSSL)
+	assert.Equal(t, 4, c.MaxRequestBodySize)
 }

@@ -1,7 +1,7 @@
 // +build perf
 
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -120,6 +120,12 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 
 		latency := (daprValue - baselineValue) * 1000
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
+	}
+
+	err = utils.UploadAzureBlob([]perf.TestResult{baselineResult, daprResult}, "Service Invocation",
+		fmt.Sprintf("%vMB", usage.MemoryMb), fmt.Sprintf("%vm", usage.CPUm))
+	if err != nil {
+		t.Error(err)
 	}
 
 	require.Equal(t, 0, daprResult.RetCodes.Num400)

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -21,9 +21,9 @@ import (
 
 const (
 	appPort = 3000
-	pubsubA = "pubsub-a-topic"
-	pubsubB = "pubsub-b-topic"
-	pubsubC = "pubsub-c-topic"
+	pubsubA = "pubsub-a-topic-http"
+	pubsubB = "pubsub-b-topic-http"
+	pubsubC = "pubsub-c-topic-http"
 )
 
 type appResponse struct {
@@ -213,14 +213,26 @@ func extractMessage(body []byte) (string, error) {
 	return msg, nil
 }
 
+func unique(slice []string) []string {
+	keys := make(map[string]bool)
+	list := []string{}
+	for _, entry := range slice {
+		if _, value := keys[entry]; !value {
+			keys[entry] = true
+			list = append(list, entry)
+		}
+	}
+	return list
+}
+
 // the test calls this to get the messages received
 func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 	log.Println("Enter getReceivedMessages")
 
 	response := receivedMessagesResponse{
-		ReceivedByTopicA: receivedMessagesA.List(),
-		ReceivedByTopicB: receivedMessagesB.List(),
-		ReceivedByTopicC: receivedMessagesC.List(),
+		ReceivedByTopicA: unique(receivedMessagesA.List()),
+		ReceivedByTopicB: unique(receivedMessagesB.List()),
+		ReceivedByTopicC: unique(receivedMessagesC.List()),
 	}
 
 	log.Printf("receivedMessagesResponse=%s", response)
@@ -290,12 +302,12 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 
-	router.HandleFunc("/tests/get", getReceivedMessages).Methods("POST")
-	router.HandleFunc("/tests/set-respond-error", setRespondWithError).Methods("POST")
-	router.HandleFunc("/tests/set-respond-retry", setRespondWithRetry).Methods("POST")
-	router.HandleFunc("/tests/set-respond-empty-json", setRespondEmptyJSON).Methods("POST")
-	router.HandleFunc("/tests/set-respond-invalid-status", setRespondInvalidStatus).Methods("POST")
-	router.HandleFunc("/tests/initialize", initializeHandler).Methods("POST")
+	router.HandleFunc("/getMessages", getReceivedMessages).Methods("POST")
+	router.HandleFunc("/set-respond-error", setRespondWithError).Methods("POST")
+	router.HandleFunc("/set-respond-retry", setRespondWithRetry).Methods("POST")
+	router.HandleFunc("/set-respond-empty-json", setRespondEmptyJSON).Methods("POST")
+	router.HandleFunc("/set-respond-invalid-status", setRespondInvalidStatus).Methods("POST")
+	router.HandleFunc("/initialize", initializeHandler).Methods("POST")
 
 	router.HandleFunc("/dapr/subscribe", configureSubscribeHandler).Methods("GET")
 
