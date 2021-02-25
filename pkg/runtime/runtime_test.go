@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -13,13 +13,17 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
-	comp_exporters "github.com/dapr/components-contrib/exporters"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -27,12 +31,12 @@ import (
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
-	"github.com/dapr/dapr/pkg/components/exporters"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -47,6 +51,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -95,6 +100,18 @@ func (m *MockKubernetesStateStore) GetSecret(req secretstores.GetSecretRequest) 
 			"_value": "_value_data",
 			"name1":  "value1",
 		},
+	}, nil
+}
+
+func (m *MockKubernetesStateStore) BulkGetSecret(req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+	response := map[string]map[string]string{}
+	response["k8s-secret"] = map[string]string{
+		"key1":   "value1",
+		"_value": "_value_data",
+		"name1":  "value1",
+	}
+	return secretstores.BulkGetSecretResponse{
+		Data: response,
 	}, nil
 }
 
@@ -179,6 +196,7 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 		},
 		Spec: components_v1alpha1.ComponentSpec{
 			Type:     "pubsubs.mockPubSub",
+			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
 		},
 	}
@@ -200,16 +218,7 @@ func TestDoProcessComponent(t *testing.T) {
 		},
 		Spec: components_v1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
-			Metadata: getFakeMetadataItems(),
-		},
-	}
-
-	exportersComponent := components_v1alpha1.Component{
-		ObjectMeta: meta_v1.ObjectMeta{
-			Name: "testexporter",
-		},
-		Spec: components_v1alpha1.ComponentSpec{
-			Type:     "exporters.mockExporter",
+			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
 		},
 	}
@@ -237,29 +246,7 @@ func TestDoProcessComponent(t *testing.T) {
 		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
 	})
 
-	t.Run("test error on exporter init", func(t *testing.T) {
-		// setup
-		mockExporter := new(daprt.MockExporter)
-
-		rt.exporterRegistry.Register(
-			exporters.New("mockExporter", func() comp_exporters.Exporter {
-				return mockExporter
-			}),
-		)
-		mockExporter.On("Init", TestRuntimeConfigID, "", comp_exporters.Metadata{
-			Properties: getFakeProperties(),
-			Buffer:     nil,
-		}).Return(assert.AnError)
-
-		// act
-		err := rt.doProcessOneComponent(exporterComponent, exportersComponent)
-
-		// assert
-		assert.Error(t, err, "expected an error")
-		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
-	})
-
-	t.Run("test invalid category componen", func(t *testing.T) {
+	t.Run("test invalid category component", func(t *testing.T) {
 		// act
 		err := rt.doProcessOneComponent(ComponentCategory("invalid"), pubsubComponent)
 
@@ -276,7 +263,8 @@ func TestInitState(t *testing.T) {
 			Name: TestPubsubName,
 		},
 		Spec: components_v1alpha1.ComponentSpec{
-			Type: "state.mockState",
+			Type:    "state.mockState",
+			Version: "v1",
 			Metadata: []components_v1alpha1.MetadataItem{
 				{
 					Name: "actorStateStore",
@@ -332,6 +320,188 @@ func TestInitState(t *testing.T) {
 	})
 }
 
+func TestSetupTracing(t *testing.T) {
+	testcases := []struct {
+		name              string
+		tracingConfig     config.TracingSpec
+		hostAddress       string
+		expectedExporters []trace.Exporter
+		expectedErr       string
+	}{{
+		name:          "no trace exporter",
+		tracingConfig: config.TracingSpec{},
+	}, {
+		name:        "bad host address, failing zipkin",
+		hostAddress: "bad:host:address",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+		},
+		expectedErr: "too many colons",
+	}, {
+		name: "zipkin trace exporter",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+		},
+		expectedExporters: []trace.Exporter{&zipkin.Exporter{}},
+	}, {
+		name: "stdout trace exporter",
+		tracingConfig: config.TracingSpec{
+			Stdout: true,
+		},
+		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}},
+	}, {
+		name: "all trace exporters",
+		tracingConfig: config.TracingSpec{
+			Zipkin: config.ZipkinSpec{
+				EndpointAddress: "http://foo.bar",
+			},
+			Stdout: true,
+		},
+		expectedExporters: []trace.Exporter{&diag_utils.StdoutExporter{}, &zipkin.Exporter{}},
+	}}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := NewTestDaprRuntime(modes.StandaloneMode)
+			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
+			if tc.hostAddress != "" {
+				rt.hostAddress = tc.hostAddress
+			}
+			// Setup tracing with the fake trace exporter store to confirm
+			// the right exporter was registered.
+			exporterStore := &fakeTraceExporterStore{}
+			if err := rt.setupTracing(rt.hostAddress, exporterStore); tc.expectedErr != "" {
+				assert.Contains(t, err.Error(), tc.expectedErr)
+			} else {
+				assert.Nil(t, err)
+			}
+			for i, exporter := range exporterStore.exporters {
+				// Exporter types don't expose internals, so we can only validate that
+				// the right type of  exporter was registered.
+				assert.Equal(t, reflect.TypeOf(tc.expectedExporters[i]), reflect.TypeOf(exporter))
+			}
+			// Setup tracing with the OpenCensus global exporter store.
+			// We have no way to validate the result, but we can at least
+			// confirm that nothing blows up.
+			rt.setupTracing(rt.hostAddress, openCensusExporterStore{})
+		})
+	}
+}
+
+func TestMetadataUUID(t *testing.T) {
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	pubsubComponent.Spec.Metadata = append(
+		pubsubComponent.Spec.Metadata,
+		components_v1alpha1.MetadataItem{
+			Name: "consumerID",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{uuid}"),
+				},
+			},
+		}, components_v1alpha1.MetadataItem{
+			Name: "twoUUIDs",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("{uuid} {uuid}"),
+				},
+			},
+		})
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		consumerID := metadata.Properties["consumerID"]
+		uuid0, err := uuid.Parse(consumerID)
+		assert.Nil(t, err)
+
+		twoUUIDs := metadata.Properties["twoUUIDs"]
+		uuids := strings.Split(twoUUIDs, " ")
+		assert.Equal(t, 2, len(uuids))
+		uuid1, err := uuid.Parse(uuids[0])
+		assert.Nil(t, err)
+		uuid2, err := uuid.Parse(uuids[1])
+		assert.Nil(t, err)
+
+		assert.NotEqual(t, uuid0, uuid1)
+		assert.NotEqual(t, uuid0, uuid2)
+		assert.NotEqual(t, uuid1, uuid2)
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
+func TestConsumerID(t *testing.T) {
+	metadata := []components_v1alpha1.MetadataItem{
+		{
+			Name: "host",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("localhost"),
+				},
+			},
+		},
+		{
+			Name: "password",
+			Value: components_v1alpha1.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("fakePassword"),
+				},
+			},
+		},
+	}
+	pubsubComponent := components_v1alpha1.Component{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsub.mockPubSub",
+			Version:  "v1",
+			Metadata: metadata,
+		},
+	}
+
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+	mockPubSub := new(daprt.MockPubSub)
+
+	rt.pubSubRegistry.Register(
+		pubsub_loader.New("mockPubSub", func() pubsub.PubSub {
+			return mockPubSub
+		}),
+	)
+
+	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		metadata := args.Get(0).(pubsub.Metadata)
+		consumerID := metadata.Properties["consumerID"]
+		assert.Equal(t, TestRuntimeConfigID, consumerID)
+	})
+
+	err := rt.processComponentAndDependents(pubsubComponent)
+	assert.Nil(t, err)
+}
+
 func TestInitPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 
@@ -342,6 +512,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub",
+				Version:  "v1",
 				Metadata: getFakeMetadataItems(),
 			},
 		}, {
@@ -350,6 +521,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub2",
+				Version:  "v1",
 				Metadata: getFakeMetadataItems(),
 			},
 		},
@@ -384,7 +556,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub2.On(
 			"Subscribe",
 			mock.AnythingOfType("pubsub.SubscribeRequest"),
-			mock.AnythingOfType("func(*pubsub.NewMessage) error")).Return(nil)
+			mock.AnythingOfType("pubsub.Handler")).Return(nil)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -419,6 +591,8 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
+		rt.startSubscribing()
+
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
@@ -451,6 +625,8 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
+		rt.startSubscribing()
+
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 
@@ -476,6 +652,8 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
+
+		rt.startSubscribing()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -582,6 +760,8 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
+		rt.startSubscribing()
+
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
@@ -611,6 +791,8 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
+
+		rt.startSubscribing()
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -674,6 +856,8 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
+		rt.startSubscribing()
+
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
@@ -705,9 +889,12 @@ func TestInitPubSub(t *testing.T) {
 		}
 
 		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
 		err := rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
+			Metadata:   md,
 		})
 
 		assert.Nil(t, err)
@@ -817,10 +1004,11 @@ func TestInitSecretStores(t *testing.T) {
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("secret store is registered", func(t *testing.T) {
@@ -831,14 +1019,16 @@ func TestInitSecretStores(t *testing.T) {
 				return m
 			}))
 
-		rt.processComponentAndDependents(components_v1alpha1.Component{
+		err := rt.processComponentAndDependents(components_v1alpha1.Component{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		})
+		assert.NoError(t, err)
 		assert.NotNil(t, rt.secretStores["kubernetesMock"])
 	})
 
@@ -856,7 +1046,8 @@ func TestInitSecretStores(t *testing.T) {
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		})
 
@@ -970,7 +1161,8 @@ func TestProcessComponentSecrets(t *testing.T) {
 			Name: "mockBinding",
 		},
 		Spec: components_v1alpha1.ComponentSpec{
-			Type: "bindings.mock",
+			Type:    "bindings.mock",
+			Version: "v1",
 			Metadata: []components_v1alpha1.MetadataItem{
 				{
 					Name: "a",
@@ -1015,7 +1207,8 @@ func TestProcessComponentSecrets(t *testing.T) {
 				Name: "kubernetes",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetes",
+				Type:    "secretstores.kubernetes",
+				Version: "v1",
 			},
 		})
 
@@ -1089,8 +1282,6 @@ func TestExtractComponentCategory(t *testing.T) {
 		{"pubsubs.redis", ""},
 		{"secretstores.azure.keyvault", "secretstores"},
 		{"secretstore.azure.keyvault", ""},
-		{"exporters.zipkin", "exporters"},
-		{"exporter.zipkin", ""},
 		{"state.redis", "state"},
 		{"states.redis", ""},
 		{"bindings.kafka", "bindings"},
@@ -1104,7 +1295,8 @@ func TestExtractComponentCategory(t *testing.T) {
 		t.Run(tt.specType, func(t *testing.T) {
 			fakeComp := components_v1alpha1.Component{
 				Spec: components_v1alpha1.ComponentSpec{
-					Type: tt.specType,
+					Type:    tt.specType,
+					Version: "v1",
 				},
 			}
 			assert.Equal(t, string(rt.extractComponentCategory(fakeComp)), tt.category)
@@ -1132,7 +1324,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		}
 		rt.flushOutstandingComponents()
@@ -1150,7 +1343,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMock2",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		}
 		rt.flushOutstandingComponents()
@@ -1192,7 +1386,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMockGrandChild",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMockGrandChild",
+				Type:    "secretstores.kubernetesMockGrandChild",
+				Version: "v1",
 				Metadata: []components_v1alpha1.MetadataItem{
 					{
 						Name: "a",
@@ -1212,7 +1407,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMockChild",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMockChild",
+				Type:    "secretstores.kubernetesMockChild",
+				Version: "v1",
 				Metadata: []components_v1alpha1.MetadataItem{
 					{
 						Name: "a",
@@ -1232,7 +1428,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Name: "kubernetesMock",
 			},
 			Spec: components_v1alpha1.ComponentSpec{
-				Type: "secretstores.kubernetesMock",
+				Type:    "secretstores.kubernetesMock",
+				Version: "v1",
 			},
 		}
 		rt.flushOutstandingComponents()
@@ -1249,7 +1446,8 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 			Name: "fakeSecretStore",
 		},
 		Spec: components_v1alpha1.ComponentSpec{
-			Type: "secretstores.fake.secretstore",
+			Type:    "secretstores.fake.secretstore",
+			Version: "v1",
 			Metadata: []components_v1alpha1.MetadataItem{
 				{
 					Name: "a",
@@ -1291,7 +1489,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1303,12 +1501,12 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic)
 	fakeReq.WithHTTPExtension(http.MethodPost, "")
-	fakeReq.WithRawData(testPubSubMessage.Data, pubsub.ContentType)
+	fakeReq.WithRawData(testPubSubMessage.Data, contenttype.CloudEventContentType)
 
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.topicRoutes = map[string]TopicRoute{}
-	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]string)}
-	rt.topicRoutes[TestPubsubName].routes["topic1"] = "topic1"
+	rt.topicRoutes[TestPubsubName] = TopicRoute{routes: make(map[string]Route)}
+	rt.topicRoutes[TestPubsubName].routes["topic1"] = Route{path: "topic1"}
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -1407,10 +1605,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		var cloudEvent pubsub.CloudEventsEnvelope
+		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent.ID)
+		expectedClientError := errors.Errorf("RETRY status returned from app while processing pub/sub event %v", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1535,10 +1733,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		var cloudEvent pubsub.CloudEventsEnvelope
+		var cloudEvent map[string]interface{}
 		json := jsoniter.ConfigFastest
 		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
-		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent.ID)
+		expectedClientError := errors.Errorf("retriable error returned from app while processing pub/sub event %v: Internal Error. status code returned: 500", cloudEvent["id"].(string))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -1547,7 +1745,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
-	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, []byte("Test Message"))
+	envelope := pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "", []byte("Test Message"), "")
 	b, err := json.Marshal(envelope)
 	assert.Nil(t, err)
 
@@ -1557,8 +1755,19 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		Metadata: map[string]string{pubsubName: TestPubsubName},
 	}
 
+	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "")
+	base64, err := json.Marshal(envelope)
+	assert.Nil(t, err)
+
+	testPubSubMessageBase64 := &pubsub.NewMessage{
+		Topic:    topic,
+		Data:     base64,
+		Metadata: map[string]string{pubsubName: TestPubsubName},
+	}
+
 	testCases := []struct {
 		name             string
+		message          *pubsub.NewMessage
 		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
 		errorExpected    bool
 		noResponseStatus bool
@@ -1566,35 +1775,47 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	}{
 		{
 			name:             "failed to publish message to user app with unimplemented error",
+			message:          testPubSubMessage,
 			noResponseStatus: true,
 			responseError:    status.Errorf(codes.Unimplemented, "unimplemented method"),
 			errorExpected:    false, // should be dropped with no error
 		},
 		{
 			name:             "failed to publish message to user app with response error",
+			message:          testPubSubMessage,
 			noResponseStatus: true,
 			responseError:    assert.AnError,
 			errorExpected:    true,
 		},
 		{
 			name:             "succeeded to publish message to user app with empty response",
+			message:          testPubSubMessage,
 			noResponseStatus: true,
 		},
 		{
 			name:           "succeeded to publish message to user app with success response",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+		},
+		{
+			name:           "succeeded to publish message to user app with base64 encoded cloud event",
+			message:        testPubSubMessageBase64,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
 		},
 		{
 			name:           "succeeded to publish message to user app with retry",
+			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_RETRY,
 			errorExpected:  true,
 		},
 		{
 			name:           "succeeded to publish message to user app with drop",
+			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_DROP,
 		},
 		{
 			name:           "succeeded to publish message to user app with invalid response",
+			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
 			errorExpected:  true,
 		},
@@ -1608,8 +1829,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
 			rt.topicRoutes = map[string]TopicRoute{}
 			rt.topicRoutes[TestPubsubName] = TopicRoute{
-				routes: map[string]string{
-					topic: topic,
+				routes: map[string]Route{
+					topic: {path: topic},
 				},
 			}
 			var grpcServer *grpc.Server
@@ -1769,7 +1990,7 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewRuntimeConfig(
 		TestRuntimeConfigID,
-		"10.10.10.12",
+		[]string{"10.10.10.12"},
 		"10.10.10.11",
 		cors.DefaultAllowedOrigins,
 		"globalConfig",
@@ -1785,7 +2006,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		-1,
 		false,
 		"",
-		false)
+		false, 4)
 
 	rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{})
 	return rt
@@ -1897,6 +2118,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1906,6 +2133,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -1921,6 +2149,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1930,6 +2164,7 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil)
 		fakeResp.WithRawData([]byte("Internal Error"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		rt.appChannel = mockAppChannel
@@ -1945,6 +2180,12 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 
+		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
+		fakeBindingReq.WithHTTPExtension(http.MethodOptions, "")
+		fakeBindingReq.WithRawData(nil, invokev1.JSONContentType)
+
+		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+
 		fakeReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod)
 		fakeReq.WithHTTPExtension(http.MethodPost, "")
 		fakeReq.WithRawData(testInputBindingData, "application/json")
@@ -1954,7 +2195,9 @@ func TestReadInputBindings(t *testing.T) {
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		fakeResp.WithRawData([]byte("OK"), "application/json")
 
+		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeBindingReq).Return(fakeBindingResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
+
 		rt.appChannel = mockAppChannel
 
 		b := mockBinding{metadata: map[string]string{"bindings": "input"}}
@@ -2095,6 +2338,10 @@ func (m *mockPublishPubSub) Close() error {
 	return nil
 }
 
+func (m *mockPublishPubSub) Features() []pubsub.Feature {
+	return nil
+}
+
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
 		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
@@ -2103,6 +2350,23 @@ func TestInitActors(t *testing.T) {
 
 		err := r.initActors()
 		assert.Error(t, err)
+	})
+
+	t.Run("actors hosted = true", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+		r.appConfig = config.ApplicationConfig{
+			Entities: []string{"actor1"},
+		}
+
+		hosted := r.hostingActors()
+		assert.True(t, hosted)
+	})
+
+	t.Run("actors hosted = false", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+
+		hosted := r.hostingActors()
+		assert.False(t, hosted)
 	})
 }
 
@@ -2119,7 +2383,7 @@ func TestInitBindings(t *testing.T) {
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
 		err := r.initBinding(c)
-		assert.NotEqual(t, "couldn't find input binding bindings.testInputBinding", err.Error())
+		assert.NoError(t, err)
 	})
 
 	t.Run("single output binding", func(t *testing.T) {
@@ -2155,8 +2419,7 @@ func TestInitBindings(t *testing.T) {
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
 		err := r.initBinding(input)
-		assert.Error(t, err)
-		assert.NotEqual(t, "couldn't find input binding bindings.test", err.Error())
+		assert.NoError(t, err)
 
 		output := components_v1alpha1.Component{}
 		output.ObjectMeta.Name = "testinput"
