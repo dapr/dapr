@@ -353,7 +353,7 @@ func TestActorFeatures(t *testing.T) {
 
 		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
-		require.Greater(t, countActorAction(resp, actorID, reminderName), firstCount)
+		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), firstCount)
 		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult)
 	})
 
