@@ -16,7 +16,7 @@ jobs:
     name: perf tests
     runs-on: ubuntu-latest
     env:
-      GOVER: 1.15.3
+      GOVER: 1.16
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://proxy.golang.org
