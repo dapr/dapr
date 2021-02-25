@@ -442,7 +442,7 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 			}
 
 			msg.Metadata[pubsubName] = name
-			return publishFunc(context.Background(), msg)
+			return publishFunc(ctx, msg)
 		}); err != nil {
 			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
 		}
