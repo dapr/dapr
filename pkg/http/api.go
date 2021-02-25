@@ -640,7 +640,6 @@ func (a *api) getSecretStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (
 	if a.secretStores == nil || len(a.secretStores) == 0 {
 		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
 	}
 
@@ -649,7 +648,6 @@ func (a *api) getSecretStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (
 	if a.secretStores[secretStoreName] == nil {
 		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
 		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
-		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
 	}
 	return a.secretStores[secretStoreName], secretStoreName, nil
