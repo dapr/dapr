@@ -201,13 +201,13 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 
 	if d.hostName != "" {
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
-		addOrCreate(fasthttp.HeaderXForwardedHost,d.hostName)
+		addOrCreate(fasthttp.HeaderXForwardedHost, d.hostName)
 
 		forwardedHeaderValue += "host=" + d.hostName
 	}
 
 	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
-	addOrCreate(fasthttp.HeaderForwarded,forwardedHeaderValue)
+	addOrCreate(fasthttp.HeaderForwarded, forwardedHeaderValue)
 }
 
 func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {

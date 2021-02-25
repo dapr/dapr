@@ -51,12 +51,12 @@ func TestForwardedHeaders(t *testing.T) {
 		assert.Equal(t, "for=1;by=1;host=2", md.Values[0])
 	})
 
-	t.Run("forwarded headers get appended", func (t *testing.T) {
+	t.Run("forwarded headers get appended", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("GET")
 		req.WithMetadata(map[string][]string{
-			fasthttp.HeaderXForwardedFor: {"originalXForwardedFor"},
+			fasthttp.HeaderXForwardedFor:  {"originalXForwardedFor"},
 			fasthttp.HeaderXForwardedHost: {"originalXForwardedHost"},
-			fasthttp.HeaderForwarded: {"originalForwarded"},
+			fasthttp.HeaderForwarded:      {"originalForwarded"},
 		})
 
 		dm := newDirectMessaging()
