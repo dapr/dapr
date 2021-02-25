@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -45,6 +45,7 @@ func FromFlags() (*DaprRuntime, error) {
 	appMaxConcurrency := flag.Int("app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code")
 	enableMTLS := flag.Bool("enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
 	appSSL := flag.Bool("app-ssl", false, "Sets the URI scheme of the app to https and attempts an SSL connection")
+	daprHTTPMaxRequestSize := flag.Int("dapr-http-max-request-size", -1, "Increasing max size of request body in MB to handle uploading of big files. By default 4 MB.")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -115,6 +116,13 @@ func FromFlags() (*DaprRuntime, error) {
 		}
 	}
 
+	var maxRequestBodySize int
+	if *daprHTTPMaxRequestSize != -1 {
+		maxRequestBodySize = *daprHTTPMaxRequestSize
+	} else {
+		maxRequestBodySize = DefaultMaxRequestBodySize
+	}
+
 	placementAddresses := []string{}
 	if *placementServiceHostAddr != "" {
 		placementAddresses = parsePlacementAddr(*placementServiceHostAddr)
@@ -131,7 +139,7 @@ func FromFlags() (*DaprRuntime, error) {
 	}
 
 	runtimeConfig := NewRuntimeConfig(*appID, placementAddresses, *controlPlaneAddress, *allowedOrigins, *config, *componentsPath,
-		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL)
+		appPrtcl, *mode, daprHTTP, daprInternalGRPC, daprAPIGRPC, applicationPort, profPort, *enableProfiling, concurrency, *enableMTLS, *sentryAddress, *appSSL, maxRequestBodySize)
 
 	var globalConfig *global_config.Configuration
 	var configErr error
@@ -157,7 +165,7 @@ func FromFlags() (*DaprRuntime, error) {
 			namespace = os.Getenv("NAMESPACE")
 			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, client)
 		case modes.StandaloneMode:
-			globalConfig, configErr = global_config.LoadStandaloneConfiguration(*config)
+			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
 
 		if configErr != nil {
@@ -173,7 +181,7 @@ func FromFlags() (*DaprRuntime, error) {
 		globalConfig = global_config.LoadDefaultConfiguration()
 	}
 
-	accessControlList, err = global_config.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec)
+	accessControlList, err = global_config.ParseAccessControlSpec(globalConfig.Spec.AccessControlSpec, string(runtimeConfig.ApplicationProtocol))
 	if err != nil {
 		log.Fatalf(err.Error())
 	}

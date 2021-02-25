@@ -54,12 +54,7 @@ spec:
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         resources:
-          limits:
-            cpu: 1000m
-            memory: 500Mi
-          requests:
-            cpu: 250m
-            memory: 100Mi
+{{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
           - name: credentials
             mountPath: /var/run/dapr/credentials
@@ -118,6 +113,14 @@ spec:
 {{- if eq .Values.global.mtls.enabled true }}
         - "--tls-enabled"
 {{- end }}
+{{- if eq .Values.global.daprControlPlaneOs "linux" }}
+        securityContext:
+{{- if eq .Values.cluster.forceInMemoryLog true }}
+          runAsNonRoot: {{ .Values.runAsNonRoot }}
+{{- else }}
+          runAsUser: 0
+{{- end }}
+{{- end }}
         env:
           - name: PLACEMENT_ID
             valueFrom:
@@ -141,10 +144,12 @@ spec:
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneOs }}
+{{- if .Values.global.daprControlPlaneArch }}
                   - key: kubernetes.io/arch
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}

@@ -1,5 +1,5 @@
 # ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
@@ -10,6 +10,7 @@ metadata:
   namespace: loadtest
 spec:
   type: state.redis
+  version: v1
   metadata:
   - name: redisHost
     value: redis-master.components.svc.cluster.local:6379

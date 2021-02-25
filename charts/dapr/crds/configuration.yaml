@@ -67,8 +67,6 @@ spec:
                     type: array
                   trustDomain:
                     type: string
-                required:
-                - policies
                 type: object
               httpPipeline:
                 description: PipelineSpec defines the middleware pipeline
@@ -152,6 +150,13 @@ spec:
                 properties:
                   samplingRate:
                     type: string
+                  zipkin:
+                    type: object
+                    description: Defines the Zipkin trace configurations
+                    properties:
+                      endpointAddress:
+                        description: The endpoint address of Zipkin server to receive traces
+                        type: string
                 required:
                 - samplingRate
                 type: object

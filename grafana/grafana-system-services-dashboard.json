@@ -12,10 +12,11 @@
       }
     ]
   },
+  "description": "This dashboard shows the metrics of Dapr control plane services",
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -35,6 +36,37 @@
     {
       "cacheTimeout": null,
       "datasource": "Dapr",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "decimals": 1,
+          "mappings": [
+            {
+              "id": 0,
+              "op": "=",
+              "text": "N/A",
+              "type": 1,
+              "value": "null"
+            }
+          ],
+          "nullValueMode": "connected",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 600
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 4,
@@ -45,48 +77,23 @@
       "links": [],
       "options": {
         "colorMode": "value",
-        "fieldOptions": {
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
           "calcs": [
             "last"
           ],
-          "defaults": {
-            "decimals": 1,
-            "mappings": [
-              {
-                "id": 0,
-                "op": "=",
-                "text": "N/A",
-                "type": 1,
-                "value": "null"
-              }
-            ],
-            "nullValueMode": "connected",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "red",
-                  "value": null
-                },
-                {
-                  "color": "green",
-                  "value": 600
-                }
-              ]
-            },
-            "unit": "s"
-          },
-          "overrides": [],
+          "fields": "",
           "values": false
         },
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "horizontal"
+        "textMode": "auto"
       },
-      "pluginVersion": "6.6.2",
+      "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "time() - max(process_start_time_seconds{app=~\"dapr-sentry|dapr-placement|dapr-sidecar-injector|dapr-operator\"}) by (app)",
+          "expr": "time() - max(process_start_time_seconds{app=~\"dapr-sentry|dapr-placement-server|dapr-sidecar-injector|dapr-operator\"}) by (app)",
+          "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{app}}",
           "refId": "A"
@@ -104,6 +111,13 @@
       "dashes": false,
       "datasource": "Dapr",
       "description": "This shows total amount of kernel and user CPU usage time.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -127,9 +141,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -139,7 +154,8 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_usage_seconds_total{pod=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement|dapr-operator).*\"}[5m])) by (pod)",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{pod=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement-server|dapr-operator).*\"}[5m])) by (pod)",
+          "interval": "",
           "legendFormat": "{{pod}}",
           "refId": "A"
         }
@@ -191,7 +207,14 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Dapr",
-      "description": "The amount of memory that belongs specifically to that process in bytes. This excludes swapped out memory pages.",
+      "description": "The amount of allocated heap memory that belongs specifically to that process in bytes.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -215,9 +238,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -227,7 +251,8 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "max(process_resident_memory_bytes{app=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement|dapr-operator)\"}) by (app)",
+          "expr": "sum(go_memstats_alloc_bytes{app=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement-server|dapr-operator)\"}) by (app)",
+          "interval": "",
           "legendFormat": "{{app}}",
           "refId": "A"
         }
@@ -236,7 +261,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Memory usage in bytes",
+      "title": "Heap Memory usage in bytes",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -279,6 +304,13 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Dapr",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -302,9 +334,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -314,7 +347,8 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "max(go_goroutines{app=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement|dapr-operator)\"}) by (app)",
+          "expr": "max(go_goroutines{app=~\"(dapr-sentry|dapr-sidecar-injector|dapr-placement-server|dapr-operator)\"}) by (app)",
+          "interval": "",
           "legendFormat": "{{app}}",
           "refId": "A"
         }
@@ -369,196 +403,6 @@
         "x": 0,
         "y": 9
       },
-      "id": 14,
-      "panels": [],
-      "title": "Operator",
-      "type": "row"
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "The total number of services created.",
-      "fill": 10,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 10
-      },
-      "hiddenSeries": false,
-      "id": 6,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": true,
-      "steppedLine": true,
-      "targets": [
-        {
-          "expr": "count(dapr_operator_service_created_total) by (app_id)",
-          "legendFormat": "{{app_id}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "# Services Created",
-      "tooltip": {
-        "shared": true,
-        "sort": 1,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": false
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "Dapr",
-      "description": "The total number of services deleted.",
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 10
-      },
-      "hiddenSeries": false,
-      "id": 4,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "dapr_operator_service_deleted_total",
-          "legendFormat": "{{app_id}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "# Services Deleted",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "collapsed": false,
-      "datasource": null,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 18
-      },
       "id": 12,
       "panels": [],
       "title": "Sidecar Injector",
@@ -571,13 +415,20 @@
       "dashes": false,
       "datasource": null,
       "description": "The total number of sidecar injection requests.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 10
       },
       "hiddenSeries": false,
       "id": 8,
@@ -594,9 +445,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -659,13 +511,20 @@
       "dashes": false,
       "datasource": "Dapr",
       "description": "The total number of successful sidecar injection requests.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 10
       },
       "hiddenSeries": false,
       "id": 10,
@@ -682,10 +541,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "6.6.2",
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -748,7 +607,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 19
       },
       "id": 42,
       "panels": [],
@@ -767,6 +626,12 @@
       "datasource": null,
       "decimals": null,
       "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
       "format": "s",
       "gauge": {
         "maxValue": 100,
@@ -779,7 +644,7 @@
         "h": 7,
         "w": 3,
         "x": 0,
-        "y": 29
+        "y": 20
       },
       "id": 44,
       "interval": null,
@@ -798,7 +663,6 @@
       "maxDataPoints": 100,
       "nullPointMode": "connected",
       "nullText": null,
-      "options": {},
       "pluginVersion": "6.6.2",
       "postfix": " left",
       "postfixFontSize": "50%",
@@ -848,13 +712,20 @@
       "dashes": false,
       "datasource": null,
       "description": "Certificate Signing Request ( CSR ) from Dapr runtime",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 9,
         "x": 3,
-        "y": 29
+        "y": 20
       },
       "hiddenSeries": false,
       "id": 34,
@@ -873,9 +744,10 @@
       "linewidth": 2,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -964,13 +836,20 @@
       "dashes": false,
       "datasource": null,
       "description": "This chart shows the failure reason of Certificate Sign Request.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 29
+        "y": 20
       },
       "hiddenSeries": false,
       "id": 38,
@@ -989,9 +868,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1055,13 +935,20 @@
       "dashes": false,
       "datasource": "Dapr",
       "description": "This will be counted when issuer cert and key are changed.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 36
+        "y": 27
       },
       "hiddenSeries": false,
       "id": 36,
@@ -1079,10 +966,10 @@
       "links": [],
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "6.6.2",
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1144,13 +1031,20 @@
       "dashes": false,
       "datasource": null,
       "description": "This chart shows the reason of gRPC server TLS certificate issuance failures.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 36
+        "y": 27
       },
       "hiddenSeries": false,
       "id": 40,
@@ -1169,9 +1063,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1234,7 +1129,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 34
       },
       "id": 16,
       "panels": [],
@@ -1247,14 +1142,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "The total number of replicas connected to placement service.",
+      "description": "The total number of Dapr sidecars connected to placement service.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 44
+        "y": 35
       },
       "hiddenSeries": false,
       "id": 28,
@@ -1271,9 +1173,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1283,8 +1186,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dapr_placement_hosts_total",
-          "legendFormat": "hosts",
+          "expr": "dapr_placement_runtimes_total",
+          "interval": "",
+          "legendFormat": "sidecar",
           "refId": "A"
         }
       ],
@@ -1292,7 +1196,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "# total replicas",
+      "title": "Number of connected Dapr sidecars",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1335,14 +1239,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": null,
-      "description": "The total number of replicas which are not hosting actors.",
+      "description": "The total number of actor sidecars and non-actor sidecars.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "links": []
+        },
+        "overrides": []
+      },
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 44
+        "y": 35
       },
       "hiddenSeries": false,
       "id": 30,
@@ -1359,9 +1270,10 @@
       "linewidth": 1,
       "nullPointMode": "null",
       "options": {
-        "dataLinks": []
+        "alertThreshold": true
       },
       "percentage": false,
+      "pluginVersion": "7.3.3",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -1371,104 +1283,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "dapr_placement_nonactorhosts_total",
-          "legendFormat": "{{kubernetes_pod_name}}",
+          "expr": "dapr_placement_actor_runtimes_total",
+          "interval": "",
+          "legendFormat": "actor sidecars",
           "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "# replicas not hosting actors",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
         },
         {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "description": "The total number of actor types registered with Dapr runtime.",
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 52
-      },
-      "hiddenSeries": false,
-      "id": 32,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
-      "options": {
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "dapr_placement_actortypes_total",
-          "legendFormat": "actor types",
-          "refId": "A"
+          "expr": "dapr_placement_runtimes_total-dapr_placement_actor_runtimes_total",
+          "interval": "",
+          "legendFormat": "nonactor sidecars",
+          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "# actor types",
+      "title": "actor sidecars vs non-actor sidecars",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1506,8 +1337,8 @@
       }
     }
   ],
-  "refresh": "15m",
-  "schemaVersion": 22,
+  "refresh": "5s",
+  "schemaVersion": 26,
   "style": "dark",
   "tags": [],
   "templating": {
@@ -1534,5 +1365,5 @@
   "timezone": "",
   "title": "Dapr System Services Dashboard",
   "uid": "RHSwiHXWk",
-  "version": 2
+  "version": 7
 }

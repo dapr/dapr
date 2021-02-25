@@ -1,9 +1,9 @@
 module app
 
-go 1.15
+go 1.16
 
 require (
-	github.com/dapr/dapr v0.11.1-0.20201106213210-a19c1322d69a
+	github.com/dapr/dapr v1.0.0-rc.2.0.20210122165906-be08e5520173
 	github.com/gorilla/mux v1.7.3
 	google.golang.org/grpc v1.33.1
 )

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -25,4 +25,5 @@ type AppDescription struct {
 	DaprCPURequest    string
 	DaprMemoryLimit   string
 	DaprMemoryRequest string
+	Namespace         *string
 }

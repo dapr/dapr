@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -15,10 +15,13 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/valyala/fasthttp"
+	"go.opencensus.io/plugin/ochttp/propagation/tracecontext"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -32,10 +35,11 @@ const (
 
 // Channel is an HTTP implementation of an AppChannel
 type Channel struct {
-	client      *fasthttp.Client
-	baseAddress string
-	ch          chan int
-	tracingSpec config.TracingSpec
+	client         *fasthttp.Client
+	baseAddress    string
+	ch             chan int
+	tracingSpec    config.TracingSpec
+	appHeaderToken string
 }
 
 // CreateLocalChannel creates an HTTP AppChannel
@@ -51,8 +55,9 @@ func CreateLocalChannel(port, maxConcurrency int, spec config.TracingSpec, sslEn
 			MaxConnsPerHost:           1000000,
 			MaxIdemponentCallAttempts: 0,
 		},
-		baseAddress: fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
-		tracingSpec: spec,
+		baseAddress:    fmt.Sprintf("%s://%s:%d", scheme, channel.DefaultChannelAddress, port),
+		tracingSpec:    spec,
+		appHeaderToken: auth.GetAppToken(),
 	}
 
 	if sslEnabled {
@@ -138,6 +143,19 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	// Recover headers
 	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Set)
+
+	// HTTP client needs to inject traceparent header for proper tracing stack.
+	span := diag_utils.SpanFromContext(ctx)
+	httpFormat := &tracecontext.HTTPFormat{}
+	tp, ts := httpFormat.SpanContextToHeaders(span.SpanContext())
+	channelReq.Header.Set("traceparent", tp)
+	if ts != "" {
+		channelReq.Header.Set("tracestate", ts)
+	}
+
+	if h.appHeaderToken != "" {
+		channelReq.Header.Set(auth.APITokenHeader, h.appHeaderToken)
+	}
 
 	// Set Content body and types
 	contentType, body := req.RawData()

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -57,6 +57,10 @@ func (f *fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) 
 	defer f.lock.RUnlock()
 	item := f.items[req.Key]
 	return &state.GetResponse{Data: item}, nil
+}
+
+func (f *fakeStateStore) BulkGet(req []state.GetRequest) (bool, []state.BulkGetResponse, error) {
+	return false, nil, nil
 }
 
 func (f *fakeStateStore) Set(req *state.SetRequest) error {

@@ -4,7 +4,8 @@ logLevel: info
 image:
   registry: docker.io/daprio
   name: dashboard
-  tag: "0.4.0"
+  tag: "0.6.0"
+  imagePullSecrets: ""
 
 nameOverride: ""
 fullnameOverride: ""
@@ -14,3 +15,6 @@ ports:
   port: 8080
   targetPort: 8080
   
+runAsNonRoot: true
+serviceType: ClusterIP
+resources: {}

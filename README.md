@@ -16,8 +16,6 @@ Dapr is a portable, serverless, event-driven runtime that makes it easy for deve
 
 Dapr codifies the *best practices* for building microservice applications into open, independent, building blocks that enable you to build portable applications with the language and framework of your choice. Each building block is independent and you can use one, some, or all of them in your application.
 
-__Note: Dapr is currently under community development in alpha phase. Dapr is not recommended for production workloads until the 1.0 stable release.__
-
 ![Dapr overview](./img/overview.png)
 
 ## Goals
@@ -129,6 +127,7 @@ See the [Development Guide](https://docs.dapr.io/contributing/) to get started w
 | [Dotnet-sdk](https://github.com/dapr/dotnet-sdk) | Dapr SDK for .NET Core
 | [Rust-sdk](https://github.com/dapr/rust-sdk) | Dapr SDK for Rust
 | [Cpp-sdk](https://github.com/dapr/cpp-sdk) | Dapr SDK for C++
+| [PHP-sdk](https://github.com/dapr/php-sdk) | Dapr SDK for PHP
 
 
 ## Code of Conduct

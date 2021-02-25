@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -8,6 +8,8 @@ package http
 import (
 	"fmt"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 
 	cors "github.com/AdhityaRamadhanus/fasthttpcors"
@@ -61,8 +63,13 @@ func (s *server) StartNonBlocking() {
 	handler = s.useMetrics(handler)
 	handler = s.useTracing(handler)
 
+	customServer := &fasthttp.Server{
+		Handler:            handler,
+		MaxRequestBodySize: s.config.MaxRequestBodySize * 1024 * 1024,
+	}
+
 	go func() {
-		log.Fatal(fasthttp.ListenAndServe(fmt.Sprintf(":%v", s.config.Port), handler))
+		log.Fatal(customServer.ListenAndServe(fmt.Sprintf(":%v", s.config.Port)))
 	}()
 
 	if s.config.EnableProfiling {
@@ -134,13 +141,46 @@ func (s *server) getCorsHandler(allowedOrigins []string) *cors.CorsHandler {
 	})
 }
 
+func (s *server) unescapeRequestParametersHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		parseError := false
+		unescapeRequestParameters := func(parameter []byte, value interface{}) {
+			switch value.(type) {
+			case string:
+				if !parseError {
+					parameterValue := fmt.Sprintf("%v", value)
+					parameterUnescapedValue, err := url.QueryUnescape(parameterValue)
+					if err == nil {
+						ctx.SetUserValueBytes(parameter, parameterUnescapedValue)
+					} else {
+						parseError = true
+						errorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %v. Error: %s", parameter, value, err.Error())
+						log.Debug(errorMessage)
+						ctx.Error(errorMessage, fasthttp.StatusBadRequest)
+					}
+				}
+			}
+		}
+		ctx.VisitUserValues(unescapeRequestParameters)
+
+		if !parseError {
+			next(ctx)
+		}
+	}
+}
+
 func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 	router := routing.New()
-
+	parameterFinder, _ := regexp.Compile("/{.*}")
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 		for _, m := range e.Methods {
-			router.Handle(m, path, e.Handler)
+			pathIncludesParameters := parameterFinder.MatchString(path)
+			if pathIncludesParameters {
+				router.Handle(m, path, s.unescapeRequestParametersHandler(e.Handler))
+			} else {
+				router.Handle(m, path, e.Handler)
+			}
 		}
 	}
 	return router

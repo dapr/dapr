@@ -7,7 +7,7 @@ spec:
     defaultAction: deny
     trustDomain: "public"
     policies:
-    - appId:  "allowlists-caller"
+    - appId: "allowlists-caller"
       defaultAction: deny
       trustDomain: 'public'
       namespace: "dapr-tests"

@@ -21,11 +21,14 @@ const (
 	ErrInvokeOutputBinding = "error when invoke output binding %s: %s"
 
 	// PubSub
-	ErrPubsubNotFound       = "no pubsub is configured"
-	ErrPubsubEmpty          = "pubsub name is empty"
-	ErrTopicEmpty           = "topic is empty in pubsub %s"
-	ErrPubsubCloudEventsSer = "error when marshal cloud event envelop for topic %s pubsub %s: %s"
-	ErrPubsubPublishMessage = "error when publish to topic %s in pubsub %s: %s"
+	ErrPubsubNotConfigured      = "no pubsub is configured"
+	ErrPubsubEmpty              = "pubsub name is empty"
+	ErrPubsubNotFound           = "pubsub %s not found"
+	ErrTopicEmpty               = "topic is empty in pubsub %s"
+	ErrPubsubCloudEventsSer     = "error when marshalling cloud event envelope for topic %s pubsub %s: %s"
+	ErrPubsubPublishMessage     = "error when publish to topic %s in pubsub %s: %s"
+	ErrPubsubForbidden          = "topic %s is not allowed for app id %s"
+	ErrPubsubCloudEventCreation = "cannot create cloudevent: %s"
 
 	// AppChannel
 	ErrChannelNotFound       = "app channel is not initialized"
@@ -49,6 +52,7 @@ const (
 	ErrSecretStoreNotFound      = "failed finding secret store with key %s"
 	ErrPermissionDenied         = "access denied by policy to get %q from %q"
 	ErrSecretGet                = "failed getting secret with key %s from secret store %s: %s"
+	ErrBulkSecretGet            = "failed getting secrets from secret store %s: %s"
 
 	// DirectMessaging
 	ErrDirectInvoke         = "fail to invoke, id: %s, err: %s"

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -85,7 +85,7 @@ func NewOperator(config, certChainPath string, enableLeaderElection bool) Operat
 		certChainPath: certChainPath,
 	}
 	o.apiServer = api.NewAPIServer(o.client)
-	if componentInfomer, err := mgr.GetCache().GetInformer(&componentsapi.Component{}); err != nil {
+	if componentInfomer, err := mgr.GetCache().GetInformer(context.TODO(), &componentsapi.Component{}); err != nil {
 		log.Fatalf("unable to get setup components informer, err: %s", err)
 	} else {
 		componentInfomer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -127,13 +127,13 @@ func (o *operator) Run(ctx context.Context) {
 	log.Infof("Dapr Operator is started")
 
 	go func() {
-		if err := o.mgr.Start(ctx.Done()); err != nil {
+		if err := o.mgr.Start(ctx); err != nil {
 			if err != nil {
 				log.Fatalf("failed to start controller manager, err: %s", err)
 			}
 		}
 	}()
-	if !o.mgr.GetCache().WaitForCacheSync(ctx.Done()) {
+	if !o.mgr.GetCache().WaitForCacheSync(ctx) {
 		log.Fatalf("failed to wait for cache sync")
 	}
 	o.prepareConfig()
@@ -177,5 +177,4 @@ func (o *operator) Run(ctx context.Context) {
 	}()
 
 	o.apiServer.Run(certChain)
-	cancel()
 }

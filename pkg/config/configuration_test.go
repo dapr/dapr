@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -47,7 +47,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			config, err := LoadStandaloneConfiguration(tc.path)
+			config, _, err := LoadStandaloneConfiguration(tc.path)
 			if tc.errorExpected {
 				assert.Error(t, err, "Expected an error")
 				assert.Nil(t, config, "Config should not be loaded")
@@ -57,6 +57,16 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadStandaloneConfigurationKindName(t *testing.T) {
+	t.Run("test Kind and Name", func(t *testing.T) {
+		config, _, err := LoadStandaloneConfiguration("./testdata/config.yaml")
+		assert.NoError(t, err, "Unexpected error")
+		assert.NotNil(t, config, "Config not loaded as expected")
+		assert.Equal(t, "secretappconfig", config.ObjectMeta.Name)
+		assert.Equal(t, "Configuration", config.TypeMeta.Kind)
+	})
 }
 
 func TestMetricSpecForStandAlone(t *testing.T) {
@@ -79,7 +89,7 @@ func TestMetricSpecForStandAlone(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			config, err := LoadStandaloneConfiguration(tc.confFile)
+			config, _, err := LoadStandaloneConfiguration(tc.confFile)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.Enabled)
 		})
@@ -284,7 +294,7 @@ func TestContainsKey(t *testing.T) {
 	assert.True(t, containsKey(s, "b"), "unexpected result")
 }
 
-func initializeAccessControlList() (*AccessControlList, error) {
+func initializeAccessControlList(protocol string) (*AccessControlList, error) {
 	inputSpec := AccessControlSpec{
 		DefaultAction: DenyAccess,
 		TrustDomain:   "abcd",
@@ -352,14 +362,14 @@ func initializeAccessControlList() (*AccessControlList, error) {
 			},
 		},
 	}
-	accessControlList, err := ParseAccessControlSpec(inputSpec)
+	accessControlList, err := ParseAccessControlSpec(inputSpec, protocol)
 
 	return accessControlList, err
 }
 
 func TestParseAccessControlSpec(t *testing.T) {
 	t.Run("translate to in-memory rules", func(t *testing.T) {
-		accessControlList, err := initializeAccessControlList()
+		accessControlList, err := initializeAccessControlList(HTTPProtocol)
 
 		assert.Nil(t, err)
 
@@ -510,7 +520,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 			},
 		}
 
-		_, err := ParseAccessControlSpec(invalidAccessControlSpec)
+		_, err := ParseAccessControlSpec(invalidAccessControlSpec, "http")
 		assert.Error(t, err, "invalid access control spec. missing trustdomain for apps: [%s], missing namespace for apps: [%s], missing app name on at least one of the app policies: true", app1, app2)
 	})
 
@@ -540,7 +550,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 			},
 		}
 
-		accessControlList, _ := ParseAccessControlSpec(accessControlSpec)
+		accessControlList, _ := ParseAccessControlSpec(accessControlSpec, "http")
 		assert.Equal(t, "public", accessControlList.PolicySpec[app1Ns1].TrustDomain)
 	})
 
@@ -551,7 +561,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 			AppPolicies:   []AppPolicySpec{},
 		}
 
-		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec)
+		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec, "http")
 		assert.Nil(t, accessControlList)
 	})
 
@@ -580,7 +590,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 			},
 		}
 
-		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec)
+		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec, "http")
 		assert.Equal(t, accessControlList.DefaultAction, DenyAccess)
 	})
 }
@@ -629,7 +639,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when no matching app in acl found", func(t *testing.T) {
 		srcAppID := "appX"
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
@@ -642,7 +652,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when trust domain does not match", func(t *testing.T) {
 		srcAppID := app1
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "private",
 			Namespace:   "ns1",
@@ -655,7 +665,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when namespace does not match", func(t *testing.T) {
 		srcAppID := app1
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "abcd",
@@ -668,7 +678,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when spiffe id is nil", func(t *testing.T) {
 		srcAppID := app1
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
@@ -676,7 +686,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when src app id is empty", func(t *testing.T) {
 		srcAppID := ""
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(nil, srcAppID, "op1", common.HTTPExtension_POST, HTTPProtocol, accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
@@ -684,7 +694,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when operation is not found in the policy spec", func(t *testing.T) {
 		srcAppID := app1
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
@@ -695,9 +705,22 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		assert.True(t, isAllowed)
 	})
 
+	t.Run("test http case-sensitivity when matching operation post fix", func(t *testing.T) {
+		srcAppID := app1
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
+		spiffeID := SpiffeID{
+			TrustDomain: "public",
+			Namespace:   "ns1",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "Op2", common.HTTPExtension_POST, HTTPProtocol, accessControlList)
+		// Action = Ignore policy and apply default action for app
+		assert.False(t, isAllowed)
+	})
+
 	t.Run("test when http verb is not found", func(t *testing.T) {
 		srcAppID := app2
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
@@ -710,7 +733,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when default action for app is not specified and no matching http verb found", func(t *testing.T) {
 		srcAppID := app3
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns1",
@@ -723,7 +746,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when http verb matches *", func(t *testing.T) {
 		srcAppID := app1
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
@@ -736,7 +759,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when http verb matches a specific verb", func(t *testing.T) {
 		srcAppID := app2
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
@@ -749,7 +772,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when operation is invoked with /", func(t *testing.T) {
 		srcAppID := app2
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
@@ -762,7 +785,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when http verb is not specified", func(t *testing.T) {
 		srcAppID := app2
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
@@ -775,7 +798,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 
 	t.Run("test when matching operation post fix is specified in policy spec", func(t *testing.T) {
 		srcAppID := app2
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
@@ -786,9 +809,35 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		assert.True(t, isAllowed)
 	})
 
+	t.Run("test grpc case-sensitivity when matching operation post fix", func(t *testing.T) {
+		srcAppID := app2
+		accessControlList, _ := initializeAccessControlList(GRPCProtocol)
+		spiffeID := SpiffeID{
+			TrustDomain: "domain1",
+			Namespace:   "ns2",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/OP4", common.HTTPExtension_NONE, GRPCProtocol, accessControlList)
+		// Action = Default action for the specific verb
+		assert.False(t, isAllowed)
+	})
+
 	t.Run("test when non-matching operation post fix is specified in policy spec", func(t *testing.T) {
 		srcAppID := app2
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
+		spiffeID := SpiffeID{
+			TrustDomain: "domain1",
+			Namespace:   "ns2",
+			AppID:       srcAppID,
+		}
+		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/b/b", common.HTTPExtension_PUT, HTTPProtocol, accessControlList)
+		// Action = Default action for the app
+		assert.False(t, isAllowed)
+	})
+
+	t.Run("test when non-matching operation post fix is specified in policy spec", func(t *testing.T) {
+		srcAppID := app2
+		accessControlList, _ := initializeAccessControlList(HTTPProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
@@ -796,12 +845,12 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 		}
 		isAllowed, _ := IsOperationAllowedByAccessControlPolicy(&spiffeID, srcAppID, "/op3/a/b", common.HTTPExtension_PUT, HTTPProtocol, accessControlList)
 		// Action = Default action for the app
-		assert.False(t, isAllowed)
+		assert.True(t, isAllowed)
 	})
 
 	t.Run("test with grpc invocation", func(t *testing.T) {
 		srcAppID := app2
-		accessControlList, _ := initializeAccessControlList()
+		accessControlList, _ := initializeAccessControlList(GRPCProtocol)
 		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
@@ -833,5 +882,12 @@ func TestGetOperationPrefixAndPostfix(t *testing.T) {
 		prefix, postfix := getOperationPrefixAndPostfix(operation)
 		assert.Equal(t, "/invoke", prefix)
 		assert.Equal(t, "/", postfix)
+	})
+
+	t.Run("test operation multi path post fix exists", func(t *testing.T) {
+		operation := "/invoke/a/b/*"
+		prefix, postfix := getOperationPrefixAndPostfix(operation)
+		assert.Equal(t, "/invoke", prefix)
+		assert.Equal(t, "/a/b/*", postfix)
 	})
 }

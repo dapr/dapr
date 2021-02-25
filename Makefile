@@ -1,5 +1,5 @@
 # ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
@@ -22,6 +22,8 @@ FORCE_INMEM ?= true
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
+
+PROTOC ?=protoc
 
 ifdef REL_VERSION
 	DAPR_VERSION := $(REL_VERSION)
@@ -233,6 +235,34 @@ lint:
 .PHONY: modtidy
 modtidy:
 	go mod tidy
+
+################################################################################
+# Target: init-proto                                                            #
+################################################################################
+.PHONY: init-proto
+init-proto:
+	go get google.golang.org/protobuf/cmd/protoc-gen-go@v1.25.0 google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
+
+################################################################################
+# Target: gen-proto                                                            #
+################################################################################
+GRPC_PROTOS:=common internals operator placement runtime sentry
+PROTO_PREFIX:=github.com/dapr/dapr
+
+# Generate archive files for each binary
+# $(1): the binary name to be archived
+define genProtoc
+.PHONY: gen-proto-$(1)
+gen-proto-$(1):
+	$(PROTOC) --go_out=. --go_opt=module=$(PROTO_PREFIX) --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./dapr/proto/$(1)/v1/*.proto
+endef
+
+$(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
+
+GEN_PROTOS:=$(foreach ITEM,$(GRPC_PROTOS),gen-proto-$(ITEM))
+
+.PHONY: gen-proto
+gen-proto: $(GEN_PROTOS) modtidy
 
 ################################################################################
 # Target: get-components-contrib                                               #

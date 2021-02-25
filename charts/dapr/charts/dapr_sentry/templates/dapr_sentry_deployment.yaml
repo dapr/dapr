@@ -1,3 +1,5 @@
+{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-trust-bundle"}}
+---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -5,9 +7,15 @@ metadata:
   labels:
     app: dapr-sentry
 data:
-  {{ if .Values.tls.issuer.certPEM }}issuer.crt: {{ b64enc .Values.tls.issuer.certPEM | trim }}{{ end }}
-  {{ if .Values.tls.issuer.keyPEM }}issuer.key: {{ b64enc .Values.tls.issuer.keyPEM | trim }}{{end}}
-  {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}{{end}}
+  {{ if .Values.tls.issuer.certPEM }}issuer.crt: {{ b64enc .Values.tls.issuer.certPEM | trim }}
+  {{ else if $existingSecret }}issuer.crt: {{ index $existingSecret.data "issuer.crt" }}
+  {{ end }}
+  {{ if .Values.tls.issuer.keyPEM }}issuer.key: {{ b64enc .Values.tls.issuer.keyPEM | trim }}
+  {{ else if $existingSecret }}issuer.key: {{ index $existingSecret.data "issuer.key" }}
+  {{end}}
+  {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
+  {{ else if $existingSecret }}ca.crt: {{ index $existingSecret.data "ca.crt" }}
+  {{end}}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -74,6 +82,10 @@ spec:
         image: "{{ .Values.global.registry }}/dapr:{{ .Values.global.tag }}"
 {{- end }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{- if eq .Values.global.daprControlPlaneOs "linux" }}
+        securityContext:
+          runAsNonRoot: {{ .Values.runAsNonRoot }}
+{{- end }}
         env:
         - name: NAMESPACE
           valueFrom:
@@ -87,12 +99,7 @@ spec:
           protocol: TCP
 {{- end }}
         resources:
-          limits:
-            cpu: 1000m
-            memory: 200Mi
-          requests:
-            cpu: 100m
-            memory: 20Mi
+{{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
           - name: credentials
             mountPath: /var/run/dapr/credentials
@@ -118,7 +125,7 @@ spec:
       volumes:
         - name: credentials
           secret:
-            secretName: dapr-trust-bundle       
+            secretName: dapr-trust-bundle
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -128,10 +135,12 @@ spec:
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneOs }}
+{{- if .Values.global.daprControlPlaneArch }}
                   - key: kubernetes.io/arch
                     operator: In
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
+{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         - name: {{ .Values.global.imagePullSecrets }}

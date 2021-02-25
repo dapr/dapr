@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 	yaml "gopkg.in/yaml.v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -43,7 +44,12 @@ const (
 	GRPCProtocol        = "grpc"
 )
 
+// Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
+	metav1.TypeMeta `json:",inline" yaml:",inline"`
+	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
+	metav1.ObjectMeta `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	// See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	Spec ConfigurationSpec `json:"spec" yaml:"spec"`
 }
 
@@ -98,6 +104,7 @@ type PipelineSpec struct {
 type HandlerSpec struct {
 	Name         string       `json:"name" yaml:"name"`
 	Type         string       `json:"type" yaml:"type"`
+	Version      string       `json:"version" yaml:"version"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
@@ -111,8 +118,14 @@ type SelectorField struct {
 }
 
 type TracingSpec struct {
-	SamplingRate string `json:"samplingRate" yaml:"samplingRate"`
-	Stdout       bool   `json:"stdout" yaml:"stdout"`
+	SamplingRate string     `json:"samplingRate" yaml:"samplingRate"`
+	Stdout       bool       `json:"stdout" yaml:"stdout"`
+	Zipkin       ZipkinSpec `json:"zipkin" yaml:"zipkin"`
+}
+
+// ZipkinSpec defines Zipkin trace configurations
+type ZipkinSpec struct {
+	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
 }
 
 // MetricSpec configuration for metrics
@@ -175,28 +188,28 @@ func LoadDefaultConfiguration() *Configuration {
 }
 
 // LoadStandaloneConfiguration gets the path to a config file and loads it into a configuration
-func LoadStandaloneConfiguration(config string) (*Configuration, error) {
+func LoadStandaloneConfiguration(config string) (*Configuration, string, error) {
 	_, err := os.Stat(config)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	b, err := ioutil.ReadFile(config)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	conf := LoadDefaultConfiguration()
 	err = yaml.Unmarshal(b, conf)
 	if err != nil {
-		return nil, err
+		return nil, string(b), err
 	}
 	err = sortAndValidateSecretsConfiguration(conf)
 	if err != nil {
-		return nil, err
+		return nil, string(b), err
 	}
 
-	return conf, nil
+	return conf, string(b), nil
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name
@@ -281,7 +294,7 @@ func containsKey(s []string, key string) bool {
 }
 
 // ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup
-func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControlList, error) {
+func ParseAccessControlSpec(accessControlSpec AccessControlSpec, protocol string) (*AccessControlList, error) {
 	if accessControlSpec.TrustDomain == "" &&
 		accessControlSpec.DefaultAction == "" &&
 		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
@@ -346,6 +359,11 @@ func ParseAccessControlSpec(accessControlSpec AccessControlSpec) (*AccessControl
 				operation = "/" + operation
 			}
 			operationPrefix, operationPostfix := getOperationPrefixAndPostfix(operation)
+
+			if protocol == HTTPProtocol {
+				operationPrefix = strings.ToLower(operationPrefix)
+				operationPostfix = strings.ToLower(operationPostfix)
+			}
 
 			operationActions := AccessControlListOperationAction{
 				OperationPostFix: operationPostfix,
@@ -526,13 +544,26 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string
 
 	inputOperationPrefix, inputOperationPostfix := getOperationPrefixAndPostfix(inputOperation)
 
+	// If HTTP, make case-insensitive
+	if appProtocol == HTTPProtocol {
+		inputOperationPrefix = strings.ToLower(inputOperationPrefix)
+		inputOperationPostfix = strings.ToLower(inputOperationPostfix)
+	}
+
 	// The acl may specify the operation in a format /invoke/*, get and match only the prefix first
 	operationPolicy, found := appPolicy.AppOperationActions[inputOperationPrefix]
 	if found {
 		// The ACL might have the operation specified as /invoke/*. Here "/*" is stored as the postfix.
 		// Match postfix
-		if operationPolicy.OperationPostFix != "/*" && !strings.HasPrefix(operationPolicy.OperationPostFix, inputOperationPostfix) {
-			return isActionAllowed(action), actionPolicy
+
+		if strings.Contains(operationPolicy.OperationPostFix, "/*") {
+			if !strings.HasPrefix(inputOperationPostfix, strings.ReplaceAll(operationPolicy.OperationPostFix, "/*", "")) {
+				return isActionAllowed(action), actionPolicy
+			}
+		} else {
+			if operationPolicy.OperationPostFix != inputOperationPostfix {
+				return isActionAllowed(action), actionPolicy
+			}
 		}
 
 		// Operation prefix and postfix match. Now check the operation specific policy

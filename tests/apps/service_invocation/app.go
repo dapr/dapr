@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -27,9 +27,9 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
-	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 var httpMethods []string
@@ -209,7 +209,7 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 
 func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers map[string]string) (*http.Response, error) {
 	url := fmt.Sprintf("http://localhost:%s/v1.0/invoke/%s/method/%s", strconv.Itoa(daprPort), remoteApp, method)
-	fmt.Printf("invoke url is %s", url)
+	fmt.Printf("invoke url is %s\n", url)
 
 	var t io.Reader = nil
 	if data != nil {
@@ -229,7 +229,7 @@ func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers 
 func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.InvokeServiceRequest {
 	msg := &commonv1pb.InvokeRequest{Method: method}
 	msg.ContentType = jsonContentType
-	msg.Data = &any.Any{Value: body}
+	msg.Data = &anypb.Any{Value: body}
 	if httpVerb != "" {
 		msg.HttpExtension = &commonv1pb.HTTPExtension{
 			Verb: commonv1pb.HTTPExtension_Verb(commonv1pb.HTTPExtension_Verb_value[httpVerb]),
@@ -502,7 +502,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 		Id: commandBody.RemoteApp,
 		Message: &commonv1pb.InvokeRequest{
 			Method:      "retrieve_request_object",
-			Data:        &any.Any{Value: []byte("GRPCToGRPCTest")},
+			Data:        &anypb.Any{Value: []byte("GRPCToGRPCTest")},
 			ContentType: "text/plain; utf-8",
 		},
 	}
@@ -606,7 +606,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 		Id: commandBody.RemoteApp,
 		Message: &commonv1pb.InvokeRequest{
 			Method:      "retrieve_request_object",
-			Data:        &any.Any{Value: []byte("GRPCToHTTPTest")},
+			Data:        &anypb.Any{Value: []byte("GRPCToHTTPTest")},
 			ContentType: "text/plain; utf-8",
 			HttpExtension: &commonv1pb.HTTPExtension{
 				Verb: commonv1pb.HTTPExtension_POST,
@@ -771,7 +771,7 @@ func httpToGrpcTest(w http.ResponseWriter, r *http.Request) {
 // and expects the response to contain the same string inside an appResponse.
 // It calls methods with all 4 http methods (verbs)
 func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Enter httpToGrpcTest")
+	fmt.Println("Enter httpTohttpTest")
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
@@ -794,7 +794,7 @@ func httpTohttpTest(w http.ResponseWriter, r *http.Request) {
 		"http://localhost:%s/v1.0/invoke/%s/method/%s",
 		strconv.Itoa(daprPort), commandBody.RemoteApp,
 		"posthandler")
-	fmt.Printf("post invoke url is %s", url)
+	fmt.Printf("post invoke url is %s\n", url)
 	b, err := json.Marshal(testMessage)
 	if err != nil {
 		fmt.Printf("marshal had error %s\n", err)
@@ -1071,7 +1071,10 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 	var testResponse negativeTestResult
 
 	client := newHTTPClient()
-	client.Timeout = 5 * time.Second
+	// Explicitly set the timeout to force an error
+	if commandBody.Method == "timeouterror" {
+		client.Timeout = 5 * time.Second
+	}
 	resp, err := client.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewBuffer(b)) // nolint
 
 	testResponse.MainCallSuccessful = err == nil && resp.StatusCode == 200
@@ -1110,7 +1113,12 @@ func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("dapr address is %s\n", daprAddress)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	timeoutDuration := time.Duration(30)
+	// Shorten the timeout if we want to force the error
+	if commandBody.Method == "timeouterror" {
+		timeoutDuration = time.Duration(5)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutDuration*time.Second)
 	defer cancel()
 
 	conn, err := grpc.DialContext(ctx, daprAddress, grpc.WithInsecure())

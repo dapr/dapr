@@ -31,3 +31,7 @@ func (m *MockPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handl
 func (m *MockPubSub) Close() error {
 	return nil
 }
+
+func (m *MockPubSub) Features() []pubsub.Feature {
+	return nil
+}

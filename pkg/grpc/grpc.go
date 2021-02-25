@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -122,6 +122,10 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 	if err != nil {
 		g.lock.Unlock()
 		return nil, err
+	}
+
+	if c, ok := g.connectionPool[address]; ok {
+		c.Close()
 	}
 
 	g.connectionPool[address] = conn

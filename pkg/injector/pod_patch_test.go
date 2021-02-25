@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -93,6 +93,7 @@ func TestGetSideCarContainer(t *testing.T) {
 	annotations[daprAppPortKey] = "5000"
 	annotations[daprLogAsJSON] = "true"
 	annotations[daprAPITokenSecret] = "secret"
+	annotations[daprAppTokenSecret] = "appsecret"
 
 	container, _ := getSidecarContainer(annotations, "app_id", "darpio/dapr", "Always", "dapr-system", "controlplane:9000", "placement:50000", nil, "", "", "", "sentry:50000", true, "pod_identity")
 
@@ -111,10 +112,18 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--app-max-concurrency", "-1",
 		"--sentry-address", "sentry:50000",
 		"--metrics-port", "9090",
+		"--dapr-http-max-request-size", "-1",
 		"--log-as-json",
 	}
 
+	// DAPR_HOST_IP
+	assert.Equal(t, "", container.Env[0].Value)
+	// NAMESPACE
+	assert.Equal(t, "dapr-system", container.Env[1].Value)
+	// DAPR_API_TOKEN
 	assert.Equal(t, "secret", container.Env[2].ValueFrom.SecretKeyRef.Name)
+	// DAPR_APP_TOKEN
+	assert.Equal(t, "appsecret", container.Env[3].ValueFrom.SecretKeyRef.Name)
 	assert.EqualValues(t, expectedArgs, container.Args)
 	assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 }

@@ -1,5 +1,5 @@
 # ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
@@ -33,10 +33,10 @@ jobs:
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
           git checkout ${REL_BRANCH} || git checkout master
           echo "BASE_BRANCH=$(git branch --show-current)" >> $GITHUB_ENV
-          git checkout -b release-notes-${REL_VERSION}
+          git checkout -b pr-release-notes-${REL_VERSION}
           git add .
           # Only commit and push if we have changes
-          git diff --quiet && git diff --staged --quiet || (git commit -m "${COMMIT_MSG}"; git push --force origin release-notes-${REL_VERSION})
+          git diff --quiet && git diff --staged --quiet || (git commit -m "${COMMIT_MSG}"; git push --force origin pr-release-notes-${REL_VERSION})
       - name: Create pull request
         env:
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
