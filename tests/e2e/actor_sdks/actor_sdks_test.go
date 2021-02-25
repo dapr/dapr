@@ -84,6 +84,13 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 		},
+		{
+			AppName:        "actorphp",
+			DaprEnabled:    true,
+			ImageName:      "e2e-actorphp",
+			Replicas:       1,
+			IngressEnabled: true,
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, apps, nil, nil)
@@ -91,7 +98,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorInvocationCrossSDKs(t *testing.T) {
-	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor"}
+	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor", "PHPCarActor"}
 	scenarios := []struct {
 		method           string
 		payload          string
