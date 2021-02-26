@@ -17,12 +17,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       GOVER: 1.16
+      KUBECTLVER: v1.19.3
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
       DAPR_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
       DAPR_TEST_REGISTRY: ${{ secrets.DOCKER_TEST_REGISTRY }}
-      HELMVER: v3.2.1
+      HELMVER: v3.4.0
       DAPR_NAMESPACE: dapr-tests
       MAX_TEST_TIMEOUT: 5400
       TARGET_OS: ${{ matrix.target_os }}
@@ -73,6 +74,10 @@ jobs:
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
+      - uses: azure/setup-kubectl@v1
+        with:
+          version: ${{ env.KUBECTLVER }}
+        id: install
       - name: Set up Helm ${{ env.HELMVER }}
         uses: azure/setup-helm@v1
         with:
