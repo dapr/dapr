@@ -18,7 +18,6 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -511,14 +510,6 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		},
 		Command: []string{"/daprd"},
 		Env: []corev1.EnvVar{
-			{
-				Name: utils.HostIPEnvVar,
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "status.podIP",
-					},
-				},
-			},
 			{
 				Name:  "NAMESPACE",
 				Value: namespace,
