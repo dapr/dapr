@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/pkg/errors"
 )
 
@@ -63,8 +64,7 @@ func (s *stateStoreRegistry) getSecretStore(name, version string) (func() state.
 	if ok {
 		return stateStoreFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		stateStoreFn, ok = s.stateStores[nameLower]
 	}
 	return stateStoreFn, ok
