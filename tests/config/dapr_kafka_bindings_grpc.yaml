@@ -1,0 +1,27 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: test-topic-grpc
+spec:
+  type: bindings.kafka
+  initTimeout: 1m
+  version: v1
+  metadata:
+  # Kafka broker connection setting
+  - name: brokers
+    value: dapr-kafka:9092
+  # consumer configuration: topic and consumer group
+  - name: topics
+    value: dapr-test-grpc
+  - name: consumerGroup
+    value: group1
+  # publisher configuration: topic
+  - name: publishTopic
+    value: dapr-test-grpc
+  - name: authRequired
+    value: "false"

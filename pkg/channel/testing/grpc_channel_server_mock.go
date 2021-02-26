@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -36,8 +36,7 @@ func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest)
 	}
 
 	dt["httpverb"] = in.HttpExtension.GetVerb().String()
-	serialized, _ := json.Marshal(in.HttpExtension.Querystring)
-	dt["querystring"] = string(serialized)
+	dt["querystring"] = in.HttpExtension.Querystring
 
 	ds, _ := json.Marshal(dt)
 	return &commonv1pb.InvokeResponse{Data: &anypb.Any{Value: ds}, ContentType: "application/json"}, m.Error

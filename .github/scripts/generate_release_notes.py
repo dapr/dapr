@@ -1,5 +1,5 @@
 # ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
@@ -30,6 +30,7 @@ top_repos=[
     'go-sdk',
     'java-sdk',
     'python-sdk',
+    'php-sdk',
     'rust-sdk',
     'cpp-sdk',
     'js-sdk',
@@ -47,11 +48,23 @@ subtitles={
     "dotnet-sdk": ".NET SDK",
     "go-sdk": "Go SDK",
     "python-sdk": "Python SDK",
+    "php-sdk": "PHP SDK",
     "js-sdk": "JavaScript SDK",
     "rust-sdk": "Rust SDK",
     "cpp-sdk": "C++ SDK",
     "docs": "Documentation",
+    "test-infra": "Test Infrastructure"
 }
+
+text_substitutions=[
+    (re.compile(re.escape("**ADD**"), re.IGNORECASE), "**ADDED**"),
+    (re.compile(re.escape("**SOLVE**"), re.IGNORECASE), "**SOLVED**"),
+    (re.compile(re.escape("**FIX**"), re.IGNORECASE), "**FIXED**"),
+    (re.compile(re.escape("**RESOLVE**"), re.IGNORECASE), "**RESOLVED**"),
+    (re.compile(re.escape("**REMOVE**"), re.IGNORECASE), "**REMOVED**"),
+    (re.compile(re.escape("**UPDATE**"), re.IGNORECASE), "**UPDATED**"),
+    (re.compile(re.escape("**DOCUMENT**"), re.IGNORECASE), "**DOCUMENTED**"),
+]
 
 changes=[]
 
@@ -99,6 +112,21 @@ releases = sorted([r for r in g.get_repo("dapr/dashboard").get_releases()], key=
 dashboardReleaseVersion = re.search(dashboardReleaseVersionRegex, releases[0].tag_name).group(1)
 print("Detected Dapr Dashboard version {}".format(dashboardReleaseVersion))
 
+releaseNotePath="docs/release_notes/v{}.md".format(releaseVersion)
+
+# get all issues previously released to avoid adding issues in previous release candidates.
+# GitHub API does not have an easy way to list all projects for an issue or PR.
+# So, we extract all issues references in previous release notes.
+issuesOrPRsPreviouslyReleased = {}
+for filename in os.listdir(os.path.join(os.getcwd(), 'docs/release_notes')):
+    filepath = os.path.join('docs/release_notes', filename)
+    if releaseNotePath == filepath:
+        continue
+    with open(filepath, 'r') as f:
+       for line in f:
+           for m in re.findall(r'\((https://github.com/\S+)\)', line):
+               issuesOrPRsPreviouslyReleased[m] = True
+
 # get all cards in all columns
 columns = project.get_columns()
 cards = []
@@ -111,6 +139,10 @@ contributors = set()
 for c in cards:
     issueOrPR = c.get_content()
     url = issueOrPR.html_url
+    if url in issuesOrPRsPreviouslyReleased:
+        # Issue was previously released, ignoring.
+        continue
+
     try:
         # only a PR can be converted to a PR object, otherwise will throw error.
         pr = issueOrPR.as_pull_request()
@@ -128,16 +160,18 @@ for c in cards:
         note = match.group(1).strip()
         if note:
             if note.upper() not in ["NOT APPLICABLE", "N/A"]:
+                for text_substitution in text_substitutions:
+                    note = text_substitution[0].sub(text_substitution[1], note)
                 changes.append((repo, issueOrPR, note, contributors, url))
             hasNote = True
     if not hasNote:
+        # Issue or PR has no release note.
         # Auto-generate a release note as fallback.
         note = '**RESOLVED** ' + issueOrPR.title
         changes.append((repo, issueOrPR, note, contributors, url))
         assignee = 'nobody'
         if issueOrPR.assignee:
             assignee = issueOrPR.assignee.login
-        print("Issue or PR assigned to {} has no release note: {}".format(assignee, url))
 
 warnings=[]
 changeLines=[]
@@ -180,7 +214,6 @@ warningsText=''
 if len(warnings) > 0:
     warningsText='\n\n'.join(warnings)
 
-releaseNotePath="docs/release_notes/v{}.md".format(releaseVersion)
 with open(releaseNotePath, 'w') as file:
     file.write(Template(template).safe_substitute(
         dapr_version=releaseVersion,

@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -79,6 +79,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testTopicHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("testTopicHandler called")
 	if r.Method == http.MethodOptions {
 		log.Println("test-topic binding input has been accepted")
 		// Sending StatusOK back to the topic, so it will not attempt to redeliver on session restart.
@@ -89,6 +90,7 @@ func testTopicHandler(w http.ResponseWriter, r *http.Request) {
 
 	var message string
 	err := json.NewDecoder(r.Body).Decode(&message)
+	log.Printf("Got message: %s", message)
 	if err != nil {
 		log.Printf("error parsing test-topic input binding payload: %s", err)
 		w.WriteHeader(http.StatusOK)

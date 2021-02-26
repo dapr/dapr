@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -116,8 +116,7 @@ func (b *bindingsRegistry) getInputBinding(name, version string) (func() binding
 	if ok {
 		return bindingFn, true
 	}
-	switch versionLower {
-	case "", "v0", "v1":
+	if components.IsInitialVersion(versionLower) {
 		bindingFn, ok = b.inputBindings[nameLower]
 	}
 	return bindingFn, ok
