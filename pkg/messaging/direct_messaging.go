@@ -182,28 +182,32 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 
 	var forwardedHeaderValue string
 
+	addOrCreate := func(header string, value string) {
+		if metadata[header] == nil {
+			metadata[header] = &internalv1pb.ListStringValue{
+				Values: []string{value},
+			}
+		} else {
+			metadata[header].Values = append(metadata[header].Values, value)
+		}
+	}
+
 	if d.hostAddress != "" {
 		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-		metadata[fasthttp.HeaderXForwardedFor] = &internalv1pb.ListStringValue{
-			Values: []string{d.hostAddress},
-		}
+		addOrCreate(fasthttp.HeaderXForwardedFor, d.hostAddress)
 
 		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress + ";"
 	}
 
 	if d.hostName != "" {
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
-		metadata[fasthttp.HeaderXForwardedHost] = &internalv1pb.ListStringValue{
-			Values: []string{d.hostName},
-		}
+		addOrCreate(fasthttp.HeaderXForwardedHost, d.hostName)
 
 		forwardedHeaderValue += "host=" + d.hostName
 	}
 
 	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
-	metadata[fasthttp.HeaderForwarded] = &internalv1pb.ListStringValue{
-		Values: []string{forwardedHeaderValue},
-	}
+	addOrCreate(fasthttp.HeaderForwarded, forwardedHeaderValue)
 }
 
 func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
