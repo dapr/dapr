@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -64,6 +64,7 @@ func StartEndpointHealthCheck(endpointAddress string, opts ...Option) chan bool 
 			if err != nil || resp.StatusCode() != options.successStatusCode {
 				failureCount++
 				if failureCount == options.failureThreshold {
+					failureCount--
 					ch <- false
 				}
 			} else {

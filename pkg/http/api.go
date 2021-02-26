@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -390,8 +390,15 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
+		key, err1 := state_loader.GetModifiedStateKey(k, storeName, a.id)
+		if err1 != nil {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err1))
+			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+			log.Debug(err1)
+			return
+		}
 		r := state.GetRequest{
-			Key:      state_loader.GetModifiedStateKey(k, storeName, a.id),
+			Key:      key,
 			Metadata: req.Metadata,
 		}
 		reqs[i] = r
@@ -426,8 +433,14 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 			fn := func(param interface{}) {
 				r := param.(*BulkGetResponse)
+				k, err := state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
+				if err != nil {
+					log.Debug(err)
+					r.Error = err.Error()
+					return
+				}
 				gr := &state.GetRequest{
-					Key:      state_loader.GetModifiedStateKey(r.Key, storeName, a.id),
+					Key:      k,
 					Metadata: metadata,
 				}
 
@@ -480,8 +493,15 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
+	k, err := state_loader.GetModifiedStateKey(key, storeName, a.id)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err))
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		log.Debug(err)
+		return
+	}
 	req := state.GetRequest{
-		Key: state_loader.GetModifiedStateKey(key, storeName, a.id),
+		Key: k,
 		Options: state.GetStateOption{
 			Consistency: consistency,
 		},
@@ -530,8 +550,15 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 
 	metadata := getMetadataFromRequest(reqCtx)
+	k, err := state_loader.GetModifiedStateKey(key, storeName, a.id)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+		log.Debug(err)
+		return
+	}
 	req := state.DeleteRequest{
-		Key: state_loader.GetModifiedStateKey(key, storeName, a.id),
+		Key: k,
 		Options: state.DeleteStateOption{
 			Concurrency: concurrency,
 			Consistency: consistency,
@@ -557,19 +584,9 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
-
-	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
-
-	if a.secretStores[secretStoreName] == nil {
-		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
-		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
-		log.Debug(msg)
+	store, secretStoreName, err := a.getSecretStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
@@ -588,7 +605,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	resp, err := a.secretStores[secretStoreName].GetSecret(req)
+	resp, err := store.GetSecret(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrSecretGet, req.Name, secretStoreName, err.Error()))
@@ -607,19 +624,9 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
-
-	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
-
-	if a.secretStores[secretStoreName] == nil {
-		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
-		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
-		log.Debug(msg)
+	store, secretStoreName, err := a.getSecretStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
@@ -629,7 +636,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	resp, err := a.secretStores[secretStoreName].BulkGetSecret(req)
+	resp, err := store.BulkGetSecret(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrBulkSecretGet, secretStoreName, err.Error()))
@@ -656,6 +663,23 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 	respondWithJSON(reqCtx, fasthttp.StatusOK, respBytes)
 }
 
+func (a *api) getSecretStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (secretstores.SecretStore, string, error) {
+	if a.secretStores == nil || len(a.secretStores) == 0 {
+		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		return nil, "", errors.New(msg.Message)
+	}
+
+	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
+
+	if a.secretStores[secretStoreName] == nil {
+		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
+		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.secretStores[secretStoreName], secretStoreName, nil
+}
+
 func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
 	if err != nil {
@@ -673,7 +697,13 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	for i, r := range reqs {
-		reqs[i].Key = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
+		reqs[i].Key, err = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
+		if err != nil {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+			respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+			log.Debug(err)
+			return
+		}
 	}
 
 	err = store.BulkSet(reqs)
@@ -1301,28 +1331,42 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		switch o.Operation {
 		case state.Upsert:
 			var upsertReq state.SetRequest
-			if err := mapstructure.Decode(o.Request, &upsertReq); err != nil {
+			err := mapstructure.Decode(o.Request, &upsertReq)
+			if err != nil {
 				msg := NewErrorResponse("ERR_MALFORMED_REQUEST",
 					fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
 				respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 				log.Debug(msg)
 				return
 			}
-			upsertReq.Key = state_loader.GetModifiedStateKey(upsertReq.Key, storeName, a.id)
+			upsertReq.Key, err = state_loader.GetModifiedStateKey(upsertReq.Key, storeName, a.id)
+			if err != nil {
+				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+				respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+				log.Debug(err)
+				return
+			}
 			operations = append(operations, state.TransactionalStateOperation{
 				Request:   upsertReq,
 				Operation: state.Upsert,
 			})
 		case state.Delete:
 			var delReq state.DeleteRequest
-			if err := mapstructure.Decode(o.Request, &delReq); err != nil {
+			err := mapstructure.Decode(o.Request, &delReq)
+			if err != nil {
 				msg := NewErrorResponse("ERR_MALFORMED_REQUEST",
 					fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
 				respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 				log.Debug(msg)
 				return
 			}
-			delReq.Key = state_loader.GetModifiedStateKey(delReq.Key, storeName, a.id)
+			delReq.Key, err = state_loader.GetModifiedStateKey(delReq.Key, storeName, a.id)
+			if err != nil {
+				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+				respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
+				log.Debug(msg)
+				return
+			}
 			operations = append(operations, state.TransactionalStateOperation{
 				Request:   delReq,
 				Operation: state.Delete,
