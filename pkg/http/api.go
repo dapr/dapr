@@ -584,19 +584,9 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
-
-	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
-
-	if a.secretStores[secretStoreName] == nil {
-		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
-		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
-		log.Debug(msg)
+	store, secretStoreName, err := a.getSecretStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
@@ -615,7 +605,7 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	resp, err := a.secretStores[secretStoreName].GetSecret(req)
+	resp, err := store.GetSecret(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrSecretGet, req.Name, secretStoreName, err.Error()))
@@ -634,19 +624,9 @@ func (a *api) onGetSecret(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
-	if a.secretStores == nil || len(a.secretStores) == 0 {
-		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
-		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
-		log.Debug(msg)
-		return
-	}
-
-	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
-
-	if a.secretStores[secretStoreName] == nil {
-		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
-		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
-		log.Debug(msg)
+	store, secretStoreName, err := a.getSecretStoreWithRequestValidation(reqCtx)
+	if err != nil {
+		log.Debug(err)
 		return
 	}
 
@@ -656,7 +636,7 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 		Metadata: metadata,
 	}
 
-	resp, err := a.secretStores[secretStoreName].BulkGetSecret(req)
+	resp, err := store.BulkGetSecret(req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_SECRET_GET",
 			fmt.Sprintf(messages.ErrBulkSecretGet, secretStoreName, err.Error()))
@@ -681,6 +661,23 @@ func (a *api) onBulkGetSecret(reqCtx *fasthttp.RequestCtx) {
 
 	respBytes, _ := a.json.Marshal(filteredSecrets)
 	respondWithJSON(reqCtx, fasthttp.StatusOK, respBytes)
+}
+
+func (a *api) getSecretStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (secretstores.SecretStore, string, error) {
+	if a.secretStores == nil || len(a.secretStores) == 0 {
+		msg := NewErrorResponse("ERR_SECRET_STORES_NOT_CONFIGURED", messages.ErrSecretStoreNotConfigured)
+		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)
+		return nil, "", errors.New(msg.Message)
+	}
+
+	secretStoreName := reqCtx.UserValue(secretStoreNameParam).(string)
+
+	if a.secretStores[secretStoreName] == nil {
+		msg := NewErrorResponse("ERR_SECRET_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrSecretStoreNotFound, secretStoreName))
+		respondWithError(reqCtx, fasthttp.StatusUnauthorized, msg)
+		return nil, "", errors.New(msg.Message)
+	}
+	return a.secretStores[secretStoreName], secretStoreName, nil
 }
 
 func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
