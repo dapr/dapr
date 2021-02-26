@@ -1,13 +1,13 @@
 module github.com/dapr/dapr
 
-go 1.15
+go 1.16
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.1.1
-	github.com/dapr/components-contrib v1.0.0-rc5
+	github.com/dapr/components-contrib v1.0.0-rc6
 	github.com/fasthttp/router v1.3.5
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
