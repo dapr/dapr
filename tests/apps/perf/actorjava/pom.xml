@@ -15,7 +15,7 @@
     <description>Module for polling against adapters</description>
 
     <properties>
-        <dapr-sdk.version>0.9.2</dapr-sdk.version>
+        <dapr-sdk.version>1.0.0-rc-6</dapr-sdk.version>
     </properties>
     <repositories>
         <repository>

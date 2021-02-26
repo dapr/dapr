@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -383,8 +383,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
+		key, err1 := state_loader.GetModifiedStateKey(k, in.StoreName, a.id)
+		if err1 != nil {
+			return &runtimev1pb.GetBulkStateResponse{}, err1
+		}
 		r := state.GetRequest{
-			Key:      state_loader.GetModifiedStateKey(k, in.StoreName, a.id),
+			Key:      key,
 			Metadata: in.Metadata,
 		}
 		reqs[i] = r
@@ -450,9 +454,12 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
-
+	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	if err != nil {
+		return &runtimev1pb.GetStateResponse{}, err
+	}
 	req := state.GetRequest{
-		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
+		Key:      key,
 		Metadata: in.Metadata,
 		Options: state.GetStateOption{
 			Consistency: stateConsistencyToString(in.Consistency),
@@ -484,8 +491,12 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	reqs := []state.SetRequest{}
 	for _, s := range in.States {
+		key, err1 := state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
+		if err1 != nil {
+			return &emptypb.Empty{}, err1
+		}
 		req := state.SetRequest{
-			Key:      state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id),
+			Key:      key,
 			Metadata: s.Metadata,
 			Value:    s.Value,
 		}
@@ -533,8 +544,12 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		return &emptypb.Empty{}, err
 	}
 
+	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	if err != nil {
+		return &empty.Empty{}, err
+	}
 	req := state.DeleteRequest{
-		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
+		Key:      key,
 		Metadata: in.Metadata,
 	}
 	if in.Etag != nil {
@@ -565,8 +580,12 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
+		key, err1 := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
+		if err1 != nil {
+			return &empty.Empty{}, err1
+		}
 		req := state.DeleteRequest{
-			Key:      state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id),
+			Key:      key,
 			Metadata: item.Metadata,
 		}
 		if item.Etag != nil {
@@ -710,11 +729,14 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		var req = inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
-
+		key, err := state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
-				Key: state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
+				Key: key,
 				// Limitation:
 				// components that cannot handle byte array need to deserialize/serialize in
 				// component specific way in components-contrib repo.
@@ -739,7 +761,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 		case state.Delete:
 			delReq := state.DeleteRequest{
-				Key:      state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
+				Key:      key,
 				Metadata: req.Metadata,
 			}
 

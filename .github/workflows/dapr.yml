@@ -1,5 +1,5 @@
 # ------------------------------------------------------------
-# Copyright (c) Microsoft Corporation.
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
 # Licensed under the MIT License.
 # ------------------------------------------------------------
 
@@ -21,7 +21,7 @@ jobs:
     name: Build ${{ matrix.target_os }}_${{ matrix.target_arch }} binaries
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: 1.15.3
+      GOVER: 1.16
       GOLANGCILINT_VER: v1.31
       GOOS: ${{ matrix.target_os }}
       GOARCH: ${{ matrix.target_arch }}
@@ -186,7 +186,10 @@ jobs:
               tar xzvf $tgzfile -C $RELEASE_DIR
             done
           done
-
+      - name: generate checksum files
+        run: cd ${ARTIFACT_DIR} && for i in *; do sha256sum -b $i > "$i.sha256"; done && cd -
+      - name: lists artifacts
+        run: ls -l ${{ env.ARTIFACT_DIR }}
       - name: publish binaries to github
         if: startswith(github.ref, 'refs/tags/v')
         run: |
@@ -284,5 +287,14 @@ jobs:
             git config --global user.email "daprweb@microsoft.com"
             git config --global user.name "dapr-bot"
             git add --all
-            git commit -m "Release - $daprVersion"
-            git push
+
+            # Check if the dapr-${daprVersion}.tgz file is modified.
+            if git diff --name-only --staged | grep -q ${daprVersion}; then
+              # If it is, we update the Helm chart, since this is an intentional update.
+              git commit -m "Release - $daprVersion"
+              git push
+            else
+              # If not, this update was accidentally triggered by tagging a release before updating the Helm chart.
+              echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
+              exit -1
+            fi

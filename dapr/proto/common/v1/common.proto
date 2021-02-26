@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -39,8 +39,8 @@ message HTTPExtension {
   // Required. HTTP verb.
   Verb verb = 1;
 
-  // querystring includes HTTP querystring.
-  map<string, string> querystring = 2;
+  // Optional. querystring represents an encoded HTTP url query string in the following format: name=value&name2=value2
+  string querystring = 2;
 }
 
 // InvokeRequest is the message to invoke a method with the data.

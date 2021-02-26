@@ -1,5 +1,5 @@
 // ------------------------------------------------------------
-// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
@@ -1754,8 +1754,19 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		Metadata: map[string]string{pubsubName: TestPubsubName},
 	}
 
+	envelope = pubsub.NewCloudEventsEnvelope("", "", pubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "")
+	base64, err := json.Marshal(envelope)
+	assert.Nil(t, err)
+
+	testPubSubMessageBase64 := &pubsub.NewMessage{
+		Topic:    topic,
+		Data:     base64,
+		Metadata: map[string]string{pubsubName: TestPubsubName},
+	}
+
 	testCases := []struct {
 		name             string
+		message          *pubsub.NewMessage
 		responseStatus   runtimev1pb.TopicEventResponse_TopicEventResponseStatus
 		errorExpected    bool
 		noResponseStatus bool
@@ -1763,35 +1774,47 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	}{
 		{
 			name:             "failed to publish message to user app with unimplemented error",
+			message:          testPubSubMessage,
 			noResponseStatus: true,
 			responseError:    status.Errorf(codes.Unimplemented, "unimplemented method"),
 			errorExpected:    false, // should be dropped with no error
 		},
 		{
 			name:             "failed to publish message to user app with response error",
+			message:          testPubSubMessage,
 			noResponseStatus: true,
 			responseError:    assert.AnError,
 			errorExpected:    true,
 		},
 		{
 			name:             "succeeded to publish message to user app with empty response",
+			message:          testPubSubMessage,
 			noResponseStatus: true,
 		},
 		{
 			name:           "succeeded to publish message to user app with success response",
+			message:        testPubSubMessage,
+			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
+		},
+		{
+			name:           "succeeded to publish message to user app with base64 encoded cloud event",
+			message:        testPubSubMessageBase64,
 			responseStatus: runtimev1pb.TopicEventResponse_SUCCESS,
 		},
 		{
 			name:           "succeeded to publish message to user app with retry",
+			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_RETRY,
 			errorExpected:  true,
 		},
 		{
 			name:           "succeeded to publish message to user app with drop",
+			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_DROP,
 		},
 		{
 			name:           "succeeded to publish message to user app with invalid response",
+			message:        testPubSubMessage,
 			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
 			errorExpected:  true,
 		},
@@ -1833,7 +1856,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			defer rt.grpc.AppClient.Close()
 
 			// act
-			err = rt.publishMessageGRPC(testPubSubMessage)
+			err = rt.publishMessageGRPC(tc.message)
 
 			// assert
 			if tc.errorExpected {
