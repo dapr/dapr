@@ -695,6 +695,10 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
+	if len(reqs) == 0 {
+		respondEmpty(reqCtx)
+		return
+	}
 
 	for i, r := range reqs {
 		reqs[i].Key, err = state_loader.GetModifiedStateKey(r.Key, storeName, a.id)
@@ -1323,6 +1327,10 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, err.Error()))
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
 		log.Debug(msg)
+		return
+	}
+	if len(req.Operations) == 0 {
+		respondEmpty(reqCtx)
 		return
 	}
 
