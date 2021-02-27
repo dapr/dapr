@@ -69,7 +69,8 @@ func TestInvokeMethod(t *testing.T) {
 		response, err := c.InvokeMethod(context.Background(), req)
 
 		assert.NoError(t, err)
-		assert.Equal(t, "code:4 message:\"context deadline exceeded\"", response.Status().String())
+		assert.Equal(t, int32(4), response.Status().GetCode())
+		assert.Equal(t, "context deadline exceeded", response.Status().GetMessage())
 	})
 
 	grpcServer.Stop()
