@@ -8,6 +8,9 @@ package testing
 import (
 	context "context"
 	"encoding/json"
+	"net/url"
+	"strconv"
+	"time"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -27,6 +30,7 @@ type MockServer struct {
 
 func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
+
 	dt := map[string]string{
 		"method": in.Method,
 	}
@@ -39,6 +43,18 @@ func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest)
 	dt["querystring"] = in.HttpExtension.Querystring
 
 	ds, _ := json.Marshal(dt)
+
+	if in.Method == "testTimeout" {
+		times := time.Duration(1)
+		v, err := url.ParseQuery(in.HttpExtension.Querystring);
+		if err == nil{
+			t,err := strconv.Atoi(v["timeout"][0])
+			if err == nil {
+				times = time.Duration(t)
+			}
+		}
+		time.Sleep(times * time.Second)
+	}
 	return &commonv1pb.InvokeResponse{Data: &anypb.Any{Value: ds}, ContentType: "application/json"}, m.Error
 }
 

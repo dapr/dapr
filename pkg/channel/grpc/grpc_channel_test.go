@@ -41,25 +41,40 @@ func TestInvokeMethod(t *testing.T) {
 	defer close(t, conn)
 	assert.NoError(t, err)
 
-	c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", timeout: 120 * time.Second}
-	assert.Equal(t, 120*time.Second, c.timeout)
-	req := invokev1.NewInvokeMethodRequest("method")
-	req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
-	response, err := c.InvokeMethod(context.Background(), req)
-	assert.NoError(t, err)
-	contentType, body := response.RawData()
+	t.Run("invoke method", func(t *testing.T) {
+		c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", timeout: 120 * time.Second}
+		assert.Equal(t, 120*time.Second, c.timeout)
+		req := invokev1.NewInvokeMethodRequest("method")
+		req.WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
+		response, err := c.InvokeMethod(context.Background(), req)
+		assert.NoError(t, err)
+		contentType, body := response.RawData()
+
+		assert.Equal(t, "application/json", contentType)
+
+		actual := map[string]string{}
+		json.Unmarshal(body, &actual)
+
+		assert.Equal(t, "POST", actual["httpverb"])
+		assert.Equal(t, "method", actual["method"])
+		assert.Equal(t, "token1", actual[auth.APITokenHeader])
+		assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
+	})
+
+	t.Run("cancel invoking because of timeout", func(t *testing.T) {
+		c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", timeout: 100 * time.Millisecond}
+		assert.Equal(t,  100 * time.Millisecond, c.timeout)
+		req := invokev1.NewInvokeMethodRequest("testTimeout")
+		req.WithHTTPExtension(http.MethodPost, "timeout=1")
+		response, err := c.InvokeMethod(context.Background(), req)
+
+		assert.NoError(t, err)
+		assert.Equal(t,  "code:4 message:\"context deadline exceeded\"",response.Status().String())
+	})
+
 	grpcServer.Stop()
-
-	assert.Equal(t, "application/json", contentType)
-
-	actual := map[string]string{}
-	json.Unmarshal(body, &actual)
-
-	assert.Equal(t, "POST", actual["httpverb"])
-	assert.Equal(t, "method", actual["method"])
-	assert.Equal(t, "token1", actual[auth.APITokenHeader])
-	assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
 }
+
 
 func close(t *testing.T, c io.Closer) {
 	err := c.Close()
