@@ -155,7 +155,6 @@ func TestActorReminder(t *testing.T) {
 					count := countActorAction(resp, actorID, reminderName)
 					// Due to possible load stress, we do not expect all reminders to be called at the same frequency.
 					// There are other E2E tests that validate the correct frequency of reminders in a happy path.
-					t.Logf("Reminder %s for Actor %s was invoked %d times - expects >= than %d.", reminderName, actorID, count, 1)
 					require.True(t, count >= 1, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
 				}
 			}(i)
