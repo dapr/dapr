@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -72,6 +74,56 @@ type testHTTPHandler struct {
 func (th *testHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	assert.Equal(th.t, th.serverURL, r.Host)
 	io.WriteString(w, r.URL.RawQuery)
+}
+
+// testTimeoutHandler is used for timeout test
+type testTimeoutHandler struct {
+	serverURL string
+
+	t *testing.T
+}
+
+func (th *testTimeoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	assert.Equal(th.t, th.serverURL, r.Host)
+	times := time.Duration(1)
+	v, err := url.ParseQuery(r.URL.RawQuery)
+	if err == nil {
+		t, err := strconv.Atoi(v["timeout"][0])
+		if err == nil {
+			times = time.Duration(t)
+		}
+	}
+	time.Sleep(times * time.Second)
+
+	io.WriteString(w, r.URL.RawQuery)
+}
+
+func TestReadTimeout(t *testing.T) {
+	th := &testTimeoutHandler{t: t, serverURL: ""}
+	server := httptest.NewServer(th)
+	ctx := context.Background()
+	t.Run("cancel invoking because of timeout", func(t *testing.T) {
+		c := Channel{
+			baseAddress: server.URL,
+			client:      &fasthttp.Client{ReadTimeout: 100 * time.Millisecond},
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "1",
+			},
+		}
+		th.serverURL = server.URL[len("http://"):]
+		fakeReq := invokev1.NewInvokeMethodRequest("method")
+		fakeReq.WithHTTPExtension(http.MethodPost, "timeout=1")
+
+		// act
+		response, err := c.InvokeMethod(ctx, fakeReq)
+
+		// assert
+		assert.NoError(t, err)
+		_, body := response.RawData()
+		assert.Equal(t, "{\"error\": \"client error: timeout\"}", string(body))
+	})
+
+	server.Close()
 }
 
 func TestInvokeMethod(t *testing.T) {

@@ -63,18 +63,17 @@ func TestInvokeMethod(t *testing.T) {
 
 	t.Run("cancel invoking because of timeout", func(t *testing.T) {
 		c := Channel{baseAddress: "localhost:9998", client: conn, appMetadataToken: "token1", timeout: 100 * time.Millisecond}
-		assert.Equal(t,  100 * time.Millisecond, c.timeout)
+		assert.Equal(t, 100*time.Millisecond, c.timeout)
 		req := invokev1.NewInvokeMethodRequest("testTimeout")
 		req.WithHTTPExtension(http.MethodPost, "timeout=1")
 		response, err := c.InvokeMethod(context.Background(), req)
 
 		assert.NoError(t, err)
-		assert.Equal(t,  "code:4 message:\"context deadline exceeded\"",response.Status().String())
+		assert.Equal(t, "code:4 message:\"context deadline exceeded\"", response.Status().String())
 	})
 
 	grpcServer.Stop()
 }
-
 
 func close(t *testing.T, c io.Closer) {
 	err := c.Close()

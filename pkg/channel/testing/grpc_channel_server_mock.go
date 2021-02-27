@@ -46,9 +46,9 @@ func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest)
 
 	if in.Method == "testTimeout" {
 		times := time.Duration(1)
-		v, err := url.ParseQuery(in.HttpExtension.Querystring);
-		if err == nil{
-			t,err := strconv.Atoi(v["timeout"][0])
+		v, err := url.ParseQuery(in.HttpExtension.Querystring)
+		if err == nil {
+			t, err := strconv.Atoi(v["timeout"][0])
 			if err == nil {
 				times = time.Duration(t)
 			}
