@@ -277,7 +277,7 @@ func TestAppToken(t *testing.T) {
 	t.Run("token present", func(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
-		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{}, appHeaderToken: "token1"}
+		c := Channel{baseAddress: testServer.URL, client: &fasthttp.Client{ReadTimeout: 60 * time.Second}, appHeaderToken: "token1"}
 
 		req := invokev1.NewInvokeMethodRequest("method")
 		req.WithHTTPExtension(http.MethodPost, "")
