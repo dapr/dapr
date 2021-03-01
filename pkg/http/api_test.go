@@ -137,14 +137,14 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Publish without topic name ending in // - 404", func(t *testing.T) {
+	t.Run("Publish with topic name '/' - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/pubsubname//", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
 			// assert
-			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "success publishing with %s", method)
 		}
 	})
 

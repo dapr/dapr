@@ -1185,8 +1185,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	topic := reqCtx.UserValue(topicParam).(string)
-	// FIXME: isn't it "" instead?
-	if topic == "/" {
+	if topic == "" {
 		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
 		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)
 		log.Debug(msg)
