@@ -7,8 +7,9 @@ require (
 	contrib.go.opencensus.io/exporter/zipkin v0.1.1
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
 	github.com/PuerkitoBio/purell v1.1.1
+	github.com/andybalholm/brotli v1.0.1 // indirect
 	github.com/dapr/components-contrib v1.0.0-rc6
-	github.com/fasthttp/router v1.3.5
+	github.com/fasthttp/router v1.3.8-0.20210301082440-f74be76d820c
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
 	github.com/golang/protobuf v1.4.3
@@ -22,6 +23,7 @@ require (
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
 	github.com/json-iterator/go v1.1.10
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/klauspost/compress v1.11.8 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/mitchellh/mapstructure v1.3.3
 	github.com/openzipkin/zipkin-go v0.2.2
@@ -30,9 +32,10 @@ require (
 	github.com/prometheus/client_golang v1.8.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.14.0
+	github.com/savsgio/gotils v0.0.0-20210225112730-595c7e5a8a7a // indirect
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.6.1
-	github.com/valyala/fasthttp v1.19.0
+	github.com/valyala/fasthttp v1.21.0
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.13.0
 	go.uber.org/atomic v1.6.0
