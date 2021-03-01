@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.15
+go 1.16
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
