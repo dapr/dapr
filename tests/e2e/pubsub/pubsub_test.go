@@ -185,11 +185,11 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	require.Equal(t, http.StatusOK, code)
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
-	if subscriberResponse == "empty-json" {
-		// on empty-json response case immediately validate the received messages
-		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
-	}
+	// if subscriberResponse == "empty-json" {
+	// 	// on empty-json response case immediately validate the received messages
+	// 	time.Sleep(5 * time.Second)
+	// 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+	// }
 
 	// restart application
 	// log.Printf("Restarting subscriber application to check redelivery...\n")
@@ -208,22 +208,23 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	// 	defer conn.Close()
 	// }
 
-	if subscriberResponse == "empty-json" {
-		// validate that there is no redelivery of messages
-		log.Printf("Validating no redelivered messages...")
-		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
-			// empty string slices
-			ReceivedByTopicA: []string{},
-			ReceivedByTopicB: []string{},
-			ReceivedByTopicC: []string{},
-		})
-	} else {
-		// validate redelivery of messages
-		log.Printf("Validating redelivered messages...")
-		time.Sleep(5 * time.Second)
-		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
-	}
+	// if subscriberResponse == "empty-json" {
+	// 	// validate that there is no redelivery of messages
+	// 	log.Printf("Validating no redelivered messages...")
+	// 	time.Sleep(5 * time.Second)
+	// 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
+	// 		// empty string slices
+	// 		ReceivedByTopicA: []string{},
+	// 		ReceivedByTopicB: []string{},
+	// 		ReceivedByTopicC: []string{},
+	// 	})
+	// } else {
+	// validate redelivery of messages
+	log.Printf("Validating redelivered messages...")
+	time.Sleep(10 * time.Second)
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+	// }
+
 	return subscriberExternalURL
 }
 
