@@ -8,6 +8,7 @@
 E2E_TEST_APPS=actorjava \
 actordotnet \
 actorpython \
+actorphp \
 hellodapr \
 stateapp \
 secretapp \

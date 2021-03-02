@@ -1,6 +1,6 @@
 module actorload
 
-go 1.15
+go 1.16
 
 require (
 	fortio.org/fortio v1.6.8
