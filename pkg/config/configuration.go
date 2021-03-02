@@ -206,6 +206,9 @@ func LoadStandaloneConfiguration(config string) (*Configuration, string, error) 
 		return nil, "", err
 	}
 
+	// Parse environment variables from yaml
+	b = []byte(os.ExpandEnv(string(b)))
+
 	conf := LoadDefaultConfiguration()
 	err = yaml.Unmarshal(b, conf)
 	if err != nil {
