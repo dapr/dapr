@@ -281,3 +281,57 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		})
 	}
 }
+
+func TestGetEnvVarsAnnotation(t *testing.T) {
+	testCases := []struct {
+		testName    string
+		annotations map[string]string
+		expEnvLen   int
+		expEnv      []corev1.EnvVar
+	}{
+		{
+			testName: "empty environment vars",
+			annotations: map[string]string{
+				"dapr.io/app-id":                 "appId",
+				"dapr.io/app-port":               "8080",
+				"dapr.io/sidecar-memory-request": "3",
+			},
+			expEnvLen: 0,
+			expEnv:    []corev1.EnvVar{},
+		},
+		{
+			testName: "existing env var",
+			annotations: map[string]string{
+				"dapr.io/app-id":                 "appId",
+				"dapr.io/app-port":               "8080",
+				"dapr.io/sidecar-memory-request": "3",
+				"dapr.io/env":                    "ENV1=value1,ENV2=value2, ENV3=value3",
+			},
+			expEnvLen: 3,
+			expEnv: []corev1.EnvVar{
+				{
+					Name:  "ENV1",
+					Value: "value1",
+				},
+				{
+					Name:  "ENV2",
+					Value: "value2",
+				},
+				{
+					Name:  "ENV3",
+					Value: "value3",
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			envVars := getEnvVarsAnnotation(tc.annotations)
+			fmt.Println(tc.testName)
+			assert.Equal(t, tc.expEnvLen, len(envVars))
+			assert.Equal(t, tc.expEnv, envVars)
+		})
+	}
+}
