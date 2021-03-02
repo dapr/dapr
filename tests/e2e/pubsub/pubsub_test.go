@@ -22,7 +22,6 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 var tr *runner.TestRunner
@@ -193,21 +192,21 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	}
 
 	// restart application
-	log.Printf("Restarting subscriber application to check redelivery...\n")
-	err = tr.Platform.Restart(subscriberAppName)
-	require.NoError(t, err, "error restarting subscriber")
-	subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
-	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
-	if protocol == "http" {
-		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
-		require.NoError(t, err)
-	} else {
-		conn, err := grpc.Dial(subscriberExternalURL, grpc.WithInsecure())
-		if err != nil {
-			log.Printf("Could not connect to app %s: %s", subscriberExternalURL, err.Error())
-		}
-		defer conn.Close()
-	}
+	// log.Printf("Restarting subscriber application to check redelivery...\n")
+	// err = tr.Platform.Restart(subscriberAppName)
+	// require.NoError(t, err, "error restarting subscriber")
+	// subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
+	// require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
+	// if protocol == "http" {
+	// 	_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
+	// 	require.NoError(t, err)
+	// } else {
+	// 	conn, err := grpc.Dial(subscriberExternalURL, grpc.WithInsecure())
+	// 	if err != nil {
+	// 		log.Printf("Could not connect to app %s: %s", subscriberExternalURL, err.Error())
+	// 	}
+	// 	defer conn.Close()
+	// }
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
