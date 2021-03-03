@@ -46,6 +46,8 @@ type subscription struct {
 	Route      string `json:"route"`
 }
 
+// respondWith determines the response to return when a message
+// is received.
 type respondWith int
 
 const (
@@ -259,6 +261,8 @@ func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// setDesiredResponse returns an http.HandlerFunc that sets the desired response
+// to `resp` and logs `msg`.
 func setDesiredResponse(resp respondWith, msg string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
