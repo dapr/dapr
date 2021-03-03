@@ -61,25 +61,24 @@ type Actors interface {
 }
 
 type actorsRuntime struct {
-	appChannel            channel.AppChannel
-	store                 state.Store
-	placement             *internal.ActorPlacement
-	grpcConnectionFn      func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
-	config                Config
-	actorsTable           *sync.Map
-	activeTimers          *sync.Map
-	activeTimersLock      *sync.RWMutex
-	activeReminders       *sync.Map
-	remindersLock         *sync.RWMutex
-	activeRemindersLock   *sync.RWMutex
-	reminders             map[string][]Reminder
-	remindersStateBackoff backoff.BackOff
-	evaluationLock        *sync.RWMutex
-	evaluationBusy        bool
-	evaluationChan        chan bool
-	appHealthy            bool
-	certChain             *dapr_credentials.CertChain
-	tracingSpec           config.TracingSpec
+	appChannel          channel.AppChannel
+	store               state.Store
+	placement           *internal.ActorPlacement
+	grpcConnectionFn    func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
+	config              Config
+	actorsTable         *sync.Map
+	activeTimers        *sync.Map
+	activeTimersLock    *sync.RWMutex
+	activeReminders     *sync.Map
+	remindersLock       *sync.RWMutex
+	activeRemindersLock *sync.RWMutex
+	reminders           map[string][]Reminder
+	evaluationLock      *sync.RWMutex
+	evaluationBusy      bool
+	evaluationChan      chan bool
+	appHealthy          bool
+	certChain           *dapr_credentials.CertChain
+	tracingSpec         config.TracingSpec
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -101,24 +100,23 @@ func NewActors(
 	certChain *dapr_credentials.CertChain,
 	tracingSpec config.TracingSpec) Actors {
 	return &actorsRuntime{
-		appChannel:            appChannel,
-		config:                config,
-		store:                 stateStore,
-		grpcConnectionFn:      grpcConnectionFn,
-		actorsTable:           &sync.Map{},
-		activeTimers:          &sync.Map{},
-		activeTimersLock:      &sync.RWMutex{},
-		activeReminders:       &sync.Map{},
-		remindersLock:         &sync.RWMutex{},
-		activeRemindersLock:   &sync.RWMutex{},
-		reminders:             map[string][]Reminder{},
-		remindersStateBackoff: backoff.NewExponentialBackOff(), // TODO: Make the backoff configurable
-		evaluationLock:        &sync.RWMutex{},
-		evaluationBusy:        false,
-		evaluationChan:        make(chan bool),
-		appHealthy:            true,
-		certChain:             certChain,
-		tracingSpec:           tracingSpec,
+		appChannel:          appChannel,
+		config:              config,
+		store:               stateStore,
+		grpcConnectionFn:    grpcConnectionFn,
+		actorsTable:         &sync.Map{},
+		activeTimers:        &sync.Map{},
+		activeTimersLock:    &sync.RWMutex{},
+		activeReminders:     &sync.Map{},
+		remindersLock:       &sync.RWMutex{},
+		activeRemindersLock: &sync.RWMutex{},
+		reminders:           map[string][]Reminder{},
+		evaluationLock:      &sync.RWMutex{},
+		evaluationBusy:      false,
+		evaluationChan:      make(chan bool),
+		appHealthy:          true,
+		certChain:           certChain,
+		tracingSpec:         tracingSpec,
 	}
 }
 
@@ -824,7 +822,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		a.reminders[req.ActorType] = reminders
 		a.remindersLock.Unlock()
 		return nil
-	}, a.remindersStateBackoff)
+	}, backoff.NewExponentialBackOff())
 	if err != nil {
 		return err
 	}
@@ -1014,7 +1012,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		a.reminders[req.ActorType] = reminders
 		a.remindersLock.Unlock()
 		return nil
-	}, a.remindersStateBackoff)
+	}, backoff.NewExponentialBackOff())
 	if err != nil {
 		return err
 	}
