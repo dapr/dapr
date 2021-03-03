@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/state"
@@ -60,24 +61,25 @@ type Actors interface {
 }
 
 type actorsRuntime struct {
-	appChannel          channel.AppChannel
-	store               state.Store
-	placement           *internal.ActorPlacement
-	grpcConnectionFn    func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
-	config              Config
-	actorsTable         *sync.Map
-	activeTimers        *sync.Map
-	activeTimersLock    *sync.RWMutex
-	activeReminders     *sync.Map
-	remindersLock       *sync.RWMutex
-	activeRemindersLock *sync.RWMutex
-	reminders           map[string][]Reminder
-	evaluationLock      *sync.RWMutex
-	evaluationBusy      bool
-	evaluationChan      chan bool
-	appHealthy          bool
-	certChain           *dapr_credentials.CertChain
-	tracingSpec         config.TracingSpec
+	appChannel            channel.AppChannel
+	store                 state.Store
+	placement             *internal.ActorPlacement
+	grpcConnectionFn      func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
+	config                Config
+	actorsTable           *sync.Map
+	activeTimers          *sync.Map
+	activeTimersLock      *sync.RWMutex
+	activeReminders       *sync.Map
+	remindersLock         *sync.RWMutex
+	activeRemindersLock   *sync.RWMutex
+	reminders             map[string][]Reminder
+	remindersStateBackoff backoff.BackOff
+	evaluationLock        *sync.RWMutex
+	evaluationBusy        bool
+	evaluationChan        chan bool
+	appHealthy            bool
+	certChain             *dapr_credentials.CertChain
+	tracingSpec           config.TracingSpec
 }
 
 // ActiveActorsCount contain actorType and count of actors each type has
@@ -99,23 +101,24 @@ func NewActors(
 	certChain *dapr_credentials.CertChain,
 	tracingSpec config.TracingSpec) Actors {
 	return &actorsRuntime{
-		appChannel:          appChannel,
-		config:              config,
-		store:               stateStore,
-		grpcConnectionFn:    grpcConnectionFn,
-		actorsTable:         &sync.Map{},
-		activeTimers:        &sync.Map{},
-		activeTimersLock:    &sync.RWMutex{},
-		activeReminders:     &sync.Map{},
-		remindersLock:       &sync.RWMutex{},
-		activeRemindersLock: &sync.RWMutex{},
-		reminders:           map[string][]Reminder{},
-		evaluationLock:      &sync.RWMutex{},
-		evaluationBusy:      false,
-		evaluationChan:      make(chan bool),
-		appHealthy:          true,
-		certChain:           certChain,
-		tracingSpec:         tracingSpec,
+		appChannel:            appChannel,
+		config:                config,
+		store:                 stateStore,
+		grpcConnectionFn:      grpcConnectionFn,
+		actorsTable:           &sync.Map{},
+		activeTimers:          &sync.Map{},
+		activeTimersLock:      &sync.RWMutex{},
+		activeReminders:       &sync.Map{},
+		remindersLock:         &sync.RWMutex{},
+		activeRemindersLock:   &sync.RWMutex{},
+		reminders:             map[string][]Reminder{},
+		remindersStateBackoff: backoff.NewExponentialBackOff(), // TODO: Make the backoff configurable
+		evaluationLock:        &sync.RWMutex{},
+		evaluationBusy:        false,
+		evaluationChan:        make(chan bool),
+		appHealthy:            true,
+		certChain:             certChain,
+		tracingSpec:           tracingSpec,
 	}
 }
 
@@ -530,7 +533,7 @@ func (a *actorsRuntime) evaluateReminders() {
 
 	var wg sync.WaitGroup
 	for _, t := range a.config.HostedActorTypes {
-		vals, err := a.getRemindersForActorType(t)
+		vals, _, err := a.getRemindersForActorType(t)
 		if err != nil {
 			log.Debugf("error getting reminders for actor type %s: %s", t, err)
 		} else {
@@ -800,24 +803,31 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		RegisteredTime: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	reminders, err := a.getRemindersForActorType(req.ActorType)
+	err := backoff.Retry(func() error {
+		reminders, remindersEtag, err := a.getRemindersForActorType(req.ActorType)
+		if err != nil {
+			return err
+		}
+
+		reminders = append(reminders, reminder)
+
+		err = a.store.Set(&state.SetRequest{
+			Key:   a.constructCompositeKey("actors", req.ActorType),
+			Value: reminders,
+			ETag:  remindersEtag,
+		})
+		if err != nil {
+			return err
+		}
+
+		a.remindersLock.Lock()
+		a.reminders[req.ActorType] = reminders
+		a.remindersLock.Unlock()
+		return nil
+	}, a.remindersStateBackoff)
 	if err != nil {
 		return err
 	}
-
-	reminders = append(reminders, reminder)
-
-	err = a.store.Set(&state.SetRequest{
-		Key:   a.constructCompositeKey("actors", req.ActorType),
-		Value: reminders,
-	})
-	if err != nil {
-		return err
-	}
-
-	a.remindersLock.Lock()
-	a.reminders[req.ActorType] = reminders
-	a.remindersLock.Unlock()
 
 	err = a.startReminder(&reminder, stop)
 	if err != nil {
@@ -939,18 +949,23 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	return err
 }
 
-func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, error) {
+func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, *string, error) {
 	key := a.constructCompositeKey("actors", actorType)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var reminders []Reminder
 	json.Unmarshal(resp.Data, &reminders)
-	return reminders, nil
+	var etag *string
+	// This check is needed due to https://github.com/dapr/components-contrib/issues/731
+	if resp.ETag != "" {
+		etag = &resp.ETag
+	}
+	return reminders, etag, nil
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
@@ -974,28 +989,35 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		a.activeReminders.Delete(reminderKey)
 	}
 
-	reminders, err := a.getRemindersForActorType(req.ActorType)
-	if err != nil {
-		return err
-	}
-
-	for i := len(reminders) - 1; i >= 0; i-- {
-		if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
-			reminders = append(reminders[:i], reminders[i+1:]...)
+	err := backoff.Retry(func() error {
+		reminders, remindersEtag, err := a.getRemindersForActorType(req.ActorType)
+		if err != nil {
+			return err
 		}
-	}
 
-	err = a.store.Set(&state.SetRequest{
-		Key:   key,
-		Value: reminders,
-	})
+		for i := len(reminders) - 1; i >= 0; i-- {
+			if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
+				reminders = append(reminders[:i], reminders[i+1:]...)
+			}
+		}
+
+		err = a.store.Set(&state.SetRequest{
+			Key:   key,
+			Value: reminders,
+			ETag:  remindersEtag,
+		})
+		if err != nil {
+			return err
+		}
+
+		a.remindersLock.Lock()
+		a.reminders[req.ActorType] = reminders
+		a.remindersLock.Unlock()
+		return nil
+	}, a.remindersStateBackoff)
 	if err != nil {
 		return err
 	}
-
-	a.remindersLock.Lock()
-	a.reminders[req.ActorType] = reminders
-	a.remindersLock.Unlock()
 
 	err = a.store.Delete(&state.DeleteRequest{
 		Key: reminderKey,
@@ -1008,7 +1030,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
-	reminders, err := a.getRemindersForActorType(req.ActorType)
+	reminders, _, err := a.getRemindersForActorType(req.ActorType)
 	if err != nil {
 		return nil, err
 	}
