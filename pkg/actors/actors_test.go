@@ -363,7 +363,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 			// Test that the last reminder update fired
 			assert.Equal(t, reminders[0].Data, request.Data)
 		case <-time.After(15 * time.Second):
-			assert.Fail(t, "reminder timed out")
+			assert.Fail(t, "request channel timed out")
 		}
 	})
 }
@@ -417,7 +417,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 			assert.Equal(t, "2s", reminders[0].DueTime)
 			assert.Equal(t, "d", reminders[0].Data)
 		case <-time.After(15 * time.Second):
-			assert.Fail(t, "reminder timed out")
+			assert.Fail(t, "request channel timed out")
 		}
 	})
 }
@@ -510,7 +510,7 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 			// Test that the last reminder update fired
 			assert.Equal(t, timer3.Data, request.Data)
 		case <-time.After(15 * time.Second):
-			assert.Fail(t, "reminder timed out")
+			assert.Fail(t, "request channel timed out")
 		}
 	})
 }
@@ -548,7 +548,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 			// Test that the last reminder update fired
 			assert.Equal(t, timer4.Data, request.Data)
 		case <-time.After(15 * time.Second):
-			assert.Fail(t, "reminder timed out")
+			assert.Fail(t, "request channel timed out")
 		}
 	})
 }
