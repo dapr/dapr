@@ -2,9 +2,10 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus/push"
 	"net/http"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/push"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/dapr/dapr/pkg/logger"
