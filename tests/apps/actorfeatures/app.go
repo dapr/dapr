@@ -58,6 +58,8 @@ type daprConfig struct {
 	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
 
+
+// response object from an actor invocation request
 type daprActorResponse struct {
 	Data     []byte            `json:"data"`
 	Metadata map[string]string `json:"metadata"`
