@@ -22,7 +22,6 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 var tr *runner.TestRunner
@@ -72,7 +71,7 @@ func sendToPublisher(t *testing.T, publisherExternalURL string, topic string, pr
 	offset := rand.Intn(randomOffsetMax)
 	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
 		// create and marshal message
-		commandBody.Data = fmt.Sprintf("message-%s-%d", protocol, i)
+		commandBody.Data = fmt.Sprintf("message-%s-%03d", protocol, i)
 		jsonValue, err := json.Marshal(commandBody)
 		require.NoError(t, err)
 
@@ -129,6 +128,9 @@ func postSingleMessage(url string, data []byte) (int, error) {
 }
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	// set to respond with success
+	setDesiredResponse(t, "success", publisherExternalURL, protocol)
+
 	log.Printf("Test publish subscribe success flow\n")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
@@ -160,54 +162,25 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 
 func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
-	if subscriberResponse == "empty-json" {
-		log.Println("Initialize the sets again in the subscriber application for this scenario ...")
-		req := callSubscriberMethodRequest{
-			RemoteApp: subscriberAppName,
-			Method:    "initialize",
-			Protocol:  protocol,
-		}
-		// only for the empty-json scenario, initialize empty sets in the subscriber app
-		reqBytes, _ := json.Marshal(req)
-		_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, code)
-	}
+
+	log.Println("Initialize the sets for this scenario ...")
+	callInitialize(t, publisherExternalURL, protocol)
 
 	// set to respond with specified subscriber response
-	req := callSubscriberMethodRequest{
-		RemoteApp: subscriberAppName,
-		Method:    "set-respond-" + subscriberResponse,
-		Protocol:  protocol,
-	}
-	reqBytes, _ := json.Marshal(req)
-	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, code)
+	setDesiredResponse(t, subscriberResponse, publisherExternalURL, protocol)
+
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// on empty-json response case immediately validate the received messages
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
+
+		callInitialize(t, publisherExternalURL, protocol)
 	}
 
-	// restart application
-	log.Printf("Restarting subscriber application to check redelivery...\n")
-	err = tr.Platform.Restart(subscriberAppName)
-	require.NoError(t, err, "error restarting subscriber")
-	subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
-	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
-	if protocol == "http" {
-		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
-		require.NoError(t, err)
-	} else {
-		conn, err := grpc.Dial(subscriberExternalURL, grpc.WithInsecure())
-		if err != nil {
-			log.Printf("Could not connect to app %s: %s", subscriberExternalURL, err.Error())
-		}
-		defer conn.Close()
-	}
+	// set to respond with success
+	setDesiredResponse(t, "success", publisherExternalURL, protocol)
 
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
@@ -222,10 +195,37 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
-		time.Sleep(5 * time.Second)
+		time.Sleep(10 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	}
+
 	return subscriberExternalURL
+}
+
+func callInitialize(t *testing.T, publisherExternalURL string, protocol string) {
+	req := callSubscriberMethodRequest{
+		RemoteApp: subscriberAppName,
+		Method:    "initialize",
+		Protocol:  protocol,
+	}
+	// only for the empty-json scenario, initialize empty sets in the subscriber app
+	reqBytes, _ := json.Marshal(req)
+	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, code)
+}
+
+func setDesiredResponse(t *testing.T, subscriberResponse string, publisherExternalURL string, protocol string) {
+	// set to respond with specified subscriber response
+	req := callSubscriberMethodRequest{
+		RemoteApp: subscriberAppName,
+		Method:    "set-respond-" + subscriberResponse,
+		Protocol:  protocol,
+	}
+	reqBytes, _ := json.Marshal(req)
+	_, code, err := utils.HTTPPostWithStatus(publisherExternalURL+"/tests/callSubscriberMethod", reqBytes)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, code)
 }
 
 func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL string, subscriberApp string, protocol string, sentMessages receivedMessagesResponse) {
@@ -249,7 +249,8 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 		err = json.Unmarshal(resp, &appResp)
 		require.NoError(t, err)
 
-		log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic", len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC))
+		log.Printf("subscriber receieved %d messages on pubsub-a-topic, %d on pubsub-b-topic and %d on pubsub-c-topic",
+			len(appResp.ReceivedByTopicA), len(appResp.ReceivedByTopicB), len(appResp.ReceivedByTopicC))
 
 		if len(appResp.ReceivedByTopicA) != len(sentMessages.ReceivedByTopicA) ||
 			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
