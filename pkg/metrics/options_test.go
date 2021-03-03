@@ -93,7 +93,6 @@ func TestOptions(t *testing.T) {
 		}
 
 		defaultPort, _ := strconv.ParseUint(defaultMetricsPort, 10, 64)
-
 		assert.Equal(t, defaultPort, o.MetricsPort())
 	})
 
