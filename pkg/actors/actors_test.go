@@ -359,7 +359,7 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 		assert.Equal(t, "b", reminders[0].Data)
 	})
@@ -373,7 +373,7 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "1s", "2s", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 		assert.Equal(t, "2s", reminders[0].DueTime)
 	})
@@ -387,7 +387,7 @@ func TestOverrideReminder(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 		assert.Equal(t, "2s", reminders[0].Period)
 	})
@@ -407,7 +407,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 
 		reminder2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder2)
-		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 		// Check reminder is updated
 		assert.Equal(t, "9s", reminders[0].Period)
@@ -416,7 +416,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 
 		reminder3 := createReminderData(actorID, actorType, reminderName, "8s", "2s", "b")
 		testActorsRuntime.CreateReminder(ctx, &reminder3)
-		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 		// Check reminder is updated
 		assert.Equal(t, "8s", reminders[0].Period)
@@ -452,7 +452,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		// Check reminder is updated
-		reminders, err := testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err := testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 		// The statestore could have either reminder2 or reminder3 based on the timing.
 		// Therefore, not verifying data field
@@ -463,7 +463,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 
 		reminder4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "d")
 		testActorsRuntime.CreateReminder(ctx, &reminder4)
-		reminders, err = testActorsRuntime.getRemindersForActorType(actorType)
+		reminders, _, err = testActorsRuntime.getRemindersForActorType(actorType)
 		assert.Nil(t, err)
 
 		time.Sleep(2*time.Second + 100*time.Millisecond)
