@@ -2,7 +2,9 @@ package metrics
 
 import (
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus/push"
 	"net/http"
+	"time"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/dapr/dapr/pkg/logger"
@@ -81,7 +83,35 @@ func (m *promMetricsExporter) Init() error {
 	view.RegisterExporter(m.ocExporter)
 
 	// start metrics server
-	return m.startMetricServer()
+	err = m.startMetricServer()
+	if err != nil {
+		return err
+	}
+
+	opts := m.exporter.Options()
+	// check if start pushgatway support
+	if !opts.pushGatewayEnabled {
+		return nil
+	}
+
+	// check if pushgateway opts are valid
+	if err := opts.CheckParam(); err != nil {
+		return errors.Errorf("pushgateway options invalid: %v", err)
+	}
+
+	go func() {
+		pusher := push.New("http://"+opts.pushGatewayHost+":"+opts.pushGatewayPort, m.namespace).Gatherer(registry)
+		if e := recover(); e != nil {
+			m.exporter.logger.Errorf("failed to push to pushgateway server: %v", e)
+		}
+		for {
+			if err := pusher.Push(); err != nil {
+				m.exporter.logger.Errorf("failed to push to pushgateway server: %v", err)
+			}
+			time.Sleep(time.Second * time.Duration(opts.pushGatewayUpdateInterval))
+		}
+	}()
+	return nil
 }
 
 // startMetricServer starts metrics server

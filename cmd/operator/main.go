@@ -51,7 +51,7 @@ func init() {
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar, flag.IntVar)
 
 	flag.StringVar(&config, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	flag.StringVar(&certChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")

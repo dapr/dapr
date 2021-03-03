@@ -71,7 +71,7 @@ func newConfig() *config {
 	cfg.loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	cfg.metricsExporter = metrics.NewExporter(metrics.DefaultMetricNamespace)
-	cfg.metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	cfg.metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar, flag.IntVar)
 
 	flag.Parse()
 

@@ -66,7 +66,7 @@ func init() {
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar, flag.IntVar)
 
 	flag.Parse()
 

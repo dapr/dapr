@@ -17,13 +17,33 @@ func TestOptions(t *testing.T) {
 		o := defaultMetricOptions()
 		assert.Equal(t, defaultMetricsPort, o.metricsPort)
 		assert.Equal(t, defaultMetricsEnabled, o.MetricsEnabled)
+		assert.Equal(t, defaultMetricsPushGatewayHost, o.pushGatewayHost)
+		assert.Equal(t, defaultMetricsPushGatewayPort, o.pushGatewayPort)
+		assert.Equal(t, defaultMetricsPushGatewayEnabled, o.pushGatewayEnabled)
+		assert.Equal(t, defaultMetricsPushGatewayUpdateInterval, o.pushGatewayUpdateInterval)
 	})
 
 	t.Run("attaching metrics related cmd flags", func(t *testing.T) {
 		o := defaultMetricOptions()
 
 		metricsPortAsserted := false
+		metricsPushGatewayHostAsserted := false
+		metricsPushGatewayPortAsserted := false
+		metricsPushGatewayEnabledAsserted := false
+		metricsPushGatewayIntervalAsserted := false
 		testStringVarFn := func(p *string, name string, value string, usage string) {
+			if name == "metrics-port" && value == defaultMetricsPort {
+				metricsPortAsserted = true
+			}
+
+			if name == "metrics-pushgateway-host" && value == defaultMetricsPushGatewayHost {
+				metricsPushGatewayHostAsserted = true
+			}
+
+			if name == "metrics-pushgateway-port" && value == defaultMetricsPushGatewayPort {
+				metricsPushGatewayPortAsserted = true
+			}
+
 			if name == "metrics-port" && value == defaultMetricsPort {
 				metricsPortAsserted = true
 			}
@@ -34,13 +54,27 @@ func TestOptions(t *testing.T) {
 			if name == "enable-metrics" && value == defaultMetricsEnabled {
 				metricsEnabledAsserted = true
 			}
+
+			if name == "enable-metrics-pushgateway" && value == defaultMetricsPushGatewayEnabled {
+				metricsPushGatewayEnabledAsserted = true
+			}
 		}
 
-		o.AttachCmdFlags(testStringVarFn, testBoolVarFn)
+		testIntVarFn := func(p *int, name string, value int, usage string) {
+			if name == "metrics-pushgateway-interval" && value == defaultMetricsPushGatewayUpdateInterval {
+				metricsPushGatewayIntervalAsserted = true
+			}
+		}
+
+		o.AttachCmdFlags(testStringVarFn, testBoolVarFn, testIntVarFn)
 
 		// assert
 		assert.True(t, metricsPortAsserted)
 		assert.True(t, metricsEnabledAsserted)
+		assert.True(t, metricsPushGatewayHostAsserted)
+		assert.True(t, metricsPushGatewayPortAsserted)
+		assert.True(t, metricsPushGatewayIntervalAsserted)
+		assert.True(t, metricsPushGatewayEnabledAsserted)
 	})
 
 	t.Run("parse valid port", func(t *testing.T) {
