@@ -21,7 +21,7 @@ const (
 type BulkGetResponse struct {
 	Key   string              `json:"key"`
 	Data  jsoniter.RawMessage `json:"data,omitempty"`
-	ETag  string              `json:"etag,omitempty"`
+	ETag  *string             `json:"etag,omitempty"`
 	Error string              `json:"error,omitempty"`
 }
 
@@ -42,10 +42,12 @@ func respond(ctx *fasthttp.RequestCtx, code int, obj []byte) {
 }
 
 // respondWithETaggedJSON overrides the content-type with application/json and etag header
-func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag string) {
+func respondWithETaggedJSON(ctx *fasthttp.RequestCtx, code int, obj []byte, etag *string) {
 	respond(ctx, code, obj)
 	ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-	ctx.Response.Header.Set(etagHeader, etag)
+	if etag != nil {
+		ctx.Response.Header.Set(etagHeader, *etag)
+	}
 }
 
 func respondWithError(ctx *fasthttp.RequestCtx, code int, resp ErrorResponse) {

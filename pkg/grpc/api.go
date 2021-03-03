@@ -403,7 +403,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			item := &runtimev1pb.BulkStateItem{
 				Key:      state_loader.GetOriginalStateKey(responses[i].Key),
 				Data:     responses[i].Data,
-				Etag:     responses[i].ETag,
+				Etag:     stringValueOrEmpty(responses[i].ETag),
 				Metadata: responses[i].Metadata,
 				Error:    responses[i].Error,
 			}
@@ -425,7 +425,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				item.Error = err.Error()
 			} else if r != nil {
 				item.Data = r.Data
-				item.Etag = r.ETag
+				item.Etag = stringValueOrEmpty(r.ETag)
 				item.Metadata = r.Metadata
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
@@ -475,7 +475,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	response := &runtimev1pb.GetStateResponse{}
 	if getResponse != nil {
-		response.Etag = getResponse.ETag
+		response.Etag = stringValueOrEmpty(getResponse.ETag)
 		response.Data = getResponse.Data
 		response.Metadata = getResponse.Metadata
 	}
@@ -1084,4 +1084,12 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
 	return &emptypb.Empty{}, nil
+}
+
+func stringValueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+
+	return *value
 }

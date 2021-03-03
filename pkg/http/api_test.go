@@ -18,6 +18,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/agrea/ptr"
+	routing "github.com/fasthttp/router"
+	jsoniter "github.com/json-iterator/go"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttputil"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
@@ -35,19 +50,6 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
-	routing "github.com/fasthttp/router"
-	jsoniter "github.com/json-iterator/go"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttputil"
-	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/anypb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var invalidJSON = []byte{0x7b, 0x7b}
@@ -2315,13 +2317,13 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  jsoniter.RawMessage("life is good"),
-				ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
 				Key:   "foo",
 				Data:  nil,
-				ETag:  "",
+				ETag:  nil,
 				Error: "",
 			},
 		}
@@ -2348,13 +2350,13 @@ func TestV1StateEndpoints(t *testing.T) {
 			{
 				Key:   "good-key",
 				Data:  jsoniter.RawMessage("life is good"),
-				ETag:  "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+				ETag:  ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 				Error: "",
 			},
 			{
 				Key:   "error-key",
 				Data:  nil,
-				ETag:  "",
+				ETag:  nil,
 				Error: "UPSTREAM STATE ERROR",
 			},
 		}
@@ -2405,7 +2407,7 @@ func (c fakeStateStore) Get(req *state.GetRequest) (*state.GetResponse, error) {
 	if req.Key == "good-key" {
 		return &state.GetResponse{
 			Data: []byte("\"bGlmZSBpcyBnb29k\""),
-			ETag: "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'",
+			ETag: ptr.String("`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"),
 		}, nil
 	}
 	if req.Key == "error-key" {
