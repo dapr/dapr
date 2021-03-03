@@ -82,6 +82,16 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 		annotationObject["dapr.io/config"] = appDesc.Config
 	}
 
+	appEnv := []apiv1.EnvVar{}
+	if appDesc.AppEnv != nil {
+		for key, value := range appDesc.AppEnv {
+			appEnv = append(appEnv, apiv1.EnvVar{
+				Name:  key,
+				Value: value,
+			})
+		}
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appDesc.AppName,
@@ -114,6 +124,7 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 									ContainerPort: DefaultContainerPort,
 								},
 							},
+							Env: appEnv,
 						},
 					},
 					Affinity: &apiv1.Affinity{
