@@ -297,7 +297,7 @@ func appRouter() *mux.Router {
 
 	router.HandleFunc("/getMessages", getReceivedMessages).Methods("POST")
 	router.HandleFunc("/set-respond-success",
-		setDesiredResponse(respondWithSuccess, "set respond with error")).Methods("POST")
+		setDesiredResponse(respondWithSuccess, "set respond with success")).Methods("POST")
 	router.HandleFunc("/set-respond-error",
 		setDesiredResponse(respondWithError, "set respond with error")).Methods("POST")
 	router.HandleFunc("/set-respond-retry",
