@@ -52,7 +52,7 @@ func FromFlags() (*DaprRuntime, error) {
 
 	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
 
-	// attaching only metrics-port option
+	// attaching metrics options
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar, flag.IntVar)
 
 	flag.Parse()
