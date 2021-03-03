@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/state"
@@ -530,7 +531,7 @@ func (a *actorsRuntime) evaluateReminders() {
 
 	var wg sync.WaitGroup
 	for _, t := range a.config.HostedActorTypes {
-		vals, err := a.getRemindersForActorType(t)
+		vals, _, err := a.getRemindersForActorType(t)
 		if err != nil {
 			log.Debugf("error getting reminders for actor type %s: %s", t, err)
 		} else {
@@ -800,24 +801,31 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		RegisteredTime: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	reminders, err := a.getRemindersForActorType(req.ActorType)
+	err := backoff.Retry(func() error {
+		reminders, remindersEtag, err := a.getRemindersForActorType(req.ActorType)
+		if err != nil {
+			return err
+		}
+
+		reminders = append(reminders, reminder)
+
+		err = a.store.Set(&state.SetRequest{
+			Key:   a.constructCompositeKey("actors", req.ActorType),
+			Value: reminders,
+			ETag:  remindersEtag,
+		})
+		if err != nil {
+			return err
+		}
+
+		a.remindersLock.Lock()
+		a.reminders[req.ActorType] = reminders
+		a.remindersLock.Unlock()
+		return nil
+	}, backoff.NewExponentialBackOff())
 	if err != nil {
 		return err
 	}
-
-	reminders = append(reminders, reminder)
-
-	err = a.store.Set(&state.SetRequest{
-		Key:   a.constructCompositeKey("actors", req.ActorType),
-		Value: reminders,
-	})
-	if err != nil {
-		return err
-	}
-
-	a.remindersLock.Lock()
-	a.reminders[req.ActorType] = reminders
-	a.remindersLock.Unlock()
 
 	err = a.startReminder(&reminder, stop)
 	if err != nil {
@@ -939,18 +947,23 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	return err
 }
 
-func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, error) {
+func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, *string, error) {
 	key := a.constructCompositeKey("actors", actorType)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var reminders []Reminder
 	json.Unmarshal(resp.Data, &reminders)
-	return reminders, nil
+	var etag *string
+	// This check is needed due to https://github.com/dapr/components-contrib/issues/731
+	if resp.ETag != "" {
+		etag = &resp.ETag
+	}
+	return reminders, etag, nil
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
@@ -974,28 +987,35 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		a.activeReminders.Delete(reminderKey)
 	}
 
-	reminders, err := a.getRemindersForActorType(req.ActorType)
-	if err != nil {
-		return err
-	}
-
-	for i := len(reminders) - 1; i >= 0; i-- {
-		if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
-			reminders = append(reminders[:i], reminders[i+1:]...)
+	err := backoff.Retry(func() error {
+		reminders, remindersEtag, err := a.getRemindersForActorType(req.ActorType)
+		if err != nil {
+			return err
 		}
-	}
 
-	err = a.store.Set(&state.SetRequest{
-		Key:   key,
-		Value: reminders,
-	})
+		for i := len(reminders) - 1; i >= 0; i-- {
+			if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
+				reminders = append(reminders[:i], reminders[i+1:]...)
+			}
+		}
+
+		err = a.store.Set(&state.SetRequest{
+			Key:   key,
+			Value: reminders,
+			ETag:  remindersEtag,
+		})
+		if err != nil {
+			return err
+		}
+
+		a.remindersLock.Lock()
+		a.reminders[req.ActorType] = reminders
+		a.remindersLock.Unlock()
+		return nil
+	}, backoff.NewExponentialBackOff())
 	if err != nil {
 		return err
 	}
-
-	a.remindersLock.Lock()
-	a.reminders[req.ActorType] = reminders
-	a.remindersLock.Unlock()
 
 	err = a.store.Delete(&state.DeleteRequest{
 		Key: reminderKey,
@@ -1008,7 +1028,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
-	reminders, err := a.getRemindersForActorType(req.ActorType)
+	reminders, _, err := a.getRemindersForActorType(req.ActorType)
 	if err != nil {
 		return nil, err
 	}
