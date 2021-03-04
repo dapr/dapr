@@ -16,6 +16,8 @@ func GetDialAddressPrefix(mode modes.DaprMode) string {
 	switch mode {
 	case modes.KubernetesMode:
 		return "dns:///"
+	case modes.OrchestratorMode:
+		return "dns:///"	
 	default:
 		return ""
 	}
