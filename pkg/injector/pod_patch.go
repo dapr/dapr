@@ -327,7 +327,7 @@ func getEnvVarsAnnotation(annotations map[string]string) []corev1.EnvVar {
 	envPairs := strings.Split(envStr, ",")
 
 	for _, value := range envPairs {
-		pair := strings.Split(strings.Trim(value, " "), "=")
+		pair := strings.Split(strings.TrimSpace(value), "=")
 
 		if len(pair) != 2 {
 			continue
