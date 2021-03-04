@@ -6,6 +6,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -126,6 +127,7 @@ var (
 )
 
 func main() {
+	fmt.Println("Its daprd from Zyfra!")
 	rt, err := runtime.FromFlags()
 	if err != nil {
 		log.Fatal(err)
