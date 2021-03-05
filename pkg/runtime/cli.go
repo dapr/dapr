@@ -166,7 +166,6 @@ func FromFlags() (*DaprRuntime, error) {
 			globalConfig, configErr = global_config.LoadKubernetesConfiguration(*config, namespace, client)
 		case modes.OrchestratorMode:
 			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
-		}
 		case modes.StandaloneMode:
 			globalConfig, _, configErr = global_config.LoadStandaloneConfiguration(*config)
 		}
