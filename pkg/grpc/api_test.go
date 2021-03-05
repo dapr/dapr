@@ -1352,9 +1352,13 @@ func TestExecuteStateTransaction(t *testing.T) {
 		return matchKeyFn(req, "error-key")
 	})).Return(errors.New("error to execute with key2"))
 
+	var fakeTransactionalStore state.TransactionalStore = fakeStore
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		transactionalStateStores: map[string]state.TransactionalStore{
+			"store1": fakeTransactionalStore,
+		},
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")

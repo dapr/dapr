@@ -80,20 +80,21 @@ type API interface {
 }
 
 type api struct {
-	actor                 actors.Actors
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
-	stateStores           map[string]state.Store
-	secretStores          map[string]secretstores.SecretStore
-	secretsConfiguration  map[string]config.SecretsScope
-	pubsubAdapter         runtime_pubsub.Adapter
-	id                    string
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec           config.TracingSpec
-	accessControlList     *config.AccessControlList
-	appProtocol           string
-	extendedMetadata      sync.Map
-	components            []components_v1alpha.Component
+	actor                    actors.Actors
+	directMessaging          messaging.DirectMessaging
+	appChannel               channel.AppChannel
+	stateStores              map[string]state.Store
+	transactionalStateStores map[string]state.TransactionalStore
+	secretStores             map[string]secretstores.SecretStore
+	secretsConfiguration     map[string]config.SecretsScope
+	pubsubAdapter            runtime_pubsub.Adapter
+	id                       string
+	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec              config.TracingSpec
+	accessControlList        *config.AccessControlList
+	appProtocol              string
+	extendedMetadata         sync.Map
+	components               []components_v1alpha.Component
 }
 
 // NewAPI returns a new gRPC API
@@ -110,19 +111,27 @@ func NewAPI(
 	accessControlList *config.AccessControlList,
 	appProtocol string,
 	components []components_v1alpha.Component) API {
+	transactionalStateStores := map[string]state.TransactionalStore{}
+	for key, store := range stateStores {
+		if state.FeatureTransactional.IsPresent(store.Features()) {
+			transactionalStateStores[key] = store.(state.TransactionalStore)
+		}
+	}
+
 	return &api{
-		directMessaging:       directMessaging,
-		actor:                 actor,
-		id:                    appID,
-		appChannel:            appChannel,
-		pubsubAdapter:         pubsubAdapter,
-		stateStores:           stateStores,
-		secretStores:          secretStores,
-		secretsConfiguration:  secretsConfiguration,
-		sendToOutputBindingFn: sendToOutputBindingFn,
-		tracingSpec:           tracingSpec,
-		accessControlList:     accessControlList,
-		appProtocol:           appProtocol,
+		directMessaging:          directMessaging,
+		actor:                    actor,
+		id:                       appID,
+		appChannel:               appChannel,
+		pubsubAdapter:            pubsubAdapter,
+		stateStores:              stateStores,
+		transactionalStateStores: transactionalStateStores,
+		secretStores:             secretStores,
+		secretsConfiguration:     secretsConfiguration,
+		sendToOutputBindingFn:    sendToOutputBindingFn,
+		tracingSpec:              tracingSpec,
+		accessControlList:        accessControlList,
+		appProtocol:              appProtocol,
 	}
 }
 
@@ -716,7 +725,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &emptypb.Empty{}, err
 	}
 
-	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
+	transactionalStore, ok := a.transactionalStateStores[storeName]
 	if !ok {
 		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, storeName)
 		apiServerLogger.Debug(err)
