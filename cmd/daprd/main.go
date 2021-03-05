@@ -70,6 +70,7 @@ import (
 	// Name resolutions
 	nr "github.com/dapr/components-contrib/nameresolution"
 	nr_kubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
+	nr_orchestrator "pkg/components/nameresolution"
 	nr_mdns "github.com/dapr/components-contrib/nameresolution/mdns"
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 
@@ -255,6 +256,9 @@ func main() {
 			}),
 			nr_loader.New("kubernetes", func() nr.Resolver {
 				return nr_kubernetes.NewResolver(logContrib)
+			}),
+			nr_loader.New("orchestrator", func() nr.Resolver {
+				return nr_orchestrator.NewResolver(logContrib)
 			}),
 		),
 		runtime.WithInputBindings(

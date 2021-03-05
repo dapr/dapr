@@ -1052,7 +1052,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	case modes.KubernetesMode:
 		resolver, err = a.nameResolutionRegistry.Create("kubernetes", "v1")
 	case modes.OrchestratorMode:
-		resolver, err = a.nameResolutionRegistry.Create("kubernetes", "v1")
+		resolver, err = a.nameResolutionRegistry.Create("orchestrator", "v1")
 	case modes.StandaloneMode:
 		resolver, err = a.nameResolutionRegistry.Create("mdns", "v1")
 		// properties to register mDNS instances.
