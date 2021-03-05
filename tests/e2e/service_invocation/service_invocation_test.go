@@ -645,13 +645,6 @@ func TestHeaders(t *testing.T) {
 				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
 			}
 		}
-
-		// traceParentRs := responseHeaders["traceparent"]
-		// if assert.NotNil(t, traceParentRs, "traceparent is missing from the response") {
-		// 	if assert.Equal(t, 1, len(traceParentRs), "traceparent is missing from the response") {
-		// 		assert.Equal(t, expectedTraceID, traceParentRs[0], "traceparent value was not expected")
-		// 	}
-		// }
 	})
 
 	t.Run("grpc-to-http-tracing", func(t *testing.T) {
@@ -699,12 +692,6 @@ func TestHeaders(t *testing.T) {
 				assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
 			}
 		}
-		// traceParentRs := responseHeaders["Traceparent"]
-		// if assert.NotNil(t, traceParentRs, "Traceparent is missing from the response") {
-		// 	if assert.Equal(t, 1, len(traceParentRs), "Traceparent is missing from the response") {
-		// 		assert.Equal(t, expectedTraceID, traceParentRs[0], "Traceparent value was not expected")
-		// 	}
-		// }
 	})
 }
 
