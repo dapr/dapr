@@ -70,7 +70,7 @@ import (
 	// Name resolutions
 	nr "github.com/dapr/components-contrib/nameresolution"
 	nr_kubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
-	nr_orchestrator "pkg/components/nameresolution"
+	nr_orchestrator "github.com/dapr/dapr/pkg/components/nameresolution"
 	nr_mdns "github.com/dapr/components-contrib/nameresolution/mdns"
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 
