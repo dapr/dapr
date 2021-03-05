@@ -24,6 +24,6 @@ func (k *resolver) Init(metadata nameresolution.Metadata) error {
 // ResolveID resolves name to address in Kubernetes.
 func (k *resolver) ResolveID(req nameresolution.ResolveRequest) (string, error) {
 	// Dapr requires this formatting for Kubernetes services
-	fmt.Println("%s-dapr.svc.cluster.local:%d", req.ID, req.Port)
-	return fmt.Sprintf("%s-dapr.svc.cluster.local:%d", req.ID, req.Port), nil
+	fmt.Println(fmt.Sprintf("%s-dapr:%d", req.ID, req.Port))
+	return fmt.Sprintf("%s-dapr:%d", req.ID, req.Port), nil
 }
