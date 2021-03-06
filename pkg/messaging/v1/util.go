@@ -406,9 +406,7 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 		diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
 			md.Set(header, value)
 		})
-		traceBinary := propagation.Binary(sc)
-		traceValue := string(traceBinary)
-		md.Set(tracebinMetadata, traceValue)
+		md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(grpctracebinValue)
 		if err == nil {
