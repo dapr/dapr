@@ -958,12 +958,8 @@ func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, 
 
 	var reminders []Reminder
 	json.Unmarshal(resp.Data, &reminders)
-	var etag *string
-	// This check is needed due to https://github.com/dapr/components-contrib/issues/731
-	if resp.ETag != "" {
-		etag = &resp.ETag
-	}
-	return reminders, etag, nil
+
+	return reminders, resp.ETag, nil
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
