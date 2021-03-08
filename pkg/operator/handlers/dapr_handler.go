@@ -23,6 +23,7 @@ import (
 const (
 	daprEnabledAnnotationKey        = "dapr.io/enabled"
 	appIDAnnotationKey              = "dapr.io/app-id"
+	daprEnableMetricsKey            = "dapr.io/enable-metrics"
 	daprMetricsPortKey              = "dapr.io/metrics-port"
 	daprSidecarHTTPPortName         = "dapr-http"
 	daprSidecarAPIGRPCPortName      = "dapr-grpc"
@@ -31,6 +32,7 @@ const (
 	daprSidecarHTTPPort             = 3500
 	daprSidecarAPIGRPCPort          = 50001
 	daprSidecarInternalGRPCPort     = 50002
+	defaultMetricsEnabled           = true
 	defaultMetricsPort              = 9090
 	clusterIPNone                   = "None"
 	daprServiceOwnerField           = ".metadata.controller"
@@ -137,19 +139,25 @@ func (h *DaprHandler) ensureDaprServicePresent(ctx context.Context, namespace st
 
 func (h *DaprHandler) createDaprService(ctx context.Context, expectedService types.NamespacedName, deployment *appsv1.Deployment) error {
 	appID := h.getAppID(deployment)
+	enableMetrics := h.getEnableMetrics(deployment)
 	metricsPort := h.getMetricsPort(deployment)
+
+	annotations := map[string]string{
+		appIDAnnotationKey: appID,
+	}
+
+	if enableMetrics {
+		annotations["prometheus.io/scrape"] = "true"
+		annotations["prometheus.io/port"] = strconv.Itoa(metricsPort)
+		annotations["prometheus.io/path"] = "/"
+	}
 
 	service := &corev1.Service{
 		ObjectMeta: meta_v1.ObjectMeta{
-			Name:      expectedService.Name,
-			Namespace: expectedService.Namespace,
-			Labels:    map[string]string{daprEnabledAnnotationKey: "true"},
-			Annotations: map[string]string{
-				"prometheus.io/scrape": "true",
-				"prometheus.io/port":   strconv.Itoa(metricsPort),
-				"prometheus.io/path":   "/",
-				appIDAnnotationKey:     appID,
-			},
+			Name:        expectedService.Name,
+			Namespace:   expectedService.Namespace,
+			Labels:      map[string]string{daprEnabledAnnotationKey: "true"},
+			Annotations: annotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector:  deployment.Spec.Selector.MatchLabels,
@@ -235,6 +243,17 @@ func (h *DaprHandler) isAnnotatedForDapr(deployment *appsv1.Deployment) bool {
 	default:
 		return false
 	}
+}
+
+func (h *DaprHandler) getEnableMetrics(deployment *appsv1.Deployment) bool {
+	annotations := deployment.Spec.Template.ObjectMeta.Annotations
+	enableMetrics := defaultMetricsEnabled
+	if val, ok := annotations[daprEnableMetricsKey]; ok {
+		if v, err := strconv.ParseBool(val); err == nil {
+			enableMetrics = v
+		}
+	}
+	return enableMetrics
 }
 
 func (h *DaprHandler) getMetricsPort(deployment *appsv1.Deployment) int {
