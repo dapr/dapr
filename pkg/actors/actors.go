@@ -101,9 +101,11 @@ func NewActors(
 	certChain *dapr_credentials.CertChain,
 	tracingSpec config.TracingSpec) Actors {
 	var transactionalStore state.TransactionalStore
-	features := stateStore.Features()
-	if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
-		transactionalStore = stateStore.(state.TransactionalStore)
+	if stateStore != nil {
+		features := stateStore.Features()
+		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
+			transactionalStore = stateStore.(state.TransactionalStore)
+		}
 	}
 
 	return &actorsRuntime{
