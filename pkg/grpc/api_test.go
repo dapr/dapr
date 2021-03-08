@@ -14,6 +14,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agrea/ptr"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/phayes/freeport"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"go.opencensus.io/trace"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -32,19 +47,6 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/phayes/freeport"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"go.opencensus.io/trace"
-	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const maxGRPCServerUptime = 100 * time.Millisecond
@@ -943,7 +945,7 @@ func TestGetState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: "test-etag",
+			ETag: ptr.String("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == "fakeAPI||error-key"
@@ -1028,7 +1030,7 @@ func TestGetBulkState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: "test-etag",
+			ETag: ptr.String("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == "fakeAPI||error-key"
