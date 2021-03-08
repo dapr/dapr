@@ -351,8 +351,18 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "DaprValue1", requestHeaders["daprtest-request-1"][0])
 		assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
 		assert.NotNil(t, requestHeaders["user-agent"][0])
-		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRq, "grpc-trace-bin is missing from the request") {
+			if assert.Equal(t, 1, len(grpcTraceBinRq), "grpc-trace-bin is missing from the request") {
+				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
+			}
+		}
+		traceParentRq := requestHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRq, "traceparent is missing from the request") {
+			if assert.Equal(t, 1, len(traceParentRq), "traceparent is missing from the request") {
+				assert.NotEqual(t, "", traceParentRq[0], "traceparent is missing from the request")
+			}
+		}
 		assert.Equal(t, hostIP, requestHeaders["x-forwarded-for"][0])
 		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
@@ -360,8 +370,18 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "application/grpc", responseHeaders["content-type"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
-		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
+		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRs, "grpc-trace-bin is missing from the response") {
+			if assert.Equal(t, 1, len(grpcTraceBinRs), "grpc-trace-bin is missing from the response") {
+				assert.NotEqual(t, "", grpcTraceBinRs[0], "grpc-trace-bin is missing from the response")
+			}
+		}
+		traceParentRs := responseHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRs, "traceparent is missing from the response") {
+			if assert.Equal(t, 1, len(traceParentRs), "traceparent is missing from the response") {
+				assert.NotEqual(t, "", traceParentRs[0], "traceparent is missing from the response")
+			}
+		}
 
 		assert.Equal(t, "DaprTest-Trailer-Value-1", trailerHeaders["daprtest-trailer-1"][0])
 		assert.Equal(t, "DaprTest-Trailer-Value-2", trailerHeaders["daprtest-trailer-2"][0])
@@ -408,8 +428,13 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, responseHeaders["dapr-date"][0])
 		assert.Equal(t, "DaprTest-Response-Value-1", responseHeaders["daprtest-response-1"][0])
 		assert.Equal(t, "DaprTest-Response-Value-2", responseHeaders["daprtest-response-2"][0])
-		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
+
+		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRs, "grpc-trace-bin is missing from the response") {
+			if assert.Equal(t, 1, len(grpcTraceBinRs), "grpc-trace-bin is missing from the response") {
+				assert.NotEqual(t, "", grpcTraceBinRs[0], "grpc-trace-bin is missing from the response")
+			}
+		}
 	})
 
 	t.Run("http-to-grpc", func(t *testing.T) {
@@ -445,8 +470,18 @@ func TestHeaders(t *testing.T) {
 		assert.Equal(t, "DaprValue1", requestHeaders["daprtest-request-1"][0])
 		assert.Equal(t, "DaprValue2", requestHeaders["daprtest-request-2"][0])
 		assert.NotNil(t, requestHeaders["user-agent"][0])
-		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRq, "grpc-trace-bin is missing from the request") {
+			if assert.Equal(t, 1, len(grpcTraceBinRq), "grpc-trace-bin is missing from the request") {
+				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
+			}
+		}
+		traceParentRq := requestHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRq, "traceparent is missing from the request") {
+			if assert.Equal(t, 1, len(traceParentRq), "traceparent is missing from the request") {
+				assert.NotEqual(t, "", traceParentRq[0], "traceparent is missing from the request")
+			}
+		}
 		assert.Equal(t, hostIP, requestHeaders["x-forwarded-for"][0])
 		assert.Equal(t, hostname, requestHeaders["x-forwarded-host"][0])
 		assert.Equal(t, expectedForwarded, requestHeaders["forwarded"][0])
@@ -507,8 +542,12 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, requestHeaders["Traceparent"][0])
 		assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
 
-		assert.NotNil(t, responseHeaders["Traceparent"][0])
-		assert.Equal(t, expectedTraceID, responseHeaders["Traceparent"][0])
+		traceParentRs := responseHeaders["Traceparent"]
+		if assert.NotNil(t, traceParentRs, "Traceparent is missing from the response") {
+			if assert.Equal(t, 1, len(traceParentRs), "Traceparent is missing from the response") {
+				assert.Equal(t, expectedTraceID, traceParentRs[0], "Traceparent value was not expected")
+			}
+		}
 	})
 
 	t.Run("grpc-to-grpc-tracing", func(t *testing.T) {
@@ -539,21 +578,39 @@ func TestHeaders(t *testing.T) {
 
 		require.NoError(t, err)
 
-		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
+		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRq, "grpc-trace-bin is missing from the request") {
+			if assert.Equal(t, 1, len(grpcTraceBinRq), "grpc-trace-bin is missing from the request") {
+				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
+			}
+		}
+		traceParentRq := requestHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRq, "traceparent is missing from the request") {
+			if assert.Equal(t, 1, len(traceParentRq), "traceparent is missing from the request") {
+				assert.NotEqual(t, "", traceParentRq[0], "traceparent is missing from the request")
+			}
+		}
 
-		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
-		traceContext := responseHeaders["grpc-trace-bin"][0]
+		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRs) {
+			if assert.Equal(t, 1, len(grpcTraceBinRs)) {
+				traceContext := grpcTraceBinRs[0]
+				t.Logf("received response grpc header..%s\n", traceContext)
+				assert.Equal(t, expectedEncodedTraceID, traceContext)
+				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
+				gotSc, ok := propagation.FromBinary(decoded)
 
-		t.Logf("received response grpc header..%s\n", traceContext)
-		assert.Equal(t, expectedEncodedTraceID, traceContext)
-		decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-		gotSc, ok := propagation.FromBinary([]byte(decoded))
-
-		assert.True(t, ok)
-		assert.NotNil(t, gotSc)
-		assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+				assert.True(t, ok)
+				assert.NotNil(t, gotSc)
+				assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+			}
+		}
+		traceParentRs := responseHeaders["traceparent"]
+		if assert.NotNil(t, traceParentRs, "traceparent is missing from the response") {
+			if assert.Equal(t, 1, len(traceParentRs), "traceparent is missing from the response") {
+				assert.Equal(t, expectedTraceID, traceParentRs[0], "traceparent value was not expected")
+			}
+		}
 	})
 
 	t.Run("http-to-grpc-tracing", func(t *testing.T) {
@@ -582,11 +639,12 @@ func TestHeaders(t *testing.T) {
 
 		require.NoError(t, err)
 
-		assert.NotNil(t, requestHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(requestHeaders["grpc-trace-bin"]))
-
-		assert.NotNil(t, responseHeaders["Traceparent"][0])
-		assert.Equal(t, expectedTraceID, responseHeaders["Traceparent"][0])
+		grpcTraceBinRq := requestHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRq, "grpc-trace-bin is missing from the request") {
+			if assert.Equal(t, 1, len(grpcTraceBinRq), "grpc-trace-bin is missing from the request") {
+				assert.NotEqual(t, "", grpcTraceBinRq[0], "grpc-trace-bin is missing from the request")
+			}
+		}
 	})
 
 	t.Run("grpc-to-http-tracing", func(t *testing.T) {
@@ -618,18 +676,22 @@ func TestHeaders(t *testing.T) {
 		assert.NotNil(t, requestHeaders["Traceparent"][0])
 		assert.Equal(t, expectedTraceID, requestHeaders["Daprtest-Traceid"][0])
 
-		assert.NotNil(t, responseHeaders["grpc-trace-bin"][0])
-		assert.Equal(t, 1, len(responseHeaders["grpc-trace-bin"]))
-		traceContext := responseHeaders["grpc-trace-bin"][0]
+		grpcTraceBinRs := responseHeaders["grpc-trace-bin"]
+		if assert.NotNil(t, grpcTraceBinRs, "grpc-trace-bin is missing from the response") {
+			if assert.Equal(t, 1, len(grpcTraceBinRs), "grpc-trace-bin is missing from the response") {
+				traceContext := grpcTraceBinRs[0]
+				assert.NotEqual(t, "", traceContext)
 
-		t.Logf("received response grpc header..%s\n", traceContext)
-		assert.Equal(t, expectedEncodedTraceID, traceContext)
-		decoded, _ := base64.StdEncoding.DecodeString(traceContext)
-		gotSc, ok := propagation.FromBinary([]byte(decoded))
+				t.Logf("received response grpc header..%s\n", traceContext)
+				assert.Equal(t, expectedEncodedTraceID, traceContext)
+				decoded, _ := base64.StdEncoding.DecodeString(traceContext)
+				gotSc, ok := propagation.FromBinary([]byte(decoded))
 
-		assert.True(t, ok)
-		assert.NotNil(t, gotSc)
-		assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+				assert.True(t, ok)
+				assert.NotNil(t, gotSc)
+				assert.Equal(t, expectedTraceID, diag.SpanContextToW3CString(gotSc))
+			}
+		}
 	})
 }
 
