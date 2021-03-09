@@ -2094,13 +2094,17 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 func TestV1StateEndpoints(t *testing.T) {
 	etag := "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'"
 	fakeServer := newFakeHTTPServer()
-	fakeStore := fakeStateStore{}
+	var fakeStore state.Store = fakeStateStore{}
 	fakeStores := map[string]state.Store{
 		"store1": fakeStore,
 	}
+	fakeTransactionalStores := map[string]state.TransactionalStore{
+		"store1": fakeStore.(state.TransactionalStore),
+	}
 	testAPI := &api{
-		stateStores: fakeStores,
-		json:        jsoniter.ConfigFastest,
+		stateStores:              fakeStores,
+		transactionalStateStores: fakeTransactionalStores,
+		json:                     jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	storeName := "store1"
@@ -2426,6 +2430,13 @@ func (c fakeStateStore) Init(metadata state.Metadata) error {
 	return nil
 }
 
+func (c fakeStateStore) Features() []state.Feature {
+	return []state.Feature{
+		state.FeatureETag,
+		state.FeatureTransactional,
+	}
+}
+
 func (c fakeStateStore) Set(req *state.SetRequest) error {
 	if req.Key == "good-key" {
 		if req.ETag != nil && *req.ETag != "`~!@#$%^&*()_+-={}[]|\\:\";'<>?,./'" {
@@ -2612,15 +2623,19 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 func TestV1TransactionEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	fakeStore := fakeStateStore{}
+	var fakeStore state.Store = fakeStateStore{}
 	fakeStoreNonTransactional := new(daprt.MockStateStore)
 	fakeStores := map[string]state.Store{
 		"store1":                fakeStore,
 		"storeNonTransactional": fakeStoreNonTransactional,
 	}
+	fakeTransactionalStores := map[string]state.TransactionalStore{
+		"store1": fakeStore.(state.TransactionalStore),
+	}
 	testAPI := &api{
-		stateStores: fakeStores,
-		json:        jsoniter.ConfigFastest,
+		stateStores:              fakeStores,
+		transactionalStateStores: fakeTransactionalStores,
+		json:                     jsoniter.ConfigFastest,
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints())
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

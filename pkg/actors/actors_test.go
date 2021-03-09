@@ -65,6 +65,10 @@ func (f *fakeStateStore) Init(metadata state.Metadata) error {
 	return nil
 }
 
+func (f *fakeStateStore) Features() []state.Feature {
+	return []state.Feature{state.FeatureETag, state.FeatureTransactional}
+}
+
 func (f *fakeStateStore) Delete(req *state.DeleteRequest) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
