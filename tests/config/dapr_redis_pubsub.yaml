@@ -18,3 +18,7 @@ spec:
       key: host
   - name: redisPassword
     value: ""
+  - name: processingTimeout
+    value: 1s
+  - name: redeliverInterval
+    value: 1s

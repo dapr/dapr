@@ -278,22 +278,21 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 
 	url := fmt.Sprintf(actorMethodURLFormat, actorType, id, callType, method)
 
-	var req interface{}
+	var req timerReminderRequest
 	switch callType {
 	case "method":
 		// NO OP
 	case "timers":
-		req = timerReminderRequest{
-			Data:    "timerdata",
-			DueTime: "1s",
-			Period:  "1s",
-		}
+		fallthrough
 	case "reminders":
-		req = timerReminderRequest{
-			Data:    "reminderdata",
-			DueTime: "1s",
-			Period:  "1s",
+		body, err := ioutil.ReadAll(r.Body)
+		defer r.Body.Close()
+		if err != nil {
+			log.Printf("Could not get reminder request: %s", err.Error())
+			return
 		}
+
+		json.Unmarshal(body, &req)
 	}
 
 	body, err := httpCall(r.Method, url, req, 200)

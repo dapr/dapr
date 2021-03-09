@@ -6,54 +6,115 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAllowedTopics(t *testing.T) {
-	t.Run("subscriptions: no scopes", func(t *testing.T) {
-		topics := GetScopedTopics(SubscriptionScopes, "test", map[string]string{})
-		assert.Len(t, topics, 0)
-	})
+func TestGetAllowedTopics(t *testing.T) {
+	var allowedTests = []struct {
+		Metadata map[string]string
+		Target   []string
+		Msg      string
+	}{
+		{
+			Metadata: nil,
+			Target:   []string{},
+			Msg:      "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"allowedTopics": "topic1,topic2,topic3",
+			},
+			Target: []string{"topic1", "topic2", "topic3"},
+			Msg:    "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"allowedTopics": "topic1, topic2, topic3",
+			},
+			Target: []string{"topic1", "topic2", "topic3"},
+			Msg:    "pass, include whitespace",
+		},
+		{
+			Metadata: map[string]string{
+				"allowedTopics": "",
+			},
+			Target: []string{},
+			Msg:    "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"allowedTopics": "topic1, topic1, topic1",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, include whitespace and repeated topic",
+		},
+	}
+	for _, item := range allowedTests {
+		assert.Equal(t, GetAllowedTopics(item.Metadata), item.Target)
+	}
+}
 
-	t.Run("publications: no scopes", func(t *testing.T) {
-		topics := GetScopedTopics(PublishingScopes, "test", map[string]string{})
-		assert.Len(t, topics, 0)
-	})
-
-	t.Run("subscriptions: allowed 1 topic", func(t *testing.T) {
-		topics := GetScopedTopics(SubscriptionScopes, "test", map[string]string{SubscriptionScopes: "test=topic1"})
-		assert.Len(t, topics, 1)
-		assert.Equal(t, topics[0], "topic1")
-	})
-
-	t.Run("publications: allowed 1 topic", func(t *testing.T) {
-		topics := GetScopedTopics(PublishingScopes, "test", map[string]string{PublishingScopes: "test=topic1"})
-		assert.Len(t, topics, 1)
-		assert.Equal(t, topics[0], "topic1")
-	})
-
-	t.Run("allowed 2 publication, 2 subscriptions", func(t *testing.T) {
-		p := map[string]string{SubscriptionScopes: "test=topic1,topic2", PublishingScopes: "test=topic3,topic4"}
-		subTopics := GetScopedTopics(SubscriptionScopes, "test", p)
-		assert.Len(t, subTopics, 2)
-		assert.Equal(t, subTopics[0], "topic1")
-		assert.Equal(t, subTopics[1], "topic2")
-
-		pubTopics := GetScopedTopics(PublishingScopes, "test", p)
-		assert.Len(t, pubTopics, 2)
-		assert.Equal(t, pubTopics[0], "topic3")
-		assert.Equal(t, pubTopics[1], "topic4")
-	})
-
-	t.Run("publications: allowed all, different app-id", func(t *testing.T) {
-		topics := GetScopedTopics(PublishingScopes, "test", map[string]string{PublishingScopes: "test1=topic1"})
-		assert.Len(t, topics, 0)
-	})
-
-	t.Run("subscriptions: allowed all, different app-id", func(t *testing.T) {
-		topics := GetScopedTopics(SubscriptionScopes, "test", map[string]string{SubscriptionScopes: "test1=topic1"})
-		assert.Len(t, topics, 0)
-	})
-
-	t.Run("get 2 allowed topics", func(t *testing.T) {
-		topics := GetAllowedTopics(map[string]string{AllowedTopics: "topic1,topic2"})
-		assert.Len(t, topics, 2)
-	})
+func TestGetScopedTopics(t *testing.T) {
+	var scopedTests = []struct {
+		Scope    string
+		AppID    string
+		Metadata map[string]string
+		Target   []string
+		Msg      string
+	}{
+		{
+			Scope:    "subscriptionScopes",
+			AppID:    "appid1",
+			Metadata: map[string]string{},
+			Target:   []string{},
+			Msg:      "pass",
+		},
+		{
+			Scope: "subscriptionScopes",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"subscriptionScopes": "appid2=topic1",
+			},
+			Target: []string{},
+			Msg:    "pass",
+		},
+		{
+			Scope: "subscriptionScopes",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"subscriptionScopes": "appid1=topic1",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass",
+		},
+		{
+			Scope: "subscriptionScopes",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"subscriptionScopes": "appid1=topic1, topic2",
+			},
+			Target: []string{"topic1", "topic2"},
+			Msg:    "pass, include whitespace",
+		},
+		{
+			Scope: "subscriptionScopes",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"subscriptionScopes": "appid1=topic1;appid1=topic2",
+			},
+			Target: []string{"topic1", "topic2"},
+			Msg:    "pass, include repeated appid",
+		},
+		{
+			Scope: "subscriptionScopes",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"subscriptionScopes": "appid1=topic1;appid1=topic1",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, include repeated appid and topic",
+		},
+	}
+	for _, item := range scopedTests {
+		assert.Equal(t,
+			GetScopedTopics(item.Scope, item.AppID, item.Metadata),
+			item.Target)
+	}
 }

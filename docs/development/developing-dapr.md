@@ -1,7 +1,7 @@
 # Developing Dapr
 
 This section will walk you through on how to clone and build the Dapr runtime.
-First, make sure you have [Go 1.15](https://golang.org/dl/) installed.
+First, make sure you have [Go 1.16](https://golang.org/dl/) installed.
 
 
 ## Setup environment

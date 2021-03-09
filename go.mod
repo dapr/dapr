@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.15
+go 1.16
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.2.0
@@ -37,8 +37,8 @@ require (
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.13.0
 	go.uber.org/atomic v1.6.0
-	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a
-	google.golang.org/grpc v1.33.1
+	google.golang.org/genproto v0.0.0-20201204160425-06b3db808446
+	google.golang.org/grpc v1.34.0
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/yaml.v2 v2.3.0
 	k8s.io/api v0.20.0
