@@ -11,9 +11,9 @@ type DaprMode string
 const (
 	// KubernetesMode is a Kubernetes Dapr mode
 	KubernetesMode DaprMode = "kubernetes"
-	// OrchestratorMode is a Dapr mode when we run in orchestrator without operator
+	// DNSMode is a Dapr mode when we run in orchestrator without operator or any other environmet
 	// It's use dns name resolution and file configuration
-	OrchestratorMode DaprMode = "orchestrator"
+	DNSMode DaprMode = "dns"
 	// StandaloneMode is a Standalone Dapr mode
 	StandaloneMode DaprMode = "standalone"
 )

@@ -865,13 +865,12 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, log)
-	case modes.OrchestratorMode:
+	case modes.DNSMode:
 		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	case modes.StandaloneMode:
 		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	}
-	
-	
+
 	// only return valid subscriptions for this app id
 	for i := len(subs) - 1; i >= 0; i-- {
 		s := subs[i]
@@ -1050,8 +1049,8 @@ func (a *DaprRuntime) initNameResolution() error {
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		resolver, err = a.nameResolutionRegistry.Create("kubernetes", "v1")
-	case modes.OrchestratorMode:
-		resolver, err = a.nameResolutionRegistry.Create("orchestrator", "v1")
+	case modes.DNSMode:
+		resolver, err = a.nameResolutionRegistry.Create("dns", "v1")
 	case modes.StandaloneMode:
 		resolver, err = a.nameResolutionRegistry.Create("mdns", "v1")
 		// properties to register mDNS instances.
@@ -1304,8 +1303,8 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.operatorClient)
-	case modes.OrchestratorMode:
-		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)	
+	case modes.DNSMode:
+		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	case modes.StandaloneMode:
 		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	default:
