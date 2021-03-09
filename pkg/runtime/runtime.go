@@ -870,6 +870,11 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, log)
+<<<<<<< HEAD
+=======
+	case modes.DNSMode:
+		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
+>>>>>>> 8ad9db61... Rename mode. Add couple tests.
 	case modes.StandaloneMode:
 		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	}
@@ -1052,6 +1057,8 @@ func (a *DaprRuntime) initNameResolution() error {
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		resolver, err = a.nameResolutionRegistry.Create("kubernetes", "v1")
+	case modes.DNSMode:
+		resolver, err = a.nameResolutionRegistry.Create("dns", "v1")
 	case modes.StandaloneMode:
 		resolver, err = a.nameResolutionRegistry.Create("mdns", "v1")
 		// properties to register mDNS instances.
@@ -1304,6 +1311,11 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.operatorClient)
+<<<<<<< HEAD
+=======
+	case modes.DNSMode:
+		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
+>>>>>>> 8ad9db61... Rename mode. Add couple tests.
 	case modes.StandaloneMode:
 		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	default:
