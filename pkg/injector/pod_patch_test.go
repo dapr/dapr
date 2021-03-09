@@ -8,6 +8,7 @@ package injector
 import (
 	"fmt"
 
+	"github.com/dapr/dapr/utils"
 	"github.com/stretchr/testify/assert"
 
 	corev1 "k8s.io/api/core/v1"
@@ -328,7 +329,7 @@ func TestGetEnvVarsAnnotation(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			envVars := getEnvVarsAnnotation(tc.annotations)
+			envVars := utils.ParseEnvString(tc.annotations[daprEnvKey])
 			fmt.Println(tc.testName)
 			assert.Equal(t, tc.expEnvLen, len(envVars))
 			assert.Equal(t, tc.expEnv, envVars)

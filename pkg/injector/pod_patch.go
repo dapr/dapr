@@ -18,6 +18,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/validation"
+	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -319,29 +320,6 @@ func getMaxRequestBodySize(annotations map[string]string) (int32, error) {
 	return getInt32Annotation(annotations, daprMaxRequestBodySize)
 }
 
-// add env-vars from annotations.
-// see https://github.com/dapr/dapr/issues/2508.
-func getEnvVarsAnnotation(annotations map[string]string) []corev1.EnvVar {
-	envVars := make([]corev1.EnvVar, 0)
-	envStr := annotations[daprEnvKey]
-	envPairs := strings.Split(envStr, ",")
-
-	for _, value := range envPairs {
-		pair := strings.Split(strings.TrimSpace(value), "=")
-
-		if len(pair) != 2 {
-			continue
-		}
-
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  pair[0],
-			Value: pair[1],
-		})
-	}
-
-	return envVars
-}
-
 func getBoolAnnotationOrDefault(annotations map[string]string, key string, defaultValue bool) bool {
 	enabled, ok := annotations[key]
 	if !ok {
@@ -572,7 +550,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		},
 	}
 
-	c.Env = append(c.Env, getEnvVarsAnnotation(annotations)...)
+	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
 
 	if tokenVolumeMount != nil {
 		c.VolumeMounts = []corev1.VolumeMount{
