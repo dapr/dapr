@@ -16,7 +16,7 @@ type AppDescription struct {
 	RegistryName      string
 	Replicas          int32
 	IngressEnabled    bool
-	EnableMetrics     string
+	MetricsEnabled    bool // This controls the setting for the dapr.io/enable-metrics annotation
 	MetricsPort       string
 	Config            string
 	AppCPULimit       string

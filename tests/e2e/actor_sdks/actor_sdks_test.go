@@ -69,6 +69,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorjava",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "actordotnet",
@@ -76,6 +77,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actordotnet",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "actorpython",
@@ -83,6 +85,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorpython",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "actorphp",
@@ -90,6 +93,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorphp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

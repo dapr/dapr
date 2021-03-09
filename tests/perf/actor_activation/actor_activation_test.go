@@ -34,6 +34,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "perf-actorjava",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 			AppPort:        3000,
 		},
 		{
@@ -42,6 +43,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "perf-tester",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 			AppPort:        3001,
 		},
 	}

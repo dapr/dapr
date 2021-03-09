@@ -143,6 +143,7 @@ func getDeployment(appID string, daprEnabled string) *appsv1.Deployment {
 		Annotations: map[string]string{
 			appIDAnnotationKey:       appID,
 			daprEnabledAnnotationKey: daprEnabled,
+			daprEnableMetricsKey:     "true",
 		},
 	}
 

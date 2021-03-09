@@ -46,6 +46,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-hellodapr",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "hellogreendapr",
@@ -53,6 +54,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-hellodapr",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "helloenvtestdapr",
@@ -60,6 +62,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-hellodapr",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
