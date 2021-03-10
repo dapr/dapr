@@ -8,6 +8,10 @@ name: dapr-base-containers
 on:
   repository_dispatch:
     types: [windows-base]
+  pull_request:
+    branches:
+      - master
+      - release-*
 jobs:
   build:
     name: Build base windows images
@@ -15,7 +19,7 @@ jobs:
     env:
       WINDOWS_VERSION: 1809
       TARGET_OS: windows
-      DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      DAPR_REGISTRY: daprio
     steps:
       - name: Parse event payload
         if: github.event_name == 'repository_dispatch'
@@ -32,22 +36,22 @@ jobs:
                 `CHECKOUT_REF=${testPayload.pull_head_ref}`);
             }
       - name: Check out dapr
-        if: env.CHECKOUT_REPO != ''
+        if: env.CHECKOUT_REPO != '' || github.event_name == 'pull_request'
         uses: actions/checkout@v2
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: docker login
-        if: env.CHECKOUT_REPO != ''
+        if: env.CHECKOUT_REPO != '' && github.event_name != 'pull_request'
         run: |
           docker login -u ${{ secrets.DOCKER_REGISTRY_ID }} -p ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: Build docker windows base images
-        if: env.CHECKOUT_REPO != ''
+        if: env.CHECKOUT_REPO != '' || github.event_name == 'pull_request'
         run: |
           echo "Build docker image..."
           make docker-windows-base-build
       - name: Push docker windows base images
-        if: env.CHECKOUT_REPO != ''
+        if: env.CHECKOUT_REPO != '' && github.event_name != 'pull_request'
         run: |
           echo "Build docker image..."
           make docker-windows-base-push
