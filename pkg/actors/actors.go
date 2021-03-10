@@ -63,6 +63,7 @@ type Actors interface {
 type actorsRuntime struct {
 	appChannel          channel.AppChannel
 	store               state.Store
+	transactionalStore  state.TransactionalStore
 	placement           *internal.ActorPlacement
 	grpcConnectionFn    func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
 	config              Config
@@ -99,10 +100,19 @@ func NewActors(
 	config Config,
 	certChain *dapr_credentials.CertChain,
 	tracingSpec config.TracingSpec) Actors {
+	var transactionalStore state.TransactionalStore
+	if stateStore != nil {
+		features := stateStore.Features()
+		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
+			transactionalStore = stateStore.(state.TransactionalStore)
+		}
+	}
+
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
 		store:               stateStore,
+		transactionalStore:  transactionalStore,
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
 		activeTimers:        &sync.Map{},
@@ -128,11 +138,11 @@ func (a *actorsRuntime) Init() error {
 	if len(a.config.HostedActorTypes) > 0 {
 		if a.store == nil {
 			log.Warn("actors: state store must be present to initialize the actor runtime")
-		}
-
-		_, ok := a.store.(state.TransactionalStore)
-		if !ok {
-			return errors.New(incompatibleStateStore)
+		} else {
+			features := a.store.Features()
+			if !state.FeatureETag.IsPresent(features) || !state.FeatureTransactional.IsPresent(features) {
+				return errors.New(incompatibleStateStore)
+			}
 		}
 	}
 
@@ -393,7 +403,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 }
 
 func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
-	if a.store == nil {
+	if a.store == nil || a.transactionalStore == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 	operations := []state.TransactionalStateOperation{}
@@ -437,12 +447,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		}
 	}
 
-	transactionalStore, ok := a.store.(state.TransactionalStore)
-	if !ok {
-		return errors.New(incompatibleStateStore)
-	}
-
-	err := transactionalStore.Multi(&state.TransactionalStateRequest{
+	err := a.transactionalStore.Multi(&state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   metadata,
 	})

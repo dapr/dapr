@@ -75,8 +75,13 @@ spec:
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
+{{- if eq .Values.global.prometheus.enabled true }}
+        - "--enable-metrics"
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
+{{- else }}
+        - "--enable-metrics=false"
+{{- end }}
         env:
         - name: TLS_CERT_FILE
           value: /dapr/cert/tls.crt

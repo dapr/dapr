@@ -111,6 +111,7 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--log-level", "info",
 		"--app-max-concurrency", "-1",
 		"--sentry-address", "sentry:50000",
+		"--enable-metrics=true",
 		"--metrics-port", "9090",
 		"--dapr-http-max-request-size", "-1",
 		"--log-as-json",
