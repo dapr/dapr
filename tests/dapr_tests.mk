@@ -26,7 +26,9 @@ actorfeatures \
 actorinvocationapp \
 runtime \
 runtime_init \
-middleware
+middleware \
+job-publisher \
+job-subscriber
 
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http

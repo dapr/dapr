@@ -12,6 +12,7 @@ import (
 	componentsv1alpha1 "github.com/dapr/dapr/pkg/client/clientset/versioned/typed/components/v1alpha1"
 	"k8s.io/client-go/kubernetes"
 	appv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
+	batchv1 "k8s.io/client-go/kubernetes/typed/batch/v1"
 	apiv1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -79,6 +80,11 @@ func (c *KubeClient) GetClientConfig() *rest.Config {
 // Deployments gets Deployment client for namespace
 func (c *KubeClient) Deployments(namespace string) appv1.DeploymentInterface {
 	return c.ClientSet.AppsV1().Deployments(namespace)
+}
+
+// Jobs gets Jobs client for namespace
+func (c *KubeClient) Jobs(namespace string) batchv1.JobInterface {
+	return c.ClientSet.BatchV1().Jobs(namespace)
 }
 
 // Services gets Service client for namespace

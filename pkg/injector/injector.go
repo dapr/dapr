@@ -112,7 +112,7 @@ func AllowedControllersServiceAccountUID(kubeClient *kubernetes.Clientset) ([]st
 		if err != nil && i == 0 {
 			return nil, err
 		} else if err != nil {
-			log.Debugf("Unable to get SA %s UID (%s)", allowedControllersServiceAccount, err)
+			log.Warnf("Unable to get SA %s UID (%s)", allowedControllersServiceAccount, err)
 			continue
 		}
 		allowedUids[i] = string(sa.ObjectMeta.UID)
