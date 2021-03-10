@@ -40,7 +40,6 @@ func TestParsePlacementAddr(t *testing.T) {
 
 func TestSetEnvVariables(t *testing.T) {
 	t.Run("Should set environment variables", func(t *testing.T) {
-
 		variables := map[string]string{
 			"ABC_ID":   "123",
 			"ABC_PORT": "234",
