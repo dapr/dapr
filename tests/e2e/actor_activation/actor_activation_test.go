@@ -83,6 +83,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorapp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

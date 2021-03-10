@@ -83,6 +83,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorfeatures",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": "testactorreminder",
 			},

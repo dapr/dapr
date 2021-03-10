@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestNewDaprHandler(t *testing.T) {
@@ -95,6 +97,36 @@ func TestDaprService(t *testing.T) {
 	})
 }
 
+func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+	ctx := context.Background()
+	myDaprService := types.NamespacedName{
+		Namespace: "test",
+		Name:      "test",
+	}
+	deployment := getDeployment("test", "true")
+	deployment.Spec.Selector = &meta_v1.LabelSelector{
+		MatchLabels: map[string]string{},
+	}
+	deployment.Spec.Template.Annotations[daprMetricsPortKey] = "12345"
+
+	service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
+	require.NotNil(t, service)
+	assert.Equal(t, "test", service.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "true", service.ObjectMeta.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "12345", service.ObjectMeta.Annotations["prometheus.io/port"])
+	assert.Equal(t, "/", service.ObjectMeta.Annotations["prometheus.io/path"])
+
+	deployment.Spec.Template.Annotations[daprEnableMetricsKey] = "false"
+
+	service = testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
+	require.NotNil(t, service)
+	assert.Equal(t, "test", service.ObjectMeta.Annotations[appIDAnnotationKey])
+	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/scrape"])
+	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/port"])
+	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
+}
+
 func TestGetMetricsPort(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	t.Run("metrics port override", func(t *testing.T) {
@@ -143,6 +175,7 @@ func getDeployment(appID string, daprEnabled string) *appsv1.Deployment {
 		Annotations: map[string]string{
 			appIDAnnotationKey:       appID,
 			daprEnabledAnnotationKey: daprEnabled,
+			daprEnableMetricsKey:     "true",
 		},
 	}
 
