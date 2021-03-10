@@ -65,6 +65,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "serviceinvocation-callee-0",
@@ -72,6 +73,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "serviceinvocation-callee-1",
@@ -79,6 +81,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "grpcapp",
@@ -86,6 +89,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
 		{
@@ -94,6 +98,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 			Namespace:      &secondaryNamespace,
 		},
 		{
@@ -102,6 +107,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-service_invocation_grpc",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 			Namespace:      &secondaryNamespace,
 			AppProtocol:    "grpc",
 		},
