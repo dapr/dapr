@@ -68,6 +68,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-binding_input",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "bindingoutput",
@@ -75,6 +76,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-binding_output",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "bindinginputgrpc",
@@ -82,6 +84,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-binding_input_grpc",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 			AppProtocol:    "grpc",
 		},
 	}

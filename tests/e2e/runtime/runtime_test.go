@@ -89,6 +89,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-runtime_init",
 			Replicas:       1,
 			IngressEnabled: false,
+			MetricsEnabled: true,
 			AppPort:        -1,
 		},
 	}
@@ -100,6 +101,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-runtime",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
