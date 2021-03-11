@@ -111,19 +111,18 @@ func TestGetSideCarContainer(t *testing.T) {
 		"--log-level", "info",
 		"--app-max-concurrency", "-1",
 		"--sentry-address", "sentry:50000",
+		"--enable-metrics=true",
 		"--metrics-port", "9090",
 		"--dapr-http-max-request-size", "-1",
 		"--log-as-json",
 	}
 
-	// DAPR_HOST_IP
-	assert.Equal(t, "", container.Env[0].Value)
 	// NAMESPACE
-	assert.Equal(t, "dapr-system", container.Env[1].Value)
+	assert.Equal(t, "dapr-system", container.Env[0].Value)
 	// DAPR_API_TOKEN
-	assert.Equal(t, "secret", container.Env[2].ValueFrom.SecretKeyRef.Name)
+	assert.Equal(t, "secret", container.Env[1].ValueFrom.SecretKeyRef.Name)
 	// DAPR_APP_TOKEN
-	assert.Equal(t, "appsecret", container.Env[3].ValueFrom.SecretKeyRef.Name)
+	assert.Equal(t, "appsecret", container.Env[2].ValueFrom.SecretKeyRef.Name)
 	assert.EqualValues(t, expectedArgs, container.Args)
 	assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 }
