@@ -14,7 +14,7 @@ roleRef:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: role-tokenreview-binding
+  name: dapr-role-tokenreview-binding
 subjects:
 - kind: ServiceAccount
   name: dapr-operator
