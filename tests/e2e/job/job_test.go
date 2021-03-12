@@ -31,16 +31,14 @@ type callSubscriberMethodRequest struct {
 
 // data returned from the subscriber app
 type receivedMessagesResponse struct {
-	Received []string `json:"received"`
+	ReceivedByTopicJob []string `json:"pubsub-job-topic"`
 }
 
-
 const (
-
-	receiveMessageRetries = 5
+	receiveMessageRetries = 25
 
 	publisherAppName  = "job-publisher"
-	subscriberAppName = "job-subscriber"
+	subscriberAppName = "pubsub-subscriber"
 )
 
 func TestMain(m *testing.M) {
@@ -100,17 +98,17 @@ func TestJobPublishMessage(t *testing.T) {
 			continue
 		}
 
-		log.Printf("Subscriber receieved %d messages on pubsub-job-topic", len(appResp.Received))
+		log.Printf("Subscriber receieved %d messages on pubsub-job-topic-http", len(appResp.ReceivedByTopicJob))
 
-		if len(appResp.Received) == 0 {
+		if len(appResp.ReceivedByTopicJob) == 0 {
 			log.Printf("No message received, retrying.")
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
 			break
 		}
 	}
 
-	require.Len(t, appResp.Received, 1)
-	require.Equal(t, "message-from-job", appResp.Received[0])
+	require.Len(t, appResp.ReceivedByTopicJob, 1)
+	require.Equal(t, "message-from-job", appResp.ReceivedByTopicJob[0])
 }
 

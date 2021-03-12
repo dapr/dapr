@@ -257,9 +257,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 // IsJobCompleted returns true if job object is complete
 func (m *AppManager) IsJobCompleted(job *batchv1.Job, err error) bool {
-	// fmt.Printf("%d; %d; %d; %v", job.Status.Succeeded, job.Status.Failed, job.Status.Active, job.Status.CompletionTime)
-	// return err == nil && job.Status.Succeeded == 1 && job.Status.Failed == 0 && job.Status.Active == 0 && job.Status.CompletionTime != nil
-	return err == nil && job.Status.Active == 1
+	return err == nil && job.Status.Succeeded == 1 && job.Status.Failed == 0 && job.Status.Active == 0 && job.Status.CompletionTime != nil
 }
 
 // IsDeploymentDone returns true if deployment object completes pod deployments

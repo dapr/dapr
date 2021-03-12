@@ -18,10 +18,27 @@ import (
 const (
 	daprPort       = 3500
 	pubsubName     = "messagebus"
-	pubsubTopic    = "pubsub-job-topic"
+	pubsubTopic    = "pubsub-job-topic-http"
 	message        = "message-from-job"
-	publishRetries = 10
+	publishRetries = 25
 )
+
+func stopSidecar() {
+	log.Printf("Shutting down the sidecar at %s", fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
+	for retryCount := 0; retryCount < publishRetries; retryCount++ {
+		r, err := http.Get(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
+		if r != nil {
+			r.Body.Close()
+		}
+		if err != nil {
+			log.Printf("Error stopping the sidecar %s, retrying.", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		log.Printf("Sidecar stopped")
+		break
+	}
+}
 
 func publishMessagesToPubsub() error {
 	daprPubsubURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", daprPort, pubsubName, pubsubTopic)
@@ -46,10 +63,12 @@ func main() {
 		err := publishMessagesToPubsub()
 		if err != nil {
 			log.Printf("Unable to publish, retrying.")
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 		} else {
+			stopSidecar()
 			os.Exit(0)
 		}
 	}
+	stopSidecar()
 	os.Exit(1)
 }

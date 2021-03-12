@@ -61,7 +61,6 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 		annotationObject = map[string]string{
 			"dapr.io/enabled":                           "true",
 			"dapr.io/app-id":                            appDesc.AppName,
-			"dapr.io/app-port":                          fmt.Sprintf("%d", appDesc.AppPort),
 			"dapr.io/sidecar-cpu-limit":                 appDesc.DaprCPULimit,
 			"dapr.io/sidecar-cpu-request":               appDesc.DaprCPURequest,
 			"dapr.io/sidecar-memory-limit":              appDesc.DaprMemoryLimit,
@@ -69,6 +68,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
+		}
+		if !appDesc.IsJob {
+			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)
 		}
 	}
 	if appDesc.AppProtocol != "" {
