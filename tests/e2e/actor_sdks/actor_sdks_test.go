@@ -10,7 +10,6 @@ package actor_sdks_e2e
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -53,13 +52,6 @@ func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 }
 
 func TestMain(m *testing.M) {
-	// Disables this test for Windows temporarily due to issues with Windows containers.
-	// Technically, this test can still work on Windows against K8s on Linux.
-	// See https://github.com/dapr/dapr/issues/2695
-	if runtime.GOOS == "windows" {
-		return
-	}
-
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	apps = []kube.AppDescription{
