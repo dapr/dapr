@@ -99,8 +99,6 @@ jobs:
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
         - role: worker
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
-        - role: worker
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
         containerdConfigPatches:
         - |-
           [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
@@ -174,6 +172,10 @@ jobs:
     - name: Setup test components
       run: |
         make setup-test-components
+
+    - name: Free up some diskspace
+      run: |
+        docker image prune -a -f
 
     - name: Run tests
       run: |
