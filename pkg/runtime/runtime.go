@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	nethttp "net/http"
@@ -113,6 +114,7 @@ type DaprRuntime struct {
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
 	accessControlList      *config.AccessControlList
+	componentsLock         *sync.RWMutex
 	components             []components_v1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
@@ -161,6 +163,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		runtimeConfig:          runtimeConfig,
 		globalConfig:           globalConfig,
 		accessControlList:      accessControlList,
+		componentsLock:         &sync.RWMutex{},
+		components:             make([]components_v1alpha1.Component, 0),
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
 		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
@@ -372,8 +376,8 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 	if a.globalConfig != nil {
 		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
 			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
-			component := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
-			if component == nil {
+			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
+			if !exists {
 				return http_middleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
 					middlewareSpec.Name,
 					middlewareSpec.Type,
@@ -496,8 +500,8 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 }
 
 func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) {
-	existed := a.getComponent(component.Spec.Type, component.Name)
-	if existed != nil && reflect.DeepEqual(existed.Spec.Metadata, component.Spec.Metadata) {
+	oldComp, exists := a.getComponent(component.Spec.Type, component.Name)
+	if exists && reflect.DeepEqual(oldComp.Spec.Metadata, component.Spec.Metadata) {
 		return
 	}
 	a.pendingComponents <- component
@@ -690,7 +694,11 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.components, a.stateStores, a.secretStores,
+	getComponentsFn := func() []components_v1alpha1.Component {
+		return a.getComponents()
+	}
+
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, getComponentsFn, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
 
@@ -723,9 +731,13 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
+	getComponentsFn := func() []components_v1alpha1.Component {
+		return a.getComponents()
+	}
+
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.components)
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), getComponentsFn)
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
@@ -1315,8 +1327,14 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 		return err
 	}
 
-	a.components = a.getAuthorizedComponents(comps)
-	for _, comp := range a.components {
+	authorizedComps := a.getAuthorizedComponents(comps)
+
+	a.componentsLock.Lock()
+	a.components = make([]components_v1alpha1.Component, len(authorizedComps))
+	copy(a.components, authorizedComps)
+	a.componentsLock.Unlock()
+
+	for _, comp := range authorizedComps {
 		a.pendingComponents <- comp
 	}
 
@@ -1324,11 +1342,20 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 }
 
 func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Component) {
-	existed := a.getComponent(component.Spec.Type, component.Name)
-	if existed == nil {
+	a.componentsLock.Lock()
+	defer a.componentsLock.Unlock()
+
+	replaced := false
+	for i, c := range a.components {
+		if c.Spec.Type == component.Spec.Type && c.ObjectMeta.Name == component.Name {
+			a.components[i] = component
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
 		a.components = append(a.components, component)
-	} else {
-		*existed = component
 	}
 }
 
@@ -1684,13 +1711,25 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 	return properties
 }
 
-func (a *DaprRuntime) getComponent(componentType string, name string) *components_v1alpha1.Component {
+func (a *DaprRuntime) getComponent(componentType string, name string) (components_v1alpha1.Component, bool) {
+	a.componentsLock.RLock()
+	defer a.componentsLock.RUnlock()
+
 	for i, c := range a.components {
 		if c.Spec.Type == componentType && c.ObjectMeta.Name == name {
-			return &a.components[i]
+			return a.components[i], true
 		}
 	}
-	return nil
+	return components_v1alpha1.Component{}, false
+}
+
+func (a *DaprRuntime) getComponents() []components_v1alpha1.Component {
+	a.componentsLock.RLock()
+	defer a.componentsLock.RUnlock()
+
+	comps := make([]components_v1alpha1.Component, len(a.components))
+	copy(comps, a.components)
+	return comps
 }
 
 func (a *DaprRuntime) establishSecurity(sentryAddress string) error {

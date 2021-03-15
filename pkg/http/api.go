@@ -50,7 +50,7 @@ type api struct {
 	endpoints                []Endpoint
 	directMessaging          messaging.DirectMessaging
 	appChannel               channel.AppChannel
-	components               []components_v1alpha1.Component
+	getComponentsFn          func() []components_v1alpha1.Component
 	stateStores              map[string]state.Store
 	transactionalStateStores map[string]state.TransactionalStore
 	secretStores             map[string]secretstores.SecretStore
@@ -102,7 +102,7 @@ func NewAPI(
 	appID string,
 	appChannel channel.AppChannel,
 	directMessaging messaging.DirectMessaging,
-	components []components_v1alpha1.Component,
+	getComponentsFn func() []components_v1alpha1.Component,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
@@ -118,6 +118,7 @@ func NewAPI(
 	}
 	api := &api{
 		appChannel:               appChannel,
+		getComponentsFn:          getComponentsFn,
 		directMessaging:          directMessaging,
 		stateStores:              stateStores,
 		transactionalStateStores: transactionalStateStores,
@@ -130,7 +131,7 @@ func NewAPI(
 		id:                       appID,
 		tracingSpec:              tracingSpec,
 	}
-	api.components = components
+
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
@@ -1135,7 +1136,8 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 
 	registeredComponents := []registeredComponent{}
 
-	for _, comp := range a.components {
+	components := a.getComponentsFn()
+	for _, comp := range components {
 		registeredComp := registeredComponent{
 			Name:    comp.Name,
 			Version: comp.Spec.Version,

@@ -110,7 +110,7 @@ func NewAPI(
 	tracingSpec config.TracingSpec,
 	accessControlList *config.AccessControlList,
 	appProtocol string,
-	components []components_v1alpha.Component) API {
+	getComponentsFn func() []components_v1alpha.Component) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
