@@ -125,10 +125,9 @@ func (d *directMessaging) invokeWithRetry(
 		resp, err := fn(ctx, app.id, app.namespace, app.address, req)
 		if err == nil {
 			return resp, nil
-		} else {
-			log.Errorf("retry count: %d, grpc call failed, ns: %s, addr: %s, appid: %s, err: %s",
-				i+1, app.namespace, app.address, app.id, err.Error())
 		}
+		log.Errorf("retry count: %d, grpc call failed, ns: %s, addr: %s, appid: %s, err: %s",
+			i+1, app.namespace, app.address, app.id, err.Error())
 		time.Sleep(backoffInterval)
 
 		code := status.Code(err)
