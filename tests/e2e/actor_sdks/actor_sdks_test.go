@@ -157,10 +157,12 @@ func TestActorInvocationCrossSDKs(t *testing.T) {
 		healthCheckApp(t, externalURL, numHealthChecks)
 	}
 
+	t.Log("Sleeping for 10 seconds ...")
 	time.Sleep(10 * time.Second)
 
 	for _, appSpec := range apps {
 		app := appSpec.AppName
+		t.Logf("Getting URL for app %s ...", app)
 		externalURL := tr.Platform.AcquireAppExternalURL(app)
 
 		for _, actorType := range actorTypes {
