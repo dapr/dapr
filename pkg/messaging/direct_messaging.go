@@ -126,7 +126,7 @@ func (d *directMessaging) invokeWithRetry(
 		if err == nil {
 			return resp, nil
 		}
-		log.Errorf("retry count: %d, grpc call failed, ns: %s, addr: %s, appid: %s, err: %s",
+		log.Debugf("retry count: %d, grpc call failed, ns: %s, addr: %s, appid: %s, err: %s",
 			i+1, app.namespace, app.address, app.id, err.Error())
 		time.Sleep(backoffInterval)
 
