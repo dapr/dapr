@@ -694,11 +694,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	getComponentsFn := func() []components_v1alpha1.Component {
-		return a.getComponents()
-	}
-
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, getComponentsFn, a.stateStores, a.secretStores,
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.stateStores, a.secretStores,
 		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
 
@@ -731,13 +727,9 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 }
 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	getComponentsFn := func() []components_v1alpha1.Component {
-		return a.getComponents()
-	}
-
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), getComponentsFn)
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents)
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
