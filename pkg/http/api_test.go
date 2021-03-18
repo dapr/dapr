@@ -1383,41 +1383,43 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		components: []components_v1alpha1.Component{
-			{
-				ObjectMeta: meta_v1.ObjectMeta{
-					Name: "MockComponent1Name",
-				},
-				Spec: components_v1alpha1.ComponentSpec{
-					Type:    "mock.component1Type",
-					Version: "v1.0",
-					Metadata: []components_v1alpha1.MetadataItem{
-						{
-							Name: "actorMockComponent1",
-							Value: components_v1alpha1.DynamicValue{
-								JSON: v1.JSON{Raw: []byte("true")},
+		getComponentsFn: func() []components_v1alpha1.Component {
+			return []components_v1alpha1.Component{
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "MockComponent1Name",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "mock.component1Type",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent1",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
 							},
 						},
 					},
 				},
-			},
-			{
-				ObjectMeta: meta_v1.ObjectMeta{
-					Name: "MockComponent2Name",
-				},
-				Spec: components_v1alpha1.ComponentSpec{
-					Type:    "mock.component2Type",
-					Version: "v1.0",
-					Metadata: []components_v1alpha1.MetadataItem{
-						{
-							Name: "actorMockComponent2",
-							Value: components_v1alpha1.DynamicValue{
-								JSON: v1.JSON{Raw: []byte("true")},
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "MockComponent2Name",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "mock.component2Type",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent2",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
 							},
 						},
 					},
 				},
-			},
+			}
 		},
 		json: jsoniter.ConfigFastest,
 	}
