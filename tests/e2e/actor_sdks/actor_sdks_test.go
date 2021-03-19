@@ -10,6 +10,7 @@ package actor_sdks_e2e
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -79,14 +80,20 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 		},
-		{
-			AppName:        "actorphp",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorphp",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-		},
+	}
+
+	// Disables PHP test for Windows temporarily due to issues with its Windows container.
+	// See https://github.com/dapr/dapr/issues/2953
+	if runtime.GOOS != "windows" {
+		apps = append(apps,
+			kube.AppDescription{
+				AppName:        "actorphp",
+				DaprEnabled:    true,
+				ImageName:      "e2e-actorphp",
+				Replicas:       1,
+				IngressEnabled: true,
+				MetricsEnabled: true,
+			})
 	}
 
 	tr = runner.NewTestRunner(appName, apps, nil, nil)
@@ -94,7 +101,13 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorInvocationCrossSDKs(t *testing.T) {
-	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor", "PHPCarActor"}
+	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor"}
+	// Disables PHP test for Windows temporarily due to issues with its Windows container.
+	// See https://github.com/dapr/dapr/issues/2953
+	if runtime.GOOS != "windows" {
+		actorTypes = append(actorTypes, "PHPCarActor")
+	}
+
 	scenarios := []struct {
 		method           string
 		payload          string
