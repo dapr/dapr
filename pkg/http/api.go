@@ -47,21 +47,22 @@ type API interface {
 }
 
 type api struct {
-	endpoints             []Endpoint
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
-	components            []components_v1alpha1.Component
-	stateStores           map[string]state.Store
-	secretStores          map[string]secretstores.SecretStore
-	secretsConfiguration  map[string]config.SecretsScope
-	json                  jsoniter.API
-	actor                 actors.Actors
-	pubsubAdapter         runtime_pubsub.Adapter
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	id                    string
-	extendedMetadata      sync.Map
-	readyStatus           bool
-	tracingSpec           config.TracingSpec
+	endpoints                []Endpoint
+	directMessaging          messaging.DirectMessaging
+	appChannel               channel.AppChannel
+	getComponentsFn          func() []components_v1alpha1.Component
+	stateStores              map[string]state.Store
+	transactionalStateStores map[string]state.TransactionalStore
+	secretStores             map[string]secretstores.SecretStore
+	secretsConfiguration     map[string]config.SecretsScope
+	json                     jsoniter.API
+	actor                    actors.Actors
+	pubsubAdapter            runtime_pubsub.Adapter
+	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	id                       string
+	extendedMetadata         sync.Map
+	readyStatus              bool
+	tracingSpec              config.TracingSpec
 }
 
 type registeredComponent struct {
@@ -101,7 +102,7 @@ func NewAPI(
 	appID string,
 	appChannel channel.AppChannel,
 	directMessaging messaging.DirectMessaging,
-	components []components_v1alpha1.Component,
+	getComponentsFn func() []components_v1alpha1.Component,
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
@@ -109,20 +110,28 @@ func NewAPI(
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
 	tracingSpec config.TracingSpec) API {
-	api := &api{
-		appChannel:            appChannel,
-		directMessaging:       directMessaging,
-		stateStores:           stateStores,
-		secretStores:          secretStores,
-		secretsConfiguration:  secretsConfiguration,
-		json:                  jsoniter.ConfigFastest,
-		actor:                 actor,
-		pubsubAdapter:         pubsubAdapter,
-		sendToOutputBindingFn: sendToOutputBindingFn,
-		id:                    appID,
-		tracingSpec:           tracingSpec,
+	transactionalStateStores := map[string]state.TransactionalStore{}
+	for key, store := range stateStores {
+		if state.FeatureTransactional.IsPresent(store.Features()) {
+			transactionalStateStores[key] = store.(state.TransactionalStore)
+		}
 	}
-	api.components = components
+	api := &api{
+		appChannel:               appChannel,
+		getComponentsFn:          getComponentsFn,
+		directMessaging:          directMessaging,
+		stateStores:              stateStores,
+		transactionalStateStores: transactionalStateStores,
+		secretStores:             secretStores,
+		secretsConfiguration:     secretsConfiguration,
+		json:                     jsoniter.ConfigFastest,
+		actor:                    actor,
+		pubsubAdapter:            pubsubAdapter,
+		sendToOutputBindingFn:    sendToOutputBindingFn,
+		id:                       appID,
+		tracingSpec:              tracingSpec,
+	}
+
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
@@ -1127,7 +1136,8 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 
 	registeredComponents := []registeredComponent{}
 
-	for _, comp := range a.components {
+	components := a.getComponentsFn()
+	for _, comp := range components {
 		registeredComp := registeredComponent{
 			Name:    comp.Name,
 			Version: comp.Spec.Version,
@@ -1305,7 +1315,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
-	stateStore, ok := a.stateStores[storeName]
+	_, ok := a.stateStores[storeName]
 	if !ok {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrStateStoreNotFound, storeName))
 		respondWithError(reqCtx, fasthttp.StatusBadRequest, msg)
@@ -1313,7 +1323,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	transactionalStore, ok := stateStore.(state.TransactionalStore)
+	transactionalStore, ok := a.transactionalStateStores[storeName]
 	if !ok {
 		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf(messages.ErrStateStoreNotSupported, storeName))
 		respondWithError(reqCtx, fasthttp.StatusInternalServerError, msg)

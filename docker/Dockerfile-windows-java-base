@@ -1,0 +1,16 @@
+# escape=`
+ARG WINDOWS_VERSION=1809
+ARG JAVA_VERSION=11.0.6
+
+FROM openjdk:${JAVA_VERSION}-windowsservercore-$WINDOWS_VERSION as build
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+ENV chocolateyUseWindowsCompression=false
+RUN iex (wget 'https://chocolatey.org/install.ps1' -UseBasicParsing)
+
+RUN choco feature enable -n=allowGlobalConfirmation
+RUN choco feature disable -n=showDownloadProgress
+RUN choco config set cachelocation C:\chococache
+
+RUN choco install maven --limit-output --timeout 3600; Remove-Item C:\chococache  -Recurse -Force

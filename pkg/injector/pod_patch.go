@@ -18,6 +18,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/validation"
+	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +41,9 @@ const (
 	daprAppTokenSecret                = "dapr.io/app-token-secret" /* #nosec */
 	daprLogAsJSON                     = "dapr.io/log-as-json"
 	daprAppMaxConcurrencyKey          = "dapr.io/app-max-concurrency"
+	daprEnableMetricsKey              = "dapr.io/enable-metrics"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
+	daprEnvKey                        = "dapr.io/env"
 	daprCPULimitKey                   = "dapr.io/sidecar-cpu-limit"
 	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
 	daprCPURequestKey                 = "dapr.io/sidecar-cpu-request"
@@ -73,6 +76,7 @@ const (
 	defaultAppSSL                     = false
 	kubernetesMountPath               = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultConfig                     = "daprsystem"
+	defaultEnabledMetric              = true
 	defaultMetricsPort                = 9090
 	sidecarHealthzPath                = "healthz"
 	defaultHealthzProbeDelaySeconds   = 3
@@ -282,6 +286,10 @@ func getProtocol(annotations map[string]string) string {
 	return getStringAnnotationOrDefault(annotations, daprAppProtocolKey, "http")
 }
 
+func getEnableMetrics(annotations map[string]string) bool {
+	return getBoolAnnotationOrDefault(annotations, daprEnableMetricsKey, defaultEnabledMetric)
+}
+
 func getMetricsPort(annotations map[string]string) int {
 	return int(getInt32AnnotationOrDefault(annotations, daprMetricsPortKey, defaultMetricsPort))
 }
@@ -464,6 +472,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 		appPortStr = fmt.Sprintf("%v", appPort)
 	}
 
+	metricsEnabled := getEnableMetrics(annotations)
 	metricsPort := getMetricsPort(annotations)
 	maxConcurrency, err := getMaxConcurrency(annotations)
 	if err != nil {
@@ -529,6 +538,7 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			"--log-level", getLogLevel(annotations),
 			"--app-max-concurrency", fmt.Sprintf("%v", maxConcurrency),
 			"--sentry-address", sentryAddress,
+			fmt.Sprintf("--enable-metrics=%t", metricsEnabled),
 			"--metrics-port", fmt.Sprintf("%v", metricsPort),
 			"--dapr-http-max-request-size", fmt.Sprintf("%v", requestBodySize),
 		},
@@ -547,6 +557,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprLivenessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 	}
+
+	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
 
 	if tokenVolumeMount != nil {
 		c.VolumeMounts = []corev1.VolumeMount{
