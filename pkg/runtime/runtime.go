@@ -582,10 +582,12 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	return nil
 }
 
-func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
+func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
 	ctx, span := diag.StartInternalCallbackSpan(spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+
+	var appResponseBody []byte
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -606,7 +608,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
-			return errors.Wrap(err, "error invoking app")
+			return nil, errors.Wrap(err, "error invoking app")
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
@@ -618,6 +620,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			response.To = resp.To
 
 			if resp.Data != nil {
+				appResponseBody = resp.Data
+
 				var d interface{}
 				err := a.json.Unmarshal(resp.Data, &d)
 				if err == nil {
@@ -625,6 +629,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				}
 			}
 
+			// TODO: THIS SHOULD BE DEPRECATED FOR v1.3
 			for _, s := range resp.States {
 				var i interface{}
 				a.json.Unmarshal(s.Value, &i)
@@ -648,7 +653,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
-			return errors.Wrap(err, "error invoking app")
+			return nil, errors.Wrap(err, "error invoking app")
 		}
 
 		if span != nil {
@@ -661,10 +666,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if resp.Status().Code != nethttp.StatusOK {
-			return errors.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
+			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
 		}
 
-		// TODO: Do we need to check content-type?
+		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
+			appResponseBody = resp.Message().Data.Value
+		}
+
+		// TODO: THIS SHOULD BE DEPRECATED FOR v1.3
 		if err := a.json.Unmarshal(resp.Message().Data.Value, &response); err != nil {
 			log.Debugf("error deserializing app response: %s", err)
 		}
@@ -675,19 +684,21 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			log.Errorf("error executing app response: %s", err)
 		}
 	}
-	return nil
+
+	return appResponseBody, nil
 }
 
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
-	err := binding.Read(func(resp *bindings.ReadResponse) error {
+	err := binding.Read(func(resp *bindings.ReadResponse) ([]byte, error) {
 		if resp != nil {
-			err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
+			b, err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
 			if err != nil {
 				log.Debugf("error from app consumer for binding [%s]: %s", name, err)
-				return err
+				return nil, err
 			}
+			return b, err
 		}
-		return nil
+		return nil, nil
 	})
 	return err
 }
