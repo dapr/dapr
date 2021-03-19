@@ -16,7 +16,7 @@ func (m *MockBinding) Init(metadata bindings.Metadata) error {
 }
 
 // Read is a mock read method
-func (m *MockBinding) Read(handler func(*bindings.ReadResponse) error) error {
+func (m *MockBinding) Read(handler func(*bindings.ReadResponse) ([]byte, error)) error {
 	args := m.Called(handler)
 	return args.Error(0)
 }
