@@ -28,9 +28,6 @@ runtime \
 runtime_init \
 middleware
 
-# Remove below:
-DAPR_E2E_TEST=actor_sdks
-
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http
 
