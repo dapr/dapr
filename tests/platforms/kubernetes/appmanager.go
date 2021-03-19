@@ -89,27 +89,36 @@ func (m *AppManager) Init() error {
 		return err
 	}
 
+	log.Printf("Deploying app %v ...", m.app.AppName)
 	// Deploy app and wait until deployment is done
 	if _, err := m.Deploy(); err != nil {
 		return err
 	}
+	log.Printf("Deployment for app %v has started.", m.app.AppName)
 
 	// Wait until app is deployed completely
 	if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
 		return err
 	}
+	log.Printf("App %v has been deployed.", m.app.AppName)
 
+	log.Printf("Validating sidecar for app %v ....", m.app.AppName)
 	// Validate daprd side car is injected
 	if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
 		return err
 	}
+	log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
 
 	// Create Ingress endpoint
+	log.Printf("Creating ingress for app %v ....", m.app.AppName)
 	if _, err := m.CreateIngressService(); err != nil {
 		return err
 	}
+	log.Printf("Ingress for app %v has been created.", m.app.AppName)
 
+	log.Printf("Creating pod port forwarder for app %v ....", m.app.AppName)
 	m.forwarder = NewPodPortForwarder(m.client, m.namespace)
+	log.Printf("Pod port forwarder for app %v has been created.", m.app.AppName)
 
 	m.logPrefix = os.Getenv(ContainerLogPathEnvVar)
 

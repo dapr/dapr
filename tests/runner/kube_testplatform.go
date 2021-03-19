@@ -118,9 +118,11 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
+	log.Printf("Installing apps ...")
 	if err := c.AppResources.setup(); err != nil {
 		return err
 	}
+	log.Printf("Apps are installed.")
 
 	return nil
 }
