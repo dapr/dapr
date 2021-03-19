@@ -284,8 +284,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz
 github.com/dapr/components-contrib v0.0.0-20200219164914-5b75f4d0fbc6/go.mod h1:AZi8IGs8LFdywJg/YGwDs7MAxJkvGa8RgHN4NoJSKt0=
 github.com/dapr/components-contrib v1.0.0-rc2/go.mod h1:5r95bQ7UqLfjJA6oomcc1L+mDTXSTPTGg3hmGhoJIxs=
 github.com/dapr/components-contrib v1.0.1-0.20210301230228-a8de09faf452/go.mod h1:z5NR1Zzscfu8DXNblEJShdUb1dd6DYZIt0FzB53DXzg=
-github.com/dapr/components-contrib v1.0.1-0.20210305225523-931048aa6009 h1:JWwYTw7eG0/1wqi3+YOzkGSJCYTr0saiPGr1QVIr+9Q=
-github.com/dapr/components-contrib v1.0.1-0.20210305225523-931048aa6009/go.mod h1:6swYaoNxlLUFSh9DHORR59rNgbsHJ0GoNkQFaSSGNok=
+github.com/dapr/components-contrib v1.0.1-0.20210318212214-192461889c55 h1:ga4PThrD2OExyFYjAldlzTzf0B48suED5pizJE8PZm4=
+github.com/dapr/components-contrib v1.0.1-0.20210318212214-192461889c55/go.mod h1:6swYaoNxlLUFSh9DHORR59rNgbsHJ0GoNkQFaSSGNok=
 github.com/dapr/dapr v0.4.1-0.20200228055659-71892bc0111e/go.mod h1:c60DJ9TdSdpbLjgqP55A5u4ZCYChFwa9UGYIXd9pmm4=
 github.com/dapr/dapr v1.0.0-rc.2/go.mod h1:raAV9hKG114OTTudY8tfajM1EELp8YasLbK6OLgKuG0=
 github.com/dapr/dapr v1.0.1-0.20210303190006-b2271c9a8a58/go.mod h1:XjKeD6e35Z6dxjProOaNhgpT5o24K7SdkuG+6paeYO0=
