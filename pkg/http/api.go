@@ -1134,7 +1134,7 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
 
-	registeredComponents := []registeredComponent{}
+	registeredComponents := make([]registeredComponent, 0, len(a.getComponentsFn()))
 
 	components := a.getComponentsFn()
 	for _, comp := range components {
