@@ -8,6 +8,7 @@ package kubernetes
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -70,6 +71,7 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 			"dapr.io/sidecar-memory-request":            appDesc.DaprMemoryRequest,
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
+			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
 		}
 	}
 	if appDesc.AppProtocol != "" {
@@ -80,6 +82,16 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 	}
 	if appDesc.Config != "" {
 		annotationObject["dapr.io/config"] = appDesc.Config
+	}
+
+	appEnv := []apiv1.EnvVar{}
+	if appDesc.AppEnv != nil {
+		for key, value := range appDesc.AppEnv {
+			appEnv = append(appEnv, apiv1.EnvVar{
+				Name:  key,
+				Value: value,
+			})
+		}
 	}
 
 	return &appsv1.Deployment{
@@ -114,6 +126,7 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 									ContainerPort: DefaultContainerPort,
 								},
 							},
+							Env: appEnv,
 						},
 					},
 					Affinity: &apiv1.Affinity{
