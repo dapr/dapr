@@ -1309,6 +1309,9 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	if err != nil {
 		return err
 	}
+	for _, comp := range comps {
+		log.Debugf("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+	}
 
 	a.components = a.getAuthorizedComponents(comps)
 	for _, comp := range a.components {
