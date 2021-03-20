@@ -180,7 +180,7 @@ func addDaprEnvVarsToContainers(containers []corev1.Container) []PatchOperation 
 			Value: strconv.Itoa(sidecarAPIGRPCPort),
 		},
 	}
-	envPatchOps := make([]PatchOperation,0, len(containers))
+	envPatchOps := make([]PatchOperation, 0, len(containers))
 	for i, container := range containers {
 		path := fmt.Sprintf("%s/%d/env", containersPath, i)
 		patchOps := getEnvPatchOperations(container.Env, portEnv, path)
