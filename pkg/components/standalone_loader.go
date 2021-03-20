@@ -8,7 +8,6 @@ package components
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"path/filepath"
@@ -48,14 +47,15 @@ func (s *StandaloneComponents) LoadComponents() ([]components_v1alpha1.Component
 
 	for _, file := range files {
 		if !file.IsDir() && s.isYaml(file.Name()) {
-			b, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", dir, file.Name()))
+			path := filepath.Join(dir, file.Name())
 
+			b, err := ioutil.ReadFile(path)
 			if err != nil {
-				log.Warnf("error reading file %s/%s : %s", dir, file.Name(), err)
+				log.Warnf("error reading file %s : %s", path, err)
 				continue
 			}
 
-			components, _ := s.decodeYaml(fmt.Sprintf("%s/%s", dir, file.Name()), b)
+			components, _ := s.decodeYaml(path, b)
 			list = append(list, components...)
 		}
 	}
