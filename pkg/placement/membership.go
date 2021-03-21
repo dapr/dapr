@@ -244,7 +244,7 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 				}()
 
 			case raft.TableDisseminate:
-				// TableDissminate will be triggered by disseminateTimer.
+				// TableDisseminate will be triggered by disseminateTimer.
 				// This disseminates the latest consistent hashing tables to Dapr runtime.
 				nStreamConnPool := len(p.streamConnPool)
 				nTargetConns := len(p.raftNode.FSM().State().Members)
@@ -256,11 +256,11 @@ func (p *Service) processRaftStateCommand(stopCh chan struct{}) {
 				if cnt := p.memberUpdateCount.Load(); cnt > 0 {
 					state := p.raftNode.FSM().PlacementState()
 					log.Infof(
-						"Start desseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+						"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 						cnt, nStreamConnPool, nTargetConns, state.Version)
 					p.performTablesUpdate(p.streamConnPool, state)
 					log.Infof(
-						"Completed dessemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+						"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 						cnt, nStreamConnPool, nTargetConns, state.Version)
 					p.memberUpdateCount.Store(0)
 
@@ -305,7 +305,7 @@ func (p *Service) disseminateOperation(targets []placementGRPCStream, operation 
 
 			log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
 			// TODO: the error should not be ignored. By handing error or retrying dissemination,
-			// this logic needs to be improved. Otherwise, the runtimes throwing the exeception
+			// this logic needs to be improved. Otherwise, the runtimes throwing the exception
 			// will have the inconsistent hashing tables.
 		}
 	}
