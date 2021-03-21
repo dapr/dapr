@@ -29,7 +29,7 @@ const (
 	// daprInternalSpanAttrPrefix is the internal span attribution prefix.
 	// Middleware will not populate it if the span key starts with this prefix.
 	daprInternalSpanAttrPrefix = "__dapr."
-	// daprAPISpanNameInternal is the internal attributation, but not populated
+	// daprAPISpanNameInternal is the internal attribution, but not populated
 	// to span attribution.
 	daprAPISpanNameInternal = daprInternalSpanAttrPrefix + "spanname"
 
