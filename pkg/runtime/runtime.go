@@ -1064,7 +1064,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	if resolverVersion == "" {
-		resolverVersion = "v1"
+		resolverVersion = components.FirstStableVersion
 	}
 
 	resolver, err = a.nameResolutionRegistry.Create(resolverName, resolverVersion)
@@ -1660,7 +1660,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
-				Version: "v1",
+				Version: components.FirstStableVersion,
 			},
 		}}
 	}
