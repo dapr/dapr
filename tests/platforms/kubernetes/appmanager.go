@@ -455,7 +455,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 		return nil, fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
 	}
 
-	result := []PodInfo{}
+	result := make([]PodInfo, 0, len(podList.Items))
 	for _, item := range podList.Items {
 		result = append(result, PodInfo{
 			Name: item.GetName(),
