@@ -1072,7 +1072,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		temp[key.(string)] = value.(string)
 		return true
 	})
-	registeredComponents := []*runtimev1pb.RegisteredComponents{}
+	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
 
 	for _, comp := range a.components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
