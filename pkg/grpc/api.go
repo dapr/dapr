@@ -80,20 +80,21 @@ type API interface {
 }
 
 type api struct {
-	actor                 actors.Actors
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
-	stateStores           map[string]state.Store
-	secretStores          map[string]secretstores.SecretStore
-	secretsConfiguration  map[string]config.SecretsScope
-	pubsubAdapter         runtime_pubsub.Adapter
-	id                    string
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec           config.TracingSpec
-	accessControlList     *config.AccessControlList
-	appProtocol           string
-	extendedMetadata      sync.Map
-	components            []components_v1alpha.Component
+	actor                    actors.Actors
+	directMessaging          messaging.DirectMessaging
+	appChannel               channel.AppChannel
+	stateStores              map[string]state.Store
+	transactionalStateStores map[string]state.TransactionalStore
+	secretStores             map[string]secretstores.SecretStore
+	secretsConfiguration     map[string]config.SecretsScope
+	pubsubAdapter            runtime_pubsub.Adapter
+	id                       string
+	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec              config.TracingSpec
+	accessControlList        *config.AccessControlList
+	appProtocol              string
+	extendedMetadata         sync.Map
+	components               []components_v1alpha.Component
 }
 
 // NewAPI returns a new gRPC API
@@ -109,20 +110,28 @@ func NewAPI(
 	tracingSpec config.TracingSpec,
 	accessControlList *config.AccessControlList,
 	appProtocol string,
-	components []components_v1alpha.Component) API {
+	getComponentsFn func() []components_v1alpha.Component) API {
+	transactionalStateStores := map[string]state.TransactionalStore{}
+	for key, store := range stateStores {
+		if state.FeatureTransactional.IsPresent(store.Features()) {
+			transactionalStateStores[key] = store.(state.TransactionalStore)
+		}
+	}
+
 	return &api{
-		directMessaging:       directMessaging,
-		actor:                 actor,
-		id:                    appID,
-		appChannel:            appChannel,
-		pubsubAdapter:         pubsubAdapter,
-		stateStores:           stateStores,
-		secretStores:          secretStores,
-		secretsConfiguration:  secretsConfiguration,
-		sendToOutputBindingFn: sendToOutputBindingFn,
-		tracingSpec:           tracingSpec,
-		accessControlList:     accessControlList,
-		appProtocol:           appProtocol,
+		directMessaging:          directMessaging,
+		actor:                    actor,
+		id:                       appID,
+		appChannel:               appChannel,
+		pubsubAdapter:            pubsubAdapter,
+		stateStores:              stateStores,
+		transactionalStateStores: transactionalStateStores,
+		secretStores:             secretStores,
+		secretsConfiguration:     secretsConfiguration,
+		sendToOutputBindingFn:    sendToOutputBindingFn,
+		tracingSpec:              tracingSpec,
+		accessControlList:        accessControlList,
+		appProtocol:              appProtocol,
 	}
 }
 
@@ -383,8 +392,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	// try bulk get first
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
+		key, err1 := state_loader.GetModifiedStateKey(k, in.StoreName, a.id)
+		if err1 != nil {
+			return &runtimev1pb.GetBulkStateResponse{}, err1
+		}
 		r := state.GetRequest{
-			Key:      state_loader.GetModifiedStateKey(k, in.StoreName, a.id),
+			Key:      key,
 			Metadata: in.Metadata,
 		}
 		reqs[i] = r
@@ -399,7 +412,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 			item := &runtimev1pb.BulkStateItem{
 				Key:      state_loader.GetOriginalStateKey(responses[i].Key),
 				Data:     responses[i].Data,
-				Etag:     responses[i].ETag,
+				Etag:     stringValueOrEmpty(responses[i].ETag),
 				Metadata: responses[i].Metadata,
 				Error:    responses[i].Error,
 			}
@@ -421,7 +434,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 				item.Error = err.Error()
 			} else if r != nil {
 				item.Data = r.Data
-				item.Etag = r.ETag
+				item.Etag = stringValueOrEmpty(r.ETag)
 				item.Metadata = r.Metadata
 			}
 			bulkResp.Items = append(bulkResp.Items, item)
@@ -450,9 +463,12 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		apiServerLogger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
-
+	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	if err != nil {
+		return &runtimev1pb.GetStateResponse{}, err
+	}
 	req := state.GetRequest{
-		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
+		Key:      key,
 		Metadata: in.Metadata,
 		Options: state.GetStateOption{
 			Consistency: stateConsistencyToString(in.Consistency),
@@ -468,7 +484,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	response := &runtimev1pb.GetStateResponse{}
 	if getResponse != nil {
-		response.Etag = getResponse.ETag
+		response.Etag = stringValueOrEmpty(getResponse.ETag)
 		response.Data = getResponse.Data
 		response.Metadata = getResponse.Metadata
 	}
@@ -484,8 +500,12 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	reqs := []state.SetRequest{}
 	for _, s := range in.States {
+		key, err1 := state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
+		if err1 != nil {
+			return &emptypb.Empty{}, err1
+		}
 		req := state.SetRequest{
-			Key:      state_loader.GetModifiedStateKey(s.Key, in.StoreName, a.id),
+			Key:      key,
 			Metadata: s.Metadata,
 			Value:    s.Value,
 		}
@@ -533,8 +553,12 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		return &emptypb.Empty{}, err
 	}
 
+	key, err := state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	if err != nil {
+		return &empty.Empty{}, err
+	}
 	req := state.DeleteRequest{
-		Key:      state_loader.GetModifiedStateKey(in.Key, in.StoreName, a.id),
+		Key:      key,
 		Metadata: in.Metadata,
 	}
 	if in.Etag != nil {
@@ -565,8 +589,12 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 
 	reqs := make([]state.DeleteRequest, 0, len(in.States))
 	for _, item := range in.States {
+		key, err1 := state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
+		if err1 != nil {
+			return &empty.Empty{}, err1
+		}
 		req := state.DeleteRequest{
-			Key:      state_loader.GetModifiedStateKey(item.Key, in.StoreName, a.id),
+			Key:      key,
 			Metadata: item.Metadata,
 		}
 		if item.Etag != nil {
@@ -697,7 +725,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &emptypb.Empty{}, err
 	}
 
-	transactionalStore, ok := a.stateStores[storeName].(state.TransactionalStore)
+	transactionalStore, ok := a.transactionalStateStores[storeName]
 	if !ok {
 		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, storeName)
 		apiServerLogger.Debug(err)
@@ -710,11 +738,14 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		var req = inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
-
+		key, err := state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
 		switch state.OperationType(inputReq.OperationType) {
 		case state.Upsert:
 			setReq := state.SetRequest{
-				Key: state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
+				Key: key,
 				// Limitation:
 				// components that cannot handle byte array need to deserialize/serialize in
 				// component specific way in components-contrib repo.
@@ -739,7 +770,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 		case state.Delete:
 			delReq := state.DeleteRequest{
-				Key:      state_loader.GetModifiedStateKey(req.Key, in.StoreName, a.id),
+				Key:      key,
 				Metadata: req.Metadata,
 			}
 
@@ -1062,4 +1093,12 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
 	return &emptypb.Empty{}, nil
+}
+
+func stringValueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+
+	return *value
 }

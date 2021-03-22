@@ -69,6 +69,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorjava",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "actordotnet",
@@ -76,6 +77,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actordotnet",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "actorpython",
@@ -83,6 +85,15 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorpython",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
+		},
+		{
+			AppName:        "actorphp",
+			DaprEnabled:    true,
+			ImageName:      "e2e-actorphp",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 
@@ -91,7 +102,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorInvocationCrossSDKs(t *testing.T) {
-	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor"}
+	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor", "PHPCarActor"}
 	scenarios := []struct {
 		method           string
 		payload          string

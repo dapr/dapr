@@ -1,0 +1,10 @@
+ARG WINDOWS_VERSION=1809
+FROM daprio/windows-php-base:$WINDOWS_VERSION
+
+WORKDIR /inetpub
+ADD https://getcomposer.org/composer-stable.phar composer.phar
+COPY composer.json composer.json
+COPY composer.lock composer.lock
+RUN php composer.phar install --no-dev -o -n --prefer-dist
+WORKDIR /inetpub/wwwroot
+COPY src .

@@ -38,7 +38,7 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      GOVER: 1.15.3
+      GOVER: 1.16
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
@@ -92,8 +92,6 @@ jobs:
         kind: Cluster
         nodes:
         - role: control-plane
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
-        - role: worker
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
         - role: worker
           image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
@@ -174,6 +172,10 @@ jobs:
     - name: Setup test components
       run: |
         make setup-test-components
+
+    - name: Free up some diskspace
+      run: |
+        docker image prune -a -f
 
     - name: Run tests
       run: |

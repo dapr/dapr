@@ -145,9 +145,13 @@ endif
 
 docker-windows-base-build: check-windows-version
 	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base . -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
+	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-java-base . -t $(DAPR_REGISTRY)/windows-java-base:$(WINDOWS_VERSION)
+	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-php-base . -t $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
 
 docker-windows-base-push: check-windows-version
 	$(DOCKER) push $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
+	$(DOCKER) push $(DAPR_REGISTRY)/windows-java-base:$(WINDOWS_VERSION)
+	$(DOCKER) push $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
 
 ################################################################################
 # Target: build-dev-container, push-dev-container                              #

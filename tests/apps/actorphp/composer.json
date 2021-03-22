@@ -1,0 +1,27 @@
+{
+    "name": "dapr/actorphp",
+    "description": "A simple e2e test actor",
+    "type": "project",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Rob Landers",
+            "email": "landers.robert@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "dapr/php-sdk": "1.*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Test\\": "src"
+        }
+    },
+    "scripts": {
+        "start-env": [
+            "docker build -t php-sdk-test .",
+            "docker run --rm --name=phpsdktest -v $(pwd):/app -p 3000:3000 php-sdk-test"
+        ]
+    }
+}
