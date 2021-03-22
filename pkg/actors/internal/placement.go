@@ -50,18 +50,22 @@ type ActorPlacement struct {
 	// serverAddr is the list of placement addresses.
 	serverAddr []string
 	// serverIndex is the the current index of placement servers in serverAddr.
-	serverIndex int
-	// streamConnAlive is the status of stream connection alive.
-	streamConnAlive bool
-	// streamConnectedCh is the channel to notify that the stream
-	// between runtime and placement is connected.
-	streamConnectedCh chan struct{}
+	serverIndex atomic.Int32
+
 	// clientCert is the workload certificate to connect placement.
 	clientCert *dapr_credentials.CertChain
+
+	// clientLock is the lock for client conn and stream.
+	clientLock *sync.RWMutex
 	// clientConn is the gRPC client connection.
 	clientConn *grpc.ClientConn
 	// clientStream is the client side stream.
 	clientStream v1pb.Placement_ReportDaprStatusClient
+	// streamConnAlive is the status of stream connection alive.
+	streamConnAlive bool
+	// streamConnectedCond is the condition variable for goroutines waiting for or announcing
+	// that the stream between runtime and placement is connected.
+	streamConnectedCond *sync.Cond
 
 	// placementTables is the consistent hashing table map to
 	// look up Dapr runtime host address to locate actor.
@@ -83,7 +87,7 @@ type ActorPlacement struct {
 	afterTableUpdateFn func()
 
 	// shutdown is the flag when runtime is being shutdown.
-	shutdown bool
+	shutdown atomic.Bool
 	// shutdownConnLoop is the wait group to wait until all connection loop are done
 	shutdownConnLoop sync.WaitGroup
 }
@@ -112,64 +116,80 @@ func NewActorPlacement(
 		appID:           appID,
 		runtimeHostName: runtimeHostName,
 		serverAddr:      addDNSResolverPrefix(serverAddr),
-		serverIndex:     0,
 
-		placementTableLock:  &sync.RWMutex{},
-		placementTables:     &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
-		clientCert:          clientCert,
+		clientCert: clientCert,
+
+		clientLock:          &sync.RWMutex{},
+		streamConnAlive:     false,
+		streamConnectedCond: sync.NewCond(&sync.Mutex{}),
+
+		placementTableLock: &sync.RWMutex{},
+		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
+
+		tableIsBlocked:   false,
+		tableUnblockCond: sync.NewCond(&sync.Mutex{}),
+
 		operationUpdateLock: &sync.Mutex{},
 		tableIsBlocked:      atomic.NewBool(false),
 		appHealthFn:         appHealthFn,
 		afterTableUpdateFn:  afterTableUpdateFn,
-
-		shutdown: false,
 	}
 }
 
 // Start connects placement service to register to membership and send heartbeat
 // to report the current member status periodically.
 func (p *ActorPlacement) Start() {
-	// streamConnAlive represents the status of stream channel. This must be changed in receiver loop.
-	// This flag reduces the unnecessary request retry.
-	p.streamConnAlive = true
-	p.streamConnectedCh = make(chan struct{})
-	p.serverIndex = 0
-	p.shutdown = false
+	p.serverIndex.Store(0)
+	p.shutdown.Store(false)
+	p.clientLock.Lock()
 	p.clientStream, p.clientConn = p.establishStreamConn()
 	if p.clientStream == nil {
+		p.clientLock.Unlock()
 		return
 	}
+	p.clientLock.Unlock()
+
+	p.streamConnectedCond.L.Lock()
+	p.streamConnAlive = true
+	p.streamConnectedCond.Broadcast()
+	p.streamConnectedCond.L.Unlock()
 
 	// Establish receive channel to retrieve placement table update
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
-		for !p.shutdown {
-			resp, err := p.clientStream.Recv()
-			if p.shutdown {
+		for !p.shutdown.Load() {
+			p.clientLock.RLock()
+			clientStream := p.clientStream
+			p.clientLock.RUnlock()
+			resp, err := clientStream.Recv()
+			if p.shutdown.Load() {
 				break
 			}
 
 			// TODO: we may need to handle specific errors later.
-			if !p.streamConnAlive || err != nil {
-				p.streamConnAlive = false
+			if err != nil {
 				p.closeStream()
 
 				s, ok := status.FromError(err)
 				// If the current server is not leader, then it will try to the next server.
 				if ok && s.Code() == codes.FailedPrecondition {
-					p.serverIndex = (p.serverIndex + 1) % len(p.serverAddr)
+					p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 				} else {
 					log.Debugf("disconnected from placement: %v", err)
 				}
 
 				newStream, newConn := p.establishStreamConn()
 				if newStream != nil {
+					p.clientLock.Lock()
 					p.clientConn = newConn
 					p.clientStream = newStream
+					p.clientLock.Unlock()
+
+					p.streamConnectedCond.L.Lock()
 					p.streamConnAlive = true
-					close(p.streamConnectedCh)
-					p.streamConnectedCh = make(chan struct{})
+					p.streamConnectedCond.Broadcast()
+					p.streamConnectedCond.L.Unlock()
 				}
 
 				continue
@@ -184,13 +204,15 @@ func (p *ActorPlacement) Start() {
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
-		for !p.shutdown {
-			// Wait until stream is reconnected.
-			if !p.streamConnAlive {
-				<-p.streamConnectedCh
+		for !p.shutdown.Load() {
+			// Wait until stream is connected.
+			p.streamConnectedCond.L.Lock()
+			for !p.streamConnAlive && !p.shutdown.Load() {
+				p.streamConnectedCond.Wait()
 			}
+			p.streamConnectedCond.L.Unlock()
 
-			if p.shutdown {
+			if p.shutdown.Load() {
 				break
 			}
 
@@ -213,14 +235,21 @@ func (p *ActorPlacement) Start() {
 				// Port is redundant because Name should include port number
 			}
 
-			err := p.clientStream.Send(&host)
+			var err error
+			// Do lock to avoid being called with CloseSend concurrently
+			p.clientLock.RLock()
+			err = p.clientStream.Send(&host)
+			p.clientLock.RUnlock()
 			if err != nil {
 				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
 				log.Debugf("failed to report status to placement service : %v", err)
 			}
 
 			// No delay if stream connection is not alive.
-			if p.streamConnAlive {
+			p.streamConnectedCond.L.Lock()
+			streamConnAlive := p.streamConnAlive
+			p.streamConnectedCond.L.Unlock()
+			if streamConnAlive {
 				diag.DefaultMonitoring.ActorStatusReported("send")
 				time.Sleep(statusReportHeartbeatInterval)
 			}
@@ -230,31 +259,38 @@ func (p *ActorPlacement) Start() {
 
 // Stop shuts down server stream gracefully.
 func (p *ActorPlacement) Stop() {
-	if p.shutdown {
-		return
+	// CAS to avoid stop more than once.
+	if p.shutdown.CAS(false, true) {
+		p.closeStream()
 	}
-
-	p.shutdown = true
-	if p.streamConnectedCh != nil {
-		close(p.streamConnectedCh)
-	}
-	p.closeStream()
 	p.shutdownConnLoop.Wait()
 }
 
 func (p *ActorPlacement) closeStream() {
+	p.clientLock.Lock()
+
 	if p.clientStream != nil {
 		p.clientStream.CloseSend()
+		p.clientStream = nil
 	}
 
 	if p.clientConn != nil {
 		p.clientConn.Close()
+		p.clientConn = nil
 	}
+
+	p.clientLock.Unlock()
+
+	p.streamConnectedCond.L.Lock()
+	p.streamConnAlive = false
+	// Let waiters wake up from block
+	p.streamConnectedCond.Broadcast()
+	p.streamConnectedCond.L.Unlock()
 }
 
 func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusClient, *grpc.ClientConn) {
-	for !p.shutdown {
-		serverAddr := p.serverAddr[p.serverIndex]
+	for !p.shutdown.Load() {
+		serverAddr := p.serverAddr[p.serverIndex.Load()]
 
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthFn() {
@@ -289,7 +325,7 @@ func (p *ActorPlacement) establishStreamConn() (v1pb.Placement_ReportDaprStatusC
 			if conn != nil {
 				conn.Close()
 			}
-			p.serverIndex = (p.serverIndex + 1) % len(p.serverAddr)
+			p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 			time.Sleep(placementReconnectInterval)
 			continue
 		}
@@ -349,11 +385,12 @@ func (p *ActorPlacement) unblockPlacements() {
 }
 
 func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
+	p.placementTableLock.Lock()
+
 	if in.Version == p.placementTables.Version {
+		p.placementTableLock.Unlock()
 		return
 	}
-
-	p.placementTableLock.Lock()
 
 	for k, v := range in.Entries {
 		loadMap := map[string]*hashing.Host{}
@@ -364,9 +401,10 @@ func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	}
 	p.placementTables.Version = in.Version
 
-	p.afterTableUpdateFn()
-
 	p.placementTableLock.Unlock()
+
+	// May call LookupActor inside, so should not do this with placementTableLock locked.
+	p.afterTableUpdateFn()
 
 	log.Infof("placement tables updated, version: %s", in.GetVersion())
 }
@@ -380,6 +418,9 @@ func (p *ActorPlacement) WaitUntilPlacementTableIsReady() {
 
 // LookupActor resolves to actor service instance address using consistent hashing table.
 func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string) {
+	p.placementTableLock.RLock()
+	defer p.placementTableLock.RUnlock()
+
 	if p.placementTables == nil {
 		return "", ""
 	}
