@@ -18,6 +18,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/pkg/validation"
+	"github.com/dapr/dapr/utils"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -42,6 +43,7 @@ const (
 	daprAppMaxConcurrencyKey          = "dapr.io/app-max-concurrency"
 	daprEnableMetricsKey              = "dapr.io/enable-metrics"
 	daprMetricsPortKey                = "dapr.io/metrics-port"
+	daprEnvKey                        = "dapr.io/env"
 	daprCPULimitKey                   = "dapr.io/sidecar-cpu-limit"
 	daprMemoryLimitKey                = "dapr.io/sidecar-memory-limit"
 	daprCPURequestKey                 = "dapr.io/sidecar-cpu-request"
@@ -555,6 +557,8 @@ func getSidecarContainer(annotations map[string]string, id, daprSidecarImage, im
 			FailureThreshold:    getInt32AnnotationOrDefault(annotations, daprLivenessProbeThresholdKey, defaultHealthzProbeThreshold),
 		},
 	}
+
+	c.Env = append(c.Env, utils.ParseEnvString(annotations[daprEnvKey])...)
 
 	if tokenVolumeMount != nil {
 		c.VolumeMounts = []corev1.VolumeMount{
