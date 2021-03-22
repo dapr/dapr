@@ -110,7 +110,7 @@ func TestAppHealthyStatus(t *testing.T) {
 	appHealth := atomic.Bool{}
 	appHealth.Store(true)
 
-	appHealthFunc := func() bool { return appHealth.Load() }
+	appHealthFunc := appHealth.Load
 	noopTableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{address}, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
