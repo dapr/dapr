@@ -484,7 +484,6 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 				log.Errorf("error from operator stream: %s", err)
 				return
 			}
-			log.Debug("received component update")
 
 			var component components_v1alpha1.Component
 			err = json.Unmarshal(c.GetComponent(), &component)
@@ -492,6 +491,14 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 				log.Warnf("error deserializing component: %s", err)
 				continue
 			}
+
+			authorized := a.isComponentAuthorized(component)
+			if !authorized {
+				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+				continue
+			}
+
+			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
 			a.onComponentUpdated(component)
 		}
 	}()
@@ -1291,25 +1298,28 @@ func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.C
 	authorized := []components_v1alpha1.Component{}
 
 	for _, c := range components {
-		if a.namespace == "" || (a.namespace != "" && c.ObjectMeta.Namespace == a.namespace) {
-			// scopes are defined, make sure this runtime ID is authorized
-			if len(c.Scopes) > 0 {
-				found := false
-				for _, s := range c.Scopes {
-					if s == a.runtimeConfig.ID {
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					continue
-				}
-			}
+		if a.isComponentAuthorized(c) {
 			authorized = append(authorized, c)
 		}
 	}
 	return authorized
+}
+
+func (a *DaprRuntime) isComponentAuthorized(component components_v1alpha1.Component) bool {
+	if a.namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
+		if len(component.Scopes) == 0 {
+			return true
+		}
+
+		// scopes are defined, make sure this runtime ID is authorized
+		for _, s := range component.Scopes {
+			if s == a.runtimeConfig.ID {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
@@ -1327,6 +1337,9 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	comps, err := loader.LoadComponents()
 	if err != nil {
 		return err
+	}
+	for _, comp := range comps {
+		log.Debugf("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
 	}
 
 	authorizedComps := a.getAuthorizedComponents(comps)
