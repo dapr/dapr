@@ -63,6 +63,7 @@ type api struct {
 	extendedMetadata         sync.Map
 	readyStatus              bool
 	tracingSpec              config.TracingSpec
+	shutdown                 func()
 }
 
 type registeredComponent struct {
@@ -109,7 +110,8 @@ func NewAPI(
 	pubsubAdapter runtime_pubsub.Adapter,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec) API {
+	tracingSpec config.TracingSpec,
+	shutdown func()) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
@@ -130,6 +132,7 @@ func NewAPI(
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		id:                       appID,
 		tracingSpec:              tracingSpec,
+		shutdown:                 shutdown,
 	}
 
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
@@ -138,6 +141,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, api.constructActorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
 
@@ -305,6 +309,17 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata,
+		},
+	}
+}
+
+func (a *api) constructShutdownEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "shutdown",
+			Version: apiVersionV1,
+			Handler: a.onShutdown,
 		},
 	}
 }
@@ -1168,6 +1183,13 @@ func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	a.extendedMetadata.Store(key, string(body))
 	respondEmpty(reqCtx)
+}
+
+func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
+	respondEmpty(reqCtx)
+	go func() {
+		a.shutdown()
+	}()
 }
 
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
