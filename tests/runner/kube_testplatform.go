@@ -22,11 +22,11 @@ const (
 	defaultSidecarCPULimit      = "2.0"
 	defaultSidecarMemoryLimit   = "512Mi"
 	defaultSidecarCPURequest    = "0.1"
-	defaultSidecarMemoryRequest = "125Mi"
+	defaultSidecarMemoryRequest = "100Mi"
 	defaultAppCPULimit          = "2.0"
 	defaultAppMemoryLimit       = "800Mi"
 	defaultAppCPURequest        = "0.1"
-	defaultAppMemoryRequest     = "250Mi"
+	defaultAppMemoryRequest     = "200Mi"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
