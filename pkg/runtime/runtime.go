@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	nethttp "net/http"
@@ -113,6 +114,7 @@ type DaprRuntime struct {
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
 	accessControlList      *config.AccessControlList
+	componentsLock         *sync.RWMutex
 	components             []components_v1alpha1.Component
 	grpc                   *grpc.Manager
 	appChannel             channel.AppChannel
@@ -161,6 +163,8 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		runtimeConfig:          runtimeConfig,
 		globalConfig:           globalConfig,
 		accessControlList:      accessControlList,
+		componentsLock:         &sync.RWMutex{},
+		components:             make([]components_v1alpha1.Component, 0),
 		grpc:                   grpc.NewGRPCManager(runtimeConfig.Mode),
 		json:                   jsoniter.ConfigFastest,
 		inputBindings:          map[string]bindings.InputBinding{},
@@ -372,8 +376,8 @@ func (a *DaprRuntime) buildHTTPPipeline() (http_middleware.Pipeline, error) {
 	if a.globalConfig != nil {
 		for i := 0; i < len(a.globalConfig.Spec.HTTPPipelineSpec.Handlers); i++ {
 			middlewareSpec := a.globalConfig.Spec.HTTPPipelineSpec.Handlers[i]
-			component := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
-			if component == nil {
+			component, exists := a.getComponent(middlewareSpec.Type, middlewareSpec.Name)
+			if !exists {
 				return http_middleware.Pipeline{}, errors.Errorf("couldn't find middleware component with name %s and type %s/%s",
 					middlewareSpec.Name,
 					middlewareSpec.Type,
@@ -481,7 +485,6 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 				log.Errorf("error from operator stream: %s", err)
 				return
 			}
-			log.Debug("received component update")
 
 			var component components_v1alpha1.Component
 			err = json.Unmarshal(c.GetComponent(), &component)
@@ -489,6 +492,14 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 				log.Warnf("error deserializing component: %s", err)
 				continue
 			}
+
+			authorized := a.isComponentAuthorized(component)
+			if !authorized {
+				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+				continue
+			}
+
+			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
 			a.onComponentUpdated(component)
 		}
 	}()
@@ -496,8 +507,8 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 }
 
 func (a *DaprRuntime) onComponentUpdated(component components_v1alpha1.Component) {
-	existed := a.getComponent(component.Spec.Type, component.Name)
-	if existed != nil && reflect.DeepEqual(existed.Spec.Metadata, component.Spec.Metadata) {
+	oldComp, exists := a.getComponent(component.Spec.Type, component.Name)
+	if exists && reflect.DeepEqual(oldComp.Spec.Metadata, component.Spec.Metadata) {
 		return
 	}
 	a.pendingComponents <- component
@@ -579,10 +590,12 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 	return nil
 }
 
-func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) error {
+func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
 	ctx, span := diag.StartInternalCallbackSpan(context.Background(), spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+
+	var appResponseBody []byte
 
 	if a.runtimeConfig.ApplicationProtocol == GRPCProtocol {
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -603,7 +616,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if err != nil {
-			return errors.Wrap(err, "error invoking app")
+			return nil, errors.Wrap(err, "error invoking app")
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL {
@@ -615,6 +628,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			response.To = resp.To
 
 			if resp.Data != nil {
+				appResponseBody = resp.Data
+
 				var d interface{}
 				err := a.json.Unmarshal(resp.Data, &d)
 				if err == nil {
@@ -622,6 +637,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 				}
 			}
 
+			// TODO: THIS SHOULD BE DEPRECATED FOR v1.3
 			for _, s := range resp.States {
 				var i interface{}
 				a.json.Unmarshal(s.Value, &i)
@@ -645,7 +661,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 
 		resp, err := a.appChannel.InvokeMethod(ctx, req)
 		if err != nil {
-			return errors.Wrap(err, "error invoking app")
+			return nil, errors.Wrap(err, "error invoking app")
 		}
 
 		if span != nil {
@@ -658,10 +674,14 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 
 		if resp.Status().Code != nethttp.StatusOK {
-			return errors.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
+			return nil, errors.Errorf("fails to send binding event to http app channel, status code: %d", resp.Status().Code)
 		}
 
-		// TODO: Do we need to check content-type?
+		if resp.Message().Data != nil && len(resp.Message().Data.Value) > 0 {
+			appResponseBody = resp.Message().Data.Value
+		}
+
+		// TODO: THIS SHOULD BE DEPRECATED FOR v1.3
 		if err := a.json.Unmarshal(resp.Message().Data.Value, &response); err != nil {
 			log.Debugf("error deserializing app response: %s", err)
 		}
@@ -672,26 +692,28 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			log.Errorf("error executing app response: %s", err)
 		}
 	}
-	return nil
+
+	return appResponseBody, nil
 }
 
 func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding) error {
-	err := binding.Read(func(resp *bindings.ReadResponse) error {
+	err := binding.Read(func(resp *bindings.ReadResponse) ([]byte, error) {
 		if resp != nil {
-			err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
+			b, err := a.sendBindingEventToApp(name, resp.Data, resp.Metadata)
 			if err != nil {
 				log.Debugf("error from app consumer for binding [%s]: %s", name, err)
-				return err
+				return nil, err
 			}
+			return b, err
 		}
-		return nil
+		return nil, nil
 	})
 	return err
 }
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
-	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.components, a.stateStores, a.secretStores,
-		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.stateStores, a.secretStores,
+		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
@@ -725,7 +747,7 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.components)
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
@@ -1275,25 +1297,28 @@ func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.C
 	authorized := []components_v1alpha1.Component{}
 
 	for _, c := range components {
-		if a.namespace == "" || (a.namespace != "" && c.ObjectMeta.Namespace == a.namespace) {
-			// scopes are defined, make sure this runtime ID is authorized
-			if len(c.Scopes) > 0 {
-				found := false
-				for _, s := range c.Scopes {
-					if s == a.runtimeConfig.ID {
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					continue
-				}
-			}
+		if a.isComponentAuthorized(c) {
 			authorized = append(authorized, c)
 		}
 	}
 	return authorized
+}
+
+func (a *DaprRuntime) isComponentAuthorized(component components_v1alpha1.Component) bool {
+	if a.namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
+		if len(component.Scopes) == 0 {
+			return true
+		}
+
+		// scopes are defined, make sure this runtime ID is authorized
+		for _, s := range component.Scopes {
+			if s == a.runtimeConfig.ID {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
@@ -1312,9 +1337,18 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	if err != nil {
 		return err
 	}
+	for _, comp := range comps {
+		log.Debugf("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+	}
 
-	a.components = a.getAuthorizedComponents(comps)
-	for _, comp := range a.components {
+	authorizedComps := a.getAuthorizedComponents(comps)
+
+	a.componentsLock.Lock()
+	a.components = make([]components_v1alpha1.Component, len(authorizedComps))
+	copy(a.components, authorizedComps)
+	a.componentsLock.Unlock()
+
+	for _, comp := range authorizedComps {
 		a.pendingComponents <- comp
 	}
 
@@ -1322,11 +1356,20 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 }
 
 func (a *DaprRuntime) appendOrReplaceComponents(component components_v1alpha1.Component) {
-	existed := a.getComponent(component.Spec.Type, component.Name)
-	if existed == nil {
+	a.componentsLock.Lock()
+	defer a.componentsLock.Unlock()
+
+	replaced := false
+	for i, c := range a.components {
+		if c.Spec.Type == component.Spec.Type && c.ObjectMeta.Name == component.Name {
+			a.components[i] = component
+			replaced = true
+			break
+		}
+	}
+
+	if !replaced {
 		a.components = append(a.components, component)
-	} else {
-		*existed = component
 	}
 }
 
@@ -1447,6 +1490,15 @@ func (a *DaprRuntime) Stop() {
 	if a.actor != nil {
 		a.actor.Stop()
 	}
+}
+
+// ShutdownWithWait will gracefully stop runtime and wait outstanding operations
+func (a *DaprRuntime) ShutdownWithWait() {
+	gracefulShutdownDuration := 5 * time.Second
+	log.Info("dapr shutting down. Waiting 5 seconds to finish outstanding operations")
+	a.Stop()
+	<-time.After(gracefulShutdownDuration)
+	os.Exit(0)
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {
@@ -1682,13 +1734,25 @@ func (a *DaprRuntime) convertMetadataItemsToProperties(items []components_v1alph
 	return properties
 }
 
-func (a *DaprRuntime) getComponent(componentType string, name string) *components_v1alpha1.Component {
+func (a *DaprRuntime) getComponent(componentType string, name string) (components_v1alpha1.Component, bool) {
+	a.componentsLock.RLock()
+	defer a.componentsLock.RUnlock()
+
 	for i, c := range a.components {
 		if c.Spec.Type == componentType && c.ObjectMeta.Name == name {
-			return &a.components[i]
+			return a.components[i], true
 		}
 	}
-	return nil
+	return components_v1alpha1.Component{}, false
+}
+
+func (a *DaprRuntime) getComponents() []components_v1alpha1.Component {
+	a.componentsLock.RLock()
+	defer a.componentsLock.RUnlock()
+
+	comps := make([]components_v1alpha1.Component, len(a.components))
+	copy(comps, a.components)
+	return comps
 }
 
 func (a *DaprRuntime) establishSecurity(sentryAddress string) error {

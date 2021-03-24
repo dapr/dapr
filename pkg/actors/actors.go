@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
 
 	"github.com/dapr/components-contrib/state"
@@ -62,6 +63,7 @@ type Actors interface {
 type actorsRuntime struct {
 	appChannel          channel.AppChannel
 	store               state.Store
+	transactionalStore  state.TransactionalStore
 	placement           *internal.ActorPlacement
 	grpcConnectionFn    func(address, id string, namespace string, skipTLS, recreateIfExists, enableSSL bool) (*grpc.ClientConn, error)
 	config              Config
@@ -98,10 +100,19 @@ func NewActors(
 	config Config,
 	certChain *dapr_credentials.CertChain,
 	tracingSpec config.TracingSpec) Actors {
+	var transactionalStore state.TransactionalStore
+	if stateStore != nil {
+		features := stateStore.Features()
+		if state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features) {
+			transactionalStore = stateStore.(state.TransactionalStore)
+		}
+	}
+
 	return &actorsRuntime{
 		appChannel:          appChannel,
 		config:              config,
 		store:               stateStore,
+		transactionalStore:  transactionalStore,
 		grpcConnectionFn:    grpcConnectionFn,
 		actorsTable:         &sync.Map{},
 		activeTimers:        &sync.Map{},
@@ -127,11 +138,11 @@ func (a *actorsRuntime) Init() error {
 	if len(a.config.HostedActorTypes) > 0 {
 		if a.store == nil {
 			log.Warn("actors: state store must be present to initialize the actor runtime")
-		}
-
-		_, ok := a.store.(state.TransactionalStore)
-		if !ok {
-			return errors.New(incompatibleStateStore)
+		} else {
+			features := a.store.Features()
+			if !state.FeatureETag.IsPresent(features) || !state.FeatureTransactional.IsPresent(features) {
+				return errors.New(incompatibleStateStore)
+			}
 		}
 	}
 
@@ -392,7 +403,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 }
 
 func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
-	if a.store == nil {
+	if a.store == nil || a.transactionalStore == nil {
 		return errors.New("actors: state store does not exist or incorrectly configured")
 	}
 	operations := []state.TransactionalStateOperation{}
@@ -436,12 +447,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		}
 	}
 
-	transactionalStore, ok := a.store.(state.TransactionalStore)
-	if !ok {
-		return errors.New(incompatibleStateStore)
-	}
-
-	err := transactionalStore.Multi(&state.TransactionalStateRequest{
+	err := a.transactionalStore.Multi(&state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   metadata,
 	})
@@ -530,7 +536,7 @@ func (a *actorsRuntime) evaluateReminders() {
 
 	var wg sync.WaitGroup
 	for _, t := range a.config.HostedActorTypes {
-		vals, err := a.getRemindersForActorType(t)
+		vals, _, err := a.getRemindersForActorType(t)
 		if err != nil {
 			log.Debugf("error getting reminders for actor type %s: %s", t, err)
 		} else {
@@ -800,24 +806,31 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		RegisteredTime: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	reminders, err := a.getRemindersForActorType(req.ActorType)
+	err := backoff.Retry(func() error {
+		reminders, remindersEtag, err := a.getRemindersForActorType(req.ActorType)
+		if err != nil {
+			return err
+		}
+
+		reminders = append(reminders, reminder)
+
+		err = a.store.Set(&state.SetRequest{
+			Key:   a.constructCompositeKey("actors", req.ActorType),
+			Value: reminders,
+			ETag:  remindersEtag,
+		})
+		if err != nil {
+			return err
+		}
+
+		a.remindersLock.Lock()
+		a.reminders[req.ActorType] = reminders
+		a.remindersLock.Unlock()
+		return nil
+	}, backoff.NewExponentialBackOff())
 	if err != nil {
 		return err
 	}
-
-	reminders = append(reminders, reminder)
-
-	err = a.store.Set(&state.SetRequest{
-		Key:   a.constructCompositeKey("actors", req.ActorType),
-		Value: reminders,
-	})
-	if err != nil {
-		return err
-	}
-
-	a.remindersLock.Lock()
-	a.reminders[req.ActorType] = reminders
-	a.remindersLock.Unlock()
 
 	err = a.startReminder(&reminder, stop)
 	if err != nil {
@@ -939,18 +952,19 @@ func (a *actorsRuntime) executeTimer(actorType, actorID, name, dueTime, period, 
 	return err
 }
 
-func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, error) {
+func (a *actorsRuntime) getRemindersForActorType(actorType string) ([]Reminder, *string, error) {
 	key := a.constructCompositeKey("actors", actorType)
 	resp, err := a.store.Get(&state.GetRequest{
 		Key: key,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var reminders []Reminder
 	json.Unmarshal(resp.Data, &reminders)
-	return reminders, nil
+
+	return reminders, resp.ETag, nil
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
@@ -974,28 +988,35 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 		a.activeReminders.Delete(reminderKey)
 	}
 
-	reminders, err := a.getRemindersForActorType(req.ActorType)
-	if err != nil {
-		return err
-	}
-
-	for i := len(reminders) - 1; i >= 0; i-- {
-		if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
-			reminders = append(reminders[:i], reminders[i+1:]...)
+	err := backoff.Retry(func() error {
+		reminders, remindersEtag, err := a.getRemindersForActorType(req.ActorType)
+		if err != nil {
+			return err
 		}
-	}
 
-	err = a.store.Set(&state.SetRequest{
-		Key:   key,
-		Value: reminders,
-	})
+		for i := len(reminders) - 1; i >= 0; i-- {
+			if reminders[i].ActorType == req.ActorType && reminders[i].ActorID == req.ActorID && reminders[i].Name == req.Name {
+				reminders = append(reminders[:i], reminders[i+1:]...)
+			}
+		}
+
+		err = a.store.Set(&state.SetRequest{
+			Key:   key,
+			Value: reminders,
+			ETag:  remindersEtag,
+		})
+		if err != nil {
+			return err
+		}
+
+		a.remindersLock.Lock()
+		a.reminders[req.ActorType] = reminders
+		a.remindersLock.Unlock()
+		return nil
+	}, backoff.NewExponentialBackOff())
 	if err != nil {
 		return err
 	}
-
-	a.remindersLock.Lock()
-	a.reminders[req.ActorType] = reminders
-	a.remindersLock.Unlock()
 
 	err = a.store.Delete(&state.DeleteRequest{
 		Key: reminderKey,
@@ -1008,7 +1029,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
-	reminders, err := a.getRemindersForActorType(req.ActorType)
+	reminders, _, err := a.getRemindersForActorType(req.ActorType)
 	if err != nil {
 		return nil, err
 	}
@@ -1049,7 +1070,7 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []ActiveActors
 		return true
 	})
 
-	activeActorsCount := []ActiveActorsCount{}
+	activeActorsCount := make([]ActiveActorsCount, 0, len(actorCountMap))
 	for actorType, count := range actorCountMap {
 		activeActorsCount = append(activeActorsCount, ActiveActorsCount{Type: actorType, Count: count})
 	}

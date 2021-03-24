@@ -2051,14 +2051,14 @@ func (b *mockBinding) Init(metadata bindings.Metadata) error {
 	return nil
 }
 
-func (b *mockBinding) Read(handler func(*bindings.ReadResponse) error) error {
+func (b *mockBinding) Read(handler func(*bindings.ReadResponse) ([]byte, error)) error {
 	b.data = string(testInputBindingData)
 	metadata := map[string]string{}
 	if b.metadata != nil {
 		metadata = b.metadata
 	}
 
-	err := handler(&bindings.ReadResponse{
+	_, err := handler(&bindings.ReadResponse{
 		Metadata: metadata,
 		Data:     []byte(b.data),
 	})

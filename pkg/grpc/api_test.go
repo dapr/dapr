@@ -14,6 +14,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agrea/ptr"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/phayes/freeport"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"go.opencensus.io/trace"
+	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
@@ -32,19 +47,6 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/phayes/freeport"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"go.opencensus.io/trace"
-	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const maxGRPCServerUptime = 100 * time.Millisecond
@@ -943,7 +945,7 @@ func TestGetState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: "test-etag",
+			ETag: ptr.String("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == "fakeAPI||error-key"
@@ -1028,7 +1030,7 @@ func TestGetBulkState(t *testing.T) {
 	})).Return(
 		&state.GetResponse{
 			Data: []byte("test-data"),
-			ETag: "test-etag",
+			ETag: ptr.String("test-etag"),
 		}, nil)
 	fakeStore.On("Get", mock.MatchedBy(func(req *state.GetRequest) bool {
 		return req.Key == "fakeAPI||error-key"
@@ -1274,6 +1276,34 @@ func TestPublishTopic(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+func TestShutdownEndpoints(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	m := mock.Mock{}
+	m.On("shutdown", mock.Anything).Return()
+	srv := &api{
+		shutdown: func() {
+			m.MethodCalled("shutdown")
+		},
+	}
+	server := startTestServerAPI(port, srv)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	t.Run("Shutdown successfully - 204", func(t *testing.T) {
+		_, err := client.Shutdown(context.Background(), &emptypb.Empty{})
+		assert.NoError(t, err, "Expected no error")
+		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
+			<-time.After(200 * time.Millisecond)
+		}
+		m.AssertCalled(t, "shutdown")
+	})
+}
+
 func TestInvokeBinding(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	srv := &api{
@@ -1350,9 +1380,13 @@ func TestExecuteStateTransaction(t *testing.T) {
 		return matchKeyFn(req, "error-key")
 	})).Return(errors.New("error to execute with key2"))
 
+	var fakeTransactionalStore state.TransactionalStore = fakeStore
 	fakeAPI := &api{
 		id:          "fakeAPI",
 		stateStores: map[string]state.Store{"store1": fakeStore},
+		transactionalStateStores: map[string]state.TransactionalStore{
+			"store1": fakeTransactionalStore,
+		},
 	}
 	port, _ := freeport.GetFreePort()
 	server := startDaprAPIServer(port, fakeAPI, "")
