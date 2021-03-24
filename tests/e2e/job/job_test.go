@@ -49,26 +49,29 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        subscriberAppName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-" + subscriberAppName,
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:          subscriberAppName,
+			DaprEnabled:      true,
+			ImageName:        "e2e-" + subscriberAppName,
+			Replicas:         1,
+			IngressEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 		{
-			AppName:        publisherAppName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-" + publisherAppName,
-			Replicas:       1,
-			IngressEnabled: false,
-			IsJob:          true,
+			AppName:          publisherAppName,
+			DaprEnabled:      true,
+			ImageName:        "e2e-" + publisherAppName,
+			Replicas:         1,
+			IngressEnabled:   false,
+			IsJob:            true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 	}
 
 	tr = runner.NewTestRunner("job", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
-
 
 func TestJobPublishMessage(t *testing.T) {
 	// Get the ingress external url of test app
@@ -111,4 +114,3 @@ func TestJobPublishMessage(t *testing.T) {
 	require.Len(t, appResp.ReceivedByTopicJob, 1)
 	require.Equal(t, "message-from-job", appResp.ReceivedByTopicJob[0])
 }
-
