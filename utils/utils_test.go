@@ -83,3 +83,14 @@ func TestParseEnvString(t *testing.T) {
 		})
 	}
 }
+
+func TestStringSliceContains(t *testing.T) {
+	t.Run("find a item", func(t *testing.T) {
+		assert.True(t, StringSliceContains("item", []string{"item-1", "item"}))
+	})
+
+	t.Run("didn't find a item", func(t *testing.T) {
+		assert.False(t, StringSliceContains("not-in-item", []string{}))
+		assert.False(t, StringSliceContains("not-in-item", nil))
+	})
+}
