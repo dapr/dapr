@@ -1134,9 +1134,9 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
 
-	registeredComponents := []registeredComponent{}
-
 	components := a.getComponentsFn()
+	registeredComponents := make([]registeredComponent, 0, len(components))
+
 	for _, comp := range components {
 		registeredComp := registeredComponent{
 			Name:    comp.Name,
@@ -1195,8 +1195,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	topic := reqCtx.UserValue(topicParam).(string)
-	// FIXME: isn't it "" instead?
-	if topic == "/" {
+	if topic == "" {
 		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
 		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)
 		log.Debug(msg)

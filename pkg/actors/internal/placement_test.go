@@ -122,7 +122,7 @@ func TestAppHealthyStatus(t *testing.T) {
 	// Mark app unhealthy
 	testPlacement.appHealthFn = func() bool { return false }
 	time.Sleep(statusReportHeartbeatInterval * 2)
-	assert.True(t, testSrv.recvCount <= oldCount+1, "no more +1 hearbeat because app is unhealthy")
+	assert.True(t, testSrv.recvCount <= oldCount+1, "no more +1 heartbeat because app is unhealthy")
 
 	// clean up
 	testPlacement.Stop()
