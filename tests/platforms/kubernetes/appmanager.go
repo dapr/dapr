@@ -90,7 +90,7 @@ func (m *AppManager) Init() error {
 		return err
 	}
 
-  log.Printf("Deploying app %v ...", m.app.AppName)
+	log.Printf("Deploying app %v ...", m.app.AppName)
 	if m.app.IsJob {
 		// Deploy app and wait until deployment is done
 		if _, err := m.ScheduleJob(); err != nil {
