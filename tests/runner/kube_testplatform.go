@@ -104,14 +104,30 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 			app.Config = disableTelemetryConfig
 		}
 
-		app.DaprCPULimit = c.sidecarCPULimit()
-		app.DaprCPURequest = c.sidecarCPURequest()
-		app.DaprMemoryLimit = c.sidecarMemoryLimit()
-		app.DaprMemoryRequest = c.sidecarMemoryRequest()
-		app.AppCPULimit = c.appCPULimit()
-		app.AppCPURequest = c.appCPURequest()
-		app.AppMemoryLimit = c.appMemoryLimit()
-		app.AppMemoryRequest = c.appMemoryRequest()
+		if app.DaprCPULimit == "" {
+			app.DaprCPULimit = c.sidecarCPULimit()
+		}
+		if app.DaprCPURequest == "" {
+			app.DaprCPURequest = c.sidecarCPURequest()
+		}
+		if app.DaprMemoryLimit == "" {
+			app.DaprMemoryLimit = c.sidecarMemoryLimit()
+		}
+		if app.DaprMemoryRequest == "" {
+			app.DaprMemoryRequest = c.sidecarMemoryRequest()
+		}
+		if app.AppCPULimit == "" {
+			app.AppCPULimit = c.appCPULimit()
+		}
+		if app.AppCPURequest == "" {
+			app.AppCPURequest = c.appCPURequest()
+		}
+		if app.AppMemoryLimit == "" {
+			app.AppMemoryLimit = c.appMemoryLimit()
+		}
+		if app.AppMemoryRequest == "" {
+			app.AppMemoryRequest = c.appMemoryRequest()
+		}
 
 		log.Printf("Adding app %v", app)
 		c.AppResources.Add(kube.NewAppManager(c.KubeClient, getNamespaceOrDefault(app.Namespace), app))

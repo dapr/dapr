@@ -57,28 +57,34 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	apps = []kube.AppDescription{
 		{
-			AppName:        "actorjava",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorjava",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:          "actorjava",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actorjava",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "500Mi",
+			AppMemoryRequest: "200Mi",
 		},
 		{
-			AppName:        "actordotnet",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actordotnet",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:          "actordotnet",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actordotnet",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "500Mi",
+			AppMemoryRequest: "200Mi",
 		},
 		{
-			AppName:        "actorpython",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorpython",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:          "actorpython",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actorpython",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 	}
 
@@ -87,12 +93,14 @@ func TestMain(m *testing.M) {
 	if runtime.GOOS != "windows" {
 		apps = append(apps,
 			kube.AppDescription{
-				AppName:        "actorphp",
-				DaprEnabled:    true,
-				ImageName:      "e2e-actorphp",
-				Replicas:       1,
-				IngressEnabled: true,
-				MetricsEnabled: true,
+				AppName:          "actorphp",
+				DaprEnabled:      true,
+				ImageName:        "e2e-actorphp",
+				Replicas:         1,
+				IngressEnabled:   true,
+				MetricsEnabled:   true,
+				AppMemoryLimit:   "200Mi",
+				AppMemoryRequest: "100Mi",
 			})
 	}
 
