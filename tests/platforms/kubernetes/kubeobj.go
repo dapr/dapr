@@ -183,7 +183,7 @@ func buildJobObject(namespace string, appDesc AppDescription) *batchv1.Job {
 			Template: buildPodTemplate(appDesc),
 		},
 	}
-	job.Spec.Template.Spec.RestartPolicy = apiv1.RestartPolicyOnFailure
+	job.Spec.Template.Spec.RestartPolicy = apiv1.RestartPolicyNever
 	return &job
 }
 
