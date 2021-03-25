@@ -49,23 +49,19 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:          subscriberAppName,
-			DaprEnabled:      true,
-			ImageName:        "e2e-" + subscriberAppName,
-			Replicas:         1,
-			IngressEnabled:   true,
-			AppMemoryLimit:   "200Mi",
-			AppMemoryRequest: "100Mi",
+			AppName:        subscriberAppName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-pubsub-subscriber",
+			Replicas:       1,
+			IngressEnabled: true,
 		},
 		{
-			AppName:          publisherAppName,
-			DaprEnabled:      true,
-			ImageName:        "e2e-" + publisherAppName,
-			Replicas:         1,
-			IngressEnabled:   false,
-			IsJob:            true,
-			AppMemoryLimit:   "200Mi",
-			AppMemoryRequest: "100Mi",
+			AppName:        publisherAppName,
+			DaprEnabled:    true,
+			ImageName:      "e2e-job-publisher",
+			Replicas:       1,
+			IngressEnabled: false,
+			IsJob:          true,
 		},
 	}
 
