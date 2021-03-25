@@ -1,18 +1,7 @@
 # escape=`
-ARG JAVA_VERSION=11.0.6
+ARG WINDOWS_VERSION=1809
 
-FROM openjdk:${JAVA_VERSION}-windowsservercore-1809 as build
-
-SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
-
-ENV chocolateyUseWindowsCompression=false
-RUN iex (wget 'https://chocolatey.org/install.ps1' -UseBasicParsing)
-
-RUN choco feature enable -n=allowGlobalConfirmation
-RUN choco feature disable -n=showDownloadProgress
-RUN choco config set cachelocation C:\chococache
-
-RUN choco install maven --limit-output --timeout 3600; Remove-Item C:\chococache  -Recurse -Force
+FROM daprio/windows-java-base:$WINDOWS_VERSION as build
 
 RUN mkdir "c:\build"
 WORKDIR "c:\build"
@@ -24,7 +13,7 @@ RUN mvn dependency:go-offline
 ADD src/ "c:\build\src\"
 RUN mvn package
 
-FROM openjdk:${JAVA_VERSION}-windowsservercore-1809
+FROM daprio/windows-java-base:$WINDOWS_VERSION
 COPY --from=build "c:\build\target\app.jar" app.jar
 
 EXPOSE 3000
