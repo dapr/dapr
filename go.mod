@@ -10,7 +10,7 @@ require (
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/andybalholm/brotli v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.0
-	github.com/dapr/components-contrib v1.0.1-0.20210318212214-192461889c55
+	github.com/dapr/components-contrib v1.0.1-0.20210325035620-c1905ba63b7c
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
