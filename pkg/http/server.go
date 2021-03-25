@@ -127,6 +127,7 @@ func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 	return func(ctx *fasthttp.RequestCtx) {
 		v := ctx.Request.Header.Peek(auth.APITokenHeader)
 		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || string(v) == token {
+			ctx.Request.Header.Del(auth.APITokenHeader)
 			next(ctx)
 		} else {
 			ctx.Error("invalid api token", http.StatusUnauthorized)

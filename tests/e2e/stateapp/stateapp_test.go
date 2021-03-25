@@ -379,6 +379,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-stateapp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

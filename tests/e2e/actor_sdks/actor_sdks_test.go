@@ -53,44 +53,55 @@ func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
 }
 
 func TestMain(m *testing.M) {
-	// Disables this test for Windows temporarily due to issues with Windows containers.
-	// Technically, this test can still work on Windows against K8s on Linux.
-	// See https://github.com/dapr/dapr/issues/2695
-	if runtime.GOOS == "windows" {
-		return
-	}
-
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
 	apps = []kube.AppDescription{
 		{
-			AppName:        "actorjava",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorjava",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:          "actorjava",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actorjava",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "500Mi",
+			AppMemoryRequest: "200Mi",
 		},
 		{
-			AppName:        "actordotnet",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actordotnet",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:          "actordotnet",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actordotnet",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "500Mi",
+			AppMemoryRequest: "200Mi",
 		},
 		{
-			AppName:        "actorpython",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorpython",
-			Replicas:       1,
-			IngressEnabled: true,
+			AppName:          "actorpython",
+			DaprEnabled:      true,
+			ImageName:        "e2e-actorpython",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
-		{
-			AppName:        "actorphp",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorphp",
-			Replicas:       1,
-			IngressEnabled: true,
-		},
+	}
+
+	// Disables PHP test for Windows temporarily due to issues with its Windows container.
+	// See https://github.com/dapr/dapr/issues/2953
+	if runtime.GOOS != "windows" {
+		apps = append(apps,
+			kube.AppDescription{
+				AppName:          "actorphp",
+				DaprEnabled:      true,
+				ImageName:        "e2e-actorphp",
+				Replicas:         1,
+				IngressEnabled:   true,
+				MetricsEnabled:   true,
+				AppMemoryLimit:   "200Mi",
+				AppMemoryRequest: "100Mi",
+			})
 	}
 
 	tr = runner.NewTestRunner(appName, apps, nil, nil)
@@ -98,7 +109,13 @@ func TestMain(m *testing.M) {
 }
 
 func TestActorInvocationCrossSDKs(t *testing.T) {
-	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor", "PHPCarActor"}
+	actorTypes := []string{"DotNetCarActor", "JavaCarActor", "PythonCarActor"}
+	// Disables PHP test for Windows temporarily due to issues with its Windows container.
+	// See https://github.com/dapr/dapr/issues/2953
+	if runtime.GOOS != "windows" {
+		actorTypes = append(actorTypes, "PHPCarActor")
+	}
+
 	scenarios := []struct {
 		method           string
 		payload          string
@@ -161,10 +178,12 @@ func TestActorInvocationCrossSDKs(t *testing.T) {
 		healthCheckApp(t, externalURL, numHealthChecks)
 	}
 
+	t.Log("Sleeping for 10 seconds ...")
 	time.Sleep(10 * time.Second)
 
 	for _, appSpec := range apps {
 		app := appSpec.AppName
+		t.Logf("Getting URL for app %s ...", app)
 		externalURL := tr.Platform.AcquireAppExternalURL(app)
 
 		for _, actorType := range actorTypes {

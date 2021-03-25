@@ -123,6 +123,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorfeatures",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 		{
 			AppName:        "actortestclient",
@@ -130,6 +131,7 @@ func TestMain(m *testing.M) {
 			ImageName:      "e2e-actorclientapp",
 			Replicas:       1,
 			IngressEnabled: true,
+			MetricsEnabled: true,
 		},
 	}
 

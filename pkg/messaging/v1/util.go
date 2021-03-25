@@ -386,6 +386,12 @@ func processHTTPToGRPCTraceHeader(ctx context.Context, md metadata.MD, tracepare
 		span := diag_utils.SpanFromContext(ctx)
 		sc = span.SpanContext()
 	}
+	// Workaround for lack of grpc-trace-bin support in OpenTelemetry (unlike OpenCensus), tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
+	// grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
+	// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
+	diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
+		md.Set(header, value)
+	})
 	md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 }
 
@@ -393,10 +399,25 @@ func processGRPCToGRPCTraceHeader(ctx context.Context, md metadata.MD, grpctrace
 	if grpctracebinValue == "" {
 		span := diag_utils.SpanFromContext(ctx)
 		sc := span.SpanContext()
+
+		// Workaround for lack of grpc-trace-bin support in OpenTelemetry (unlike OpenCensus), tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
+		// grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
+		// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
+		diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
+			md.Set(header, value)
+		})
 		md.Set(tracebinMetadata, string(propagation.Binary(sc)))
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(grpctracebinValue)
 		if err == nil {
+			// Workaround for lack of grpc-trace-bin support in OpenTelemetry (unlike OpenCensus), tracking issue https://github.com/open-telemetry/opentelemetry-specification/issues/639
+			// grpc-dotnet client adheres to OpenTelemetry Spec which only supports http based traceparent header in gRPC path
+			// TODO : Remove this workaround fix once grpc-dotnet supports grpc-trace-bin header. Tracking issue https://github.com/dapr/dapr/issues/1827
+			if sc, ok := propagation.FromBinary(decoded); ok {
+				diag.SpanContextToHTTPHeaders(sc, func(header, value string) {
+					md.Set(header, value)
+				})
+			}
 			md.Set(tracebinMetadata, string(decoded))
 		}
 	}

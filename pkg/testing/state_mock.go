@@ -113,3 +113,8 @@ func (_m *MockStateStore) Set(req *state.SetRequest) error {
 
 	return r0
 }
+
+// Features returns the features for this state store.
+func (_m *MockStateStore) Features() []state.Feature {
+	return nil
+}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -89,27 +90,47 @@ func (m *AppManager) Init() error {
 		return err
 	}
 
-	// Deploy app and wait until deployment is done
-	if _, err := m.Deploy(); err != nil {
-		return err
-	}
+	log.Printf("Deploying app %v ...", m.app.AppName)
+	if m.app.IsJob {
+		// Deploy app and wait until deployment is done
+		if _, err := m.ScheduleJob(); err != nil {
+			return err
+		}
 
-	// Wait until app is deployed completely
-	if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
-		return err
-	}
+		// Wait until app is deployed completely
+		if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
+			return err
+		}
+	} else {
+		// Deploy app and wait until deployment is done
+		if _, err := m.Deploy(); err != nil {
+			return err
+		}
 
+		// Wait until app is deployed completely
+		if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDone); err != nil {
+			return err
+		}
+	}
+	log.Printf("App %v has been deployed.", m.app.AppName)
+
+	log.Printf("Validating sidecar for app %v ....", m.app.AppName)
 	// Validate daprd side car is injected
 	if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
 		return err
 	}
+	log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
 
 	// Create Ingress endpoint
+	log.Printf("Creating ingress for app %v ....", m.app.AppName)
 	if _, err := m.CreateIngressService(); err != nil {
 		return err
 	}
+	log.Printf("Ingress for app %v has been created.", m.app.AppName)
 
+	log.Printf("Creating pod port forwarder for app %v ....", m.app.AppName)
 	m.forwarder = NewPodPortForwarder(m.client, m.namespace)
+	log.Printf("Pod port forwarder for app %v has been created.", m.app.AppName)
 
 	m.logPrefix = os.Getenv(ContainerLogPathEnvVar)
 
@@ -133,8 +154,14 @@ func (m *AppManager) Dispose(wait bool) error {
 		}
 	}
 
-	if err := m.DeleteDeployment(true); err != nil {
-		return err
+	if m.app.IsJob {
+		if err := m.DeleteJob(true); err != nil {
+			return err
+		}
+	} else {
+		if err := m.DeleteDeployment(true); err != nil {
+			return err
+		}
 	}
 
 	if err := m.DeleteService(true); err != nil {
@@ -142,8 +169,14 @@ func (m *AppManager) Dispose(wait bool) error {
 	}
 
 	if wait {
-		if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDeleted); err != nil {
-			return err
+		if m.app.IsJob {
+			if _, err := m.WaitUntilJobState(m.IsJobDeleted); err != nil {
+				return err
+			}
+		} else {
+			if _, err := m.WaitUntilDeploymentState(m.IsDeploymentDeleted); err != nil {
+				return err
+			}
 		}
 
 		if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
@@ -156,6 +189,42 @@ func (m *AppManager) Dispose(wait bool) error {
 	}
 
 	return nil
+}
+
+// ScheduleJob deploys job based on app description
+func (m *AppManager) ScheduleJob() (*batchv1.Job, error) {
+	jobsClient := m.client.Jobs(m.namespace)
+	obj := buildJobObject(m.namespace, m.app)
+
+	result, err := jobsClient.Create(context.TODO(), obj, metav1.CreateOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// WaitUntilJobState waits until isState returns true
+func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (*batchv1.Job, error) {
+	jobsClient := m.client.Jobs(m.namespace)
+
+	var lastJob *batchv1.Job
+
+	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+		var err error
+		lastJob, err = jobsClient.Get(context.TODO(), m.app.AppName, metav1.GetOptions{})
+		done := isState(lastJob, err)
+		if !done && err != nil {
+			return true, err
+		}
+		return done, nil
+	})
+
+	if waitErr != nil {
+		return nil, fmt.Errorf("job %q is not in desired state, received: %+v: %s", m.app.AppName, lastJob, waitErr)
+	}
+
+	return lastJob, nil
 }
 
 // Deploy deploys app based on app description
@@ -194,9 +263,19 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 	return lastDeployment, nil
 }
 
+// IsJobCompleted returns true if job object is complete
+func (m *AppManager) IsJobCompleted(job *batchv1.Job, err error) bool {
+	return err == nil && job.Status.Succeeded == 1 && job.Status.Failed == 0 && job.Status.Active == 0 && job.Status.CompletionTime != nil
+}
+
 // IsDeploymentDone returns true if deployment object completes pod deployments
 func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) bool {
 	return err == nil && deployment.Generation == deployment.Status.ObservedGeneration && deployment.Status.ReadyReplicas == m.app.Replicas && deployment.Status.AvailableReplicas == m.app.Replicas
+}
+
+// IsJobDeleted returns true if job does not exist
+func (m *AppManager) IsJobDeleted(job *batchv1.Job, err error) bool {
+	return err != nil && errors.IsNotFound(err)
 }
 
 // IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero
@@ -393,6 +472,20 @@ func (m *AppManager) minikubeNodeIP() string {
 	return os.Getenv(MiniKubeIPEnvVar)
 }
 
+// DeleteJob deletes job for the test app
+func (m *AppManager) DeleteJob(ignoreNotFound bool) error {
+	jobsClient := m.client.Jobs(m.namespace)
+	deletePolicy := metav1.DeletePropagationForeground
+
+	if err := jobsClient.Delete(context.TODO(), m.app.AppName, metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
+		return err
+	}
+
+	return nil
+}
+
 // DeleteDeployment deletes deployment for the test app
 func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
@@ -455,7 +548,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 		return nil, fmt.Errorf("expected number of pods for %s: %d, received: %d", m.app.AppName, m.app.Replicas, len(podList.Items))
 	}
 
-	result := []PodInfo{}
+	result := make([]PodInfo, 0, len(podList.Items))
 	for _, item := range podList.Items {
 		result = append(result, PodInfo{
 			Name: item.GetName(),

@@ -143,6 +143,11 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	opts := []grpc_go.ServerOption{}
 	intr := []grpc_go.UnaryServerInterceptor{}
 
+	if s.authToken != "" {
+		s.logger.Info("enabled token authentication on gRPC server")
+		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
+	}
+
 	if diag_utils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		s.logger.Info("enabled gRPC tracing middleware")
 		intr = append(intr, diag.GRPCTraceUnaryServerInterceptor(s.config.AppID, s.tracingSpec))
@@ -151,10 +156,6 @@ func (s *server) getMiddlewareOptions() []grpc_go.ServerOption {
 	if s.metricSpec.Enabled {
 		s.logger.Info("enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
-	}
-	if s.authToken != "" {
-		s.logger.Info("enabled token authentication on gRPC server")
-		intr = append(intr, setAPIAuthenticationMiddlewareUnary(s.authToken, auth.APITokenHeader))
 	}
 
 	chain := grpc_middleware.ChainUnaryServer(
