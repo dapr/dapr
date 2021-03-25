@@ -270,15 +270,15 @@ else
 endif
 
 setup-minikube-darwin:
-	minikube start --memory=4g --cpus=4 --driver=hyperkit --kubernetes-version=v1.18.9
+	minikube start --memory=4g --cpus=4 --driver=hyperkit --kubernetes-version=v1.18.8
 	minikube addons enable metrics-server
 
 setup-minikube-windows:
-	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.9
+	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.8
 	minikube addons enable metrics-server
 
 setup-minikube-linux:
-	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.9
+	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.8
 	minikube addons enable metrics-server
 
 setup-minikube: setup-minikube-$(detected_OS)

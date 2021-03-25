@@ -38,7 +38,7 @@ const (
 	receiveMessageRetries = 25
 
 	publisherAppName  = "job-publisher"
-	subscriberAppName = "pubsub-subscriber"
+	subscriberAppName = "job-subscriber"
 )
 
 func TestMain(m *testing.M) {
