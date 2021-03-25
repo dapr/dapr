@@ -38,7 +38,7 @@ const (
 	receiveMessageRetries = 25
 
 	publisherAppName  = "job-publisher"
-	subscriberAppName = "pubsub-subscriber"
+	subscriberAppName = "job-subscriber"
 )
 
 func TestMain(m *testing.M) {
@@ -51,14 +51,14 @@ func TestMain(m *testing.M) {
 		{
 			AppName:        subscriberAppName,
 			DaprEnabled:    true,
-			ImageName:      "e2e-" + subscriberAppName,
+			ImageName:      "e2e-pubsub-subscriber",
 			Replicas:       1,
 			IngressEnabled: true,
 		},
 		{
 			AppName:        publisherAppName,
 			DaprEnabled:    true,
-			ImageName:      "e2e-" + publisherAppName,
+			ImageName:      "e2e-job-publisher",
 			Replicas:       1,
 			IngressEnabled: false,
 			IsJob:          true,
@@ -68,7 +68,6 @@ func TestMain(m *testing.M) {
 	tr = runner.NewTestRunner("job", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
-
 
 func TestJobPublishMessage(t *testing.T) {
 	// Get the ingress external url of test app
@@ -111,4 +110,3 @@ func TestJobPublishMessage(t *testing.T) {
 	require.Len(t, appResp.ReceivedByTopicJob, 1)
 	require.Equal(t, "message-from-job", appResp.ReceivedByTopicJob[0])
 }
-
