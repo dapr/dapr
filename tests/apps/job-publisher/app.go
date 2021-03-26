@@ -25,19 +25,14 @@ const (
 
 func stopSidecar() {
 	log.Printf("Shutting down the sidecar at %s", fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
-	for retryCount := 0; retryCount < publishRetries; retryCount++ {
-		r, err := http.Get(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
-		if r != nil {
-			r.Body.Close()
-		}
-		if err != nil {
-			log.Printf("Error stopping the sidecar %s, retrying.", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		log.Printf("Sidecar stopped")
-		break
+	r, err := http.Get(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
+	if r != nil {
+		r.Body.Close()
 	}
+	if err != nil {
+		log.Printf("Error stopping the sidecar %s", err)
+	}
+	log.Printf("Sidecar stopped")
 }
 
 func publishMessagesToPubsub() error {
