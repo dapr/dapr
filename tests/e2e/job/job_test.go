@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -42,6 +43,12 @@ const (
 )
 
 func TestMain(m *testing.M) {
+	// Disables this test on Windows since daprd is not injected correctly:
+	// https://github.com/dapr/dapr/issues/2982
+	if runtime.GOOS == "windows" {
+		return
+	}
+
 	// This test shows how to deploy the multiple test apps, validate the side-car injection
 	// and validate the response by using test app's service endpoint
 
