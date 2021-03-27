@@ -517,7 +517,7 @@ func TestActorFeatures(t *testing.T) {
 		tr.Platform.Restart(appName)
 
 		// wait until actors are redistributed.
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 
 		newHostname, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
 		require.NoError(t, err)
