@@ -109,7 +109,7 @@ func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient *kubern
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountsTimeoutSeconds*time.Second)
 	defer cancel()
 
-	allowedUids := make([]string, len(allowedControllersServiceAccounts))
+	allowedUids := []string{}
 	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {
 		sa, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get(ctxWithTimeout, allowedControllersServiceAccount, metav1.GetOptions{})
 		// i == 0 => "replicaset-controller" is the only one mandatory
@@ -119,7 +119,7 @@ func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient *kubern
 			log.Warnf("Unable to get SA %s UID (%s)", allowedControllersServiceAccount, err)
 			continue
 		}
-		allowedUids[i] = string(sa.ObjectMeta.UID)
+		allowedUids = append(allowedUids, string(sa.ObjectMeta.UID))
 	}
 	return allowedUids, nil
 }
