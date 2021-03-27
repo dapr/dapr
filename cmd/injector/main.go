@@ -49,7 +49,7 @@ func main() {
 		}
 	}()
 
-	uids, err := injector.AllowedControllersServiceAccountUID(kubeClient)
+	uids, err := injector.AllowedControllersServiceAccountUID(ctx, kubeClient)
 	if err != nil {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}

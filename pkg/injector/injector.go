@@ -27,6 +27,7 @@ import (
 )
 
 const port = 4000
+const getKubernetesServiceAccountsTimeoutSeconds = 30
 
 var log = logger.NewLogger("dapr.injector")
 
@@ -104,10 +105,13 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler
-func AllowedControllersServiceAccountUID(kubeClient *kubernetes.Clientset) ([]string, error) {
+func AllowedControllersServiceAccountUID(ctx context.Context, kubeClient *kubernetes.Clientset) ([]string, error) {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, getKubernetesServiceAccountsTimeoutSeconds*time.Second)
+	defer cancel()
+
 	allowedUids := make([]string, len(allowedControllersServiceAccounts))
 	for i, allowedControllersServiceAccount := range allowedControllersServiceAccounts {
-		sa, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get(context.TODO(), allowedControllersServiceAccount, metav1.GetOptions{})
+		sa, err := kubeClient.CoreV1().ServiceAccounts(metav1.NamespaceSystem).Get(ctxWithTimeout, allowedControllersServiceAccount, metav1.GetOptions{})
 		// i == 0 => "replicaset-controller" is the only one mandatory
 		if err != nil && i == 0 {
 			return nil, err
