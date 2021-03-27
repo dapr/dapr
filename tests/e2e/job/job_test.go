@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -43,9 +42,9 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	// Disables this test on Windows since daprd is not injected correctly:
+	// Disables this test on AKS since daprd is not injected correctly on E2E:
 	// https://github.com/dapr/dapr/issues/2982
-	if runtime.GOOS == "windows" {
+	if os.Getenv("TEST_CLUSTER") != "" {
 		return
 	}
 
