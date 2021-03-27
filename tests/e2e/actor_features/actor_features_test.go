@@ -339,8 +339,9 @@ func TestActorFeatures(t *testing.T) {
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 		firstCount := countActorAction(resp, actorID, reminderName)
+		minFirstCount := 9
 		// Min call is based off of having a 1s period/due time, the amount of seconds we've waited, and a bit of room for timing.
-		require.GreaterOrEqual(t, firstCount, 9)
+		require.GreaterOrEqual(t, firstCount, minFirstCount)
 
 		err = tr.Platform.Restart(appName)
 		assert.NoError(t, err)
@@ -355,7 +356,9 @@ func TestActorFeatures(t *testing.T) {
 
 		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), firstCount)
+
+		restartDelayDiscount := 1
+		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minFirstCount-restartDelayDiscount)
 		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult)
 	})
 
