@@ -543,7 +543,7 @@ func TestActorFeatures(t *testing.T) {
 		tr.Platform.Scale(appName, appScaleToCheckRebalance)
 
 		// wait until actors are redistributed.
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 
 		anyActorMoved := false
 		for index := 0; index < actorsToCheckRebalance; index++ {
