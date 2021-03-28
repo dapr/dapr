@@ -357,9 +357,9 @@ func TestActorFeatures(t *testing.T) {
 		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		restartDelayDiscount := 1
+		restartDelayDiscount := 2
 		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minFirstCount-restartDelayDiscount)
-		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult)
+		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult-restartDelayDiscount)
 	})
 
 	t.Run("Actor timer.", func(t *testing.T) {
