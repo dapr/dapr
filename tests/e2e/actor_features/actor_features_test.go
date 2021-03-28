@@ -39,7 +39,8 @@ const (
 	actorInvokeURLFormat                  = "%s/test/testactorfeatures/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorDeleteURLFormat                  = "%s/actors/testactorfeatures/%s"     // URL to deactivate an actor in test app.
 	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
-	actorMetadataURLFormat                = "%s/test/metadata"
+	actorMetadataURLFormat                = "%s/test/metadata"                   // URL to fetch metadata from test app.
+	actorInvokeRetriesAfterRestart        = 10                                   // Number of retried to invoke actor after restart.
 )
 
 // represents a response for the APIs in this app.
@@ -516,11 +517,20 @@ func TestActorFeatures(t *testing.T) {
 
 		tr.Platform.Restart(appName)
 
-		// wait until actors are redistributed.
-		time.Sleep(30 * time.Second)
+		newHostname := []byte{}
+		for i := 0; i <= actorInvokeRetriesAfterRestart; i++ {
+			// wait until actors are redistributed.
+			time.Sleep(30 * time.Second)
 
-		newHostname, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
-		require.NoError(t, err)
+			newHostname, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
+			if i == actorInvokeRetriesAfterRestart {
+				require.NoError(t, err)
+			}
+
+			if err == nil {
+				break
+			}
+		}
 
 		require.NotEqual(t, string(firstHostname), string(newHostname))
 		close(quit)
