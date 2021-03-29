@@ -39,6 +39,9 @@ const (
 
 	// maxReplicas is the maximum replicas of replica sets
 	maxReplicas = 10
+
+	// maxSideCarDetectionRetries is the maximum number of retries to detect Dapr sidecar
+	maxSideCarDetectionRetries = 3
 )
 
 // AppManager holds Kubernetes clients and namespace used for test apps
@@ -115,9 +118,19 @@ func (m *AppManager) Init() error {
 	log.Printf("App %v has been deployed.", m.app.AppName)
 
 	log.Printf("Validating sidecar for app %v ....", m.app.AppName)
-	// Validate daprd side car is injected
-	if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
-		return err
+	for i := 0; i <= maxSideCarDetectionRetries; i++ {
+		// Validate daprd side car is injected
+		if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
+			if i == maxSideCarDetectionRetries {
+				return err
+			}
+
+			log.Printf("Did not find sidecar for app %v, retrying ....", m.app.AppName)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+
+		break
 	}
 	log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
 
