@@ -117,33 +117,36 @@ func (m *AppManager) Init() error {
 	}
 	log.Printf("App %v has been deployed.", m.app.AppName)
 
-	log.Printf("Validating sidecar for app %v ....", m.app.AppName)
-	for i := 0; i <= maxSideCarDetectionRetries; i++ {
-		// Validate daprd side car is injected
-		if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
-			if i == maxSideCarDetectionRetries {
-				return err
+	if !m.app.IsJob {
+		// Job cannot have side car validated because it is shutdown on successful completion.
+		log.Printf("Validating sidecar for app %v ....", m.app.AppName)
+		for i := 0; i <= maxSideCarDetectionRetries; i++ {
+			// Validate daprd side car is injected
+			if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
+				if i == maxSideCarDetectionRetries {
+					return err
+				}
+
+				log.Printf("Did not find sidecar for app %v, retrying ....", m.app.AppName)
+				time.Sleep(10 * time.Second)
+				continue
 			}
 
-			log.Printf("Did not find sidecar for app %v, retrying ....", m.app.AppName)
-			time.Sleep(10 * time.Second)
-			continue
+			break
 		}
+		log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
 
-		break
+		// Create Ingress endpoint
+		log.Printf("Creating ingress for app %v ....", m.app.AppName)
+		if _, err := m.CreateIngressService(); err != nil {
+			return err
+		}
+		log.Printf("Ingress for app %v has been created.", m.app.AppName)
+
+		log.Printf("Creating pod port forwarder for app %v ....", m.app.AppName)
+		m.forwarder = NewPodPortForwarder(m.client, m.namespace)
+		log.Printf("Pod port forwarder for app %v has been created.", m.app.AppName)
 	}
-	log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
-
-	// Create Ingress endpoint
-	log.Printf("Creating ingress for app %v ....", m.app.AppName)
-	if _, err := m.CreateIngressService(); err != nil {
-		return err
-	}
-	log.Printf("Ingress for app %v has been created.", m.app.AppName)
-
-	log.Printf("Creating pod port forwarder for app %v ....", m.app.AppName)
-	m.forwarder = NewPodPortForwarder(m.client, m.namespace)
-	log.Printf("Pod port forwarder for app %v has been created.", m.app.AppName)
 
 	m.logPrefix = os.Getenv(ContainerLogPathEnvVar)
 
