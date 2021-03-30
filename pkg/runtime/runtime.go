@@ -331,6 +331,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.InternalGRPCPort)
 
+	if a.daprHTTPAPI != nil {
+		a.daprHTTPAPI.MarkStatusAsOutboundReady()
+	}
+
 	a.blockUntilAppIsReady()
 
 	err = a.createAppChannel()
