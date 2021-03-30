@@ -42,12 +42,6 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	// Disables this test on AKS since daprd is not injected correctly on E2E:
-	// https://github.com/dapr/dapr/issues/2982
-	if os.Getenv("TEST_CLUSTER") != "" {
-		return
-	}
-
 	// This test shows how to deploy the multiple test apps, validate the side-car injection
 	// and validate the response by using test app's service endpoint
 
