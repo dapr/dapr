@@ -100,6 +100,12 @@ func (m *AppManager) Init() error {
 			return err
 		}
 
+		log.Printf("Validating sidecar for app %v ....", m.app.AppName)
+		if err := m.WaitUntilSidecarPresent(); err != nil {
+			return err
+		}
+		log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
+
 		// Wait until app is deployed completely
 		if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
 			return err
@@ -122,7 +128,7 @@ func (m *AppManager) Init() error {
 		log.Printf("Validating sidecar for app %v ....", m.app.AppName)
 		for i := 0; i <= maxSideCarDetectionRetries; i++ {
 			// Validate daprd side car is injected
-			if ok, err := m.ValidiateSideCar(); err != nil || ok != m.app.IngressEnabled {
+			if ok, err := m.ValidateSidecar(); err != nil || ok != m.app.IngressEnabled {
 				if i == maxSideCarDetectionRetries {
 					return err
 				}
@@ -279,6 +285,27 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 	return lastDeployment, nil
 }
 
+// WaitUntilSidecarPresent waits until Dapr sidecar is present
+func (m *AppManager) WaitUntilSidecarPresent() error {
+	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+		allDaprd, minContainerCount, maxContainerCount, err := m.getContainerInfo()
+		log.Printf(
+			"Checking if Dapr sidecar is present on app %s (minContainerCount=%d, maxContainerCount=%d, allDaprd=%v): %v ...",
+			m.app.AppName,
+			minContainerCount,
+			maxContainerCount,
+			allDaprd,
+			err)
+		return allDaprd, err
+	})
+
+	if waitErr != nil {
+		return fmt.Errorf("app %q does not contain Dapr sidecar", m.app.AppName)
+	}
+
+	return nil
+}
+
 // IsJobCompleted returns true if job object is complete
 func (m *AppManager) IsJobCompleted(job *batchv1.Job, err error) bool {
 	return err == nil && job.Status.Succeeded == 1 && job.Status.Failed == 0 && job.Status.Active == 0 && job.Status.CompletionTime != nil
@@ -299,14 +326,13 @@ func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err erro
 	return err != nil && errors.IsNotFound(err)
 }
 
-// ValidiateSideCar validates that dapr side car is running in dapr enabled pods
-func (m *AppManager) ValidiateSideCar() (bool, error) {
+// ValidateSidecar validates that dapr side car is running in dapr enabled pods
+func (m *AppManager) ValidateSidecar() (bool, error) {
 	if !m.app.DaprEnabled {
 		return false, fmt.Errorf("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
-
 	// Filter only 'testapp=appName' labeled Pods
 	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
@@ -333,6 +359,54 @@ func (m *AppManager) ValidiateSideCar() (bool, error) {
 	}
 
 	return true, nil
+}
+
+// getSidecarInfo returns if sidecar is present and how many containers there are.
+func (m *AppManager) getContainerInfo() (bool, int, int, error) {
+	if !m.app.DaprEnabled {
+		return false, 0, 0, fmt.Errorf("dapr is not enabled for this app")
+	}
+
+	podClient := m.client.Pods(m.namespace)
+
+	// Filter only 'testapp=appName' labeled Pods
+	podList, err := podClient.List(context.TODO(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
+	})
+	if err != nil {
+		return false, 0, 0, err
+	}
+
+	// Each pod must have daprd sidecar
+	minContainerCount := -1
+	maxContainerCount := 0
+	allDaprd := true && (len(podList.Items) > 0)
+	for _, pod := range podList.Items {
+		daprdFound := false
+		containerCount := len(pod.Spec.Containers)
+		if containerCount < minContainerCount || minContainerCount == -1 {
+			minContainerCount = containerCount
+		}
+		if containerCount > maxContainerCount {
+			maxContainerCount = containerCount
+		}
+
+		for _, container := range pod.Spec.Containers {
+			if container.Name == DaprSideCarName {
+				daprdFound = true
+			}
+		}
+
+		if !daprdFound {
+			allDaprd = false
+		}
+	}
+
+	if minContainerCount < 0 {
+		minContainerCount = 0
+	}
+
+	return allDaprd, minContainerCount, maxContainerCount, nil
 }
 
 // DoPortForwarding performs port forwarding for given podname to access test apps in the cluster
