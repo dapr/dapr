@@ -36,6 +36,9 @@ service AppCallback {
   // User application can save the states or send the events to the output
   // bindings optionally by returning BindingEventResponse.
   rpc OnBindingEvent(BindingEventRequest) returns (BindingEventResponse) {}
+
+  // Listens configuration update events from the configuration store.
+  rpc OnConfigurationEvent(ConfigurationEventRequest) returns (google.protobuf.Empty) {}
 }
 
 // TopicEventRequest message is compatible with CloudEvent spec v1.0
@@ -150,4 +153,17 @@ message TopicSubscription {
 message ListInputBindingsResponse {
   // The list of input bindings.
   repeated string bindings = 1;
+}
+
+// ConfigurationEventRequest represents update events of configuration items.
+message ConfigurationEventRequest {
+  // Required. The name of the configuration store component.
+  string store_name = 1;
+
+  // The application id.
+  // Only used for admin client.
+  string app_id = 2;
+
+  // Required. The updated configuration items.
+  repeated common.v1.ConfigurationItem items = 3;
 }

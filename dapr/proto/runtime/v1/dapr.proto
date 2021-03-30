@@ -72,6 +72,18 @@ service Dapr {
   // InvokeActor calls a method on an actor.
   rpc InvokeActor (InvokeActorRequest) returns (InvokeActorResponse) {}
 
+  // GetConfiguration gets configuration from configuration store.
+  rpc GetConfiguration(GetConfigurationRequest) returns (GetConfigurationResponse) {}
+
+  // SaveConfiguration saves configuration into configuration store.
+  rpc SaveConfiguration(SaveConfigurationRequest) returns (google.protobuf.Empty) {}
+
+  // DeleteConfiguration deletes configuration from configuration store.
+  rpc DeleteConfiguration(DeleteConfigurationRequest) returns (google.protobuf.Empty) {}
+
+  // SubscribeConfiguration gets configuration from configuration store and subscribe the updates.
+  rpc SubscribeConfiguration(stream SubscribeConfigurationRequest) returns (stream SubscribeConfigurationResponse) {}
+
   // Gets metadata of the sidecar
   rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
 
@@ -407,3 +419,110 @@ message SetMetadataRequest {
   string key = 1;
   string value = 2;
 }
+
+// GetConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
+message GetConfigurationRequest {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // The application id which
+  // Only used for admin, Ignored and reset for normal client
+  string app_id = 2;
+
+  // The group of keys.
+  string group = 3;
+
+  // The label for keys.
+  string label = 4;
+
+  // The keys to get.
+  repeated string keys = 5;
+
+  // The metadata which will be sent to configuration store components.
+  map<string,string> metadata = 6;
+
+  // Subscribes update event for given keys.
+  // If true, when any configuration item in this request is updated, app will receive event by OnConfigurationEvent() of app callback
+  bool subscribe_update = 7;
+}
+
+// GetConfigurationResponse is the response conveying the list of configuration values.
+message GetConfigurationResponse {
+  // The list of items containing configuration values.
+  repeated common.v1.ConfigurationItem items = 1;
+}
+
+// SubscribeConfigurationRequest is the message to get a list of key-value configuration from specified configuration store.
+message SubscribeConfigurationRequest {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // The application id which
+  // Only used for admin, ignored and reset for normal client
+  string app_id = 2;
+
+  // The group of keys.
+  string group = 3;
+
+  // The label for keys.
+  string label = 4;
+
+  // The keys to get.
+  repeated string keys = 5;
+
+  // The metadata which will be sent to configuration store components.
+  map<string,string> metadata = 6;
+}
+
+// SubscribeConfigurationResponse is the response conveying the list of configuration values.
+message SubscribeConfigurationResponse {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // The application id.
+  // Only used for admin client.
+  string app_id = 2;
+
+  // The list of items containing configuration values.
+  repeated common.v1.ConfigurationItem items = 3;
+}
+
+// SaveConfigurationRequest is the message to save a list of key-value configuration into specified configuration store.
+message SaveConfigurationRequest {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // The application id which
+  // Only used for admin, ignored and reset for normal client
+  string app_id = 2;
+
+  // The list of configuration items to save.
+  // To delete a exist item, set the key (also label) and let content to be empty
+  repeated common.v1.ConfigurationItem items = 3;
+
+  // The metadata which will be sent to configuration store components.
+  map<string,string> metadata = 4;
+}
+
+// DeleteConfigurationRequest is the message to delete a list of key-value configuration from specified configuration store.
+message DeleteConfigurationRequest {
+  // The name of configuration store.
+  string store_name = 1;
+
+  // The application id which
+  // Only used for admin, Ignored and reset for normal client
+  string app_id = 2;
+
+  // The group of keys.
+  string group = 3;
+
+  // The label for keys.
+  string label = 4;
+
+  // The keys to get.
+  repeated string keys = 5;
+
+  // The metadata which will be sent to configuration store components.
+  map<string,string> metadata = 6;
+}
+

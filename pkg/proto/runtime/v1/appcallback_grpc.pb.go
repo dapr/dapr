@@ -5,10 +5,10 @@ package runtime
 import (
 	context "context"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -23,16 +23,18 @@ type AppCallbackClient interface {
 	// Invokes service method with InvokeRequest.
 	OnInvoke(ctx context.Context, in *v1.InvokeRequest, opts ...grpc.CallOption) (*v1.InvokeResponse, error)
 	// Lists all topics subscribed by this app.
-	ListTopicSubscriptions(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListTopicSubscriptionsResponse, error)
+	ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListTopicSubscriptionsResponse, error)
 	// Subscribes events from Pubsub
 	OnTopicEvent(ctx context.Context, in *TopicEventRequest, opts ...grpc.CallOption) (*TopicEventResponse, error)
 	// Lists all input bindings subscribed by this app.
-	ListInputBindings(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListInputBindingsResponse, error)
+	ListInputBindings(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListInputBindingsResponse, error)
 	// Listens events from the input bindings
 	//
 	// User application can save the states or send the events to the output
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(ctx context.Context, in *BindingEventRequest, opts ...grpc.CallOption) (*BindingEventResponse, error)
+	// Listens configuration update events from the configuration store.
+	OnConfigurationEvent(ctx context.Context, in *ConfigurationEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type appCallbackClient struct {
@@ -52,7 +54,7 @@ func (c *appCallbackClient) OnInvoke(ctx context.Context, in *v1.InvokeRequest, 
 	return out, nil
 }
 
-func (c *appCallbackClient) ListTopicSubscriptions(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListTopicSubscriptionsResponse, error) {
+func (c *appCallbackClient) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListTopicSubscriptionsResponse, error) {
 	out := new(ListTopicSubscriptionsResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallback/ListTopicSubscriptions", in, out, opts...)
 	if err != nil {
@@ -70,7 +72,7 @@ func (c *appCallbackClient) OnTopicEvent(ctx context.Context, in *TopicEventRequ
 	return out, nil
 }
 
-func (c *appCallbackClient) ListInputBindings(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListInputBindingsResponse, error) {
+func (c *appCallbackClient) ListInputBindings(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListInputBindingsResponse, error) {
 	out := new(ListInputBindingsResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallback/ListInputBindings", in, out, opts...)
 	if err != nil {
@@ -88,6 +90,15 @@ func (c *appCallbackClient) OnBindingEvent(ctx context.Context, in *BindingEvent
 	return out, nil
 }
 
+func (c *appCallbackClient) OnConfigurationEvent(ctx context.Context, in *ConfigurationEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallback/OnConfigurationEvent", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AppCallbackServer is the server API for AppCallback service.
 // All implementations should embed UnimplementedAppCallbackServer
 // for forward compatibility
@@ -95,16 +106,18 @@ type AppCallbackServer interface {
 	// Invokes service method with InvokeRequest.
 	OnInvoke(context.Context, *v1.InvokeRequest) (*v1.InvokeResponse, error)
 	// Lists all topics subscribed by this app.
-	ListTopicSubscriptions(context.Context, *empty.Empty) (*ListTopicSubscriptionsResponse, error)
+	ListTopicSubscriptions(context.Context, *emptypb.Empty) (*ListTopicSubscriptionsResponse, error)
 	// Subscribes events from Pubsub
 	OnTopicEvent(context.Context, *TopicEventRequest) (*TopicEventResponse, error)
 	// Lists all input bindings subscribed by this app.
-	ListInputBindings(context.Context, *empty.Empty) (*ListInputBindingsResponse, error)
+	ListInputBindings(context.Context, *emptypb.Empty) (*ListInputBindingsResponse, error)
 	// Listens events from the input bindings
 	//
 	// User application can save the states or send the events to the output
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error)
+	// Listens configuration update events from the configuration store.
+	OnConfigurationEvent(context.Context, *ConfigurationEventRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedAppCallbackServer should be embedded to have forward compatible implementations.
@@ -114,17 +127,20 @@ type UnimplementedAppCallbackServer struct {
 func (UnimplementedAppCallbackServer) OnInvoke(context.Context, *v1.InvokeRequest) (*v1.InvokeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnInvoke not implemented")
 }
-func (UnimplementedAppCallbackServer) ListTopicSubscriptions(context.Context, *empty.Empty) (*ListTopicSubscriptionsResponse, error) {
+func (UnimplementedAppCallbackServer) ListTopicSubscriptions(context.Context, *emptypb.Empty) (*ListTopicSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTopicSubscriptions not implemented")
 }
 func (UnimplementedAppCallbackServer) OnTopicEvent(context.Context, *TopicEventRequest) (*TopicEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnTopicEvent not implemented")
 }
-func (UnimplementedAppCallbackServer) ListInputBindings(context.Context, *empty.Empty) (*ListInputBindingsResponse, error) {
+func (UnimplementedAppCallbackServer) ListInputBindings(context.Context, *emptypb.Empty) (*ListInputBindingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListInputBindings not implemented")
 }
 func (UnimplementedAppCallbackServer) OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBindingEvent not implemented")
+}
+func (UnimplementedAppCallbackServer) OnConfigurationEvent(context.Context, *ConfigurationEventRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OnConfigurationEvent not implemented")
 }
 
 // UnsafeAppCallbackServer may be embedded to opt out of forward compatibility for this service.
@@ -157,7 +173,7 @@ func _AppCallback_OnInvoke_Handler(srv interface{}, ctx context.Context, dec fun
 }
 
 func _AppCallback_ListTopicSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -169,7 +185,7 @@ func _AppCallback_ListTopicSubscriptions_Handler(srv interface{}, ctx context.Co
 		FullMethod: "/dapr.proto.runtime.v1.AppCallback/ListTopicSubscriptions",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppCallbackServer).ListTopicSubscriptions(ctx, req.(*empty.Empty))
+		return srv.(AppCallbackServer).ListTopicSubscriptions(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -193,7 +209,7 @@ func _AppCallback_OnTopicEvent_Handler(srv interface{}, ctx context.Context, dec
 }
 
 func _AppCallback_ListInputBindings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -205,7 +221,7 @@ func _AppCallback_ListInputBindings_Handler(srv interface{}, ctx context.Context
 		FullMethod: "/dapr.proto.runtime.v1.AppCallback/ListInputBindings",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppCallbackServer).ListInputBindings(ctx, req.(*empty.Empty))
+		return srv.(AppCallbackServer).ListInputBindings(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -224,6 +240,24 @@ func _AppCallback_OnBindingEvent_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AppCallbackServer).OnBindingEvent(ctx, req.(*BindingEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AppCallback_OnConfigurationEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigurationEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AppCallbackServer).OnConfigurationEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.AppCallback/OnConfigurationEvent",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AppCallbackServer).OnConfigurationEvent(ctx, req.(*ConfigurationEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -254,6 +288,10 @@ var AppCallback_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnBindingEvent",
 			Handler:    _AppCallback_OnBindingEvent_Handler,
+		},
+		{
+			MethodName: "OnConfigurationEvent",
+			Handler:    _AppCallback_OnConfigurationEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

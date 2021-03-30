@@ -13,9 +13,9 @@ package common
 
 import (
 	proto "github.com/golang/protobuf/proto"
-	any "github.com/golang/protobuf/ptypes/any"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -214,7 +214,7 @@ type HTTPExtension struct {
 
 	// Required. HTTP verb.
 	Verb HTTPExtension_Verb `protobuf:"varint,1,opt,name=verb,proto3,enum=dapr.proto.common.v1.HTTPExtension_Verb" json:"verb,omitempty"`
-	// querystring includes HTTP querystring.
+	// Optional. querystring represents an encoded HTTP url query string in the following format: name=value&name2=value2
 	Querystring string `protobuf:"bytes,2,opt,name=querystring,proto3" json:"querystring,omitempty"`
 }
 
@@ -276,7 +276,7 @@ type InvokeRequest struct {
 	Method string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
 	// Required. Bytes value or Protobuf message which caller sent.
 	// Dapr treats Any.value as bytes type if Any.type_url is unset.
-	Data *any.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Data *anypb.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	// The type of data content.
 	//
 	// This field is required if data delivers http request body
@@ -328,7 +328,7 @@ func (x *InvokeRequest) GetMethod() string {
 	return ""
 }
 
-func (x *InvokeRequest) GetData() *any.Any {
+func (x *InvokeRequest) GetData() *anypb.Any {
 	if x != nil {
 		return x.Data
 	}
@@ -359,7 +359,7 @@ type InvokeResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Required. The content body of InvokeService response.
-	Data *any.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Data *anypb.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	// Required. The type of data content.
 	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 }
@@ -396,7 +396,7 @@ func (*InvokeResponse) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *InvokeResponse) GetData() *any.Any {
+func (x *InvokeResponse) GetData() *anypb.Any {
 	if x != nil {
 		return x.Data
 	}
@@ -601,6 +601,101 @@ func (x *StateOptions) GetConsistency() StateOptions_StateConsistency {
 	return StateOptions_CONSISTENCY_UNSPECIFIED
 }
 
+// ConfigurationItem represents a configuration item with key, content and other information.
+type ConfigurationItem struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Required. The key of configuration item
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// The content of configuration item
+	// Empty if the configuration is not set, including the case that the configuration is changed from value-set to value-not-set.
+	Content string `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	// The group of configuration item.
+	Group string `protobuf:"bytes,3,opt,name=group,proto3" json:"group,omitempty"`
+	// The label of configuration item.
+	Label string `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"`
+	// The tag list of configuration item.
+	Tags map[string]string `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// The metadata which will be passed to configuration store component.
+	Metadata map[string]string `protobuf:"bytes,6,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+}
+
+func (x *ConfigurationItem) Reset() {
+	*x = ConfigurationItem{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_common_v1_common_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ConfigurationItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigurationItem) ProtoMessage() {}
+
+func (x *ConfigurationItem) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_common_v1_common_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigurationItem.ProtoReflect.Descriptor instead.
+func (*ConfigurationItem) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ConfigurationItem) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *ConfigurationItem) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *ConfigurationItem) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *ConfigurationItem) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *ConfigurationItem) GetTags() map[string]string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *ConfigurationItem) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 var File_dapr_proto_common_v1_common_proto protoreflect.FileDescriptor
 
 var file_dapr_proto_common_v1_common_proto_rawDesc = []byte{
@@ -686,14 +781,38 @@ var file_dapr_proto_common_v1_common_proto_rawDesc = []byte{
 	0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x18, 0x0a, 0x14, 0x43, 0x4f, 0x4e, 0x53, 0x49, 0x53, 0x54,
 	0x45, 0x4e, 0x43, 0x59, 0x5f, 0x45, 0x56, 0x45, 0x4e, 0x54, 0x55, 0x41, 0x4c, 0x10, 0x01, 0x12,
 	0x16, 0x0a, 0x12, 0x43, 0x4f, 0x4e, 0x53, 0x49, 0x53, 0x54, 0x45, 0x4e, 0x43, 0x59, 0x5f, 0x53,
-	0x54, 0x52, 0x4f, 0x4e, 0x47, 0x10, 0x02, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61,
-	0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0c, 0x43, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x50, 0x72, 0x6f,
-	0x74, 0x6f, 0x73, 0x5a, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f,
-	0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6f,
-	0x6d, 0x6d, 0x6f, 0x6e, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65,
-	0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e,
-	0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x54, 0x52, 0x4f, 0x4e, 0x47, 0x10, 0x02, 0x22, 0xfb, 0x02, 0x0a, 0x11, 0x43, 0x6f, 0x6e, 0x66,
+	0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x74, 0x65, 0x6d, 0x12, 0x10, 0x0a,
+	0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12,
+	0x18, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x67, 0x72, 0x6f,
+	0x75, 0x70, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x67, 0x72, 0x6f, 0x75, 0x70, 0x12,
+	0x14, 0x0a, 0x05, 0x6c, 0x61, 0x62, 0x65, 0x6c, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05,
+	0x6c, 0x61, 0x62, 0x65, 0x6c, 0x12, 0x45, 0x0a, 0x04, 0x74, 0x61, 0x67, 0x73, 0x18, 0x05, 0x20,
+	0x03, 0x28, 0x0b, 0x32, 0x31, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6e, 0x66, 0x69,
+	0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x49, 0x74, 0x65, 0x6d, 0x2e, 0x54, 0x61, 0x67,
+	0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x04, 0x74, 0x61, 0x67, 0x73, 0x12, 0x51, 0x0a, 0x08,
+	0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x06, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x35,
+	0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x63, 0x6f, 0x6d, 0x6d,
+	0x6f, 0x6e, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74,
+	0x69, 0x6f, 0x6e, 0x49, 0x74, 0x65, 0x6d, 0x2e, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61,
+	0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x1a,
+	0x37, 0x0a, 0x09, 0x54, 0x61, 0x67, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03,
+	0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14,
+	0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76,
+	0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x1a, 0x3b, 0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x61,
+	0x64, 0x61, 0x74, 0x61, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76,
+	0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75,
+	0x65, 0x3a, 0x02, 0x38, 0x01, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72,
+	0x2e, 0x76, 0x31, 0x42, 0x0c, 0x43, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x74, 0x6f,
+	0x73, 0x5a, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61,
+	0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6f, 0x6d, 0x6d,
+	0x6f, 0x6e, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74,
+	0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31,
+	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -709,7 +828,7 @@ func file_dapr_proto_common_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_dapr_proto_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_dapr_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_dapr_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
 	(HTTPExtension_Verb)(0),            // 0: dapr.proto.common.v1.HTTPExtension.Verb
 	(StateOptions_StateConcurrency)(0), // 1: dapr.proto.common.v1.StateOptions.StateConcurrency
@@ -720,24 +839,29 @@ var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
 	(*StateItem)(nil),                  // 6: dapr.proto.common.v1.StateItem
 	(*Etag)(nil),                       // 7: dapr.proto.common.v1.Etag
 	(*StateOptions)(nil),               // 8: dapr.proto.common.v1.StateOptions
-	nil,                                // 9: dapr.proto.common.v1.StateItem.MetadataEntry
-	(*any.Any)(nil),                    // 10: google.protobuf.Any
+	(*ConfigurationItem)(nil),          // 9: dapr.proto.common.v1.ConfigurationItem
+	nil,                                // 10: dapr.proto.common.v1.StateItem.MetadataEntry
+	nil,                                // 11: dapr.proto.common.v1.ConfigurationItem.TagsEntry
+	nil,                                // 12: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	(*anypb.Any)(nil),                  // 13: google.protobuf.Any
 }
 var file_dapr_proto_common_v1_common_proto_depIdxs = []int32{
 	0,  // 0: dapr.proto.common.v1.HTTPExtension.verb:type_name -> dapr.proto.common.v1.HTTPExtension.Verb
-	10, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any
+	13, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any
 	3,  // 2: dapr.proto.common.v1.InvokeRequest.http_extension:type_name -> dapr.proto.common.v1.HTTPExtension
-	10, // 3: dapr.proto.common.v1.InvokeResponse.data:type_name -> google.protobuf.Any
+	13, // 3: dapr.proto.common.v1.InvokeResponse.data:type_name -> google.protobuf.Any
 	7,  // 4: dapr.proto.common.v1.StateItem.etag:type_name -> dapr.proto.common.v1.Etag
-	9,  // 5: dapr.proto.common.v1.StateItem.metadata:type_name -> dapr.proto.common.v1.StateItem.MetadataEntry
+	10, // 5: dapr.proto.common.v1.StateItem.metadata:type_name -> dapr.proto.common.v1.StateItem.MetadataEntry
 	8,  // 6: dapr.proto.common.v1.StateItem.options:type_name -> dapr.proto.common.v1.StateOptions
 	1,  // 7: dapr.proto.common.v1.StateOptions.concurrency:type_name -> dapr.proto.common.v1.StateOptions.StateConcurrency
 	2,  // 8: dapr.proto.common.v1.StateOptions.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	11, // 9: dapr.proto.common.v1.ConfigurationItem.tags:type_name -> dapr.proto.common.v1.ConfigurationItem.TagsEntry
+	12, // 10: dapr.proto.common.v1.ConfigurationItem.metadata:type_name -> dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_common_v1_common_proto_init() }
@@ -818,6 +942,18 @@ func file_dapr_proto_common_v1_common_proto_init() {
 				return nil
 			}
 		}
+		file_dapr_proto_common_v1_common_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ConfigurationItem); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -825,7 +961,7 @@ func file_dapr_proto_common_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_common_v1_common_proto_rawDesc,
 			NumEnums:      3,
-			NumMessages:   7,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

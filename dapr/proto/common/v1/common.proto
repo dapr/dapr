@@ -123,3 +123,27 @@ message StateOptions {
   StateConcurrency concurrency = 1;
   StateConsistency consistency = 2;
 }
+
+// ConfigurationItem represents a configuration item with key, content and other information.
+message ConfigurationItem {
+  // Required. The key of configuration item
+  string key = 1;
+
+  // The content of configuration item
+  // Empty if the configuration is not set, including the case that the configuration is changed from value-set to value-not-set.
+  string content = 2;
+
+  // The group of configuration item.
+  string group = 3;
+
+  // The label of configuration item.
+  string label = 4;
+
+  // The tag list of configuration item.
+  map<string,string> tags = 5;
+
+  // The metadata which will be passed to configuration store component.
+  map<string,string> metadata = 6;
+}
+
+
