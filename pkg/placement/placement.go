@@ -92,11 +92,11 @@ type Service struct {
 	// faultyHostDetectDuration
 	faultyHostDetectDuration time.Duration
 
-	// hasLeadership incidicates the state for leadership.
+	// hasLeadership indicates the state for leadership.
 	hasLeadership bool
 
 	// streamConnGroup represents the number of stream connections.
-	// This waits until all stream connnections are drained when revoking leadership.
+	// This waits until all stream connections are drained when revoking leadership.
 	streamConnGroup sync.WaitGroup
 
 	// shutdownLock is the mutex to lock shutdown

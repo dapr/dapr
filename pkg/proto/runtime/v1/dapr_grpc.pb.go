@@ -60,6 +60,8 @@ type DaprClient interface {
 	GetMetadata(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// Shutdown the sidecar
+	Shutdown(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type daprClient struct {
@@ -250,6 +252,15 @@ func (c *daprClient) SetMetadata(ctx context.Context, in *SetMetadataRequest, op
 	return out, nil
 }
 
+func (c *daprClient) Shutdown(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/Shutdown", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -294,6 +305,8 @@ type DaprServer interface {
 	GetMetadata(context.Context, *empty.Empty) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(context.Context, *SetMetadataRequest) (*empty.Empty, error)
+	// Shutdown the sidecar
+	Shutdown(context.Context, *empty.Empty) (*empty.Empty, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -359,6 +372,9 @@ func (UnimplementedDaprServer) GetMetadata(context.Context, *empty.Empty) (*GetM
 }
 func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetMetadata not implemented")
+}
+func (UnimplementedDaprServer) Shutdown(context.Context, *empty.Empty) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -732,6 +748,24 @@ func _Dapr_SetMetadata_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).Shutdown(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.runtime.v1.Dapr/Shutdown",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).Shutdown(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -818,6 +852,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetMetadata",
 			Handler:    _Dapr_SetMetadata_Handler,
+		},
+		{
+			MethodName: "Shutdown",
+			Handler:    _Dapr_Shutdown_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -65,6 +65,7 @@ type api struct {
 	readyStatus              bool
 	outboundReadyStatus      bool
 	tracingSpec              config.TracingSpec
+	shutdown                 func()
 }
 
 type registeredComponent struct {
@@ -111,7 +112,8 @@ func NewAPI(
 	pubsubAdapter runtime_pubsub.Adapter,
 	actor actors.Actors,
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error),
-	tracingSpec config.TracingSpec) API {
+	tracingSpec config.TracingSpec,
+	shutdown func()) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
@@ -132,6 +134,7 @@ func NewAPI(
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		id:                       appID,
 		tracingSpec:              tracingSpec,
+		shutdown:                 shutdown,
 	}
 
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
@@ -140,6 +143,7 @@ func NewAPI(
 	api.endpoints = append(api.endpoints, api.constructActorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructMetadataEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructShutdownEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructBindingsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructHealthzEndpoints()...)
 
@@ -312,6 +316,17 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata,
+		},
+	}
+}
+
+func (a *api) constructShutdownEndpoints() []Endpoint {
+	return []Endpoint{
+		{
+			Methods: []string{fasthttp.MethodGet},
+			Route:   "shutdown",
+			Version: apiVersionV1,
+			Handler: a.onShutdown,
 		},
 	}
 }
@@ -1147,9 +1162,9 @@ func (a *api) onGetMetadata(reqCtx *fasthttp.RequestCtx) {
 		activeActorsCount = a.actor.GetActiveActorsCount(reqCtx)
 	}
 
-	registeredComponents := []registeredComponent{}
-
 	components := a.getComponentsFn()
+	registeredComponents := make([]registeredComponent, 0, len(components))
+
 	for _, comp := range components {
 		registeredComp := registeredComponent{
 			Name:    comp.Name,
@@ -1183,6 +1198,13 @@ func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 	respondEmpty(reqCtx)
 }
 
+func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
+	respondEmpty(reqCtx)
+	go func() {
+		a.shutdown()
+	}()
+}
+
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	if a.pubsubAdapter == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
@@ -1208,8 +1230,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	topic := reqCtx.UserValue(topicParam).(string)
-	// FIXME: isn't it "" instead?
-	if topic == "/" {
+	if topic == "" {
 		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
 		respondWithError(reqCtx, fasthttp.StatusNotFound, msg)
 		log.Debug(msg)

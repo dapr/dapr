@@ -3,10 +3,10 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -106,7 +106,7 @@ func DeclarativeSelfHosted(componentsPath string, log logger.Logger) []Subscript
 
 	for _, f := range files {
 		if !f.IsDir() {
-			filePath := fmt.Sprintf("%s/%s", componentsPath, f.Name())
+			filePath := filepath.Join(componentsPath, f.Name())
 			b, err := ioutil.ReadFile(filePath)
 			if err != nil {
 				log.Errorf("failed to read file %s: %s", filePath, err)
