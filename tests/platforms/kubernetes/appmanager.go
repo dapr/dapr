@@ -100,12 +100,6 @@ func (m *AppManager) Init() error {
 			return err
 		}
 
-		log.Printf("Validating sidecar for app %v ....", m.app.AppName)
-		if err := m.WaitUntilSidecarPresent(); err != nil {
-			return err
-		}
-		log.Printf("Sidecar for app %v has been validated.", m.app.AppName)
-
 		// Wait until app is deployed completely
 		if _, err := m.WaitUntilJobState(m.IsJobCompleted); err != nil {
 			return err
