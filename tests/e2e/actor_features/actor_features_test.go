@@ -39,7 +39,8 @@ const (
 	actorInvokeURLFormat                  = "%s/test/testactorfeatures/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorDeleteURLFormat                  = "%s/actors/testactorfeatures/%s"     // URL to deactivate an actor in test app.
 	actorlogsURLFormat                    = "%s/test/logs"                       // URL to fetch logs from test app.
-	actorMetadataURLFormat                = "%s/test/metadata"
+	actorMetadataURLFormat                = "%s/test/metadata"                   // URL to fetch metadata from test app.
+	actorInvokeRetriesAfterRestart        = 10                                   // Number of retried to invoke actor after restart.
 )
 
 // represents a response for the APIs in this app.
@@ -124,6 +125,10 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
+			DaprCPULimit:   "2.0",
+			DaprCPURequest: "0.1",
+			AppCPULimit:    "2.0",
+			AppCPURequest:  "0.1",
 		},
 		{
 			AppName:        "actortestclient",
@@ -132,6 +137,10 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
+			DaprCPULimit:   "2.0",
+			DaprCPURequest: "0.1",
+			AppCPULimit:    "2.0",
+			AppCPURequest:  "0.1",
 		},
 	}
 
@@ -339,8 +348,9 @@ func TestActorFeatures(t *testing.T) {
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 		firstCount := countActorAction(resp, actorID, reminderName)
+		minFirstCount := 9
 		// Min call is based off of having a 1s period/due time, the amount of seconds we've waited, and a bit of room for timing.
-		require.GreaterOrEqual(t, firstCount, 9)
+		require.GreaterOrEqual(t, firstCount, minFirstCount)
 
 		err = tr.Platform.Restart(appName)
 		assert.NoError(t, err)
@@ -355,8 +365,10 @@ func TestActorFeatures(t *testing.T) {
 
 		resp, err = utils.HTTPGet(logsURL)
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), firstCount)
-		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult)
+
+		restartDelayDiscount := 2
+		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minFirstCount-restartDelayDiscount)
+		require.GreaterOrEqual(t, countActorAction(resp, actorID, reminderName), minimumCallsForTimerAndReminderResult-restartDelayDiscount)
 	})
 
 	t.Run("Actor timer.", func(t *testing.T) {
@@ -513,11 +525,20 @@ func TestActorFeatures(t *testing.T) {
 
 		tr.Platform.Restart(appName)
 
-		// wait until actors are redistributed.
-		time.Sleep(10 * time.Second)
+		newHostname := []byte{}
+		for i := 0; i <= actorInvokeRetriesAfterRestart; i++ {
+			// wait until actors are redistributed.
+			time.Sleep(30 * time.Second)
 
-		newHostname, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
-		require.NoError(t, err)
+			newHostname, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "method", "hostname"), []byte{})
+			if i == actorInvokeRetriesAfterRestart {
+				require.NoError(t, err)
+			}
+
+			if err == nil {
+				break
+			}
+		}
 
 		require.NotEqual(t, string(firstHostname), string(newHostname))
 		close(quit)
@@ -540,7 +561,7 @@ func TestActorFeatures(t *testing.T) {
 		tr.Platform.Scale(appName, appScaleToCheckRebalance)
 
 		// wait until actors are redistributed.
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 
 		anyActorMoved := false
 		for index := 0; index < actorsToCheckRebalance; index++ {
