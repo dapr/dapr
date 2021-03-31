@@ -212,10 +212,10 @@ releaseNoteTemplatePath="docs/release_notes/template.md"
 with open(releaseNoteTemplatePath, 'r') as file:
     template = file.read()
 
-changesText='\n\n'.join(changeLines)
+changesText='\n'.join(changeLines)
 breakingChangesText='None.'
 if len(breakingChangeLines) > 0:
-    breakingChangesText='\n\n'.join(breakingChangeLines)
+    breakingChangesText='\n'.join(breakingChangeLines)
 warningsText=''
 if len(warnings) > 0:
     warningsText='\n\n'.join(warnings)
