@@ -13,7 +13,6 @@ from datetime import date
 from string import Template
 
 from github import Github
-from github import PullRequest
 
 releaseIssueRegex = "^v(.*) Release Planning$"
 releaseNoteRegex = "^RELEASE NOTE:(.*)$"
@@ -134,9 +133,10 @@ issuesOrPRs = []
 for repoMilestonePair in repoMilestonePairs:
     repo = g.get_repo(f"dapr/{repoMilestonePair[0]}")
     milestone = repo.get_milestone(int(repoMilestonePair[1]))
-    print(f"Detected milestone for repo {repoMilestonePair[0]}: {milestone.title}")
-    issuesOrPRs = issuesOrPRs + [i for i in repo.get_issues(milestone=milestone)]
-    issuesOrPRs = issuesOrPRs + [p for p in repo.get_pulls(state='closed') if p.milestone != None and p.milestone.id == milestone.id]
+    # PRs are also returned as `issue`
+    issues = [i for i in repo.get_issues(milestone, state='all')]
+    print(f"Detected milestone {milestone.title} for repo {repoMilestonePair[0]} with {len(issues)} issues or pull requests")
+    issuesOrPRs = issuesOrPRs + issues
 
 print("Detected {} issues or pull requests.".format(len(issuesOrPRs)))
 
@@ -149,17 +149,17 @@ for issueOrPR in issuesOrPRs:
         # Issue was previously released, ignoring.
         continue
 
-    repo = None
-    if type(issueOrPR) == PullRequest.PullRequest:
-        repo = issueOrPR.as_issue().repository
-        contributors.add("@" + str(issueOrPR.user.login))
-    else:
-        repo = issueOrPR.repository
+    try:
+        # only a PR can be converted to a PR object, otherwise will throw error.
+        pr = issueOrPR.as_pull_request()
+        contributors.add("@" + str(pr.user.login))
+    except:
         a = [l.login for l in issueOrPR.assignees]
         if len(a) == 0:
             print("Issue is unassigned: {}".format(url))
         for c in a: 
             contributors.add("@" + str(c))
+    repo = issueOrPR.repository
     match = re.search(releaseNoteRegex, issueOrPR.body, re.M)
     hasNote = False
     if match:
