@@ -17,6 +17,13 @@ const (
 	ErrNotSupportedStateOperation = "operation type %s not supported"
 	ErrStateTransaction           = "error while executing state transaction: %s"
 
+	// Configuration
+	ErrConfigurationStoresNotConfigured = "configuration store is not configured"
+	ErrConfigurationStoreNotFound       = "configuration store %s is not found"
+	ErrConfigurationGet                 = "fail to get %s from configuration store %s: %s"
+	ErrConfigurationDelete              = "failed deleting configuration with key %s: %s"
+	ErrConfigurationSave                = "failed saving configuration in configuration store %s: %s"
+
 	// Binding
 	ErrInvokeOutputBinding = "error when invoke output binding %s: %s"
 

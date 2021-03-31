@@ -14,6 +14,7 @@ import (
 
 	"github.com/PuerkitoBio/purell"
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -73,6 +74,15 @@ type API interface {
 	GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error)
 	ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error)
+
+	// GetConfiguration gets configuration from configuration store.
+	GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error)
+	// SaveConfiguration saves configuration into configuration store.
+	SaveConfiguration(ctx context.Context, in *runtimev1pb.SaveConfigurationRequest) (*emptypb.Empty, error)
+	// DeleteConfiguration deletes configuration from configuration store.
+	DeleteConfiguration(ctx context.Context, in *runtimev1pb.DeleteConfigurationRequest) (*emptypb.Empty, error)
+	SubscribeConfiguration(runtimev1pb.Dapr_SubscribeConfigurationServer) error
+
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
@@ -89,6 +99,7 @@ type api struct {
 	transactionalStateStores map[string]state.TransactionalStore
 	secretStores             map[string]secretstores.SecretStore
 	secretsConfiguration     map[string]config.SecretsScope
+	configurationStores      map[string]configuration.Store
 	pubsubAdapter            runtime_pubsub.Adapter
 	id                       string
 	sendToOutputBindingFn    func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
@@ -106,6 +117,7 @@ func NewAPI(
 	stateStores map[string]state.Store,
 	secretStores map[string]secretstores.SecretStore,
 	secretsConfiguration map[string]config.SecretsScope,
+	configurationStores map[string]configuration.Store,
 	pubsubAdapter runtime_pubsub.Adapter,
 	directMessaging messaging.DirectMessaging,
 	actor actors.Actors,
@@ -132,6 +144,7 @@ func NewAPI(
 		transactionalStateStores: transactionalStateStores,
 		secretStores:             secretStores,
 		secretsConfiguration:     secretsConfiguration,
+		configurationStores:      configurationStores,
 		sendToOutputBindingFn:    sendToOutputBindingFn,
 		tracingSpec:              tracingSpec,
 		accessControlList:        accessControlList,
@@ -1067,6 +1080,144 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.actor = actor
+}
+
+func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
+	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+		return nil, status.Error(codes.FailedPrecondition, messages.ErrConfigurationStoresNotConfigured)
+	}
+
+	if a.configurationStores[name] == nil {
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrConfigurationStoreNotFound, name)
+	}
+	return a.configurationStores[name], nil
+}
+
+func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+	store, err := a.getConfigurationStore(in.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetConfigurationResponse{}, err
+	}
+
+	req := configuration.GetRequest{
+		AppID:           in.AppId,
+		Group:           in.Group,
+		Label:           in.Label,
+		Keys:            in.Keys,
+		Metadata:        in.Metadata,
+		SubscribeUpdate: in.SubscribeUpdate,
+	}
+	// override appID in request for normal client
+	// TODO: add checking for normal client or admin client
+	req.AppID = a.id
+
+	// TODO：implement SubscribeUpdate later
+
+	getResponse, err := store.Get(ctx, &req, nil)
+	if err != nil {
+		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, in.Keys, in.StoreName, err.Error())
+		apiServerLogger.Debug(err)
+		return &runtimev1pb.GetConfigurationResponse{}, err
+	}
+
+	response := &runtimev1pb.GetConfigurationResponse{}
+	if getResponse != nil && len(getResponse.Items) > 0 {
+		response.Items = a.toGRPCItems(getResponse.Items)
+	}
+	return response, nil
+}
+
+func (a *api) toGRPCItems(items []*configuration.Item) []*commonv1pb.ConfigurationItem {
+	result := make([]*commonv1pb.ConfigurationItem, 0, len(items))
+
+	for _, item := range items {
+		result = append(result, a.toGRPCItem(item))
+	}
+
+	return result
+}
+
+func (a *api) toGRPCItem(item *configuration.Item) *commonv1pb.ConfigurationItem {
+	return &commonv1pb.ConfigurationItem{
+		Key: item.Key,
+		Content: item.Content,
+		Group: item.Group,
+		Label: item.Label,
+		Tags: item.Tags,
+		Metadata: item.Metadata,
+	}
+}
+
+func (a *api) fromGRPCItems(items []*commonv1pb.ConfigurationItem)  []*configuration.Item  {
+	result := make([]*configuration.Item, 0, len(items))
+
+	for _, item := range items {
+		result = append(result, a.fromGRPCItem(item))
+	}
+
+	return result
+}
+
+func (a *api) fromGRPCItem(item *commonv1pb.ConfigurationItem ) *configuration.Item {
+	return &configuration.Item{
+		Key: item.Key,
+		Content: item.Content,
+		Group: item.Group,
+		Label: item.Label,
+		Tags: item.Tags,
+		Metadata: item.Metadata,
+	}
+}
+
+func (a *api) SaveConfiguration(ctx context.Context, in *runtimev1pb.SaveConfigurationRequest) (*emptypb.Empty, error) {
+	store, err := a.getConfigurationStore(in.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	req := &configuration.SaveRequest{
+		AppID: in.AppId,
+		Items: a.fromGRPCItems(in.Items),
+		Metadata: in.Metadata,
+	}
+
+	err = store.Save(ctx, req)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (a *api) DeleteConfiguration(ctx context.Context, in *runtimev1pb.DeleteConfigurationRequest) (*emptypb.Empty, error) {
+	store, err := a.getConfigurationStore(in.StoreName)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	req := &configuration.DeleteRequest{
+		AppID: in.AppId,
+		Group: in.Group,
+		Label: in.Label,
+		Keys: in.Keys,
+		Metadata: in.Metadata,
+	}
+
+	err = store.Delete(ctx, req)
+	if err != nil {
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (a *api) SubscribeConfiguration(configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error {
+	panic("implement me")
 }
 
 func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
