@@ -207,16 +207,27 @@ helm install dapr dapr/dapr --namespace dapr-system --values values.yml --wait
 ```
 
 ## Example of debugging dapr
+Rebuild dapr binaries and docker images:
+```bash
+make release GOOS=linux GOARCH=amd64 DEBUG=1
+export DAPR_TAG=dev
+export DAPR_REGISTRY=<your docker.io id>
+docker login
+make docker-push DEBUG=1
+```
 Take dapr_operator as an example, configure the corresponding `debug.enabled` option in a value file:
 ```yaml
+global:
+   registry: docker.io/<your docker.io id>
+   tag: "dev-linux-amd64"
 dapr_operator:
   debug:
     enabled: true
 ```
 
-Install dapr:
+Step into dapr project, and install dapr:
 ```bash
-helm install dapr dapr/dapr --namespace dapr-system --values values.yml --wait
+helm install dapr charts/dapr --namespace dapr-system --values values.yml --wait
 ```
 
 Find the target dapr-operator pod:
