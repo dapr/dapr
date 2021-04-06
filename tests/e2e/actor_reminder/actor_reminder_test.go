@@ -84,6 +84,10 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
+			DaprCPULimit:   "2.0",
+			DaprCPURequest: "0.1",
+			AppCPULimit:    "2.0",
+			AppCPURequest:  "0.1",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": "testactorreminder",
 			},

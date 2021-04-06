@@ -26,7 +26,8 @@ actorfeatures \
 actorinvocationapp \
 runtime \
 runtime_init \
-middleware
+middleware \
+job-publisher
 
 # PERFORMACE test app list
 PERF_TEST_APPS=actorjava tester service_invocation_http
@@ -81,11 +82,7 @@ ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
 	CGO_ENABLED=0 GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -o $(E2E_TESTAPP_DIR)/$(1)/app$(BINARY_EXT_LOCAL) $(E2E_TESTAPP_DIR)/$(1)/app.go
 	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
 else
-# Builds of E2E apps within Docker works for Windows but are too slow. Disabling them for now.
-# See https://github.com/dapr/dapr/issues/2695
-ifeq ($(TARGET_OS),linux)
 	$(DOCKER) build -f $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE) $(E2E_TESTAPP_DIR)/$(1)/. -t $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
-endif
 endif
 endef
 
@@ -95,15 +92,7 @@ $(foreach ITEM,$(E2E_TEST_APPS),$(eval $(call genTestAppImageBuild,$(ITEM))))
 define genTestAppImagePush
 .PHONY: push-e2e-app-$(1)
 push-e2e-app-$(1): check-e2e-env
-ifeq ($(TARGET_OS),windows)
-ifeq (,$(wildcard $(E2E_TESTAPP_DIR)/$(1)/$(DOCKERFILE)))
-# Builds of E2E apps within Docker works for Windows but are too slow. Disabling them for now.
-# See https://github.com/dapr/dapr/issues/2695
 	$(DOCKER) push $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
-endif
-else
-	$(DOCKER) push $(DAPR_TEST_REGISTRY)/e2e-$(1):$(DAPR_TEST_TAG)
-endif
 endef
 
 # Generate test app image push targets
@@ -281,15 +270,15 @@ else
 endif
 
 setup-minikube-darwin:
-	minikube start --memory=4g --cpus=4 --driver=hyperkit --kubernetes-version=v1.18.9
+	minikube start --memory=4g --cpus=4 --driver=hyperkit --kubernetes-version=v1.18.8
 	minikube addons enable metrics-server
 
 setup-minikube-windows:
-	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.9
+	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.8
 	minikube addons enable metrics-server
 
 setup-minikube-linux:
-	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.9
+	minikube start --memory=4g --cpus=4 --kubernetes-version=v1.18.8
 	minikube addons enable metrics-server
 
 setup-minikube: setup-minikube-$(detected_OS)

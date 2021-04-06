@@ -17,6 +17,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
@@ -139,14 +140,14 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Publish without topic name ending in // - 404", func(t *testing.T) {
+	t.Run("Publish with topic name '/' - 204", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/pubsubname//", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil)
 			// assert
-			assert.Equal(t, 404, resp.StatusCode, "unexpected success publishing with %s", method)
+			assert.Equal(t, 204, resp.StatusCode, "success publishing with %s", method)
 		}
 	})
 
@@ -211,6 +212,33 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
 			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
 		}
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestShutdownEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	m := mock.Mock{}
+	m.On("shutdown", mock.Anything).Return()
+	testAPI := &api{
+		json: jsoniter.ConfigFastest,
+		shutdown: func() {
+			m.MethodCalled("shutdown")
+		},
+	}
+
+	fakeServer.StartServer(testAPI.constructShutdownEndpoints())
+
+	t.Run("Shutdown successfully - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
+		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
+			<-time.After(200 * time.Millisecond)
+		}
+		m.AssertCalled(t, "shutdown")
 	})
 
 	fakeServer.Shutdown()
@@ -1383,41 +1411,43 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	testAPI := &api{
 		actor: nil,
-		components: []components_v1alpha1.Component{
-			{
-				ObjectMeta: meta_v1.ObjectMeta{
-					Name: "MockComponent1Name",
-				},
-				Spec: components_v1alpha1.ComponentSpec{
-					Type:    "mock.component1Type",
-					Version: "v1.0",
-					Metadata: []components_v1alpha1.MetadataItem{
-						{
-							Name: "actorMockComponent1",
-							Value: components_v1alpha1.DynamicValue{
-								JSON: v1.JSON{Raw: []byte("true")},
+		getComponentsFn: func() []components_v1alpha1.Component {
+			return []components_v1alpha1.Component{
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "MockComponent1Name",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "mock.component1Type",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent1",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
 							},
 						},
 					},
 				},
-			},
-			{
-				ObjectMeta: meta_v1.ObjectMeta{
-					Name: "MockComponent2Name",
-				},
-				Spec: components_v1alpha1.ComponentSpec{
-					Type:    "mock.component2Type",
-					Version: "v1.0",
-					Metadata: []components_v1alpha1.MetadataItem{
-						{
-							Name: "actorMockComponent2",
-							Value: components_v1alpha1.DynamicValue{
-								JSON: v1.JSON{Raw: []byte("true")},
+				{
+					ObjectMeta: meta_v1.ObjectMeta{
+						Name: "MockComponent2Name",
+					},
+					Spec: components_v1alpha1.ComponentSpec{
+						Type:    "mock.component2Type",
+						Version: "v1.0",
+						Metadata: []components_v1alpha1.MetadataItem{
+							{
+								Name: "actorMockComponent2",
+								Value: components_v1alpha1.DynamicValue{
+									JSON: v1.JSON{Raw: []byte("true")},
+								},
 							},
 						},
 					},
 				},
-			},
+			}
 		},
 		json: jsoniter.ConfigFastest,
 	}

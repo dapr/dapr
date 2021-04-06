@@ -27,6 +27,8 @@ func setAPIAuthenticationMiddlewareUnary(apiToken, authHeader string) grpc.Unary
 			err := v1.ErrorFromHTTPResponseCode(http.StatusUnauthorized, "authentication error: api token mismatch")
 			return nil, err
 		}
+
+		md.Set(authHeader, "")
 		return handler(ctx, req)
 	}
 }

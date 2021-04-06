@@ -12,6 +12,7 @@ import (
 
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -52,19 +53,14 @@ var (
 	TargetArch = "amd64"
 )
 
-// buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
-func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
+// buildDaprAnnotations creates the Kubernetes Annotations object for dapr test app
+func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	annotationObject := map[string]string{}
-
-	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
-		appDesc.AppPort = DefaultContainerPort
-	}
 
 	if appDesc.DaprEnabled {
 		annotationObject = map[string]string{
 			"dapr.io/enabled":                           "true",
 			"dapr.io/app-id":                            appDesc.AppName,
-			"dapr.io/app-port":                          fmt.Sprintf("%d", appDesc.AppPort),
 			"dapr.io/sidecar-cpu-limit":                 appDesc.DaprCPULimit,
 			"dapr.io/sidecar-cpu-request":               appDesc.DaprCPURequest,
 			"dapr.io/sidecar-memory-limit":              appDesc.DaprMemoryLimit,
@@ -72,6 +68,9 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 			"dapr.io/sidecar-readiness-probe-threshold": "15",
 			"dapr.io/sidecar-liveness-probe-threshold":  "15",
 			"dapr.io/enable-metrics":                    strconv.FormatBool(appDesc.MetricsEnabled),
+		}
+		if !appDesc.IsJob {
+			annotationObject["dapr.io/app-port"] = fmt.Sprintf("%d", appDesc.AppPort)
 		}
 	}
 	if appDesc.AppProtocol != "" {
@@ -83,7 +82,11 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 	if appDesc.Config != "" {
 		annotationObject["dapr.io/config"] = appDesc.Config
 	}
+	return annotationObject
+}
 
+// buildPodTemplate creates the Kubernetes Pod Template object for dapr test app
+func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 	appEnv := []apiv1.EnvVar{}
 	if appDesc.AppEnv != nil {
 		for key, value := range appDesc.AppEnv {
@@ -92,6 +95,61 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 				Value: value,
 			})
 		}
+	}
+
+	return apiv1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				TestAppLabelKey: appDesc.AppName,
+			},
+			Annotations: buildDaprAnnotations(appDesc),
+		},
+		Spec: apiv1.PodSpec{
+			Containers: []apiv1.Container{
+				{
+					Name:            appDesc.AppName,
+					Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
+					ImagePullPolicy: apiv1.PullAlways,
+					Ports: []apiv1.ContainerPort{
+						{
+							Name:          "http",
+							Protocol:      apiv1.ProtocolTCP,
+							ContainerPort: DefaultContainerPort,
+						},
+					},
+					Env: appEnv,
+				},
+			},
+			Affinity: &apiv1.Affinity{
+				NodeAffinity: &apiv1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
+						NodeSelectorTerms: []apiv1.NodeSelectorTerm{
+							{
+								MatchExpressions: []apiv1.NodeSelectorRequirement{
+									{
+										Key:      "kubernetes.io/os",
+										Operator: "In",
+										Values:   []string{TargetOs},
+									},
+									{
+										Key:      "kubernetes.io/arch",
+										Operator: "In",
+										Values:   []string{TargetArch},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// buildDeploymentObject creates the Kubernetes Deployment object for dapr test app
+func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Deployment {
+	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
+		appDesc.AppPort = DefaultContainerPort
 	}
 
 	return &appsv1.Deployment{
@@ -106,55 +164,27 @@ func buildDeploymentObject(namespace string, appDesc AppDescription) *appsv1.Dep
 					TestAppLabelKey: appDesc.AppName,
 				},
 			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						TestAppLabelKey: appDesc.AppName,
-					},
-					Annotations: annotationObject,
-				},
-				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						{
-							Name:            appDesc.AppName,
-							Image:           fmt.Sprintf("%s/%s", appDesc.RegistryName, appDesc.ImageName),
-							ImagePullPolicy: apiv1.PullAlways,
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http",
-									Protocol:      apiv1.ProtocolTCP,
-									ContainerPort: DefaultContainerPort,
-								},
-							},
-							Env: appEnv,
-						},
-					},
-					Affinity: &apiv1.Affinity{
-						NodeAffinity: &apiv1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
-								NodeSelectorTerms: []apiv1.NodeSelectorTerm{
-									{
-										MatchExpressions: []apiv1.NodeSelectorRequirement{
-											{
-												Key:      "kubernetes.io/os",
-												Operator: "In",
-												Values:   []string{TargetOs},
-											},
-											{
-												Key:      "kubernetes.io/arch",
-												Operator: "In",
-												Values:   []string{TargetArch},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			Template: buildPodTemplate(appDesc),
 		},
 	}
+}
+
+// buildJobObject creates the Kubernetes Job object for dapr test app
+func buildJobObject(namespace string, appDesc AppDescription) *batchv1.Job {
+	if appDesc.AppPort == 0 { // If AppPort is negative, assume this has been set explicitly
+		appDesc.AppPort = DefaultContainerPort
+	}
+	job := batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      appDesc.AppName,
+			Namespace: namespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: buildPodTemplate(appDesc),
+		},
+	}
+	job.Spec.Template.Spec.RestartPolicy = apiv1.RestartPolicyOnFailure
+	return &job
 }
 
 // buildServiceObject creates the Kubernetes Service Object for dapr test app

@@ -19,14 +19,14 @@ const (
 	defaultImageRegistry        = "docker.io/dapriotest"
 	defaultImageTag             = "latest"
 	disableTelemetryConfig      = "disable-telemetry"
-	defaultSidecarCPULimit      = "4.0"
-	defaultSidecarMemoryLimit   = "512Mi"
+	defaultSidecarCPULimit      = "1.0"
+	defaultSidecarMemoryLimit   = "256Mi"
 	defaultSidecarCPURequest    = "0.1"
-	defaultSidecarMemoryRequest = "250Mi"
-	defaultAppCPULimit          = "4.0"
-	defaultAppMemoryLimit       = "800Mi"
+	defaultSidecarMemoryRequest = "100Mi"
+	defaultAppCPULimit          = "1.0"
+	defaultAppMemoryLimit       = "300Mi"
 	defaultAppCPURequest        = "0.1"
-	defaultAppMemoryRequest     = "250Mi"
+	defaultAppMemoryRequest     = "200Mi"
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
@@ -104,23 +104,41 @@ func (c *KubeTestPlatform) addApps(apps []kube.AppDescription) error {
 			app.Config = disableTelemetryConfig
 		}
 
-		app.DaprCPULimit = c.sidecarCPULimit()
-		app.DaprCPURequest = c.sidecarCPURequest()
-		app.DaprMemoryLimit = c.sidecarMemoryLimit()
-		app.DaprMemoryRequest = c.sidecarMemoryRequest()
-		app.AppCPULimit = c.appCPULimit()
-		app.AppCPURequest = c.appCPURequest()
-		app.AppMemoryLimit = c.appMemoryLimit()
-		app.AppMemoryRequest = c.appMemoryRequest()
+		if app.DaprCPULimit == "" {
+			app.DaprCPULimit = c.sidecarCPULimit()
+		}
+		if app.DaprCPURequest == "" {
+			app.DaprCPURequest = c.sidecarCPURequest()
+		}
+		if app.DaprMemoryLimit == "" {
+			app.DaprMemoryLimit = c.sidecarMemoryLimit()
+		}
+		if app.DaprMemoryRequest == "" {
+			app.DaprMemoryRequest = c.sidecarMemoryRequest()
+		}
+		if app.AppCPULimit == "" {
+			app.AppCPULimit = c.appCPULimit()
+		}
+		if app.AppCPURequest == "" {
+			app.AppCPURequest = c.appCPURequest()
+		}
+		if app.AppMemoryLimit == "" {
+			app.AppMemoryLimit = c.appMemoryLimit()
+		}
+		if app.AppMemoryRequest == "" {
+			app.AppMemoryRequest = c.appMemoryRequest()
+		}
 
 		log.Printf("Adding app %v", app)
 		c.AppResources.Add(kube.NewAppManager(c.KubeClient, getNamespaceOrDefault(app.Namespace), app))
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
+	log.Printf("Installing apps ...")
 	if err := c.AppResources.setup(); err != nil {
 		return err
 	}
+	log.Printf("Apps are installed.")
 
 	return nil
 }

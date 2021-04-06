@@ -132,7 +132,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	log.Printf("Test publish subscribe success flow\n")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(30 * time.Second)
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	return subscriberExternalURL
 }
@@ -212,7 +212,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
 		log.Printf("Validating no redelivered messages...")
-		time.Sleep(5 * time.Second)
+		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA: []string{},
@@ -222,7 +222,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
-		time.Sleep(5 * time.Second)
+		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	}
 	return subscriberExternalURL
@@ -255,7 +255,7 @@ func validateMessagesReceivedBySubscriber(t *testing.T, publisherExternalURL str
 			len(appResp.ReceivedByTopicB) != len(sentMessages.ReceivedByTopicB) ||
 			len(appResp.ReceivedByTopicC) != len(sentMessages.ReceivedByTopicC) {
 			log.Printf("Differing lengths in received vs. sent messages, retrying.")
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Second)
 		} else {
 			break
 		}

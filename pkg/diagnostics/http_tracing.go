@@ -69,7 +69,7 @@ func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config
 	}
 }
 
-// userDefinedHTTPHeaders returns dapr- prefixed header from incoming metdata.
+// userDefinedHTTPHeaders returns dapr- prefixed header from incoming metadata.
 // Users can add dapr- prefixed headers that they want to see in span attributes.
 func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
 	var m = map[string]string{}

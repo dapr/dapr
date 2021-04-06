@@ -32,7 +32,7 @@ const (
 // Manager is a wrapper around gRPC connection pooling
 type Manager struct {
 	AppClient      *grpc.ClientConn
-	lock           *sync.Mutex
+	lock           *sync.RWMutex
 	connectionPool map[string]*grpc.ClientConn
 	auth           security.Authenticator
 	mode           modes.DaprMode
@@ -41,7 +41,7 @@ type Manager struct {
 // NewGRPCManager returns a new grpc manager
 func NewGRPCManager(mode modes.DaprMode) *Manager {
 	return &Manager{
-		lock:           &sync.Mutex{},
+		lock:           &sync.RWMutex{},
 		connectionPool: map[string]*grpc.ClientConn{},
 		mode:           mode,
 	}
@@ -66,13 +66,17 @@ func (g *Manager) CreateLocalChannel(port, maxConcurrency int, spec config.Traci
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist
 func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTLS, recreateIfExists, sslEnabled bool) (*grpc.ClientConn, error) {
+	g.lock.RLock()
 	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
+		g.lock.RUnlock()
 		return val, nil
 	}
+	g.lock.RUnlock()
 
 	g.lock.Lock()
+	defer g.lock.Unlock()
+	// read the value once again, as a concurrent writer could create it
 	if val, ok := g.connectionPool[address]; ok && !recreateIfExists {
-		g.lock.Unlock()
 		return val, nil
 	}
 
@@ -84,6 +88,7 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 		opts = append(opts, grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
 	}
 
+	transportCredentialsAdded := false
 	if !skipTLS && g.auth != nil {
 		signedCert := g.auth.GetCurrentSignedCert()
 		cert, err := tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
@@ -103,8 +108,7 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 			RootCAs:      signedCert.TrustChain,
 		})
 		opts = append(opts, grpc.WithTransportCredentials(ta))
-	} else {
-		opts = append(opts, grpc.WithInsecure())
+		transportCredentialsAdded = true
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
@@ -116,11 +120,15 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			InsecureSkipVerify: true,
 		})))
+		transportCredentialsAdded = true
+	}
+
+	if !transportCredentialsAdded {
+		opts = append(opts, grpc.WithInsecure())
 	}
 
 	conn, err := grpc.DialContext(ctx, dialPrefix+address, opts...)
 	if err != nil {
-		g.lock.Unlock()
 		return nil, err
 	}
 
@@ -129,7 +137,6 @@ func (g *Manager) GetGRPCConnection(address, id string, namespace string, skipTL
 	}
 
 	g.connectionPool[address] = conn
-	g.lock.Unlock()
 
 	return conn, nil
 }
