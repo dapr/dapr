@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/runtime"
@@ -96,6 +95,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
+	"github.com/dapr/components-contrib/bindings/localstorage"
 	"github.com/dapr/components-contrib/bindings/mqtt"
 	"github.com/dapr/components-contrib/bindings/mysql"
 	"github.com/dapr/components-contrib/bindings/postgres"
@@ -337,6 +337,9 @@ func main() {
 			bindings_loader.NewOutput("kafka", func() bindings.OutputBinding {
 				return kafka.NewKafka(logContrib)
 			}),
+			bindings_loader.NewOutput("localstorage", func() bindings.OutputBinding {
+				return localstorage.NewLocalStorage(logContrib)
+			}),
 			bindings_loader.NewOutput("mqtt", func() bindings.OutputBinding {
 				return mqtt.NewMQTT(logContrib)
 			}),
@@ -434,8 +437,5 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
 	<-stop
-	gracefulShutdownDuration := 5 * time.Second
-	log.Info("dapr shutting down. Waiting 5 seconds to finish outstanding operations")
-	rt.Stop()
-	<-time.After(gracefulShutdownDuration)
+	rt.ShutdownWithWait()
 }
