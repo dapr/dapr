@@ -212,6 +212,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		admissionResponse = toAdmissionResponse(err)
+		log.Errorf("Sidecar injector failed to inject for app '%s'. Error: %s", diagAppID, err)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "patch")
 	} else if len(patchOps) == 0 {
 		admissionResponse = &v1.AdmissionResponse{
@@ -246,20 +247,20 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	log.Infof("ready to write response ...")
 	respBytes, err := json.Marshal(admissionReview)
 	if err != nil {
-		log.Errorf("can't deserialize response: %s", err)
-
 		http.Error(
 			w,
 			err.Error(),
 			http.StatusInternalServerError,
 		)
 
+		log.Errorf("Sidecar injector failed to inject for app '%s'. Can't deserialize response: %s", diagAppID, err)
 		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(respBytes); err != nil {
 		log.Error(err)
 	} else {
+		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
 		monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
 	}
 }
