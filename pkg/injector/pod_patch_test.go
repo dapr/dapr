@@ -176,7 +176,6 @@ func TestGetSideCarContainer(t *testing.T) {
 		assert.EqualValues(t, expectedArgs, container.Args)
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
-
 }
 
 func TestImagePullPolicy(t *testing.T) {
