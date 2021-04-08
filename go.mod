@@ -11,7 +11,7 @@ require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
 	github.com/cenkalti/backoff/v4 v4.1.0
-	github.com/dapr/components-contrib v1.1.0-rc1
+	github.com/dapr/components-contrib v1.0.1-0.20210408212107-b71a8b560ebe
 	github.com/dnaeon/go-vcr v1.1.0 // indirect
 	github.com/fasthttp/router v1.3.8
 	github.com/fatih/structs v1.1.0 // indirect
@@ -60,7 +60,6 @@ require (
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/couchbase/gocbcore.v7 v7.1.18 // indirect
-	gopkg.in/couchbaselabs/gocbconnstr.v1 v1.0.0-00010101000000-000000000000 // indirect
 	gopkg.in/couchbaselabs/gojcbmock.v1 v1.0.4 // indirect
 	gopkg.in/couchbaselabs/jsonx.v1 v1.0.0 // indirect
 	gopkg.in/gorethink/gorethink.v4 v4.1.0 // indirect
@@ -79,7 +78,6 @@ require (
 )
 
 replace (
-	github.com/dapr/components-contrib => github.com/jjcollinge/components-contrib v1.0.0-rc1.0.20210325195722-6c8b0ef77d34
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 	k8s.io/client => github.com/kubernetes-client/go v0.0.0-20190928040339-c757968c4c36
 )
