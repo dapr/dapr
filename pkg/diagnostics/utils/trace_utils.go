@@ -51,7 +51,7 @@ func TraceSampler(samplingRate string) trace.StartOption {
 
 // IsTracingEnabled parses the given rate and returns false if sampling rate is explicitly set 0
 func IsTracingEnabled(rate string) bool {
-	return GetTraceSamplingRate(rate) != 0	
+	return GetTraceSamplingRate(rate) != 0
 }
 
 // SpanFromContext returns the SpanContext stored in a context, or nil if there isn't one.
