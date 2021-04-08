@@ -20,7 +20,7 @@ const (
 	pubsubName     = "messagebus"
 	pubsubTopic    = "pubsub-job-topic-http"
 	message        = "message-from-job"
-	publishRetries = 25
+	publishRetries = 10
 )
 
 func stopSidecar() {
@@ -58,8 +58,10 @@ func main() {
 		err := publishMessagesToPubsub()
 		if err != nil {
 			log.Printf("Unable to publish, retrying.")
-			time.Sleep(2 * time.Second)
+			time.Sleep(10 * time.Second)
 		} else {
+			// Wait for a minute before shutting down to give time for any validation by E2E test code.
+			time.Sleep(1 * time.Minute)
 			stopSidecar()
 			os.Exit(0)
 		}
