@@ -9,9 +9,10 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/valyala/fasthttp"
 	"go.opencensus.io/trace"
+
+	"github.com/dapr/kit/logger"
 )
 
 const (
