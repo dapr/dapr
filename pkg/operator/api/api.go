@@ -11,17 +11,18 @@ import (
 	"fmt"
 	"net"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/logger"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/kit/logger"
 )
 
 const serverPort = 6500

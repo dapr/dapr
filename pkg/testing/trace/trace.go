@@ -3,8 +3,9 @@ package trace
 import (
 	"strconv"
 
-	"github.com/dapr/dapr/pkg/logger"
 	"go.opencensus.io/trace"
+
+	"github.com/dapr/kit/logger"
 )
 
 // NewStringExporter returns a new string exporter instance.
