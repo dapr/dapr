@@ -74,6 +74,9 @@ jobs:
       - name: Run go mod tidy check diff
         if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
         run: make modtidy check-diff
+      - name: Run gen-proto check diff
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux'
+        run: make gen-proto check-proto-diff
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
