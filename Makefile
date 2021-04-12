@@ -294,6 +294,22 @@ check-proto-version: ## Checking the version of proto related tools
 	|| { echo "please use protoc-gen-go v1.25.0 to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
+# Target: check-proto-diff                                                           #
+################################################################################
+.PHONY: check-proto-diff
+check-proto-diff:
+	git diff --exit-code ./pkg/proto/common/v1/common.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/internals/v1/status.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/operator/v1/operator.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/operator/v1/operator_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/appcallback.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/appcallback_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/dapr.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/runtime/v1/dapr_grpc.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/sentry/v1/sentry.pb.go # check no changes
+
+
+################################################################################
 # Target: codegen                                                              #
 ################################################################################
 include tools/codegen.mk
