@@ -1112,9 +1112,13 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	// TODO: add checking for normal client or admin client
 	req.AppID = a.id
 
-	// TODO：implement SubscribeUpdate later
+	handler := configurationEventHandler{
+		api:       a,
+		storeName: in.StoreName,
+		appId:     req.AppID,
+	}
 
-	getResponse, err := store.Get(ctx, &req, nil)
+	getResponse, err := store.Get(ctx, &req, handler.updateEventHandler)
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, in.Keys, in.StoreName, err.Error())
 		apiServerLogger.Debug(err)
@@ -1123,51 +1127,26 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 
 	response := &runtimev1pb.GetConfigurationResponse{}
 	if getResponse != nil && len(getResponse.Items) > 0 {
-		response.Items = a.toGRPCItems(getResponse.Items)
+		response.Items = invokev1.ToConfigurationGRPCItems(getResponse.Items)
 	}
 	return response, nil
 }
 
-func (a *api) toGRPCItems(items []*configuration.Item) []*commonv1pb.ConfigurationItem {
-	result := make([]*commonv1pb.ConfigurationItem, 0, len(items))
-
-	for _, item := range items {
-		result = append(result, a.toGRPCItem(item))
-	}
-
-	return result
+type configurationEventHandler struct {
+	api       *api
+	storeName string
+	appId     string
 }
 
-func (a *api) toGRPCItem(item *configuration.Item) *commonv1pb.ConfigurationItem {
-	return &commonv1pb.ConfigurationItem{
-		Key: item.Key,
-		Content: item.Content,
-		Group: item.Group,
-		Label: item.Label,
-		Tags: item.Tags,
-		Metadata: item.Metadata,
+func (h *configurationEventHandler) updateEventHandler(e *configuration.UpdateEvent) error {
+	if h.api.appChannel == nil {
+		return status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
-}
-
-func (a *api) fromGRPCItems(items []*commonv1pb.ConfigurationItem)  []*configuration.Item  {
-	result := make([]*configuration.Item, 0, len(items))
-
-	for _, item := range items {
-		result = append(result, a.fromGRPCItem(item))
+	if len(e.Items) == 0 {
+		return nil
 	}
 
-	return result
-}
-
-func (a *api) fromGRPCItem(item *commonv1pb.ConfigurationItem ) *configuration.Item {
-	return &configuration.Item{
-		Key: item.Key,
-		Content: item.Content,
-		Group: item.Group,
-		Label: item.Label,
-		Tags: item.Tags,
-		Metadata: item.Metadata,
-	}
+	return h.api.appChannel.OnConfigurationEvent(context.Background(), h.storeName, h.appId, e.Items)
 }
 
 func (a *api) SaveConfiguration(ctx context.Context, in *runtimev1pb.SaveConfigurationRequest) (*emptypb.Empty, error) {
@@ -1178,8 +1157,8 @@ func (a *api) SaveConfiguration(ctx context.Context, in *runtimev1pb.SaveConfigu
 	}
 
 	req := &configuration.SaveRequest{
-		AppID: in.AppId,
-		Items: a.fromGRPCItems(in.Items),
+		AppID:    in.AppId,
+		Items:    invokev1.FromConfigurationGRPCItems(in.Items),
 		Metadata: in.Metadata,
 	}
 
@@ -1200,10 +1179,10 @@ func (a *api) DeleteConfiguration(ctx context.Context, in *runtimev1pb.DeleteCon
 	}
 
 	req := &configuration.DeleteRequest{
-		AppID: in.AppId,
-		Group: in.Group,
-		Label: in.Label,
-		Keys: in.Keys,
+		AppID:    in.AppId,
+		Group:    in.Group,
+		Label:    in.Label,
+		Keys:     in.Keys,
 		Metadata: in.Metadata,
 	}
 

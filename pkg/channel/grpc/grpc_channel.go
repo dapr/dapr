@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -103,4 +104,22 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	rsp.WithHeaders(header).WithTrailers(trailer)
 
 	return rsp.WithMessage(resp), nil
+}
+
+// OnConfigurationEvent sends configuration update events to app.
+func (g *Channel) OnConfigurationEvent(ctx context.Context, storeName string, appID string, items []*configuration.Item) error {
+	grpcItems := invokev1.ToConfigurationGRPCItems(items)
+	var request =  &runtimev1pb.ConfigurationEventRequest {
+		StoreName: storeName,
+		AppId: appID,
+		Items: grpcItems,
+	}
+
+	clientV1 := runtimev1pb.NewAppCallbackClient(g.client)
+	_, err := clientV1.OnConfigurationEvent(context.Background(), request)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -185,4 +186,10 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, resp *
 	rsp.WithFastHTTPHeaders(&resp.Header).WithRawData(body, contentType)
 
 	return rsp
+}
+
+// OnConfigurationEvent sends configuration update events to app.
+func (g *Channel) OnConfigurationEvent(ctx context.Context, storeName string, appID string, items []*configuration.Item) error {
+	// TODO: implement it later
+	return nil
 }
