@@ -62,15 +62,10 @@ func (m *promMetricsExporter) Init() error {
 		return nil
 	}
 
-	// Add default health metrics for process
-	registry := prom.NewRegistry()
-	registry.MustRegister(prom.NewProcessCollector(prom.ProcessCollectorOpts{}))
-	registry.MustRegister(prom.NewGoCollector())
-
 	var err error
 	m.ocExporter, err = ocprom.NewExporter(ocprom.Options{
 		Namespace: m.namespace,
-		Registry:  registry,
+		Registry:  prom.DefaultRegisterer.(*prom.Registry),
 	})
 
 	if err != nil {
