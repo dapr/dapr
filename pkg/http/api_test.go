@@ -17,6 +17,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/agrea/ptr"
 	routing "github.com/fasthttp/router"
@@ -211,6 +212,33 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
 			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"])
 		}
+	})
+
+	fakeServer.Shutdown()
+}
+
+func TestShutdownEndpoints(t *testing.T) {
+	fakeServer := newFakeHTTPServer()
+
+	m := mock.Mock{}
+	m.On("shutdown", mock.Anything).Return()
+	testAPI := &api{
+		json: jsoniter.ConfigFastest,
+		shutdown: func() {
+			m.MethodCalled("shutdown")
+		},
+	}
+
+	fakeServer.StartServer(testAPI.constructShutdownEndpoints())
+
+	t.Run("Shutdown successfully - 204", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+		assert.Equal(t, 204, resp.StatusCode, "success shutdown")
+		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
+			<-time.After(200 * time.Millisecond)
+		}
+		m.AssertCalled(t, "shutdown")
 	})
 
 	fakeServer.Shutdown()

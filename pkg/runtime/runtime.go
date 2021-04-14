@@ -413,7 +413,7 @@ func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 }
 
 func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
-	var publishFunc func(msg *pubsub.NewMessage) error
+	var publishFunc pubsub.Handler
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
 		publishFunc = a.publishMessageHTTP
@@ -440,13 +440,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic:    topic,
 			Metadata: route.metadata,
-		}, func(msg *pubsub.NewMessage) error {
+		}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 			if msg.Metadata == nil {
 				msg.Metadata = make(map[string]string, 1)
 			}
 
 			msg.Metadata[pubsubName] = name
-			return publishFunc(msg)
+			return publishFunc(ctx, msg)
 		}); err != nil {
 			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
 		}
@@ -485,7 +485,6 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 				log.Errorf("error from operator stream: %s", err)
 				return
 			}
-			log.Debug("received component update")
 
 			var component components_v1alpha1.Component
 			err = json.Unmarshal(c.GetComponent(), &component)
@@ -493,6 +492,14 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 				log.Warnf("error deserializing component: %s", err)
 				continue
 			}
+
+			authorized := a.isComponentAuthorized(component)
+			if !authorized {
+				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+				continue
+			}
+
+			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
 			a.onComponentUpdated(component)
 		}
 	}()
@@ -586,7 +593,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(context.Background(), spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
 
@@ -706,7 +713,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.stateStores, a.secretStores,
-		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
@@ -740,7 +747,7 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents)
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
@@ -1095,7 +1102,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMessage) error {
 	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
@@ -1108,7 +1115,6 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		return nil
 	}
 
-	ctx := context.Background()
 	var span *trace.Span
 
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
@@ -1120,7 +1126,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -1178,7 +1184,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
 }
 
-func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMessage) error {
 	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
@@ -1219,7 +1225,6 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		}
 	}
 
-	ctx := context.Background()
 	var span *trace.Span
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
@@ -1227,7 +1232,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 
 		// no ops if trace is off
-		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
 
@@ -1292,25 +1297,28 @@ func (a *DaprRuntime) getAuthorizedComponents(components []components_v1alpha1.C
 	authorized := []components_v1alpha1.Component{}
 
 	for _, c := range components {
-		if a.namespace == "" || (a.namespace != "" && c.ObjectMeta.Namespace == a.namespace) {
-			// scopes are defined, make sure this runtime ID is authorized
-			if len(c.Scopes) > 0 {
-				found := false
-				for _, s := range c.Scopes {
-					if s == a.runtimeConfig.ID {
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					continue
-				}
-			}
+		if a.isComponentAuthorized(c) {
 			authorized = append(authorized, c)
 		}
 	}
 	return authorized
+}
+
+func (a *DaprRuntime) isComponentAuthorized(component components_v1alpha1.Component) bool {
+	if a.namespace == "" || (a.namespace != "" && component.ObjectMeta.Namespace == a.namespace) {
+		if len(component.Scopes) == 0 {
+			return true
+		}
+
+		// scopes are defined, make sure this runtime ID is authorized
+		for _, s := range component.Scopes {
+			if s == a.runtimeConfig.ID {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
@@ -1328,6 +1336,9 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	comps, err := loader.LoadComponents()
 	if err != nil {
 		return err
+	}
+	for _, comp := range comps {
+		log.Debugf("found component. name: %s, type: %s/%s", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
 	}
 
 	authorizedComps := a.getAuthorizedComponents(comps)
@@ -1479,6 +1490,15 @@ func (a *DaprRuntime) Stop() {
 	if a.actor != nil {
 		a.actor.Stop()
 	}
+}
+
+// ShutdownWithWait will gracefully stop runtime and wait outstanding operations
+func (a *DaprRuntime) ShutdownWithWait() {
+	gracefulShutdownDuration := 5 * time.Second
+	log.Info("dapr shutting down. Waiting 5 seconds to finish outstanding operations")
+	a.Stop()
+	<-time.After(gracefulShutdownDuration)
+	os.Exit(0)
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {

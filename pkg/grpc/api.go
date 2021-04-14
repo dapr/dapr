@@ -77,6 +77,8 @@ type API interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error)
+	// Shutdown the sidecar
+	Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error)
 }
 
 type api struct {
@@ -95,6 +97,7 @@ type api struct {
 	appProtocol              string
 	extendedMetadata         sync.Map
 	components               []components_v1alpha.Component
+	shutdown                 func()
 }
 
 // NewAPI returns a new gRPC API
@@ -110,7 +113,8 @@ func NewAPI(
 	tracingSpec config.TracingSpec,
 	accessControlList *config.AccessControlList,
 	appProtocol string,
-	getComponentsFn func() []components_v1alpha.Component) API {
+	getComponentsFn func() []components_v1alpha.Component,
+	shutdown func()) API {
 	transactionalStateStores := map[string]state.TransactionalStore{}
 	for key, store := range stateStores {
 		if state.FeatureTransactional.IsPresent(store.Features()) {
@@ -132,6 +136,7 @@ func NewAPI(
 		tracingSpec:              tracingSpec,
 		accessControlList:        accessControlList,
 		appProtocol:              appProtocol,
+		shutdown:                 shutdown,
 	}
 }
 
@@ -1072,7 +1077,7 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 		temp[key.(string)] = value.(string)
 		return true
 	})
-	registeredComponents := []*runtimev1pb.RegisteredComponents{}
+	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(a.components))
 
 	for _, comp := range a.components {
 		registeredComp := &runtimev1pb.RegisteredComponents{
@@ -1092,6 +1097,15 @@ func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.
 // Sets value in extended metadata of the sidecar
 func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	a.extendedMetadata.Store(in.Key, in.Value)
+	return &emptypb.Empty{}, nil
+}
+
+// Shutdown the sidecar
+func (a *api) Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
+	go func() {
+		<-ctx.Done()
+		a.shutdown()
+	}()
 	return &emptypb.Empty{}, nil
 }
 

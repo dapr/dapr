@@ -75,10 +75,10 @@ The Helm chart has the follow configuration options that can be supplied:
 ### Global options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `global.registry`                         | Docker image registry                                       | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                    | `0.11.0`            |
+| `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
+| `global.tag`                              | Docker image version tag                                                | `1.1.0-rc1`             |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
-| `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`                |
+| `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
 | `global.imagePullSecret`                  | Control plane service image pull secret for docker registry             | `""`                    |
 | `global.ha.enabled`                       | Highly Availability mode enabled for control plane, except for placement service | `false`             |
 | `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
@@ -144,7 +144,7 @@ The Helm chart has the follow configuration options that can be supplied:
 ### Dapr Sidecar Injector options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                                | `Always`                     |
+| `dapr_sidecar_injector.sidecarImagePullPolicy`      | Dapr sidecar image pull policy                                | `IfNotPresent`                     |
 | `dapr_sidecar_injector.replicaCount`      | Number of replicas                                                      | `1`                     |
 | `dapr_sidecar_injector.logLevel`          | Log level                                                               | `info`                  |
 | `dapr_sidecar_injector.image.name`        | Dapr runtime sidecar image name injecting to application (`global.registry/dapr_sidecar_injector.image.name`) | `daprd`|

@@ -185,7 +185,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	if subscriberResponse == "empty-json" {
 		// validate that there is no redelivery of messages
 		log.Printf("Validating no redelivered messages...")
-		time.Sleep(5 * time.Second)
+		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, receivedMessagesResponse{
 			// empty string slices
 			ReceivedByTopicA: []string{},
@@ -195,7 +195,7 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	} else {
 		// validate redelivery of messages
 		log.Printf("Validating redelivered messages...")
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 		validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
 	}
 
@@ -281,20 +281,24 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        publisherAppName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-pubsub-publisher",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:          publisherAppName,
+			DaprEnabled:      true,
+			ImageName:        "e2e-pubsub-publisher",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 		{
-			AppName:        subscriberAppName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-pubsub-subscriber",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:          subscriberAppName,
+			DaprEnabled:      true,
+			ImageName:        "e2e-pubsub-subscriber",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			AppMemoryLimit:   "200Mi",
+			AppMemoryRequest: "100Mi",
 		},
 	}
 

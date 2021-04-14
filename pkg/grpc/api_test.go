@@ -1276,6 +1276,34 @@ func TestPublishTopic(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
+func TestShutdownEndpoints(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	m := mock.Mock{}
+	m.On("shutdown", mock.Anything).Return()
+	srv := &api{
+		shutdown: func() {
+			m.MethodCalled("shutdown")
+		},
+	}
+	server := startTestServerAPI(port, srv)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	t.Run("Shutdown successfully - 204", func(t *testing.T) {
+		_, err := client.Shutdown(context.Background(), &emptypb.Empty{})
+		assert.NoError(t, err, "Expected no error")
+		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
+			<-time.After(200 * time.Millisecond)
+		}
+		m.AssertCalled(t, "shutdown")
+	})
+}
+
 func TestInvokeBinding(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	srv := &api{
