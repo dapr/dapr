@@ -78,61 +78,16 @@ func newGRPCMetrics() *grpcMetrics {
 func (g *grpcMetrics) Init(appID string) error {
 	g.appID = appID
 	g.enabled = true
-
-	views := []*view.View{
-		{
-			Name:        "grpc.io/server/received_bytes_per_rpc",
-			Description: "Distribution of received bytes per RPC, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyServerMethod},
-			Measure:     g.serverReceivedBytes,
-			Aggregation: defaultSizeDistribution,
-		},
-		{
-			Name:        "grpc.io/server/sent_bytes_per_rpc",
-			Description: "Distribution of total sent bytes per RPC, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyServerMethod},
-			Measure:     g.serverSentBytes,
-			Aggregation: defaultSizeDistribution,
-		},
-		{
-			Name:        "grpc.io/server/server_latency",
-			Description: "Distribution of server latency in milliseconds, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyServerMethod},
-			Measure:     g.serverLatency,
-			Aggregation: defaultLatencyDistribution,
-		},
-		{
-			Name:        "grpc.io/server/completed_rpcs",
-			Description: "Count of RPCs by method and status.",
-			TagKeys:     []tag.Key{appIDKey, KeyServerMethod, KeyServerStatus},
-			Measure:     g.serverLatency,
-			Aggregation: view.Count(),
-		},
-		{
-			Name:        "grpc.io/client/sent_bytes_per_rpc",
-			Description: "Distribution of bytes sent per RPC, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyClientMethod},
-			Measure:     g.clientSentBytes,
-			Aggregation: view.Count(),
-		},
-
-		{
-			Name:        "grpc.io/client/received_bytes_per_rpc",
-			Measure:     g.clientReceivedBytes,
-			Aggregation: defaultSizeDistribution,
-			Description: "Distribution of bytes received per RPC, by method.",
-			TagKeys:     []tag.Key{appIDKey, KeyClientMethod},
-		},
-		{
-			Name:        "grpc.io/client/completed_rpcs",
-			Measure:     g.clientRoundtripLatency,
-			Aggregation: defaultSizeDistribution,
-			Description: "Count of RPCs by method and status.",
-			TagKeys:     []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus},
-		},
-	}
-
-	return view.Register(views...)
+	tags := []tag.Key{appIDKey, KeyClientMethod}
+	return view.Register(
+		diag_utils.NewMeasureView(g.serverReceivedBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.serverSentBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.serverLatency, tags, defaultLatencyDistribution),
+		diag_utils.NewMeasureView(g.serverLatency, append(tags, KeyServerStatus), view.Count()),
+		diag_utils.NewMeasureView(g.clientSentBytes, tags, view.Count()),
+		diag_utils.NewMeasureView(g.clientReceivedBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.clientRoundtripLatency, append(tags, KeyClientStatus), defaultSizeDistribution),
+	)
 }
 
 func (g *grpcMetrics) IsEnabled() bool {
