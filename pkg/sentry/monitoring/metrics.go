@@ -39,6 +39,7 @@ var (
 
 	// Metrics Tags
 	failedReasonKey = tag.MustNewKey("reason")
+	noKeys          = []tag.Key{}
 )
 
 // CertSignRequestRecieved counts when CSR received.
@@ -76,13 +77,12 @@ func IssuerCertChanged() {
 
 // InitMetrics initializes metrics
 func InitMetrics() error {
-	nilKey := []tag.Key{}
 	return view.Register(
-		diag_utils.NewMeasureView(csrReceivedTotal, nilKey, view.Count()),
-		diag_utils.NewMeasureView(certSignSuccessTotal, nilKey, view.Count()),
+		diag_utils.NewMeasureView(csrReceivedTotal, noKeys, view.Count()),
+		diag_utils.NewMeasureView(certSignSuccessTotal, noKeys, view.Count()),
 		diag_utils.NewMeasureView(certSignFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
 		diag_utils.NewMeasureView(serverTLSCertIssueFailedTotal, []tag.Key{failedReasonKey}, view.Count()),
-		diag_utils.NewMeasureView(issuerCertChangedTotal, nilKey, view.Count()),
-		diag_utils.NewMeasureView(issuerCertExpiryTimestamp, nilKey, view.LastValue()),
+		diag_utils.NewMeasureView(issuerCertChangedTotal, noKeys, view.Count()),
+		diag_utils.NewMeasureView(issuerCertExpiryTimestamp, noKeys, view.LastValue()),
 	)
 }
