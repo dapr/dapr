@@ -87,16 +87,16 @@ func newGRPCMetrics() *grpcMetrics {
 func (g *grpcMetrics) Init(appID string) error {
 	g.appID = appID
 	g.enabled = true
-	tags := []tag.Key{appIDKey, KeyClientMethod}
+	
 	return view.Register(
-		diag_utils.NewMeasureView(g.serverReceivedBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.serverSentBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.serverLatency, tags, defaultLatencyDistribution),
-		diag_utils.NewMeasureView(g.serverCompletedRpcs, append(tags, KeyServerStatus), view.Count()),
-		diag_utils.NewMeasureView(g.clientSentBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.clientReceivedBytes, tags, defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.clientRoundtripLatency, append(tags, KeyClientStatus), defaultSizeDistribution),
-		diag_utils.NewMeasureView(g.clientCompletedRpcs, append(tags, KeyClientStatus), view.Count()),
+		diag_utils.NewMeasureView(g.serverReceivedBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.serverSentBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.serverLatency, []tag.Key{appIDKey, KeyServerMethod}, defaultLatencyDistribution),
+		diag_utils.NewMeasureView(g.serverCompletedRpcs, []tag.Key{appIDKey, KeyServerMethod, KeyServerStatus}, view.Count()),
+		diag_utils.NewMeasureView(g.clientSentBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.clientReceivedBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.clientRoundtripLatency, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(g.clientCompletedRpcs, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, view.Count()),
 	)
 }
 
