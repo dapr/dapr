@@ -87,7 +87,7 @@ func newGRPCMetrics() *grpcMetrics {
 func (g *grpcMetrics) Init(appID string) error {
 	g.appID = appID
 	g.enabled = true
-	
+
 	return view.Register(
 		diag_utils.NewMeasureView(g.serverReceivedBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
 		diag_utils.NewMeasureView(g.serverSentBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),
