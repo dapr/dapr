@@ -60,7 +60,7 @@ func newGRPCMetrics() *grpcMetrics {
 			"Time between first byte of request received to last byte of response sent, or terminal error.",
 			stats.UnitMilliseconds),
 		serverCompletedRpcs: stats.Int64(
-			"grpc.io/client/completed_rpcs",
+			"grpc.io/server/completed_rpcs",
 			"Distribution of bytes sent per RPC, by method.",
 			stats.UnitDimensionless),
 
