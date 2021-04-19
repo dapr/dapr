@@ -10,12 +10,13 @@ import (
 	"encoding/json"
 	"time"
 
-	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	config "github.com/dapr/dapr/pkg/config/modes"
-	"github.com/dapr/dapr/pkg/logger"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	components_v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	config "github.com/dapr/dapr/pkg/config/modes"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.components")
