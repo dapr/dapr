@@ -124,7 +124,7 @@ func (f *fakeStateStore) Multi(request *state.TransactionalStateRequest) error {
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "")
+	config := NewConfig("", TestAppID, []string{""}, nil, 0, "", "", "", false, "", config.ReentrancyConfig{})
 	a := NewActors(store, appChannel, nil, config, nil, spec, nil)
 
 	return a.(*actorsRuntime)
@@ -964,7 +964,7 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
-	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default")
+	c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default", config.ReentrancyConfig{})
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
 	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
@@ -975,6 +975,33 @@ func TestConfig(t *testing.T) {
 	assert.Equal(t, "3s", c.DrainOngoingCallTimeout.String())
 	assert.Equal(t, true, c.DrainRebalancedActors)
 	assert.Equal(t, "default", c.Namespace)
+}
+
+func TestReentrancyConfig(t *testing.T) {
+	t.Run("Test empty reentrancy values", func(t *testing.T) {
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
+			config.ReentrancyConfig{})
+		assert.False(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
+	})
+
+	t.Run("Test minimum reentrancy values", func(t *testing.T) {
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
+			config.ReentrancyConfig{Enabled: true})
+		assert.True(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
+	})
+
+	t.Run("Test full reentrancy values", func(t *testing.T) {
+		reentrancyLimit := 64
+		c := NewConfig("localhost:5050", "app1", []string{"placement:5050"}, []string{"1"}, 3500, "1s", "2s", "3s", true, "default",
+			config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit})
+		assert.True(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 64, *c.Reentrancy.MaxStackDepth)
+	})
 }
 
 func TestHostValidation(t *testing.T) {

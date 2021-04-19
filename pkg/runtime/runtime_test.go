@@ -2590,6 +2590,88 @@ func TestInitBindings(t *testing.T) {
 	})
 }
 
+func TestActorReentrancyConfig(t *testing.T) {
+	fullConfig := `{
+		"entities":["actorType1", "actorType2"],
+		"actorIdleTimeout": "1h",
+		"actorScanInterval": "30s",
+		"drainOngoingCallTimeout": "30s",
+		"drainRebalancedActors": true,
+		"reentrancy": {
+		  "enabled": true,
+		  "maxStackDepth": 64
+		}
+	  }`
+	limit := 64
+
+	minimumConfig := `{
+		"entities":["actorType1", "actorType2"],
+		"actorIdleTimeout": "1h",
+		"actorScanInterval": "30s",
+		"drainOngoingCallTimeout": "30s",
+		"drainRebalancedActors": true,
+		"reentrancy": {
+		  "enabled": true
+		}
+	  }`
+
+	emptyConfig := `{
+		"entities":["actorType1", "actorType2"],
+		"actorIdleTimeout": "1h",
+		"actorScanInterval": "30s",
+		"drainOngoingCallTimeout": "30s",
+		"drainRebalancedActors": true
+	  }`
+
+	testcases := []struct {
+		Name               string
+		Config             []byte
+		ExpectedReentrancy bool
+		ExpectedLimit      *int
+	}{
+		{
+			Name:               "Test full configuration",
+			Config:             []byte(fullConfig),
+			ExpectedReentrancy: true,
+			ExpectedLimit:      &limit,
+		},
+		{
+			Name:               "Test minimum configuration",
+			Config:             []byte(minimumConfig),
+			ExpectedReentrancy: true,
+			ExpectedLimit:      nil,
+		},
+		{
+			Name:               "Test minimum configuration",
+			Config:             []byte(emptyConfig),
+			ExpectedReentrancy: false,
+			ExpectedLimit:      nil,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.Name, func(t *testing.T) {
+			r := NewDaprRuntime(&Config{Mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{})
+
+			mockAppChannel := new(channelt.MockAppChannel)
+			r.appChannel = mockAppChannel
+			r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+
+			configResp := config.ApplicationConfig{}
+			json.Unmarshal(tc.Config, &configResp)
+
+			mockAppChannel.On("GetAppConfig").Return(&configResp, nil)
+
+			r.loadAppConfiguration()
+
+			assert.NotNil(t, r.appConfig)
+
+			assert.Equal(t, tc.ExpectedReentrancy, r.appConfig.Reentrancy.Enabled)
+			assert.Equal(t, tc.ExpectedLimit, r.appConfig.Reentrancy.MaxStackDepth)
+		})
+	}
+}
+
 type mockPubSub struct {
 	pubsub.PubSub
 	closeErr error
