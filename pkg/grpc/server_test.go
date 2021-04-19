@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/kit/logger"
 )
 
 func TestCertRenewal(t *testing.T) {
