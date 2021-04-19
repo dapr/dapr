@@ -129,7 +129,7 @@ func NewActors(
 		appHealthy:          true,
 		certChain:           certChain,
 		tracingSpec:         tracingSpec,
-		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy),
+		reentrancyEnabled:   configuration.IsFeatureEnabled(features, configuration.ActorRentrancy) && config.Reentrancy.Enabled,
 	}
 }
 
