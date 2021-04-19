@@ -9,6 +9,7 @@ package testing
 
 import (
 	"github.com/dapr/components-contrib/pubsub"
+	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 // MockPubSubAdapter is mock for PubSubAdapter
@@ -20,8 +21,14 @@ type MockPubSubAdapter struct {
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
-func (a *MockPubSubAdapter) Publish(req *pubsub.PublishRequest) error {
-	return a.PublishFn(req)
+func (a *MockPubSubAdapter) Publish(req *runtime_pubsub.PublishRequest) error {
+	requestToPubSub := pubsub.PublishRequest{
+		PubsubName: req.PubsubName,
+		Topic:      req.Topic,
+		Data:       req.Data,
+		Metadata:   req.Metadata,
+	}
+	return a.PublishFn(&requestToPubSub)
 }
 
 // GetPubSub is an adapter method to fetch a pubsub

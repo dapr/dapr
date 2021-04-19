@@ -215,7 +215,134 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("Publish with valid retry settings - 203", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil, []string{"retryStrategy", "linear"}, []string{"retryMaxCount", "3"})
+			// assert
+			assert.Equal(t, 204, resp.StatusCode, "failed to publish with %s", method)
+			assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		}
+	})
+
+	t.Run("Publish with invalid retry settings - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil, []string{"retryStrategy", "linear"}, []string{"retryMaxCount", "3A"})
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with invalid retry settings")
+			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "failed deserializing HTTP body: retry max count value provided is invalid", resp.ErrorBody["message"])
+		}
+	})
+
 	fakeServer.Shutdown()
+}
+
+func TestGetRetrySettingsFromRequest(t *testing.T) {
+	testAPI := &api{}
+	type retrySettings struct {
+		retryStrategy                  string
+		retryMaxCount                  string
+		retryIntervalInSeconds         string
+		expectedRetryStrategy          string
+		expectedRetryMaxCount          int
+		expectedRetryIntervalInSeconds int
+		expectedErrorMessage           string
+	}
+
+	t.Run("test request with valid retry settings", func(t *testing.T) {
+		validRetrySettings := []retrySettings{
+			{},
+			{
+				retryStrategy:         "linEar",
+				retryMaxCount:         "1",
+				expectedRetryStrategy: "linear",
+				expectedRetryMaxCount: 1,
+			},
+			{
+				retryStrategy:                  "off",
+				retryIntervalInSeconds:         "1",
+				expectedRetryStrategy:          "off",
+				expectedRetryIntervalInSeconds: 1,
+			},
+			{
+				retryStrategy:                  "expoNential",
+				retryMaxCount:                  "1",
+				retryIntervalInSeconds:         "1",
+				expectedRetryStrategy:          "exponential",
+				expectedRetryMaxCount:          1,
+				expectedRetryIntervalInSeconds: 1,
+			},
+		}
+
+		for _, validRetrySetting := range validRetrySettings {
+
+			reqCtx := &fasthttp.RequestCtx{}
+
+			// act
+			if validRetrySetting.retryStrategy != "" {
+				reqCtx.Request.Header.Set("retryStrategy", validRetrySetting.retryStrategy)
+			}
+			if validRetrySetting.retryMaxCount != "" {
+				reqCtx.Request.Header.Set("retryMaxCount", validRetrySetting.retryMaxCount)
+			}
+			if validRetrySetting.retryIntervalInSeconds != "" {
+				reqCtx.Request.Header.Set("retryIntervalInSeconds", validRetrySetting.retryIntervalInSeconds)
+			}
+
+			retryStrategy, retryMaxCount, retryIntervalInSeconds, err := testAPI.getRetrySettingsFromRequest(reqCtx)
+
+			// assert
+			assert.NoError(t, err, "no error expected")
+			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retryStrategy)
+			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retryMaxCount)
+			assert.EqualValues(t, validRetrySetting.expectedRetryIntervalInSeconds, retryIntervalInSeconds)
+		}
+
+	})
+
+	t.Run("test request with invalid retry settings", func(t *testing.T) {
+		invalidRetrySettings := []retrySettings{
+			{
+				retryStrategy:          "linEar",
+				retryMaxCount:          "1A",
+				retryIntervalInSeconds: "1",
+				expectedErrorMessage:   "retry max count value provided is invalid",
+			},
+			{
+				retryStrategy:          "linEar",
+				retryMaxCount:          "1",
+				retryIntervalInSeconds: "1A",
+				expectedErrorMessage:   "retry interval value provided is invalid",
+			},
+		}
+		for _, invalidRetrySetting := range invalidRetrySettings {
+
+			reqCtx := &fasthttp.RequestCtx{}
+
+			// act
+			if invalidRetrySetting.retryStrategy != "" {
+				reqCtx.Request.Header.Set("retryStrategy", invalidRetrySetting.retryStrategy)
+			}
+			if invalidRetrySetting.retryMaxCount != "" {
+				reqCtx.Request.Header.Set("retryMaxCount", invalidRetrySetting.retryMaxCount)
+			}
+			if invalidRetrySetting.retryIntervalInSeconds != "" {
+				reqCtx.Request.Header.Set("retryIntervalInSeconds", invalidRetrySetting.retryIntervalInSeconds)
+			}
+
+			_, _, _, err := testAPI.getRetrySettingsFromRequest(reqCtx)
+
+			// assert
+			assert.Error(t, err, "error expected")
+			assert.Equal(t, invalidRetrySetting.expectedErrorMessage, err.Error(), "expected error string to match")
+		}
+	})
 }
 
 func TestShutdownEndpoints(t *testing.T) {
@@ -2093,7 +2220,7 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 	return response
 }
 
-func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
+func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[string]string, headers ...[]string) fakeHTTPResponse {
 	url := fmt.Sprintf("http://localhost/%s", path)
 	if params != nil {
 		url += "?"
@@ -2104,9 +2231,11 @@ func (f *fakeHTTPServer) DoRequest(method, path string, body []byte, params map[
 	}
 	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
-	if len(headers) == 1 {
-		r.Header.Set("If-Match", headers[0])
+
+	for _, header := range headers {
+		r.Header.Set(header[0], header[1])
 	}
+
 	res, err := f.client.Do(r)
 	if err != nil {
 		panic(fmt.Errorf("failed to request: %v", err))
@@ -2306,7 +2435,8 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Delete state - Matching ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, etag)
+
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, []string{"If-Match", etag})
 		// assert
 		assert.Equal(t, 204, resp.StatusCode, "updating existing key with matching etag should succeed")
 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
@@ -2315,7 +2445,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	t.Run("Delete state - Bad ETag", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/good-key", storeName)
 		// act
-		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, "BAD ETAG")
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil, []string{"If-Match", "BAD ETAG"})
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "updating existing key with wrong etag should fail")
 	})

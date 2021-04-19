@@ -1258,6 +1258,14 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	requestRetryStrategy, requestRetryMaxCount, requestRetryInternalInSeconds, requestRetrySettingsError := a.getRetrySettingsFromRequest(reqCtx)
+	if requestRetrySettingsError != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, requestRetrySettingsError))
+		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
 	// Extract trace context from context.
 	span := diag_utils.SpanFromContext(reqCtx)
 	// Populate W3C traceparent to cloudevent envelope
@@ -1295,11 +1303,14 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	req := pubsub.PublishRequest{
-		PubsubName: pubsubName,
-		Topic:      topic,
-		Data:       data,
-		Metadata:   metadata,
+	req := runtime_pubsub.PublishRequest{
+		PubsubName:             pubsubName,
+		Topic:                  topic,
+		Data:                   data,
+		Metadata:               metadata,
+		RetryStrategy:          requestRetryStrategy,
+		RetryMaxCount:          requestRetryMaxCount,
+		RetryIntervalInSeconds: requestRetryInternalInSeconds,
 	}
 
 	err := a.pubsubAdapter.Publish(&req)
@@ -1325,7 +1336,33 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-// GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.
+func (a *api) getRetrySettingsFromRequest(reqCtx *fasthttp.RequestCtx) (string, int, int, error) {
+	var retryStrategy string
+	var retryMaxCount, retryIntervalInSeconds int
+	var retrySettingsError, err error
+	retryStrategy = strings.ToLower(string(reqCtx.Request.Header.Peek("retryStrategy")))
+	retryMaxCountString := string(reqCtx.Request.Header.Peek("retryMaxCount"))
+	if retryMaxCountString != "" {
+		retryMaxCount, err = strconv.Atoi(retryMaxCountString)
+		if err != nil {
+			retrySettingsError = errors.Errorf("retry max count value provided is invalid")
+		}
+	}
+	if retrySettingsError == nil {
+		retryIntervalInSecondsString := string(reqCtx.Request.Header.Peek("retryIntervalInSeconds"))
+		if retryIntervalInSecondsString != "" {
+			retryIntervalInSeconds, err = strconv.Atoi(retryIntervalInSecondsString)
+			if err != nil {
+				retrySettingsError = errors.Errorf("retry interval value provided is invalid")
+			}
+		}
+	}
+
+	return retryStrategy, retryMaxCount, retryIntervalInSeconds, retrySettingsError
+
+}
+
+// GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists
 func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	code := metadata[http.HTTPStatusCode]
 	if code != "" {

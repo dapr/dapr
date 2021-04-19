@@ -308,11 +308,14 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		}
 	}
 
-	req := pubsub.PublishRequest{
-		PubsubName: pubsubName,
-		Topic:      topic,
-		Data:       data,
-		Metadata:   in.Metadata,
+	req := runtime_pubsub.PublishRequest{
+		PubsubName:             pubsubName,
+		Topic:                  topic,
+		Data:                   data,
+		Metadata:               in.Metadata,
+		RetryStrategy:          string(in.RetryStrategy),
+		RetryMaxCount:          int(in.RetryMaxCount),
+		RetryIntervalInSeconds: int(in.RetryIntervalInSeconds),
 	}
 
 	err := a.pubsubAdapter.Publish(&req)

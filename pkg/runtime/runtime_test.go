@@ -57,6 +57,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -211,11 +212,37 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 		},
 	}
 
+	componentTypeWithNoSupportToRetrySettings := components_v1alpha1.Component{
+
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:          "state",
+			Version:       "v1",
+			Metadata:      getFakeMetadataItems(),
+			RetryStrategy: "linear",
+		},
+	}
+
 	t.Run("test incorrect type", func(t *testing.T) {
 		err := rt.processComponentAndDependents(incorrectComponentType)
 		assert.Error(t, err, "expected an error")
 		assert.Equal(t, "incorrect type pubsubs.mockPubSub", err.Error(), "expected error strings to match")
 	})
+
+	t.Run("test component type that does not support retry settings", func(t *testing.T) {
+		for _, category := range componentCategoriesNeedProcess {
+			componentTypeWithNoSupportToRetrySettings.Spec.Type = fmt.Sprintf("%s.fakeComponentType", string(category))
+			if !rt.componentSupportRetries(category) {
+				expectedErrorMessage := fmt.Sprintf("component type %s does not support retry operations", string(category))
+				err := rt.processComponentAndDependents(componentTypeWithNoSupportToRetrySettings)
+				assert.Error(t, err, "expected an error")
+				assert.Equal(t, expectedErrorMessage, err.Error(), "expected error strings to match")
+			}
+		}
+	})
+
 }
 
 func TestDoProcessComponent(t *testing.T) {
@@ -264,6 +291,115 @@ func TestDoProcessComponent(t *testing.T) {
 		// assert
 		assert.NoError(t, err, "no error expected")
 	})
+}
+
+func TestGetComponentRetrySettings(t *testing.T) {
+
+	type retrySettings struct {
+		retryStrategy                  string
+		retryMaxCount                  string
+		retryIntervalInSeconds         string
+		expectedRetryStrategy          retry.RetryStrategy
+		expectedRetryMaxCount          int
+		expectedRetryIntervalInSeconds int
+		expectedErrorMessage           string
+	}
+
+	testComponent := components_v1alpha1.Component{
+
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: components_v1alpha1.ComponentSpec{
+			Type:     "pubsubs.testComponentType",
+			Version:  "v1",
+			Metadata: getFakeMetadataItems(),
+		},
+	}
+
+	rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+	t.Run("test Component with valid Retry Settings", func(t *testing.T) {
+		validRetrySettings := []retrySettings{
+			{
+				expectedRetryStrategy:          retry.DefaultRetrySettings.RetryStrategy,
+				expectedRetryMaxCount:          retry.DefaultRetrySettings.RetryMaxCount,
+				expectedRetryIntervalInSeconds: retry.DefaultRetrySettings.RetryIntervalInSeconds,
+			},
+			{
+				retryStrategy:                  "linEar",
+				expectedRetryStrategy:          retry.AllowedRetryStrategies["linear"],
+				expectedRetryMaxCount:          retry.DefaultRetrySettings.RetryMaxCount,
+				expectedRetryIntervalInSeconds: retry.DefaultRetrySettings.RetryIntervalInSeconds,
+			},
+			{
+				retryStrategy:                  "exponential",
+				retryMaxCount:                  strconv.Itoa(retry.MaxRetryMaxCount),
+				expectedRetryStrategy:          retry.AllowedRetryStrategies["exponential"],
+				expectedRetryMaxCount:          retry.MaxRetryMaxCount,
+				expectedRetryIntervalInSeconds: retry.DefaultRetrySettings.RetryIntervalInSeconds,
+			},
+			{
+				retryStrategy:                  "exponential",
+				retryMaxCount:                  strconv.Itoa(retry.MaxRetryMaxCount),
+				retryIntervalInSeconds:         strconv.Itoa(retry.MaxRetryIntervalInSeconds),
+				expectedRetryStrategy:          retry.AllowedRetryStrategies["exponential"],
+				expectedRetryMaxCount:          retry.MaxRetryMaxCount,
+				expectedRetryIntervalInSeconds: retry.MaxRetryIntervalInSeconds,
+			},
+			{
+				retryIntervalInSeconds:         strconv.Itoa(retry.MaxRetryIntervalInSeconds - 1),
+				expectedRetryStrategy:          retry.DefaultRetrySettings.RetryStrategy,
+				expectedRetryMaxCount:          retry.DefaultRetrySettings.RetryMaxCount,
+				expectedRetryIntervalInSeconds: retry.MaxRetryIntervalInSeconds - 1,
+			},
+			{
+				retryMaxCount:                  strconv.Itoa(retry.MaxRetryMaxCount - 1),
+				retryIntervalInSeconds:         strconv.Itoa(retry.MaxRetryIntervalInSeconds - 1),
+				expectedRetryStrategy:          retry.DefaultRetrySettings.RetryStrategy,
+				expectedRetryMaxCount:          retry.MaxRetryMaxCount - 1,
+				expectedRetryIntervalInSeconds: retry.MaxRetryIntervalInSeconds - 1,
+			},
+		}
+
+		for _, validRetrySetting := range validRetrySettings {
+			testComponent.Spec.RetryStrategy = validRetrySetting.retryStrategy
+			testComponent.Spec.RetryMaxCount = validRetrySetting.retryMaxCount
+			testComponent.Spec.RetryIntervalInSeconds = validRetrySetting.retryIntervalInSeconds
+			retrySettings, err := rt.getComponentRetrySettings(&testComponent)
+			assert.NoError(t, err, "no error expected")
+			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retrySettings.RetryStrategy)
+			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retrySettings.RetryMaxCount)
+			assert.EqualValues(t, validRetrySetting.expectedRetryIntervalInSeconds, retrySettings.RetryIntervalInSeconds)
+		}
+	})
+
+	t.Run("test Component with invalid Retry Settings", func(t *testing.T) {
+		invalidRetrySettings := []retrySettings{
+			{
+				retryStrategy:        "invalidRetryStrategy",
+				expectedErrorMessage: "retry strategy invalidretrystrategy is not valid",
+			},
+			{
+				retryMaxCount:        "1A",
+				expectedErrorMessage: "retry max count value provided is invalid",
+			},
+			{
+				retryIntervalInSeconds: "1A",
+				expectedErrorMessage:   "retry interval value provided is invalid",
+			},
+		}
+
+		for _, invalidRetrySetting := range invalidRetrySettings {
+			testComponent.Spec.RetryStrategy = invalidRetrySetting.retryStrategy
+			testComponent.Spec.RetryMaxCount = invalidRetrySetting.retryMaxCount
+			testComponent.Spec.RetryIntervalInSeconds = invalidRetrySetting.retryIntervalInSeconds
+			_, err := rt.getComponentRetrySettings(&testComponent)
+			assert.Error(t, err, "error expected")
+			assert.Equal(t, invalidRetrySetting.expectedErrorMessage, err.Error(), "expected error string to match")
+		}
+	})
+
 }
 
 func TestInitState(t *testing.T) {
@@ -674,7 +810,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
 		rt.topicRoutes = nil
-		rt.pubSubs = make(map[string]pubsub.PubSub)
+		rt.pubSubs = make(map[string]pubSub)
 
 		return mockPubSub, mockPubSub2
 	}
@@ -785,7 +921,10 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("publish adapter not nil, with pub sub component", func(t *testing.T) {
 		rts := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rts)
-		rts.pubSubs[TestPubsubName], _ = initMockPubSubForRuntime(rts)
+		thepubsub, _ := initMockPubSubForRuntime(rts)
+		rts.pubSubs[TestPubsubName] = pubSub{
+			pubSub: thepubsub,
+		}
 		a := rts.getPublishAdapter()
 		assert.NotNil(t, a)
 	})
@@ -1005,20 +1144,26 @@ func TestInitPubSub(t *testing.T) {
 			err := rt.processComponentAndDependents(comp)
 			assert.Nil(t, err)
 		}
-
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
+		thepubsub := &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubSub{
+			pubSub:        thepubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
 		md := make(map[string]string, 2)
 		md["key"] = "v3"
-		err := rt.Publish(&pubsub.PublishRequest{
+		err := rt.Publish(&runtime_pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic0",
 			Metadata:   md,
 		})
 
 		assert.Nil(t, err)
-
-		rt.pubSubs[TestSecondPubsubName] = &mockPublishPubSub{}
-		err = rt.Publish(&pubsub.PublishRequest{
+		thesecondpubsub := &mockPublishPubSub{}
+		rt.pubSubs[TestSecondPubsubName] = pubSub{
+			pubSub:        thesecondpubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		err = rt.Publish(&runtime_pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 		})
@@ -1048,19 +1193,189 @@ func TestInitPubSub(t *testing.T) {
 			assert.Nil(t, err)
 		}
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
-		err := rt.Publish(&pubsub.PublishRequest{
+		thepubsub := &mockPublishPubSub{}
+		rt.pubSubs[TestPubsubName] = pubSub{
+			pubSub:        thepubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		err := rt.Publish(&runtime_pubsub.PublishRequest{
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 		})
 		assert.NotNil(t, err)
 
-		rt.pubSubs[TestPubsubName] = &mockPublishPubSub{}
-		err = rt.Publish(&pubsub.PublishRequest{
+		thesecondpubsub := &mockPublishPubSub{}
+		rt.pubSubs[TestSecondPubsubName] = pubSub{
+			pubSub:        thesecondpubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		err = rt.Publish(&runtime_pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
 		})
 		assert.NotNil(t, err)
+	})
+
+	t.Run("test successful retry publish", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+		thepubsub := &mockPublishPubSub{}
+		thepubsub.ReturnErrors = 1
+		rt.pubSubs[TestPubsubName] = pubSub{
+			pubSub:        thepubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		err := rt.Publish(&runtime_pubsub.PublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic0",
+			Metadata:   md,
+		})
+
+		assert.Nil(t, err)
+		thesecondpubsub := &mockPublishPubSub{}
+		thesecondpubsub.ReturnErrors = 1
+		rt.pubSubs[TestSecondPubsubName] = pubSub{
+			pubSub:        thesecondpubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		err = rt.Publish(&runtime_pubsub.PublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic1",
+		})
+
+		assert.Nil(t, err)
+	})
+
+	t.Run("test successful retry publish with custom retry settings from request", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+		thepubsub := &mockPublishPubSub{}
+		thepubsub.ReturnErrors = 4
+		rt.pubSubs[TestPubsubName] = pubSub{
+			pubSub:        thepubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		err := rt.Publish(&runtime_pubsub.PublishRequest{
+			PubsubName:             TestPubsubName,
+			Topic:                  "topic0",
+			Metadata:               md,
+			RetryStrategy:          "exponential",
+			RetryMaxCount:          5,
+			RetryIntervalInSeconds: 1,
+		})
+
+		assert.Nil(t, err)
+		thesecondpubsub := &mockPublishPubSub{}
+		thesecondpubsub.ReturnErrors = 4
+		rt.pubSubs[TestSecondPubsubName] = pubSub{
+			pubSub:        thesecondpubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		err = rt.Publish(&runtime_pubsub.PublishRequest{
+			PubsubName:             TestSecondPubsubName,
+			Topic:                  "topic1",
+			RetryStrategy:          "exponential",
+			RetryMaxCount:          5,
+			RetryIntervalInSeconds: 1,
+		})
+
+		assert.Nil(t, err)
+	})
+
+	t.Run("test failed retry publish", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+		thepubsub := &mockPublishPubSub{}
+		thepubsub.ReturnErrors = 4
+		rt.pubSubs[TestPubsubName] = pubSub{
+			pubSub:        thepubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		err := rt.Publish(&runtime_pubsub.PublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic0",
+			Metadata:   md,
+		})
+		assert.Error(t, err, "error expected")
+		assert.Equal(t, "error 4 out of 4 expected", err.Error(), "expected error string to match")
+
+		thesecondpubsub := &mockPublishPubSub{}
+		thesecondpubsub.ReturnErrors = 4
+		rt.pubSubs[TestSecondPubsubName] = pubSub{
+			pubSub:        thesecondpubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		err = rt.Publish(&runtime_pubsub.PublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic1",
+		})
+		assert.Error(t, err, "error expected")
+		assert.Equal(t, "error 4 out of 4 expected", err.Error(), "expected error string to match")
+	})
+
+	t.Run("test failed retry publish with invalid retry settings provided in request", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.Nil(t, err)
+		}
+		thepubsub := &mockPublishPubSub{}
+		thepubsub.ReturnErrors = 4
+		rt.pubSubs[TestPubsubName] = pubSub{
+			pubSub:        thepubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		err := rt.Publish(&runtime_pubsub.PublishRequest{
+			PubsubName:             TestPubsubName,
+			Topic:                  "topic0",
+			Metadata:               md,
+			RetryStrategy:          "lineear",
+			RetryMaxCount:          5,
+			RetryIntervalInSeconds: 1,
+		})
+		assert.Error(t, err, "error expected")
+		assert.Equal(t, "retry strategy lineear is not valid", err.Error(), "expected error string to match")
+
+		thesecondpubsub := &mockPublishPubSub{}
+		thesecondpubsub.ReturnErrors = 4
+		rt.pubSubs[TestSecondPubsubName] = pubSub{
+			pubSub:        thesecondpubsub,
+			retrySettings: retry.DefaultRetrySettings,
+		}
+		err = rt.Publish(&runtime_pubsub.PublishRequest{
+			PubsubName:             TestSecondPubsubName,
+			Topic:                  "topic1",
+			RetryStrategy:          "lineear",
+			RetryMaxCount:          5,
+			RetryIntervalInSeconds: 1,
+		})
+		assert.Error(t, err, "error expected")
+		assert.Equal(t, "retry strategy lineear is not valid", err.Error(), "expected error string to match")
 	})
 
 	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
@@ -1105,6 +1420,32 @@ func TestInitPubSub(t *testing.T) {
 
 		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", rt.scopedPublishings[TestPubsubName])
 		assert.False(t, b)
+	})
+
+	t.Run("error parsing pubsub retry settings", func(t *testing.T) {
+		invalidPubsubComponents := []components_v1alpha1.Component{
+			{
+				ObjectMeta: meta_v1.ObjectMeta{
+					Name: TestPubsubName,
+				},
+				Spec: components_v1alpha1.ComponentSpec{
+					Type:          "pubsub.mockPubSub",
+					Version:       "v1",
+					Metadata:      getFakeMetadataItems(),
+					RetryStrategy: "linear",
+					RetryMaxCount: "1A",
+				},
+			},
+		}
+		// act
+		for _, comp := range invalidPubsubComponents {
+			//initMockPubSubForRuntime(rt)
+			err := rt.processComponentAndDependents(comp)
+			//assert
+			assert.Error(t, err, "an error is expected")
+			expectedErrorMessage := fmt.Sprintf("error 'retry max count value provided is invalid' parsing retry settings for component %s", comp.ObjectMeta.Name)
+			assert.Equal(t, expectedErrorMessage, err.Error(), "expected error string to match")
+		}
 	})
 }
 
@@ -2480,6 +2821,8 @@ func TestAuthorizedComponents(t *testing.T) {
 }
 
 type mockPublishPubSub struct {
+	returnedErrors int
+	ReturnErrors   int
 }
 
 // Init is a mock initialization method.
@@ -2489,6 +2832,11 @@ func (m *mockPublishPubSub) Init(metadata pubsub.Metadata) error {
 
 // Publish is a mock publish method.
 func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
+	if m.returnedErrors < m.ReturnErrors {
+		m.returnedErrors++
+		return errors.Errorf("error %d out of %d expected", m.returnedErrors, m.ReturnErrors)
+	}
+	m.returnedErrors = 0
 	return nil
 }
 

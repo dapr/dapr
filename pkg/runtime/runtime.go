@@ -67,6 +67,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -102,6 +103,10 @@ var componentCategoriesNeedProcess = []ComponentCategory{
 	middlewareComponent,
 }
 
+var componentsSupportRetries = []ComponentCategory{
+	pubsubComponent,
+}
+
 var log = logger.NewLogger("dapr.runtime")
 
 type Route struct {
@@ -113,7 +118,13 @@ type TopicRoute struct {
 	routes map[string]Route
 }
 
-// DaprRuntime holds all the core components of the runtime.
+// Wrapper to PubSub interface to accommodate retry logic settings
+type pubSub struct {
+	retrySettings retry.RetrySettings
+	pubSub        pubsub.PubSub
+}
+
+// DaprRuntime holds all the core components of the runtime
 type DaprRuntime struct {
 	runtimeConfig          *Config
 	globalConfig           *config.Configuration
@@ -135,7 +146,7 @@ type DaprRuntime struct {
 	outputBindings         map[string]bindings.OutputBinding
 	secretStores           map[string]secretstores.SecretStore
 	pubSubRegistry         pubsub_loader.Registry
-	pubSubs                map[string]pubsub.PubSub
+	pubSubs                map[string]pubSub
 	nameResolver           nr.Resolver
 	json                   jsoniter.API
 	httpMiddlewareRegistry http_middleware_loader.Registry
@@ -182,7 +193,7 @@ func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, a
 		outputBindings:         map[string]bindings.OutputBinding{},
 		secretStores:           map[string]secretstores.SecretStore{},
 		stateStores:            map[string]state.Store{},
-		pubSubs:                map[string]pubsub.PubSub{},
+		pubSubs:                map[string]pubSub{},
 		stateStoreRegistry:     state_loader.NewRegistry(),
 		bindingsRegistry:       bindings_loader.NewRegistry(),
 		pubSubRegistry:         pubsub_loader.NewRegistry(),
@@ -1026,7 +1037,7 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]TopicRoute, error) {
 }
 
 func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
-	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version)
+	thepubsub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version)
 	if err != nil {
 		log.Warnf("error creating pub sub %s (%s/%s): %s", &c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version, err)
 		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation")
@@ -1040,7 +1051,7 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	}
 	properties["consumerID"] = consumerID
 
-	err = pubSub.Init(pubsub.Metadata{
+	err = thepubsub.Init(pubsub.Metadata{
 		Properties: properties,
 	})
 	if err != nil {
@@ -1054,7 +1065,14 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 	a.scopedSubscriptions[pubsubName] = scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.ID, properties)
 	a.scopedPublishings[pubsubName] = scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.ID, properties)
 	a.allowedTopics[pubsubName] = scopes.GetAllowedTopics(properties)
-	a.pubSubs[pubsubName] = pubSub
+	retrySettings, err := a.getComponentRetrySettings(&c)
+	if err != nil {
+		return errors.Errorf("error '%s' parsing retry settings for component %s", err.Error(), c.ObjectMeta.Name)
+	}
+	a.pubSubs[pubsubName] = pubSub{
+		retrySettings: retrySettings,
+		pubSub:        thepubsub,
+	}
 	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
 
 	return nil
@@ -1063,7 +1081,7 @@ func (a *DaprRuntime) initPubSub(c components_v1alpha1.Component) error {
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
-func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
+func (a *DaprRuntime) Publish(req *runtime_pubsub.PublishRequest) error {
 	thepubsub := a.GetPubSub(req.PubsubName)
 	if thepubsub == nil {
 		return runtime_pubsub.NotFoundError{PubsubName: req.PubsubName}
@@ -1073,12 +1091,29 @@ func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
 		return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
 
-	return a.pubSubs[req.PubsubName].Publish(req)
+	requestToPubSub := pubsub.PublishRequest{
+		PubsubName: req.PubsubName,
+		Topic:      req.Topic,
+		Data:       req.Data,
+		Metadata:   req.Metadata,
+	}
+
+	retrySettings, err := retry.CustomizeRetrySettings(a.pubSubs[req.PubsubName].retrySettings, req.RetryStrategy, req.RetryMaxCount, req.RetryIntervalInSeconds)
+
+	if err != nil {
+		return err
+	}
+
+	publishFn := func() error {
+		return thepubsub.Publish(&requestToPubSub)
+	}
+
+	return retry.Retry(publishFn, retrySettings)
 }
 
 // GetPubSub is an adapter method to find a pubsub by name.
 func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
-	return a.pubSubs[pubsubName]
+	return a.pubSubs[pubsubName].pubSub
 }
 
 func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
@@ -1434,6 +1469,15 @@ func (a *DaprRuntime) extractComponentCategory(component components_v1alpha1.Com
 	return ""
 }
 
+func (a *DaprRuntime) componentSupportRetries(componentCategory ComponentCategory) bool {
+	for _, supportedCategory := range componentsSupportRetries {
+		if componentCategory == supportedCategory {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *DaprRuntime) processComponents() {
 	for comp := range a.pendingComponents {
 		if comp.Name == "" {
@@ -1480,6 +1524,12 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 	if err != nil {
 		timeout = defaultComponentInitTimeout
+	}
+
+	// Parse retry logic settings
+	if !a.componentSupportRetries(compCategory) && (comp.Spec.RetryStrategy != "" || comp.Spec.RetryMaxCount != "" || comp.Spec.RetryIntervalInSeconds != "") {
+		//the Component does not support Retry operations
+		return errors.Errorf("component type %s does not support retry operations", compCategory)
 	}
 
 	go func() {
@@ -1537,6 +1587,37 @@ func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component
 	return componentPreprocessRes{}
 }
 
+func (a *DaprRuntime) getComponentRetrySettings(comp *components_v1alpha1.Component) (retry.RetrySettings, error) {
+
+	var retryStrategy string
+	var retryMaxCount, retryIntervalInSeconds int
+
+	log.Debugf("parsing retry settings for component %s", comp.ObjectMeta.Name)
+
+	var err error
+
+	if comp.Spec.RetryStrategy != "" {
+		retryStrategy = strings.ToLower(comp.Spec.RetryStrategy)
+	}
+	if comp.Spec.RetryMaxCount != "" {
+		retryMaxCount, err = strconv.Atoi(comp.Spec.RetryMaxCount)
+		if err != nil {
+			err := errors.Errorf("retry max count value provided is invalid")
+			return retry.RetrySettings{}, err
+		}
+	}
+	if comp.Spec.RetryIntervalInSeconds != "" {
+		retryIntervalInSeconds, err = strconv.Atoi(comp.Spec.RetryIntervalInSeconds)
+		if err != nil {
+			err = errors.Errorf("retry interval value provided is invalid")
+			return retry.RetrySettings{}, err
+		}
+	}
+
+	return retry.NewRetrySettings(retryStrategy, retryMaxCount, retryIntervalInSeconds)
+
+}
+
 func (a *DaprRuntime) stopActor() {
 	if a.actor != nil {
 		log.Info("Shutting down actor")
@@ -1578,7 +1659,7 @@ func (a *DaprRuntime) shutdownComponents() error {
 		}
 	}
 	for name, pubSub := range a.pubSubs {
-		if err := pubSub.Close(); err != nil {
+		if err := pubSub.pubSub.Close(); err != nil {
 			err = fmt.Errorf("error closing pub sub %s: %w", name, err)
 			merr = multierror.Append(merr, err)
 			log.Warn(err)
@@ -1852,7 +1933,7 @@ func componentDependency(compCategory ComponentCategory, name string) string {
 }
 func (a *DaprRuntime) startSubscribing() {
 	for name, pubsub := range a.pubSubs {
-		if err := a.beginPubSub(name, pubsub); err != nil {
+		if err := a.beginPubSub(name, pubsub.pubSub); err != nil {
 			log.Errorf("error occurred while beginning pubsub %s: %s", name, err)
 		}
 	}

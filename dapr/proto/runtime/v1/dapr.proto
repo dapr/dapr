@@ -217,6 +217,22 @@ message PublishEventRequest {
   // metadata property:
   // - key : the key of the message.
   map<string,string> metadata = 5;
+
+
+  // The retry strategy (optional).
+  enum RetryStrategy {
+    off = 0;
+    linear = 1;
+    exponential = 2;
+  }
+  RetryStrategy retryStrategy = 6;
+
+  // The retry count (optional).
+  int32 retryMaxCount = 7;
+
+  // The retry interval in seconds (optional).
+  int32 retryIntervalInSeconds = 8;
+
 }
 
 // InvokeBindingRequest is the message to send data to output bindings
