@@ -6,6 +6,7 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -18,7 +19,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ghodss/yaml"
 	"github.com/google/uuid"
+	jsoniter "github.com/json-iterator/go"
+	"github.com/phayes/freeport"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"go.opencensus.io/trace"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
@@ -44,18 +57,6 @@ import (
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	"github.com/ghodss/yaml"
-	jsoniter "github.com/json-iterator/go"
-	"github.com/phayes/freeport"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"go.opencensus.io/trace"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -549,13 +550,13 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub.On(
 			"Subscribe",
 			mock.AnythingOfType("pubsub.SubscribeRequest"),
-			mock.AnythingOfType("func(*pubsub.NewMessage) error")).Return(nil)
+			mock.AnythingOfType("pubsub.Handler")).Return(nil)
 
 		mockPubSub2.On("Init", expectedMetadata).Return(nil)
 		mockPubSub2.On(
 			"Subscribe",
 			mock.AnythingOfType("pubsub.SubscribeRequest"),
-			mock.AnythingOfType("func(*pubsub.NewMessage) error")).Return(nil)
+			mock.AnythingOfType("pubsub.Handler")).Return(nil)
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		rt.appChannel = mockAppChannel
@@ -1517,7 +1518,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1547,7 +1548,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.emptyCtx"), fakeReqNoTraceID).Return(fakeResp, nil)
 
 		// act
-		err = rt.publishMessageHTTP(message)
+		err = rt.publishMessageHTTP(context.Background(), message)
 
 		// assert
 		assert.Nil(t, err)
@@ -1565,7 +1566,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1583,7 +1584,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1601,7 +1602,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		var cloudEvent map[string]interface{}
@@ -1623,7 +1624,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err)
@@ -1641,7 +1642,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Error(t, err, "expected error on unknown status")
@@ -1659,7 +1660,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.NoError(t, err, "expected no error on empty status")
@@ -1677,7 +1678,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err, "expected no error on unknown status")
@@ -1692,7 +1693,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(nil, invokeError)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		expectedError := errors.Wrap(invokeError, "error from app channel while sending pub/sub event to app")
@@ -1711,7 +1712,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		assert.Nil(t, err, "expected error to be nil")
@@ -1729,7 +1730,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.AnythingOfType("*context.valueCtx"), fakeReq).Return(fakeResp, nil)
 
 		// act
-		err := rt.publishMessageHTTP(testPubSubMessage)
+		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
 		var cloudEvent map[string]interface{}
@@ -1856,7 +1857,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			defer rt.grpc.AppClient.Close()
 
 			// act
-			err = rt.publishMessageGRPC(tc.message)
+			err = rt.publishMessageGRPC(context.Background(), tc.message)
 
 			// assert
 			if tc.errorExpected {
@@ -2329,7 +2330,7 @@ func (m *mockPublishPubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is a mock subscribe method
-func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler func(msg *pubsub.NewMessage) error) error {
+func (m *mockPublishPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	return nil
 }
 

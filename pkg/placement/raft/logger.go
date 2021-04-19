@@ -10,8 +10,9 @@ import (
 	"io/ioutil"
 	"log"
 
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/hashicorp/go-hclog"
+
+	"github.com/dapr/kit/logger"
 )
 
 var logging = logger.NewLogger("dapr.placement.raft")

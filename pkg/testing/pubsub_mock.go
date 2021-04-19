@@ -23,7 +23,7 @@ func (m *MockPubSub) Publish(req *pubsub.PublishRequest) error {
 }
 
 // Subscribe is a mock subscribe method
-func (m *MockPubSub) Subscribe(req pubsub.SubscribeRequest, handler func(msg *pubsub.NewMessage) error) error {
+func (m *MockPubSub) Subscribe(req pubsub.SubscribeRequest, handler pubsub.Handler) error {
 	args := m.Called(req, handler)
 	return args.Error(0)
 }

@@ -9,7 +9,8 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/agrea/ptr v0.0.0-20180711073057-77a518d99b7b
 	github.com/cenkalti/backoff/v4 v4.1.0
-	github.com/dapr/components-contrib v1.1.0-rc1
+	github.com/dapr/components-contrib v1.0.1-0.20210419190610-688df9bda4b2
+	github.com/dapr/kit v0.0.1
 	github.com/fasthttp/router v1.3.8
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/ghodss/yaml v1.0.0
@@ -32,8 +33,7 @@ require (
 	github.com/prometheus/client_golang v1.8.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.14.0
-	github.com/sirupsen/logrus v1.6.0
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	github.com/valyala/fasthttp v1.21.0
 	go.opencensus.io v0.22.5
 	go.opentelemetry.io/otel v0.13.0
