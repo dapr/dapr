@@ -1,3 +1,8 @@
+// ------------------------------------------------------------
+// Copyright (c) Microsoft Corporation and Dapr Contributors.
+// Licensed under the MIT License.
+// ------------------------------------------------------------
+
 package runtime
 
 import (
@@ -8,10 +13,10 @@ import (
 )
 
 var (
-	timeoutSeconds       int = 60
-	requestTimeoutMillis int = 500
-	periodMillis         int = 100
-	urlFormat                 string = "http://localhost:%s/v1.0/healthz/outbound"
+	timeoutSeconds       int    = 60
+	requestTimeoutMillis int    = 500
+	periodMillis         int    = 100
+	urlFormat            string = "http://localhost:%s/v1.0/healthz/outbound"
 )
 
 func waitUntilDaprOutboundReady(daprHTTPPort string) {
