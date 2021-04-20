@@ -12,15 +12,16 @@ import (
 	"sync"
 	"time"
 
-	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/placement/hashing"
-	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/dapr/pkg/runtime/security"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	dapr_credentials "github.com/dapr/dapr/pkg/credentials"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/placement/hashing"
+	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.internal.placement")

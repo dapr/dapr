@@ -19,11 +19,12 @@ import (
 	"strings"
 	"time"
 
+	guuid "github.com/google/uuid"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/tests/perf"
-	guuid "github.com/google/uuid"
+	"github.com/dapr/kit/logger"
 )
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
