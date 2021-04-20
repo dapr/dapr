@@ -9,9 +9,9 @@ import (
 	"flag"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/kit/logger"
 )
 
 const (
