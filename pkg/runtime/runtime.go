@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	nethttp "net/http"
 	"os"
 	"reflect"
 	"strconv"
@@ -18,9 +19,19 @@ import (
 	"sync"
 	"time"
 
-	nethttp "net/http"
-
 	"contrib.go.opencensus.io/exporter/zipkin"
+	"github.com/google/uuid"
+	jsoniter "github.com/json-iterator/go"
+	openzipkin "github.com/openzipkin/zipkin-go"
+	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
+	"github.com/pkg/errors"
+	"go.opencensus.io/trace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/middleware"
@@ -44,7 +55,6 @@ import (
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -56,17 +66,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
-	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
-	openzipkin "github.com/openzipkin/zipkin-go"
-	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
-	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -413,7 +413,7 @@ func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 }
 
 func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
-	var publishFunc func(msg *pubsub.NewMessage) error
+	var publishFunc pubsub.Handler
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
 		publishFunc = a.publishMessageHTTP
@@ -440,13 +440,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic:    topic,
 			Metadata: route.metadata,
-		}, func(msg *pubsub.NewMessage) error {
+		}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 			if msg.Metadata == nil {
 				msg.Metadata = make(map[string]string, 1)
 			}
 
 			msg.Metadata[pubsubName] = name
-			return publishFunc(msg)
+			return publishFunc(ctx, msg)
 		}); err != nil {
 			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
 		}
@@ -593,7 +593,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(context.Background(), spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
 
@@ -1102,7 +1102,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMessage) error {
 	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
@@ -1115,7 +1115,6 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		return nil
 	}
 
-	ctx := context.Background()
 	var span *trace.Span
 
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
@@ -1127,7 +1126,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -1185,7 +1184,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
 }
 
-func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMessage) error {
 	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
@@ -1226,7 +1225,6 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		}
 	}
 
-	ctx := context.Background()
 	var span *trace.Span
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
@@ -1234,7 +1232,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 
 		// no ops if trace is off
-		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
 
