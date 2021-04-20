@@ -131,6 +131,18 @@ func TestActorActivate(t *testing.T) {
 		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
 	}
 
+	report := perf.NewTestReport(
+		[]perf.TestResult{daprResult},
+		"Actor Activation",
+		sidecarUsage,
+		appUsage)
+	report.SetTotalRestartCount(restarts)
+	err = utils.UploadAzureBlob(report)
+
+	if err != nil {
+		t.Error(err)
+	}
+
 	require.Equal(t, 0, daprResult.RetCodes.Num400)
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
