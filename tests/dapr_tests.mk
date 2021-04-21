@@ -30,7 +30,7 @@ middleware \
 job-publisher
 
 # PERFORMACE test app list
-PERF_TEST_APPS=actorjava tester service_invocation_http
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
