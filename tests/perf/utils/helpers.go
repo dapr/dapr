@@ -19,16 +19,13 @@ import (
 	"strings"
 	"time"
 
+	guuid "github.com/google/uuid"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/tests/perf"
-	guuid "github.com/google/uuid"
+	"github.com/dapr/kit/logger"
 )
-
-const GitHubRunID = "GITHUB_RUN_ID"
-const GitHubSHA = "GITHUB_SHA"
-const GitHubREF = "GITHUB_REF"
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
 type SimpleKeyValue struct {
@@ -177,7 +174,7 @@ func HTTPDelete(url string) ([]byte, error) {
 }
 
 // UploadAzureBlob takes test output data and saves it to an Azure Blob Storage container
-func UploadAzureBlob(tests []perf.TestResult, testName, daprConsumedMemory, daprConsumedCPU string) error {
+func UploadAzureBlob(report *perf.TestReport) error {
 	accountName, accountKey := os.Getenv("AZURE_STORAGE_ACCOUNT"), os.Getenv("AZURE_STORAGE_ACCESS_KEY")
 	if len(accountName) == 0 || len(accountKey) == 0 {
 		return nil
@@ -190,9 +187,7 @@ func UploadAzureBlob(tests []perf.TestResult, testName, daprConsumedMemory, dapr
 
 	container := fmt.Sprintf("%v-%v-%v", int(m), d, y)
 
-	r := perf.NewTestReport(tests, testName, os.Getenv(GitHubSHA), os.Getenv(GitHubREF), os.Getenv(GitHubRunID), daprConsumedMemory, daprConsumedCPU)
-
-	b, err := json.Marshal(r)
+	b, err := json.Marshal(report)
 	if err != nil {
 		return err
 	}
@@ -212,12 +207,13 @@ func UploadAzureBlob(tests []perf.TestResult, testName, daprConsumedMemory, dapr
 		return err
 	}
 
-	filename := fmt.Sprintf("%s-%v-%v-%v", testName, now.Hour(), time.Hour.Minutes(), time.Hour.Seconds())
+	filename := fmt.Sprintf("%s-%v-%v-%v", report.TestName, now.Hour(), time.Hour.Minutes(), time.Hour.Seconds())
 	_, err = azblob.Invoke(&bindings.InvokeRequest{
 		Operation: bindings.CreateOperation,
 		Data:      b,
 		Metadata: map[string]string{
-			"blobName": filename,
+			"blobName":    filename,
+			"ContentType": "application/json",
 		},
 	})
 	return err
