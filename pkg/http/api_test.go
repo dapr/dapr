@@ -49,6 +49,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/retry"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
@@ -71,6 +72,10 @@ func TestPubSubEndpoints(t *testing.T) {
 
 				if req.PubsubName == "errnotallowed" {
 					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
+				}
+
+				if req.PubsubName == "errinvalidretrySettings" {
+					return runtime_pubsub.InvalidRetrySettingsError{InvalidRetrySettingErrorCause: "retry Strategy invalidRetryStrategy is invalid"}
 				}
 
 				return nil
@@ -228,7 +233,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish with invalid retry settings - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
+		apiPath := fmt.Sprintf("%s/publish/errinvalidretrySettings/topic", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -249,7 +254,7 @@ func TestGetRetrySettingsFromRequest(t *testing.T) {
 		retryStrategy                  string
 		retryMaxCount                  string
 		retryIntervalInSeconds         string
-		expectedRetryStrategy          string
+		expectedRetryStrategy          retry.Strategy
 		expectedRetryMaxCount          int
 		expectedRetryIntervalInSeconds int
 		expectedErrorMessage           string
@@ -261,27 +266,26 @@ func TestGetRetrySettingsFromRequest(t *testing.T) {
 			{
 				retryStrategy:         "linEar",
 				retryMaxCount:         "1",
-				expectedRetryStrategy: "linear",
+				expectedRetryStrategy: retry.AllowedRetryStrategies["linear"],
 				expectedRetryMaxCount: 1,
 			},
 			{
 				retryStrategy:                  "off",
 				retryIntervalInSeconds:         "1",
-				expectedRetryStrategy:          "off",
+				expectedRetryStrategy:          retry.AllowedRetryStrategies["off"],
 				expectedRetryIntervalInSeconds: 1,
 			},
 			{
 				retryStrategy:                  "expoNential",
 				retryMaxCount:                  "1",
 				retryIntervalInSeconds:         "1",
-				expectedRetryStrategy:          "exponential",
+				expectedRetryStrategy:          retry.AllowedRetryStrategies["exponential"],
 				expectedRetryMaxCount:          1,
 				expectedRetryIntervalInSeconds: 1,
 			},
 		}
 
 		for _, validRetrySetting := range validRetrySettings {
-
 			reqCtx := &fasthttp.RequestCtx{}
 
 			// act
@@ -295,19 +299,22 @@ func TestGetRetrySettingsFromRequest(t *testing.T) {
 				reqCtx.Request.Header.Set("retryIntervalInSeconds", validRetrySetting.retryIntervalInSeconds)
 			}
 
-			retryStrategy, retryMaxCount, retryIntervalInSeconds, err := testAPI.getRetrySettingsFromRequest(reqCtx)
+			retrySettings, err := testAPI.getRetrySettingsFromRequest(reqCtx)
 
 			// assert
 			assert.NoError(t, err, "no error expected")
-			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retryStrategy)
-			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retryMaxCount)
-			assert.EqualValues(t, validRetrySetting.expectedRetryIntervalInSeconds, retryIntervalInSeconds)
+			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retrySettings.RetryStrategy)
+			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retrySettings.RetryMaxCount)
+			assert.EqualValues(t, validRetrySetting.expectedRetryIntervalInSeconds, retrySettings.RetryIntervalInSeconds)
 		}
-
 	})
 
 	t.Run("test request with invalid retry settings", func(t *testing.T) {
 		invalidRetrySettings := []retrySettings{
+			{
+				retryStrategy:        "invalidRetryStrategy",
+				expectedErrorMessage: "retry strategy provided is invalid",
+			},
 			{
 				retryStrategy:          "linEar",
 				retryMaxCount:          "1A",
@@ -322,7 +329,6 @@ func TestGetRetrySettingsFromRequest(t *testing.T) {
 			},
 		}
 		for _, invalidRetrySetting := range invalidRetrySettings {
-
 			reqCtx := &fasthttp.RequestCtx{}
 
 			// act
@@ -336,7 +342,7 @@ func TestGetRetrySettingsFromRequest(t *testing.T) {
 				reqCtx.Request.Header.Set("retryIntervalInSeconds", invalidRetrySetting.retryIntervalInSeconds)
 			}
 
-			_, _, _, err := testAPI.getRetrySettingsFromRequest(reqCtx)
+			_, err := testAPI.getRetrySettingsFromRequest(reqCtx)
 
 			// assert
 			assert.Error(t, err, "error expected")

@@ -19,43 +19,47 @@ const (
 	DefaultLinearRetryCount      = 3
 )
 
-//RetryStrategy is the type that represents Retry Policy settings
-type RetryStrategy string
+// Strategy is the type that represents Retry Policy settings
+type Strategy string
 
 const (
-	off                           RetryStrategy = "off"
-	linear                        RetryStrategy = "linear"
-	exponential                   RetryStrategy = "exponential"
-	defaultRetryStrategy          RetryStrategy = linear
-	defaultRetryMaxCount          int           = 3
-	defaultRetryIntervalInSeconds int           = 1
-	MinRetryMaxCount              int           = 1
-	MaxRetryMaxCount              int           = 5
-	MinRetryIntervalInSeconds     int           = 1
-	MaxRetryIntervalInSeconds     int           = 3
+	off                           Strategy = "off"
+	linear                        Strategy = "linear"
+	exponential                   Strategy = "exponential"
+	defaultRetryStrategy          Strategy = linear
+	defaultRetryMaxCount          int      = 3
+	defaultRetryIntervalInSeconds int      = 1
+	MinRetryMaxCount              int      = 1
+	MaxRetryMaxCount              int      = 5
+	MinRetryIntervalInSeconds     int      = 1
+	MaxRetryIntervalInSeconds     int      = 3
 )
 
-var log = logger.NewLogger("dapr.runtime.retry")
-
 // AllowedRetryStrategies lists allowed Retry Policies supported by the darp Retry
-var AllowedRetryStrategies = map[string]RetryStrategy{
+var AllowedRetryStrategies = map[string]Strategy{
 	"off":         off,
 	"linear":      linear,
 	"exponential": exponential,
 }
 
-// RetrySettings contains retry settings supported by the dapr Retry
-type RetrySettings struct {
-	RetryStrategy          RetryStrategy
+// Settings contains retry settings supported by the dapr Retry
+type Settings struct {
+	RetryStrategy          Strategy
 	RetryMaxCount          int
 	RetryIntervalInSeconds int
 }
 
 // DefaultRetrySettings object contains the default retry settings
-var DefaultRetrySettings = RetrySettings{
+var DefaultRetrySettings = Settings{
 	RetryStrategy:          defaultRetryStrategy,
 	RetryMaxCount:          defaultRetryMaxCount,
 	RetryIntervalInSeconds: defaultRetryIntervalInSeconds,
+}
+
+var nilRetrySettings = Settings{
+	RetryStrategy:          off,
+	RetryMaxCount:          0,
+	RetryIntervalInSeconds: 0,
 }
 
 // Operation to be executed by dapr Retry function
@@ -63,24 +67,10 @@ var DefaultRetrySettings = RetrySettings{
 type Operation func() error
 
 // NewRetrySettings returns a valid retry settings object based on the retry settings provided
-func NewRetrySettings(retryStrategy string, retryMaxCount int, retryIntervalInSeconds int) (RetrySettings, error) {
-	return newRetrySettingsFromBaseline(DefaultRetrySettings, retryStrategy, retryMaxCount, retryIntervalInSeconds)
-}
-
-// CustomizeRetrySettings returns a valid retry settings object based on an existing retrySettings and applying a set of custom settings
-func CustomizeRetrySettings(retrySettings RetrySettings, retryStrategy string, retryMaxCount int, retryIntervalInSeconds int) (RetrySettings, error) {
-	return newRetrySettingsFromBaseline(retrySettings, retryStrategy, retryMaxCount, retryIntervalInSeconds)
-}
-
-func newRetrySettingsFromBaseline(baseRetrySettings RetrySettings, retryStrategy string, retryMaxCount int, retryIntervalInSeconds int) (RetrySettings, error) {
-	retrySettings := baseRetrySettings
-	nilRetrySettings := RetrySettings{
-		RetryStrategy:          off,
-		RetryMaxCount:          0,
-		RetryIntervalInSeconds: 0,
-	}
+func NewRetrySettings(retryStrategy string, retryMaxCount int, retryIntervalInSeconds int, log logger.Logger) (Settings, error) {
+	retrySettings := DefaultRetrySettings
 	if retryStrategy != "" {
-		err := validateRetryStrategy(string(retryStrategy))
+		err := validateRetryStrategy(retryStrategy)
 		if err == nil {
 			log.Debugf("setting retry strategy %s", retryStrategy)
 			retrySettings.RetryStrategy = AllowedRetryStrategies[retryStrategy]
@@ -88,7 +78,7 @@ func newRetrySettingsFromBaseline(baseRetrySettings RetrySettings, retryStrategy
 			return nilRetrySettings, err
 		}
 	} else {
-		log.Debugf("no retry strategy provided. setting default %s", string(baseRetrySettings.RetryStrategy))
+		log.Debugf("no retry strategy provided. setting default %s", string(retrySettings.RetryStrategy))
 	}
 
 	if retrySettings.RetryStrategy == off {
@@ -104,7 +94,7 @@ func newRetrySettingsFromBaseline(baseRetrySettings RetrySettings, retryStrategy
 			return nilRetrySettings, err
 		}
 	} else {
-		log.Debugf("no retry max count provided. setting default %d", baseRetrySettings.RetryMaxCount)
+		log.Debugf("no retry max count provided. setting default %d", retrySettings.RetryMaxCount)
 	}
 
 	if retryIntervalInSeconds != 0 {
@@ -116,13 +106,56 @@ func newRetrySettingsFromBaseline(baseRetrySettings RetrySettings, retryStrategy
 			return nilRetrySettings, err
 		}
 	} else {
-		log.Debugf("no retry interval provided. setting default %s", baseRetrySettings.RetryIntervalInSeconds)
+		log.Debugf("no retry interval provided. setting default %s", retrySettings.RetryIntervalInSeconds)
 	}
 
 	return retrySettings, nil
 }
 
-func validateRetrySettings(retrySettings RetrySettings) error {
+// CustomizeRetrySettings returns a valid retry settings object based on an existing retrySettings and applying a set of custom settings
+func CustomizeRetrySettings(retrySettings Settings, customRetrySettings Settings, log logger.Logger) (Settings, error) {
+	log.Debugf("customizing base retry settings")
+	err := validateRetrySettings(retrySettings)
+	if err != nil {
+		return nilRetrySettings, errors.Errorf("base retry settings provided are invalid: %s", err.Error())
+	}
+
+	if customRetrySettings.RetryStrategy != "" {
+		log.Debugf("customizing retry strategy to %s", customRetrySettings.RetryStrategy)
+		if customRetrySettings.RetryStrategy == off {
+			return nilRetrySettings, nil
+		}
+		retrySettings.RetryStrategy = customRetrySettings.RetryStrategy
+	} else {
+		log.Debugf("no custom retry strategy provided. applying baseline %d", retrySettings.RetryStrategy)
+	}
+
+	if customRetrySettings.RetryMaxCount != 0 {
+		err := validateRetryMaxCount(customRetrySettings.RetryMaxCount)
+		if err != nil {
+			return nilRetrySettings, errors.Errorf("custom retry settings provided are invalid: %s", err.Error())
+		}
+		log.Debugf("customizing retry max count to %d", customRetrySettings.RetryMaxCount)
+		retrySettings.RetryMaxCount = customRetrySettings.RetryMaxCount
+	} else {
+		log.Debugf("no custom retry max count provided. applying baseline %d", retrySettings.RetryMaxCount)
+	}
+
+	if customRetrySettings.RetryIntervalInSeconds != 0 {
+		err := validateRetryIntervalInSeconds(customRetrySettings.RetryIntervalInSeconds)
+		if err != nil {
+			return nilRetrySettings, errors.Errorf("custom retry settings provided are invalid: %s", err.Error())
+		}
+		log.Debugf("customizing retry interval to %d", customRetrySettings.RetryIntervalInSeconds)
+		retrySettings.RetryIntervalInSeconds = customRetrySettings.RetryIntervalInSeconds
+	} else {
+		log.Debugf("no custom retry interval provided. applying baseline %s", retrySettings.RetryIntervalInSeconds)
+	}
+
+	return retrySettings, nil
+}
+
+func validateRetrySettings(retrySettings Settings) error {
 	err := validateRetryStrategy(string(retrySettings.RetryStrategy))
 	if err == nil {
 		err = validateRetryMaxCount(retrySettings.RetryMaxCount)
@@ -161,7 +194,7 @@ func validateRetryIntervalInSeconds(retryIntervalInSeconds int) error {
 }
 
 // Retry executes an Operation as per the Retry Policy specified and till it succeeds or the max number of retries specified in the retry settings provided
-func Retry(operation Operation, retrySettings RetrySettings) error {
+func Retry(operation Operation, retrySettings Settings, log logger.Logger) error {
 	err := validateRetrySettings(retrySettings)
 	if err != nil {
 		return errors.Errorf("failed to execute Operation with retry due to invalid retry settings: %s", err.Error())
@@ -179,7 +212,7 @@ func Retry(operation Operation, retrySettings RetrySettings) error {
 					backoff = retryCount * retrySettings.RetryIntervalInSeconds
 				}
 				log.Infof("retrying operation in %d seconds", backoff)
-				elapsedTime = elapsedTime + backoff
+				elapsedTime += backoff
 				timer, _ := time.ParseDuration(fmt.Sprintf("%ss", strconv.Itoa(backoff)))
 				time.Sleep(timer)
 				err = operation()

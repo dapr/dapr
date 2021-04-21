@@ -120,7 +120,7 @@ type TopicRoute struct {
 
 // Wrapper to PubSub interface to accommodate retry logic settings
 type pubSub struct {
-	retrySettings retry.RetrySettings
+	retrySettings retry.Settings
 	pubSub        pubsub.PubSub
 }
 
@@ -1098,17 +1098,14 @@ func (a *DaprRuntime) Publish(req *runtime_pubsub.PublishRequest) error {
 		Metadata:   req.Metadata,
 	}
 
-	retrySettings, err := retry.CustomizeRetrySettings(a.pubSubs[req.PubsubName].retrySettings, req.RetryStrategy, req.RetryMaxCount, req.RetryIntervalInSeconds)
-
+	retrySettings, err := retry.CustomizeRetrySettings(a.pubSubs[req.PubsubName].retrySettings, req.RetrySettings, log)
 	if err != nil {
-		return err
+		return runtime_pubsub.InvalidRetrySettingsError{InvalidRetrySettingErrorCause: err.Error()}
 	}
 
-	publishFn := func() error {
+	return retry.Retry(func() error {
 		return thepubsub.Publish(&requestToPubSub)
-	}
-
-	return retry.Retry(publishFn, retrySettings)
+	}, retrySettings, log)
 }
 
 // GetPubSub is an adapter method to find a pubsub by name.
@@ -1528,7 +1525,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp components_v1alpha1.Com
 
 	// Parse retry logic settings
 	if !a.componentSupportRetries(compCategory) && (comp.Spec.RetryStrategy != "" || comp.Spec.RetryMaxCount != "" || comp.Spec.RetryIntervalInSeconds != "") {
-		//the Component does not support Retry operations
+		// the Component does not support Retry operations
 		return errors.Errorf("component type %s does not support retry operations", compCategory)
 	}
 
@@ -1587,8 +1584,7 @@ func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component
 	return componentPreprocessRes{}
 }
 
-func (a *DaprRuntime) getComponentRetrySettings(comp *components_v1alpha1.Component) (retry.RetrySettings, error) {
-
+func (a *DaprRuntime) getComponentRetrySettings(comp *components_v1alpha1.Component) (retry.Settings, error) {
 	var retryStrategy string
 	var retryMaxCount, retryIntervalInSeconds int
 
@@ -1602,20 +1598,19 @@ func (a *DaprRuntime) getComponentRetrySettings(comp *components_v1alpha1.Compon
 	if comp.Spec.RetryMaxCount != "" {
 		retryMaxCount, err = strconv.Atoi(comp.Spec.RetryMaxCount)
 		if err != nil {
-			err := errors.Errorf("retry max count value provided is invalid")
-			return retry.RetrySettings{}, err
+			err = errors.Errorf("retry max count value provided is invalid")
+			return retry.Settings{}, err
 		}
 	}
 	if comp.Spec.RetryIntervalInSeconds != "" {
 		retryIntervalInSeconds, err = strconv.Atoi(comp.Spec.RetryIntervalInSeconds)
 		if err != nil {
 			err = errors.Errorf("retry interval value provided is invalid")
-			return retry.RetrySettings{}, err
+			return retry.Settings{}, err
 		}
 	}
 
-	return retry.NewRetrySettings(retryStrategy, retryMaxCount, retryIntervalInSeconds)
-
+	return retry.NewRetrySettings(retryStrategy, retryMaxCount, retryIntervalInSeconds, log)
 }
 
 func (a *DaprRuntime) stopActor() {

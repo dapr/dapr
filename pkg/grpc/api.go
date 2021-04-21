@@ -40,6 +40,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -272,6 +273,8 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, err
 	}
 
+	requestRetrySettings := a.getRetrySettingsFromRequest(in)
+
 	span := diag_utils.SpanFromContext(ctx)
 	corID := diag.SpanContextToW3CString(span.SpanContext())
 
@@ -309,13 +312,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	req := runtime_pubsub.PublishRequest{
-		PubsubName:             pubsubName,
-		Topic:                  topic,
-		Data:                   data,
-		Metadata:               in.Metadata,
-		RetryStrategy:          string(in.RetryStrategy),
-		RetryMaxCount:          int(in.RetryMaxCount),
-		RetryIntervalInSeconds: int(in.RetryIntervalInSeconds),
+		PubsubName:    pubsubName,
+		Topic:         topic,
+		Data:          data,
+		Metadata:      in.Metadata,
+		RetrySettings: requestRetrySettings,
 	}
 
 	err := a.pubsubAdapter.Publish(&req)
@@ -328,10 +329,42 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		if errors.As(err, &runtime_pubsub.NotFoundError{}) {
 			nerr = status.Errorf(codes.NotFound, err.Error())
 		}
+
+		if errors.As(err, &runtime_pubsub.InvalidRetrySettingsError{}) {
+			nerr = status.Errorf(codes.InvalidArgument, err.Error())
+		}
 		apiServerLogger.Debug(nerr)
 		return &emptypb.Empty{}, nerr
 	}
 	return &emptypb.Empty{}, nil
+}
+
+func (a *api) getRetrySettingsFromRequest(in *runtimev1pb.PublishEventRequest) retry.Settings {
+	var retrySettings retry.Settings
+
+	switch in.RetryStrategy {
+	case runtimev1pb.PublishEventRequest_none:
+		{
+			retrySettings.RetryStrategy = ""
+		}
+	case runtimev1pb.PublishEventRequest_off:
+		{
+			retrySettings.RetryStrategy = retry.AllowedRetryStrategies["off"]
+		}
+	case runtimev1pb.PublishEventRequest_linear:
+		{
+			retrySettings.RetryStrategy = retry.AllowedRetryStrategies["linear"]
+		}
+	case runtimev1pb.PublishEventRequest_exponential:
+		{
+			retrySettings.RetryStrategy = retry.AllowedRetryStrategies["exponential"]
+		}
+	}
+
+	retrySettings.RetryMaxCount = int(in.RetryMaxCount)
+	retrySettings.RetryIntervalInSeconds = int(in.RetryIntervalInSeconds)
+
+	return retrySettings
 }
 
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {

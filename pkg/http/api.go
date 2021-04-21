@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -1258,7 +1259,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	requestRetryStrategy, requestRetryMaxCount, requestRetryInternalInSeconds, requestRetrySettingsError := a.getRetrySettingsFromRequest(reqCtx)
+	requestRetrySettings, requestRetrySettingsError := a.getRetrySettingsFromRequest(reqCtx)
 	if requestRetrySettingsError != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrMalformedRequest, requestRetrySettingsError))
 		respond(reqCtx, withError(fasthttp.StatusBadRequest, msg))
@@ -1304,13 +1305,11 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	req := runtime_pubsub.PublishRequest{
-		PubsubName:             pubsubName,
-		Topic:                  topic,
-		Data:                   data,
-		Metadata:               metadata,
-		RetryStrategy:          requestRetryStrategy,
-		RetryMaxCount:          requestRetryMaxCount,
-		RetryIntervalInSeconds: requestRetryInternalInSeconds,
+		PubsubName:    pubsubName,
+		Topic:         topic,
+		Data:          data,
+		Metadata:      metadata,
+		RetrySettings: requestRetrySettings,
 	}
 
 	err := a.pubsubAdapter.Publish(&req)
@@ -1329,6 +1328,10 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			status = fasthttp.StatusBadRequest
 		}
 
+		if errors.As(err, &runtime_pubsub.InvalidRetrySettingsError{}) {
+			msg = NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrInvalidRetrySettings, requestRetrySettingsError.Error()))
+			status = fasthttp.StatusBadRequest
+		}
 		respond(reqCtx, withError(status, msg))
 		log.Debug(msg)
 	} else {
@@ -1336,30 +1339,44 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) getRetrySettingsFromRequest(reqCtx *fasthttp.RequestCtx) (string, int, int, error) {
-	var retryStrategy string
+func (a *api) getRetrySettingsFromRequest(reqCtx *fasthttp.RequestCtx) (retry.Settings, error) {
+	var retryStrategyString string
+	var retryStrategy retry.Strategy
 	var retryMaxCount, retryIntervalInSeconds int
-	var retrySettingsError, err error
-	retryStrategy = strings.ToLower(string(reqCtx.Request.Header.Peek("retryStrategy")))
+	var err error
+	var retrySettings retry.Settings
+
+	retryStrategyString = strings.ToLower(string(reqCtx.Request.Header.Peek("retryStrategy")))
+	if retryStrategyString != "" {
+		retryStrategy = retry.AllowedRetryStrategies[retryStrategyString]
+		if retryStrategy == "" {
+			return retrySettings, errors.Errorf("retry strategy provided is invalid")
+		}
+	}
+
 	retryMaxCountString := string(reqCtx.Request.Header.Peek("retryMaxCount"))
 	if retryMaxCountString != "" {
 		retryMaxCount, err = strconv.Atoi(retryMaxCountString)
 		if err != nil {
-			retrySettingsError = errors.Errorf("retry max count value provided is invalid")
-		}
-	}
-	if retrySettingsError == nil {
-		retryIntervalInSecondsString := string(reqCtx.Request.Header.Peek("retryIntervalInSeconds"))
-		if retryIntervalInSecondsString != "" {
-			retryIntervalInSeconds, err = strconv.Atoi(retryIntervalInSecondsString)
-			if err != nil {
-				retrySettingsError = errors.Errorf("retry interval value provided is invalid")
-			}
+			return retrySettings, errors.Errorf("retry max count value provided is invalid")
 		}
 	}
 
-	return retryStrategy, retryMaxCount, retryIntervalInSeconds, retrySettingsError
+	retryIntervalInSecondsString := string(reqCtx.Request.Header.Peek("retryIntervalInSeconds"))
+	if retryIntervalInSecondsString != "" {
+		retryIntervalInSeconds, err = strconv.Atoi(retryIntervalInSecondsString)
+		if err != nil {
+			return retrySettings, errors.Errorf("retry interval value provided is invalid")
+		}
+	}
 
+	retrySettings = retry.Settings{
+		RetryStrategy:          retryStrategy,
+		RetryMaxCount:          retryMaxCount,
+		RetryIntervalInSeconds: retryIntervalInSeconds,
+	}
+
+	return retrySettings, nil
 }
 
 // GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists

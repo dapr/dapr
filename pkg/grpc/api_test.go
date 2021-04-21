@@ -45,6 +45,7 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/retry"
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
@@ -1229,6 +1230,10 @@ func TestPublishTopic(t *testing.T) {
 					return runtime_pubsub.NotAllowedError{Topic: req.Topic, ID: "test"}
 				}
 
+				if req.Topic == "err-invalid-retrySettings" {
+					return runtime_pubsub.InvalidRetrySettingsError{InvalidRetrySettingErrorCause: "retry Strategy invalidRetryStrategy is invalid"}
+				}
+
 				return nil
 			},
 			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
@@ -1275,6 +1280,15 @@ func TestPublishTopic(t *testing.T) {
 		Topic:      "err-not-allowed",
 	})
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	_, err = client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
+		PubsubName:             "pubsub",
+		Topic:                  "err-invalid-retrySettings",
+		RetryStrategy:          runtimev1pb.PublishEventRequest_linear,
+		RetryMaxCount:          int32(retry.MaxRetryMaxCount + 1),
+		RetryIntervalInSeconds: int32(retry.MinRetryIntervalInSeconds),
+	})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestShutdownEndpoints(t *testing.T) {

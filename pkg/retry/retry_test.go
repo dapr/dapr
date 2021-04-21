@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/logger"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -12,14 +13,15 @@ type retrySettings struct {
 	retryStrategy                  string
 	retryMaxCount                  int
 	retryIntervalInSeconds         int
-	expectedRetryStrategy          RetryStrategy
+	expectedRetryStrategy          Strategy
 	expectedRetryMaxCount          int
 	expectedRetryIntervalInSeconds int
 	expectedErrorMessage           string
 }
 
-func TestValidateRetryStrategy(t *testing.T) {
+var log = logger.NewLogger("dapr.retry.test")
 
+func TestValidateRetryStrategy(t *testing.T) {
 	testCasesError := []string{"", "invalidStrategy", "exponEntial", "Linear"}
 
 	t.Run("test valid Retry Strategy", func(t *testing.T) {
@@ -40,7 +42,6 @@ func TestValidateRetryStrategy(t *testing.T) {
 }
 
 func TestValidateRetryMaxCount(t *testing.T) {
-
 	t.Run("test valid Retry Count", func(t *testing.T) {
 		for i := MinRetryMaxCount; i <= MaxRetryMaxCount; i++ {
 			err := validateRetryMaxCount(i)
@@ -62,7 +63,6 @@ func TestValidateRetryMaxCount(t *testing.T) {
 }
 
 func TestValidateRetryIntervalInSeconds(t *testing.T) {
-
 	t.Run("test valid Retry Count", func(t *testing.T) {
 		for i := MinRetryIntervalInSeconds; i <= MaxRetryIntervalInSeconds; i++ {
 			err := validateRetryIntervalInSeconds(i)
@@ -110,7 +110,7 @@ func TestValidateRetrySettings(t *testing.T) {
 			},
 		}
 		for _, invalidRetrySetting := range invalidRetrySettings {
-			retrySettings := RetrySettings{
+			retrySettings := Settings{
 				RetryStrategy:          AllowedRetryStrategies[invalidRetrySetting.retryStrategy],
 				RetryMaxCount:          invalidRetrySetting.retryMaxCount,
 				RetryIntervalInSeconds: invalidRetrySetting.retryIntervalInSeconds,
@@ -123,7 +123,6 @@ func TestValidateRetrySettings(t *testing.T) {
 }
 
 func TestNewRetrySettings(t *testing.T) {
-
 	t.Run("test NewRetrySettings with valid Retry Settings", func(t *testing.T) {
 		validRetrySettings := []retrySettings{
 			{
@@ -206,7 +205,7 @@ func TestNewRetrySettings(t *testing.T) {
 			if validRetrySetting.retryIntervalInSeconds != 0 {
 				retryIntervalInSeconds = validRetrySetting.retryIntervalInSeconds
 			}
-			retrySettings, err := NewRetrySettings(retryStrategy, retryMaxCount, retryIntervalInSeconds)
+			retrySettings, err := NewRetrySettings(retryStrategy, retryMaxCount, retryIntervalInSeconds, log)
 			assert.NoError(t, err, "no error expected")
 			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retrySettings.RetryStrategy)
 			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retrySettings.RetryMaxCount)
@@ -242,20 +241,18 @@ func TestNewRetrySettings(t *testing.T) {
 			if invalidRetrySetting.retryIntervalInSeconds != 0 {
 				retryIntervalInSeconds = invalidRetrySetting.retryIntervalInSeconds
 			}
-			_, err := NewRetrySettings(retryStrategy, retryMaxCount, retryIntervalInSeconds)
+			_, err := NewRetrySettings(retryStrategy, retryMaxCount, retryIntervalInSeconds, log)
 			assert.Error(t, err, "error expected")
 			assert.Equal(t, invalidRetrySetting.expectedErrorMessage, err.Error(), "expected error string to match")
 		}
 	})
-
 }
 
 func TestCustomizeRetrySettings(t *testing.T) {
-
 	baseRetrySettings := DefaultRetrySettings
 
-	t.Run("test NewRetrySettings with valid Retry Settings", func(t *testing.T) {
-		validRetrySettings := []retrySettings{
+	t.Run("test with valid custom Retry Settings", func(t *testing.T) {
+		customValidRetrySettings := []retrySettings{
 			{
 				expectedRetryStrategy:          baseRetrySettings.RetryStrategy,
 				expectedRetryMaxCount:          baseRetrySettings.RetryMaxCount,
@@ -338,60 +335,109 @@ func TestCustomizeRetrySettings(t *testing.T) {
 			},
 		}
 
-		for _, validRetrySetting := range validRetrySettings {
-			var retryStrategy string
+		for _, customValidRetrySetting := range customValidRetrySettings {
+			var retryStrategy Strategy
 			var retryMaxCount, retryIntervalInSeconds int
-			if validRetrySetting.retryStrategy != "" {
-				retryStrategy = validRetrySetting.retryStrategy
+			if customValidRetrySetting.retryStrategy != "" {
+				retryStrategy = AllowedRetryStrategies[customValidRetrySetting.retryStrategy]
 			}
-			if validRetrySetting.retryMaxCount != 0 {
-				retryMaxCount = validRetrySetting.retryMaxCount
+			if customValidRetrySetting.retryMaxCount != 0 {
+				retryMaxCount = customValidRetrySetting.retryMaxCount
 			}
-			if validRetrySetting.retryIntervalInSeconds != 0 {
-				retryIntervalInSeconds = validRetrySetting.retryIntervalInSeconds
+			if customValidRetrySetting.retryIntervalInSeconds != 0 {
+				retryIntervalInSeconds = customValidRetrySetting.retryIntervalInSeconds
 			}
-			retrySettings, err := CustomizeRetrySettings(baseRetrySettings, retryStrategy, retryMaxCount, retryIntervalInSeconds)
+			customRetrySettings := Settings{
+				RetryStrategy:          retryStrategy,
+				RetryMaxCount:          retryMaxCount,
+				RetryIntervalInSeconds: retryIntervalInSeconds,
+			}
+			retrySettings, err := CustomizeRetrySettings(baseRetrySettings, customRetrySettings, log)
 			assert.NoError(t, err, "no error expected")
-			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retrySettings.RetryStrategy)
-			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retrySettings.RetryMaxCount)
-			assert.EqualValues(t, validRetrySetting.expectedRetryIntervalInSeconds, retrySettings.RetryIntervalInSeconds)
+			assert.EqualValues(t, customValidRetrySetting.expectedRetryStrategy, retrySettings.RetryStrategy)
+			assert.EqualValues(t, customValidRetrySetting.expectedRetryMaxCount, retrySettings.RetryMaxCount)
+			assert.EqualValues(t, customValidRetrySetting.expectedRetryIntervalInSeconds, retrySettings.RetryIntervalInSeconds)
 		}
 	})
 
-	t.Run("test Component with invalid Retry Settings", func(t *testing.T) {
-		invalidRetrySettings := []retrySettings{
-			{
-				retryStrategy:        "invalidRetryStrategy",
-				expectedErrorMessage: "retry strategy invalidRetryStrategy is not valid",
-			},
+	t.Run("test with invalid custom Retry Settings", func(t *testing.T) {
+		customInvalidRetrySettings := []retrySettings{
 			{
 				retryMaxCount:        MaxRetryMaxCount + 1,
-				expectedErrorMessage: fmt.Sprintf("retry max count of %d is out of range [%d-%d]", MaxRetryMaxCount+1, MinRetryMaxCount, MaxRetryMaxCount),
+				expectedErrorMessage: fmt.Sprintf("custom retry settings provided are invalid: retry max count of %d is out of range [%d-%d]", MaxRetryMaxCount+1, MinRetryMaxCount, MaxRetryMaxCount),
 			},
 			{
 				retryIntervalInSeconds: MaxRetryIntervalInSeconds + 1,
-				expectedErrorMessage:   fmt.Sprintf("retry interval of %d is out of range [%d-%d]", MaxRetryIntervalInSeconds+1, MinRetryIntervalInSeconds, MaxRetryIntervalInSeconds),
+				expectedErrorMessage:   fmt.Sprintf("custom retry settings provided are invalid: retry interval of %d is out of range [%d-%d]", MaxRetryIntervalInSeconds+1, MinRetryIntervalInSeconds, MaxRetryIntervalInSeconds),
 			},
 		}
 
-		for _, invalidRetrySetting := range invalidRetrySettings {
-			var retryStrategy string
+		for _, customInvalidRetrySetting := range customInvalidRetrySettings {
+			var retryStrategy Strategy
 			var retryMaxCount, retryIntervalInSeconds int
-			if invalidRetrySetting.retryStrategy != "" {
-				retryStrategy = invalidRetrySetting.retryStrategy
+			if customInvalidRetrySetting.retryStrategy != "" {
+				retryStrategy = AllowedRetryStrategies[customInvalidRetrySetting.retryStrategy]
 			}
-			if invalidRetrySetting.retryMaxCount != 0 {
-				retryMaxCount = invalidRetrySetting.retryMaxCount
+			if customInvalidRetrySetting.retryMaxCount != 0 {
+				retryMaxCount = customInvalidRetrySetting.retryMaxCount
 			}
-			if invalidRetrySetting.retryIntervalInSeconds != 0 {
-				retryIntervalInSeconds = invalidRetrySetting.retryIntervalInSeconds
+			if customInvalidRetrySetting.retryIntervalInSeconds != 0 {
+				retryIntervalInSeconds = customInvalidRetrySetting.retryIntervalInSeconds
 			}
-			_, err := CustomizeRetrySettings(baseRetrySettings, retryStrategy, retryMaxCount, retryIntervalInSeconds)
+			customRetrySettings := Settings{
+				RetryStrategy:          retryStrategy,
+				RetryMaxCount:          retryMaxCount,
+				RetryIntervalInSeconds: retryIntervalInSeconds,
+			}
+			_, err := CustomizeRetrySettings(baseRetrySettings, customRetrySettings, log)
 			assert.Error(t, err, "error expected")
-			assert.Equal(t, invalidRetrySetting.expectedErrorMessage, err.Error(), "expected error string to match")
+			assert.Equal(t, customInvalidRetrySetting.expectedErrorMessage, err.Error(), "expected error string to match")
 		}
 	})
 
+	t.Run("test with invalid base Retry Settings", func(t *testing.T) {
+		invalidBaseRetrySettings := []retrySettings{
+			{
+				retryStrategy:          "",
+				retryMaxCount:          MaxRetryMaxCount,
+				retryIntervalInSeconds: MinRetryMaxCount,
+				expectedErrorMessage:   "base retry settings provided are invalid: retry strategy  is not valid",
+			},
+			{
+				retryStrategy:        "linear",
+				retryMaxCount:        MaxRetryMaxCount + 1,
+				expectedErrorMessage: fmt.Sprintf("base retry settings provided are invalid: retry max count of %d is out of range [%d-%d]", MaxRetryMaxCount+1, MinRetryMaxCount, MaxRetryMaxCount),
+			},
+			{
+				retryStrategy:          "linear",
+				retryMaxCount:          MaxRetryMaxCount,
+				retryIntervalInSeconds: MaxRetryIntervalInSeconds + 1,
+				expectedErrorMessage:   fmt.Sprintf("base retry settings provided are invalid: retry interval of %d is out of range [%d-%d]", MaxRetryIntervalInSeconds+1, MinRetryIntervalInSeconds, MaxRetryIntervalInSeconds),
+			},
+		}
+
+		for _, invalidBaseRetrySetting := range invalidBaseRetrySettings {
+			var retryStrategy Strategy
+			var retryMaxCount, retryIntervalInSeconds int
+			if invalidBaseRetrySetting.retryStrategy != "" {
+				retryStrategy = AllowedRetryStrategies[invalidBaseRetrySetting.retryStrategy]
+			}
+			if invalidBaseRetrySetting.retryMaxCount != 0 {
+				retryMaxCount = invalidBaseRetrySetting.retryMaxCount
+			}
+			if invalidBaseRetrySetting.retryIntervalInSeconds != 0 {
+				retryIntervalInSeconds = invalidBaseRetrySetting.retryIntervalInSeconds
+			}
+			baseRetrySettings = Settings{
+				RetryStrategy:          retryStrategy,
+				RetryMaxCount:          retryMaxCount,
+				RetryIntervalInSeconds: retryIntervalInSeconds,
+			}
+			_, err := CustomizeRetrySettings(baseRetrySettings, DefaultRetrySettings, log)
+			assert.Error(t, err, "error expected")
+			assert.Equal(t, invalidBaseRetrySetting.expectedErrorMessage, err.Error(), "expected error string to match")
+		}
+	})
 }
 
 func TestRetry(t *testing.T) {
@@ -401,21 +447,20 @@ func TestRetry(t *testing.T) {
 			if errorsReturned < consecutiveErrors {
 				errorsReturned++
 				return errors.Errorf("operation error number %d", errorsReturned)
-			} else {
-				return nil
 			}
+			return nil
 		}
 		return operation
 	}
 
 	t.Run("operation fails with empty retry settings", func(t *testing.T) {
 		operation := newOperation(0)
-		retrySettings := RetrySettings{
+		retrySettings := Settings{
 			RetryStrategy:          "",
 			RetryMaxCount:          0,
 			RetryIntervalInSeconds: 0,
 		}
-		err := Retry(operation, retrySettings)
+		err := Retry(operation, retrySettings, log)
 		expectedErrorMessage := "failed to execute Operation with retry due to invalid retry settings: retry strategy  is not valid"
 		assert.Error(t, err, "error expected")
 		assert.Equal(t, expectedErrorMessage, err.Error(), "expected error string to match")
@@ -423,12 +468,12 @@ func TestRetry(t *testing.T) {
 
 	t.Run("operation fails with invalid retry settings", func(t *testing.T) {
 		operation := newOperation(0)
-		retrySettings := RetrySettings{
+		retrySettings := Settings{
 			RetryStrategy:          linear,
 			RetryMaxCount:          MaxRetryMaxCount + 1,
 			RetryIntervalInSeconds: MinRetryIntervalInSeconds,
 		}
-		err := Retry(operation, retrySettings)
+		err := Retry(operation, retrySettings, log)
 		expectedErrorMessage := fmt.Sprintf("failed to execute Operation with retry due to invalid retry settings: retry max count of %d is out of range [%d-%d]", retrySettings.RetryMaxCount, MinRetryMaxCount, MaxRetryMaxCount)
 		assert.Error(t, err, "error expected")
 		assert.Equal(t, expectedErrorMessage, err.Error(), "expected error string to match")
@@ -437,31 +482,30 @@ func TestRetry(t *testing.T) {
 	t.Run("operation succeeds the first time", func(t *testing.T) {
 		operation := newOperation(0)
 		retrySettings := DefaultRetrySettings
-		err := Retry(operation, retrySettings)
+		err := Retry(operation, retrySettings, log)
 		assert.NoError(t, err, "no error expected")
 	})
 
 	t.Run("operation succeeds in the second retry", func(t *testing.T) {
 		operation := newOperation(1)
 		retrySettings := DefaultRetrySettings
-		err := Retry(operation, retrySettings)
+		err := Retry(operation, retrySettings, log)
 		assert.NoError(t, err, "no error expected")
 	})
 
 	t.Run("operation fails after exceeded retry max count", func(t *testing.T) {
 		retrySettings := DefaultRetrySettings
 		operation := newOperation(retrySettings.RetryMaxCount + 1)
-		err := Retry(operation, retrySettings)
+		err := Retry(operation, retrySettings, log)
 		assert.Error(t, err, "error expected")
 		expectedErrorMessage := fmt.Sprintf("operation error number %d", retrySettings.RetryMaxCount+1)
 		assert.Equal(t, expectedErrorMessage, err.Error(), "expected error string to match")
 	})
 
 	t.Run("operation succeeds with exponential retry strategy", func(t *testing.T) {
-		retrySettings, _ := NewRetrySettings("exponential", 0, 0)
+		retrySettings, _ := NewRetrySettings("exponential", 0, 0, log)
 		operation := newOperation(retrySettings.RetryMaxCount)
-		err := Retry(operation, retrySettings)
+		err := Retry(operation, retrySettings, log)
 		assert.NoError(t, err, "no error expected")
 	})
-
 }

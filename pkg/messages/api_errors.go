@@ -64,4 +64,7 @@ const (
 
 	// Healthz.
 	ErrHealthNotReady = "dapr is not ready"
+
+	// Retry
+	ErrInvalidRetrySettings = "retry settings are invalid: %s"
 )

@@ -7,17 +7,16 @@ package pubsub
 
 import (
 	contrib_pubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/retry"
 )
 
 // PublisRequest is the runtime wrapper to allow handling retry settings
 type PublishRequest struct {
-	PubsubName             string
-	RetryMaxCount          int
-	RetryStrategy          string
-	RetryIntervalInSeconds int
-	Topic                  string
-	Data                   []byte
-	Metadata               map[string]string
+	PubsubName    string
+	RetrySettings retry.Settings
+	Topic         string
+	Data          []byte
+	Metadata      map[string]string
 }
 
 // Adapter is the interface for message buses
