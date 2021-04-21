@@ -75,7 +75,7 @@ func TestPubSubEndpoints(t *testing.T) {
 				}
 
 				if req.PubsubName == "errinvalidretrySettings" {
-					return runtime_pubsub.InvalidRetrySettingsError{InvalidRetrySettingErrorCause: "retry Strategy invalidRetryStrategy is invalid"}
+					return runtime_pubsub.InvalidRetrySettingsError{InvalidRetrySettingErrorCause: "mock pubsub fails due to invalid retry settings"}
 				}
 
 				return nil
@@ -232,7 +232,7 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Publish with invalid retry settings - 400", func(t *testing.T) {
+	t.Run("Publish with invalid retry settings format - 400", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/errinvalidretrySettings/topic", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
@@ -242,6 +242,19 @@ func TestPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with invalid retry settings")
 			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 			assert.Equal(t, "failed deserializing HTTP body: retry max count value provided is invalid", resp.ErrorBody["message"])
+		}
+	})
+
+	t.Run("Publish with invalid retry settings values - 400", func(t *testing.T) {
+		apiPath := fmt.Sprintf("%s/publish/errinvalidretrySettings/topic", apiVersionV1)
+		testMethods := []string{"POST", "PUT"}
+		for _, method := range testMethods {
+			// act
+			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\": \"value\"}"), nil, []string{"retryStrategy", "linear"}, []string{"retryMaxCount", "6"})
+			// assert
+			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with invalid retry settings")
+			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "retry settings are invalid: retry settings are invalid: mock pubsub fails due to invalid retry settings", resp.ErrorBody["message"])
 		}
 	})
 

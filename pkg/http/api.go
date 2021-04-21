@@ -1329,7 +1329,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		if errors.As(err, &runtime_pubsub.InvalidRetrySettingsError{}) {
-			msg = NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrInvalidRetrySettings, requestRetrySettingsError.Error()))
+			msg = NewErrorResponse("ERR_MALFORMED_REQUEST", fmt.Sprintf(messages.ErrInvalidRetrySettings, err.Error()))
 			status = fasthttp.StatusBadRequest
 		}
 		respond(reqCtx, withError(status, msg))
