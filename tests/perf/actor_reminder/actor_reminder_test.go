@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 		{
 			AppName:           "testapp",
 			DaprEnabled:       true,
-			ImageName:         "e2e-actorfeatures",
+			ImageName:         "perf-actorfeatures",
 			Replicas:          1,
 			IngressEnabled:    true,
 			AppPort:           3000,
