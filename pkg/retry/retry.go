@@ -6,10 +6,12 @@
 package retry
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/dapr/dapr/pkg/logger"
 	"github.com/pkg/errors"
 )
@@ -61,10 +63,6 @@ var nilRetrySettings = Settings{
 	RetryMaxCount:          0,
 	RetryIntervalInSeconds: 0,
 }
-
-// Operation to be executed by dapr Retry function
-// The operation will be retried using a retry policy if it returns an error.
-type Operation func() error
 
 // NewRetrySettings returns a valid retry settings object based on the retry settings provided
 func NewRetrySettings(retryStrategy string, retryMaxCount int, retryIntervalInSeconds int, log logger.Logger) (Settings, error) {
@@ -194,43 +192,63 @@ func validateRetryIntervalInSeconds(retryIntervalInSeconds int) error {
 }
 
 // Retry executes an Operation as per the Retry Policy specified and till it succeeds or the max number of retries specified in the retry settings provided
-func Retry(operation Operation, retrySettings Settings, log logger.Logger) error {
+func Retry(operation backoff.Operation, retrySettings Settings, notify backoff.Notify, recovered func(), log logger.Logger) error {
 	err := validateRetrySettings(retrySettings)
 	if err != nil {
 		return errors.Errorf("failed to execute Operation with retry due to invalid retry settings: %s", err.Error())
 	}
 	err = operation()
 	if err != nil && retrySettings.RetryStrategy != off {
-		log.Infof("Operation failed. Will retry as per the retrySettings provided: retryStrategy=%s, retryMaxCount=%d, retryIntervalInSeconds=%d", retrySettings.RetryStrategy, retrySettings.RetryMaxCount, retrySettings.RetryIntervalInSeconds)
-		ch := make(chan error, 1)
-		retryFn := func(c chan error) {
-			backoff := retrySettings.RetryIntervalInSeconds
-			elapsedTime := 0
-			retryOperationOK := false
-			for retryCount := 1; retryCount <= retrySettings.RetryMaxCount; retryCount++ {
-				if retrySettings.RetryStrategy == exponential {
-					backoff = retryCount * retrySettings.RetryIntervalInSeconds
-				}
-				log.Infof("retrying operation in %d seconds", backoff)
-				elapsedTime += backoff
-				timer, _ := time.ParseDuration(fmt.Sprintf("%ss", strconv.Itoa(backoff)))
-				time.Sleep(timer)
-				err = operation()
-				if err == nil {
-					retryOperationOK = true
-					log.Infof("retry operation succeeded after %d seconds and %d retries", elapsedTime, retryCount)
-					c <- nil
-					break
-				}
-				log.Infof("retry operation failed with error: %s", err.Error())
+		var bo backoff.BackOff
+		interval, _ := time.ParseDuration(fmt.Sprintf("%ss", strconv.Itoa(retrySettings.RetryIntervalInSeconds)))
+		switch retrySettings.RetryStrategy {
+		case linear:
+			{
+				ebo := backoff.NewConstantBackOff(interval)
+				bo = backoff.WithMaxRetries(ebo, uint64(retrySettings.RetryMaxCount)-1)
 			}
-			if !retryOperationOK {
-				log.Warnf("completed retry operation as failed after %d seconds and %d retries", elapsedTime, retrySettings.RetryMaxCount)
-				c <- err
+		case exponential:
+			{
+				ebo := backoff.NewExponentialBackOff()
+				ebo.InitialInterval = interval
+				bo = backoff.WithMaxRetries(ebo, uint64(retrySettings.RetryMaxCount)-1)
 			}
 		}
-		go retryFn(ch)
-		err = <-ch
+		bo = backoff.WithContext(bo, context.Background())
+
+		if notify == nil {
+			notify = func(e error, d time.Duration) {
+				log.Debugf("retry operation failed with error: %s", e.Error())
+			}
+		}
+
+		if recovered == nil {
+			recovered = func() {
+				log.Debugf("retry operation succeeded after it previously failed")
+			}
+		}
+
+		return retryNotifyRecover(operation, bo, notify, recovered)
 	}
 	return err
+}
+
+func retryNotifyRecover(operation backoff.Operation, b backoff.BackOff, notify backoff.Notify, recovered func()) error {
+	var notified bool
+
+	return backoff.RetryNotify(func() error {
+		err := operation()
+
+		if err == nil && notified {
+			notified = false
+			recovered()
+		}
+
+		return err
+	}, b, func(err error, d time.Duration) {
+		if !notified {
+			notify(err, d)
+			notified = true
+		}
+	})
 }

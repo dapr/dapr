@@ -460,7 +460,7 @@ func TestRetry(t *testing.T) {
 			RetryMaxCount:          0,
 			RetryIntervalInSeconds: 0,
 		}
-		err := Retry(operation, retrySettings, log)
+		err := Retry(operation, retrySettings, nil, nil, log)
 		expectedErrorMessage := "failed to execute Operation with retry due to invalid retry settings: retry strategy  is not valid"
 		assert.Error(t, err, "error expected")
 		assert.Equal(t, expectedErrorMessage, err.Error(), "expected error string to match")
@@ -473,7 +473,7 @@ func TestRetry(t *testing.T) {
 			RetryMaxCount:          MaxRetryMaxCount + 1,
 			RetryIntervalInSeconds: MinRetryIntervalInSeconds,
 		}
-		err := Retry(operation, retrySettings, log)
+		err := Retry(operation, retrySettings, nil, nil, log)
 		expectedErrorMessage := fmt.Sprintf("failed to execute Operation with retry due to invalid retry settings: retry max count of %d is out of range [%d-%d]", retrySettings.RetryMaxCount, MinRetryMaxCount, MaxRetryMaxCount)
 		assert.Error(t, err, "error expected")
 		assert.Equal(t, expectedErrorMessage, err.Error(), "expected error string to match")
@@ -482,21 +482,21 @@ func TestRetry(t *testing.T) {
 	t.Run("operation succeeds the first time", func(t *testing.T) {
 		operation := newOperation(0)
 		retrySettings := DefaultRetrySettings
-		err := Retry(operation, retrySettings, log)
+		err := Retry(operation, retrySettings, nil, nil, log)
 		assert.NoError(t, err, "no error expected")
 	})
 
 	t.Run("operation succeeds in the second retry", func(t *testing.T) {
 		operation := newOperation(1)
 		retrySettings := DefaultRetrySettings
-		err := Retry(operation, retrySettings, log)
+		err := Retry(operation, retrySettings, nil, nil, log)
 		assert.NoError(t, err, "no error expected")
 	})
 
 	t.Run("operation fails after exceeded retry max count", func(t *testing.T) {
 		retrySettings := DefaultRetrySettings
 		operation := newOperation(retrySettings.RetryMaxCount + 1)
-		err := Retry(operation, retrySettings, log)
+		err := Retry(operation, retrySettings, nil, nil, log)
 		assert.Error(t, err, "error expected")
 		expectedErrorMessage := fmt.Sprintf("operation error number %d", retrySettings.RetryMaxCount+1)
 		assert.Equal(t, expectedErrorMessage, err.Error(), "expected error string to match")
@@ -505,7 +505,7 @@ func TestRetry(t *testing.T) {
 	t.Run("operation succeeds with exponential retry strategy", func(t *testing.T) {
 		retrySettings, _ := NewRetrySettings("exponential", 0, 0, log)
 		operation := newOperation(retrySettings.RetryMaxCount)
-		err := Retry(operation, retrySettings, log)
+		err := Retry(operation, retrySettings, nil, nil, log)
 		assert.NoError(t, err, "no error expected")
 	})
 }

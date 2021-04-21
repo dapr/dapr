@@ -1105,7 +1105,7 @@ func (a *DaprRuntime) Publish(req *runtime_pubsub.PublishRequest) error {
 
 	return retry.Retry(func() error {
 		return thepubsub.Publish(&requestToPubSub)
-	}, retrySettings, log)
+	}, retrySettings, nil, nil, log)
 }
 
 // GetPubSub is an adapter method to find a pubsub by name.
