@@ -150,6 +150,14 @@ jobs:
           DAPR_TEST_DURATION: 1m
           DAPR_PAYLOAD: "{}"
         run: make test-perf-actor_activation
+      - name: Run Perf test actor reminder registration without SDK
+        if: env.TEST_CLUSTER != ''
+        env:
+          DAPR_PERF_QPS: 500
+          DAPR_PERF_CONNECTIONS: 8
+          DAPR_TEST_DURATION: 1m
+          DAPR_PAYLOAD: "{}"
+        run: make test-perf-actor_reminder
       - name: Save control plane logs
         if: always() && env.TEST_CLUSTER != ''
         run: |

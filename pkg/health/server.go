@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/kit/logger"
 )
 
 // Server is the interface for the healthz server
