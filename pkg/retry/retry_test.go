@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/kit/logger"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )

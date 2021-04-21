@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/dapr/dapr/pkg/logger"
+	"github.com/dapr/kit/logger"
 	"github.com/pkg/errors"
 )
 
