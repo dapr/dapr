@@ -27,6 +27,7 @@ jobs:
       GOARCH: ${{ matrix.target_arch }}
       GOPROXY: https://proxy.golang.org
       ARCHIVE_OUTDIR: dist/archives
+      TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
@@ -106,6 +107,12 @@ jobs:
         run: |
           echo "Build docker image and push image..."
           make docker-push TARGET_OS=${{ matrix.target_os }} TARGET_ARCH=${{ matrix.target_arch }} DAPR_REGISTRY=${{ secrets.DOCKER_REGISTRY }} DAPR_TAG=${{ env.REL_VERSION }}
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
   publish:
     name: Publish docker image and binaries
     needs: build
