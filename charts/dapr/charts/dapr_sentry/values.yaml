@@ -20,5 +20,10 @@ tls:
     certPEM: ""
   trustDomain: cluster.local
 
+debug:
+  enabled: false
+  port: 40000
+  initialDelaySeconds: 30000
+
 runAsNonRoot: true
 resources: {}
