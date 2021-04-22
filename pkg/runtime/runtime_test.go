@@ -36,6 +36,7 @@ import (
 	"contrib.go.opencensus.io/exporter/zipkin"
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
+	"github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -43,6 +44,7 @@ import (
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	bindings_loader "github.com/dapr/dapr/pkg/components/bindings"
+	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsub_loader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstores_loader "github.com/dapr/dapr/pkg/components/secretstores"
 	state_loader "github.com/dapr/dapr/pkg/components/state"
@@ -317,6 +319,103 @@ func TestInitState(t *testing.T) {
 		// assert
 		assert.Error(t, err, "expected error")
 		assert.Equal(t, assert.AnError.Error(), err.Error(), "expected error strings to match")
+	})
+}
+
+func TestInitNameResolution(t *testing.T) {
+	initMockResolverForRuntime := func(rt *DaprRuntime, resolverName string, e error) *daprt.MockResolver {
+		mockResolver := new(daprt.MockResolver)
+
+		rt.nameResolutionRegistry.Register(
+			nr_loader.New(resolverName, func() nameresolution.Resolver {
+				return mockResolver
+			}),
+		)
+
+		expectedMetadata := nameresolution.Metadata{
+			Properties: map[string]string{
+				nameresolution.DaprHTTPPort:        strconv.Itoa(rt.runtimeConfig.HTTPPort),
+				nameresolution.DaprPort:            strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
+				nameresolution.AppPort:             strconv.Itoa(rt.runtimeConfig.ApplicationPort),
+				nameresolution.HostAddress:         rt.hostAddress,
+				nameresolution.AppID:               rt.runtimeConfig.ID,
+				nameresolution.MDNSInstanceName:    rt.runtimeConfig.ID,
+				nameresolution.MDNSInstanceAddress: rt.hostAddress,
+				nameresolution.MDNSInstancePort:    strconv.Itoa(rt.runtimeConfig.InternalGRPCPort),
+			},
+		}
+
+		mockResolver.On("Init", expectedMetadata).Return(e)
+
+		return mockResolver
+	}
+
+	t.Run("error on unknown resolver", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec.Component = "targetResolver"
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "anotherResolver", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.Error(t, err)
+	})
+
+	t.Run("test init nameresolution", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec.Component = "someResolver"
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "someResolver", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init nameresolution default in StandaloneMode", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec.Component = ""
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "mdns", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init nameresolution default in KubernetesMode", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec.Component = ""
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "kubernetes", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
 	})
 }
 
