@@ -221,9 +221,8 @@ func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 }
 
 // StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
-func StartInternalCallbackSpan(spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, *trace.Span) {
+func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, *trace.Span) {
 	traceEnabled := diag_utils.IsTracingEnabled(spec.SamplingRate)
-	ctx := context.Background()
 	if !traceEnabled {
 		return ctx, nil
 	}

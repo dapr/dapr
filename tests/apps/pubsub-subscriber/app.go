@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	appPort = 3000
-	pubsubA = "pubsub-a-topic-http"
-	pubsubB = "pubsub-b-topic-http"
-	pubsubC = "pubsub-c-topic-http"
+	appPort   = 3000
+	pubsubA   = "pubsub-a-topic-http"
+	pubsubB   = "pubsub-b-topic-http"
+	pubsubC   = "pubsub-c-topic-http"
+	pubsubJob = "pubsub-job-topic-http"
 )
 
 type appResponse struct {
@@ -35,9 +36,10 @@ type appResponse struct {
 }
 
 type receivedMessagesResponse struct {
-	ReceivedByTopicA []string `json:"pubsub-a-topic"`
-	ReceivedByTopicB []string `json:"pubsub-b-topic"`
-	ReceivedByTopicC []string `json:"pubsub-c-topic"`
+	ReceivedByTopicA   []string `json:"pubsub-a-topic"`
+	ReceivedByTopicB   []string `json:"pubsub-b-topic"`
+	ReceivedByTopicC   []string `json:"pubsub-c-topic"`
+	ReceivedByTopicJob []string `json:"pubsub-job-topic"`
 }
 
 type subscription struct {
@@ -64,11 +66,12 @@ const (
 
 var (
 	// using sets to make the test idempotent on multiple delivery of same message
-	receivedMessagesA sets.String
-	receivedMessagesB sets.String
-	receivedMessagesC sets.String
-	desiredResponse   respondWith
-	lock              sync.Mutex
+	receivedMessagesA   sets.String
+	receivedMessagesB   sets.String
+	receivedMessagesC   sets.String
+	receivedMessagesJob sets.String
+	desiredResponse     respondWith
+	lock                sync.Mutex
 )
 
 // indexHandler is the handler for root path
@@ -101,6 +104,11 @@ func configureSubscribeHandler(w http.ResponseWriter, _ *http.Request) {
 			PubsubName: pubsubName,
 			Topic:      pubsubC,
 			Route:      pubsubC,
+		},
+		{
+			PubsubName: pubsubName,
+			Topic:      pubsubJob,
+			Route:      pubsubJob,
 		},
 	}
 	log.Printf("configureSubscribeHandler subscribing to:%v\n", t)
@@ -187,6 +195,8 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		receivedMessagesB.Insert(msg)
 	} else if strings.HasSuffix(r.URL.String(), pubsubC) && !receivedMessagesC.Has(msg) {
 		receivedMessagesC.Insert(msg)
+	} else if strings.HasSuffix(r.URL.String(), pubsubJob) && !receivedMessagesJob.Has(msg) {
+		receivedMessagesJob.Insert(msg)
 	} else {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
@@ -253,6 +263,7 @@ func getReceivedMessages(w http.ResponseWriter, _ *http.Request) {
 		ReceivedByTopicA: unique(receivedMessagesA.List()),
 		ReceivedByTopicB: unique(receivedMessagesB.List()),
 		ReceivedByTopicC: unique(receivedMessagesC.List()),
+		ReceivedByTopicJob: unique(receivedMessagesJob.List()),
 	}
 
 	log.Printf("receivedMessagesResponse=%s", response)
@@ -286,6 +297,7 @@ func initializeSets() {
 	receivedMessagesA = sets.NewString()
 	receivedMessagesB = sets.NewString()
 	receivedMessagesC = sets.NewString()
+	receivedMessagesJob = sets.NewString()
 }
 
 // appRouter initializes restful api router
@@ -313,6 +325,7 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/"+pubsubA, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubB, subscribeHandler).Methods("POST")
 	router.HandleFunc("/"+pubsubC, subscribeHandler).Methods("POST")
+	router.HandleFunc("/"+pubsubJob, subscribeHandler).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

@@ -15,3 +15,8 @@ ports:
   targetPort: 6500
 
 resources: {}
+
+debug:
+  enabled: false
+  port: 40000
+  initialDelaySeconds: 30000

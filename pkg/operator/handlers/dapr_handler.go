@@ -6,9 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/logger"
-	"github.com/dapr/dapr/pkg/operator/monitoring"
-	"github.com/dapr/dapr/pkg/validation"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+
+	"github.com/dapr/dapr/pkg/operator/monitoring"
+	"github.com/dapr/dapr/pkg/validation"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -76,6 +78,9 @@ func (h *DaprHandler) Init() error {
 	return ctrl.NewControllerManagedBy(h.mgr).
 		For(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: 100,
+		}).
 		Complete(h)
 }
 

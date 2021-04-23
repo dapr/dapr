@@ -29,22 +29,38 @@ var tr *runner.TestRunner
 func TestMain(m *testing.M) {
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "testapp",
-			DaprEnabled:    true,
-			ImageName:      "perf-actorjava",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			AppPort:        3000,
+			AppName:           "testapp",
+			DaprEnabled:       true,
+			ImageName:         "perf-actorjava",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			AppPort:           3000,
+			DaprCPULimit:      "4.0",
+			DaprCPURequest:    "0.1",
+			DaprMemoryLimit:   "512Mi",
+			DaprMemoryRequest: "250Mi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "0.1",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "2500Mi",
 		},
 		{
-			AppName:        "tester",
-			DaprEnabled:    true,
-			ImageName:      "perf-tester",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			AppPort:        3001,
+			AppName:           "tester",
+			DaprEnabled:       true,
+			ImageName:         "perf-tester",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			AppPort:           3001,
+			DaprCPULimit:      "4.0",
+			DaprCPURequest:    "0.1",
+			DaprMemoryLimit:   "512Mi",
+			DaprMemoryRequest: "250Mi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "0.1",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "2500Mi",
 		},
 	}
 
@@ -113,6 +129,18 @@ func TestActorActivate(t *testing.T) {
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
+	}
+
+	report := perf.NewTestReport(
+		[]perf.TestResult{daprResult},
+		"Actor Activation",
+		sidecarUsage,
+		appUsage)
+	report.SetTotalRestartCount(restarts)
+	err = utils.UploadAzureBlob(report)
+
+	if err != nil {
+		t.Error(err)
 	}
 
 	require.Equal(t, 0, daprResult.RetCodes.Num400)

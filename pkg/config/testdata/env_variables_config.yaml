@@ -1,0 +1,10 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: secretappconfig
+spec:
+  secrets:
+    scopes:
+        - storeName: "local"
+          defaultAccess: "allow"
+          allowedSecrets: ["${DAPR_SECRET}"]

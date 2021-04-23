@@ -11,5 +11,13 @@ import "strings"
 // or first stable version (v1). For backward compatibility, empty strings are also included.
 func IsInitialVersion(version string) bool {
 	v := strings.ToLower(version)
-	return v == "" || v == "v0" || v == "v1"
+	return v == "" || v == UnstableVersion || v == FirstStableVersion
 }
+
+const (
+	// Unstable version (v0)
+	UnstableVersion = "v0"
+
+	// First stable version (v1)
+	FirstStableVersion = "v1"
+)

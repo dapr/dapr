@@ -10,10 +10,10 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/runtime"
+	"github.com/dapr/dapr/pkg/version"
+	"github.com/dapr/kit/logger"
 
 	// Included components in compiled daprd
 
@@ -68,6 +68,7 @@ import (
 
 	// Name resolutions
 	nr "github.com/dapr/components-contrib/nameresolution"
+	nr_consul "github.com/dapr/components-contrib/nameresolution/consul"
 	nr_kubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
 	nr_mdns "github.com/dapr/components-contrib/nameresolution/mdns"
 	nr_loader "github.com/dapr/dapr/pkg/components/nameresolution"
@@ -95,6 +96,7 @@ import (
 	"github.com/dapr/components-contrib/bindings/influx"
 	"github.com/dapr/components-contrib/bindings/kafka"
 	"github.com/dapr/components-contrib/bindings/kubernetes"
+	"github.com/dapr/components-contrib/bindings/localstorage"
 	"github.com/dapr/components-contrib/bindings/mqtt"
 	"github.com/dapr/components-contrib/bindings/mysql"
 	"github.com/dapr/components-contrib/bindings/postgres"
@@ -126,6 +128,7 @@ var (
 )
 
 func main() {
+	logger.DaprVersion = version.Version()
 	rt, err := runtime.FromFlags()
 	if err != nil {
 		log.Fatal(err)
@@ -254,6 +257,9 @@ func main() {
 			nr_loader.New("kubernetes", func() nr.Resolver {
 				return nr_kubernetes.NewResolver(logContrib)
 			}),
+			nr_loader.New("consul", func() nr.Resolver {
+				return nr_consul.NewResolver(logContrib)
+			}),
 		),
 		runtime.WithInputBindings(
 			bindings_loader.NewInput("aws.sqs", func() bindings.InputBinding {
@@ -332,6 +338,9 @@ func main() {
 			}),
 			bindings_loader.NewOutput("kafka", func() bindings.OutputBinding {
 				return kafka.NewKafka(logContrib)
+			}),
+			bindings_loader.NewOutput("localstorage", func() bindings.OutputBinding {
+				return localstorage.NewLocalStorage(logContrib)
 			}),
 			bindings_loader.NewOutput("mqtt", func() bindings.OutputBinding {
 				return mqtt.NewMQTT(logContrib)
@@ -430,8 +439,5 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
 	<-stop
-	gracefulShutdownDuration := 5 * time.Second
-	log.Info("dapr shutting down. Waiting 5 seconds to finish outstanding operations")
-	rt.Stop()
-	<-time.After(gracefulShutdownDuration)
+	rt.ShutdownWithWait()
 }

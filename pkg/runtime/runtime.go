@@ -10,7 +10,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	nethttp "net/http"
 	"os"
 	"reflect"
 	"strconv"
@@ -18,9 +20,20 @@ import (
 	"sync"
 	"time"
 
-	nethttp "net/http"
-
 	"contrib.go.opencensus.io/exporter/zipkin"
+	"github.com/google/uuid"
+	"github.com/hashicorp/go-multierror"
+	jsoniter "github.com/json-iterator/go"
+	openzipkin "github.com/openzipkin/zipkin-go"
+	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
+	"github.com/pkg/errors"
+	"go.opencensus.io/trace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/middleware"
@@ -44,7 +57,6 @@ import (
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -56,17 +68,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
-	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
-	openzipkin "github.com/openzipkin/zipkin-go"
-	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
-	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -413,7 +415,7 @@ func (a *DaprRuntime) initBinding(c components_v1alpha1.Component) error {
 }
 
 func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
-	var publishFunc func(msg *pubsub.NewMessage) error
+	var publishFunc pubsub.Handler
 	switch a.runtimeConfig.ApplicationProtocol {
 	case HTTPProtocol:
 		publishFunc = a.publishMessageHTTP
@@ -440,13 +442,13 @@ func (a *DaprRuntime) beginPubSub(name string, ps pubsub.PubSub) error {
 		if err := ps.Subscribe(pubsub.SubscribeRequest{
 			Topic:    topic,
 			Metadata: route.metadata,
-		}, func(msg *pubsub.NewMessage) error {
+		}, func(ctx context.Context, msg *pubsub.NewMessage) error {
 			if msg.Metadata == nil {
 				msg.Metadata = make(map[string]string, 1)
 			}
 
 			msg.Metadata[pubsubName] = name
-			return publishFunc(msg)
+			return publishFunc(ctx, msg)
 		}); err != nil {
 			log.Warnf("failed to subscribe to topic %s: %s", topic, err)
 		}
@@ -593,7 +595,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, metadata map[string]string) ([]byte, error) {
 	var response bindings.AppResponse
 	spanName := fmt.Sprintf("bindings/%s", bindingName)
-	ctx, span := diag.StartInternalCallbackSpan(spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
+	ctx, span := diag.StartInternalCallbackSpan(context.Background(), spanName, trace.SpanContext{}, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
 
@@ -713,7 +715,7 @@ func (a *DaprRuntime) readFromBinding(name string, binding bindings.InputBinding
 
 func (a *DaprRuntime) startHTTPServer(port, profilePort int, allowedOrigins string, pipeline http_middleware.Pipeline) {
 	a.daprHTTPAPI = http.NewAPI(a.runtimeConfig.ID, a.appChannel, a.directMessaging, a.getComponents, a.stateStores, a.secretStores,
-		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec)
+		a.secretsConfiguration, a.getPublishAdapter(), a.actor, a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.ShutdownWithWait)
 	serverConf := http.NewServerConfig(a.runtimeConfig.ID, a.hostAddress, port, profilePort, allowedOrigins, a.runtimeConfig.EnableProfiling, a.runtimeConfig.MaxRequestBodySize)
 
 	server := http.NewServer(a.daprHTTPAPI, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, pipeline)
@@ -747,7 +749,7 @@ func (a *DaprRuntime) getNewServerConfig(port int) grpc.ServerConfig {
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(a.runtimeConfig.ID, a.appChannel, a.stateStores, a.secretStores, a.secretsConfiguration,
 		a.getPublishAdapter(), a.directMessaging, a.actor,
-		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents)
+		a.sendToOutputBinding, a.globalConfig.Spec.TracingSpec, a.accessControlList, string(a.runtimeConfig.ApplicationProtocol), a.getComponents, a.ShutdownWithWait)
 }
 
 func (a *DaprRuntime) getPublishAdapter() runtime_pubsub.Adapter {
@@ -1071,38 +1073,55 @@ func (a *DaprRuntime) initNameResolution() error {
 	var err error
 	var resolverMetadata = nr.Metadata{}
 
-	switch a.runtimeConfig.Mode {
-	case modes.KubernetesMode:
-		resolver, err = a.nameResolutionRegistry.Create("kubernetes", "v1")
-	case modes.StandaloneMode:
-		resolver, err = a.nameResolutionRegistry.Create("mdns", "v1")
-		// properties to register mDNS instances.
-		resolverMetadata.Properties = map[string]string{
-			nr.MDNSInstanceName:    a.runtimeConfig.ID,
-			nr.MDNSInstanceAddress: a.hostAddress,
-			nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
+	resolverName := a.globalConfig.Spec.NameResolutionSpec.Component
+	resolverVersion := a.globalConfig.Spec.NameResolutionSpec.Version
+
+	if resolverName == "" {
+		switch a.runtimeConfig.Mode {
+		case modes.KubernetesMode:
+			resolverName = "kubernetes"
+		case modes.StandaloneMode:
+			resolverName = "mdns"
+		default:
+			return errors.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode))
 		}
-	default:
-		return errors.Errorf("remote calls not supported for %s mode", string(a.runtimeConfig.Mode))
+	}
+
+	if resolverVersion == "" {
+		resolverVersion = components.FirstStableVersion
+	}
+
+	resolver, err = a.nameResolutionRegistry.Create(resolverName, resolverVersion)
+	resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
+	resolverMetadata.Properties = map[string]string{
+		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.HTTPPort),
+		nr.DaprPort:     strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
+		nr.AppPort:      strconv.Itoa(a.runtimeConfig.ApplicationPort),
+		nr.HostAddress:  a.hostAddress,
+		nr.AppID:        a.runtimeConfig.ID,
+		// TODO - change other nr components to use above properties (specifically MDNS component)
+		nr.MDNSInstanceName:    a.runtimeConfig.ID,
+		nr.MDNSInstanceAddress: a.hostAddress,
+		nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
 	}
 
 	if err != nil {
-		log.Warnf("error creating name resolution resolver %s: %s", a.runtimeConfig.Mode, err)
+		log.Warnf("error creating name resolution resolver %s: %s", resolverName, err)
 		return err
 	}
 
 	if err = resolver.Init(resolverMetadata); err != nil {
-		log.Errorf("failed to initialize name resolution resolver %s: %s", a.runtimeConfig.Mode, err)
+		log.Errorf("failed to initialize name resolution resolver %s: %s", resolverName, err)
 		return err
 	}
 
 	a.nameResolver = resolver
 
-	log.Infof("Initialized name resolution to %s", a.runtimeConfig.Mode)
+	log.Infof("Initialized name resolution to %s", resolverName)
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsub.NewMessage) error {
 	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
@@ -1115,7 +1134,6 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		return nil
 	}
 
-	ctx := context.Background()
 	var span *trace.Span
 
 	route := a.topicRoutes[msg.Metadata[pubsubName]].routes[msg.Topic]
@@ -1127,7 +1145,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
 		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
-		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 	}
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req)
@@ -1185,7 +1203,7 @@ func (a *DaprRuntime) publishMessageHTTP(msg *pubsub.NewMessage) error {
 	return errors.Errorf("retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField].(string), body, statusCode)
 }
 
-func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
+func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsub.NewMessage) error {
 	var cloudEvent map[string]interface{}
 	err := a.json.Unmarshal(msg.Data, &cloudEvent)
 	if err != nil {
@@ -1226,7 +1244,6 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		}
 	}
 
-	ctx := context.Background()
 	var span *trace.Span
 	if cloudEvent[pubsub.TraceIDField] != nil {
 		traceID := cloudEvent[pubsub.TraceIDField].(string)
@@ -1234,7 +1251,7 @@ func (a *DaprRuntime) publishMessageGRPC(msg *pubsub.NewMessage) error {
 		spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
 
 		// no ops if trace is off
-		ctx, span = diag.StartInternalCallbackSpan(spanName, sc, a.globalConfig.Spec.TracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
 		ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	}
 
@@ -1485,13 +1502,81 @@ func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component
 	return componentPreprocessRes{}
 }
 
-// Stop allows for a graceful shutdown of all runtime internal operations or components
-func (a *DaprRuntime) Stop() {
-	log.Info("stop command issued. Shutting down all operations")
-
+func (a *DaprRuntime) stopActor() {
 	if a.actor != nil {
+		log.Info("Shutting down actor")
 		a.actor.Stop()
 	}
+}
+
+// shutdownComponents allows for a graceful shutdown of all runtime internal operations or components
+func (a *DaprRuntime) shutdownComponents() error {
+	log.Info("Shutting down all components")
+	var merr error
+
+	// Close components if they implement `io.Closer`
+	for name, binding := range a.inputBindings {
+		if closer, ok := binding.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing input binding %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	for name, binding := range a.outputBindings {
+		if closer, ok := binding.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing output binding %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	for name, secretstore := range a.secretStores {
+		if closer, ok := secretstore.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing secret store %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	for name, pubSub := range a.pubSubs {
+		if err := pubSub.Close(); err != nil {
+			err = fmt.Errorf("error closing pub sub %s: %w", name, err)
+			merr = multierror.Append(merr, err)
+			log.Warn(err)
+		}
+	}
+	for name, stateStore := range a.stateStores {
+		if closer, ok := stateStore.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing state store %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	if closer, ok := a.nameResolver.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing name resolver: %w", err)
+			merr = multierror.Append(merr, err)
+			log.Warn(err)
+		}
+	}
+
+	return merr
+}
+
+// ShutdownWithWait will gracefully stop runtime and wait outstanding operations
+func (a *DaprRuntime) ShutdownWithWait() {
+	a.stopActor()
+	gracefulShutdownDuration := 5 * time.Second
+	log.Infof("dapr shutting down. Waiting %s to finish outstanding operations", gracefulShutdownDuration)
+	<-time.After(gracefulShutdownDuration)
+	a.shutdownComponents()
+	os.Exit(0)
 }
 
 func (a *DaprRuntime) processComponentSecrets(component components_v1alpha1.Component) (components_v1alpha1.Component, string) {
@@ -1686,7 +1771,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
-				Version: "v1",
+				Version: components.FirstStableVersion,
 			},
 		}}
 	}

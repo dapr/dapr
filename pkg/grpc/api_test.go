@@ -38,7 +38,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -47,6 +46,7 @@ import (
 	runtime_pubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
+	"github.com/dapr/kit/logger"
 )
 
 const maxGRPCServerUptime = 100 * time.Millisecond
@@ -1274,6 +1274,34 @@ func TestPublishTopic(t *testing.T) {
 		Topic:      "err-not-allowed",
 	})
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+func TestShutdownEndpoints(t *testing.T) {
+	port, _ := freeport.GetFreePort()
+
+	m := mock.Mock{}
+	m.On("shutdown", mock.Anything).Return()
+	srv := &api{
+		shutdown: func() {
+			m.MethodCalled("shutdown")
+		},
+	}
+	server := startTestServerAPI(port, srv)
+	defer server.Stop()
+
+	clientConn := createTestClient(port)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	t.Run("Shutdown successfully - 204", func(t *testing.T) {
+		_, err := client.Shutdown(context.Background(), &emptypb.Empty{})
+		assert.NoError(t, err, "Expected no error")
+		for i := 0; i < 5 && len(m.Calls) == 0; i++ {
+			<-time.After(200 * time.Millisecond)
+		}
+		m.AssertCalled(t, "shutdown")
+	})
 }
 
 func TestInvokeBinding(t *testing.T) {

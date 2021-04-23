@@ -101,3 +101,13 @@ func ParseEnvString(envStr string) []corev1.EnvVar {
 
 	return envVars
 }
+
+// StringSliceContains return true if an array containe the "str" string
+func StringSliceContains(needle string, haystack []string) bool {
+	for _, item := range haystack {
+		if item == needle {
+			return true
+		}
+	}
+	return false
+}

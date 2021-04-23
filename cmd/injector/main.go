@@ -13,11 +13,11 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/pkg/version"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.injector")
@@ -27,6 +27,7 @@ const (
 )
 
 func main() {
+	logger.DaprVersion = version.Version()
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", version.Version(), version.Commit())
 
 	ctx := signals.Context()
@@ -49,12 +50,12 @@ func main() {
 		}
 	}()
 
-	uid, err := injector.ReplicasetAccountUID(kubeClient)
+	uids, err := injector.AllowedControllersServiceAccountUID(ctx, kubeClient)
 	if err != nil {
-		log.Fatalf("failed to get authentication uid from service account: %s", err)
+		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	injector.NewInjector(uid, cfg, daprClient, kubeClient).Run(ctx)
+	injector.NewInjector(uids, cfg, daprClient, kubeClient).Run(ctx)
 
 	shutdownDuration := 5 * time.Second
 	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)

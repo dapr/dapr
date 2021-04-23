@@ -37,14 +37,22 @@ spec:
           httpGet:
             path: /healthz
             port: 8080
+{{- if eq .Values.debug.enabled false }}
           initialDelaySeconds: 10
+{{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+{{- end }}
           periodSeconds: 3
           failureThreshold: 5
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 10
+{{- if eq .Values.debug.enabled false }}
+          initialDelaySeconds: 3
+{{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+{{- end }}
           periodSeconds: 3
           failureThreshold: 5
 {{- if contains "/" .Values.image.name }}
@@ -80,8 +88,22 @@ spec:
             protocol: TCP
 {{- end }}
         command:
+{{- if eq .Values.debug.enabled false }}
         - "/placement"
+{{- else }}
+        - "/dlv"
+{{- end }}
         args:
+{{- if eq .Values.debug.enabled true }}
+        - "--listen=:{{ .Values.debug.port }}"
+        - "--accept-multiclient"
+        - "--headless=true"
+        - "--log"
+        - "--api-version=2"
+        - "exec"
+        - "/placement"
+        - "--"
+{{- end }}
 {{- if eq .Values.global.ha.enabled true }}
         - "--id"
         - "$(PLACEMENT_ID)"
@@ -119,6 +141,11 @@ spec:
           runAsNonRoot: {{ .Values.runAsNonRoot }}
 {{- else }}
           runAsUser: 0
+{{- end }}
+{{- if eq .Values.debug.enabled true }}
+          capabilities:
+            add:
+              - SYS_PTRACE
 {{- end }}
 {{- end }}
         env:

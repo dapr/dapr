@@ -28,4 +28,5 @@ type AppDescription struct {
 	DaprMemoryLimit   string
 	DaprMemoryRequest string
 	Namespace         *string
+	IsJob             bool
 }
