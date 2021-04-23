@@ -119,6 +119,10 @@ func CustomizeRetrySettings(retrySettings Settings, customRetrySettings Settings
 	}
 
 	if customRetrySettings.RetryStrategy != "" {
+		err := validateRetryStrategy(string(customRetrySettings.RetryStrategy))
+		if err != nil {
+			return nilRetrySettings, errors.Errorf("custom retry settings provided are invalid: %s", err.Error())
+		}
 		log.Debugf("customizing retry strategy to %s", customRetrySettings.RetryStrategy)
 		if customRetrySettings.RetryStrategy == off {
 			return nilRetrySettings, nil

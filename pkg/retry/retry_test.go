@@ -10,7 +10,7 @@ import (
 )
 
 type retrySettings struct {
-	retryStrategy                  string
+	retryStrategy                  Strategy
 	retryMaxCount                  int
 	retryIntervalInSeconds         int
 	expectedRetryStrategy          Strategy
@@ -97,13 +97,19 @@ func TestValidateRetrySettings(t *testing.T) {
 				expectedErrorMessage:   "retry strategy  is not valid",
 			},
 			{
-				retryStrategy:          "exponential",
+				retryStrategy:          " ",
+				retryMaxCount:          MaxRetryMaxCount,
+				retryIntervalInSeconds: MinRetryIntervalInSeconds,
+				expectedErrorMessage:   "retry strategy   is not valid",
+			},
+			{
+				retryStrategy:          exponential,
 				retryMaxCount:          MaxRetryMaxCount + 1,
 				retryIntervalInSeconds: MinRetryIntervalInSeconds,
 				expectedErrorMessage:   fmt.Sprintf("retry max count of %d is out of range [%d-%d]", MaxRetryMaxCount+1, MinRetryMaxCount, MaxRetryMaxCount),
 			},
 			{
-				retryStrategy:          "exponential",
+				retryStrategy:          exponential,
 				retryMaxCount:          MaxRetryMaxCount,
 				retryIntervalInSeconds: MaxRetryIntervalInSeconds + 1,
 				expectedErrorMessage:   fmt.Sprintf("retry interval of %d is out of range [%d-%d]", MaxRetryIntervalInSeconds+1, MinRetryIntervalInSeconds, MaxRetryIntervalInSeconds),
@@ -111,7 +117,7 @@ func TestValidateRetrySettings(t *testing.T) {
 		}
 		for _, invalidRetrySetting := range invalidRetrySettings {
 			retrySettings := Settings{
-				RetryStrategy:          AllowedRetryStrategies[invalidRetrySetting.retryStrategy],
+				RetryStrategy:          invalidRetrySetting.retryStrategy,
 				RetryMaxCount:          invalidRetrySetting.retryMaxCount,
 				RetryIntervalInSeconds: invalidRetrySetting.retryIntervalInSeconds,
 			}
@@ -126,19 +132,19 @@ func TestNewRetrySettings(t *testing.T) {
 	t.Run("test NewRetrySettings with valid Retry Settings", func(t *testing.T) {
 		validRetrySettings := []retrySettings{
 			{
-				retryStrategy:                  "linear",
+				retryStrategy:                  linear,
 				expectedRetryStrategy:          linear,
 				expectedRetryMaxCount:          defaultRetryMaxCount,
 				expectedRetryIntervalInSeconds: defaultRetryIntervalInSeconds,
 			},
 			{
-				retryStrategy:                  "off",
+				retryStrategy:                  off,
 				expectedRetryStrategy:          off,
 				expectedRetryMaxCount:          0,
 				expectedRetryIntervalInSeconds: 0,
 			},
 			{
-				retryStrategy:                  "off",
+				retryStrategy:                  off,
 				retryMaxCount:                  MaxRetryMaxCount - 1,
 				retryIntervalInSeconds:         MaxRetryIntervalInSeconds - 1,
 				expectedRetryStrategy:          off,
@@ -163,14 +169,14 @@ func TestNewRetrySettings(t *testing.T) {
 				expectedRetryIntervalInSeconds: MaxRetryIntervalInSeconds - 1,
 			},
 			{
-				retryStrategy:                  "exponential",
+				retryStrategy:                  exponential,
 				retryMaxCount:                  MinRetryMaxCount + 1,
 				expectedRetryStrategy:          exponential,
 				expectedRetryMaxCount:          MinRetryMaxCount + 1,
 				expectedRetryIntervalInSeconds: defaultRetryIntervalInSeconds,
 			},
 			{
-				retryStrategy:                  "exponential",
+				retryStrategy:                  exponential,
 				retryIntervalInSeconds:         MinRetryIntervalInSeconds + 1,
 				expectedRetryStrategy:          exponential,
 				expectedRetryMaxCount:          defaultRetryMaxCount,
@@ -184,7 +190,7 @@ func TestNewRetrySettings(t *testing.T) {
 				expectedRetryIntervalInSeconds: MaxRetryIntervalInSeconds - 1,
 			},
 			{
-				retryStrategy:                  "linear",
+				retryStrategy:                  linear,
 				retryMaxCount:                  MaxRetryMaxCount - 1,
 				retryIntervalInSeconds:         MaxRetryIntervalInSeconds - 1,
 				expectedRetryStrategy:          linear,
@@ -197,7 +203,7 @@ func TestNewRetrySettings(t *testing.T) {
 			var retryStrategy string
 			var retryMaxCount, retryIntervalInSeconds int
 			if validRetrySetting.retryStrategy != "" {
-				retryStrategy = validRetrySetting.retryStrategy
+				retryStrategy = string(validRetrySetting.retryStrategy)
 			}
 			if validRetrySetting.retryMaxCount != 0 {
 				retryMaxCount = validRetrySetting.retryMaxCount
@@ -233,7 +239,7 @@ func TestNewRetrySettings(t *testing.T) {
 			var retryStrategy string
 			var retryMaxCount, retryIntervalInSeconds int
 			if invalidRetrySetting.retryStrategy != "" {
-				retryStrategy = invalidRetrySetting.retryStrategy
+				retryStrategy = string(invalidRetrySetting.retryStrategy)
 			}
 			if invalidRetrySetting.retryMaxCount != 0 {
 				retryMaxCount = invalidRetrySetting.retryMaxCount
@@ -259,25 +265,25 @@ func TestCustomizeRetrySettings(t *testing.T) {
 				expectedRetryIntervalInSeconds: baseRetrySettings.RetryIntervalInSeconds,
 			},
 			{
-				retryStrategy:                  "linear",
+				retryStrategy:                  linear,
 				expectedRetryStrategy:          linear,
 				expectedRetryMaxCount:          baseRetrySettings.RetryMaxCount,
 				expectedRetryIntervalInSeconds: baseRetrySettings.RetryIntervalInSeconds,
 			},
 			{
-				retryStrategy:                  "exponential",
+				retryStrategy:                  exponential,
 				expectedRetryStrategy:          exponential,
 				expectedRetryMaxCount:          baseRetrySettings.RetryMaxCount,
 				expectedRetryIntervalInSeconds: baseRetrySettings.RetryIntervalInSeconds,
 			},
 			{
-				retryStrategy:                  "off",
+				retryStrategy:                  off,
 				expectedRetryStrategy:          off,
 				expectedRetryMaxCount:          0,
 				expectedRetryIntervalInSeconds: 0,
 			},
 			{
-				retryStrategy:                  "linear",
+				retryStrategy:                  linear,
 				retryMaxCount:                  MaxRetryMaxCount - 1,
 				retryIntervalInSeconds:         MaxRetryIntervalInSeconds - 1,
 				expectedRetryStrategy:          linear,
@@ -285,7 +291,7 @@ func TestCustomizeRetrySettings(t *testing.T) {
 				expectedRetryIntervalInSeconds: MaxRetryIntervalInSeconds - 1,
 			},
 			{
-				retryStrategy:                  "exponential",
+				retryStrategy:                  exponential,
 				retryMaxCount:                  MaxRetryMaxCount - 1,
 				retryIntervalInSeconds:         MaxRetryIntervalInSeconds - 1,
 				expectedRetryStrategy:          exponential,
@@ -305,14 +311,14 @@ func TestCustomizeRetrySettings(t *testing.T) {
 				expectedRetryIntervalInSeconds: MaxRetryIntervalInSeconds - 1,
 			},
 			{
-				retryStrategy:                  "exponential",
+				retryStrategy:                  exponential,
 				retryMaxCount:                  MinRetryMaxCount + 1,
 				expectedRetryStrategy:          exponential,
 				expectedRetryMaxCount:          MinRetryMaxCount + 1,
 				expectedRetryIntervalInSeconds: baseRetrySettings.RetryIntervalInSeconds,
 			},
 			{
-				retryStrategy:                  "exponential",
+				retryStrategy:                  exponential,
 				retryIntervalInSeconds:         MinRetryIntervalInSeconds + 1,
 				expectedRetryStrategy:          exponential,
 				expectedRetryMaxCount:          baseRetrySettings.RetryMaxCount,
@@ -326,7 +332,7 @@ func TestCustomizeRetrySettings(t *testing.T) {
 				expectedRetryIntervalInSeconds: MaxRetryIntervalInSeconds - 1,
 			},
 			{
-				retryStrategy:                  "exponential",
+				retryStrategy:                  exponential,
 				retryMaxCount:                  MaxRetryMaxCount - 1,
 				retryIntervalInSeconds:         MaxRetryIntervalInSeconds - 1,
 				expectedRetryStrategy:          exponential,
@@ -339,7 +345,7 @@ func TestCustomizeRetrySettings(t *testing.T) {
 			var retryStrategy Strategy
 			var retryMaxCount, retryIntervalInSeconds int
 			if customValidRetrySetting.retryStrategy != "" {
-				retryStrategy = AllowedRetryStrategies[customValidRetrySetting.retryStrategy]
+				retryStrategy = customValidRetrySetting.retryStrategy
 			}
 			if customValidRetrySetting.retryMaxCount != 0 {
 				retryMaxCount = customValidRetrySetting.retryMaxCount
@@ -363,6 +369,10 @@ func TestCustomizeRetrySettings(t *testing.T) {
 	t.Run("test with invalid custom Retry Settings", func(t *testing.T) {
 		customInvalidRetrySettings := []retrySettings{
 			{
+				retryStrategy:        " ",
+				expectedErrorMessage: "custom retry settings provided are invalid: retry strategy   is not valid",
+			},
+			{
 				retryMaxCount:        MaxRetryMaxCount + 1,
 				expectedErrorMessage: fmt.Sprintf("custom retry settings provided are invalid: retry max count of %d is out of range [%d-%d]", MaxRetryMaxCount+1, MinRetryMaxCount, MaxRetryMaxCount),
 			},
@@ -376,7 +386,7 @@ func TestCustomizeRetrySettings(t *testing.T) {
 			var retryStrategy Strategy
 			var retryMaxCount, retryIntervalInSeconds int
 			if customInvalidRetrySetting.retryStrategy != "" {
-				retryStrategy = AllowedRetryStrategies[customInvalidRetrySetting.retryStrategy]
+				retryStrategy = customInvalidRetrySetting.retryStrategy
 			}
 			if customInvalidRetrySetting.retryMaxCount != 0 {
 				retryMaxCount = customInvalidRetrySetting.retryMaxCount
@@ -404,12 +414,18 @@ func TestCustomizeRetrySettings(t *testing.T) {
 				expectedErrorMessage:   "base retry settings provided are invalid: retry strategy  is not valid",
 			},
 			{
-				retryStrategy:        "linear",
+				retryStrategy:          " ",
+				retryMaxCount:          MaxRetryMaxCount,
+				retryIntervalInSeconds: MinRetryMaxCount,
+				expectedErrorMessage:   "base retry settings provided are invalid: retry strategy   is not valid",
+			},
+			{
+				retryStrategy:        linear,
 				retryMaxCount:        MaxRetryMaxCount + 1,
 				expectedErrorMessage: fmt.Sprintf("base retry settings provided are invalid: retry max count of %d is out of range [%d-%d]", MaxRetryMaxCount+1, MinRetryMaxCount, MaxRetryMaxCount),
 			},
 			{
-				retryStrategy:          "linear",
+				retryStrategy:          linear,
 				retryMaxCount:          MaxRetryMaxCount,
 				retryIntervalInSeconds: MaxRetryIntervalInSeconds + 1,
 				expectedErrorMessage:   fmt.Sprintf("base retry settings provided are invalid: retry interval of %d is out of range [%d-%d]", MaxRetryIntervalInSeconds+1, MinRetryIntervalInSeconds, MaxRetryIntervalInSeconds),
@@ -420,7 +436,7 @@ func TestCustomizeRetrySettings(t *testing.T) {
 			var retryStrategy Strategy
 			var retryMaxCount, retryIntervalInSeconds int
 			if invalidBaseRetrySetting.retryStrategy != "" {
-				retryStrategy = AllowedRetryStrategies[invalidBaseRetrySetting.retryStrategy]
+				retryStrategy = invalidBaseRetrySetting.retryStrategy
 			}
 			if invalidBaseRetrySetting.retryMaxCount != 0 {
 				retryMaxCount = invalidBaseRetrySetting.retryMaxCount

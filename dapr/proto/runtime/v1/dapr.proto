@@ -221,9 +221,10 @@ message PublishEventRequest {
 
   // The retry strategy (optional).
   enum RetryStrategy {
-    off = 0;
-    linear = 1;
-    exponential = 2;
+    none = 0;
+    off = 1;
+    linear = 2;
+    exponential = 3;
   }
   RetryStrategy retryStrategy = 6;
 

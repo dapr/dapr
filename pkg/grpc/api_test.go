@@ -1212,6 +1212,75 @@ func TestDeleteState(t *testing.T) {
 	}
 }
 
+func TestGetRetrySettingsFromRequest(t *testing.T) {
+	type retrySettings struct {
+		retryStrategy                  runtimev1pb.PublishEventRequest_RetryStrategy
+		retryMaxCount                  int32
+		retryIntervalInSeconds         int32
+		expectedRetryStrategy          retry.Strategy
+		expectedRetryMaxCount          int
+		expectedRetryIntervalInSeconds int
+	}
+
+	a := &api{}
+
+	t.Run("test request with valid retry settings", func(t *testing.T) {
+		validRetrySettings := []retrySettings{
+			{
+				retryStrategy:                  runtimev1pb.PublishEventRequest_none,
+				expectedRetryStrategy:          "",
+				expectedRetryMaxCount:          0,
+				expectedRetryIntervalInSeconds: 0,
+			},
+			{
+				retryStrategy:                  runtimev1pb.PublishEventRequest_linear,
+				expectedRetryStrategy:          retry.AllowedRetryStrategies["linear"],
+				expectedRetryMaxCount:          0,
+				expectedRetryIntervalInSeconds: 0,
+			},
+			{
+				retryStrategy:                  runtimev1pb.PublishEventRequest_off,
+				expectedRetryStrategy:          retry.AllowedRetryStrategies["off"],
+				expectedRetryMaxCount:          0,
+				expectedRetryIntervalInSeconds: 0,
+			},
+			{
+				retryStrategy:                  runtimev1pb.PublishEventRequest_exponential,
+				expectedRetryStrategy:          retry.AllowedRetryStrategies["exponential"],
+				expectedRetryMaxCount:          0,
+				expectedRetryIntervalInSeconds: 0,
+			},
+			{
+				retryStrategy:                  runtimev1pb.PublishEventRequest_none,
+				retryMaxCount:                  int32(retry.MaxRetryMaxCount),
+				retryIntervalInSeconds:         int32(retry.MinRetryIntervalInSeconds),
+				expectedRetryStrategy:          "",
+				expectedRetryMaxCount:          retry.MaxRetryMaxCount,
+				expectedRetryIntervalInSeconds: retry.MinRetryIntervalInSeconds,
+			},
+		}
+
+		for _, validRetrySetting := range validRetrySettings {
+			request := &runtimev1pb.PublishEventRequest{}
+			request.RetryStrategy = validRetrySetting.retryStrategy
+			if validRetrySetting.retryMaxCount != 0 {
+				request.RetryMaxCount = validRetrySetting.retryMaxCount
+			}
+			if validRetrySetting.retryIntervalInSeconds != 0 {
+				request.RetryIntervalInSeconds = validRetrySetting.retryIntervalInSeconds
+			}
+
+			retrySettings, err := a.getRetrySettingsFromRequest(request)
+
+			// assert
+			assert.NoError(t, err, "no error expected")
+			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retrySettings.RetryStrategy)
+			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retrySettings.RetryMaxCount)
+			assert.EqualValues(t, validRetrySetting.expectedRetryIntervalInSeconds, retrySettings.RetryIntervalInSeconds)
+		}
+	})
+}
+
 func TestPublishTopic(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 
