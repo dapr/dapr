@@ -203,7 +203,7 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 		},
 		{
 			Methods: []string{fasthttp.MethodGet},
-			Route:   "secrets/{secretStoreName}/{key}",
+			Route:   "secrets/{secretStoreName}/{key:*}",
 			Version: apiVersionV1,
 			Handler: a.onGetSecret,
 		},
