@@ -1502,14 +1502,16 @@ func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component
 	return componentPreprocessRes{}
 }
 
-// Stop allows for a graceful shutdown of all runtime internal operations or components
-func (a *DaprRuntime) Stop() error {
-	log.Info("Stop command issued. Shutting down all operations")
-
+func (a *DaprRuntime) stopActor() {
 	if a.actor != nil {
+		log.Info("Shutting down actor")
 		a.actor.Stop()
 	}
+}
 
+// shutdownComponents allows for a graceful shutdown of all runtime internal operations or components
+func (a *DaprRuntime) shutdownComponents() error {
+	log.Info("Shutting down all components")
 	var merr error
 
 	// Close components if they implement `io.Closer`
@@ -1569,10 +1571,11 @@ func (a *DaprRuntime) Stop() error {
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations
 func (a *DaprRuntime) ShutdownWithWait() {
+	a.stopActor()
 	gracefulShutdownDuration := 5 * time.Second
-	log.Info("dapr shutting down. Waiting 5 seconds to finish outstanding operations")
-	a.Stop()
+	log.Infof("dapr shutting down. Waiting %s to finish outstanding operations", gracefulShutdownDuration)
 	<-time.After(gracefulShutdownDuration)
+	a.shutdownComponents()
 	os.Exit(0)
 }
 
