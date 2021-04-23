@@ -63,7 +63,7 @@ func TestValidateRetryMaxCount(t *testing.T) {
 }
 
 func TestValidateRetryIntervalInSeconds(t *testing.T) {
-	t.Run("test valid Retry Count", func(t *testing.T) {
+	t.Run("test valid Retry Interval", func(t *testing.T) {
 		for i := MinRetryIntervalInSeconds; i <= MaxRetryIntervalInSeconds; i++ {
 			err := validateRetryIntervalInSeconds(i)
 			assert.NoError(t, err, "no error expected")

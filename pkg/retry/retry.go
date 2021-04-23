@@ -185,10 +185,6 @@ func validateRetryMaxCount(retryMaxCount int) error {
 }
 
 func validateRetryIntervalInSeconds(retryIntervalInSeconds int) error {
-	_, isValidDuration := time.ParseDuration(fmt.Sprintf("%ss", strconv.Itoa(retryIntervalInSeconds)))
-	if isValidDuration != nil {
-		return errors.Errorf("retry interval value provided of %d fails to convert to a valid duration with %s", retryIntervalInSeconds, isValidDuration.Error())
-	}
 	if retryIntervalInSeconds > MaxRetryIntervalInSeconds || retryIntervalInSeconds < MinRetryIntervalInSeconds {
 		return errors.Errorf("retry interval of %d is out of range [%d-%d]", retryIntervalInSeconds, MinRetryIntervalInSeconds, MaxRetryIntervalInSeconds)
 	}

@@ -1270,10 +1270,9 @@ func TestGetRetrySettingsFromRequest(t *testing.T) {
 				request.RetryIntervalInSeconds = validRetrySetting.retryIntervalInSeconds
 			}
 
-			retrySettings, err := a.getRetrySettingsFromRequest(request)
+			retrySettings := a.getRetrySettingsFromRequest(request)
 
 			// assert
-			assert.NoError(t, err, "no error expected")
 			assert.EqualValues(t, validRetrySetting.expectedRetryStrategy, retrySettings.RetryStrategy)
 			assert.EqualValues(t, validRetrySetting.expectedRetryMaxCount, retrySettings.RetryMaxCount)
 			assert.EqualValues(t, validRetrySetting.expectedRetryIntervalInSeconds, retrySettings.RetryIntervalInSeconds)
