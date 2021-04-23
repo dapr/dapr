@@ -21,6 +21,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
 	github.com/hashicorp/go-hclog v0.14.1
 	github.com/hashicorp/go-msgpack v1.1.5
+	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/raft v1.2.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
 	github.com/json-iterator/go v1.1.10
