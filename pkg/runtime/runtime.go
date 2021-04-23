@@ -1571,9 +1571,9 @@ func (a *DaprRuntime) shutdownComponents() error {
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations
 func (a *DaprRuntime) ShutdownWithWait() {
-	gracefulShutdownDuration := 5 * time.Second
 	a.stopActor()
-	log.Info("dapr shutting down. Waiting 5 seconds to finish outstanding operations")
+	gracefulShutdownDuration := 5 * time.Second
+	log.Infof("dapr shutting down. Waiting %s to finish outstanding operations", gracefulShutdownDuration)
 	<-time.After(gracefulShutdownDuration)
 	a.shutdownComponents()
 	os.Exit(0)
