@@ -2766,7 +2766,7 @@ func TestStopWithErrors(t *testing.T) {
 	require.NoError(t, rt.initSecretStore(mockSecretsComponent))
 	rt.nameResolver = &mockNameResolver{closeErr: testErr}
 
-	err := rt.Stop()
+	err := rt.shutdownComponents()
 	assert.Error(t, err)
 	var merr *multierror.Error
 	merr, ok := err.(*multierror.Error)
@@ -2775,5 +2775,6 @@ func TestStopWithErrors(t *testing.T) {
 }
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
-	assert.NoError(t, rt.Stop())
+	rt.stopActor()
+	assert.NoError(t, rt.shutdownComponents())
 }
