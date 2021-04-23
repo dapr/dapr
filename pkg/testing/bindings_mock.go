@@ -31,3 +31,7 @@ func (m *MockBinding) Invoke(req *bindings.InvokeRequest) (*bindings.InvokeRespo
 func (m *MockBinding) Operations() []bindings.OperationKind {
 	return []bindings.OperationKind{bindings.CreateOperation}
 }
+
+func (m *MockBinding) Close() error {
+	return nil
+}
