@@ -30,7 +30,7 @@ middleware \
 job-publisher
 
 # PERFORMACE test app list
-PERF_TEST_APPS=actorjava tester service_invocation_http
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -39,7 +39,7 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer actor_activation service_invocation_http
+PERF_TESTS=actor_timer actor_reminder actor_activation service_invocation_http
 
 KUBECTL=kubectl
 

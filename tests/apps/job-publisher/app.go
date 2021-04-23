@@ -25,7 +25,7 @@ const (
 
 func stopSidecar() {
 	log.Printf("Shutting down the sidecar at %s", fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
-	r, err := http.Get(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
+	r, err := http.Post(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort), "", bytes.NewBuffer([]byte{}))
 	if r != nil {
 		r.Body.Close()
 	}

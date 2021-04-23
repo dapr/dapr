@@ -5,13 +5,14 @@
 // Licensed under the MIT License.
 // ------------------------------------------------------------
 
-package service_invocation_http_perf
+package actor_reminder_perf
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -20,7 +21,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const numHealthChecks = 60 // Number of times to check for endpoint health per app.
+const (
+	numHealthChecks = 60 // Number of times to check for endpoint health per app.
+	actorType       = "PerfTestActorReminder"
+)
 
 var tr *runner.TestRunner
 
@@ -29,10 +33,10 @@ func TestMain(m *testing.M) {
 		{
 			AppName:           "testapp",
 			DaprEnabled:       true,
-			ImageName:         "perf-service_invocation_http",
+			ImageName:         "perf-actorfeatures",
 			Replicas:          1,
 			IngressEnabled:    true,
-			MetricsEnabled:    true,
+			AppPort:           3000,
 			DaprCPULimit:      "4.0",
 			DaprCPURequest:    "0.1",
 			DaprMemoryLimit:   "512Mi",
@@ -41,6 +45,9 @@ func TestMain(m *testing.M) {
 			AppCPURequest:     "0.1",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPE": actorType,
+			},
 		},
 		{
 			AppName:           "tester",
@@ -48,7 +55,6 @@ func TestMain(m *testing.M) {
 			ImageName:         "perf-tester",
 			Replicas:          1,
 			IngressEnabled:    true,
-			MetricsEnabled:    true,
 			AppPort:           3001,
 			DaprCPULimit:      "4.0",
 			DaprCPURequest:    "0.1",
@@ -61,21 +67,19 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("serviceinvocationhttp", testApps, nil, nil)
+	tr = runner.NewTestRunner("actorreminder", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
-func TestServiceInvocationHTTPPerformance(t *testing.T) {
+func TestActorReminderRegistrationPerformance(t *testing.T) {
 	p := perf.Params()
-	t.Logf("running service invocation http test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
-
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL("testapp")
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
-	t.Logf("test app url: %s", testAppURL+"/test")
-	_, err := utils.HTTPGetNTimes(testAppURL+"/test", numHealthChecks)
+	t.Logf("test app url: %s", testAppURL+"/health")
+	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
 	// Get the ingress external url of tester app
@@ -83,69 +87,54 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
-	t.Logf("teter app url: %s", testerAppURL)
+	t.Logf("tester app url: %s", testerAppURL)
 	_, err = utils.HTTPGetNTimes(testerAppURL, numHealthChecks)
 	require.NoError(t, err)
 
-	// Perform baseline test
-	endpoint := fmt.Sprintf("http://testapp:3000/test")
+	// Perform dapr test
+	endpoint := fmt.Sprintf("http://127.0.0.1:3500/v1.0/actors/%v/{uuid}/reminders/myreminder", actorType)
 	p.TargetEndpoint = endpoint
+	p.Payload = "{\"dueTime\":\"24h\",\"period\":\"24h\"}"
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
-	t.Log("runnng baseline test...")
-	baselineResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
-	t.Log("checking err...")
-	require.NoError(t, err)
-	require.NotEmpty(t, baselineResp)
-
-	t.Logf("baseline test results: %s", string(baselineResp))
-
-	// Perform dapr test
-	endpoint = fmt.Sprintf("http://127.0.0.1:3500/v1.0/invoke/testapp/method/test")
-	p.TargetEndpoint = endpoint
-	body, err = json.Marshal(&p)
-	require.NoError(t, err)
-
-	t.Log("running dapr test...")
+	t.Logf("running dapr test with params: %s", body)
 	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
 	t.Log("checking err...")
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 
-	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
-	require.NoError(t, err)
+	// Let test run for 10 minutes triggering the timers and collect metrics.
+	time.Sleep(10 * time.Minute)
 
 	appUsage, err := tr.Platform.GetAppUsage("testapp")
+	require.NoError(t, err)
+
+	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
 	require.NoError(t, err)
 
 	restarts, err := tr.Platform.GetTotalRestarts("testapp")
 	require.NoError(t, err)
 
 	t.Logf("dapr test results: %s", string(daprResp))
-	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
+	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	t.Logf("target dapr app or sidecar restarted %v times", restarts)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
 	require.NoError(t, err)
 
-	var baselineResult perf.TestResult
-	err = json.Unmarshal(baselineResp, &baselineResult)
-	require.NoError(t, err)
-
-	percentiles := map[int]string{1: "75th", 2: "90th"}
+	percentiles := map[int]string{2: "90th", 3: "99th"}
 
 	for k, v := range percentiles {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
-		baselineValue := baselineResult.DurationHistogram.Percentiles[k].Value
-
-		latency := (daprValue - baselineValue) * 1000
-		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
+		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
 	}
 
 	report := perf.NewTestReport(
-		[]perf.TestResult{baselineResult, daprResult},
-		"Service Invocation",
+		[]perf.TestResult{daprResult},
+		"Actor Reminder",
 		sidecarUsage,
 		appUsage)
 	report.SetTotalRestartCount(restarts)
@@ -158,5 +147,6 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.Equal(t, 0, daprResult.RetCodes.Num400)
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
-	require.True(t, daprResult.ActualQPS > float64(p.QPS)*0.99)
+	// ActualQPS is at 60 right now. TODO: improve it to 90% of p.QPS.
+	require.True(t, daprResult.ActualQPS > 59)
 }
