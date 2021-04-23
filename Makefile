@@ -62,6 +62,7 @@ export GOOS ?= $(TARGET_OS_LOCAL)
 # Default docker container and e2e test targst.
 TARGET_OS ?= linux
 TARGET_ARCH ?= amd64
+TEST_OUTPUT_FILE_PREFIX ?= ./test_report
 
 ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
@@ -217,8 +218,8 @@ release: build archive
 # Target: test                                                                 #
 ################################################################################
 .PHONY: test
-test:
-	go test ./pkg/... $(COVERAGE_OPTS)
+test: test-deps
+	gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json --format standard-quiet -- ./pkg/... $(COVERAGE_OPTS)
 	go test ./tests/...
 
 ################################################################################

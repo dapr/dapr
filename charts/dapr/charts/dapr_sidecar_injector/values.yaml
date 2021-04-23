@@ -12,3 +12,8 @@ webhookFailurePolicy: Ignore
 sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 resources: {}
+
+debug:
+  enabled: false
+  port: 40000
+  initialDelaySeconds: 30000

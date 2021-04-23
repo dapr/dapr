@@ -10,7 +10,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	nethttp "net/http"
 	"os"
 	"reflect"
 	"strconv"
@@ -18,9 +20,20 @@ import (
 	"sync"
 	"time"
 
-	nethttp "net/http"
-
 	"contrib.go.opencensus.io/exporter/zipkin"
+	"github.com/google/uuid"
+	"github.com/hashicorp/go-multierror"
+	jsoniter "github.com/json-iterator/go"
+	openzipkin "github.com/openzipkin/zipkin-go"
+	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
+	"github.com/pkg/errors"
+	"go.opencensus.io/trace"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
 	"github.com/dapr/components-contrib/middleware"
@@ -44,7 +57,6 @@ import (
 	diag_utils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
-	"github.com/dapr/dapr/pkg/logger"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	http_middleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -56,17 +68,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
-	"github.com/google/uuid"
-	jsoniter "github.com/json-iterator/go"
-	openzipkin "github.com/openzipkin/zipkin-go"
-	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
-	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -1070,34 +1072,51 @@ func (a *DaprRuntime) initNameResolution() error {
 	var err error
 	var resolverMetadata = nr.Metadata{}
 
-	switch a.runtimeConfig.Mode {
-	case modes.KubernetesMode:
-		resolver, err = a.nameResolutionRegistry.Create("kubernetes", "v1")
-	case modes.StandaloneMode:
-		resolver, err = a.nameResolutionRegistry.Create("mdns", "v1")
-		// properties to register mDNS instances.
-		resolverMetadata.Properties = map[string]string{
-			nr.MDNSInstanceName:    a.runtimeConfig.ID,
-			nr.MDNSInstanceAddress: a.hostAddress,
-			nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
+	resolverName := a.globalConfig.Spec.NameResolutionSpec.Component
+	resolverVersion := a.globalConfig.Spec.NameResolutionSpec.Version
+
+	if resolverName == "" {
+		switch a.runtimeConfig.Mode {
+		case modes.KubernetesMode:
+			resolverName = "kubernetes"
+		case modes.StandaloneMode:
+			resolverName = "mdns"
+		default:
+			return errors.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.Mode))
 		}
-	default:
-		return errors.Errorf("remote calls not supported for %s mode", string(a.runtimeConfig.Mode))
+	}
+
+	if resolverVersion == "" {
+		resolverVersion = components.FirstStableVersion
+	}
+
+	resolver, err = a.nameResolutionRegistry.Create(resolverName, resolverVersion)
+	resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
+	resolverMetadata.Properties = map[string]string{
+		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.HTTPPort),
+		nr.DaprPort:     strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
+		nr.AppPort:      strconv.Itoa(a.runtimeConfig.ApplicationPort),
+		nr.HostAddress:  a.hostAddress,
+		nr.AppID:        a.runtimeConfig.ID,
+		// TODO - change other nr components to use above properties (specifically MDNS component)
+		nr.MDNSInstanceName:    a.runtimeConfig.ID,
+		nr.MDNSInstanceAddress: a.hostAddress,
+		nr.MDNSInstancePort:    strconv.Itoa(a.runtimeConfig.InternalGRPCPort),
 	}
 
 	if err != nil {
-		log.Warnf("error creating name resolution resolver %s: %s", a.runtimeConfig.Mode, err)
+		log.Warnf("error creating name resolution resolver %s: %s", resolverName, err)
 		return err
 	}
 
 	if err = resolver.Init(resolverMetadata); err != nil {
-		log.Errorf("failed to initialize name resolution resolver %s: %s", a.runtimeConfig.Mode, err)
+		log.Errorf("failed to initialize name resolution resolver %s: %s", resolverName, err)
 		return err
 	}
 
 	a.nameResolver = resolver
 
-	log.Infof("Initialized name resolution to %s", a.runtimeConfig.Mode)
+	log.Infof("Initialized name resolution to %s", resolverName)
 	return nil
 }
 
@@ -1483,12 +1502,68 @@ func (a *DaprRuntime) preprocessOneComponent(comp *components_v1alpha1.Component
 }
 
 // Stop allows for a graceful shutdown of all runtime internal operations or components
-func (a *DaprRuntime) Stop() {
-	log.Info("stop command issued. Shutting down all operations")
+func (a *DaprRuntime) Stop() error {
+	log.Info("Stop command issued. Shutting down all operations")
 
 	if a.actor != nil {
 		a.actor.Stop()
 	}
+
+	var merr error
+
+	// Close components if they implement `io.Closer`
+	for name, binding := range a.inputBindings {
+		if closer, ok := binding.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing input binding %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	for name, binding := range a.outputBindings {
+		if closer, ok := binding.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing output binding %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	for name, secretstore := range a.secretStores {
+		if closer, ok := secretstore.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing secret store %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	for name, pubSub := range a.pubSubs {
+		if err := pubSub.Close(); err != nil {
+			err = fmt.Errorf("error closing pub sub %s: %w", name, err)
+			merr = multierror.Append(merr, err)
+			log.Warn(err)
+		}
+	}
+	for name, stateStore := range a.stateStores {
+		if closer, ok := stateStore.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing state store %s: %w", name, err)
+				merr = multierror.Append(merr, err)
+				log.Warn(err)
+			}
+		}
+	}
+	if closer, ok := a.nameResolver.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			err = fmt.Errorf("error closing name resolver: %w", err)
+			merr = multierror.Append(merr, err)
+			log.Warn(err)
+		}
+	}
+
+	return merr
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations
@@ -1645,7 +1720,7 @@ func (a *DaprRuntime) builtinSecretStore() []components_v1alpha1.Component {
 			},
 			Spec: components_v1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetes",
-				Version: "v1",
+				Version: components.FirstStableVersion,
 			},
 		}}
 	}

@@ -126,6 +126,12 @@ jobs:
                   -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
         echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
 
+    - name: Setup test output
+      shell: bash
+      run: |
+        export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
+        echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
+
     - name: Setup local registry
       run: |
         # Run a registry.
@@ -192,3 +198,9 @@ jobs:
       with:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_container_logs
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.json
