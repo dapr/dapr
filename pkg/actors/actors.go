@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -586,14 +588,17 @@ func (a *actorsRuntime) getReminderTrack(actorKey, name string) (*ReminderTrack,
 		return nil, err
 	}
 
-	var track ReminderTrack
+	track := ReminderTrack{
+		RepetitionLeft: -1,
+	}
 	json.Unmarshal(resp.Data, &track)
 	return &track, nil
 }
 
-func (a *actorsRuntime) updateReminderTrack(actorKey, name string) error {
+func (a *actorsRuntime) updateReminderTrack(actorKey, name string, repetition int) error {
 	track := ReminderTrack{
-		LastFiredTime: time.Now().UTC().Format(time.RFC3339),
+		LastFiredTime:  time.Now().UTC().Format(time.RFC3339),
+		RepetitionLeft: repetition,
 	}
 
 	err := a.store.Set(&state.SetRequest{
@@ -634,7 +639,7 @@ func (a *actorsRuntime) getUpcomingReminderInvokeTime(reminder *Reminder) (time.
 	if lastFiredTime.IsZero() {
 		nextInvokeTime = registeredTime.Add(dueTime)
 	} else {
-		period, err := time.ParseDuration(reminder.Period)
+		period, _, err := parseDuration(reminder.Period)
 		if err != nil {
 			return nextInvokeTime, errors.Wrap(err, "error parsing reminder period")
 		}
@@ -652,7 +657,9 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 		return err
 	}
 
-	go func(reminder *Reminder, stop chan bool) {
+	_, repetitionsLeft, err := parseDuration(reminder.Period)
+	log.Debugf("repetitions allowed are %d", repetitionsLeft)
+	go func(reminder *Reminder, repetitionsLeft int, stop chan bool) {
 		now := time.Now().UTC()
 		initialDuration := nextInvokeTime.Sub(now)
 		time.Sleep(initialDuration)
@@ -666,13 +673,13 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 			break
 		}
 
-		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, reminder.Data)
+		err = a.executeReminder(reminder.ActorType, reminder.ActorID, reminder.DueTime, reminder.Period, reminder.Name, &repetitionsLeft, reminder.Data)
 		if err != nil {
 			log.Errorf("error executing reminder: %s", err)
 		}
 
 		if reminder.Period != "" {
-			period, err := time.ParseDuration(reminder.Period)
+			period, _, err := parseDuration(reminder.Period)
 			if err != nil {
 				log.Errorf("error parsing reminder period: %s", err)
 			}
@@ -683,21 +690,31 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				return
 			}
 
+			if quit, _ := a.stopReminderIfRepetitionsOver(reminder.Name, reminder.ActorID, reminder.ActorType, repetitionsLeft); quit {
+				return
+			}
+
 			t := a.configureTicker(period)
-			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, data interface{}) {
+			go func(ticker *time.Ticker, actorType, actorID, reminder, dueTime, period string, repetition *int, data interface{}) {
 				for {
 					select {
 					case <-ticker.C:
-						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, data)
+
+						err := a.executeReminder(actorType, actorID, dueTime, period, reminder, repetition, data)
 						if err != nil {
 							log.Debugf("error invoking reminder on actor %s: %s", a.constructCompositeKey(actorType, actorID), err)
+						} else {
+							log.Debugf("executing reminder on actor succedeed; reminders pending for actor %s:  %d", a.constructCompositeKey(actorType, actorID), *repetition)
+							if quit, _ := a.stopReminderIfRepetitionsOver(reminder, actorID, actorType, repetitionsLeft); quit {
+								return
+							}
 						}
 					case <-stop:
 						log.Infof("reminder: %v with parameters: dueTime: %v, period: %v, data: %v has been deleted.", reminderKey, dueTime, period, data)
 						return
 					}
 				}
-			}(t, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, reminder.Data)
+			}(t, reminder.ActorType, reminder.ActorID, reminder.Name, reminder.DueTime, reminder.Period, &repetitionsLeft, reminder.Data)
 		} else {
 			err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 				Name:      reminder.Name,
@@ -708,12 +725,12 @@ func (a *actorsRuntime) startReminder(reminder *Reminder, stopChannel chan bool)
 				log.Errorf("error deleting reminder: %s", err)
 			}
 		}
-	}(reminder, stopChannel)
+	}(reminder, repetitionsLeft, stopChannel)
 
 	return nil
 }
 
-func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, data interface{}) error {
+func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, reminder string, repetition *int, data interface{}) error {
 	r := ReminderResponse{
 		DueTime: dueTime,
 		Period:  period,
@@ -732,7 +749,10 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	_, err = a.callLocalActor(context.Background(), req)
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
-		err = a.updateReminderTrack(key, reminder)
+		if *repetition != -1 {
+			*repetition -= 1
+		}
+		err = a.updateReminderTrack(key, reminder, *repetition)
 	} else {
 		log.Debugf("error execution of reminder %s for actor type %s with id %s: %s", reminder, actorType, actorID, err)
 	}
@@ -1095,4 +1115,68 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 		}
 	}
 	return nil
+}
+
+var pattern = regexp.MustCompile(`^(R(?P<repetiton>\d+))?P((?P<year>\d+)Y)?((?P<month>\d+)M)?((?P<week>\d+)W)?((?P<day>\d+)D)?(T((?P<hour>\d+)H)?((?P<minute>\d+)M)?((?P<second>\d+)S)?)?$`)
+
+// parseDuration creates time.Duration from ISO8601 or time.duration string formats.
+func parseDuration(from string) (time.Duration, int, error) {
+	var match []string
+	if pattern.MatchString(from) {
+		match = pattern.FindStringSubmatch(from)
+	} else {
+		d, err := time.ParseDuration(from)
+		return d, -1, err
+	}
+	duration := time.Duration(0)
+	// -1 signifies infinite duration
+	repetition := -1
+	for i, name := range pattern.SubexpNames() {
+		part := match[i]
+		if i == 0 || name == "" || part == "" {
+			continue
+		}
+
+		val, err := strconv.Atoi(part)
+		if err != nil {
+			return time.Duration(0), 0, err
+		}
+		switch name {
+		case "year":
+			duration += time.Hour * 24 * 365 * time.Duration(val)
+		case "month":
+			duration += time.Hour * 24 * 30 * time.Duration(val)
+		case "week":
+			duration += time.Hour * 24 * 7 * time.Duration(val)
+		case "day":
+			duration += time.Hour * 24 * time.Duration(val)
+		case "hour":
+			duration += time.Hour * time.Duration(val)
+		case "minute":
+			duration += time.Minute * time.Duration(val)
+		case "second":
+			duration += time.Second * time.Duration(val)
+		case "repetiton":
+			repetition = val
+		default:
+			return time.Duration(0), 0, fmt.Errorf("unknown field %s", name)
+		}
+	}
+
+	return duration, repetition, nil
+}
+
+func (a *actorsRuntime) stopReminderIfRepetitionsOver(name, actorId, actorType string, repetitionLeft int) (bool, error) {
+	if repetitionLeft == 0 {
+		err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
+			Name:      name,
+			ActorID:   actorId,
+			ActorType: actorType,
+		})
+		if err != nil {
+			log.Errorf("error deleting reminder: %s", err)
+		}
+		return true, nil
+	}
+	return false, nil
 }
