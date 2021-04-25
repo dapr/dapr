@@ -6,6 +6,9 @@
 package v1alpha1
 
 import (
+	"strconv"
+
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -36,6 +39,15 @@ type ConfigurationSpec struct {
 	Secrets SecretsSpec `json:"secrets,omitempty"`
 	// +optional
 	AccessControlSpec AccessControlSpec `json:"accessControl,omitempty"`
+	// +optional
+	NameResolutionSpec NameResolutionSpec `json:"nameResolution,omitempty"`
+}
+
+// NameResolutionSpec is the spec for name resolution configuration
+type NameResolutionSpec struct {
+	Component     string       `json:"component"`
+	Version       string       `json:"version"`
+	Configuration DynamicValue `json:"configuration"`
 }
 
 // SecretsSpec is the spec for secrets configuration
@@ -141,4 +153,20 @@ type ConfigurationList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Configuration `json:"items"`
+}
+
+// DynamicValue is a dynamic value struct for the component.metadata pair value
+type DynamicValue struct {
+	v1.JSON `json:",inline"`
+}
+
+// String returns the string representation of the raw value.
+// If the value is a string, it will be unquoted as the string is guaranteed to be a JSON serialized string.
+func (d *DynamicValue) String() string {
+	s := string(d.Raw)
+	c, err := strconv.Unquote(s)
+	if err == nil {
+		s = c
+	}
+	return s
 }
