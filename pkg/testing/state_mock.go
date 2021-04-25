@@ -118,3 +118,7 @@ func (_m *MockStateStore) Set(req *state.SetRequest) error {
 func (_m *MockStateStore) Features() []state.Feature {
 	return nil
 }
+
+func (_m *MockStateStore) Close() error {
+	return nil
+}

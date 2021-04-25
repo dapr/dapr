@@ -119,6 +119,22 @@ spec:
                 required:
                 - enabled
                 type: object
+              nameResolution:
+                description: NameResolutionSpec is the spec for name resolution configuration
+                properties:
+                  component:
+                    type: string
+                  configuration:
+                    description: DynamicValue is a dynamic value struct for the component.metadata pair value
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                  version:
+                    type: string
+                required:
+                - component
+                - configuration
+                - version
+                type: object
               secrets:
                 description: SecretsSpec is the spec for secrets configuration
                 properties:
