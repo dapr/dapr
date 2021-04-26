@@ -189,7 +189,7 @@ func TestActorInvocationCrossSDKs(t *testing.T) {
 		for _, actorType := range actorTypes {
 			for _, tt := range scenarios {
 				method := fmt.Sprintf(tt.method, actorType, uuid.New().String())
-				name := fmt.Sprintf("Test %s calling %s", app, method)
+				name := fmt.Sprintf("Test %s calling %s", app, fmt.Sprintf(tt.method, actorType, "ActorId"))
 				t.Run(name, func(t *testing.T) {
 
 					resp, err := utils.HTTPPost(fmt.Sprintf("%s/%s", externalURL, method), []byte(tt.payload))

@@ -113,14 +113,17 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 
-	usage, err := tr.Platform.GetSidecarUsage("testapp")
+	sidecarUsage, err := tr.Platform.GetSidecarUsage("testapp")
+	require.NoError(t, err)
+
+	appUsage, err := tr.Platform.GetAppUsage("testapp")
 	require.NoError(t, err)
 
 	restarts, err := tr.Platform.GetTotalRestarts("testapp")
 	require.NoError(t, err)
 
 	t.Logf("dapr test results: %s", string(daprResp))
-	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", usage.CPUm, usage.MemoryMb)
+	t.Logf("target dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
 
 	var daprResult perf.TestResult
 	err = json.Unmarshal(daprResp, &daprResult)
@@ -140,8 +143,14 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 		t.Logf("added latency for %s percentile: %sms", v, fmt.Sprintf("%.2f", latency))
 	}
 
-	err = utils.UploadAzureBlob([]perf.TestResult{baselineResult, daprResult}, "Service Invocation",
-		fmt.Sprintf("%vMB", usage.MemoryMb), fmt.Sprintf("%vm", usage.CPUm))
+	report := perf.NewTestReport(
+		[]perf.TestResult{baselineResult, daprResult},
+		"Service Invocation",
+		sidecarUsage,
+		appUsage)
+	report.SetTotalRestartCount(restarts)
+	err = utils.UploadAzureBlob(report)
+
 	if err != nil {
 		t.Error(err)
 	}
