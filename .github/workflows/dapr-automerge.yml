@@ -1,0 +1,25 @@
+# ------------------------------------------------------------
+# Copyright (c) Microsoft Corporation and Dapr Contributors.
+# Licensed under the MIT License.
+# ------------------------------------------------------------
+
+name: dapr-automerge
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+jobs:
+  automerge:
+    name: Automerge and update PRs.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Install dependencies
+        run: pip install PyGithub
+      - name: Automerge and update
+        env:
+          MAINTAINERS: yaron2,youngbupark,artursouza
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        run: python ./.github/scripts/automerge.py
