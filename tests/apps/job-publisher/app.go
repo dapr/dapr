@@ -25,12 +25,21 @@ const (
 
 func stopSidecar() {
 	log.Printf("Shutting down the sidecar at %s", fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
-	r, err := http.Post(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort), "", bytes.NewBuffer([]byte{}))
-	if r != nil {
-		r.Body.Close()
-	}
-	if err != nil {
-		log.Printf("Error stopping the sidecar %s", err)
+	for retryCount := 0; retryCount < 200; retryCount++ {
+		r, err := http.Post(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort), "", bytes.NewBuffer([]byte{}))
+		if r != nil {
+			r.Body.Close()
+		}
+		if err != nil {
+			log.Printf("Error stopping the sidecar %s", err)
+		}
+
+		if r.StatusCode != 200 && r.StatusCode != 204 {
+			log.Printf("Received Non-200 from shutdown API. Code: %d", r.StatusCode)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		break
 	}
 	log.Printf("Sidecar stopped")
 }
