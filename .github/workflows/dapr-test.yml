@@ -150,11 +150,11 @@ jobs:
           netsh interface tcp show global
       - name: Build e2e test apps
         if: env.TEST_CLUSTER != ''
-        run: make build-e2e-app-all
+        run: make -j4 build-e2e-app-all
       - name: Push e2e app images to test dockerhub
         if: env.TEST_CLUSTER != ''
         run: |
-          make push-e2e-app-all
+          make -j4 push-e2e-app-all
       - name: Run E2E tests
         if: env.TEST_CLUSTER != ''
         run: make test-e2e-all

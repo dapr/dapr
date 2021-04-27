@@ -9,6 +9,6 @@ spec:
   ignoreErrors: true
   metadata:
   - name: redisHost
-    value: localhost:6379
+    value: 127.0.0.1:6379
   - name: redisPassword
     value: "not_a_password"

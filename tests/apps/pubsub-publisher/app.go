@@ -138,6 +138,10 @@ func performPublishHTTP(topic string, jsonValue []byte) (int, error) {
 		}
 	}
 	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err == nil && len(body) > 0 {
+		log.Printf("Publish response body '%s'", string(body))
+	}
 
 	return resp.StatusCode, nil
 }

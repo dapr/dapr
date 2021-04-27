@@ -1,4 +1,4 @@
-FROM python:3.7-windowsservercore
+FROM wcs1only/windows-python-nanoserver:3.7-1809
 WORKDIR /app
 ADD . /app
 RUN pip install -r requirements.txt
