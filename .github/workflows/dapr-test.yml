@@ -31,6 +31,7 @@ jobs:
       HA_MODE: true
       TEST_OUTPUT_FILE_PREFIX: test_report
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         target_arch: [amd64]
