@@ -750,7 +750,7 @@ func (a *actorsRuntime) executeReminder(actorType, actorID, dueTime, period, rem
 	if err == nil {
 		key := a.constructCompositeKey(actorType, actorID)
 		if *repetition != -1 {
-			*repetition -= 1
+			*repetition--
 		}
 		err = a.updateReminderTrack(key, reminder, *repetition)
 	} else {
@@ -1166,11 +1166,11 @@ func parseDuration(from string) (time.Duration, int, error) {
 	return duration, repetition, nil
 }
 
-func (a *actorsRuntime) stopReminderIfRepetitionsOver(name, actorId, actorType string, repetitionLeft int) (bool, error) {
+func (a *actorsRuntime) stopReminderIfRepetitionsOver(name, actorID, actorType string, repetitionLeft int) (bool, error) {
 	if repetitionLeft == 0 {
 		err := a.DeleteReminder(context.TODO(), &DeleteReminderRequest{
 			Name:      name,
-			ActorID:   actorId,
+			ActorID:   actorID,
 			ActorType: actorType,
 		})
 		if err != nil {
