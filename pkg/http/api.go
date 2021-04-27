@@ -316,7 +316,7 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 func (a *api) constructShutdownEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet},
+			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
 			Handler: a.onShutdown,
@@ -1186,6 +1186,10 @@ func (a *api) onPutMetadata(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onShutdown(reqCtx *fasthttp.RequestCtx) {
+	if !reqCtx.IsPost() {
+		log.Warn("Please use POST method when invoking shutdown API")
+	}
+
 	respondEmpty(reqCtx)
 	go func() {
 		a.shutdown()
