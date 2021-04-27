@@ -15,7 +15,7 @@ import (
 func TestOptions(t *testing.T) {
 	t.Run("default options", func(t *testing.T) {
 		o := defaultMetricOptions()
-		assert.Equal(t, defaultMetricsPort, o.metricsPort)
+		assert.Equal(t, defaultMetricsPort, o.Port)
 		assert.Equal(t, defaultMetricsEnabled, o.MetricsEnabled)
 	})
 
@@ -45,7 +45,7 @@ func TestOptions(t *testing.T) {
 
 	t.Run("parse valid port", func(t *testing.T) {
 		o := Options{
-			metricsPort:    "1010",
+			Port:           "1010",
 			MetricsEnabled: false,
 		}
 
@@ -54,7 +54,7 @@ func TestOptions(t *testing.T) {
 
 	t.Run("return default port if port is invalid", func(t *testing.T) {
 		o := Options{
-			metricsPort:    "invalid",
+			Port:           "invalid",
 			MetricsEnabled: false,
 		}
 

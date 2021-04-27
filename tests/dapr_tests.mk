@@ -152,14 +152,22 @@ build-perf-app-all: $(BUILD_PERF_APPS_TARGETS)
 # push perf app image to the registry
 push-perf-app-all: $(PUSH_PERF_APPS_TARGETS)
 
+.PHONY: test-deps
+test-deps:
+	# The desire here is to download this test dependency without polluting go.mod
+	# In golang >=1.16 there is a new way to do this with `go install gotest.tools/gotestsum@latest`
+	# But this doesn't work with <=1.15, so we do it the old way for now 
+	# (see: https://golang.org/ref/mod#go-install)
+	GO111MODULE=off go get gotest.tools/gotestsum
+
 # start all e2e tests
-test-e2e-all: check-e2e-env
+test-e2e-all: check-e2e-env test-deps
 	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
 	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
 	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) go test -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
 
 
 define genPerfTestRun
