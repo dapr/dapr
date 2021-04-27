@@ -39,10 +39,12 @@ type httpMetrics struct {
 	serverRequestBytes  *stats.Int64Measure
 	serverResponseBytes *stats.Int64Measure
 	serverLatency       *stats.Float64Measure
+	serverResponseCount *stats.Int64Measure
 
 	clientSentBytes        *stats.Int64Measure
 	clientReceivedBytes    *stats.Int64Measure
 	clientRoundtripLatency *stats.Float64Measure
+	clientCompletedCount   *stats.Int64Measure
 
 	appID   string
 	enabled bool
@@ -66,7 +68,10 @@ func newHTTPMetrics() *httpMetrics {
 			"http/server/latency",
 			"HTTP request end to end latency in server.",
 			stats.UnitMilliseconds),
-
+		serverResponseCount: stats.Int64(
+			"http/server/response_count",
+			"The number of HTTP responses",
+			stats.UnitDimensionless),
 		clientSentBytes: stats.Int64(
 			"http/client/sent_bytes",
 			"Total bytes sent in request body (not including headers)",
@@ -79,6 +84,10 @@ func newHTTPMetrics() *httpMetrics {
 			"http/client/roundtrip_latency",
 			"Time between first byte of request headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
+		clientCompletedCount: stats.Int64(
+			"http/client/completed_count",
+			"Count of completed requests",
+			stats.UnitDimensionless),
 
 		enabled: false,
 	}
@@ -105,6 +114,10 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			h.serverResponseCount.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.serverLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx, diag_utils.WithTags(appIDKey, h.appID),
@@ -126,6 +139,10 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		stats.RecordWithTags(
 			ctx,
 			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
+			h.clientCompletedCount.M(1))
+		stats.RecordWithTags(
+			ctx,
+			diag_utils.WithTags(appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientRoundtripLatency.M(elapsed))
 		stats.RecordWithTags(
 			ctx, diag_utils.WithTags(appIDKey, h.appID),
@@ -137,74 +154,18 @@ func (h *httpMetrics) Init(appID string) error {
 	h.appID = appID
 	h.enabled = true
 
-	views := []*view.View{
-		{
-			Name:        "http/server/request_count",
-			Description: "The Number of HTTP requests",
-			TagKeys:     []tag.Key{appIDKey, httpPathKey, httpMethodKey},
-			Measure:     h.serverRequestCount,
-			Aggregation: view.Count(),
-		},
-		{
-			Name:        "http/server/request_bytes",
-			Description: "Size distribution of HTTP request body",
-			TagKeys:     []tag.Key{appIDKey},
-			Measure:     h.serverRequestBytes,
-			Aggregation: defaultSizeDistribution,
-		},
-		{
-			Name:        "http/server/response_bytes",
-			Description: "Size distribution of HTTP response body",
-			TagKeys:     []tag.Key{appIDKey},
-			Measure:     h.serverResponseBytes,
-			Aggregation: defaultSizeDistribution,
-		},
-		{
-			Name:        "http/server/latency",
-			Description: "Latency distribution of HTTP requests",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-			Measure:     h.serverLatency,
-			Aggregation: defaultLatencyDistribution,
-		},
-		{
-			Name:        "http/server/response_count",
-			Description: "The number of HTTP responses",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-			Measure:     h.serverLatency,
-			Aggregation: view.Count(),
-		},
-
-		{
-			Name:        "http/client/sent_bytes",
-			Measure:     h.clientSentBytes,
-			Aggregation: defaultSizeDistribution,
-			Description: "Total bytes sent in request body (not including headers)",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-		},
-		{
-			Name:        "http/client/received_bytes",
-			Measure:     h.clientReceivedBytes,
-			Aggregation: defaultSizeDistribution,
-			Description: "Total bytes received in response bodies (not including headers but including error responses with bodies)",
-			TagKeys:     []tag.Key{appIDKey},
-		},
-		{
-			Name:        "http/client/roundtrip_latency",
-			Measure:     h.clientRoundtripLatency,
-			Aggregation: defaultLatencyDistribution,
-			Description: "End-to-end latency",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-		},
-		{
-			Name:        "http/client/completed_count",
-			Measure:     h.clientRoundtripLatency,
-			Aggregation: view.Count(),
-			Description: "Count of completed requests",
-			TagKeys:     []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey},
-		},
-	}
-
-	return view.Register(views...)
+	tags := []tag.Key{appIDKey}
+	return view.Register(
+		diag_utils.NewMeasureView(h.serverRequestCount, []tag.Key{appIDKey, httpPathKey, httpMethodKey}, view.Count()),
+		diag_utils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.serverLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.serverResponseCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
+		diag_utils.NewMeasureView(h.clientSentBytes, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.clientRoundtripLatency, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, defaultSizeDistribution),
+		diag_utils.NewMeasureView(h.clientCompletedCount, []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}, view.Count()),
+	)
 }
 
 // FastHTTPMiddleware is the middleware to track http server-side requests
