@@ -1129,7 +1129,7 @@ func parseDuration(from string) (time.Duration, int, error) {
 		return d, -1, err
 	}
 	duration := time.Duration(0)
-	// -1 signifies infinite duration
+	// -1 signifies infinite repetition
 	repetition := -1
 	for i, name := range pattern.SubexpNames() {
 		part := match[i]
@@ -1159,7 +1159,7 @@ func parseDuration(from string) (time.Duration, int, error) {
 		case "repetiton":
 			repetition = val
 		default:
-			return time.Duration(0), 0, fmt.Errorf("unknown field %s", name)
+			return time.Duration(0), -1, fmt.Errorf("unknown field %s", name)
 		}
 	}
 

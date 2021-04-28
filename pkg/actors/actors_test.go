@@ -1006,3 +1006,18 @@ func TestHostValidation(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+func TestParseDuration(t *testing.T) {
+	t.Run("parse existing duration", func(t *testing.T) {
+		duration, repetition, err := parseDuration("0h30m0s")
+		assert.Equal(t, time.Minute*30, duration)
+		assert.Equal(t, -1, repetition)
+		assert.Nil(t, err)
+	})
+	t.Run("parse ISO 8601 duration", func(t *testing.T) {
+		duration, repetition, err := parseDuration("R5PT30M")
+		assert.Equal(t, time.Minute*30, duration)
+		assert.Equal(t, 5, repetition)
+		assert.Nil(t, err)
+	})
+}
