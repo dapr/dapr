@@ -894,8 +894,6 @@ func (a *DaprRuntime) getDeclarativeSubscriptions() []runtime_pubsub.Subscriptio
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		subs = runtime_pubsub.DeclarativeKubernetes(a.operatorClient, log)
-	case modes.DNSMode:
-		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	case modes.StandaloneMode:
 		subs = runtime_pubsub.DeclarativeSelfHosted(a.runtimeConfig.Standalone.ComponentsPath, log)
 	}
@@ -1348,8 +1346,6 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	switch a.runtimeConfig.Mode {
 	case modes.KubernetesMode:
 		loader = components.NewKubernetesComponents(a.runtimeConfig.Kubernetes, a.operatorClient)
-	case modes.DNSMode:
-		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	case modes.StandaloneMode:
 		loader = components.NewStandaloneComponents(a.runtimeConfig.Standalone)
 	default:
