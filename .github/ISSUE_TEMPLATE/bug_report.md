@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-<!-- If you need to report a security issue in the Dapr runtime please visit https://docs.dapr.io/operations/support/suport-security-issues -->
+<!-- If you need to report a security issue please visit https://docs.dapr.io/operations/support/suport-security-issues -->
 
 ## In what area(s)?
 
